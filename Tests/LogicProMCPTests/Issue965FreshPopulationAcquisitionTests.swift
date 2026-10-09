@@ -1048,6 +1048,18 @@ struct Issue965FreshPopulationAcquisitionTests {
         try await observeStack(navigation: true, initiallyExpanded: false, helpMovesFocus: true)
     }
 
+    @Test func nestedStackRetainsTheSameOwnedOuterPassiveFocusThroughInnerClicks() async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, nested: true,
+            headerFocus: "passive", focusRestoration: "restored", originalFocusRole: kAXGroupRole as String)
+    }
+
+    @Test(arguments: ["retained_label_editable", "retained_label_insertion", "retained_label_replacement", "retained_label_foreign"])
+    func nestedStackRefusesLostOrEditingPreviouslyAcceptedPassiveFocus(nestedFault: String) async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, nested: true,
+            nestedFault: nestedFault, headerFocus: "passive", focusRestoration: "restored",
+            originalFocusRole: kAXGroupRole as String)
+    }
+
     @Test(arguments: ["restored", "unavailable", "declined", "wrong_readback", "reparented", "foreign_focus"])
     func registeredStackRestoresOnlyItsHeldWorkspaceFocus(focusRestoration: String) async throws {
         try await observeStack(navigation: true, initiallyExpanded: false,
@@ -1526,6 +1538,19 @@ struct Issue965FreshPopulationAcquisitionTests {
                     default: fixture.builder.setAttribute(scrollbar, kAXValueAttribute as String, 0.75)
                     }
                 }
+                if isInner, !expanded, let nestedFault, nestedFault.hasPrefix("retained_label_") {
+                    fixture.reads.record("child_custody_fault")
+                    switch nestedFault {
+                    case "retained_label_editable":
+                        fixture.builder.setAttributeSettable(passiveLabel, kAXValueAttribute as String, true)
+                    case "retained_label_insertion":
+                        fixture.builder.setAttribute(passiveLabel, kAXInsertionPointLineNumberAttribute as String, 0)
+                    case "retained_label_replacement":
+                        fixture.builder.setChildren(headers[0], [disclosure, otherLabel])
+                    default:
+                        fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, otherLabel)
+                    }
+                }
                 if isInner, !expanded, let nestedFault, ["cancel", "deadline"].contains(nestedFault) {
                     fixture.reads.record("child_custody_fault")
                     if nestedFault == "deadline" {
@@ -1913,6 +1938,11 @@ struct Issue965FreshPopulationAcquisitionTests {
             #expect(effects["restoration"] as? String == "not_restored")
             let current = await cache.getTracks()
             #expect(current.isEmpty, "conflicted temporary rows are never current cache authority")
+            if nestedFault.hasPrefix("retained_label_") {
+                #expect(body["state"] as? String == "C" && body["snapshot_id"] == nil)
+                #expect(!fixture.reads.recorded.contains("workspace_focus_setter"),
+                        "lost passive focus never authorizes overwriting the current focus")
+            }
             if lastReadFault {
                 #expect(body["state"] as? String == "C")
                 #expect(body["error"] as? String == "stale_snapshot")
@@ -1980,7 +2010,10 @@ struct Issue965FreshPopulationAcquisitionTests {
             let restored = focusRestoration == "restored"
             let setters = fixture.reads.recorded.filter { $0 == "workspace_focus_setter" }
             #expect(setters.count == (["restored", "declined", "wrong_readback"].contains(focusRestoration) ? 1 : 0))
-            #expect(fixture.events.recorded == ["disclosure_down", "disclosure_up", "disclosure_down", "disclosure_up"])
+            #expect(fixture.events.recorded == (nested
+                ? ["disclosure_down", "disclosure_up", "inner_down", "inner_up",
+                   "inner_down", "inner_up", "disclosure_down", "disclosure_up"]
+                : ["disclosure_down", "disclosure_up", "disclosure_down", "disclosure_up"]))
             #expect(fixture.builder.makeAXRuntime().children(fixture.rail).count == 19)
             let body = try #require(sharedJSONObject(sharedToolText(result)))
             let effects = try #require(body["ui_effects"] as? [String: Any])
@@ -1988,6 +2021,10 @@ struct Issue965FreshPopulationAcquisitionTests {
                 : focusRestoration == "foreign_focus" ? "not_restored" : "partially_restored"))
             if restored {
                 #expect(body["tracks"] != nil && body["snapshot_id"] != nil)
+                if nested {
+                    #expect(((body["tracks"] as? [String: Any])?["rows"] as? [[String: Any]])?.count == 44)
+                    #expect((fixture.builder.attributeValue(inner, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+                }
                 let actualFocus: AXUIElement? = AXHelpers.getAttribute(fixture.app, kAXFocusedUIElementAttribute as String,
                     runtime: fixture.builder.makeAXRuntime())
                 let focused = try #require(actualFocus)

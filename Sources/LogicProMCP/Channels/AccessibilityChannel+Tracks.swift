@@ -227,6 +227,7 @@ extension AccessibilityChannel {
         private var expandedHeaders: [AXUIElement]?
         private var releaseUnverified = false
         private var completedClickFocus: (target: Disclosure, labels: [AXUIElement])?
+        private var acceptedPassiveClickFocus: (target: Disclosure, labels: [AXUIElement])?
         private var restorationStarted = false
         private var acquired: [AcquiredDisclosure] = []
         private var pending: [Disclosure]
@@ -629,7 +630,9 @@ extension AccessibilityChannel {
         /// our completed click. This request-local Help/read exception is not
         /// keyboard-command permission and cannot admit an editor or new label.
         func permitsHeldPassiveLabelFocus() -> Bool {
-            guard !releaseUnverified, let completed = completedClickFocus, completed.labels.count == 1,
+            guard !releaseUnverified,
+                  let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
+                  let completed = passiveClickFocus(matching: focus),
                   (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
                   logic.logicProPID() == pid, logic.focusedApplicationPID() == pid,
                   let currentApp = AXLogicProElements.appRoot(runtime: logic), CFEqual(currentApp, app),
@@ -643,7 +646,6 @@ extension AccessibilityChannel {
                   rows.filter({ CFEqual($0, completed.target.header) }).count == 1,
                   same(rows.filter { row in originalHeaders.contains { CFEqual($0, row) } }, originalHeaders),
                   let currentSelection = Self.selectedHeaders(rows, ax: logic.ax), same(currentSelection, selected),
-                  let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
                   CFEqual(focus, completed.labels[0]), isPassiveLabel(focus),
                   case .success(let children) = AXHelpers.childrenResult(completed.target.header, runtime: logic.ax),
                   children.filter({ CFEqual($0, focus) }).count == 1,
@@ -652,6 +654,16 @@ extension AccessibilityChannel {
                   let finalFocus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
                   CFEqual(finalFocus, focus) else { return false }
             return true
+        }
+
+        private func passiveClickFocus(matching focus: AXUIElement) -> (target: Disclosure, labels: [AXUIElement])? {
+            if let completed = completedClickFocus, completed.labels.count == 1,
+               CFEqual(focus, completed.labels[0]) { return completed }
+            // A nested owned click can leave focus on the outer label. Retain
+            // only the exact already accepted focus, not arbitrary past labels.
+            guard let accepted = acceptedPassiveClickFocus, accepted.labels.count == 1,
+                  CFEqual(focus, observedFocus), CFEqual(focus, accepted.labels[0]) else { return nil }
+            return accepted
         }
 
         private func click(target: Disclosure, expectedHeaders: [AXUIElement]?, expectedValue: Int?, stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
@@ -865,6 +877,12 @@ extension AccessibilityChannel {
                     || (completedClickFocus.map { CFEqual($0.target.header, target.header)
                         && CFEqual($0.target.disclosure, target.disclosure) } == true
                         && permitsHeldPassiveLabelFocus()) else { return false }
+            if let completed = completedClickFocus, completed.labels.count == 1,
+               CFEqual(focus, completed.labels[0]), permitsHeldPassiveLabelFocus() {
+                acceptedPassiveClickFocus = completed
+            } else if !CFEqual(focus, observedFocus) {
+                acceptedPassiveClickFocus = nil
+            }
             if !CFEqual(focus, observedFocus), !effects.changed.contains("keyboard_focus") { effects.changed.append("keyboard_focus") }
             observedFocus = focus
             return true
