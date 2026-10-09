@@ -1592,10 +1592,12 @@ struct QualificationTransport: Sendable {
                         var seededSessionSnapshotID: String?
                         if spec.id == .projectPlanSessionRepair {
                             let seedID = nextID
-                            nextID += 1
+                            // Reserve the optional fresh-read retry's ID even when the first
+                            // seed succeeds. No retry may collide with the planner probe.
+                            nextID += 2
                             // A failed seed sends no handle, so the planner's refusal is recorded
                             // as the failure it is rather than skipped.
-                            seededSessionSnapshotID = try? sessionInspectionSeed(session, id: seedID)
+                            seededSessionSnapshotID = try? sessionInspectionSeed(session, startingAt: seedID)
                         }
                         let responseID = nextID
                         nextID += 1
@@ -4468,39 +4470,91 @@ struct QualificationTransport: Sendable {
         return (true, body, text)
     }
 
-    /// #966: the handle the planner probe plans over, taken from a cache-only `inspect_session`
+    /// #966: the handle the planner probe plans over, taken from request-owned `inspect_session`
     /// in the same subprocess. Only the handle is read; whether it was retained is the planner's
     /// to answer, and its refusal for an unsaved project is classified where refusals are.
     private func sessionInspectionSeed(
         _ session: QualificationSubprocessSession,
-        id: Int
+        startingAt id: Int
     ) throws -> String {
         guard let inspect = OperationRegistry.specs.first(where: { $0.id == .projectInspectSession }) else {
             throw QualificationTransportError.protocolViolation("session_inspection_seed: no inspect_session operation")
         }
-        let result: ToolCallResult = try session.request(
-            id: id,
-            method: "tools/call",
-            params: [
-                "name": inspect.tool.rawValue,
-                "arguments": [
-                    "command": inspect.command,
-                    "params": [:] as [String: Any],
+        return try Self.sessionInspectionSeed(startingAt: id) { requestID, phase in
+            let result: ToolCallResult = try session.request(
+                id: requestID,
+                method: "tools/call",
+                params: [
+                    "name": inspect.tool.rawValue,
+                    "arguments": [
+                        "command": inspect.command,
+                        "params": [:] as [String: Any],
+                    ],
                 ],
-            ],
-            phase: "session_inspection_seed"
-        )
-        guard result.isError != true else {
-            throw QualificationTransportError.protocolViolation("session_inspection_seed: tool returned isError")
+                phase: phase
+            )
+            return (result.isError, try result.text(phase: phase))
         }
-        let seed: SessionInspectionSeed = try Self.decodeInner(
-            result.text(phase: "session_inspection_seed"),
-            phase: "session_inspection_seed"
-        )
-        guard !seed.snapshotID.isEmpty else {
-            throw QualificationTransportError.protocolViolation("session_inspection_seed: empty snapshot_id")
+    }
+
+    /// Startup feedback can invalidate a genuine fresh read's strict cache boundary.
+    /// Keep that refusal and perform at most one entirely new read; never accept its
+    /// old rows, refresh the boundary around them, navigate, or retry a write/timeout.
+    static func sessionInspectionSeed(
+        startingAt id: Int,
+        request: (Int, String) throws -> (isError: Bool?, text: String)
+    ) throws -> String {
+        for attempt in 0..<2 {
+            let phase = attempt == 0 ? "session_inspection_seed" : "session_inspection_seed_retry"
+            let result = try request(id + attempt, phase)
+            if result.isError == true {
+                if attempt == 0,
+                   let refusal = try? JSONDecoder().decode(SessionSeedReadRefusal.self, from: Data(result.text.utf8)),
+                   refusal.permitsFreshReadRetry { continue }
+                throw QualificationTransportError.protocolViolation("\(phase): tool returned isError")
+            }
+            let seed: SessionInspectionSeed = try decodeInner(result.text, phase: phase)
+            guard !seed.snapshotID.isEmpty else {
+                throw QualificationTransportError.protocolViolation("\(phase): empty snapshot_id")
+            }
+            return seed.snapshotID
         }
-        return seed.snapshotID
+        throw QualificationTransportError.protocolViolation("session_inspection_seed: no successful fresh read")
+    }
+
+    private struct SessionSeedReadRefusal: Decodable {
+        struct Effects: Decodable {
+            let attempted: [String]
+            let changed: [String]
+            let navigationPerformed: Bool
+            let restoration: String
+            let reason: String?
+            enum CodingKeys: String, CodingKey {
+                case attempted, changed, restoration, reason
+                case navigationPerformed = "navigation_performed"
+            }
+        }
+        let state: String
+        let success: Bool
+        let error: String
+        let writeAttempted: Bool
+        let navigationPerformed: Bool
+        let effects: Effects
+        let snapshotID: String?
+        enum CodingKeys: String, CodingKey {
+            case state, success, error
+            case writeAttempted = "write_attempted"
+            case navigationPerformed = "navigation_performed"
+            case effects = "ui_effects"
+            case snapshotID = "snapshot_id"
+        }
+        var permitsFreshReadRetry: Bool {
+            state == "C" && !success && error == "readback_unavailable"
+                && !writeAttempted && !navigationPerformed && snapshotID == nil
+                && effects.attempted.isEmpty && effects.changed.isEmpty
+                && !effects.navigationPerformed && effects.restoration == "not_applicable"
+                && effects.reason == nil
+        }
     }
 
     private struct SessionInspectionSeed: Decodable {
