@@ -56,7 +56,14 @@ enum LogicProjectFileReader {
         static let production: Runtime = .init(
             currentDocumentPath: { await AppleScriptChannel.currentDocumentPath() },
             now: Date.init,
-            readPlistData: { url in FileManager.default.contents(atPath: url.path) },
+            readPlistData: { url in
+                guard let file = try? FileHandle(forReadingFrom: url) else { return nil }
+                defer { try? file.close() }
+                // Read one sentinel byte beyond the limit, never the whole oversized file.
+                guard let data = try? file.read(upToCount: maxPlistBytes + 1),
+                      data.count <= maxPlistBytes else { return nil }
+                return data
+            },
             mtime: { url in
                 (try? FileManager.default.attributesOfItem(atPath: url.path)[.modificationDate]) as? Date
             },
