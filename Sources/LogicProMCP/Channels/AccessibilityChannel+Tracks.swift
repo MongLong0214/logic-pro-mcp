@@ -2447,7 +2447,9 @@ extension AccessibilityChannel {
                 "write_attempted": attempted,
             ]
             if attempted {
-                return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
+                return .success(HonestContract.encodeStateB(
+                    reason: .readbackUnavailable, extras: extras.merging(["hint": hint]) { _, new in new }
+                ))
             }
             return .error(HonestContract.encodeStateC(error: .staleTargetReference, hint: hint, extras: extras))
         }
