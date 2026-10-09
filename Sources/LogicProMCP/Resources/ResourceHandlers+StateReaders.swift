@@ -123,8 +123,9 @@ extension ResourceHandlers {
     /// v3.1.8 (Issue #7) — tier-merged track list read.
     ///
     /// Tier order:
-    ///   1. Cache (live AX poll). If non-empty AND not Inspector-contaminated,
-    ///      surface as-is, source: "ax_live".
+    ///   1. Cache. If non-empty AND not Inspector-contaminated, surface as-is.
+    ///      Source: "ax_live" after an AX population read, otherwise "cache"
+    ///      for scalar-only feedback before that first read.
     ///   2. LogicProjectFileReader's `NumberOfTracks`. Synthesise placeholder
     ///      rows (`name: "Track 1".."Track \(N)"`, `placeholder: true`).
     ///      Source: "ax_live_with_file_count" if poller has run before but
@@ -154,16 +155,21 @@ extension ResourceHandlers {
         } else {
             targetSnapshot = nil
         }
-        let liveTracks = TrackReferenceIssuance.liveInventory(await cache.getTracks())
-        let cacheFetchedAt = await cache.getTracksFetchedAt()
-        let axOccluded = await cache.getAXOccluded()
+        // Rows and their observation time must come from the same actor turn: a later AX
+        // commit must not certify scalar-only rows already sampled by this resource.
+        let cacheState = await cache.auditSnapshot()
+        let liveTracks = TrackReferenceIssuance.liveInventory(cacheState.tracks)
+        let cacheFetchedAt = cacheState.tracksFetchedAt
+        let axOccluded = cacheState.axOccluded
 
         var tracksOut: [TrackState] = []
         var source: String
 
         if !liveTracks.isEmpty {
             tracksOut = liveTracks
-            source = "ax_live"
+            // MCU feedback can create scalar-only rows before the first AX population read.
+            // Retain those cached values, but do not claim their generated names were observed.
+            source = cacheFetchedAt > .distantPast ? "ax_live" : "cache"
         } else {
             // Tier 2: synthesise placeholders from file count.
             let metadata = await LogicProjectFileReader.read(runtime: fileReader)
@@ -215,7 +221,8 @@ extension ResourceHandlers {
         // consumer reading `data` cannot tell "the project has no tracks" from "nothing has been
         // read yet" — and before the first live read this document answers `data: []` for a project
         // that demonstrably has tracks. `ax_live` is the only source that saw the real thing; the
-        // file-count tiers synthesise placeholder names from a count.
+        // file-count tiers synthesise placeholder names from a count, and cold scalar feedback
+        // can populate cache rows without observing their identities.
         let observedLive = source == "ax_live"
         let collapsedStacks = collapsedTrackStacks(in: tracksOut)
         // This legacy cache holds exposed rows, not a request-owned project population witness.
@@ -236,7 +243,9 @@ extension ResourceHandlers {
             } else {
                 extras["reason"] = "track_population_not_verified"
             }
-        } else if !observedLive {
+        } else if source == "cache" {
+            extras["reason"] = "no_live_track_read_yet"
+        } else {
             extras["reason"] = tracksOut.isEmpty
                 ? "no_live_track_read_yet"
                 : "track_names_synthesised_from_project_file"
