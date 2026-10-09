@@ -19,6 +19,7 @@ enum OperationID: String, CaseIterable, Codable, Sendable, Hashable {
     case mixerInsertPlugin = "mixer.insert_plugin"
     case mixerBank = "mixer.bank"
     case mixerSetOutputVerified = "mixer.set_output_verified"
+    case mixerGetOutputVerified = "mixer.get_output_verified"
     case navigateGotoBar = "navigate.goto_bar"
     case navigateGotoMarker = "navigate.goto_marker"
     case navigateCaptureMarkers = "navigate.capture_markers"
@@ -302,7 +303,7 @@ enum OperationRegistry {
         ToolID.logicMixer.rawValue: [
             "mixer.set_volume", "mixer.set_pan", "mixer.set_master_volume",
             "mixer.set_plugin_param", "mixer.insert_plugin", "mixer.bank",
-            "mixer.set_output_verified",
+            "mixer.set_output_verified", "mixer.get_output_verified",
         ],
         ToolID.logicNavigate.rawValue: [
             "navigate.goto_bar", "navigate.goto_marker", "navigate.create_marker",
@@ -364,7 +365,7 @@ enum OperationRegistry {
         ],
         ToolID.logicMixer.rawValue: [
             "set_volume", "set_pan", "set_master_volume", "set_plugin_param", "insert_plugin",
-            "bank", "set_output_verified",
+            "bank", "set_output_verified", "get_output_verified",
         ],
         ToolID.logicNavigate.rawValue: [
             "goto_bar", "goto_marker", "create_marker", "delete_marker", "rename_marker",
@@ -599,12 +600,13 @@ enum OperationRegistry {
             .acceptsStableTarget,
             ["destination", "expected_current", "index", "track"]
         ),
+        (.mixerGetOutputVerified, "get_output_verified", .none, .acceptsStableTarget, []),
     ] as [(OperationID, String, ConfirmationPolicy, TargetPolicy, Set<String>)]).map { entry in
         OperationSpec(
             id: entry.0,
             tool: .logicMixer,
             command: entry.1,
-            mutability: Mutability.`mutating`,
+            mutability: entry.0 == .mixerGetOutputVerified ? .readOnly : Mutability.`mutating`,
             confirmation: entry.2,
             target: entry.3,
             verification: .readbackRequired,
