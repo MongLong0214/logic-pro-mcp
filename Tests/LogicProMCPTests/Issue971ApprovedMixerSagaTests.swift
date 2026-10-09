@@ -217,8 +217,8 @@ struct Issue971ApprovedMixerSagaTests {
 
         func namesPlan(_ names: [String], approvedNames: [String]? = nil,
                        policyExtras: [String: Value] = [:], includeMixerObservation: Bool = true) async throws -> [String: Any] {
-            // A composed Mixer goal needs the existing guarded Mixer observation,
-            // not an absence inferred from a tracks-only, Help-free snapshot.
+            // A composed Mixer goal needs a guarded presentation observation;
+            // the requested domains alone neither prove nor disprove visibility.
             let hasMixerGoal = policyExtras["presentation"]?.objectValue?["mixer_visible"]?.boolValue != nil
             let domains: [Value] = hasMixerGoal && includeMixerObservation
                 ? [.string("tracks"), .string("strips")] : [.string("tracks")]
@@ -698,20 +698,53 @@ struct Issue971ApprovedMixerSagaTests {
     }
 
     @Test
-    func composedMixerGoalCannotInventAbsenceFromTracksOnlySnapshot() async throws {
+    func composedMixerGoalCannotInventAbsenceAcrossUnreadPresentationDescendants() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             try await FeatureFlags.withAdr004MutationSagaForTests(true) {
                 let f = try Fixture(showing: false)
                 let names = ["Bass", "Lead"]
                 _ = f.installNameHeaders(names)
+                // Unread children can hide a Mixer. Unavailable exclusion-only
+                // Help instead includes all positively typed descendants.
+                f.view.unreadNestedGroup = f.view.extraWindowChildren[0]
                 let plan = try await f.namesPlan(names,
                     policyExtras: ["presentation": .object(["mixer_visible": .bool(true)])],
                     includeMixerObservation: false)
                 let executable = try #require(plan["executable"] as? Bool)
                 #expect(!executable)
-        let reasons = try #require(plan["reasons"] as? [String])
-        #expect(reasons.contains("mixer_visibility_unobserved"))
+                let reasons = try #require(plan["reasons"] as? [String])
+                #expect(reasons.contains("mixer_visibility_unobserved"))
                 #expect(f.view.events.isEmpty)
+            }
+        }
+    }
+
+    @Test
+    func composedMixerGoalUsesIndependentPresentationEvidenceInATracksOnlySnapshot() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: false)
+                let names = ["Bass", "Lead"]
+                _ = f.installNameHeaders(names)
+                let report = try await f.call("inspect_session", params: ["domains": .array([.string("tracks")])])
+                let observation = try #require(report["presentation_observation"] as? [String: Any])
+                let visible = try #require(observation["mixer_visible"] as? Bool)
+                #expect(!visible)
+                let snapshot = try #require(report["snapshot_id"] as? String)
+                let retained = try #require(await f.cache.retainedInspection(id: snapshot))
+                #expect(retained.capture.freshPopulation?.presentationBinding != nil)
+                let plan = try await f.namesPlan(names,
+                    policyExtras: ["presentation": .object(["mixer_visible": .bool(true)])],
+                    includeMixerObservation: false)
+                let executable = try #require(plan["executable"] as? Bool)
+                #expect(executable)
+                let steps = try #require(plan["steps"] as? [[String: Any]])
+                #expect(steps.count == 1)
+                let before = try #require(steps.first?["before"] as? [String: Any])
+                let beforeVisible = try #require(before["visible"] as? Bool)
+                #expect(!beforeVisible)
+                #expect(f.view.events.isEmpty)
+                #expect(!f.view.showing)
             }
         }
     }
