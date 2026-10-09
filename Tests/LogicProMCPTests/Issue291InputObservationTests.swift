@@ -38,6 +38,13 @@ struct Issue291InputObservationTests {
                 b.setButton(input, description: shape == "blank" ? "" : (shape == "aux" ? "Bus 1" : "Input 1"),
                             help: "Input slot. Choose the channel strip input source.",
                             x: 0, y: 0, width: 1, height: 1)
+                // Logic 12.3 en-US: an offscreen physical strip retains a button described
+                // "input" but has not populated its help or source description. Scrolling
+                // the same strip into view exposes Input 1, so this is not an absent slot.
+                if shape == "placeholder" {
+                    b.removeAttribute(input, kAXHelpAttribute as String)
+                    b.setAttribute(input, kAXDescriptionAttribute as String, "input")
+                }
                 b.setChildren(input, [])
                 children.append(input)
             }
@@ -120,7 +127,7 @@ struct Issue291InputObservationTests {
         return try #require(sharedJSONObject(sharedToolText(result)))
     }
 
-    @Test(arguments: ["audio", "aux", "instrument", "blank", "children"], [false, true])
+    @Test(arguments: ["audio", "aux", "instrument", "blank", "children", "placeholder"], [false, true])
     func bothOrdinaryProducersCarryActualInputStatus(shape: String, single: Bool) throws {
         let fixture = Fixture(shape)
         let row = try #require(ordinaryRows(fixture, single: single).first)
@@ -135,7 +142,7 @@ struct Issue291InputObservationTests {
         #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
     }
 
-    @Test(arguments: ["audio", "aux", "instrument", "blank"])
+    @Test(arguments: ["audio", "aux", "instrument", "blank", "placeholder"])
     func registeredInspectionCarriesInputStatusWithoutInventingRouting(shape: String) async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(false) {
             let fixture = Fixture(shape)
@@ -193,6 +200,38 @@ struct Issue291InputObservationTests {
 
     @Test func unknownBusBesideRecognizedPhysicalInputCannotClearTheExistingCycleCheck() {
         let fixture = Fixture("unknown_bus")
+        #expect(AccessibilityChannel.busLoop(into: 2, from: 0, strips: [fixture.strip], inputs: [:],
+                                           runtime: fixture.runtime.ax) == .unknown(ordinal: 0, part: "input"))
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+    }
+
+    @Test func offscreenInputPlaceholderCannotClearTheExistingCycleCheck() {
+        let fixture = Fixture("placeholder")
+        #expect(AXLogicProElements.inputSlotReading(in: fixture.strip, runtime: fixture.runtime.ax) == .unreadable)
+        #expect(AccessibilityChannel.busLoop(into: 2, from: 0, strips: [fixture.strip], inputs: [:],
+                                           runtime: fixture.runtime.ax) == .unknown(ordinal: 0, part: "input"))
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+    }
+
+    @Test func inputPlaceholderCannotBeIgnoredBesideAnObservedSource() {
+        let fixture = Fixture("placeholder")
+        fixture.builder.setButton(fixture.later, description: "Input 2",
+                                  help: "Input slot. Choose the channel strip input source.",
+                                  x: 0, y: 0, width: 1, height: 1)
+        fixture.builder.setChildren(fixture.later, [])
+        fixture.builder.setChildren(fixture.strip, [fixture.input, fixture.later])
+        let read = AXLogicProElements.inputSlotRead(in: fixture.strip, runtime: fixture.runtime.ax)
+        #expect(read.reading == .unreadable)
+        #expect(read.control == nil)
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+    }
+
+    @Test func malformedPlaceholderDescriptionCannotEstablishAbsence() {
+        let fixture = Fixture("placeholder")
+        fixture.builder.setAttribute(fixture.input, kAXDescriptionAttribute as String, NSNumber(value: 42))
+        let read = AXLogicProElements.inputSlotRead(in: fixture.strip, runtime: fixture.runtime.ax)
+        #expect(read.reading == .unreadable)
+        #expect(read.control == nil)
         #expect(AccessibilityChannel.busLoop(into: 2, from: 0, strips: [fixture.strip], inputs: [:],
                                            runtime: fixture.runtime.ax) == .unknown(ordinal: 0, part: "input"))
         #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
