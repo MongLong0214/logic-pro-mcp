@@ -346,21 +346,23 @@ extension AccessibilityChannel {
         }
 
         /// Track's menu is application-global. Its final reread cannot by itself
-        /// bind AXPress to the document whose view was acquired.
+        /// bind AXPress to the document whose view was acquired. Finish stop
+        /// callbacks before the final scope sample; they can themselves read AX
+        /// focus and must not leave an already sampled document authorizing Press.
         private func hiddenMenuActionBoundary(stoppingWhen stop: @Sendable () -> Bool) -> Bool {
             guard !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
                   logic.logicProPID() == pid,
                   let currentApp = AXLogicProElements.appRoot(runtime: logic), CFEqual(app, currentApp),
+                  !stop(), logic.logicProPID() == pid,
+                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                  let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
+                  CFEqual(focus, observedFocus),
                   let main: AXUIElement = AXHelpers.getAttribute(app, kAXMainWindowAttribute as String, runtime: logic.ax),
                   let focusedWindow: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedWindowAttribute as String, runtime: logic.ax),
                   CFEqual(main, window), CFEqual(focusedWindow, window),
                   AXHelpers.getTitle(window, runtime: logic.ax)?.utf8.elementsEqual(title.utf8) == true,
-                  let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
-                  CFEqual(focus, observedFocus),
                   case .success(.some(let currentDocument)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: logic),
-                  currentDocument.utf8.elementsEqual(document.utf8),
-                  !stop(), logic.logicProPID() == pid,
-                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+                  currentDocument.utf8.elementsEqual(document.utf8) else { return false }
             return true
         }
 
@@ -670,8 +672,8 @@ extension AccessibilityChannel {
             if let held = hiddenMenuPath, hiddenControl.map({ CFEqual($0, target.disclosure) }) == true {
                 guard await owned(target: target, expectedHeaders: expectedHeaders, expectedValue: expectedValue, stoppingWhen: stop),
                       isBoundHiddenMenuTarget(target), let leaf = held.last,
-                      hiddenMenuActionBoundary(stoppingWhen: stop),
-                      !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+                      !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                      hiddenMenuActionBoundary(stoppingWhen: stop) else { return false }
                 effects.navigationPerformed = true; effects.restoration = "not_restored"
                 if !effects.attempted.contains("hidden_track_view") { effects.attempted.append("hidden_track_view") }
                 // ACK is not the outcome. The caller still requires independent
@@ -789,8 +791,8 @@ extension AccessibilityChannel {
                       await owned(target: target, expectedHeaders: currentHeaders, expectedValue: 1,
                         hiddenViewCleanup: true, stoppingWhen: stop),
                       isBoundHiddenMenuTarget(target), let leaf = hiddenMenuPath?.last,
-                      hiddenMenuActionBoundary(stoppingWhen: stop),
-                      !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return effects }
+                      !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                      hiddenMenuActionBoundary(stoppingWhen: stop) else { return effects }
                 // This ends no earlier loss and revives no row or snapshot.
                 // Only presentation is inversed; no selection setter is used.
                 _ = AXHelpers.performAction(leaf, kAXPressAction as String, runtime: logic.ax)

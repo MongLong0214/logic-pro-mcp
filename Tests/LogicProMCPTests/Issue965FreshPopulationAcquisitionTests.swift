@@ -269,9 +269,16 @@ struct Issue965FreshPopulationAcquisitionTests {
         try await observeHiddenView(scopedMenu: true, recycledSelection: fault.hasPrefix("cleanup_"), menuBoundaryFault: fault)
     }
 
+    @Test(arguments: ["document", "window", "cleanup_document", "cleanup_window"], [2, 3])
+    func registeredHiddenMenuRejectsTargetSwitchInTheStopCallbackAfterItsScopeRead(fault: String, callback: Int) async throws {
+        try await observeHiddenView(scopedMenu: true, recycledSelection: fault.hasPrefix("cleanup_"),
+                                   lateMenuStopFault: fault, lateMenuStopCallback: callback)
+    }
+
     private func observeHiddenView(needsWindowServerBootstrap: Bool = false, scopedMenu: Bool = false,
                                    recycledSelection: Bool = false, cleanupFault: String? = nil,
-                                   menuBoundaryFault: String? = nil) async throws {
+                                   menuBoundaryFault: String? = nil, lateMenuStopFault: String? = nil,
+                                   lateMenuStopCallback: Int = 2) async throws {
         let fixture = hiddenViewFixture(shown: false)
         let hide = fixture.builder.element(965_973)
         let hidden = fixture.builder.element(965_978)
@@ -353,6 +360,7 @@ struct Issue965FreshPopulationAcquisitionTests {
            postUnicodeScalar: { _ in Issue.record("no typing"); return false }, sleepMicros: { _ in })
         let cache = StateCache(), gate = LogicMutationGate()
         let menuReads = Reads()
+        let lateScopeReads = Reads()
         let dependencies = HandlerDependencies(router: ChannelRouter(), cache: cache, targetRegistry: TargetRegistry(),
             poller: StatePoller(axChannel: fixture.channel(observationMouse: mouse, hiddenControl: hide,
                 needsWindowServerBootstrap: needsWindowServerBootstrap, focusedPID: scopedMenu ? 7777 : 4242,
@@ -406,9 +414,10 @@ struct Issue965FreshPopulationAcquisitionTests {
                         : (shown ? [fixture.header] : [fixture.header, hidden]))
                     return true
                 }, readingAttribute: { element, attribute in
-                    guard menuBoundaryFault != nil, CFEqual(element, toggle), attribute == kAXEnabledAttribute as String else { return nil }
+                    guard menuBoundaryFault != nil || lateMenuStopFault != nil,
+                          CFEqual(element, toggle), attribute == kAXEnabledAttribute as String else { return nil }
                     menuReads.record("enabled")
-                    if menuReads.count == (menuBoundaryFault?.hasPrefix("cleanup_") == true ? 12 : 5) {
+                    if menuBoundaryFault != nil, menuReads.count == (menuBoundaryFault?.hasPrefix("cleanup_") == true ? 12 : 5) {
                         if menuBoundaryFault?.hasSuffix("document") == true {
                             fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String, "file:///tmp/Foreign.logicx")
                         } else {
@@ -419,7 +428,24 @@ struct Issue965FreshPopulationAcquisitionTests {
                     }
                     return .success(NSNumber(value: true))
                 }), cache: cache,
-                runtime: .init(hasVisibleWindow: { true }, projectFileReader: .unavailable, keyboardFocus: { .notTextEditing })),
+                runtime: .init(hasVisibleWindow: { true }, projectFileReader: .unavailable, keyboardFocus: {
+                    if let lateMenuStopFault,
+                       menuReads.count >= (lateMenuStopFault.hasPrefix("cleanup_") ? 12 : 5),
+                       fixture.events.count == (lateMenuStopFault.hasPrefix("cleanup_") ? 1 : 0),
+                       !lateScopeReads.recorded.contains("scope_switched_in_stop") {
+                        lateScopeReads.record("stop_callback")
+                        guard lateScopeReads.count == lateMenuStopCallback else { return .notTextEditing }
+                        lateScopeReads.record("scope_switched_in_stop")
+                        if lateMenuStopFault.hasSuffix("document") {
+                            fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String, "file:///tmp/Foreign.logicx")
+                        } else {
+                            let foreign = fixture.builder.element(965_992)
+                            fixture.builder.setAttribute(fixture.app, kAXMainWindowAttribute as String, foreign)
+                            fixture.builder.setAttribute(fixture.app, kAXFocusedWindowAttribute as String, foreign)
+                        }
+                    }
+                    return .notTextEditing
+                })),
             dialogPresent: { false }, supportBundleExporter: nil, mutationGate: gate,
             liveTrackNames: { [:] }, projectFileReader: .unavailable)
         let handler = try #require(OperationHandlerRegistry.handler(tool: "logic_project", command: "inspect_session"))
@@ -427,6 +453,16 @@ struct Issue965FreshPopulationAcquisitionTests {
         let result = await LogicProServer.runWithDeadline(tool: "logic_project", command: "inspect_session",
             commandParams: params, mutationGate: gate) { await handler(dependencies, params) }
         let body = try #require(sharedJSONObject(sharedToolText(result)))
+        if let lateMenuStopFault {
+            let injected = lateScopeReads.recorded.contains("scope_switched_in_stop")
+            #expect(injected)
+            let cleanup = lateMenuStopFault.hasPrefix("cleanup_")
+            #expect(fixture.events.recorded == (cleanup ? ["hidden_menu"] : []),
+                    "the stop callback cannot authorize app-global AXPress after its document/window changes")
+            #expect((fixture.builder.attributeValue(hide, kAXValueAttribute as String) as? NSNumber)?.intValue == (cleanup ? 1 : 0))
+            #expect(fixture.builder.setCalls.isEmpty)
+            return
+        }
         if menuBoundaryFault != nil {
             let cleanup = menuBoundaryFault?.hasPrefix("cleanup_") == true
             #expect(menuReads.count >= (cleanup ? 12 : 5), "the switch must occur in the final held-menu reread")
