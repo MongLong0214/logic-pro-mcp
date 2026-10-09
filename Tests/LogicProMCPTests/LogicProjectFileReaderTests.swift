@@ -160,6 +160,44 @@ func parseMetaData_oversize10MB_returnsNil() async throws {
     #expect(metadata == nil)
 }
 
+@Test(arguments: [-1, 0, 1])
+func productionMetadataReaderBoundsBytesBeforeParsing(limitDelta: Int) throws {
+    let bundle = try makeProjectBundle(name: "BoundedProductionRead")
+    defer { cleanupBundle(bundle) }
+    let leaf = bundle.appendingPathComponent("Alternatives/000/MetaData.plist")
+    let size = LogicProjectFileReader.maxPlistBytes + limitDelta
+    try Data(repeating: 0x61, count: size).write(to: leaf)
+
+    // Exercise the real file callback, not the injected whole-file fixture reader.
+    let bytes = LogicProjectFileReader.Runtime.production.readPlistData(leaf)
+    if limitDelta > 0 {
+        #expect(bytes == nil)
+    } else {
+        #expect(bytes?.count == size)
+        #expect(bytes?.first == 0x61)
+        #expect(bytes?.last == 0x61)
+    }
+}
+
+@Test(arguments: [false, true])
+func productionMetadataReaderParsesValidPlists(asXML: Bool) async throws {
+    let bundle = try makeProjectBundle(name: "ProductionPlist", tempo: 110, trackCount: 31, asXML: asXML)
+    defer { cleanupBundle(bundle) }
+    let metadata = await LogicProjectFileReader.readPath(bundle.path)
+    #expect(metadata?.tempo == 110)
+    #expect(metadata?.timeSignatureString == "4/4")
+    #expect(metadata?.trackCount == 31)
+}
+
+@Test
+func productionMetadataReaderRefusesMissingFileAndDirectory() throws {
+    let bundle = try makeProjectBundle(name: "ProductionMissingFile")
+    defer { cleanupBundle(bundle) }
+    let missing = bundle.appendingPathComponent("missing.plist")
+    #expect(LogicProjectFileReader.Runtime.production.readPlistData(missing) == nil)
+    #expect(LogicProjectFileReader.Runtime.production.readPlistData(bundle) == nil)
+}
+
 // MARK: - Path validation
 
 @Test
