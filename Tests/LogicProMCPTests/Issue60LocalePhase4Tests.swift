@@ -371,9 +371,12 @@ struct Issue60LocalePhase4Tests {
         #expect(found != nil && CFEqual(found!, pan))
     }
 
-    @Test("isOccupiedPluginSlotElement recognizes the bypass+open label pair (EN + KO)",
-          arguments: [("Bypass", "Open"), ("바이패스", "열기"), ("Bypass", "List"), ("바이패스", "목록")])
-    func occupiedPluginSlotByLabel(bypassLabel: String, openLabel: String) {
+    // The old list-only positives also described an assigned send, observed
+    // on Logic 12.3 en-US in #291. Keep those cases as explicit negative controls.
+    @Test("occupied inserts require bypass+open, not bypass+list (EN + KO)",
+          arguments: [("Bypass", "Open", true), ("바이패스", "열기", true),
+                      ("Bypass", "List", false), ("바이패스", "목록", false)])
+    func occupiedPluginSlotByLabel(bypassLabel: String, openLabel: String, expected: Bool) {
         let b = FakeAXRuntimeBuilder()
         let slot = b.element(9300)
         b.setAttribute(slot, kAXRoleAttribute as String, kAXGroupRole as String)
@@ -384,7 +387,12 @@ struct Issue60LocalePhase4Tests {
         b.setAttribute(open, kAXRoleAttribute as String, kAXButtonRole as String)
         b.setAttribute(open, kAXDescriptionAttribute as String, openLabel)
         b.setChildren(slot, [bypass, open])
-        #expect(AXLogicProElements.isOccupiedPluginSlotElement(slot, runtime: b.makeAXRuntime()))
+        let observed = AXLogicProElements.isOccupiedPluginSlotElement(slot, runtime: b.makeAXRuntime())
+        if expected {
+            #expect(observed)
+        } else {
+            #expect(!observed)
+        }
     }
 
     @Test("pluginSlotDisplayName rejects automation-mode labels (EN + KO), accepts a real name",
