@@ -166,6 +166,19 @@ private final class Issue1118CaptureFixture: @unchecked Sendable {
     var userOpensListOnRefusal = false
     var finalRestoreDocumentDrift = false
     var inventoryDocumentDrift: String?
+    var viewportMove = false
+    var viewportFailure: String?
+    var viewportWrites = 0
+
+    func installViewport() -> AXUIElement {
+        let bar = builder.element(111808)
+        builder.setRole(bar, kAXScrollBarRole as String)
+        builder.setAttribute(bar, kAXWindowAttribute as String, arrange)
+        builder.setAttribute(bar, kAXValueAttribute as String, NSNumber(value: 1.0))
+        builder.setAttributeSettable(bar, kAXValueAttribute as String, true)
+        builder.setChildren(arrange, [focus, bar])
+        return bar
+    }
 
     init(open: Bool = false, empty: Bool = false) {
         app = builder.element(111800)
@@ -219,6 +232,13 @@ private final class Issue1118CaptureFixture: @unchecked Sendable {
                 if phase == "before", unreadInitial == attribute {
                     return .failure(.init(raw: AXError.cannotComplete.rawValue))
                 }
+                // Preserve AXNumber's numeric type; the shared legacy bridge
+                // otherwise casts NSNumber(0/1) to Bool before reaching NSNumber.
+                if attribute == kAXValueAttribute as String,
+                   (CFEqual(element, builder.element(111808)) || CFEqual(element, builder.element(111809))),
+                   let value = builder.attributeValue(element, attribute) as? NSNumber {
+                    return .success(value)
+                }
                 if phase == "closed", unreadAfterClose, CFEqual(element, app),
                    attribute == kAXWindowsAttribute as String {
                     return .failure(.init(raw: AXError.cannotComplete.rawValue))
@@ -228,8 +248,23 @@ private final class Issue1118CaptureFixture: @unchecked Sendable {
                 }
                 return nil
             },
-            setAttributeHandler: { [self] element, attribute, _ in
+            setAttributeHandler: { [self] element, attribute, value in
                 events.append("set.\(attribute)")
+                if CFEqual(element, builder.element(111808)), attribute == kAXValueAttribute as String {
+                    viewportWrites += 1
+                    if viewportFailure != "ineffective" {
+                        builder.setAttribute(element, attribute, value)
+                    }
+                    if viewportFailure == "focus" {
+                        builder.setAttribute(app, kAXFocusedUIElementAttribute as String, foreign)
+                        builder.setAttribute(app, kAXFocusedWindowAttribute as String, foreign)
+                    }
+                    if viewportFailure == "document" {
+                        builder.setAttribute(arrange, kAXDocumentAttribute as String, "/Changed.logicx")
+                    }
+                    if viewportFailure == "pid" { captureLogicPID = 4343 }
+                    return viewportFailure != "failed_status"
+                }
                 if !focusIneffective {
                     if CFEqual(element, arrange), attribute == kAXMainAttribute as String {
                         builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
@@ -273,7 +308,7 @@ private final class Issue1118CaptureFixture: @unchecked Sendable {
             }
         )
         return AXLogicProElements.Runtime(
-            logicProPID: base.logicProPID, ax: base.ax,
+            logicProPID: { [self] in captureLogicPID }, ax: base.ax,
             executeAppleScript: base.executeAppleScript,
             executeAppleScriptWithTimeout: base.executeAppleScriptWithTimeout,
             onScreenWindowList: base.onScreenWindowList,
@@ -298,6 +333,27 @@ private final class Issue1118CaptureFixture: @unchecked Sendable {
         }
         events.append("open")
         phase = "opened"
+        if viewportMove {
+            let bar = builder.element(111808)
+            builder.setAttribute(bar, kAXValueAttribute as String, NSNumber(value: 0.0))
+            if viewportFailure == "unsupported" {
+                builder.setAttributeSettable(bar, kAXValueAttribute as String, false)
+            }
+            if viewportFailure == "replacement" {
+                let replacement = builder.element(111809)
+                builder.setRole(replacement, kAXScrollBarRole as String)
+                builder.setAttribute(replacement, kAXWindowAttribute as String, arrange)
+                builder.setAttribute(replacement, kAXValueAttribute as String, NSNumber(value: 0.0))
+                builder.setChildren(arrange, [focus, replacement])
+            }
+            if viewportFailure == "retired" { builder.setChildren(arrange, [focus]) }
+            if viewportFailure == "foreign_window" {
+                builder.setAttribute(bar, kAXWindowAttribute as String, foreign)
+            }
+            if viewportFailure == "nonfinite" {
+                builder.setAttribute(bar, kAXValueAttribute as String, NSNumber(value: Double.nan))
+            }
+        }
         var windows = originalGone ? [list, foreign] : [arrange, list, foreign]
         if duplicateAfter {
             let duplicate = builder.element(111806)
@@ -347,6 +403,56 @@ private final class Issue1118CaptureFixture: @unchecked Sendable {
     func object(_ result: ChannelResult) -> [String: Any] {
         (try? JSONSerialization.jsonObject(with: Data(result.message.utf8))) as? [String: Any] ?? [:]
     }
+}
+
+@Test(arguments: ["observed", "failed_status"])
+func issue1118CaptureRestoresRetainedScrollValueBeforeClaimingUIRestored(mode: String) async throws {
+    let fixture = Issue1118CaptureFixture()
+    let bar = fixture.installViewport()
+    fixture.viewportMove = true
+    fixture.viewportFailure = mode
+    let body = fixture.object(await fixture.capture())
+    #expect(body["state"] as? String == "A")
+    let restored = try #require(body["ui_restored"] as? Bool)
+    #expect(restored)
+    #expect(fixture.viewportWrites == 1)
+    #expect((fixture.builder.attributeValue(bar, kAXValueAttribute as String) as? NSNumber)?.doubleValue == 1.0)
+}
+
+@Test(arguments: ["ineffective", "unsupported", "replacement", "retired", "foreign_window", "nonfinite", "focus", "document", "pid"])
+func issue1118CaptureUnverifiedScrollRestorationCannotPublishStateA(mode: String) async throws {
+    let fixture = Issue1118CaptureFixture()
+    _ = fixture.installViewport()
+    fixture.viewportMove = true
+    fixture.viewportFailure = mode
+    let body = fixture.object(await fixture.capture())
+    #expect(body["state"] as? String == "C")
+    let restored = try #require(body["ui_restored"] as? Bool)
+    #expect(!restored)
+    if ["unsupported", "replacement", "retired", "foreign_window", "nonfinite"].contains(mode) {
+        #expect(fixture.viewportWrites == 0)
+    }
+}
+
+@Test func issue1118CaptureUnchangedScrollMakesNoViewportWrite() async throws {
+    let fixture = Issue1118CaptureFixture()
+    _ = fixture.installViewport()
+    let body = fixture.object(await fixture.capture())
+    #expect(body["state"] as? String == "A")
+    #expect(fixture.viewportWrites == 0)
+}
+
+@Test(arguments: [Optional<pid_t>.none, Optional<pid_t>.some(4343)])
+func issue1118CaptureAlreadyOpenRemainsReadOnlyWithoutGlobalFocus(pid: pid_t?) async throws {
+    let fixture = Issue1118CaptureFixture(open: true)
+    _ = fixture.installViewport()
+    fixture.focusedApplicationPID = pid
+    let body = fixture.object(await fixture.capture())
+    #expect(body["state"] as? String == "A")
+    let attempted = try #require(body["write_attempted"] as? Bool)
+    #expect(!attempted)
+    #expect(fixture.events.isEmpty)
+    #expect(fixture.viewportWrites == 0)
 }
 
 @Test func issue1118CaptureClosedListReadsAndRestoresExactWindowsAndFocus() async throws {
