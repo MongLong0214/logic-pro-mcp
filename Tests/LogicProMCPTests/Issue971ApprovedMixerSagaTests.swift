@@ -848,6 +848,87 @@ struct Issue971ApprovedMixerSagaTests {
         }
     }
 
+    @Test
+    func ownedHideRestoresExactRetainedWorkspaceAfterFocusMovesToItsAncestor() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: true)
+                let ancestor = f.view.builder.element(971_990)
+                f.view.builder.setRole(ancestor, kAXGroupRole as String)
+                f.view.builder.setChildren(ancestor, [f.view.rail])
+                f.view.railContainer = ancestor
+                f.view.updateVisibility()
+                f.view.permitsCapturedFocusRestore = true
+                f.view.afterVisibilityChange = {
+                    f.view.builder.setAttribute(f.view.app, kAXFocusedUIElementAttribute as String, ancestor)
+                }
+                await f.router.register(f.view.channel())
+                let plan = try await f.plan(desired: false)
+                let executable = try #require(plan["executable"] as? Bool)
+                #expect(executable)
+                let outcome = try await f.call("apply_session_repair", params: f.applyParameters(plan, key: "owned-hide-focus"))
+                #expect(outcome["saga_state"] as? String == "completed")
+                let verified = try #require(outcome["verified"] as? Bool)
+                #expect(verified)
+                #expect(!f.view.showing)
+                #expect(f.view.events == ["open_view", "hide_mixer", "restore_captured_focus"])
+                let focus = try #require(f.view.builder.attributeValue(f.view.app, kAXFocusedUIElementAttribute as String))
+                #expect(CFEqual(focus as AnyObject, f.view.rail))
+            }
+        }
+    }
+
+    @Test(arguments: ["foreign", "window", "retired", "parent_replaced", "nonsettable", "false_ack", "no_readback", "late_focus", "late_document", "late_pid", "menu_open"])
+    func ownedHideCannotRestoreForeignOrRetiredWorkspaceOrTrustAnAck(fault: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: true)
+                let ancestor = f.view.builder.element(971_991)
+                let foreign = f.view.builder.element(971_992)
+                f.view.builder.setRole(ancestor, kAXGroupRole as String)
+                f.view.builder.setRole(foreign, kAXGroupRole as String)
+                f.view.builder.setChildren(ancestor, [f.view.rail])
+                f.view.builder.setChildren(foreign, [])
+                f.view.railContainer = ancestor
+                f.view.updateVisibility()
+                f.view.permitsCapturedFocusRestore = true
+                await f.router.register(f.view.channel())
+                let plan = try await f.plan(desired: false)
+                f.view.focusRestoreAcknowledged = fault != "false_ack"
+                f.view.focusRestoreChangesFocus = fault != "no_readback"
+                f.view.leafLeavesMenuOpen = fault == "menu_open"
+                f.view.afterVisibilityChange = {
+                    f.view.builder.setAttribute(f.view.app, kAXFocusedUIElementAttribute as String,
+                        fault == "foreign" ? foreign : fault == "window" ? f.view.window : ancestor)
+                    if fault == "retired" { f.view.builder.setChildren(ancestor, []) }
+                    if fault == "parent_replaced" {
+                        f.view.builder.setChildren(foreign, [f.view.rail])
+                        f.view.railContainer = foreign
+                        f.view.updateVisibility()
+                    }
+                    if fault == "nonsettable" {
+                        f.view.builder.setAttributeSettable(f.view.rail, kAXFocusedAttribute as String, false)
+                    }
+                }
+                f.view.afterFocusRestore = {
+                    if fault == "late_focus" { f.view.builder.setAttribute(f.view.app, kAXFocusedUIElementAttribute as String, foreign) }
+                    if fault == "late_document" { f.view.builder.setAttribute(f.view.window, kAXDocumentAttribute as String, "file:///tmp/Other.logicx") }
+                    if fault == "late_pid" { f.view.logicPID += 1 }
+                }
+                let outcome = try await f.call("apply_session_repair", params: f.applyParameters(plan, key: "hide-fault-" + fault))
+                #expect(outcome["state"] as? String == "B")
+                let verified = try #require(outcome["verified"] as? Bool)
+                #expect(!verified)
+                #expect(!f.view.showing)
+                #expect(f.view.events.filter { $0 == "hide_mixer" }.count == 1)
+                let shouldAttempt = ["false_ack", "no_readback", "late_focus", "late_document", "late_pid"].contains(fault)
+                let attempted = f.view.events.contains("restore_captured_focus")
+                #expect(attempted == shouldAttempt)
+                #expect(!f.view.events.contains("unexpected_setter"))
+            }
+        }
+    }
+
     @Test(arguments: [false, true], [false, true])
     func composedMatchingNamesKeepBothViewDirectionsAndNoOpReceipts(initial: Bool, desired: Bool) async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
