@@ -610,6 +610,18 @@ extension AccessibilityChannel {
             return CFEqual(current, focus)
         }
 
+        private func capturedFocusCanBeRestored() -> Bool {
+            guard let role = AXHelpers.getRole(focus, runtime: runtime.ax),
+                  [kAXGroupRole as String, kAXListRole as String, "AXLayoutArea"].contains(role),
+                  let focusPath,
+                  let currentPath = Self.retainedPath(focus, in: window, runtime: runtime.ax),
+                  currentPath.count == focusPath.count,
+                  zip(currentPath, focusPath).allSatisfy({ CFEqual($0, $1) }),
+                  AXHelpers.isAttributeSettable(focus, kAXFocusedAttribute as String, runtime: runtime.ax) == true,
+                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+            return true
+        }
+
         private func ownedMenuFocus() -> Bool {
             if sameFocus() { return true }
             guard menuOpen, let bar, let app = AXLogicProElements.appRoot(runtime: runtime),
@@ -733,6 +745,10 @@ extension AccessibilityChannel {
             }
             // The final-state caller checks retained custody AFTER the deciding Mixer read.
             // Temporary inspection retains its original default-nil behavior.
+            if desiredVisibility == nil, revealedMixer == nil {
+                guard capturedFocusCanBeRestored(), await stillOwned(stoppingWhen: stop), ownedMenuFocus()
+                else { return false }
+            }
             guard await permittingActuation?() ?? true,
                   !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
             if !effects.attempted.contains("mixer_visibility") { effects.attempted.append("mixer_visibility") }
@@ -744,6 +760,9 @@ extension AccessibilityChannel {
 
         func reveal(stoppingWhen stop: @Sendable () -> Bool) async {
             guard case .notFound = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime) else { return }
+            // Showing the Mixer may move focus even when its leaf reports an AX error.
+            // Never acquire that UI effect if the retained original cannot be restored.
+            guard capturedFocusCanBeRestored() else { effects.reason = "mixer_reveal_focus_unrestorable"; return }
             let toggled = await toggle(stoppingWhen: stop)
             guard toggled || effects.attempted.contains("mixer_visibility") else { effects.reason = "mixer_reveal_refused"; return }
             let end = min(OperationTraceContext.current?.deadline ?? ContinuousClock.now, ContinuousClock.now.advanced(by: .milliseconds(mixerRevealPollTimeoutMs)))

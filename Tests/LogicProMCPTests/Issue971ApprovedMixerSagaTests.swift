@@ -112,6 +112,7 @@ struct Issue971ApprovedMixerSagaTests {
              fileReader: (@Sendable (Issue969MixerVisibilitySetterTests.Fixture) -> LogicProjectFileReader.Runtime)? = nil) throws {
             self.cache = cache; self.journal = journal
             view = .init(showing: showing)
+            view.builder.setAttributeSettable(view.rail, kAXFocusedAttribute as String, true)
             bundle = FileManager.default.temporaryDirectory
                 .appendingPathComponent("ApprovedMixer-\(UUID().uuidString).logicx", isDirectory: true)
             try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: false)
