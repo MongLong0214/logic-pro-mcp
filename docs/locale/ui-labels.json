@@ -7477,6 +7477,34 @@
     "zh-TW": "derived"
    }
   },
+  "toggleHideViewMenuItem": {
+   "canonical": "Toggle Hide View",
+   "variants": [
+    "보기 가리기 토글",
+    "非表示を切り替え",
+    "„Spuren ausblenden“ ein-/ausschalten",
+    "Activar/desactivar vista oculta",
+    "Ouvrir/Fermer l’affichage",
+    "Mostra/nascondi vista",
+    "Ativar/Desativar Ocultar Visualização",
+    "开关隐藏视图",
+    "切換隱藏顯示區"
+   ],
+   "rationale": "Track menu leaf observed in English Logic 12.3. All ten strings were read from Apple's Toggle Hide View row; static derivation is not all-language native qualification. Only exact, unique physical menu custody authorizes the temporary hidden-view action.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
   "trackContentExplicit": {
    "canonical": "트랙 콘텐츠",
    "variants": [
@@ -7622,6 +7650,33 @@
     "pt-BR": "derived",
     "zh-CN": "derived",
     "zh-TW": "derived"
+   }
+  },
+  "trackHideControl": {
+   "canonical": "Hide Track",
+   "variants": [
+    "트랙 가리기",
+    "トラックを非表示",
+    "Spur ausblenden",
+    "Ocultar pista",
+    "Masquer la piste",
+    "Nascondi traccia",
+    "隐藏轨道",
+    "隱藏音軌"
+   ],
+   "rationale": "Per-track Hide checkbox description observed in English Logic 12.3. Values read from Apple's Hide Track row in all ten locales (Spanish and Portuguese share a value). A zero value is only a visibility witness, not track identity or all-language native qualification.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "unmeasured",
+    "ko-KR": "unmeasured",
+    "ja-JP": "unmeasured",
+    "de-DE": "unmeasured",
+    "es-ES": "unmeasured",
+    "fr-FR": "unmeasured",
+    "it-IT": "unmeasured",
+    "pt-BR": "unmeasured",
+    "zh-CN": "unmeasured",
+    "zh-TW": "unmeasured"
    }
   },
   "trackInputMonitoringButton": {

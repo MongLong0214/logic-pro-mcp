@@ -13,12 +13,21 @@ enum AXTrackBinding {
         let disclosure: AXUIElement
         let runtime: AXLogicProElements.Runtime
         let originalHeaders: [AXUIElement]
+        private let hiddenViewWindow: AXUIElement?
         private var controls: [(header: AXUIElement, disclosure: AXUIElement)]
         init(header: AXUIElement, disclosure: AXUIElement, runtime: AXLogicProElements.Runtime,
-             originalHeaders: [AXUIElement] = []) {
+             originalHeaders: [AXUIElement] = [], hiddenViewWindow: AXUIElement? = nil) {
             self.header = header; self.disclosure = disclosure; self.runtime = runtime
             self.originalHeaders = originalHeaders
+            self.hiddenViewWindow = hiddenViewWindow
             controls = [(header, disclosure)]
+        }
+        private func isHiddenControl(_ element: AXUIElement) -> Bool {
+            hiddenViewWindow != nil && CFEqual(element, disclosure)
+        }
+        func observeHiddenView(control: AXUIElement?, shown: Bool?) {
+            guard hiddenViewWindow != nil else { return }
+            guard let control, CFEqual(control, disclosure), shown == true else { lose(); return }
         }
         func end() { lock.withLock { ended = true } }
         /// A sampled terminal fact, not a fresh AX ownership check.
@@ -33,11 +42,11 @@ enum AXTrackBinding {
             if held.contains(where: { target in headers.filter { CFEqual($0, target.header) }.count != 1 }) { lose() }
         }
         func observeStackState(header: AXUIElement, isStackHeader: Bool?, collapsed: Bool?) {
-            let owned = lock.withLock { controls.contains { CFEqual($0.header, header) } }
+            let owned = lock.withLock { controls.contains { CFEqual($0.header, header) && !isHiddenControl($0.disclosure) } }
             if owned, collapsed == true || isStackHeader == false { lose() }
         }
         func observeDisclosureChildren(header: AXUIElement, children: [AXUIElement], selected: AXUIElement?) {
-            let held = lock.withLock { controls.first { CFEqual($0.header, header) } }
+            let held = lock.withLock { controls.first { CFEqual($0.header, header) && !isHiddenControl($0.disclosure) } }
             guard let held else { return }
             guard let selected, CFEqual(selected, held.disclosure),
                   children.filter({ CFEqual($0, held.disclosure) }).count == 1 else { lose(); return }
@@ -46,10 +55,10 @@ enum AXTrackBinding {
         /// discovery reads made before a later successful control reread.
         func observeRole(element: AXUIElement, role: String?) {
             let owned = lock.withLock { controls.contains { CFEqual($0.disclosure, element) } }
-            if owned, role != kAXDisclosureTriangleRole as String { lose() }
+            if owned, role != (isHiddenControl(element) ? kAXCheckBoxRole as String : kAXDisclosureTriangleRole as String) { lose() }
         }
         func observeChildren(element: AXUIElement, children: [AXUIElement]) {
-            let held = lock.withLock { controls.first { CFEqual($0.header, element) } }
+            let held = lock.withLock { controls.first { CFEqual($0.header, element) && !isHiddenControl($0.disclosure) } }
             if let held, children.filter({ CFEqual($0, held.disclosure) }).count != 1 { lose() }
         }
         func observeValue(header: AXUIElement, disclosure: AXUIElement, value: Int?) {
@@ -61,7 +70,7 @@ enum AXTrackBinding {
         func retainAcquiredDisclosure(header: AXUIElement, disclosure: AXUIElement) -> Bool {
             lock.withLock {
                 guard !ended, !controls.contains(where: {
-                    CFEqual($0.header, header) || CFEqual($0.disclosure, disclosure)
+                    (!isHiddenControl($0.disclosure) && CFEqual($0.header, header)) || CFEqual($0.disclosure, disclosure)
                 }) else { return false }
                 controls.append((header, disclosure))
                 return true
@@ -71,7 +80,14 @@ enum AXTrackBinding {
             let held = lock.withLock { ended ? [] : controls }
             guard !held.isEmpty else { return false }
             guard held.allSatisfy({
-                AXLogicProElements.heldTrackDisclosureValue(header: $0.header, disclosure: $0.disclosure, runtime: runtime) == 1
+                if isHiddenControl($0.disclosure) {
+                    guard let window = hiddenViewWindow,
+                          case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: runtime),
+                          let reading = AXLogicProElements.hiddenTrackViewRead(headers: headers, in: window, runtime: runtime)
+                    else { return false }
+                    return CFEqual(reading.control, disclosure) && reading.shown
+                }
+                return AXLogicProElements.heldTrackDisclosureValue(header: $0.header, disclosure: $0.disclosure, runtime: runtime) == 1
             })
             else { lose(); return false }
             return !lock.withLock { ended }
@@ -131,6 +147,76 @@ enum AXTrackBinding {
 
 extension AXLogicProElements {
     // MARK: - Tracks
+
+    struct HiddenTrackViewRead {
+        let control: AXUIElement
+        let shown: Bool
+    }
+
+    /// The held rail and its sibling legend, not another window's Hide button.
+    /// This same status-preserving locator serves observation and owned exposure.
+    static func hiddenTrackViewRead(headers: [AXUIElement], in window: AXUIElement,
+                                    runtime: Runtime, exposure: AXTrackBinding.Exposure? = nil) -> HiddenTrackViewRead? {
+        let ax = runtime.ax
+        guard let first = headers.first,
+              let rail: AXUIElement = AXHelpers.getAttribute(first, kAXParentAttribute as String, runtime: ax),
+              AXHelpers.getRole(rail, runtime: ax) == kAXGroupRole as String,
+              AXLocalePolicy.trackHeadersDescription.matches(AXHelpers.getDescription(rail, runtime: ax)),
+              case .success(let rows) = AXHelpers.childrenResult(rail, runtime: ax) else { return nil }
+        exposure?.observeHeaders(rows)
+        guard rows.count == headers.count && zip(rows, headers).allSatisfy({ CFEqual($0, $1) }),
+              let scroll: AXUIElement = AXHelpers.getAttribute(rail, kAXParentAttribute as String, runtime: ax),
+              AXHelpers.getRole(scroll, runtime: ax) == kAXScrollAreaRole as String,
+              case .success(let scrollChildren) = AXHelpers.childrenResult(scroll, runtime: ax),
+              scrollChildren.filter({ CFEqual($0, rail) }).count == 1,
+              let headerSplit: AXUIElement = AXHelpers.getAttribute(scroll, kAXParentAttribute as String, runtime: ax),
+              AXHelpers.getRole(headerSplit, runtime: ax) == kAXSplitGroupRole as String,
+              case .success(let headerChildren) = AXHelpers.childrenResult(headerSplit, runtime: ax),
+              headerChildren.filter({ CFEqual($0, scroll) }).count == 1,
+              let split: AXUIElement = AXHelpers.getAttribute(headerSplit, kAXParentAttribute as String, runtime: ax),
+              AXHelpers.getRole(split, runtime: ax) == kAXSplitGroupRole as String,
+              case .success(let siblings) = AXHelpers.childrenResult(split, runtime: ax),
+              siblings.filter({ CFEqual($0, headerSplit) }).count == 1 else { return nil }
+        var ancestor = split
+        var visited = [split]
+        for _ in 0..<32 {
+            if CFEqual(ancestor, window) { break }
+            guard let parent: AXUIElement = AXHelpers.getAttribute(ancestor, kAXParentAttribute as String, runtime: ax),
+                  !visited.contains(where: { CFEqual($0, parent) }),
+                  case .success(let children) = AXHelpers.childrenResult(parent, runtime: ax),
+                  children.filter({ CFEqual($0, ancestor) }).count == 1 else { return nil }
+            ancestor = parent; visited.append(parent)
+        }
+        guard CFEqual(ancestor, window) else { return nil }
+        var matches: [AXUIElement] = []
+        for sibling in siblings {
+            if CFEqual(sibling, headerSplit) { continue }
+            guard let role = AXHelpers.getRole(sibling, runtime: ax) else { return nil }
+            guard role == kAXSplitGroupRole as String else { continue }
+            guard case .success(let groups) = AXHelpers.childrenResult(sibling, runtime: ax) else { return nil }
+            for group in groups {
+                guard let role = AXHelpers.getRole(group, runtime: ax) else { return nil }
+                guard role == kAXGroupRole as String else { continue }
+                guard case .success(let controls) = AXHelpers.childrenResult(group, runtime: ax) else { return nil }
+                for control in controls {
+                    guard let role = AXHelpers.getRole(control, runtime: ax) else { return nil }
+                    guard role == kAXCheckBoxRole as String else { continue }
+                    guard case .success(.some(let description)) = AXHelpers.getAttributeResult(
+                        control, kAXDescriptionAttribute as String, runtime: ax) as Result<String?, AXHelpers.AXStatusError>
+                    else { return nil }
+                    let label = description.components(separatedBy: "   ").first ?? description
+                    if AXLocalePolicy.trackHiddenViewControl.matches(label) { matches.append(control) }
+                }
+            }
+        }
+        guard matches.count == 1, let control = matches.first,
+              let owner: AXUIElement = AXHelpers.getAttribute(control, kAXWindowAttribute as String, runtime: ax),
+              CFEqual(owner, window),
+              case .success(.some(let value)) = AXHelpers.getAttributeResult(
+                control, kAXValueAttribute as String, runtime: ax) as Result<NSNumber?, AXHelpers.AXStatusError>,
+              value == 0 || value == 1 else { return nil }
+        return .init(control: control, shown: value == 1)
+    }
 
     /// A track-header enumeration whose unsuccessful traversal cannot be
     /// confused with an empty, successfully read rail. Mutation verification

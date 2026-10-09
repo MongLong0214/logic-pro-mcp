@@ -100,6 +100,9 @@ extension AccessibilityChannel {
         let rail: AXUIElement
         let header: AXUIElement
         let disclosure: AXUIElement
+        private let hiddenControl: AXUIElement?
+        private let hiddenMenuPath: [AXUIElement]?
+        private let originalSelectionPresentation: [[Data]]?
         let originalHeaders: [AXUIElement]
         let originalFocus: AXUIElement
         private let originalWorkspacePath: [AXUIElement]?
@@ -127,38 +130,138 @@ extension AccessibilityChannel {
         init?(window: AXUIElement, logic: AXLogicProElements.Runtime, mouse: AXMouseHelper.Runtime,
               expectedProject: TargetDescriptor?, requiresProjectReference: Bool,
               referenceIsCurrent: @escaping @Sendable () async -> Bool) {
-            guard let pid = logic.logicProPID(), logic.focusedApplicationPID() == pid,
-                  let app = AXLogicProElements.appRoot(runtime: logic),
+            // The system-wide focused-application AX read needs this process's
+            // window-server connection first; an unread/foreign PID still refuses.
+            _ = logic.onScreenWindowList()
+            guard let pid = logic.logicProPID() else {
+                Log.info("Population navigation acquisition unavailable: process identity", subsystem: "ax"); return nil
+            }
+            guard let app = AXLogicProElements.appRoot(runtime: logic),
                   let title = AXHelpers.getTitle(window, runtime: logic.ax),
                   case .success(.some(let document)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: logic),
                   let url = URL(string: document), url.isFileURL,
-                  url.host == nil || url.host == "" || url.host == "localhost",
-                  let rail = AXLogicProElements.uniqueTrackHeaderRail(in: window, runtime: logic),
-                  case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: logic),
+                  url.host == nil || url.host == "" || url.host == "localhost" else {
+                Log.info("Population navigation acquisition unavailable: project identity", subsystem: "ax"); return nil
+            }
+            guard let rail = AXLogicProElements.uniqueTrackHeaderRail(in: window, runtime: logic),
+                  case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: logic) else {
+                Log.info("Population navigation acquisition unavailable: header rail", subsystem: "ax"); return nil
+            }
+            guard
                   let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
-                  let selected = Self.selectedHeaders(headers, ax: logic.ax),
-                  let viewport = Self.readViewport(window, ax: logic.ax),
-                  let transport = try? AXLogicProElements.observedTransportActivity(in: window, runtime: logic,
+                  let selected = Self.selectedHeaders(headers, ax: logic.ax) else {
+                Log.info("Population navigation acquisition unavailable: focus or selection", subsystem: "ax"); return nil
+            }
+            guard let viewport = Self.readViewport(window, ax: logic.ax) else {
+                Log.info("Population navigation acquisition unavailable: viewport", subsystem: "ax"); return nil
+            }
+            guard let transport = try? AXLogicProElements.observedTransportActivity(in: window, runtime: logic,
                     checking: { try SessionPopulationObservation.requireOwnedAcquisition() }),
-                  !transport.isPlaying, !transport.isRecording else { return nil }
+                  !transport.isPlaying, !transport.isRecording else {
+                Log.info("Population navigation acquisition unavailable: stopped transport", subsystem: "ax"); return nil
+            }
             if requiresProjectReference {
                 guard expectedProject?.projectName?.utf8.elementsEqual(AccessibilityChannel.projectName(fromWindowTitle: title).utf8) == true,
                       expectedProject?.projectFilePath?.utf8.elementsEqual(url.path.utf8) == true else { return nil }
             }
-            guard let collapsed = Self.collapsedDisclosures(in: headers, runtime: logic), !collapsed.isEmpty else { return nil }
+            guard let collapsed = Self.collapsedDisclosures(in: headers, runtime: logic) else { return nil }
+            let hiddenView = AXLogicProElements.hiddenTrackViewRead(headers: headers, in: window, runtime: logic)
+            let hiddenControl = hiddenView?.shown == false ? hiddenView?.control : nil
+            let hiddenMenuPath = hiddenControl == nil ? nil : Self.hiddenMenuPath(in: app, runtime: logic)
+            let focusedPID = logic.focusedApplicationPID()
+            guard hiddenMenuPath != nil || focusedPID == pid else {
+                Log.info("Population navigation acquisition unavailable: foreground process identity", subsystem: "ax"); return nil
+            }
+            let targets = (hiddenControl.flatMap { control in headers.first.map { [($0, control)] } } ?? []) + collapsed
+            guard let first = targets.first else {
+                Log.info("Population navigation acquisition unavailable: no held exposure control", subsystem: "ax"); return nil
+            }
             self.logic = logic; self.mouse = mouse; self.pid = pid; self.app = app
             self.window = window; self.title = title; self.document = document; self.rail = rail
-            header = collapsed[0].header; disclosure = collapsed[0].disclosure; originalHeaders = headers
-            pending = collapsed
+            header = first.0; disclosure = first.1; originalHeaders = headers
+            self.hiddenControl = hiddenControl
+            self.hiddenMenuPath = hiddenMenuPath
+            pending = targets
             originalFocus = focus; observedFocus = focus; self.selected = selected
-            originalWorkspacePath = Self.workspacePath(focus, in: window, ax: logic.ax)
+            originalSelectionPresentation = hiddenMenuPath == nil ? nil
+                : Self.selectionPresentation(selected, headers: headers, ax: logic.ax)
+            originalWorkspacePath = Self.workspacePath(focus, in: window, ax: logic.ax, permitsContainer: hiddenControl != nil)
+            if hiddenControl != nil {
+                guard originalWorkspacePath != nil,
+                      AXHelpers.isAttributeSettable(focus, kAXFocusedAttribute as String, runtime: logic.ax) == true else {
+                    Log.info("Population navigation acquisition unavailable: original focus restoration", subsystem: "ax"); return nil
+                }
+            }
             self.transport = transport; self.viewport = viewport; self.referenceIsCurrent = referenceIsCurrent
         }
 
-        private static func workspacePath(_ focus: AXUIElement, in window: AXUIElement,
-                                          ax: AXHelpers.Runtime) -> [AXUIElement]? {
+        /// The bound AX leaf does not dispatch an input event to the system's
+        /// keyboard owner. Hold and reread its entire physical menu path; this
+        /// cannot authorize the global mouse route used by stack disclosures.
+        private static func hiddenMenuPath(in app: AXUIElement, runtime: AXLogicProElements.Runtime) -> [AXUIElement]? {
             guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
-                  AXHelpers.getRole(focus, runtime: ax) == "AXLayoutArea",
+                  case .success(.some(let bar)) = AXHelpers.getAttributeResult(app, kAXMenuBarAttribute as String,
+                    runtime: runtime.ax) as Result<AXUIElement?, AXHelpers.AXStatusError>,
+                  AXHelpers.getRole(bar, runtime: runtime.ax) == kAXMenuBarRole as String,
+                  case .success(let bars) = AXHelpers.childrenResult(bar, runtime: runtime.ax) else { return nil }
+            func unique(_ children: [AXUIElement], role: String, labels: AXLocalePolicy.LabelSet?) -> AXUIElement? {
+                var matches: [AXUIElement] = []
+                for child in children {
+                    guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                          case .success(.some(let actualRole)) = AXHelpers.getAttributeResult(child, kAXRoleAttribute as String,
+                            runtime: runtime.ax) as Result<String?, AXHelpers.AXStatusError> else { return nil }
+                    guard actualRole == role else { continue }
+                    if let labels {
+                        guard case .success(let title) = AXHelpers.getAttributeResult(child, kAXTitleAttribute as String,
+                            runtime: runtime.ax) as Result<String?, AXHelpers.AXStatusError> else { return nil }
+                        guard labels.matches(title) else { continue }
+                    }
+                    matches.append(child)
+                }
+                return matches.count == 1 ? matches[0] : nil
+            }
+            guard let track = unique(bars, role: kAXMenuBarItemRole as String, labels: AXLocalePolicy.trackMenuBar),
+                  case .success(let tracks) = AXHelpers.childrenResult(track, runtime: runtime.ax),
+                  let menu = unique(tracks, role: kAXMenuRole as String, labels: nil),
+                  case .success(let leaves) = AXHelpers.childrenResult(menu, runtime: runtime.ax),
+                  let leaf = unique(leaves, role: kAXMenuItemRole as String, labels: AXLocalePolicy.toggleHideViewMenuItem),
+                  case .success(.some(true)) = AXHelpers.getAttributeResult(leaf, kAXEnabledAttribute as String,
+                    runtime: runtime.ax) as Result<Bool?, AXHelpers.AXStatusError>,
+                  case .success(let actions) = AXHelpers.getActionNamesResult(leaf, runtime: runtime.ax),
+                  actions.contains(kAXPressAction as String) else { return nil }
+            return [bar, track, menu, leaf]
+        }
+
+        private func isBoundHiddenMenuTarget(_ target: Disclosure) -> Bool {
+            guard let hiddenControl, let held = hiddenMenuPath, CFEqual(target.disclosure, hiddenControl),
+                  let current = Self.hiddenMenuPath(in: app, runtime: logic) else { return false }
+            return same(held, current)
+        }
+
+        /// Track's menu is application-global. Its final reread cannot by itself
+        /// bind AXPress to the document whose view was acquired.
+        private func hiddenMenuActionBoundary(stoppingWhen stop: @Sendable () -> Bool) -> Bool {
+            guard !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                  logic.logicProPID() == pid,
+                  let currentApp = AXLogicProElements.appRoot(runtime: logic), CFEqual(app, currentApp),
+                  let main: AXUIElement = AXHelpers.getAttribute(app, kAXMainWindowAttribute as String, runtime: logic.ax),
+                  let focusedWindow: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedWindowAttribute as String, runtime: logic.ax),
+                  CFEqual(main, window), CFEqual(focusedWindow, window),
+                  AXHelpers.getTitle(window, runtime: logic.ax)?.utf8.elementsEqual(title.utf8) == true,
+                  let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
+                  CFEqual(focus, observedFocus),
+                  case .success(.some(let currentDocument)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: logic),
+                  currentDocument.utf8.elementsEqual(document.utf8),
+                  !stop(), logic.logicProPID() == pid,
+                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+            return true
+        }
+
+        private static func workspacePath(_ focus: AXUIElement, in window: AXUIElement,
+                                          ax: AXHelpers.Runtime, permitsContainer: Bool = false) -> [AXUIElement]? {
+            guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                  let role = AXHelpers.getRole(focus, runtime: ax),
+                  role == "AXLayoutArea" || (permitsContainer && [kAXGroupRole as String, kAXListRole as String].contains(role)),
                   let owner: AXUIElement = AXHelpers.getAttribute(focus, kAXWindowAttribute as String, runtime: ax),
                   CFEqual(owner, window) else { return nil }
             var path = [focus]
@@ -207,11 +310,58 @@ extension AccessibilityChannel {
         private static func selectedHeaders(_ headers: [AXUIElement], ax: AXHelpers.Runtime) -> [AXUIElement]? {
             var selected: [AXUIElement] = []
             for header in headers {
-                guard case .success(.some(let value)) = AXHelpers.getAttributeResult(
-                    header, kAXSelectedAttribute as String, runtime: ax) as Result<Bool?, AXHelpers.AXStatusError> else { return nil }
+                let reading = AXHelpers.getAttributeResult(header, kAXSelectedAttribute as String,
+                    runtime: ax) as Result<Bool?, AXHelpers.AXStatusError>
+                guard case .success(.some(let value)) = reading else {
+                    return nil
+                }
                 if value { selected.append(header) }
             }
             return selected
+        }
+
+        /// A byte-exact, unique presentation envelope, never a TrackBinding or
+        /// semantic identity. It can permit only the already-held Hide View inverse.
+        private static func selectionPresentation(_ selected: [AXUIElement], headers: [AXUIElement],
+                                                  ax: AXHelpers.Runtime) -> [[Data]]? {
+            var names: [Data] = []
+            for header in headers {
+                guard case .success(.some(let name)) = AXValueExtractors.extractTrackNameResult(from: header, runtime: ax),
+                      !name.isEmpty else { return nil }
+                names.append(Data(name.utf8))
+            }
+            var result: [[Data]] = []
+            for header in selected {
+                guard let index = headers.firstIndex(where: { CFEqual($0, header) }),
+                      names.filter({ $0 == names[index] }).count == 1,
+                      case .success(.some(let role)) = AXHelpers.getAttributeResult(header, kAXRoleAttribute as String,
+                        runtime: ax) as Result<String?, AXHelpers.AXStatusError>,
+                      case .success(.some(let description)) = AXHelpers.getAttributeResult(header, kAXDescriptionAttribute as String,
+                        runtime: ax) as Result<String?, AXHelpers.AXStatusError>, !description.isEmpty else { return nil }
+                result.append([Data(role.utf8), names[index], Data(description.utf8)])
+            }
+            return result
+        }
+
+        private func selectedTracksRemainVisible(_ selected: [AXUIElement]) -> Bool {
+            for header in selected {
+                guard case .success(let children) = AXHelpers.childrenResult(header, runtime: logic.ax) else { return false }
+                var matches: [AXUIElement] = []
+                for child in children {
+                    guard case .success(.some(let role)) = AXHelpers.getAttributeResult(child, kAXRoleAttribute as String,
+                        runtime: logic.ax) as Result<String?, AXHelpers.AXStatusError> else { return false }
+                    guard role == kAXCheckBoxRole as String else { continue }
+                    guard case .success(let description) = AXHelpers.getAttributeResult(child, kAXDescriptionAttribute as String,
+                        runtime: logic.ax) as Result<String?, AXHelpers.AXStatusError> else { return false }
+                    if AXLocalePolicy.trackHideControl.matches(description) { matches.append(child) }
+                }
+                guard matches.count == 1, let control = matches.first,
+                      let owner: AXUIElement = AXHelpers.getAttribute(control, kAXWindowAttribute as String, runtime: logic.ax),
+                      CFEqual(owner, window),
+                      case .success(.some(let flag)) = AXHelpers.getAttributeResult(control, kAXValueAttribute as String,
+                        runtime: logic.ax) as Result<NSNumber?, AXHelpers.AXStatusError>, flag.doubleValue == 0 else { return false }
+            }
+            return true
         }
 
         private static func readViewport(_ rail: AXUIElement, ax: AXHelpers.Runtime,
@@ -235,7 +385,15 @@ extension AccessibilityChannel {
         }
 
         private func value(_ target: Disclosure) -> Int? {
-            let observed = AXLogicProElements.heldTrackDisclosureValue(header: target.header, disclosure: target.disclosure, runtime: logic)
+            let observed: Int?
+            if hiddenControl.map({ CFEqual($0, target.disclosure) }) == true {
+                if case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: logic),
+                   let view = AXLogicProElements.hiddenTrackViewRead(headers: headers, in: window, runtime: logic),
+                   CFEqual(view.control, target.disclosure) { observed = view.shown ? 1 : 0 }
+                else { observed = nil }
+            } else {
+                observed = AXLogicProElements.heldTrackDisclosureValue(header: target.header, disclosure: target.disclosure, runtime: logic)
+            }
             if !restorationStarted, acquired.contains(where: {
                 CFEqual($0.target.header, target.header) && CFEqual($0.target.disclosure, target.disclosure)
             }) {
@@ -254,13 +412,15 @@ extension AccessibilityChannel {
             return !forwardExposure.hasObservedLoss
         }
 
-        private func owned(target: Disclosure, expectedHeaders: [AXUIElement]?, expectedValue: Int?, stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
+        private func owned(target: Disclosure, expectedHeaders: [AXUIElement]?, expectedValue: Int?,
+                           hiddenViewCleanup: Bool = false, stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
             guard !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
-                  await referenceIsCurrent(), logic.logicProPID() == pid, logic.focusedApplicationPID() == pid,
+                  await referenceIsCurrent(), logic.logicProPID() == pid,
+                  isBoundHiddenMenuTarget(target) || logic.focusedApplicationPID() == pid,
                   let currentApp = AXLogicProElements.appRoot(runtime: logic), CFEqual(app, currentApp),
                   case .success(.elements(let windows)) = AXHelpers.getAXUIElementArrayRead(app, kAXWindowsAttribute as String, runtime: logic.ax),
                   windows.filter({ CFEqual($0, window) }).count == 1,
-                  AXHelpers.getAttribute(app, kAXFrontmostAttribute as String, runtime: logic.ax) as Bool? == true,
+                  isBoundHiddenMenuTarget(target) || AXHelpers.getAttribute(app, kAXFrontmostAttribute as String, runtime: logic.ax) as Bool? == true,
                   let main: AXUIElement = AXHelpers.getAttribute(app, kAXMainWindowAttribute as String, runtime: logic.ax),
                   let focusedWindow: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedWindowAttribute as String, runtime: logic.ax),
                   CFEqual(main, window), CFEqual(focusedWindow, window),
@@ -279,19 +439,40 @@ extension AccessibilityChannel {
                           && (CFEqual(entry.target.disclosure, target.disclosure) || value(entry.target) == 1)
                   }),
                   same(headers.filter { row in originalHeaders.contains { CFEqual($0, row) } }, originalHeaders),
-                  expectedHeaders.map({ same(headers, $0) }) ?? true,
-                  let currentSelection = Self.selectedHeaders(headers, ax: logic.ax), same(currentSelection, selected),
-                  let currentValue = value(target), expectedValue.map({ $0 == currentValue }) ?? true,
-                  let currentViewport = Self.readViewport(window, ax: logic.ax, exposure: forwardExposure), currentViewport.count == viewport.count,
-                  zip(currentViewport, viewport).allSatisfy({ CFEqual($0.control, $1.control) && $0.value == $1.value }),
-                  let currentTransport = try? AXLogicProElements.observedTransportActivity(in: window, runtime: logic,
+                  expectedHeaders.map({ same(headers, $0) }) ?? true else {
+                Log.info("Population navigation ownership unavailable: process, project or held rail membership", subsystem: "ax"); return false
+            }
+            let sampledSelection = Self.selectedHeaders(headers, ax: logic.ax)
+            guard let currentSelection = sampledSelection else { return false }
+            if hiddenViewCleanup {
+                guard restorationStarted, acquired.isEmpty, isBoundHiddenMenuTarget(target),
+                      let originalSelectionPresentation,
+                      Self.selectionPresentation(currentSelection, headers: headers, ax: logic.ax) == originalSelectionPresentation,
+                      expectedValue == 0 ? same(currentSelection, selected) : selectedTracksRemainVisible(currentSelection) else { return false }
+            } else if !same(currentSelection, selected) {
+                Log.info("Population navigation ownership unavailable: selection", subsystem: "ax"); return false
+            }
+            guard let currentValue = value(target), expectedValue.map({ $0 == currentValue }) ?? true else {
+                Log.info("Population navigation ownership unavailable: held control value", subsystem: "ax"); return false
+            }
+            let sampledViewport = Self.readViewport(window, ax: logic.ax, exposure: forwardExposure)
+            guard let currentViewport = sampledViewport, currentViewport.count == viewport.count,
+                  zip(currentViewport, viewport).allSatisfy({ CFEqual($0.control, $1.control) && $0.value == $1.value }) else {
+                Log.info("Population navigation ownership unavailable: viewport", subsystem: "ax"); return false
+            }
+            guard let currentTransport = try? AXLogicProElements.observedTransportActivity(in: window, runtime: logic,
                     observingExposure: forwardExposure,
                     checking: { try SessionPopulationObservation.requireOwnedAcquisition() }),
                   CFEqual(currentTransport.controlBar, transport.controlBar), CFEqual(currentTransport.play, transport.play),
-                  CFEqual(currentTransport.record, transport.record), !currentTransport.isPlaying, !currentTransport.isRecording,
-                  let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
-                  CFEqual(focus, observedFocus), !stop(), logic.logicProPID() == pid, logic.focusedApplicationPID() == pid,
-                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+                  CFEqual(currentTransport.record, transport.record), !currentTransport.isPlaying, !currentTransport.isRecording else {
+                Log.info("Population navigation ownership unavailable: transport", subsystem: "ax"); return false
+            }
+            guard let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
+                  CFEqual(focus, observedFocus), !stop(), logic.logicProPID() == pid,
+                  isBoundHiddenMenuTarget(target) || logic.focusedApplicationPID() == pid,
+                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else {
+                Log.info("Population navigation ownership unavailable: final focus or process", subsystem: "ax"); return false
+            }
             return true
         }
 
@@ -367,6 +548,19 @@ extension AccessibilityChannel {
         }
 
         private func click(target: Disclosure, expectedHeaders: [AXUIElement]?, expectedValue: Int?, stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
+            if let held = hiddenMenuPath, hiddenControl.map({ CFEqual($0, target.disclosure) }) == true {
+                guard await owned(target: target, expectedHeaders: expectedHeaders, expectedValue: expectedValue, stoppingWhen: stop),
+                      isBoundHiddenMenuTarget(target), let leaf = held.last,
+                      hiddenMenuActionBoundary(stoppingWhen: stop),
+                      !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+                effects.navigationPerformed = true; effects.restoration = "not_restored"
+                if !effects.attempted.contains("hidden_track_view") { effects.attempted.append("hidden_track_view") }
+                // ACK is not the outcome. The caller still requires independent
+                // held-control value, membership, focus and custody readback.
+                _ = AXHelpers.performAction(leaf, kAXPressAction as String, runtime: logic.ax)
+                completedClickFocus = (target, [])
+                return true
+            }
             guard await owned(target: target, expectedHeaders: expectedHeaders, expectedValue: expectedValue, stoppingWhen: stop),
                   let frame = frame(target),
                   let pair = mouse.prepareMouseClick(CGPoint(x: frame.midX, y: frame.midY), 1) else { return false }
@@ -385,7 +579,8 @@ extension AccessibilityChannel {
                   (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
             guard !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
             effects.navigationPerformed = true; effects.restoration = "not_restored"
-            if !effects.attempted.contains("stack_disclosure") { effects.attempted.append("stack_disclosure") }
+            let effect = hiddenControl.map({ CFEqual($0, target.disclosure) }) == true ? "hidden_track_view" : "stack_disclosure"
+            if !effects.attempted.contains(effect) { effects.attempted.append(effect) }
             guard pair.postDown() else { return false }
             releaseUnverified = true
             // Complete only this preconstructed click. An AX read, await, sleep,
@@ -413,7 +608,8 @@ extension AccessibilityChannel {
         }
 
         func expand(stoppingWhen stop: @Sendable () -> Bool) async {
-            exposure = .init(header: header, disclosure: disclosure, runtime: logic, originalHeaders: originalHeaders)
+            exposure = .init(header: header, disclosure: disclosure, runtime: logic, originalHeaders: originalHeaders,
+                hiddenViewWindow: hiddenControl == nil ? nil : window)
             var beforeHeaders = originalHeaders
             while let target = pending.first {
                 guard await click(target: target, expectedHeaders: beforeHeaders, expectedValue: 0, stoppingWhen: stop) else {
@@ -428,6 +624,7 @@ extension AccessibilityChannel {
                 }
                 guard acceptHeldGestureFocus(target),
                       await owned(target: target, expectedHeaders: headers, expectedValue: 1, stoppingWhen: stop) else {
+                    exposure?.end()
                     effects.reason = "stack_navigation_ownership_lost"; return
                 }
                 if !acquired.isEmpty,
@@ -437,7 +634,8 @@ extension AccessibilityChannel {
                 acquired.append(.init(target: target, beforeHeaders: beforeHeaders, afterHeaders: headers))
                 pending.removeFirst()
                 expandedHeaders = headers
-                if !effects.changed.contains("stack_disclosure") { effects.changed.append("stack_disclosure") }
+                let effect = hiddenControl.map({ CFEqual($0, target.disclosure) }) == true ? "hidden_track_view" : "stack_disclosure"
+                if !effects.changed.contains(effect) { effects.changed.append(effect) }
                 let newlyExposed = headers.filter { row in !beforeHeaders.contains { CFEqual($0, row) } }
                 guard let collapsed = Self.collapsedDisclosures(in: newlyExposed, runtime: logic) else {
                     effects.reason = "stack_disclosure_unreadable"; return
@@ -463,6 +661,26 @@ extension AccessibilityChannel {
             guard !releaseUnverified else { return effects }
             guard exposure?.hasObservedLoss != true else {
                 effects.reason = effects.reason ?? "stack_navigation_ownership_lost"; return effects
+            }
+            if acquired.isEmpty, hiddenMenuPath != nil, let hiddenControl,
+               effects.attempted.contains("hidden_track_view"), value((header, hiddenControl)) == 1 {
+                if !effects.changed.contains("hidden_track_view") { effects.changed.append("hidden_track_view") }
+                let target: Disclosure = (header, hiddenControl)
+                guard case .read(let currentHeaders) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: logic),
+                      await owned(target: target, expectedHeaders: currentHeaders, expectedValue: 1,
+                        hiddenViewCleanup: true, stoppingWhen: stop),
+                      isBoundHiddenMenuTarget(target), let leaf = hiddenMenuPath?.last,
+                      hiddenMenuActionBoundary(stoppingWhen: stop),
+                      !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return effects }
+                // This ends no earlier loss and revives no row or snapshot.
+                // Only presentation is inversed; no selection setter is used.
+                _ = AXHelpers.performAction(leaf, kAXPressAction as String, runtime: logic.ax)
+                guard await observeCompletedClick(target: target, expectedValue: 0, stoppingWhen: stop),
+                      await owned(target: target, expectedHeaders: originalHeaders, expectedValue: 0,
+                        hiddenViewCleanup: true, stoppingWhen: stop),
+                      CFEqual(observedFocus, originalFocus) else { return effects }
+                effects.restoration = "restored"
+                return effects
             }
             guard expandedHeaders != nil, !acquired.isEmpty else {
                 effects.reason = effects.reason ?? "stack_navigation_ownership_lost"; return effects
@@ -493,12 +711,12 @@ extension AccessibilityChannel {
         private func restoreOriginalWorkspaceFocus(stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
             let target: Disclosure = (header, disclosure)
             guard !releaseUnverified, acquired.isEmpty, let originalWorkspacePath,
-                  permitsHeldPassiveLabelFocus(),
+                  permitsHeldFocusRestoration(),
                   await owned(target: target, expectedHeaders: originalHeaders, expectedValue: 0, stoppingWhen: stop),
-                  let path = Self.workspacePath(originalFocus, in: window, ax: logic.ax), same(path, originalWorkspacePath),
+                  let path = Self.workspacePath(originalFocus, in: window, ax: logic.ax, permitsContainer: hiddenControl != nil), same(path, originalWorkspacePath),
                   logic.ax.attributeIsSettable(originalFocus, kAXFocusedAttribute as String) == true,
                   let current: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
-                  CFEqual(current, observedFocus), permitsHeldPassiveLabelFocus(), !stop(),
+                  CFEqual(current, observedFocus), permitsHeldFocusRestoration(), !stop(),
                   (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
             // This is the original physical workspace, not a key, coordinate or
             // a newly discovered focus target. Never overwrite foreign/editor focus.
@@ -512,7 +730,7 @@ extension AccessibilityChannel {
                 if CFEqual(focus, originalFocus) {
                     observedFocus = focus
                     guard await owned(target: target, expectedHeaders: originalHeaders, expectedValue: 0, stoppingWhen: stop),
-                          let path = Self.workspacePath(originalFocus, in: window, ax: logic.ax), same(path, originalWorkspacePath)
+                          let path = Self.workspacePath(originalFocus, in: window, ax: logic.ax, permitsContainer: hiddenControl != nil), same(path, originalWorkspacePath)
                     else { effects.reason = effects.reason ?? "stack_navigation_ownership_lost"; return false }
                     return true
                 }
@@ -521,6 +739,14 @@ extension AccessibilityChannel {
                 catch { return false }
             }
             return false
+        }
+
+        private func permitsHeldFocusRestoration() -> Bool {
+            if permitsHeldPassiveLabelFocus() { return true }
+            guard let hiddenControl, completedClickFocus.map({ CFEqual($0.target.disclosure, hiddenControl) }) == true,
+                  let current: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax)
+            else { return false }
+            return CFEqual(current, hiddenControl) && CFEqual(observedFocus, hiddenControl)
         }
 
         /// A completed click may focus its held target. Corroborate that limited

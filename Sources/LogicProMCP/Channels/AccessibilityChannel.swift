@@ -493,10 +493,7 @@ actor AccessibilityChannel: Channel {
         let logic = runtime.logicRuntime
         let wantsTracks = request.needsTracks
         let wantsStrips = request.needsStrips
-        struct HiddenView {
-            let control: AXUIElement
-            let shown: Bool
-        }
+        typealias HiddenView = AXLogicProElements.HiddenTrackViewRead
         func sameHiddenView(_ lhs: HiddenView?, _ rhs: HiddenView?) -> Bool {
             switch (lhs, rhs) {
             case (nil, nil): return true
@@ -507,68 +504,10 @@ actor AccessibilityChannel: Channel {
         // Reuse this read's physical headers. No independent rail scanner or Help
         // query: the native legend and header scroll live in sibling split groups.
         func readHiddenView(_ headers: [AXUIElement]?, in window: AXUIElement) -> HiddenView? {
-            guard let headers, let first = headers.first,
-                  let rail: AXUIElement = AXHelpers.getAttribute(first, kAXParentAttribute as String, runtime: logic.ax),
-                  AXHelpers.getRole(rail, runtime: logic.ax) == kAXGroupRole as String,
-                  AXLocalePolicy.trackHeadersDescription.matches(AXHelpers.getDescription(rail, runtime: logic.ax)),
-                  case .success(let rows) = AXHelpers.childrenResult(rail, runtime: logic.ax) else { return nil }
-            // This is a real census even when it disagrees with the copied rows.
-            // A sampled disappearance ends the same acquired exposure permanently.
-            exposure?.observeHeaders(rows)
-            guard rows.count == headers.count && zip(rows, headers).allSatisfy({ CFEqual($0, $1) }),
-                  let scroll: AXUIElement = AXHelpers.getAttribute(rail, kAXParentAttribute as String, runtime: logic.ax),
-                  AXHelpers.getRole(scroll, runtime: logic.ax) == kAXScrollAreaRole as String,
-                  case .success(let scrollChildren) = AXHelpers.childrenResult(scroll, runtime: logic.ax),
-                  scrollChildren.filter({ CFEqual($0, rail) }).count == 1,
-                  let headerSplit: AXUIElement = AXHelpers.getAttribute(scroll, kAXParentAttribute as String, runtime: logic.ax),
-                  AXHelpers.getRole(headerSplit, runtime: logic.ax) == kAXSplitGroupRole as String,
-                  case .success(let headerChildren) = AXHelpers.childrenResult(headerSplit, runtime: logic.ax),
-                  headerChildren.filter({ CFEqual($0, scroll) }).count == 1,
-                  let split: AXUIElement = AXHelpers.getAttribute(headerSplit, kAXParentAttribute as String, runtime: logic.ax),
-                  AXHelpers.getRole(split, runtime: logic.ax) == kAXSplitGroupRole as String,
-                  case .success(let siblings) = AXHelpers.childrenResult(split, runtime: logic.ax),
-                  siblings.filter({ CFEqual($0, headerSplit) }).count == 1 else { return nil }
-            var ancestor = split
-            var visited = [split]
-            for _ in 0..<32 {
-                if CFEqual(ancestor, window) { break }
-                guard let parent: AXUIElement = AXHelpers.getAttribute(ancestor, kAXParentAttribute as String, runtime: logic.ax),
-                      !visited.contains(where: { CFEqual($0, parent) }),
-                      case .success(let children) = AXHelpers.childrenResult(parent, runtime: logic.ax),
-                      children.filter({ CFEqual($0, ancestor) }).count == 1 else { return nil }
-                ancestor = parent; visited.append(parent)
-            }
-            guard CFEqual(ancestor, window) else { return nil }
-            var matches: [AXUIElement] = []
-            for sibling in siblings {
-                if CFEqual(sibling, headerSplit) { continue }
-                guard let role = AXHelpers.getRole(sibling, runtime: logic.ax) else { return nil }
-                guard role == kAXSplitGroupRole as String else { continue }
-                guard case .success(let groups) = AXHelpers.childrenResult(sibling, runtime: logic.ax) else { return nil }
-                for group in groups {
-                    guard let role = AXHelpers.getRole(group, runtime: logic.ax) else { return nil }
-                    guard role == kAXGroupRole as String else { continue }
-                    guard case .success(let controls) = AXHelpers.childrenResult(group, runtime: logic.ax) else { return nil }
-                    for control in controls {
-                        guard let role = AXHelpers.getRole(control, runtime: logic.ax) else { return nil }
-                        guard role == kAXCheckBoxRole as String else { continue }
-                        guard case .success(.some(let description)) = AXHelpers.getAttributeResult(
-                            control, kAXDescriptionAttribute as String, runtime: logic.ax) as Result<String?, AXHelpers.AXStatusError>
-                        else { return nil }
-                        // Logic appends the shortcut after three spaces. Match
-                        // the whole label, not arbitrary extensions such as Tracksuit.
-                        let label = description.components(separatedBy: "   ").first ?? description
-                        if AXLocalePolicy.trackHiddenViewControl.matches(label) { matches.append(control) }
-                    }
-                }
-            }
-            guard matches.count == 1, let control = matches.first,
-                  let owner: AXUIElement = AXHelpers.getAttribute(control, kAXWindowAttribute as String, runtime: logic.ax),
-                  CFEqual(owner, window),
-                  case .success(.some(let value)) = AXHelpers.getAttributeResult(
-                    control, kAXValueAttribute as String, runtime: logic.ax) as Result<NSNumber?, AXHelpers.AXStatusError>,
-                  value == 0 || value == 1 else { return nil }
-            return .init(control: control, shown: value == 1)
+            guard let headers else { return nil }
+            let reading = AXLogicProElements.hiddenTrackViewRead(headers: headers, in: window, runtime: logic, exposure: exposure)
+            exposure?.observeHiddenView(control: reading?.control, shown: reading?.shown)
+            return reading
         }
         struct Read {
             let title: String?
@@ -786,7 +725,10 @@ actor AccessibilityChannel: Channel {
             case .failure: finalDocument = nil; finalDocumentReadable = false
             }
             try check()
-            let stable = sameWindow && before.title != nil && before.documentReadable && after.documentReadable && finalDocumentReadable
+            // A terminated acquisition cannot regain row authority merely because
+            // its two later censuses agree. View-only cleanup is independent.
+            let stable = exposure?.hasEnded != true
+                && sameWindow && before.title != nil && before.documentReadable && after.documentReadable && finalDocumentReadable
                 && sameBytes(before.title, after.title) && sameBytes(before.document, after.document)
                 && sameBytes(after.title, finalTitle) && sameBytes(after.document, finalDocument)
                 && sameElements(before.headers, after.headers)
