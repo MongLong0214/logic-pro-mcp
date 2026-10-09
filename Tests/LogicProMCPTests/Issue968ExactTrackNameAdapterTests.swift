@@ -1202,6 +1202,12 @@ struct Issue968ExactTrackNameAdapterTests {
             let body = try #require(sharedJSONObject(sharedToolText(receipt.result)))
             let attempted = try #require(body["write_attempted"] as? Bool)
             #expect(attempted)
+            #expect(body["state"] as? String == "B")
+            #expect(body["reason"] as? String == "readback_unavailable")
+            let expectedHint = failure == "false_ack"
+                ? "Held name field opening was attempted but unverified"
+                : "Exact rename precondition changed before the setter"
+            #expect(body["hint"] as? String == expectedHint)
         }
     }
 
