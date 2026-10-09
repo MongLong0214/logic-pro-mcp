@@ -2673,6 +2673,18 @@ class BootstrapFreshSessionActionTests(unittest.TestCase):
         self.assertLess(confirm_index, create_indices[1])
 
     def test_force_new_retries_after_single_picker_confirm_for_logic_not_running_error(self):
+        # Every host response below is fake; scheduler latency must not consume
+        # the blank-shell grace period before the picker retry is exercised.
+        class FakeClock:
+            def __init__(self):
+                self.now = 0.0
+
+            def time(self):
+                return self.now
+
+            def sleep(self, duration):
+                self.now += duration
+
         state = {
             "created": False,
             "track_created": False,
@@ -2780,7 +2792,12 @@ class BootstrapFreshSessionActionTests(unittest.TestCase):
             state["picker_confirmed"] = True
             return True
 
-        with mock.patch("logic_session_bootstrap._send_return_key", side_effect=send_return_key):
+        fake_clock = FakeClock()
+        with (
+            mock.patch("logic_session_bootstrap._send_return_key", side_effect=send_return_key),
+            mock.patch("logic_session_bootstrap.time.sleep", side_effect=fake_clock.sleep),
+            mock.patch("logic_session_bootstrap.time.time", side_effect=fake_clock.time),
+        ):
             result = run_force_new_bootstrap(
                 call_tool=call_tool,
                 document_probe=lambda timeout_sec: (False, None) if state["created"] else (True, None),
@@ -2797,6 +2814,7 @@ class BootstrapFreshSessionActionTests(unittest.TestCase):
         self.assertTrue(state["track_created"])
         self.assertEqual(state["track_create_attempts"], 2)
         self.assertEqual(state["send_return_calls"], 1)
+        self.assertGreaterEqual(state["refresh_polls_after_error"], 2)
         create_indices = [
             index
             for index, action in enumerate(result.actions)

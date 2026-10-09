@@ -336,6 +336,10 @@ actor AccessibilityChannel: Channel {
         var navigation: OwnedMixerObservationNavigation?
         var stackNavigation: OwnedTrackStackObservationNavigation?
         var originalPresentation: SessionPopulationObservation.FreshPopulation?
+        if !request.allowUINavigation, request.needsTracks, !request.needsStrips,
+           case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime.logicRuntime) {
+            readFocusScope?.retainPassiveMixer(in: window, logic: runtime.logicRuntime)
+        }
         if request.allowUINavigation, request.needsStrips,
            case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime.logicRuntime) {
             originalPresentation = try readPresentationBaseline(stoppingWhen: stopBeforeAXRead ?? stop)
