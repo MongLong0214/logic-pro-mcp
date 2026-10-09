@@ -6852,6 +6852,7 @@
   "sortTracksByInstrumentNameMenuItem": {
    "canonical": "악기 이름",
    "variants": [
+    "Instrument Name",
     "Instrument Names",
     "音源名",
     "Instrumentennamen",
@@ -6892,6 +6893,7 @@
   "sortTracksByMIDIChannelMenuItem": {
    "canonical": "MIDI 채널",
    "variants": [
+    "MIDI Channel",
     "MIDI Channels",
     "MIDIチャンネル",
     "MIDI-Kanäle",
