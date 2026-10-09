@@ -1048,6 +1048,38 @@ struct Issue965FreshPopulationAcquisitionTests {
         try await observeStack(navigation: true, initiallyExpanded: false, helpMovesFocus: true)
     }
 
+    @Test func nestedStackRetainsTheSameOwnedOuterPassiveFocusThroughInnerClicks() async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, nested: true,
+            headerFocus: "passive", focusRestoration: "restored", originalFocusRole: kAXGroupRole as String)
+    }
+
+    @Test func hiddenNestedStackRestoresWorkspaceBeforeHideViewRecyclesItsPassiveLabel() async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, nested: true,
+            headerFocus: "passive", focusRestoration: "restored", originalFocusRole: kAXGroupRole as String,
+            hiddenView: true)
+    }
+
+    @Test(arguments: ["unavailable", "declined", "wrong_readback", "reparented", "foreign_focus", "post_focus_project"])
+    func hiddenNestedStackRefusesTheViewInverseWhenOriginalFocusCannotBeVerified(hiddenFocusFault: String) async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, nested: true,
+            headerFocus: "passive", focusRestoration: "restored", originalFocusRole: kAXGroupRole as String,
+            hiddenView: true, hiddenFocusFault: hiddenFocusFault)
+    }
+
+    @Test(arguments: [false, true], ["document", "main_window", "focused_window"])
+    func stackFocusRestorationRefusesScopeChangedByItsFinalPassiveFocusRead(hiddenView: Bool, lateScopeFault: String) async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, nested: true,
+            headerFocus: "passive", focusRestoration: "restored", originalFocusRole: kAXGroupRole as String,
+            hiddenView: hiddenView, lateScopeFault: lateScopeFault)
+    }
+
+    @Test(arguments: ["retained_label_editable", "retained_label_insertion", "retained_label_replacement", "retained_label_foreign"])
+    func nestedStackRefusesLostOrEditingPreviouslyAcceptedPassiveFocus(nestedFault: String) async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, nested: true,
+            nestedFault: nestedFault, headerFocus: "passive", focusRestoration: "restored",
+            originalFocusRole: kAXGroupRole as String)
+    }
+
     @Test(arguments: ["restored", "unavailable", "declined", "wrong_readback", "reparented", "foreign_focus"])
     func registeredStackRestoresOnlyItsHeldWorkspaceFocus(focusRestoration: String) async throws {
         try await observeStack(navigation: true, initiallyExpanded: false,
@@ -1347,8 +1379,10 @@ struct Issue965FreshPopulationAcquisitionTests {
                               delayedLanding: Bool = false, headerFocus: String? = nil,
                               helpMovesFocus: Bool = false, focusRestoration: String? = nil,
                               originalFocusRole: String = "AXLayoutArea",
-                              hiddenViewLoss: Bool = false) async throws {
+                              hiddenViewLoss: Bool = false, hiddenView: Bool = false,
+                              hiddenFocusFault: String? = nil, lateScopeFault: String? = nil) async throws {
         let fixture = Fixture()
+        let focusBoundaryReads = Reads()
         let bundle = FileManager.default.temporaryDirectory.appendingPathComponent("lpm965-stack-\(UUID().uuidString).logicx")
         try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: false)
         defer { try? FileManager.default.removeItem(at: bundle) }
@@ -1369,6 +1403,9 @@ struct Issue965FreshPopulationAcquisitionTests {
         let passiveLabel = fixture.builder.element(965_240)
         let otherLabel = fixture.builder.element(965_241)
         let workspace = fixture.builder.element(965_242)
+        let shownLabel = fixture.builder.element(965_243)
+        let hide = fixture.builder.element(965_244)
+        let hideMenu = fixture.builder.element(965_245)
         if let focusRestoration {
             fixture.builder.setRole(workspace, originalFocusRole)
             fixture.builder.setAttribute(workspace, kAXWindowAttribute as String, fixture.window)
@@ -1417,7 +1454,7 @@ struct Issue965FreshPopulationAcquisitionTests {
             #expect(!headers.contains { row in grandchildren.contains { CFEqual(row, $0) } })
         }
         fixture.builder.setChildren(fixture.rail, initiallyExpanded ? headers : collapsed)
-        if hiddenViewLoss {
+        if hiddenViewLoss || hiddenView {
             fixture.builder.setRole(fixture.rail, kAXGroupRole as String)
             fixture.builder.setAttribute(fixture.rail, kAXDescriptionAttribute as String, "Tracks header")
         }
@@ -1445,6 +1482,40 @@ struct Issue965FreshPopulationAcquisitionTests {
         fixture.builder.setChildren(scrollbar, [])
         fixture.builder.setChildren(fixture.window, [fixture.rail, controlBar]
             + (nestedFault == "viewport" ? [scrollbar] : []) + (focusRestoration == nil ? [] : [workspace]))
+        if hiddenView {
+            fixture.builder.setRole(shownLabel, kAXTextFieldRole as String)
+            fixture.builder.setAttribute(shownLabel, kAXDescriptionAttribute as String, "Track 1")
+            fixture.builder.setAttribute(shownLabel, kAXValueAttribute as String, 0)
+            fixture.builder.setAttribute(shownLabel, kAXWindowAttribute as String, fixture.window)
+            let split = fixture.builder.element(965_246), legendSplit = fixture.builder.element(965_247)
+            let headerSplit = fixture.builder.element(965_248), scroll = fixture.builder.element(965_249)
+            let legend = fixture.builder.element(965_250)
+            for element in [split, legendSplit, headerSplit] { fixture.builder.setRole(element, kAXSplitGroupRole as String) }
+            fixture.builder.setRole(scroll, kAXScrollAreaRole as String)
+            fixture.builder.setRole(legend, kAXGroupRole as String)
+            fixture.builder.setRole(hide, kAXCheckBoxRole as String)
+            fixture.builder.setAttribute(hide, kAXDescriptionAttribute as String, "Show/Hide Hidden Tracks   H")
+            fixture.builder.setAttribute(hide, kAXValueAttribute as String, 0)
+            fixture.builder.setAttribute(hide, kAXWindowAttribute as String, fixture.window)
+            fixture.builder.setChildren(legend, [hide]); fixture.builder.setChildren(scroll, [fixture.rail])
+            fixture.builder.setChildren(legendSplit, [legend]); fixture.builder.setChildren(headerSplit, [scroll])
+            fixture.builder.setChildren(split, [legendSplit, headerSplit])
+            fixture.builder.setChildren(fixture.window, [split, controlBar, workspace])
+            for header in headers { fixture.builder.setAttribute(header, kAXParentAttribute as String, fixture.rail) }
+            let menuBar = fixture.builder.element(965_251), trackMenu = fixture.builder.element(965_252)
+            let menu = fixture.builder.element(965_253)
+            fixture.builder.setRole(menuBar, kAXMenuBarRole as String)
+            fixture.builder.setRole(trackMenu, kAXMenuBarItemRole as String)
+            fixture.builder.setAttribute(trackMenu, kAXTitleAttribute as String, "Track")
+            fixture.builder.setRole(menu, kAXMenuRole as String)
+            fixture.builder.setRole(hideMenu, kAXMenuItemRole as String)
+            fixture.builder.setAttribute(hideMenu, kAXTitleAttribute as String, "Toggle Hide View")
+            fixture.builder.setAttribute(hideMenu, kAXEnabledAttribute as String, true)
+            fixture.builder.setActionNames(hideMenu, [kAXPressAction as String])
+            fixture.builder.setChildren(menu, [hideMenu]); fixture.builder.setChildren(trackMenu, [menu])
+            fixture.builder.setChildren(menuBar, [trackMenu])
+            fixture.builder.setAttribute(fixture.app, kAXMenuBarAttribute as String, menuBar)
+        }
         let replacement = fixture.builder.element(965_231)
         fixture.builder.setRole(replacement, kAXLayoutItemRole as String)
         fixture.builder.setAttribute(replacement, kAXTitleAttribute as String, "Repeated grandchild")
@@ -1483,7 +1554,8 @@ struct Issue965FreshPopulationAcquisitionTests {
             if type == .leftMouseDown {
                 if mouseCase == "down_failed" { return false }
                 if let headerFocus {
-                    let focused = headerFocus == "foreign" || headerFocus == "replacement" ? otherLabel : passiveLabel
+                    let focused = headerFocus == "foreign" || headerFocus == "replacement" ? otherLabel
+                        : hiddenView ? shownLabel : passiveLabel
                     if headerFocus == "replacement" { fixture.builder.setChildren(headers[0], [disclosure, otherLabel]) }
                     fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, focused)
                 }
@@ -1510,6 +1582,15 @@ struct Issue965FreshPopulationAcquisitionTests {
                 fixture.builder.setAttribute(target, kAXValueAttribute as String, expanded ? 0 : 1)
                 fixture.builder.setChildren(fixture.rail, isInner ? (expanded ? headers : fullyExposed)
                     : (expanded ? collapsed : headers))
+                if hiddenView, eventCount == 9, let hiddenFocusFault {
+                    fixture.reads.record("hidden_focus_fault_boundary")
+                    switch hiddenFocusFault {
+                    case "unavailable": fixture.builder.setAttributeSettable(workspace, kAXFocusedAttribute as String, false)
+                    case "reparented": fixture.builder.setAttribute(workspace, kAXParentAttribute as String, otherLabel)
+                    case "foreign_focus": fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, otherLabel)
+                    default: break
+                    }
+                }
                 if eventCount == 4, focusRestoration == "reparented" {
                     fixture.builder.setAttribute(workspace, kAXParentAttribute as String, otherLabel)
                 }
@@ -1524,6 +1605,19 @@ struct Issue965FreshPopulationAcquisitionTests {
                     case "project": fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String,
                         bundle.deletingLastPathComponent().appendingPathComponent("Other.logicx").absoluteString)
                     default: fixture.builder.setAttribute(scrollbar, kAXValueAttribute as String, 0.75)
+                    }
+                }
+                if isInner, !expanded, let nestedFault, nestedFault.hasPrefix("retained_label_") {
+                    fixture.reads.record("child_custody_fault")
+                    switch nestedFault {
+                    case "retained_label_editable":
+                        fixture.builder.setAttributeSettable(passiveLabel, kAXValueAttribute as String, true)
+                    case "retained_label_insertion":
+                        fixture.builder.setAttribute(passiveLabel, kAXInsertionPointLineNumberAttribute as String, 0)
+                    case "retained_label_replacement":
+                        fixture.builder.setChildren(headers[0], [disclosure, otherLabel])
+                    default:
+                        fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, otherLabel)
                     }
                 }
                 if isInner, !expanded, let nestedFault, ["cancel", "deadline"].contains(nestedFault) {
@@ -1573,6 +1667,22 @@ struct Issue965FreshPopulationAcquisitionTests {
         let dependencies = HandlerDependencies(router: ChannelRouter(), cache: cache, targetRegistry: registry,
             poller: StatePoller(axChannel: fixture.channel(disclosure: disclosure,
                 additionalDisclosure: nested ? inner : nil, observationMouse: observationMouse,
+                observationAction: { element, action in
+                    guard hiddenView, CFEqual(element, hideMenu), action == kAXPressAction as String else { return nil }
+                    fixture.events.record("hidden_menu")
+                    let wasShown = (fixture.builder.attributeValue(hide, kAXValueAttribute as String) as? NSNumber)?.intValue == 1
+                    fixture.builder.setAttribute(hide, kAXValueAttribute as String, wasShown ? 0 : 1)
+                    fixture.builder.setChildren(headers[0], [disclosure, wasShown ? passiveLabel : shownLabel])
+                    if wasShown {
+                        let focus: AXUIElement? = AXHelpers.getAttribute(fixture.app, kAXFocusedUIElementAttribute as String,
+                            runtime: fixture.builder.makeAXRuntime())
+                        if focus.map({ CFEqual($0, shownLabel) }) == true {
+                            fixture.reads.record("hidden_inverse_before_workspace_focus")
+                            fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, passiveLabel)
+                        }
+                    }
+                    return true
+                },
                 wrongDisclosureHit: mouseCase == "wrong_hit", focusSetter: { element, attribute, value in
                     guard let focusRestoration else { Issue.record("no AX setters"); return false }
                     #expect(CFEqual(element, workspace) && attribute == kAXFocusedAttribute as String)
@@ -1581,11 +1691,35 @@ struct Issue965FreshPopulationAcquisitionTests {
                         #expect(number.boolValue)
                     } catch { return false }
                     fixture.reads.record("workspace_focus_setter")
-                    if focusRestoration == "declined" { return false }
+                    if focusRestoration == "declined" || hiddenFocusFault == "declined" { return false }
                     fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String,
-                        focusRestoration == "wrong_readback" ? otherLabel : workspace)
+                        focusRestoration == "wrong_readback" || hiddenFocusFault == "wrong_readback" ? otherLabel : workspace)
+                    if hiddenFocusFault == "post_focus_project" {
+                        fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String, "file:///tmp/Foreign.logicx")
+                    }
                     return true
                 }, observingAttribute: { element, attribute in
+                    if nested, fixture.events.count == (hiddenView ? 9 : 8),
+                       CFEqual(element, fixture.app), attribute == kAXFocusedUIElementAttribute as String {
+                        focusBoundaryReads.record("focus")
+                        if let lateScopeFault {
+                            // Calibrated positive call stacks locate the final
+                            // stop callback's held-focus read before the setter:
+                            // 22 for Stack-only and 27 with the initial Hide menu.
+                            if focusBoundaryReads.count == (hiddenView ? 27 : 22) {
+                                fixture.reads.record("late_scope_fault_injected")
+                                if lateScopeFault == "document" {
+                                    fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String, "file:///tmp/Foreign.logicx")
+                                } else {
+                                    let foreign = fixture.builder.element(965_299)
+                                    fixture.builder.setRole(foreign, kAXWindowRole as String)
+                                    fixture.builder.setAttribute(fixture.app,
+                                        lateScopeFault == "main_window" ? kAXMainWindowAttribute as String : kAXFocusedWindowAttribute as String,
+                                        foreign)
+                                }
+                            }
+                        }
+                    }
                     if hiddenViewLoss, fixture.events.count == 2, CFEqual(element, headers.last!),
                        attribute == kAXTitleAttribute as String {
                         fixture.reads.record("hidden_view_last_row_name")
@@ -1913,6 +2047,11 @@ struct Issue965FreshPopulationAcquisitionTests {
             #expect(effects["restoration"] as? String == "not_restored")
             let current = await cache.getTracks()
             #expect(current.isEmpty, "conflicted temporary rows are never current cache authority")
+            if nestedFault.hasPrefix("retained_label_") {
+                #expect(body["state"] as? String == "C" && body["snapshot_id"] == nil)
+                #expect(!fixture.reads.recorded.contains("workspace_focus_setter"),
+                        "lost passive focus never authorizes overwriting the current focus")
+            }
             if lastReadFault {
                 #expect(body["state"] as? String == "C")
                 #expect(body["error"] as? String == "stale_snapshot")
@@ -1976,11 +2115,74 @@ struct Issue965FreshPopulationAcquisitionTests {
             #expect(gate.currentOperation() == nil)
             return
         }
+        if lateScopeFault != nil {
+            let injected = fixture.reads.recorded.contains("late_scope_fault_injected")
+            let setterAttempted = fixture.reads.recorded.contains("workspace_focus_setter")
+            #expect(injected)
+            #expect(!setterAttempted, "a final held-focus read cannot authorize a setter after the document/window changes")
+            let expectedStackEvents = ["disclosure_down", "disclosure_up", "inner_down", "inner_up",
+                "inner_down", "inner_up", "disclosure_down", "disclosure_up"]
+            #expect(fixture.events.recorded == (hiddenView ? ["hidden_menu"] + expectedStackEvents : expectedStackEvents))
+            if hiddenView { #expect((fixture.builder.attributeValue(hide, kAXValueAttribute as String) as? NSNumber)?.intValue == 1) }
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            let effects = try #require(body["ui_effects"] as? [String: Any])
+            #expect(effects["restoration"] as? String != "restored")
+            if body["state"] as? String == "C" {
+                #expect(body["snapshot_id"] == nil && body["tracks"] == nil)
+            } else {
+                let tracks = try #require(body["tracks"] as? [String: Any])
+                #expect(tracks["coverage"] as? String == "unstable")
+                let rows = try #require(tracks["rows"] as? [[String: Any]])
+                #expect(rows.allSatisfy { $0["track_ref"] == nil })
+            }
+            #expect(await cache.getTracks().isEmpty)
+            #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty && gate.currentOperation() == nil)
+            #expect((fixture.builder.attributeValue(play, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+            #expect((fixture.builder.attributeValue(record, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+            return
+        }
+        if let hiddenFocusFault {
+            let faultBoundaryReached = fixture.reads.recorded.contains("hidden_focus_fault_boundary")
+            #expect(faultBoundaryReached)
+            #expect(fixture.events.recorded == ["hidden_menu", "disclosure_down", "disclosure_up", "inner_down", "inner_up",
+                "inner_down", "inner_up", "disclosure_down", "disclosure_up"],
+                "unverified original focus must not initiate the final Hide View inverse")
+            #expect((fixture.builder.attributeValue(hide, kAXValueAttribute as String) as? NSNumber)?.intValue == 1)
+            #expect((fixture.builder.attributeValue(disclosure, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+            #expect((fixture.builder.attributeValue(inner, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+            let setters = fixture.reads.recorded.filter { $0 == "workspace_focus_setter" }
+            #expect(setters.count == (["declined", "wrong_readback", "post_focus_project"].contains(hiddenFocusFault) ? 1 : 0))
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            let effects = try #require(body["ui_effects"] as? [String: Any])
+            #expect(effects["restoration"] as? String != "restored")
+            if body["state"] as? String == "C" {
+                #expect(body["snapshot_id"] == nil && body["tracks"] == nil)
+            } else {
+                let tracks = try #require(body["tracks"] as? [String: Any])
+                #expect(tracks["coverage"] as? String == "unstable")
+                let rows = try #require(tracks["rows"] as? [[String: Any]])
+                #expect(rows.allSatisfy { $0["track_ref"] == nil })
+            }
+            #expect(await cache.getTracks().isEmpty)
+            #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty && gate.currentOperation() == nil)
+            #expect((fixture.builder.attributeValue(play, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+            #expect((fixture.builder.attributeValue(record, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+            return
+        }
         if let focusRestoration {
             let restored = focusRestoration == "restored"
             let setters = fixture.reads.recorded.filter { $0 == "workspace_focus_setter" }
             #expect(setters.count == (["restored", "declined", "wrong_readback"].contains(focusRestoration) ? 1 : 0))
-            #expect(fixture.events.recorded == ["disclosure_down", "disclosure_up", "disclosure_down", "disclosure_up"])
+            let stackEvents = nested
+                ? ["disclosure_down", "disclosure_up", "inner_down", "inner_up",
+                   "inner_down", "inner_up", "disclosure_down", "disclosure_up"]
+                : ["disclosure_down", "disclosure_up", "disclosure_down", "disclosure_up"]
+            #expect(fixture.events.recorded == (hiddenView ? ["hidden_menu"] + stackEvents + ["hidden_menu"] : stackEvents))
+            if hiddenView {
+                let inversePrecededWorkspaceFocus = fixture.reads.recorded.contains("hidden_inverse_before_workspace_focus")
+                #expect(!inversePrecededWorkspaceFocus)
+                #expect((fixture.builder.attributeValue(hide, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+            }
             #expect(fixture.builder.makeAXRuntime().children(fixture.rail).count == 19)
             let body = try #require(sharedJSONObject(sharedToolText(result)))
             let effects = try #require(body["ui_effects"] as? [String: Any])
@@ -1988,6 +2190,10 @@ struct Issue965FreshPopulationAcquisitionTests {
                 : focusRestoration == "foreign_focus" ? "not_restored" : "partially_restored"))
             if restored {
                 #expect(body["tracks"] != nil && body["snapshot_id"] != nil)
+                if nested {
+                    #expect(((body["tracks"] as? [String: Any])?["rows"] as? [[String: Any]])?.count == 44)
+                    #expect((fixture.builder.attributeValue(inner, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+                }
                 let actualFocus: AXUIElement? = AXHelpers.getAttribute(fixture.app, kAXFocusedUIElementAttribute as String,
                     runtime: fixture.builder.makeAXRuntime())
                 let focused = try #require(actualFocus)
