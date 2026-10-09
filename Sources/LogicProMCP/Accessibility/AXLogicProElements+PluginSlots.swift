@@ -255,7 +255,9 @@ extension AXLogicProElements {
 
     /// Structural predicate: is this element an OCCUPIED audio-plugin insert
     /// slot, regardless of whether its name can be read? An occupied slot is an
-    /// AXGroup carrying both a bypass control and an open/menu control. Split
+    /// AXGroup carrying both a bypass control and an editor-opening control. A
+    /// bypass plus a list control alone also describes an assigned send (#291),
+    /// so it cannot establish an insert. Split
     /// out of `occupiedPluginSlotName` (rev-4 D4) so the enumerator can mark a
     /// slot occupied-but-unreadable instead of dropping it.
     static func isOccupiedPluginSlotElement(
@@ -270,12 +272,11 @@ extension AXLogicProElements {
             let text = elementSearchText(child, runtime: runtime)
             return AXLocalePolicy.pluginBypassControl.containsAny(in: text)
         }
-        let hasOpenOrMenu = children.contains { child in
+        let hasOpen = children.contains { child in
             let text = elementSearchText(child, runtime: runtime)
             return AXLocalePolicy.pluginSlotOpenControl.containsAny(in: text)
-                || AXLocalePolicy.pluginSlotListControl.containsAny(in: text)
         }
-        if hasBypass && hasOpenOrMenu {
+        if hasBypass && hasOpen {
             return true
         }
         // Locale-neutral fallback: Logic's occupied insert row is a short group
