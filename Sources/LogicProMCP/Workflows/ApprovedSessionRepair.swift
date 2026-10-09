@@ -345,7 +345,10 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         if !ran { expected = before; expectedMixer = binding.mixer }
         else { expected = ownedVisibility ?? (before == task.desired ? before : nil); expectedMixer = ownedMixer ?? binding.mixer }
         guard let expected, desired == task.desired || desired == before,
-              let navigation = await navigation(runtime: runtime, allowPendingCancellation: ownedInverse) else {
+              // Journal cancellation still denies each new forward boundary below.
+              // It must not revoke owned cleanup or the independent post-write
+              // proof needed to retain custody for the existing conditional inverse.
+              let navigation = await navigation(runtime: runtime, allowPendingCancellation: true) else {
             return .error(HonestContract.encodeStateC(error: .staleTargetReference,
                 hint: "The retained view custody or conditional inverse is unavailable.", extras: ["write_attempted": false]))
         }
