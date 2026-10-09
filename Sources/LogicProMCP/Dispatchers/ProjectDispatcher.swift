@@ -497,14 +497,19 @@ struct ProjectDispatcher: OperationTraceDispatching {
                 let cause = navigationFailure?.cause ?? error
                 let effects = navigationFailure?.effects ?? capturedUIEffects
                 let failure: HonestContract.FailureError
+                let hint: String
                 switch cause {
-                case SessionPopulationObservation.AcquisitionError.cancelled: failure = .cancelled
-                case SessionPopulationObservation.AcquisitionError.deadline: failure = .operationTimeout
-                default: failure = .readbackUnavailable
+                case SessionPopulationObservation.AcquisitionError.cancelled:
+                    failure = .cancelled
+                    hint = "Fresh population acquisition was cancelled; no replacement report was published."
+                case SessionPopulationObservation.AcquisitionError.deadline:
+                    failure = .operationTimeout
+                    hint = "Fresh population acquisition exceeded its owned deadline; no replacement report was published."
+                default:
+                    failure = .readbackUnavailable
+                    hint = "Fresh population acquisition could not verify its owned observation; no replacement report was published."
                 }
-                return toolStateCResult(failure,
-                    hint: "Fresh population acquisition could not finish under its owned deadline; no replacement report was published.",
-                    extras: uiEffectExtras(effects))
+                return toolStateCResult(failure, hint: hint, extras: uiEffectExtras(effects))
             }
             if let acquireSessionPopulation {
                 do {
