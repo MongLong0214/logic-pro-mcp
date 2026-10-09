@@ -261,7 +261,8 @@ extension AccessibilityChannel {
                                           ax: AXHelpers.Runtime, permitsContainer: Bool = false) -> [AXUIElement]? {
             guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
                   let role = AXHelpers.getRole(focus, runtime: ax),
-                  role == "AXLayoutArea" || (permitsContainer && [kAXGroupRole as String, kAXListRole as String].contains(role)),
+                  role == "AXLayoutArea" || role == kAXGroupRole as String
+                    || (permitsContainer && role == kAXListRole as String),
                   let owner: AXUIElement = AXHelpers.getAttribute(focus, kAXWindowAttribute as String, runtime: ax),
                   CFEqual(owner, window) else { return nil }
             var path = [focus]

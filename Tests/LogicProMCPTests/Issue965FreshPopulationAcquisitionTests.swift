@@ -1054,6 +1054,12 @@ struct Issue965FreshPopulationAcquisitionTests {
             headerFocus: "passive", focusRestoration: focusRestoration)
     }
 
+    @Test(arguments: ["restored", "unavailable", "declined", "wrong_readback", "reparented", "foreign_focus"])
+    func registeredStackRestoresOnlyItsOriginalOwnedContainerFocus(focusRestoration: String) async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false,
+            headerFocus: "passive", focusRestoration: focusRestoration, originalFocusRole: kAXGroupRole as String)
+    }
+
     @Test func finalPreDownStopDoesNotReportNavigationThatNeverPosted() async throws {
         let f = Fixture()
         let disclosure = f.builder.element(965_700)
@@ -1340,6 +1346,7 @@ struct Issue965FreshPopulationAcquisitionTests {
                               knownInnerReplacement: Bool = false, disclosureDecision: String? = nil,
                               delayedLanding: Bool = false, headerFocus: String? = nil,
                               helpMovesFocus: Bool = false, focusRestoration: String? = nil,
+                              originalFocusRole: String = "AXLayoutArea",
                               hiddenViewLoss: Bool = false) async throws {
         let fixture = Fixture()
         let bundle = FileManager.default.temporaryDirectory.appendingPathComponent("lpm965-stack-\(UUID().uuidString).logicx")
@@ -1363,7 +1370,7 @@ struct Issue965FreshPopulationAcquisitionTests {
         let otherLabel = fixture.builder.element(965_241)
         let workspace = fixture.builder.element(965_242)
         if let focusRestoration {
-            fixture.builder.setRole(workspace, "AXLayoutArea")
+            fixture.builder.setRole(workspace, originalFocusRole)
             fixture.builder.setAttribute(workspace, kAXWindowAttribute as String, fixture.window)
             fixture.builder.setAttribute(workspace, kAXParentAttribute as String, fixture.window)
             fixture.builder.setAttributeSettable(workspace, kAXFocusedAttribute as String, focusRestoration != "unavailable")
