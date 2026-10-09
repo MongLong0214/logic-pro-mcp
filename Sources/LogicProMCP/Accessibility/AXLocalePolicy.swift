@@ -800,6 +800,20 @@ enum AXLocalePolicy {
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Track%23mti#value"
     )
 
+    static let trackHideControl = LabelSet(
+        canonical: "Hide Track",
+        variants: ["트랙 가리기", "トラックを非表示", "Spur ausblenden", "Ocultar pista", "Masquer la piste", "Nascondi traccia", "隐藏轨道", "隱藏音軌"],
+        rationale: "Per-track Hide checkbox description observed in English Logic 12.3. Values read from Apple's Hide Track row in all ten locales (Spanish and Portuguese share a value). A zero value is only a visibility witness, not track identity or all-language native qualification.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Hide%20Track#value"
+    )
+
+    static let toggleHideViewMenuItem = LabelSet(
+        canonical: "Toggle Hide View",
+        variants: ["보기 가리기 토글", "非表示を切り替え", "„Spuren ausblenden“ ein-/ausschalten", "Activar/desactivar vista oculta", "Ouvrir/Fermer l’affichage", "Mostra/nascondi vista", "Ativar/Desativar Ocultar Visualização", "开关隐藏视图", "切換隱藏顯示區"],
+        rationale: "Track menu leaf observed in English Logic 12.3. All ten strings were read from Apple's Toggle Hide View row; static derivation is not all-language native qualification. Only exact, unique physical menu custody authorizes the temporary hidden-view action.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Toggle%20Hide%20View#value"
+    )
+
     /// #448 — Track > Sort Tracks By. Measured on 2026-09-02 on Logic Pro
     /// 12.3 with a Korean UI as `트랙 › 트랙을 다음으로 정렬`. The menu bar is
     /// only partly localized: derived aliases locate the submenu, but the
@@ -3547,6 +3561,8 @@ enum AXLocalePolicy {
         editMenuBar,
         navigateMenuBar,
         trackMenuBar,
+        toggleHideViewMenuItem,
+        trackHideControl,
         sortTracksByMenuItem,
         sortTracksByMIDIChannelMenuItem,
         sortTracksByAudioChannelMenuItem,

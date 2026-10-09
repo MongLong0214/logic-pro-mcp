@@ -82,6 +82,10 @@ struct Issue965FreshPopulationAcquisitionTests {
                      thirdDisclosure: AXUIElement? = nil,
                      wrongAdditionalDisclosureHit: Bool = false,
                      observationMouse: AXMouseHelper.Runtime? = nil,
+                     hiddenControl: AXUIElement? = nil,
+                     needsWindowServerBootstrap: Bool = false,
+                     focusedPID: pid_t = 4242,
+                     observationAction: (@Sendable (AXUIElement, String) -> Bool?)? = nil,
                      wrongDisclosureHit: Bool = false,
                      focusSetter: (@Sendable (AXUIElement, String, CFTypeRef) -> Bool)? = nil,
                      observingAttribute: (@Sendable (AXUIElement, String) -> Void)? = nil,
@@ -116,6 +120,7 @@ struct Issue965FreshPopulationAcquisitionTests {
                         events.record("setter"); return false
                     },
                     performActionHandler: { element, action in
+                        if let result = observationAction?(element, action) { return result }
                         events.record(action)
                         // A successful AXPress is not expansion on the measured disclosure.
                         if let disclosure, CFEqual(element, disclosure), action == kAXPressAction as String { return true }
@@ -124,6 +129,7 @@ struct Issue965FreshPopulationAcquisitionTests {
                     },
                     elementAtPosition: { element, point in
                         guard CFEqual(element, app) else { return .success(nil) }
+                        if let hiddenControl, point == CGPoint(x: 16, y: 26) { return .success(hiddenControl) }
                         if let thirdDisclosure, point == CGPoint(x: 36, y: 46) { return .success(thirdDisclosure) }
                         if let additionalDisclosure, point == CGPoint(x: 26, y: 36) {
                             return .success(wrongAdditionalDisclosureHit ? header : additionalDisclosure)
@@ -133,9 +139,9 @@ struct Issue965FreshPopulationAcquisitionTests {
                     })
             let logic = AXLogicProElements.Runtime(logicProPID: { 4242 }, ax: ax,
                 executeAppleScript: { _ in Issue.record("fixture forbids AppleScript"); return .error("forbidden") },
-                onScreenWindowList: { [] },
+                onScreenWindowList: { reads.record("window_server_bootstrap"); return [] },
                 postPopupMenuEscape: { Issue.record("fixture forbids Escape") },
-                focusedApplicationPID: { 4242 }, observeFrontmost: nil)
+                focusedApplicationPID: { needsWindowServerBootstrap && !reads.recorded.contains("window_server_bootstrap") ? nil : focusedPID }, observeFrontmost: nil)
             let mouse = AXMouseHelper.Runtime(
                 postMouseEvent: { _, _, _ in Issue.record("fixture has no approved mouse actuation yet"); return false },
                 postKeyEvent: { _ in Issue.record("fixture forbids keyboard events"); return false },
@@ -232,6 +238,264 @@ struct Issue965FreshPopulationAcquisitionTests {
         default: break
         }
         return fixture
+    }
+
+    @Test("permitted hidden-track observation captures hidden members and restores the current rail", arguments: [false, true])
+    func registeredHiddenViewObservationCapturesAndRestoresMembership(needsWindowServerBootstrap: Bool) async throws {
+        try await observeHiddenView(needsWindowServerBootstrap: needsWindowServerBootstrap)
+    }
+
+    @Test func registeredHiddenViewUsesOnlyTheBoundMenuWhenAnotherApplicationHasKeyboardFocus() async throws {
+        try await observeHiddenView(scopedMenu: true)
+    }
+
+    @Test func registeredHiddenViewRestoresPresentationButDoesNotReviveRecycledSelectionIdentity() async throws {
+        try await observeHiddenView(scopedMenu: true, recycledSelection: true)
+    }
+
+    @Test(arguments: ["changed_name", "changed_description", "hidden_selection", "missing_hide_flag",
+                      "duplicate_name", "foreign_focus", "wrong_hide_window", "nonbinary_hide_flag", "project", "playback"])
+    func registeredHiddenPresentationCleanupRefusesChangedOrUnprovenCustody(fault: String) async throws {
+        try await observeHiddenView(scopedMenu: true, recycledSelection: true, cleanupFault: fault)
+    }
+
+    @Test(arguments: ["inverse_name", "inverse_description"])
+    func registeredHiddenCleanupDoesNotCreditChangedInversePresentation(fault: String) async throws {
+        try await observeHiddenView(scopedMenu: true, recycledSelection: true, cleanupFault: fault)
+    }
+
+    @Test(arguments: ["document", "window", "cleanup_document", "cleanup_window"])
+    func registeredHiddenMenuRejectsTargetSwitchDuringFinalMenuRead(fault: String) async throws {
+        try await observeHiddenView(scopedMenu: true, recycledSelection: fault.hasPrefix("cleanup_"), menuBoundaryFault: fault)
+    }
+
+    private func observeHiddenView(needsWindowServerBootstrap: Bool = false, scopedMenu: Bool = false,
+                                   recycledSelection: Bool = false, cleanupFault: String? = nil,
+                                   menuBoundaryFault: String? = nil) async throws {
+        let fixture = hiddenViewFixture(shown: false)
+        let hide = fixture.builder.element(965_973)
+        let hidden = fixture.builder.element(965_978)
+        fixture.builder.setRole(hidden, kAXLayoutItemRole as String)
+        fixture.builder.setAttribute(hidden, kAXTitleAttribute as String, "Known hidden track")
+        fixture.builder.setAttribute(hidden, kAXSelectedAttribute as String, false)
+        fixture.builder.setAttribute(hidden, kAXParentAttribute as String, fixture.rail)
+        fixture.builder.setChildren(hidden, [])
+        if recycledSelection {
+            fixture.builder.setAttribute(fixture.header, kAXDescriptionAttribute as String, "Track 2 “ Fresh track ”")
+            fixture.builder.setAttribute(fixture.header, kAXSelectedAttribute as String, true)
+        }
+        let anchor = fixture.builder.element(965_989)
+        if recycledSelection {
+            fixture.builder.setRole(anchor, kAXLayoutItemRole as String)
+            fixture.builder.setAttribute(anchor, kAXTitleAttribute as String, "Anchor")
+            fixture.builder.setAttribute(anchor, kAXDescriptionAttribute as String, "Track 1 “Anchor”")
+            fixture.builder.setAttribute(anchor, kAXSelectedAttribute as String, false)
+            fixture.builder.setChildren(anchor, [])
+            fixture.builder.setChildren(fixture.rail, [anchor, fixture.header])
+        }
+        fixture.builder.setFrame(hide, x: 10, y: 20, width: 12, height: 12)
+        fixture.builder.setAttribute(fixture.rail, kAXSelectedChildrenAttribute as String, [AXUIElement]())
+        fixture.builder.setAttribute(fixture.app, kAXWindowsAttribute as String, [fixture.window])
+        fixture.builder.setAttribute(fixture.app, kAXFocusedWindowAttribute as String, fixture.window)
+        fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, fixture.rail)
+        fixture.builder.setAttribute(fixture.rail, kAXWindowAttribute as String, fixture.window)
+        fixture.builder.setAttributeSettable(fixture.rail, kAXFocusedAttribute as String, true)
+        fixture.builder.setAttribute(fixture.app, kAXFrontmostAttribute as String, true)
+        let bundle = FileManager.default.temporaryDirectory.appendingPathComponent("lpm965-hidden-\(UUID().uuidString).logicx")
+        try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: bundle) }
+        fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String, bundle.absoluteString)
+        let bar = fixture.builder.element(965_979)
+        fixture.builder.setRole(bar, kAXGroupRole as String)
+        fixture.builder.setAttribute(bar, kAXDescriptionAttribute as String, AXLocalePolicy.controlBarGroupLabel.canonical)
+        let play = fixture.builder.element(965_980), record = fixture.builder.element(965_981)
+        for (control, labels) in [(play, AXLocalePolicy.transportPlayControl), (record, AXLocalePolicy.transportRecordControl)] {
+            fixture.builder.setRole(control, kAXCheckBoxRole as String)
+            fixture.builder.setAttribute(control, kAXDescriptionAttribute as String, labels.canonical)
+            fixture.builder.setAttribute(control, kAXValueAttribute as String, 0)
+            fixture.builder.setChildren(control, [])
+        }
+        fixture.builder.setChildren(bar, [play, record])
+        let split = fixture.builder.element(965_970)
+        fixture.builder.setChildren(fixture.window, [split, bar])
+        let toggle = fixture.builder.element(965_986)
+        if scopedMenu {
+            let menuBar = fixture.builder.element(965_983)
+            let track = fixture.builder.element(965_984)
+            let menu = fixture.builder.element(965_985)
+            fixture.builder.setRole(menuBar, kAXMenuBarRole as String)
+            fixture.builder.setRole(track, kAXMenuBarItemRole as String)
+            fixture.builder.setAttribute(track, kAXTitleAttribute as String, "Track")
+            fixture.builder.setRole(menu, kAXMenuRole as String)
+            fixture.builder.setRole(toggle, kAXMenuItemRole as String)
+            fixture.builder.setAttribute(toggle, kAXTitleAttribute as String, "Toggle Hide View")
+            fixture.builder.setAttribute(toggle, kAXEnabledAttribute as String, true)
+            fixture.builder.setActionNames(toggle, [kAXPressAction as String])
+            fixture.builder.setChildren(menu, [toggle])
+            fixture.builder.setChildren(track, [menu])
+            fixture.builder.setChildren(menuBar, [track])
+            fixture.builder.setAttribute(fixture.app, kAXMenuBarAttribute as String, menuBar)
+        }
+        let mouse = AXMouseHelper.Runtime(postMouseEvent: { type, point, clicks in
+            if scopedMenu { Issue.record("bound menu acquisition must never post global mouse events"); return false }
+            guard point == CGPoint(x: 16, y: 26), clicks == 1,
+                  type == .leftMouseDown || type == .leftMouseUp else {
+                Issue.record("unrelated hidden-view gesture"); return false
+            }
+            fixture.events.record(type == .leftMouseDown ? "hidden_down" : "hidden_up")
+            if type == .leftMouseUp {
+                let shown = (fixture.builder.attributeValue(hide, kAXValueAttribute as String) as? NSNumber)?.intValue == 1
+                fixture.builder.setAttribute(hide, kAXValueAttribute as String, shown ? 0 : 1)
+                fixture.builder.setChildren(fixture.rail, shown ? [fixture.header] : [fixture.header, hidden])
+            }
+            return true
+        }, postKeyEvent: { _ in Issue.record("no key fallback"); return false },
+           postUnicodeScalar: { _ in Issue.record("no typing"); return false }, sleepMicros: { _ in })
+        let cache = StateCache(), gate = LogicMutationGate()
+        let menuReads = Reads()
+        let dependencies = HandlerDependencies(router: ChannelRouter(), cache: cache, targetRegistry: TargetRegistry(),
+            poller: StatePoller(axChannel: fixture.channel(observationMouse: mouse, hiddenControl: hide,
+                needsWindowServerBootstrap: needsWindowServerBootstrap, focusedPID: scopedMenu ? 7777 : 4242,
+                observationAction: { element, action in
+                    guard scopedMenu, CFEqual(element, toggle), action == kAXPressAction as String else { return nil }
+                    fixture.events.record("hidden_menu")
+                    let shown = (fixture.builder.attributeValue(hide, kAXValueAttribute as String) as? NSNumber)?.intValue == 1
+                    fixture.builder.setAttribute(hide, kAXValueAttribute as String, shown ? 0 : 1)
+                    if recycledSelection {
+                        fixture.builder.setAttribute(fixture.header, kAXTitleAttribute as String, shown ? " Fresh track " : "Known hidden track")
+                        fixture.builder.setAttribute(fixture.header, kAXDescriptionAttribute as String,
+                            shown ? "Track 2 “ Fresh track ”" : "Track 1 “Known hidden track”")
+                        if shown, cleanupFault == "inverse_name" {
+                            fixture.builder.setAttribute(fixture.header, kAXTitleAttribute as String, "Changed by inverse")
+                        }
+                        if shown, cleanupFault == "inverse_description" {
+                            fixture.builder.setAttribute(fixture.header, kAXDescriptionAttribute as String, "Track 99 “ Fresh track ”")
+                        }
+                        fixture.builder.setAttribute(fixture.header, kAXSelectedAttribute as String, shown)
+                        fixture.builder.setAttribute(hidden, kAXTitleAttribute as String, " Fresh track ")
+                        fixture.builder.setAttribute(hidden, kAXDescriptionAttribute as String, "Track 2 “ Fresh track ”")
+                        fixture.builder.setAttribute(hidden, kAXSelectedAttribute as String, true)
+                        let flag = fixture.builder.element(965_988)
+                        fixture.builder.setRole(flag, kAXCheckBoxRole as String)
+                        fixture.builder.setAttribute(flag, kAXDescriptionAttribute as String, "Hide Track")
+                        fixture.builder.setAttribute(flag, kAXValueAttribute as String, 0)
+                        fixture.builder.setAttribute(flag, kAXWindowAttribute as String, fixture.window)
+                        fixture.builder.setChildren(hidden, [flag])
+                        if !shown {
+                            switch cleanupFault {
+                            case "changed_name": fixture.builder.setAttribute(hidden, kAXTitleAttribute as String, "Changed")
+                                fixture.builder.setAttribute(hidden, kAXDescriptionAttribute as String, "Track 2 “Changed”")
+                            case "changed_description": fixture.builder.setAttribute(hidden, kAXDescriptionAttribute as String, "Track 99 “ Fresh track ”")
+                            case "hidden_selection": fixture.builder.setAttribute(flag, kAXValueAttribute as String, 1)
+                            case "missing_hide_flag": fixture.builder.setChildren(hidden, [])
+                            case "duplicate_name": fixture.builder.setAttribute(anchor, kAXTitleAttribute as String, " Fresh track ")
+                                fixture.builder.setAttribute(anchor, kAXDescriptionAttribute as String, "Track 1 “ Fresh track ”")
+                            case "foreign_focus": fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String,
+                                fixture.builder.element(965_990))
+                            case "wrong_hide_window": fixture.builder.setAttribute(flag, kAXWindowAttribute as String,
+                                fixture.builder.element(965_991))
+                            case "nonbinary_hide_flag": fixture.builder.setAttribute(flag, kAXValueAttribute as String, NSNumber(value: 0.5))
+                            case "project": fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String, "file:///tmp/Foreign.logicx")
+                            case "playback": fixture.builder.setAttribute(play, kAXValueAttribute as String, 1)
+                            default: break
+                            }
+                        }
+                    }
+                    fixture.builder.setChildren(fixture.rail, recycledSelection
+                        ? (shown ? [anchor, fixture.header] : [anchor, fixture.header, hidden])
+                        : (shown ? [fixture.header] : [fixture.header, hidden]))
+                    return true
+                }, readingAttribute: { element, attribute in
+                    guard menuBoundaryFault != nil, CFEqual(element, toggle), attribute == kAXEnabledAttribute as String else { return nil }
+                    menuReads.record("enabled")
+                    if menuReads.count == (menuBoundaryFault?.hasPrefix("cleanup_") == true ? 12 : 5) {
+                        if menuBoundaryFault?.hasSuffix("document") == true {
+                            fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String, "file:///tmp/Foreign.logicx")
+                        } else {
+                            let other = fixture.builder.element(965_992)
+                            fixture.builder.setAttribute(fixture.app, kAXMainWindowAttribute as String, other)
+                            fixture.builder.setAttribute(fixture.app, kAXFocusedWindowAttribute as String, other)
+                        }
+                    }
+                    return .success(NSNumber(value: true))
+                }), cache: cache,
+                runtime: .init(hasVisibleWindow: { true }, projectFileReader: .unavailable, keyboardFocus: { .notTextEditing })),
+            dialogPresent: { false }, supportBundleExporter: nil, mutationGate: gate,
+            liveTrackNames: { [:] }, projectFileReader: .unavailable)
+        let handler = try #require(OperationHandlerRegistry.handler(tool: "logic_project", command: "inspect_session"))
+        let params: [String: Value] = ["domains": .array([.string("tracks")]), "allow_ui_navigation": .bool(true)]
+        let result = await LogicProServer.runWithDeadline(tool: "logic_project", command: "inspect_session",
+            commandParams: params, mutationGate: gate) { await handler(dependencies, params) }
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+        if menuBoundaryFault != nil {
+            let cleanup = menuBoundaryFault?.hasPrefix("cleanup_") == true
+            #expect(menuReads.count >= (cleanup ? 12 : 5), "the switch must occur in the final held-menu reread")
+            #expect(fixture.events.recorded == (cleanup ? ["hidden_menu"] : []), "an app-global menu leaf must not act on a switched document")
+            #expect((fixture.builder.attributeValue(hide, kAXValueAttribute as String) as? NSNumber)?.intValue == (cleanup ? 1 : 0))
+            #expect(fixture.builder.setCalls.isEmpty)
+            return
+        }
+        let inverseFault = cleanupFault == "inverse_name" || cleanupFault == "inverse_description"
+        if recycledSelection {
+            if body["state"] as? String == "C" {
+                #expect(body["snapshot_id"] == nil)
+                #expect(body["tracks"] == nil)
+            } else {
+                // Retaining a diagnostic report is not stable row authority.
+                let tracks = try #require(body["tracks"] as? [String: Any])
+                #expect(tracks["coverage"] as? String == "unstable")
+                let rows = try #require(tracks["rows"] as? [[String: Any]])
+                #expect(rows.allSatisfy { $0["track_ref"] == nil })
+                if cleanupFault == nil { #expect(rows.compactMap { $0["name"] as? String } == ["Anchor", "Known hidden track", " Fresh track "]) }
+            }
+        } else {
+            let tracks = try #require(body["tracks"] as? [String: Any])
+            let rows = try #require(tracks["rows"] as? [[String: Any]])
+            #expect(rows.compactMap { $0["name"] as? String } == [" Fresh track ", "Known hidden track"])
+            #expect(tracks["coverage"] as? String == "partial", "physical acquisition does not invent an end witness")
+        }
+        let effects = try #require(body["ui_effects"] as? [String: Any])
+        #expect(try #require(effects["navigation_performed"] as? Bool))
+        if cleanupFault == nil { #expect(effects["restoration"] as? String == "restored") }
+        else { #expect(effects["restoration"] as? String != "restored") }
+        #expect(fixture.events.recorded == (scopedMenu ? (cleanupFault == nil || inverseFault ? ["hidden_menu", "hidden_menu"] : ["hidden_menu"]) : ["hidden_down", "hidden_up", "hidden_down", "hidden_up"]))
+        #expect((fixture.builder.attributeValue(hide, kAXValueAttribute as String) as? NSNumber)?.intValue == (cleanupFault == nil || inverseFault ? 0 : 1))
+        if cleanupFault == nil {
+            #expect(await cache.getTracks().map(\.name) == (recycledSelection ? [] : [" Fresh track "]),
+                "unstable capture must not refresh ordinary cache; temporary hidden members are never current cache rows")
+        }
+        #expect(fixture.builder.setCalls.isEmpty)
+        if scopedMenu {
+            // The injected action handler records the exact held leaf above;
+            // FakeAXRuntimeBuilder's default action log is bypassed by it.
+            #expect(fixture.events.recorded.count == (cleanupFault == nil || inverseFault ? 2 : 1))
+            #expect(fixture.reads.recorded.contains(kAXMenuBarAttribute as String))
+        } else { #expect(fixture.builder.actionCalls.isEmpty) }
+    }
+
+    @Test func hiddenExposureCanRetainAStackOnTheFirstOriginalHeader() {
+        let fixture = hiddenViewFixture(shown: true)
+        let hide = fixture.builder.element(965_973)
+        let triangle = fixture.builder.element(965_982)
+        fixture.builder.setRole(triangle, kAXDisclosureTriangleRole as String)
+        fixture.builder.setAttribute(triangle, kAXValueAttribute as String, 1)
+        fixture.builder.setChildren(fixture.header, [triangle])
+        let ax = fixture.builder.makeAXRuntime(appElement: fixture.app)
+        let logic = AXLogicProElements.Runtime(logicProPID: { 4242 }, ax: ax,
+            executeAppleScript: { _ in Issue.record("no scripts"); return .error("forbidden") },
+            onScreenWindowList: { [] }, postPopupMenuEscape: { Issue.record("no keys") },
+            focusedApplicationPID: { 4242 }, observeFrontmost: nil)
+        let scope = AXTrackBinding.Exposure(header: fixture.header, disclosure: hide, runtime: logic,
+            originalHeaders: [fixture.header], hiddenViewWindow: fixture.window)
+        #expect(scope.isCurrent)
+        #expect(scope.retainAcquiredDisclosure(header: fixture.header, disclosure: triangle))
+        #expect(!scope.retainAcquiredDisclosure(header: fixture.header, disclosure: triangle), "a real stack must still be unique")
+        #expect(scope.isCurrent)
+        fixture.builder.setAttribute(triangle, kAXValueAttribute as String, 0)
+        #expect(!scope.isCurrent, "the first stack's loss must end hidden exposure too")
+        fixture.builder.setAttribute(triangle, kAXValueAttribute as String, 1)
+        #expect(!scope.isCurrent, "a later open cannot renew observed loss")
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
     }
 
     @Test("permitted stack observation exposes real descendants but restores the current cache rail",
