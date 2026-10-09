@@ -6864,12 +6864,25 @@
     "樂器名稱"
    ],
    "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured.",
+   "provenance": {
+    "Instrument Name": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "match": "exact",
+     "observed": "Instrument Name",
+     "path_contains": "AXMenuBar/AXMenuBarItem[Track]/AXMenu/AXMenuItem[Sort Tracks by]/AXMenu/AXMenuItem[Instrument Name]",
+     "record": "2026-09-12-en-US-arrange-menus-census",
+     "role": "AXMenuItem"
+    }
+   },
    "roles": [
     "AXMenuItem"
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -6905,12 +6918,25 @@
     "MIDI 聲道"
    ],
    "rationale": "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured.",
+   "provenance": {
+    "MIDI Channel": {
+     "attribute": "title",
+     "date": "2026-09-12",
+     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "match": "exact",
+     "observed": "MIDI Channel",
+     "path_contains": "AXMenuBar/AXMenuBarItem[Track]/AXMenu/AXMenuItem[Sort Tracks by]/AXMenu/AXMenuItem[MIDI Channel]",
+     "record": "2026-09-12-en-US-arrange-menus-census",
+     "role": "AXMenuItem"
+    }
+   },
    "roles": [
     "AXMenuItem"
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "derived",
     "de-DE": "derived",
