@@ -323,7 +323,7 @@ enum RoutingGraphPublication {
     static let physicalOutputHasNoNodeReason =
         "physical outputs are classified on the source node and publish no node or edge"
     static let busToAuxInputReason = "bus-to-aux input edges are not observed in this increment"
-    static let sendDestinationReason = "send destinations are not readable at the source slot: occupancy only"
+    static let sendDestinationReason = "send endpoint identities are not observed at the source slot: display labels do not establish routing edges"
 }
 
 /// One domain's coverage while it is being built: it only ever moves away from `complete`.
