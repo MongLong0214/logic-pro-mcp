@@ -169,6 +169,9 @@ private final class Issue1118CaptureFixture: @unchecked Sendable {
     var viewportMove = false
     var viewportFailure: String?
     var viewportWrites = 0
+    var unreadForegroundLock = false
+    var foregroundMutation: String?
+    var foregroundInventoryReads = 0
 
     func installViewport() -> AXUIElement {
         let bar = builder.element(111808)
@@ -222,6 +225,27 @@ private final class Issue1118CaptureFixture: @unchecked Sendable {
                     }
                 }
                 if attribute == "AXRows" {
+                    foregroundInventoryReads += 1
+                    if foregroundInventoryReads == 1 {
+                        if foregroundMutation == "changed" {
+                            builder.setAttribute(builder.element(111808), kAXValueAttribute as String, NSNumber(value: 0.5))
+                        }
+                        if foregroundMutation == "replaced" {
+                            let replacement = builder.element(111809)
+                            builder.setRole(replacement, kAXScrollBarRole as String)
+                            builder.setAttribute(replacement, kAXWindowAttribute as String, list)
+                            builder.setAttribute(replacement, kAXValueAttribute as String, NSNumber(value: 1.0))
+                            let children = builder.makeAXRuntime().children(list)
+                            builder.setChildren(list, children.map { CFEqual($0, builder.element(111808)) ? replacement : $0 })
+                        }
+                        if foregroundMutation == "lock_replaced" {
+                            let row = builder.element(8100)
+                            let replacement = builder.element(111811)
+                            builder.setRole(replacement, kAXCellRole as String)
+                            let children = builder.makeAXRuntime().children(row)
+                            builder.setChildren(row, children.map { CFEqual($0, builder.element(8101)) ? replacement : $0 })
+                        }
+                    }
                     if inventoryDocumentDrift == "original" {
                         builder.setAttribute(arrange, kAXDocumentAttribute as String, "/Changed.logicx")
                     }
@@ -245,6 +269,18 @@ private final class Issue1118CaptureFixture: @unchecked Sendable {
                 }
                 if unreadRows, attribute == "AXRows" {
                     return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                }
+                return nil
+            },
+            childrenResultHandler: { [self] element in
+                if unreadForegroundLock, CFEqual(element, builder.element(8101)) {
+                    return .failure(.init(raw: AXError.failure.rawValue))
+                }
+                if foregroundMutation == "required_cell_unreadable", CFEqual(element, builder.element(8102)) {
+                    return .failure(.init(raw: AXError.failure.rawValue))
+                }
+                if foregroundMutation == "outside_unreadable", CFEqual(element, builder.element(111810)) {
+                    return .failure(.init(raw: AXError.failure.rawValue))
                 }
                 return nil
             },
@@ -440,6 +476,43 @@ func issue1118CaptureUnverifiedScrollRestorationCannotPublishStateA(mode: String
     let body = fixture.object(await fixture.capture())
     #expect(body["state"] as? String == "A")
     #expect(fixture.viewportWrites == 0)
+}
+
+@Test(arguments: ["unchanged", "changed", "replaced", "lock_replaced", "required_cell_unreadable", "outside_unreadable"])
+func issue1118ForegroundListOpaqueLockDoesNotReplaceViewportOrMarkerProof(mode: String) async throws {
+    let fixture = Issue1118CaptureFixture(open: true)
+    let bar = fixture.installViewport()
+    fixture.builder.setChildren(fixture.arrange, [fixture.focus])
+    fixture.builder.setAttribute(bar, kAXWindowAttribute as String, fixture.list)
+    var children = fixture.runtime.ax.children(fixture.list)
+    children.append(bar)
+    if mode == "outside_unreadable" {
+        let outside = fixture.builder.element(111810)
+        fixture.builder.setRole(outside, kAXGroupRole as String)
+        children.append(outside)
+    }
+    fixture.builder.setChildren(fixture.list, children)
+    fixture.builder.setAttribute(fixture.app, kAXMainWindowAttribute as String, fixture.list)
+    fixture.builder.setAttribute(fixture.app, kAXFocusedWindowAttribute as String, fixture.list)
+    fixture.builder.setAttribute(fixture.focus, kAXWindowAttribute as String, fixture.list)
+    fixture.unreadForegroundLock = true
+    fixture.foregroundMutation = mode
+    let body = fixture.object(await fixture.capture())
+    #expect(body["state"] as? String == (mode == "unchanged" ? "A" : "C"))
+    let attempted = try #require(body["write_attempted"] as? Bool)
+    #expect(!attempted)
+    #expect(fixture.events.isEmpty)
+    #expect(fixture.viewportWrites == 0)
+    if mode == "unchanged" {
+        let alreadyOpen = try #require(body["already_open"] as? Bool)
+        let restored = try #require(body["ui_restored"] as? Bool)
+        #expect(alreadyOpen)
+        #expect(restored)
+        let markers = try #require(body["markers"] as? [[String: Any]])
+        #expect(markers.count == 1)
+        #expect(markers.first?["name"] as? String == "Verse")
+        #expect(markers.first?["position"] as? String == "5.1.1.1")
+    }
 }
 
 @Test(arguments: [Optional<pid_t>.none, Optional<pid_t>.some(4343)])

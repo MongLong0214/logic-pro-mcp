@@ -489,7 +489,7 @@ extension AXLogicProElements {
     /// projection of this table: an empty row set is published only when that independent witness
     /// parses to zero. A witness that reports a non-zero count, or that will not answer, keeps the
     /// read unreadable — so a rebuilding table still cannot be mistaken for an empty marker list.
-    private static func markerListStructuralRows(
+    static func markerListStructuralRows(
         from table: AXUIElement,
         ownerWindow: AXUIElement?,
         runtime: AXHelpers.Runtime
@@ -754,7 +754,7 @@ extension AXLogicProElements {
     /// Finds the first Marker List table without turning a failed `AXChildren` read into an
     /// empty tree. An empty successful traversal means no table was exposed; a failed traversal
     /// remains unreadable for callers deciding whether a destructive write is verified.
-    private static func markerListTable(
+    static func markerListTable(
         in window: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> Result<AXUIElement?, AXHelpers.AXStatusError> {
