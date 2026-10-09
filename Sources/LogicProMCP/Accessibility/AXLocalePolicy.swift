@@ -816,8 +816,8 @@ enum AXLocalePolicy {
 
     /// #448 — Track > Sort Tracks By. Measured on 2026-09-02 on Logic Pro
     /// 12.3 with a Korean UI as `트랙 › 트랙을 다음으로 정렬`. The menu bar is
-    /// only partly localized, so this policy deliberately has no inferred EN/JA
-    /// form: a locale without this measurement must refuse.
+    /// only partly localized: derived aliases locate the submenu, but the
+    /// mutating sort verifier separately requires the exact measured leaf title.
     static let sortTracksByMenuItem = LabelSet(
         canonical: "트랙을 다음으로 정렬",
         variants: ["Sort Tracks by", "トラックを並べ替える", "Spuren sortieren nach", "Ordenar pistas por", "Trier les pistes par", "Ordina tracce per", "轨道排序方式", "按以下方式排列音軌"],
@@ -831,11 +831,26 @@ enum AXLocalePolicy {
         item: sortTracksByMenuItem
     )
 
+    /// Exact English Track > Sort Tracks by leaf titles from the 2026-09-05
+    /// and 2026-09-12 en-US arrange-menu censuses, reconfirmed live 2026-10-09.
+    /// In particular, these leaves use singular "Channel" and "Name", unlike
+    /// the plural strings belonging to the cited derived rows. No other locale
+    /// or spelling is authorized by this measurement.
+    static let measuredEnglishTrackSortLabels: [TrackSortCriterion: String] = [
+        .midiChannel: "MIDI Channel",
+        .audioChannel: "Audio Channel",
+        .outputChannel: "Output Channel",
+        .instrumentName: "Instrument Name",
+        .trackName: "Track Name",
+        .used: "Used, Unused",
+        .creationDate: "Creation Date",
+    ]
+
     static let sortTracksByMIDIChannelMenuItem = LabelSet(
         canonical: "MIDI 채널",
-        variants: ["MIDI Channels", "MIDIチャンネル", "MIDI-Kanäle", "Canales MIDI", "Canaux MIDI", "Canali MIDI", "Canais de MIDI", "MIDI 通道", "MIDI 聲道"],
+        variants: ["MIDI Channel", "MIDI Channels", "MIDIチャンネル", "MIDI-Kanäle", "Canales MIDI", "Canaux MIDI", "Canali MIDI", "Canais de MIDI", "MIDI 通道", "MIDI 聲道"],
         rationale: "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured."
-            + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control, keyed `#mti` in Apple's own namespace; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
+            + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control, keyed `#mti` in Apple's own namespace; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py. The singular English sort leaf was independently read in the en-US arrange-menu censuses and reconfirmed live 2026-10-09; the plural derived value remains retained.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/MIDI%20Channels%23mti#value"
     )
 
@@ -857,9 +872,9 @@ enum AXLocalePolicy {
 
     static let sortTracksByInstrumentNameMenuItem = LabelSet(
         canonical: "악기 이름",
-        variants: ["Instrument Names", "音源名", "Instrumentennamen", "Nombres de instrumento", "Noms des instruments", "nomi strumenti", "Nomes dos Instrumentos", "乐器名称", "樂器名稱"],
+        variants: ["Instrument Name", "Instrument Names", "音源名", "Instrumentennamen", "Nombres de instrumento", "Noms des instruments", "nomi strumenti", "Nomes dos Instrumentos", "乐器名称", "樂器名稱"],
         rationale: "Measured 2026-09-02 on Korean Logic Pro 12.3 as a Track > Sort Tracks By leaf; no other locale is measured."
-            + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control, keyed `#acc` in Apple's own namespace; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
+            + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control, keyed `#acc` in Apple's own namespace; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py. The singular English sort leaf was independently read in the en-US arrange-menu censuses and reconfirmed live 2026-10-09; the plural derived value remains retained.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Instrument%20Names%23acc#value"
     )
 

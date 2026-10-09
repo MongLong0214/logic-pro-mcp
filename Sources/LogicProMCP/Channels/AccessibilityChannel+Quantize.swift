@@ -23,7 +23,8 @@ extension AccessibilityChannel {
     private struct QuantizeTarget {
         let window: AXUIElement
         let content: AXUIElement
-        let area: AXUIElement
+        let selectionAreas: [AXUIElement]
+        let areas: [AXUIElement]
         let row: AXUIElement
         let mode: AXUIElement
         let value: AXUIElement
@@ -33,8 +34,10 @@ extension AccessibilityChannel {
 
         func matches(_ other: QuantizeTarget) -> Bool {
             CFEqual(window, other.window) && CFEqual(content, other.content)
-                && CFEqual(area, other.area) && CFEqual(row, other.row)
+                && AccessibilityChannel.quantizeSameSet(selectionAreas, other.selectionAreas)
+                && CFEqual(row, other.row)
                 && CFEqual(mode, other.mode) && CFEqual(value, other.value)
+                && AccessibilityChannel.quantizeSameSet(areas, other.areas)
                 && AccessibilityChannel.quantizeSameSet(headers, other.headers)
                 && AccessibilityChannel.quantizeSameSet(regions, other.regions)
                 && AccessibilityChannel.quantizeSameSet(selected, other.selected)
@@ -173,6 +176,10 @@ extension AccessibilityChannel {
                 guard try target.matches(quantizeTarget(runtime)) else {
                     _ = cleanup(); return refusal(.readbackUnavailable, "target_changed")
                 }
+            } catch let failure as QuantizeReadFailure {
+                extras["read_stage"] = failure.stage
+                extras["read_status"] = failure.status
+                _ = cleanup(); return refusal(.readbackUnavailable, "target_changed")
             } catch {
                 _ = cleanup(); return refusal(.readbackUnavailable, "target_changed")
             }
@@ -263,11 +270,24 @@ extension AccessibilityChannel {
         let areas = try contentNodes.filter {
             try quantizeString($0, kAXRoleAttribute as String, ax, stage: "area_role") == "AXLayoutArea"
         }
-        guard areas.count == 1, let area = areas.first else { throw quantizeFailure("selection_area") }
-        let areaNodes = try quantizeWalk(area, ax)
+        // Logic can publish disjoint track-background areas, or nest them under an
+        // arrangement area. Read every outermost area's aggregate; never pick one track.
+        let areaCensuses = try areas.map { (area: $0, nodes: try quantizeWalk($0, ax)) }
+        let owners = areaCensuses.filter { census in
+            !areaCensuses.contains { other in
+                !CFEqual(other.area, census.area)
+                    && other.nodes.contains { CFEqual($0, census.area) }
+            }
+        }
+        guard !owners.isEmpty else {
+            throw quantizeFailure("selection_area", status: "candidate_count_\(areas.count)")
+        }
         var regions: [AXUIElement] = [], selected: [AXUIElement] = []
-        for node in areaNodes {
+        for node in contentNodes {
             if try quantizeString(node, kAXRoleAttribute as String, ax, stage: "region_role") == kAXLayoutItemRole as String {
+                guard owners.filter({ owner in owner.nodes.contains { CFEqual($0, node) } }).count == 1 else {
+                    throw quantizeFailure("region_owner")
+                }
                 let help = try quantizeString(node, kAXHelpAttribute as String, ax, stage: "region_help")
                 guard AXLocalePolicy.regionHelpKeyword.containsAny(in: help ?? "") else { throw quantizeFailure("region_help") }
                 regions.append(node)
@@ -276,8 +296,11 @@ extension AccessibilityChannel {
         }
         // The viewport census alone cannot prove that offscreen selected regions are absent. Require
         // AX's independently readable aggregate and exact CF membership, never a count-only fallback.
-        let aggregate = try quantizeElements(area, kAXSelectedChildrenAttribute as String, ax, stage: "selected_children")
-        guard quantizeSameSet(aggregate, selected) else { throw quantizeFailure("selected_children") }
+        for owner in owners {
+            let aggregate = try quantizeElements(owner.area, kAXSelectedChildrenAttribute as String, ax, stage: "selected_children")
+            let selectedInArea = selected.filter { region in owner.nodes.contains { CFEqual($0, region) } }
+            guard quantizeSameSet(aggregate, selectedInArea) else { throw quantizeFailure("selected_children") }
+        }
         let headers: [AXUIElement]
         switch AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: runtime) {
         case .read(let read) where !read.isEmpty: headers = read
@@ -305,7 +328,7 @@ extension AccessibilityChannel {
             } else if !modes.isEmpty { throw quantizeFailure("quantize_row") }
         }
         guard rows.count == 1, let row = rows.first else { throw quantizeFailure("quantize_row") }
-        return QuantizeTarget(window: window, content: content, area: area, row: row.0,
+        return QuantizeTarget(window: window, content: content, selectionAreas: owners.map(\.area), areas: areas, row: row.0,
                               mode: row.1, value: row.2, headers: headers, regions: regions, selected: selected)
     }
 
@@ -372,9 +395,13 @@ extension AccessibilityChannel {
     private static func quantizeWalk(_ root: AXUIElement, _ ax: AXHelpers.Runtime) throws -> [AXUIElement] {
         var nodes: [AXUIElement] = []
         func walk(_ node: AXUIElement, _ depth: Int) throws {
-            guard depth <= 32, !nodes.contains(where: { CFEqual($0, node) }) else { throw quantizeFailure("census_bound") }
-            nodes.append(node)
+            guard depth <= 32 else { throw quantizeFailure("census_bound") }
             guard let role = try quantizeString(node, kAXRoleAttribute as String, ax, stage: "role") else { throw quantizeFailure("role") }
+            // Menus can alias their AX children. They are not arrangement authority;
+            // the retained popup's unique menu and grid leaf are verified separately.
+            if role == kAXMenuRole as String { return }
+            guard !nodes.contains(where: { CFEqual($0, node) }) else { throw quantizeFailure("census_bound") }
+            nodes.append(node)
             // Text-field editor children are not arrangement/inspector authority; their lazy AX
             // children are not used to infer a complete region set or discover a quantize row.
             if role == kAXTextFieldRole as String { return }

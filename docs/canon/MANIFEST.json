@@ -114,7 +114,7 @@
     "index/stringsdict.tsv": "538081502dfdd84fb916e331a08b1682b64807cdbc2adbfe6faf9c70a983a511",
     "index/stringsdict.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "ledger/casefold.tsv": "d76e9d4411d59a905e50107c75a6af0a023a96156f9415eb0a0a6c950fc65b96",
-    "ledger/presence.tsv": "36e474128fcb87933f586f5f65e0d90223c9d3a759192e80bf193a20d4a57963"
+    "ledger/presence.tsv": "3c232aef45ff6482393f779ccb51e4ca706800f1834a640f8666d274379d52e2"
   },
   "extractor_version": 3,
   "ledger_casefold_entries": {
@@ -165,9 +165,9 @@
       "-": 9
     },
     "niblabels": {
-      "-": 31,
+      "-": 32,
       "de": 31,
-      "en": 34,
+      "en": 35,
       "es": 33,
       "fr": 33,
       "it": 34,
@@ -178,7 +178,7 @@
       "zh_TW": 41
     },
     "nibstrings": {
-      "en": 92
+      "en": 94
     },
     "quickhelp": {
       "de": 54,
@@ -195,7 +195,7 @@
     "strings": {
       "-": 3,
       "de": 197,
-      "en": 197,
+      "en": 199,
       "es": 209,
       "fr": 191,
       "it": 201,
