@@ -1850,6 +1850,55 @@ struct Issue971ApprovedMixerSagaTests {
         }
     }
 
+    @Test(arguments: [false, true])
+    func cancellationAtTheActualVisibilityLeafRetainsItsOwnedInverse(initial: Bool) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: initial)
+                await f.router.register(f.view.channel())
+                let plan = try await f.plan(desired: !initial)
+                let blocked = BlockedRead()
+                defer { blocked.unblock() }
+                let hook = DecidingMixerReplacement()
+                let key = "cancel-at-visibility-leaf"
+                f.view.afterVisibilityChange = {
+                    guard !hook.armed else { return }
+                    hook.armed = true
+                    Task {
+                        if await f.journal.cancel(idempotencyKey: key) == .requested { hook.replaced = true }
+                        blocked.unblock()
+                    }
+                    blocked.blockOnce()
+                }
+                let params = try f.applyParameters(plan, key: key)
+                let outcome = try await f.call("apply_session_repair", params: params)
+                #expect(hook.armed)
+                #expect(hook.replaced)
+                #expect(blocked.entered)
+                #expect(outcome["saga_state"] as? String == "fullyCompensated")
+                let restored = f.view.showing == initial
+                #expect(restored)
+                #expect(f.view.events == ["open_view", initial ? "hide_mixer" : "show_mixer",
+                                          "open_view", initial ? "show_mixer" : "hide_mixer"])
+                let compensation = try #require(outcome["compensation"] as? [String: Any])
+                let fullyCompensated = try #require(compensation["fully_compensated"] as? Bool)
+                #expect(fullyCompensated)
+                let summary = try #require(compensation["journal_summary"] as? [String: Any])
+                #expect(summary["forward_write_boundary_count"] as? Int == 1)
+                #expect(summary["compensation_write_boundary_count"] as? Int == 1)
+                #expect(summary["failed_compensation_count"] as? Int == 0)
+                #expect(summary["uncertain_compensation_count"] as? Int == 0)
+                guard case .cancelled(_, verified: true)? = await f.journal.record(for: key) else {
+                    Issue.record("cancellation at the actual leaf must verify its own conditional inverse"); return
+                }
+                let events = f.view.events
+                let replay = try await f.call("apply_session_repair", params: params)
+                #expect(replay["saga_state"] as? String == "fullyCompensated")
+                #expect(f.view.events == events)
+            }
+        }
+    }
+
     @Test
     func disabledSagaIsUnavailableInTheActualCanonicalPlanAndApply() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
