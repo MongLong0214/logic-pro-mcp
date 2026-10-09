@@ -2,6 +2,10 @@ import ApplicationServices
 import Foundation
 
 private enum MarkerCaptureContext {
+    struct LockBoundary: @unchecked Sendable {
+        let row: AXUIElement
+        let cell: AXUIElement
+    }
     struct Authority: @unchecked Sendable {
         let pid: pid_t
         let app: AXUIElement
@@ -77,13 +81,57 @@ extension AccessibilityChannel {
         // Opening Marker List can scroll the original arrange window to the
         // playhead. Retain physical controls, not replacement controls or ordinals.
         typealias Scroll = (control: AXUIElement, value: Double)
+        var markerLockBoundaries: [MarkerCaptureContext.LockBoundary] = []
         func scrollValues(_ window: AXUIElement) throws -> [Scroll] {
             observation = "scroll_inventory"
+            let boundaries = markerLockBoundaries
+            let base = runtime.ax
+            // The Marker List's Lock cell is a data field, not a viewport
+            // carrier. Native AX reports a failure for its children even while
+            // the strict marker inventory reads the required Position/Name.
+            // Scope only the physically retained Lock cells; no failed read is
+            // interpreted as an empty subtree, and all other nodes stay strict.
+            let viewportAX = AXHelpers.Runtime(
+                axApp: base.axApp, attributeValue: base.attributeValue,
+                attributeIsSettable: base.attributeIsSettable,
+                setAttributeValue: base.setAttributeValue, children: base.children,
+                performAction: base.performAction, childCount: base.childCount,
+                actionNames: base.actionNames, actionNamesResult: base.actionNamesResult,
+                childrenResult: { node in
+                    if boundaries.contains(where: { CFEqual($0.cell, node) }) { return .success([]) }
+                    return AXHelpers.childrenResult(node, runtime: base)
+                },
+                attributeValueResult: base.attributeValueResult,
+                performActionResult: base.performActionResult,
+                elementAtPosition: base.elementAtPosition
+            )
+            var seenRows: [AXUIElement] = []
+            var boundaryChanged = false
             let census = try AXHelpers.censusDescendantResult(
                 of: window, role: kAXScrollBarRole as String, maxDepth: 32,
-                runtime: runtime.ax, requiresCompleteTraversal: true,
-                permittingRead: { !blocked() }
+                runtime: viewportAX, requiresCompleteTraversal: true,
+                permittingRead: { !blocked() },
+                observingRole: { node, role in
+                    if boundaries.contains(where: { CFEqual($0.cell, node) }), role != kAXCellRole as String {
+                        boundaryChanged = true
+                    }
+                    if boundaries.contains(where: { CFEqual($0.row, node) }), role != kAXRowRole as String {
+                        boundaryChanged = true
+                    }
+                },
+                observingChildren: { parent, children in
+                    for boundary in boundaries where CFEqual(boundary.row, parent) {
+                        seenRows.append(parent)
+                        if children.first.map({ CFEqual($0, boundary.cell) }) != true {
+                            boundaryChanged = true
+                        }
+                    }
+                }
             ).get()
+            guard !boundaryChanged,
+                  boundaries.allSatisfy({ boundary in seenRows.contains(where: { CFEqual($0, boundary.row) }) }) else {
+                throw AXHelpers.AXStatusError.malformedAttribute
+            }
             guard census.matches.count <= 32 else { throw AXHelpers.AXStatusError.malformedAttribute }
             var values: [Scroll] = []
             for control in census.matches {
@@ -150,11 +198,35 @@ extension AccessibilityChannel {
                   CFEqual(try element(focusedElement, kAXWindowAttribute as String), focusedWindow) else {
                 return failure(hint: "Original project and focused UI could not be bound.")
             }
-            let originalScroll = try scrollValues(main)
             let existing = try lists(before, document: document)
             guard existing.count <= 1 else {
                 return failure(hint: "More than one Marker List matches the project.")
             }
+            if let list = existing.first, CFEqual(main, list) {
+                // Bind structural scope only. Read AXRows and marker values
+                // after the original scrollbar baseline, not before it.
+                guard let table = try AXLogicProElements.markerListTable(in: list, runtime: runtime.ax).get() else {
+                    return failure(hint: "The Marker List table could not be bound.")
+                }
+                let rows: [AXUIElement]
+                switch AXLogicProElements.markerListStructuralRows(from: table, ownerWindow: list, runtime: runtime.ax) {
+                case .success(let observed): rows = observed
+                case .failure(let error):
+                    extras["marker_read_failure_site"] = error.site.rawValue
+                    extras["marker_read_status"] = error.status.diagnosticLabel
+                    return failure(hint: "The Marker List row structure could not be bound.")
+                }
+                for row in rows {
+                    let children = try AXHelpers.childrenResult(row, runtime: runtime.ax).get()
+                    guard let lock = children.first,
+                          try text(row, kAXRoleAttribute as String) == kAXRowRole as String,
+                          try text(lock, kAXRoleAttribute as String) == kAXCellRole as String else {
+                        return failure(hint: "The retained Marker List Lock cell could not be bound.")
+                    }
+                    markerLockBoundaries.append(.init(row: row, cell: lock))
+                }
+            }
+            let originalScroll = try scrollValues(main)
             if let list = existing.first {
                 extras["already_open"] = true
                 let markers = capture(list)
