@@ -243,8 +243,8 @@ struct SendState: Sendable, Codable {
 
 /// What one send slot was seen to be (#291, ADR-008 section 5's endpoint-and-edge-observations requirement).
 ///
-/// `occupiedKnownDestination` is declared and produced by nothing this increment: the destination
-/// an assigned send's group names is not read, so a consumer that later learns one can say so
+/// `occupiedKnownDestination` remains unproduced: an assigned send's raw display is not
+/// endpoint identity, so a consumer that later learns one can say so
 /// without the unknown case silently changing meaning. `unreadable` is a slot whose button was
 /// found but whose successor would not say whether it is the send knob — unknown for that slot
 /// alone, not for the strip. A successor whose role will not read may be a slot of its own, and
@@ -270,12 +270,16 @@ struct SendSlotObservation: Sendable, Codable, Equatable {
     /// The qualified assigned group's own binary checkbox, never an enabled default.
     /// Unknown/legacy slots carry no bypass observation and acquire no write authority.
     var bypassed: Bool? = nil
+    /// Raw description of the qualified assigned group; never a bus/port reference,
+    /// group-to-knob pairing, endpoint identity, or permission to write a send.
+    var destinationDisplay: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case ordinal, state
         case levelRaw = "level_raw"
         case levelDescription = "level_description"
         case bypassed
+        case destinationDisplay = "destination_display"
     }
 }
 

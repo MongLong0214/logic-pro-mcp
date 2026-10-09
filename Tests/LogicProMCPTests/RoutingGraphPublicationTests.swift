@@ -105,7 +105,7 @@ struct RoutingGraphPublicationTests {
         #expect(sendList == nil)
         #expect(!edges.contains { $0["kind"] as? String == "send" })
         #expect(sends["state"] as? String == "partial")
-        #expect(partialReason.contains("send destinations are not readable at the source slot: occupancy only"))
+        #expect(partialReason.contains("send endpoint identities are not observed at the source slot: display labels do not establish routing edges"))
         #expect(partialReason.contains("send slots unreadable for track_index=0"))
     }
 
@@ -148,7 +148,7 @@ struct RoutingGraphPublicationTests {
 
         #expect(edges.count == 1)
         #expect(!complete)
-        #expect(partialReason.contains("send destinations are not readable at the source slot: occupancy only"))
+        #expect(partialReason.contains("send endpoint identities are not observed at the source slot: display labels do not establish routing edges"))
         #expect(!partialReason.contains("send slots unreadable"))
     }
 

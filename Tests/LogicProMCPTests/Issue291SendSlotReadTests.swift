@@ -725,7 +725,9 @@ struct Issue291AssignedSendAsDumpedTests {
             #expect(slots.count == 2)
             #expect(slots[0]["state"] as? String == "observed_empty")
             #expect(slots[0]["bypassed"] == nil)
+            #expect(slots[0]["destination_display"] == nil)
             #expect(slots[1]["state"] as? String == "occupied_unknown_destination")
+            #expect(slots[1]["destination_display"] as? String == (korean ? "버스 256" : "B256"))
             switch slots[1]["bypassed"] as? Bool {
             case .some(let bypassed): #expect(!bypassed)
             case .none: Issue.record("the archived assigned send's own unchecked checkbox must be published")
@@ -779,6 +781,8 @@ struct Issue291AssignedSendAsDumpedTests {
         if let slots {
             #expect(slots.count == 2)
             #expect(slots[0]["bypassed"] == nil)
+            #expect(slots[0]["destination_display"] == nil)
+            #expect(slots[1]["destination_display"] as? String == (korean ? "버스 256" : "B256"))
             switch slots[1]["bypassed"] as? Bool {
             case .some(let bypassed): #expect(!bypassed)
             case .none: Issue.record("inspection must retain the actually observed own checkbox value")
@@ -913,7 +917,7 @@ struct Issue291AssignedSendAsDumpedTests {
         #expect(slots == [SendSlotObservation(ordinal: 0, state: .occupiedUnknownDestination, levelRaw: 0, levelDescription: "-∞")])
         let legacy = Data(#"{"ordinal":0,"state":"occupied_unknown_destination","level_raw":0.5,"level_description":"-6 dB"}"#.utf8)
         let decoded = try JSONDecoder().decode(SendSlotObservation.self, from: legacy)
-        #expect(decoded.bypassed == nil && decoded.levelRaw == 0.5)
+        #expect(decoded.bypassed == nil && decoded.destinationDisplay == nil && decoded.levelRaw == 0.5)
         for value in [false, true] {
             let actual = SendSlotObservation(ordinal: 1, state: .occupiedUnknownDestination, bypassed: value)
             #expect(try JSONDecoder().decode(SendSlotObservation.self, from: JSONEncoder().encode(actual)) == actual)
@@ -978,8 +982,8 @@ struct Issue291AssignedSendAsDumpedTests {
         let ownStrip = strip(rows, builder: builder, id: 32_700)
         let expected = [
             SendSlotObservation(ordinal: 0, state: .observedEmpty),
-            SendSlotObservation(ordinal: 1, state: .occupiedUnknownDestination, bypassed: false),
-            SendSlotObservation(ordinal: 2, state: .occupiedUnknownDestination, bypassed: false),
+            SendSlotObservation(ordinal: 1, state: .occupiedUnknownDestination, bypassed: false, destinationDisplay: "버스 3"),
+            SendSlotObservation(ordinal: 2, state: .occupiedUnknownDestination, bypassed: false, destinationDisplay: "버스 2"),
         ]
         let direct = try #require(
             AXLogicProElements.sendSlotObservations(in: ownStrip, runtime: builder.makeAXRuntime())
@@ -1205,7 +1209,8 @@ struct Issue291AssignedSendAsDumpedTests {
         fixture.b.setChildren(ownStrip, fixture.b.makeAXRuntime().children(ownStrip) + run)
         let expected: [SendSlotObservation]? = kind == "distinct_runs"
             ? (0..<6).map { .init(ordinal: $0, state: $0 == 0 || $0 == 3
-                ? .observedEmpty : .occupiedUnknownDestination, bypassed: $0 == 1 || $0 == 4 ? false : nil) } : nil
+                ? .observedEmpty : .occupiedUnknownDestination, bypassed: $0 == 1 || $0 == 4 ? false : nil,
+                destinationDisplay: $0 % 3 == 1 ? "버스 256" : ($0 % 3 == 2 ? "버스 2" : nil)) } : nil
         let direct = AXLogicProElements.sendSlotObservations(in: ownStrip, runtime: fixture.logic.ax)
         #expect(direct == expected)
         let typed = AccessibilityChannel.defaultGetMixerStates(runtime: fixture.logic, stoppingWhen: { false })
@@ -1327,7 +1332,7 @@ struct Issue291AssignedSendAsDumpedTests {
         )
         #expect(read == [
             SendSlotObservation(ordinal: 0, state: .observedEmpty),
-            SendSlotObservation(ordinal: 1, state: .occupiedUnknownDestination, levelRaw: 0, levelDescription: "-∞", bypassed: false),
+            SendSlotObservation(ordinal: 1, state: .occupiedUnknownDestination, levelRaw: 0, levelDescription: "-∞", bypassed: false, destinationDisplay: "버스 256"),
         ])
     }
 
@@ -1345,8 +1350,140 @@ struct Issue291AssignedSendAsDumpedTests {
         )
         #expect(read == [
             SendSlotObservation(ordinal: 0, state: .observedEmpty),
-            SendSlotObservation(ordinal: 1, state: .occupiedUnknownDestination, levelRaw: 0, levelDescription: "-∞", bypassed: false),
+            SendSlotObservation(ordinal: 1, state: .occupiedUnknownDestination, levelRaw: 0, levelDescription: "-∞", bypassed: false, destinationDisplay: "B256"),
         ])
+    }
+
+    @Test(arguments: ["en", "ko"])
+    func qualifiedAssignedGroupPreservesOnlyItsOwnRawDisplay(locale: String) throws {
+        let builder = FakeAXRuntimeBuilder()
+        let rows = locale == "en" ? assignedSendStripEn : assignedSendStripKo
+        let dumped = strip(rows, builder: builder, id: 39_500)
+        let read = try #require(AXLogicProElements.sendSlotObservations(in: dumped, runtime: builder.makeAXRuntime()))
+        let wire = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(read)) as? [[String: Any]])
+        #expect(wire.count == 2)
+        #expect(wire[0]["destination_display"] == nil)
+        #expect(wire[1]["destination_display"] as? String == (locale == "en" ? "B256" : "버스 256"))
+        #expect(wire[1]["state"] as? String == "occupied_unknown_destination")
+        #expect(wire[1]["destination_ref"] == nil)
+        #expect(builder.setCalls.isEmpty && builder.actionCalls.isEmpty)
+    }
+
+    @Test(arguments: ["raw", "missing", "empty", "malformed", "failed", "parent_changed", "group_removed", "control_replaced", "wrong_role"])
+    func assignedDisplayIsOptionalAndRetainsItsOwnPhysicalScope(kind: String) throws {
+        let builder = FakeAXRuntimeBuilder()
+        let id = 39_600
+        let dumped = strip(assignedSendStripEn, builder: builder, id: id)
+        let group = try element(at: "13", role: kAXGroupRole as String, in: assignedSendStripEn, builder: builder, stripID: id)
+        let list = try element(at: "13.1", role: kAXButtonRole as String, in: assignedSendStripEn, builder: builder, stripID: id)
+        let raw = "  e\u{301} / Bus 1  "
+        builder.setAttribute(group, kAXDescriptionAttribute as String, raw)
+        if kind == "missing" { builder.removeAttribute(group, kAXDescriptionAttribute as String) }
+        if kind == "empty" { builder.setAttribute(group, kAXDescriptionAttribute as String, "") }
+        if kind == "malformed" { builder.setAttribute(group, kAXDescriptionAttribute as String, 1) }
+        let read = FailedRead()
+        let runtime = builder.makeAXRuntime(attributeValueResultHandler: { target, attribute in
+            guard CFEqual(target, group), attribute == kAXDescriptionAttribute as String else { return nil }
+            read.consume()
+            if kind == "failed" { return .failure(.init(raw: AXError.cannotComplete.rawValue)) }
+            if kind == "parent_changed" { builder.setAttribute(group, kAXParentAttribute as String, builder.element(id + 200)) }
+            if kind == "group_removed" { builder.setChildren(dumped, builder.makeAXRuntime().children(dumped).filter { !CFEqual($0, group) }) }
+            if kind == "control_replaced" {
+                let replacement = builder.element(id + 201)
+                builder.setRole(replacement, kAXCheckBoxRole as String)
+                builder.setChildren(group, [replacement, list])
+            }
+            if kind == "wrong_role" { builder.setRole(group, kAXButtonRole as String) }
+            return nil
+        }, setAttributeHandler: nil, performActionHandler: nil)
+        let slots = try #require(AXLogicProElements.sendSlotObservations(in: dumped, runtime: runtime))
+        #expect(read.wasConsumed)
+        #expect(slots.count == 2 && slots[1].state == .occupiedUnknownDestination)
+        let wire = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(slots)) as? [[String: Any]])
+        if kind == "raw" {
+            let text = try #require(wire[1]["destination_display"] as? String)
+            #expect(Array(text.utf8) == Array(raw.utf8))
+        } else { #expect(wire[1]["destination_display"] == nil) }
+        #expect(builder.setCalls.isEmpty && builder.actionCalls.isEmpty)
+    }
+
+    @Test
+    func multipleAssignedGroupsKeepRawDisplaysWithoutPairingLevelsOrCreatingKnownDestinations() throws {
+        let builder = FakeAXRuntimeBuilder()
+        let cluster = try multipleAssignedStrip(builder, id: 39_900)
+        let slots = try #require(AXLogicProElements.sendSlotObservations(in: cluster.strip, runtime: builder.makeAXRuntime()))
+        let wire = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(slots)) as? [[String: Any]])
+        #expect(wire.map { $0["destination_display"] as? String } == [nil, "버스 256", "버스 2"])
+        #expect(slots.map(\.state) == [.observedEmpty, .occupiedUnknownDestination, .occupiedUnknownDestination])
+        #expect(slots.allSatisfy { $0.levelRaw == nil && $0.levelDescription == nil })
+        #expect(builder.setCalls.isEmpty && builder.actionCalls.isEmpty)
+    }
+
+    @Test(arguments: [false, true], [false, true])
+    func sourceStripMigrationDuringOwnBypassReadCannotPublishForeignDisplay(multiple: Bool, nested: Bool) throws {
+        let builder = FakeAXRuntimeBuilder()
+        let id = 40_100
+        let cluster = try multipleAssignedStrip(builder, id: id)
+        let group = cluster.groups[0]
+        if !multiple {
+            builder.setChildren(cluster.strip, cluster.children.filter { node in
+                !CFEqual(node, cluster.groups[1]) && !CFEqual(node, cluster.knobs[1])
+            })
+        }
+        let container = builder.element(id + 302)
+        if nested {
+            builder.setRole(container, kAXGroupRole as String)
+            builder.setChildren(container, builder.makeAXRuntime().children(cluster.strip))
+            builder.setChildren(cluster.strip, [container])
+        }
+        let checkbox = try #require(builder.makeAXRuntime().children(group).first)
+        let foreignStrip = builder.element(id + 300)
+        builder.setRole(foreignStrip, kAXLayoutItemRole as String)
+        let consumed = FailedRead()
+        let runtime = builder.makeAXRuntime(attributeValueResultHandler: { target, attribute in
+            guard CFEqual(target, checkbox), attribute == kAXValueAttribute as String else { return nil }
+            consumed.consume()
+            let migrated = nested ? container : group
+            builder.setChildren(cluster.strip, builder.makeAXRuntime().children(cluster.strip).filter { !CFEqual($0, migrated) })
+            builder.setChildren(foreignStrip, [migrated])
+            return nil
+        }, setAttributeHandler: nil, performActionHandler: nil)
+        let slots = try #require(AXLogicProElements.sendSlotObservations(in: cluster.strip, runtime: runtime))
+        #expect(consumed.wasConsumed)
+        #expect(slots[1].state == .occupiedUnknownDestination)
+        #expect(slots[1].destinationDisplay == nil)
+        if multiple { #expect(slots[2].destinationDisplay == (nested ? nil : "버스 2")) }
+        #expect(builder.setCalls.isEmpty && builder.actionCalls.isEmpty)
+    }
+
+    @Test(arguments: [false, true])
+    func actualParentProxyCannotReplaceOriginalSourceMembershipOrItsCapturedWitness(replaced: Bool) throws {
+        let builder = FakeAXRuntimeBuilder()
+        let cluster = try multipleAssignedStrip(builder, id: 40_500)
+        let group = cluster.groups[0]
+        let proxy = builder.element(40_800)
+        builder.setRole(proxy, kAXGroupRole as String)
+        builder.setChildren(proxy, [group])
+        // Actual Logic exposes the group directly in Audio 1's children, but gives it
+        // a distinct off-walk AXParent proxy whose own child is that same group.
+        #expect(builder.makeAXRuntime().children(cluster.strip).contains { CFEqual($0, group) })
+        let checkbox = try #require(builder.makeAXRuntime().children(group).first)
+        let observed = FailedRead()
+        let runtime = builder.makeAXRuntime(attributeValueResultHandler: { target, attribute in
+            guard CFEqual(target, checkbox), attribute == kAXValueAttribute as String else { return nil }
+            observed.consume()
+            if replaced {
+                let replacement = builder.element(40_801)
+                builder.setRole(replacement, kAXGroupRole as String)
+                builder.setChildren(replacement, [group])
+            }
+            return nil
+        }, setAttributeHandler: nil, performActionHandler: nil)
+        let slots = try #require(AXLogicProElements.sendSlotObservations(in: cluster.strip, runtime: runtime))
+        #expect(observed.wasConsumed)
+        #expect(slots[1].destinationDisplay == (replaced ? nil : "버스 256"))
+        #expect(slots[1].state == .occupiedUnknownDestination)
+        #expect(builder.setCalls.isEmpty && builder.actionCalls.isEmpty)
     }
 
     /// Strip 2 at the same moment: no send of its own, and two empty send buttons, because the

@@ -162,7 +162,7 @@ struct Issue291EndpointClassificationTests {
         ))
 
         #expect(graph.coverage.sends == RoutingDomainCoverage(state: .partial, reasons: [
-            "send destinations are not readable at the source slot: occupancy only",
+            "send endpoint identities are not observed at the source slot: display labels do not establish routing edges",
             "send slots unreadable for track_index=0",
             "send slot ordinal=0 unreadable for track_index=3",
         ]))

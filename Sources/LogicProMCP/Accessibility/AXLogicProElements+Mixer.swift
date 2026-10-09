@@ -1001,9 +1001,10 @@ extension AXLogicProElements {
     /// read, because a knob right after a send button can only mean that button's send, and
     /// dropping it would turn such a strip, were Logic ever to draw one, from occupied to empty.
     ///
-    /// Every occupied slot reads `occupiedUnknownDestination`. The group's description does name
-    /// the destination, but abbreviated in English and in full in Korean, so publishing it needs
-    /// its own measurement per language; `occupiedKnownDestination` stays produced by nothing here.
+    /// Every occupied slot still reads `occupiedUnknownDestination`. A qualified assigned group
+    /// can carry its own raw description (measured `B256`/`버스 256`, and `Bus 1` in en-US).
+    /// Preserve that display verbatim, without parsing or joining it to an endpoint. The legacy
+    /// button/knob shape has no group display; `occupiedKnownDestination` is never produced here.
     ///
     /// Occupancy is decided by the PRESENCE of the knob, never by its level: a send at minus
     /// infinity or under automation is still a send. `levelRaw` is the knob's `AXValue` when it is
@@ -1038,6 +1039,22 @@ extension AXLogicProElements {
         var observations: [SendSlotObservation] = []
         var consumedGroups: Set<Int> = []
         var recognizedControls: [AXUIElement] = []
+        // This path comes from the already-read source walk, not a later AXParent lookup
+        // that could adopt a group after it migrated to another strip.
+        func sourcePath(at index: Int) -> [AXUIElement]? {
+            var path = [walk[index].element]
+            var cursor = index
+            var depth = walk[index].depth
+            while depth > 1 {
+                guard let parentIndex = (0..<cursor).last(where: { walk[$0].depth == depth - 1 }),
+                      !path.contains(where: { CFEqual($0, walk[parentIndex].element) }) else { return nil }
+                path.append(walk[parentIndex].element)
+                cursor = parentIndex
+                depth -= 1
+            }
+            guard !path.contains(where: { CFEqual($0, strip) }) else { return nil }
+            return path + [strip]
+        }
         func claim(_ controls: [AXUIElement]) -> Bool {
             for offset in controls.indices {
                 if recognizedControls.contains(where: { CFEqual($0, controls[offset]) })
@@ -1118,9 +1135,11 @@ extension AXLogicProElements {
                     }
                     for (offset, group) in groups.enumerated() {
                         consumedGroups.insert(group)
+                        let originalParent: AXUIElement? = AXHelpers.getAttribute(walk[group].element, kAXParentAttribute as String, runtime: runtime)
                         observations.append(SendSlotObservation(
                             ordinal: observations.count, state: .occupiedUnknownDestination,
-                            bypassed: observedSendBypass(group: walk[group].element, control: bypassControls[offset], runtime: runtime)
+                            bypassed: observedSendBypass(group: walk[group].element, control: bypassControls[offset], runtime: runtime),
+                            destinationDisplay: observedSendDisplay(group: walk[group].element, control: bypassControls[offset], sourcePath: sourcePath(at: group), originalParent: originalParent, runtime: runtime)
                         ))
                     }
                     continue
@@ -1132,8 +1151,10 @@ extension AXLogicProElements {
                         _ = assignedSendGroupShape(visit.element, runtime: runtime, observingBypass: { bypassControl = $0 })
                     }
                     guard claim([visit.element, walk[sibling].element] + (bypassControl.map { [$0] } ?? [])) else { return nil }
+                    let originalParent: AXUIElement? = AXHelpers.getAttribute(visit.element, kAXParentAttribute as String, runtime: runtime)
                     var observation = occupiedSendSlot(ordinal: observations.count, knob: walk[sibling].element, runtime: runtime)
                     observation.bypassed = bypassControl.flatMap { observedSendBypass(group: visit.element, control: $0, runtime: runtime) }
+                    observation.destinationDisplay = bypassControl.flatMap { observedSendDisplay(group: visit.element, control: $0, sourcePath: sourcePath(at: index), originalParent: originalParent, runtime: runtime) }
                     observations.append(observation)
                 }
                 continue
@@ -1173,6 +1194,36 @@ extension AXLogicProElements {
         let matches = firstRole == (kAXCheckBoxRole as String) && secondRole == (kAXButtonRole as String)
         if matches { observingBypass?(children[0]) }
         return matches
+    }
+
+    /// Read display only after occupancy qualified this group. Recheck the retained parent
+    /// source ancestry and own control around the read; never adopt a migrated group.
+    /// Missing, malformed or unread display loses only this optional value, not occupancy.
+    private static func observedSendDisplay(group: AXUIElement, control: AXUIElement, sourcePath: [AXUIElement]?, originalParent: AXUIElement?, runtime: AXHelpers.Runtime) -> String? {
+        guard let sourcePath, sourcePath.count >= 2, CFEqual(sourcePath[0], group), let originalParent else { return nil }
+        func stillInSource() -> Bool {
+            for (child, parent) in zip(sourcePath, sourcePath.dropFirst()) {
+                guard let peers = childrenIfRead(parent, runtime: runtime),
+                      peers.filter({ CFEqual($0, child) }).count == 1 else { return false }
+            }
+            // Logic's assigned group has an off-walk AXParent proxy, not the source strip.
+            // Hold it before level/bypass reads only as another stability witness. The original
+            // source's child-list ancestry above remains mandatory; the proxy cannot replace it.
+            guard let currentParent: AXUIElement = AXHelpers.getAttribute(group, kAXParentAttribute as String, runtime: runtime),
+                  CFEqual(originalParent, currentParent),
+                  let proxyChildren = childrenIfRead(originalParent, runtime: runtime),
+                  proxyChildren.filter({ CFEqual($0, group) }).count == 1 else { return false }
+            return true
+        }
+        guard stillInSource(),
+              case .success(.some(let text)) = slotDecidingString(group, kAXDescriptionAttribute as String, runtime: runtime),
+              !text.isEmpty,
+              AXHelpers.getRole(group, runtime: runtime) == kAXGroupRole as String else { return nil }
+        var currentControl: AXUIElement?
+        guard assignedSendGroupShape(group, runtime: runtime, observingBypass: { currentControl = $0 }) == true,
+              currentControl.map({ CFEqual($0, control) }) == true,
+              stillInSource() else { return nil }
+        return text
     }
 
     /// Consume the retained direct child's value, then corroborate that same control.
