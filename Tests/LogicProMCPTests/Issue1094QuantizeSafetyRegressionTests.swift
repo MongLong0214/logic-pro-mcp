@@ -158,6 +158,97 @@ private func expectQuantizeRefusal(_ result: ChannelResult, written: Bool, reaso
 
 @Suite("#1094 retained quantize target and fail-closed census")
 struct Issue1094QuantizeSafetyRegressionTests {
+    @Test func popupMenuAliasesAreNotArrangementCensusNodes() async throws {
+        let f = QuantizeSafetyFixture()
+        f.b.setChildren(f.menu, [f.items[0], f.items[0], f.items[1], f.items[2]])
+        let result = await f.run()
+        #expect(result.isSuccess, "\(result.message)")
+        #expect(f.popupPresses == 1)
+        #expect(f.leafPresses == 1)
+        #expect(f.currentValue == "1/16 Note")
+    }
+    @Test func unreadSelectionAfterOpeningKeepsTheConcreteReadFailure() async throws {
+        let f = QuantizeSafetyFixture()
+        f.onOpen = { f.failingAttribute = (f.regions[1], kAXSelectedAttribute as String) }
+        let result = await f.run()
+        try expectQuantizeRefusal(result, written: true, reason: "target_changed")
+        let object = try #require(sharedJSONObject(result.message))
+        #expect(object["read_stage"] as? String == "region_selected")
+        #expect(object["read_status"] as? String == "-25200")
+        #expect(f.leafPresses == 0)
+    }
+    @Test func disjointTrackAreasRequireEachExactSelectionAggregate() async throws {
+        let f = QuantizeSafetyFixture()
+        let second = f.b.element(109_453)
+        f.b.setAttribute(second, kAXRoleAttribute as String, "AXLayoutArea")
+        f.b.setChildren(f.area, Array(f.regions.prefix(2)))
+        f.b.setChildren(second, [f.regions[2]])
+        f.b.setAttribute(second, kAXSelectedChildrenAttribute as String, [AXUIElement]())
+        f.b.setChildren(f.content, [f.area, second])
+        let result = await f.run()
+        #expect(result.isSuccess, "\(result.message)")
+        #expect(f.popupPresses == 1)
+        #expect(f.leafPresses == 1)
+    }
+    @Test func anOfftreeSelectionInAnyTrackAreaRefusesBeforeOpening() async throws {
+        let f = QuantizeSafetyFixture()
+        let second = f.b.element(109_453)
+        f.b.setAttribute(second, kAXRoleAttribute as String, "AXLayoutArea")
+        f.b.setChildren(second, [])
+        f.b.setAttribute(second, kAXSelectedChildrenAttribute as String, [f.b.element(109_454)])
+        f.b.setChildren(f.content, [f.area, second])
+        let result = await f.run()
+        try expectQuantizeRefusal(result, written: false, reason: "selection_children_unavailable")
+        #expect(f.popupPresses == 0)
+        #expect(f.leafPresses == 0)
+    }
+    @Test func nestedTrackAreasUseTheOwningArrangementSelectionAggregate() async throws {
+        let f = QuantizeSafetyFixture()
+        let trackArea = f.b.element(109_451)
+        f.b.setAttribute(trackArea, kAXRoleAttribute as String, "AXLayoutArea")
+        f.b.setChildren(trackArea, f.regions)
+        f.b.setChildren(f.area, [trackArea])
+        let result = await f.run()
+        #expect(result.isSuccess, "\(result.message)")
+        #expect(f.popupPresses == 1)
+        #expect(f.leafPresses == 1)
+        #expect(f.currentValue == "1/16 Note")
+    }
+    @Test func replacingANestedTrackAreaStopsTheGridLeaf() async throws {
+        let f = QuantizeSafetyFixture()
+        let trackArea = f.b.element(109_451)
+        let replacement = f.b.element(109_452)
+        for area in [trackArea, replacement] {
+            f.b.setAttribute(area, kAXRoleAttribute as String, "AXLayoutArea")
+            f.b.setChildren(area, f.regions)
+        }
+        f.b.setChildren(f.area, [trackArea])
+        f.onOpen = { f.b.setChildren(f.area, [replacement]) }
+        let result = await f.run()
+        try expectQuantizeRefusal(result, written: true, reason: "target_changed")
+        #expect(f.popupPresses == 1)
+        #expect(f.leafPresses == 0)
+        #expect(f.currentValue == "Off")
+    }
+    @Test(arguments: [0, 2])
+    func selectionAreaRefusalReportsObservedCandidateCount(_ count: Int) async throws {
+        let f = QuantizeSafetyFixture()
+        if count == 0 {
+            f.b.setChildren(f.content, f.regions)
+        } else {
+            let extra = f.b.element(109_450)
+            f.b.setAttribute(extra, kAXRoleAttribute as String, "AXLayoutArea")
+            f.b.setChildren(extra, [])
+            f.b.setChildren(f.content, [f.area, extra])
+        }
+        let result = await f.run()
+        try expectQuantizeRefusal(result, written: false)
+        let object = try #require(sharedJSONObject(result.message))
+        #expect(object["read_stage"] as? String == (count == 0 ? "selection_area" : "selected_children"))
+        #expect(object["read_status"] as? String == (count == 0 ? "candidate_count_0" : "malformed_or_absent"))
+        #expect(f.popupPresses == 0)
+        #expect(f.leafPresses == 0)
+    }
     @Test func unreadBeforeRefusesWithoutOpening() async throws {
         let f = QuantizeSafetyFixture(); f.failingAttribute = (f.value, kAXValueAttribute as String)
         let result = await f.run()
