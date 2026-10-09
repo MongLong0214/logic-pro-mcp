@@ -525,12 +525,15 @@ extension AccessibilityChannel {
         let document: String
         let focus: AXUIElement
         let focusPath: [AXUIElement]?
+        private let acquiredApp: AXUIElement
+        private let acquiredPID: pid_t
         let headers: [AXUIElement]
         let selected: [Bool]
         let referenceIsCurrent: @Sendable () async -> Bool
         var bar: AXUIElement?
         var revealedMixer: AXUIElement?
         var menuOpen = false
+        private var focusRestoreAttempted = false
         var effects = SessionPopulationObservation.UIEffects()
 
         init?(
@@ -538,7 +541,7 @@ extension AccessibilityChannel {
             expectedProject: TargetDescriptor?, requiresProjectReference: Bool,
             referenceIsCurrent: @escaping @Sendable () async -> Bool
         ) {
-            guard let app = AXLogicProElements.appRoot(runtime: runtime),
+            guard let pid = runtime.logicProPID(), let app = AXLogicProElements.appRoot(runtime: runtime),
                   let title = AXHelpers.getTitle(window, runtime: runtime.ax),
                   case .success(.some(let document)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: runtime),
                   let url = URL(string: document), url.isFileURL,
@@ -555,6 +558,7 @@ extension AccessibilityChannel {
             guard selected.count == headers.count else { return nil }
             self.runtime = runtime; self.window = window; self.title = title; self.document = document
             self.focus = focus; self.headers = headers; self.selected = selected
+            self.acquiredApp = app; self.acquiredPID = pid
             self.focusPath = Self.retainedPath(focus, in: window, runtime: runtime.ax)
             self.referenceIsCurrent = referenceIsCurrent
         }
@@ -579,7 +583,9 @@ extension AccessibilityChannel {
         private func stillOwned(stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
             guard !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
                   await referenceIsCurrent(),
+                  runtime.logicProPID() == acquiredPID,
                   let app = AXLogicProElements.appRoot(runtime: runtime),
+                  CFEqual(app, acquiredApp),
                   AXHelpers.getAttribute(app, kAXFrontmostAttribute as String, runtime: runtime.ax) as Bool? == true,
                   let main: AXUIElement = AXHelpers.getAttribute(app, kAXMainWindowAttribute, runtime: runtime.ax),
                   let focusedWindow: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedWindowAttribute, runtime: runtime.ax),
@@ -602,6 +608,18 @@ extension AccessibilityChannel {
                   let current: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute, runtime: runtime.ax)
             else { return false }
             return CFEqual(current, focus)
+        }
+
+        private func capturedFocusCanBeRestored() -> Bool {
+            guard let role = AXHelpers.getRole(focus, runtime: runtime.ax),
+                  [kAXGroupRole as String, kAXListRole as String, "AXLayoutArea"].contains(role),
+                  let focusPath,
+                  let currentPath = Self.retainedPath(focus, in: window, runtime: runtime.ax),
+                  currentPath.count == focusPath.count,
+                  zip(currentPath, focusPath).allSatisfy({ CFEqual($0, $1) }),
+                  AXHelpers.isAttributeSettable(focus, kAXFocusedAttribute as String, runtime: runtime.ax) == true,
+                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+            return true
         }
 
         private func ownedMenuFocus() -> Bool {
@@ -727,6 +745,10 @@ extension AccessibilityChannel {
             }
             // The final-state caller checks retained custody AFTER the deciding Mixer read.
             // Temporary inspection retains its original default-nil behavior.
+            if desiredVisibility == nil, revealedMixer == nil {
+                guard capturedFocusCanBeRestored(), await stillOwned(stoppingWhen: stop), ownedMenuFocus()
+                else { return false }
+            }
             guard await permittingActuation?() ?? true,
                   !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
             if !effects.attempted.contains("mixer_visibility") { effects.attempted.append("mixer_visibility") }
@@ -738,6 +760,9 @@ extension AccessibilityChannel {
 
         func reveal(stoppingWhen stop: @Sendable () -> Bool) async {
             guard case .notFound = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime) else { return }
+            // Showing the Mixer may move focus even when its leaf reports an AX error.
+            // Never acquire that UI effect if the retained original cannot be restored.
+            guard capturedFocusCanBeRestored() else { effects.reason = "mixer_reveal_focus_unrestorable"; return }
             let toggled = await toggle(stoppingWhen: stop)
             guard toggled || effects.attempted.contains("mixer_visibility") else { effects.reason = "mixer_reveal_refused"; return }
             let end = min(OperationTraceContext.current?.deadline ?? ContinuousClock.now, ContinuousClock.now.advanced(by: .milliseconds(mixerRevealPollTimeoutMs)))
@@ -759,6 +784,11 @@ extension AccessibilityChannel {
         func restore(stoppingWhen stop: @Sendable () -> Bool) async -> SessionPopulationObservation.UIEffects {
             guard effects.navigationPerformed else { return effects }
             guard await stillOwned(stoppingWhen: stop) else { effects.reason = "navigation_ownership_lost"; return effects }
+            if !ownedMenuFocus(), revealedMixer != nil {
+                guard await restoreCapturedFocusAfterReveal(stoppingWhen: stop) else {
+                    effects.reason = "mixer_restoration_conflict"; return effects
+                }
+            }
             if menuOpen {
                 // Cancel only the exact menu we opened, never a global Escape into another window.
                 guard await dismissOwnedMenu(stoppingWhen: stop) else {
@@ -784,6 +814,52 @@ extension AccessibilityChannel {
             effects.restoration = "restored"
             effects.reason = nil
             return effects
+        }
+
+        /// Showing the owned Mixer can focus its physical container. Both temporary
+        /// inspection and final visibility reuse the same exact retained workspace
+        /// proof; an ACK or the target's AXFocused value alone is not restoration.
+        private func restoreCapturedFocusAfterReveal(stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
+            let pid = acquiredPID
+            let app = acquiredApp
+            guard effects.attempted.contains("mixer_visibility"), !focusRestoreAttempted,
+                  runtime.logicProPID() == pid,
+                  let acquiredCurrentApp = AXLogicProElements.appRoot(runtime: runtime), CFEqual(app, acquiredCurrentApp), let bar,
+                  AXHelpers.getAttribute(bar, kAXSelectedAttribute as String, runtime: runtime.ax) as Bool? == false,
+                  await stillOwned(stoppingWhen: stop), runtime.logicProPID() == pid,
+                  let currentApp = AXLogicProElements.appRoot(runtime: runtime), CFEqual(app, currentApp),
+                  let current: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: runtime.ax),
+                  !CFEqual(current, focus), !CFEqual(current, window),
+                  AXHelpers.getRole(current, runtime: runtime.ax) == kAXGroupRole as String,
+                  case .found(let mixer) = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime, requiresCompleteAbsence: true),
+                  revealedMixer.map({ CFEqual($0, mixer) }) ?? true,
+                  let mixerPath = Self.retainedPath(mixer, in: window, runtime: runtime.ax),
+                  CFEqual(current, mixer) || (mixerPath.count > 1 && CFEqual(mixerPath[1], current)),
+                  let focusPath, let currentPath = Self.retainedPath(focus, in: window, runtime: runtime.ax),
+                  currentPath.count == focusPath.count, zip(currentPath, focusPath).allSatisfy({ CFEqual($0, $1) }),
+                  AXHelpers.isAttributeSettable(focus, kAXFocusedAttribute as String, runtime: runtime.ax) == true,
+                  await stillOwned(stoppingWhen: stop), runtime.logicProPID() == pid,
+                  let finalApp = AXLogicProElements.appRoot(runtime: runtime), CFEqual(app, finalApp),
+                  let finalFocus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: runtime.ax),
+                  CFEqual(current, finalFocus),
+                  AXHelpers.getAttribute(bar, kAXSelectedAttribute as String, runtime: runtime.ax) as Bool? == false,
+                  let decidingPath = Self.retainedPath(focus, in: window, runtime: runtime.ax),
+                  decidingPath.count == focusPath.count, zip(decidingPath, focusPath).allSatisfy({ CFEqual($0, $1) }),
+                  let decidingFocus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: runtime.ax),
+                  CFEqual(current, decidingFocus), !stop(),
+                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+            // Positive closed-menu evidence ends the earlier acquired-menu flag.
+            menuOpen = false
+            focusRestoreAttempted = true
+            guard AXHelpers.setAttribute(focus, kAXFocusedAttribute as String, NSNumber(value: true), runtime: runtime.ax),
+                  await stillOwned(stoppingWhen: stop), ownedMenuFocus(), sameFocus(),
+                  runtime.logicProPID() == pid,
+                  let restoredApp = AXLogicProElements.appRoot(runtime: runtime), CFEqual(app, restoredApp),
+                  let restoredPath = Self.retainedPath(focus, in: window, runtime: runtime.ax),
+                  restoredPath.count == focusPath.count, zip(restoredPath, focusPath).allSatisfy({ CFEqual($0, $1) }),
+                  await stillOwned(stoppingWhen: stop), sameFocus(), !stop(),
+                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+            return true
         }
 
         /// Leave the caller's approved Mixer state in place. Only the menu acquired here is
@@ -822,7 +898,6 @@ extension AccessibilityChannel {
             var before: Bool?
             var after: Bool?
             var menuRestored = true
-            var focusRestoreAttempted = false
             func result(verified: Bool, reason: String? = nil) -> ChannelResult {
                 var extras: [String: Any] = [
                     "operation": operation, "requested_visible": desired,
@@ -894,40 +969,9 @@ extension AccessibilityChannel {
                 // Showing the owned Mixer can move focus to its physical container.
                 // Only restore a still-live, exact captured workspace; never accept
                 // changed focus as success or try to focus a retired hidden Mixer.
-                guard desired, before == false, effects.attempted.contains("mixer_visibility"),
-                      !focusRestoreAttempted, let bar,
-                      AXHelpers.getAttribute(bar, kAXSelectedAttribute as String, runtime: runtime.ax) as Bool? == false,
-                      await stillOwned(stoppingWhen: stop), runtime.logicProPID() == pid,
+                guard desired, before == false, runtime.logicProPID() == pid,
                       let currentApp = AXLogicProElements.appRoot(runtime: runtime), CFEqual(app, currentApp),
-                      let current: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: runtime.ax),
-                      !CFEqual(current, focus), !CFEqual(current, window),
-                      AXHelpers.getRole(current, runtime: runtime.ax) == kAXGroupRole as String,
-                      case .found(let mixer) = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime, requiresCompleteAbsence: true),
-                      let mixerPath = Self.retainedPath(mixer, in: window, runtime: runtime.ax),
-                      CFEqual(current, mixer) || (mixerPath.count > 1 && CFEqual(mixerPath[1], current)),
-                      let focusPath, let currentPath = Self.retainedPath(focus, in: window, runtime: runtime.ax),
-                      currentPath.count == focusPath.count, zip(currentPath, focusPath).allSatisfy({ CFEqual($0, $1) }),
-                      AXHelpers.isAttributeSettable(focus, kAXFocusedAttribute as String, runtime: runtime.ax) == true,
-                      await stillOwned(stoppingWhen: stop), runtime.logicProPID() == pid,
-                      let finalApp = AXLogicProElements.appRoot(runtime: runtime), CFEqual(app, finalApp),
-                      let finalFocus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: runtime.ax),
-                      CFEqual(current, finalFocus),
-                      AXHelpers.getAttribute(bar, kAXSelectedAttribute as String, runtime: runtime.ax) as Bool? == false,
-                      let decidingPath = Self.retainedPath(focus, in: window, runtime: runtime.ax),
-                      decidingPath.count == focusPath.count, zip(decidingPath, focusPath).allSatisfy({ CFEqual($0, $1) }),
-                      let decidingFocus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: runtime.ax),
-                      CFEqual(current, decidingFocus),
-                      !stop(),
-                      (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
-                // The host can close the acquired menu asynchronously after AXPress.
-                // A positive closed read, not the earlier flag, ends this menu custody.
-                menuOpen = false
-                focusRestoreAttempted = true
-                guard AXHelpers.setAttribute(focus, kAXFocusedAttribute as String, NSNumber(value: true), runtime: runtime.ax),
-                      await owned(), sameFocus(),
-                      let restoredPath = Self.retainedPath(focus, in: window, runtime: runtime.ax),
-                      restoredPath.count == focusPath.count, zip(restoredPath, focusPath).allSatisfy({ CFEqual($0, $1) }),
-                      await owned() else { return false }
+                      await restoreCapturedFocusAfterReveal(stoppingWhen: stop), await owned() else { return false }
                 return true
             }
             let end = min(OperationTraceContext.current?.deadline ?? ContinuousClock.now.advanced(by: .milliseconds(mixerRevealPollTimeoutMs)),
