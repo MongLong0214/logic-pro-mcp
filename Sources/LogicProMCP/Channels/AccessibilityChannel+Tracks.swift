@@ -690,15 +690,19 @@ extension AccessibilityChannel {
                   let hitTest = logic.ax.elementAtPosition,
                   case .success(.some(let hit)) = hitTest(app, CGPoint(x: frame.midX, y: frame.midY)), CFEqual(hit, target.disclosure),
                   await owned(target: target, expectedHeaders: expectedHeaders, expectedValue: expectedValue, stoppingWhen: stop),
+                  !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                  !stop(), logic.logicProPID() == pid, logic.focusedApplicationPID() == pid,
+                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
                   self.frame(target) == frame,
                   case .success(.some(let finalHit)) = hitTest(app, CGPoint(x: frame.midX, y: frame.midY)), CFEqual(finalHit, target.disclosure),
-                  case .success(.some(let doc)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: logic),
-                  doc.utf8.elementsEqual(document.utf8),
-                  let main: AXUIElement = AXHelpers.getAttribute(app, kAXMainWindowAttribute as String, runtime: logic.ax), CFEqual(main, window),
                   let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax), CFEqual(focus, observedFocus),
-                  !stop(), logic.logicProPID() == pid, logic.focusedApplicationPID() == pid,
-                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
-            guard !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+                  let main: AXUIElement = AXHelpers.getAttribute(app, kAXMainWindowAttribute as String, runtime: logic.ax), CFEqual(main, window),
+                  let focusedWindow: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedWindowAttribute as String, runtime: logic.ax), CFEqual(focusedWindow, window),
+                  AXHelpers.getTitle(window, runtime: logic.ax)?.utf8.elementsEqual(title.utf8) == true,
+                  case .success(.some(let doc)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: logic),
+                  doc.utf8.elementsEqual(document.utf8) else { return false }
+            // Deciding callbacks precede the final physical/scope sample. Nothing
+            // reads AX or calls stop between this document proof and paired input.
             effects.navigationPerformed = true; effects.restoration = "not_restored"
             let effect = hiddenControl.map({ CFEqual($0, target.disclosure) }) == true ? "hidden_track_view" : "stack_disclosure"
             if !effects.attempted.contains(effect) { effects.attempted.append(effect) }

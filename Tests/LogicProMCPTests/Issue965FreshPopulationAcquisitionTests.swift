@@ -1129,6 +1129,21 @@ struct Issue965FreshPopulationAcquisitionTests {
     }
 
     @Test func finalPreDownStopDoesNotReportNavigationThatNeverPosted() async throws {
+        try await observeFinalPreDownStop()
+    }
+
+    @Test(arguments: ["document", "main_window", "focused_window", "foreground_pid", "logic_pid",
+                      "cleanup_document", "cleanup_main_window", "cleanup_focused_window",
+                      "cleanup_foreground_pid", "cleanup_logic_pid"], [5, 6])
+    func finalPreDownScopeSwitchCannotPostAgainstAnotherTarget(fault: String, callback: Int) async throws {
+        try await observeFinalPreDownStop(fault: fault, callback: callback)
+    }
+
+    private func observeFinalPreDownStop(fault: String? = nil, callback: Int = 6) async throws {
+        let cleanup = fault?.hasPrefix("cleanup_") == true
+        // Restore first checks the acquired entry's ownership, adding two stop
+        // callbacks before click's own two ownership passes and final callbacks.
+        let switchingCallback = callback + (cleanup ? 2 : 0)
         let f = Fixture()
         let disclosure = f.builder.element(965_700)
         f.builder.setRole(disclosure, kAXDisclosureTriangleRole as String)
@@ -1151,32 +1166,78 @@ struct Issue965FreshPopulationAcquisitionTests {
         }
         f.builder.setChildren(bar, [play, record])
         f.builder.setChildren(f.window, [f.rail, bar])
-        let logic = AXLogicProElements.Runtime(logicProPID: { 4242 },
+        f.builder.setAttribute(f.app, "fixture_logic_pid", NSNumber(value: 4242))
+        f.builder.setAttribute(f.app, "fixture_foreground_pid", NSNumber(value: 4242))
+        let logic = AXLogicProElements.Runtime(logicProPID: {
+            (f.builder.attributeValue(f.app, "fixture_logic_pid") as? NSNumber).map { pid_t($0.int32Value) }
+        },
             ax: f.builder.makeAXRuntime(appElement: f.app,
                 setAttributeHandler: { _, _, _ in Issue.record("no AX setters"); return false },
                 performActionHandler: { _, _ in Issue.record("no AX actions"); return false },
                 elementAtPosition: { _, _ in .success(disclosure) }),
             executeAppleScript: { _ in Issue.record("no scripts"); return .error("forbidden") },
-            onScreenWindowList: { [] }, postPopupMenuEscape: { Issue.record("no Escape") }, focusedApplicationPID: { 4242 })
-        let mouse = AXMouseHelper.Runtime(postMouseEvent: { _, _, _ in f.events.record("post"); return true },
+            onScreenWindowList: { [] }, postPopupMenuEscape: { Issue.record("no Escape") }, focusedApplicationPID: {
+                (f.builder.attributeValue(f.app, "fixture_foreground_pid") as? NSNumber).map { pid_t($0.int32Value) }
+            })
+        let mouse = AXMouseHelper.Runtime(postMouseEvent: { type, _, _ in
+            f.events.record("post")
+            if cleanup, type == .leftMouseUp {
+                let shown = (f.builder.attributeValue(disclosure, kAXValueAttribute as String) as? NSNumber)?.intValue == 1
+                f.builder.setAttribute(disclosure, kAXValueAttribute as String, NSNumber(value: shown ? 0 : 1))
+            }
+            return true
+        },
             postKeyEvent: { _ in false }, postUnicodeScalar: { _ in false }, sleepMicros: { _ in })
         let checks = Reads()
         let gate = LogicMutationGate()
         let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
         defer { gate.release(claim) }
         let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: { gate.stillOwns(claim) })
+        let stop: @Sendable () -> Bool = {
+            checks.record("stop")
+            if let fault, checks.count == switchingCallback {
+                f.reads.record("scope_switched_in_stop")
+                if fault.hasSuffix("foreground_pid") {
+                    f.builder.setAttribute(f.app, "fixture_foreground_pid", NSNumber(value: 8888))
+                } else if fault.hasSuffix("logic_pid") {
+                    f.builder.setAttribute(f.app, "fixture_logic_pid", NSNumber(value: 4343))
+                } else if fault.hasSuffix("document") {
+                    f.builder.setAttribute(f.window, kAXDocumentAttribute as String, "file:///tmp/Foreign.logicx")
+                } else {
+                    let other = f.builder.element(965_704)
+                    f.builder.setAttribute(f.app, fault.hasSuffix("main_window")
+                        ? kAXMainWindowAttribute as String : kAXFocusedWindowAttribute as String, other)
+                }
+            }
+            return fault == nil && checks.count == callback
+        }
         let effects = try await OperationTraceContext.$current.withValue(context) {
             let candidate = AccessibilityChannel.OwnedTrackStackObservationNavigation(
                 window: f.window, logic: logic, mouse: mouse, expectedProject: nil,
                 requiresProjectReference: false, referenceIsCurrent: { true })
             let navigation = try #require(candidate)
-            await navigation.expand(stoppingWhen: { checks.record("stop"); return checks.count == 6 })
+            if cleanup {
+                await navigation.expand(stoppingWhen: { false })
+                return await navigation.restore(stoppingWhen: stop)
+            }
+            await navigation.expand(stoppingWhen: stop)
             return await navigation.restore(stoppingWhen: { false })
         }
-        #expect(checks.count == 6, "refuse only at the last pre-Down permission check, after full preflight")
-        #expect(f.events.recorded.isEmpty)
-        #expect(!effects.navigationPerformed && effects.attempted.isEmpty)
-        #expect(effects.restoration == "not_applicable")
+        if fault == nil {
+            #expect(checks.count == 6, "refuse only at the last pre-Down permission check, after full preflight")
+        } else {
+            let injected = f.reads.recorded.contains("scope_switched_in_stop")
+            #expect(injected, "the late target switch must actually occur before the mouse pair")
+        }
+        if cleanup {
+            #expect(f.events.count == 2, "only the original owned expansion pair may be posted")
+            #expect((f.builder.attributeValue(disclosure, kAXValueAttribute as String) as? NSNumber)?.intValue == 1)
+            #expect(effects.navigationPerformed && effects.restoration == "not_restored")
+        } else {
+            #expect(f.events.recorded.isEmpty)
+            #expect(!effects.navigationPerformed && effects.attempted.isEmpty)
+            #expect(effects.restoration == "not_applicable")
+        }
     }
 
     @Test(arguments: ["expansion", "restoration"])
