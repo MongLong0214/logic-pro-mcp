@@ -247,7 +247,7 @@ enum AXHelpers {
     /// forbidden: it must continue through its existing per-read ownership/editing guard.
     static func getNonHelpAttributes(
         _ element: AXUIElement, _ attributes: [String], runtime: Runtime = .production,
-        permittingRead: @Sendable () -> Bool = { true }
+        permittingRead: () -> Bool = { true }
     ) -> [Result<AnyObject?, AXStatusError>] {
         func failures(_ error: AXStatusError) -> [Result<AnyObject?, AXStatusError>] {
             attributes.map { _ in .failure(error) }
