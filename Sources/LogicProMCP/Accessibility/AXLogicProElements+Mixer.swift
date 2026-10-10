@@ -393,13 +393,34 @@ extension AXLogicProElements {
         }
         remainingNodes -= 1
 
+        // A fresh batch on this exact visited element, not a cached discovery or
+        // authority token. Help still runs separately under its per-read guard.
+        // Older/injected runtimes retain the original individual status reads.
+        let nonHelpAttributes = [kAXRoleAttribute, kAXIdentifierAttribute,
+                                 kAXDescriptionAttribute, kAXTitleAttribute] as [String]
+        var batchCutoff: Error?
+        let metadataBatch = requiresCompleteAbsence && runtime.attributeValuesResult != nil
+            ? AXHelpers.getNonHelpAttributes(element, nonHelpAttributes, runtime: runtime,
+                permittingRead: {
+                    // One thrown cutoff ends this batch even if a later check
+                    // would return normally; preserve its first actual cause.
+                    guard batchCutoff == nil else { return false }
+                    do { try check(); return true }
+                    catch { batchCutoff = error; return false }
+                }) : nil
+        if let batchCutoff { throw batchCutoff }
+
         var sawUnreadCandidateText = false
         func metadata(_ attribute: String, allowUnreadContext: Bool = false,
                       deferCandidateTextFailure: Bool = false) throws -> String? {
             try check()
             if requiresCompleteAbsence {
-                let read: Result<AnyObject?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
-                    element, attribute, runtime: runtime)
+                let read: Result<AnyObject?, AXHelpers.AXStatusError>
+                if let metadataBatch, let index = nonHelpAttributes.firstIndex(of: attribute) {
+                    read = metadataBatch[index]
+                } else {
+                    read = AXHelpers.getAttributeResult(element, attribute, runtime: runtime)
+                }
                 switch read {
                 case .success(.some(let value)):
                     guard let text = value as? String else { sawIncompleteAbsence = true; return nil }

@@ -83,6 +83,115 @@ struct Issue965MixerPresentationWitnessTests {
         }
     }
 
+    private func batchedCensusRuntime(
+        _ fixture: Fixture, batches: Counter, singles: Counter, help: Counter,
+        fault: String = "", stopped: StopRead? = nil
+    ) -> AXLogicProElements.Runtime {
+        let base = fixture.builder.makeAXRuntime(appElement: fixture.app)
+        let attributes = [kAXRoleAttribute, kAXIdentifierAttribute, kAXDescriptionAttribute, kAXTitleAttribute] as [String]
+        let ax = AXHelpers.Runtime(axApp: base.axApp,
+            attributeValue: base.attributeValue, attributeIsSettable: base.attributeIsSettable,
+            setAttributeValue: base.setAttributeValue, children: base.children,
+            performAction: base.performAction, childCount: base.childCount,
+            actionNames: base.actionNames, actionNamesResult: base.actionNamesResult,
+            childrenResult: base.childrenResult,
+            attributeValueResult: { element, attribute in
+                if attributes.contains(attribute) { _ = singles.next() }
+                if attribute == kAXHelpAttribute as String { _ = help.next() }
+                return base.attributeValueResult!(element, attribute)
+            }, attributeValuesResult: { element, requested in
+                _ = batches.next()
+                #expect(requested == attributes, "Help must remain a separately guarded read")
+                if fault == "cancel" || fault == "null" {
+                    if fault == "cancel" { stopped?.observe(stop: true) }
+                    // Null would require individual status reads without a cutoff.
+                    return .success(requested.map { _ in NSNull() })
+                }
+                if CFEqual(element, fixture.window), fault == "failed" {
+                    return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                }
+                if CFEqual(element, fixture.window), fault == "short" { return .success([]) }
+                return .success(requested.enumerated().map { index, attribute in
+                    if CFEqual(element, fixture.window), fault == "malformed", index == 0 {
+                        return NSNumber(value: 1)
+                    }
+                    switch base.attributeValueResult!(element, attribute) {
+                    case .success(let value?): return value
+                    case .success(nil):
+                        var error = AXError.attributeUnsupported
+                        return AXValueCreate(.axError, &error)!
+                    case .failure(let status):
+                        var error = AXError(rawValue: status.raw)!
+                        return AXValueCreate(.axError, &error)!
+                    }
+                })
+            })
+        return .init(logicProPID: { 4242 }, ax: ax,
+                     executeAppleScript: { _ in .error("fixture forbids scripts") })
+    }
+
+    @Test(arguments: [false, true])
+    func strictMixerCensusUsesFreshNonHelpBatchesWithoutChangingItsWinner(korean: Bool) throws {
+        let fixture = Fixture(korean: korean), batches = Counter(), singles = Counter(), help = Counter()
+        let result = try AXLogicProElements.mixerPopulationAreaLookup(in: fixture.window,
+            runtime: batchedCensusRuntime(fixture, batches: batches, singles: singles, help: help),
+            requiresCompleteAbsence: true)
+        let binding = try #require(result.binding)
+        #expect(CFEqual(binding.mixer, fixture.layout))
+        #expect(batches.count > 0)
+        #expect(singles.count == 0, "the four deciding non-Help attributes use one fresh native call per node")
+        #expect(help.count == batches.count, "each visited node still reads Help separately")
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+    }
+
+    @Test(arguments: ["failed", "short", "malformed"])
+    func aFailedOrMalformedCensusBatchCannotCertifyMixerAbsence(fault: String) throws {
+        let fixture = Fixture(), batches = Counter(), singles = Counter(), help = Counter()
+        fixture.builder.setChildren(fixture.window, [])
+        let result = try AXLogicProElements.mixerPopulationAreaLookup(in: fixture.window,
+            runtime: batchedCensusRuntime(fixture, batches: batches, singles: singles, help: help, fault: fault),
+            requiresCompleteAbsence: true)
+        if case .childrenUnread = result.lookup {} else { Issue.record("a failed/malformed batch became observed absence") }
+        #expect(result.binding == nil)
+        #expect(batches.count == 1 && singles.count == 0)
+    }
+
+    @Test func censusBatchCutoffStopsNullFallbackAndHelpBeforeAnotherAXRead() throws {
+        enum Stop: Error { case requested }
+        let fixture = Fixture(), batches = Counter(), singles = Counter(), help = Counter(), stopped = StopRead()
+        do {
+            _ = try AXLogicProElements.mixerPopulationAreaLookup(in: fixture.window,
+                runtime: batchedCensusRuntime(fixture, batches: batches, singles: singles, help: help,
+                                              fault: "cancel", stopped: stopped),
+                requiresCompleteAbsence: true, checking: {
+                    if stopped.isStopped { throw Stop.requested }
+                })
+            Issue.record("the actual batch cutoff did not propagate")
+        } catch Stop.requested {}
+        #expect(batches.count == 1)
+        #expect(singles.count == 0 && help.count == 0)
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+    }
+
+    @Test func oneCheckedCutoffCannotResumeLaterNullStatusReadsInTheSameBatch() throws {
+        enum Stop: Error { case requested }
+        let fixture = Fixture(), batches = Counter(), singles = Counter(), help = Counter(), cutoffs = Counter()
+        do {
+            _ = try AXLogicProElements.mixerPopulationAreaLookup(in: fixture.window,
+                runtime: batchedCensusRuntime(fixture, batches: batches, singles: singles, help: help, fault: "null"),
+                requiresCompleteAbsence: true, checking: {
+                    // A one-shot throwing observer must end this acquisition,
+                    // even if later calls would return normally.
+                    if singles.count > 0, cutoffs.next() == 1 { throw Stop.requested }
+                })
+            Issue.record("the actual checked cutoff did not propagate")
+        } catch Stop.requested {}
+        #expect(batches.count == 1)
+        #expect(singles.count == 1, "only the first status fallback precedes the cutoff")
+        #expect(help.count == 0)
+        #expect(cutoffs.count == 1, "a rejected acquisition cannot ask to reacquire authority")
+    }
+
     private func inspect(
         _ fixture: Fixture,
         attributes: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>?)? = nil,
