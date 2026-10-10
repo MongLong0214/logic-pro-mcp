@@ -162,7 +162,8 @@ enum SessionPopulationObservation {
     static func requireOwnedAcquisition() throws {
         let context = OperationTraceContext.current
         if (Task.isCancelled || context?.cancellationRequested() == true)
-            && !AccessibilityChannel.OwnedTrackStackObservationNavigation.restoringInterruptedAcquisition {
+            && !AccessibilityChannel.OwnedTrackStackObservationNavigation.restoringInterruptedAcquisition
+            && !AccessibilityChannel.restoringInterruptedOutputPopup {
             throw AcquisitionError.cancelled
         }
         guard let context,

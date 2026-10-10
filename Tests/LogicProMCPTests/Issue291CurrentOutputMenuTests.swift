@@ -189,6 +189,84 @@ struct Issue291OwnedCurrentOutputTests {
         #expect(f.mutations.isEmpty)
     }
 
+    @Test("Cancellation reverses only an already-owned popup under its live original scope",
+          arguments: ["owned", "remembered", "document", "source", "slot", "popup", "gate", "deadline"])
+    func cancelledOutputReadCleansOnlyItsOwnedPopup(_ revocation: String) async throws {
+        let f = try Issue291PhysicalStripReferenceTests.Fixture()
+        defer { try? FileManager.default.removeItem(at: f.bundle) }
+        prepare(f)
+        f.b.setAttribute(f.app, kAXFrontmostAttribute as String, true)
+        let interrupted = "291-interrupted-popup"
+        f.onActionNamesRead = { node in
+            guard CFEqual(node, f.root), f.b.attributeValue(f.window, interrupted) as? Bool != true else { return }
+            f.b.setAttribute(f.window, interrupted, true)
+            switch revocation {
+            case "document": f.b.setAttribute(f.window, kAXDocumentAttribute as String, "file:///foreign.logicx")
+            case "source": f.b.setChildren(f.mixer, [f.strips[1], f.root])
+            case "slot":
+                if case .success(let children) = AXHelpers.childrenResult(f.strips[0], runtime: f.logic.ax) {
+                    f.b.setChildren(f.strips[0], children.filter { !CFEqual($0, f.outputs[0]) })
+                }
+            case "popup":
+                let foreign = f.b.element(291_854)
+                f.b.setRole(foreign, kAXMenuRole as String)
+                f.b.setChildren(foreign, [])
+                f.b.setChildren(f.mixer, f.strips + [foreign])
+            default: break
+            }
+            if revocation == "deadline" { Thread.sleep(forTimeInterval: 0.12) }
+            if revocation != "remembered" { withUnsafeCurrentTask { $0?.cancel() } }
+            // Model the interrupted reader's latched Help refusal. Cleanup must
+            // not reset it or grant a fresh Help/assignment acquisition.
+            _ = AXHelpers.getHelp(f.outputs[0], runtime: f.logic.ax)
+        }
+        f.onAttributeRead = { _, attribute in
+            if attribute == kAXHelpAttribute as String, f.b.attributeValue(f.window, interrupted) as? Bool == true {
+                f.b.setAttribute(f.window, "291-help-after-interruption", true)
+            }
+        }
+        let guardian = AXHelpers.HelpReadGuard(stop: {
+            f.b.attributeValue(f.window, interrupted) as? Bool == true
+        })
+        let context = OperationTraceContext(mutationGateAcquired: true,
+            ownsGate: { revocation != "gate" || f.b.attributeValue(f.window, interrupted) as? Bool != true },
+            deadline: ContinuousClock.now.advanced(by: revocation == "deadline" ? .milliseconds(100) : .seconds(30)),
+            cancellationRequested: { f.b.attributeValue(f.window, interrupted) as? Bool == true })
+        let binding = AXMixerStripBinding.Binding(window: f.window, mixer: f.mixer,
+            strip: f.strips[0], document: f.bundle.absoluteString)
+        let read = await Task {
+            await OperationTraceContext.$current.withValue(context) {
+                await AXMixerStripBinding.$current.withValue(binding) {
+                    await AXHelpers.HelpReadGuard.$current.withValue(guardian) {
+                        await AccessibilityChannel.getOutputVerified(params: [:], runtime: f.logic, timing: .immediate)
+                    }
+                }
+            }
+        }.value
+        let body = try #require(sharedJSONObject(read.message))
+        let interruptionObserved = try #require(f.b.attributeValue(f.window, interrupted) as? Bool)
+        #expect(interruptionObserved)
+        #expect(guardian.stopped)
+        let helpAfterInterruption = f.b.attributeValue(f.window, "291-help-after-interruption") as? Bool ?? false
+        #expect(!helpAfterInterruption)
+        #expect(body["state"] as? String == "C")
+        #expect(body["current_output"] == nil)
+        let writeAttempted = try #require(body["write_attempted"] as? Bool)
+        #expect(!writeAttempted)
+        let cancels = f.mutations.filter { $0.1 == kAXCancelAction as String }
+        let cleanupOwned = revocation == "owned" || revocation == "remembered"
+        #expect(cancels.count == (cleanupOwned ? 1 : 0))
+        #expect(f.mutations.filter { $0.1 == kAXPressAction as String }.count == 1)
+        if cleanupOwned {
+            let cancel = try #require(cancels.first)
+            #expect(CFEqual(cancel.0, f.root))
+            #expect(body["popup_menu_state"] as? String == "closed")
+            #expect(body["focus_restoration"] as? String == "restored")
+        } else {
+            #expect(body["popup_menu_state"] as? String != "closed")
+        }
+    }
+
     @Test("A failed press acknowledgement requires actual owned-menu readback, not the acknowledgement", arguments: [false, true])
     func ownedCurrentOutputRequiresObservedPopupAfterFailedPress(_ opensMenu: Bool) async throws {
         let f = try Issue291PhysicalStripReferenceTests.Fixture()
