@@ -135,7 +135,25 @@ enum ExactTrackNameAdapter {
             return renewed
         }
 
+        private func membershipStillHeld() -> Bool {
+            let trackSources = [pair.track] + preservedTracks.compactMap(\.physicalBinding)
+            let stripSources = [pair.strip] + preservedStrips.compactMap(\.physicalBinding)
+            guard operationPermitted(), trackSources.count == preservedTracks.count + 1,
+                  stripSources.count == preservedStrips.count + 1,
+                  case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(
+                    in: pair.track.window, runtime: pair.track.runtime),
+                  headers.count == trackSources.count,
+                  headers.allSatisfy({ header in trackSources.filter { CFEqual(header, $0.header) }.count == 1 }),
+                  let enumeration = AXLogicProElements.mixerChannelStripsIfCompletelyRead(
+                    in: pair.strip.mixer, runtime: pair.track.runtime.ax),
+                  enumeration.strips.count == stripSources.count,
+                  enumeration.strips.allSatisfy({ strip in stripSources.filter { CFEqual(strip, $0.strip) }.count == 1 }),
+                  operationPermitted() else { return false }
+            return true
+        }
+
         private func peerNamesStillHeld() -> Bool {
+            guard membershipStillHeld() else { return false }
             for row in preservedTracks {
                 guard operationPermitted(), let source = row.physicalBinding,
                       source.document.utf8.elementsEqual(pair.track.document.utf8),
@@ -154,7 +172,7 @@ enum ExactTrackNameAdapter {
                       name.utf8.elementsEqual(expected.utf8),
                       source.currentIndex(runtime: pair.track.runtime) == index else { return false }
             }
-            return operationPermitted()
+            return membershipStillHeld() && operationPermitted()
         }
 
         func namesStillHeld(before: String, after: String? = nil) -> Bool {
