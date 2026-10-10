@@ -2885,6 +2885,7 @@ extension AccessibilityChannel {
         var actualBefore: String?
         var attempted = false
         func refusal(_ hint: String) -> ChannelResult {
+            Log.info("Exact rename refused: \(hint)", subsystem: "ax")
             let extras: [String: Any] = [
                 "before": actualBefore as Any? ?? NSNull(),
                 "write_attempted": attempted,
