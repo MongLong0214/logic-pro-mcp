@@ -4,6 +4,42 @@ import Testing
 
 @Suite("RoutingGraphTests")
 struct RoutingGraphTests {
+    @Test(arguments: ["new_cycle", "self_loop", "existing", "removal", "scalar", "acyclic", "partial", "inconsistent", "cross_capture"])
+    func structuralCycleChangesRequireBoundEvidenceWithoutRewritingExistingLoops(_ change: String) throws {
+        let aux = RoutingNode(id: "aux", kind: .aux, displayName: "Same", busNumber: nil, targetRef: nil)
+        let forward = assignment(.inputAssignment, source: "bus-1", destination: "aux")
+        let back = assignment(.mainOutput, source: "aux", destination: "bus-1")
+        var baseEdges = change == "existing" || change == "removal" || change == "scalar" ? [forward, back] : [forward]
+        if change == "scalar" { baseEdges.append(sendEdge(send(slot: 0, bus: 1, level: -17.25), destination: "bus-1")) }
+        let before = graph(nodes: [trackNode, busNode(1), aux], edges: baseEdges)
+        var afterEdges = baseEdges
+        switch change {
+        case "new_cycle": afterEdges.append(back)
+        case "self_loop": afterEdges.append(assignment(.mainOutput, source: "aux", destination: "aux"))
+        case "removal": afterEdges.removeAll { $0 == back }
+        case "scalar":
+            // The send shares an existing connection, so its scalar metadata cannot add a cycle.
+            afterEdges.removeAll { $0.kind == .send }
+            afterEdges.append(sendEdge(send(slot: 0, bus: 1, level: 0), destination: "bus-1"))
+        case "acyclic": afterEdges.append(assignment(.mainOutput, source: "track-1", destination: "bus-1"))
+        case "inconsistent": afterEdges.append(assignment(.mainOutput, source: "missing", destination: "bus-1"))
+        default: break
+        }
+        let candidate = graph(complete: change != "partial", partialReason: change == "partial" ? "unread" : nil,
+            nodes: before.nodes, edges: afterEdges)
+        let after = change == "cross_capture" ? RoutingGraph(projectReference: candidate.projectReference,
+            projectEpoch: candidate.projectEpoch, complete: candidate.complete, partialReason: candidate.partialReason,
+            nodes: candidate.nodes, edges: candidate.edges, provenance: candidate.provenance,
+            snapshotId: "other_capture", coverage: candidate.coverage) : candidate
+        let result = routingIntroducesCycle(before: before, after: after)
+        if ["partial", "inconsistent", "cross_capture"].contains(change) { #expect(result == nil) }
+        else {
+            let known = try #require(result as Bool?)
+            if change == "new_cycle" || change == "self_loop" { #expect(known) }
+            else { #expect(!known) }
+        }
+    }
+
     @Test func partialGraphNeverReportsCompleteAndConsistencyRejectsContradiction() {
         let partial = graph(complete: false, partialReason: "mixer scan interrupted")
         let contradictory = graph(complete: true, partialReason: "missing aux strips")
