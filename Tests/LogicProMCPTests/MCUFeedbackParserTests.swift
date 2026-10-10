@@ -1,5 +1,66 @@
+import Foundation
 import Testing
 @testable import LogicProMCP
+
+@Test(arguments: ["lcd", "ignored", "replacement"])
+func testMCUHeartbeatPreservesPhysicalMixerCaptureBoundary(kind: String) async throws {
+    let cache = StateCache()
+    let parser = MCUFeedbackParser(cache: cache)
+    let previousFeedback = Date(timeIntervalSince1970: 1)
+    await cache.updateChannelStrips([ChannelStripState(trackIndex: 0)])
+    await cache.updateMCUConnection(MCUConnectionState(
+        isConnected: true, registeredAsDevice: true,
+        lastFeedbackAt: previousFeedback, portName: "LogicProMCP-MCU-Internal"
+    ))
+    let before = await cache.captureBoundary(watching: [.mixer])
+    switch kind {
+    case "lcd":
+        await parser.handle(.sysEx([0xF0, 0x00, 0x00, 0x66, 0x14, 0x12, 0x00,
+                                   0x56, 0x6F, 0x63, 0x61, 0x6C, 0x73, 0x20, 0xF7]))
+        #expect(await cache.getMCUDisplay().upperRow.hasPrefix("Vocals"))
+    case "ignored":
+        await parser.handle(.programChange(channel: 0, program: 1))
+    default:
+        var connection = await cache.getMCUConnection()
+        connection.lastFeedbackAt = Date(timeIntervalSince1970: 2)
+        await cache.updateMCUConnection(connection)
+    }
+    let connection = await cache.getMCUConnection()
+    let feedback = try #require(connection.lastFeedbackAt)
+    #expect(feedback > previousFeedback)
+    #expect(connection.isConnected)
+    #expect(connection.registeredAsDevice)
+    #expect(await cache.captureBoundary(watching: [.mixer]) == before)
+}
+
+@Test(arguments: ["fader", "pan", "connection", "registration", "port", "census"])
+func testMCUMaterialChangesStillInvalidatePhysicalMixerCapture(kind: String) async throws {
+    let cache = StateCache()
+    let parser = MCUFeedbackParser(cache: cache)
+    await cache.updateChannelStrips([ChannelStripState(trackIndex: 0)])
+    await cache.updateMCUConnection(MCUConnectionState(
+        isConnected: true, registeredAsDevice: true,
+        lastFeedbackAt: Date(timeIntervalSince1970: 1), portName: "LogicProMCP-MCU-Internal"
+    ))
+    let before = await cache.captureBoundary(watching: [.mixer])
+    let version = await cache.currentVersion(for: .mixer)
+    switch kind {
+    case "fader": await parser.handle(.pitchBend(channel: 0, value: 8192))
+    case "pan": await parser.handle(.controlChange(channel: 0, controller: 0x30, value: 6))
+    default:
+        await cache.updateMCUConnection { connection in
+            switch kind {
+            case "connection": connection.isConnected = false
+            case "registration": connection.registeredAsDevice = false
+            case "port": connection.portName = "Other port"
+            default: connection.portCensus = .unknown(reason: "Catalog unavailable")
+            }
+        }
+    }
+    #expect(await cache.captureBoundary(watching: [.mixer]) != before)
+    let accepted = await cache.updateMCUConnection(ifCurrent: version) { $0.isConnected = false }
+    #expect(!accepted)
+}
 
 @Test func testFeedbackParserUpdatesFaderState() async {
     let cache = StateCache()
