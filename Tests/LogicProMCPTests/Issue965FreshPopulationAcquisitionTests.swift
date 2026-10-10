@@ -205,7 +205,8 @@ struct Issue965FreshPopulationAcquisitionTests {
         let tracks = try #require(body["tracks"] as? [String: Any])
         let rows = try #require(tracks["rows"] as? [[String: Any]])
         let actual = try #require(rows.first?["hidden"] as? Bool)
-        #expect(actual == hidden)
+        if hidden { #expect(actual) }
+        else { #expect(!actual) }
         #expect(tracks["coverage"] as? String == "partial")
         #expect(fixture.events.recorded.isEmpty)
         #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
