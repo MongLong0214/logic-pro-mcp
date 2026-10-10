@@ -2885,6 +2885,7 @@ extension AccessibilityChannel {
         var actualBefore: String?
         var attempted = false
         func refusal(_ hint: String) -> ChannelResult {
+            Log.info("Exact rename refused: \(hint)", subsystem: "ax")
             let extras: [String: Any] = [
                 "before": actualBefore as Any? ?? NSNull(),
                 "write_attempted": attempted,
@@ -3032,9 +3033,39 @@ extension AccessibilityChannel {
                 attempted = true
                 // Use the actual String-valued editor, never the passive header label.
                 // No typing fallback follows an attempted setter or lost ownership.
-                guard AXHelpers.setAttribute(editor, kAXValueAttribute as String, desired as CFTypeRef, runtime: runtime.ax),
-                      editorIsHeld(allowOwnNamePreview: true),
-                      let value: String = AXHelpers.getAttribute(editor, kAXValueAttribute as String, runtime: runtime.ax),
+                guard AXHelpers.setAttribute(editor, kAXValueAttribute as String, desired as CFTypeRef, runtime: runtime.ax) else {
+                    return refusal("Ordinary rename editor value was attempted but its committed readback is unavailable")
+                }
+                if !editorIsHeld(allowOwnNamePreview: true) {
+                    // Logic can commit the String setter and close its editor itself.
+                    // Never send Return into a different focus. Verify the original
+                    // physical target and coupled footprint instead; an ack, preview,
+                    // newer name or lost project/selection/gate cannot satisfy this.
+                    guard physical != nil,
+                          runtime.logicProPID() == heldPID, runtime.focusedApplicationPID() == heldPID,
+                          processRuntime.logicIsFrontmost(),
+                          let currentApp = AXLogicProElements.appRoot(runtime: runtime), CFEqual(currentApp, heldApp),
+                          let committedFocus: AXUIElement = AXHelpers.getAttribute(
+                            heldApp, kAXFocusedUIElementAttribute, runtime: runtime.ax),
+                          case .notTextEditing = readLogicKeyboardFocus(of: committedFocus, runtime: runtime),
+                          targetStillHeld(requiringExclusiveSelection: true),
+                          let after = readHeldName(), after.utf8.elementsEqual(desired.utf8),
+                          ExactTrackNameAdapter.coupledWritePermitted(allowOwnPreview: true),
+                          targetStillHeld(requiringExclusiveSelection: true),
+                          let finalName = readHeldName(), finalName.utf8.elementsEqual(after.utf8),
+                          let finalFocus: AXUIElement = AXHelpers.getAttribute(
+                            heldApp, kAXFocusedUIElementAttribute, runtime: runtime.ax), CFEqual(finalFocus, committedFocus),
+                          case .notTextEditing = readLogicKeyboardFocus(of: finalFocus, runtime: runtime),
+                          runtime.logicProPID() == heldPID, runtime.focusedApplicationPID() == heldPID,
+                          processRuntime.logicIsFrontmost() else {
+                        return refusal("Ordinary rename editor closed without a verified held-target commit")
+                    }
+                    return .success(HonestContract.encodeStateA(extras: [
+                        "before": before, "observed": finalName, "via": "track_menu_ax_set_value_committed", "write_attempted": true,
+                        "track_index": physical?.currentIndex() ?? index,
+                    ]))
+                }
+                guard let value: String = AXHelpers.getAttribute(editor, kAXValueAttribute as String, runtime: runtime.ax),
                       value.utf8.elementsEqual(desired.utf8),
                       case .textEditing = readLogicKeyboardFocus(runtime: runtime),
                       ExactTrackNameAdapter.coupledWritePermitted(allowOwnPreview: true),

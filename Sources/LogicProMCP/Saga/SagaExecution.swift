@@ -323,6 +323,8 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
             response = await ApprovedSessionRepair.$current.withValue(approvedSessionRepair) {
                 await NavigateDispatcher.handle(command: "toggle_view", params: params, router: router, cache: cache)
             }
+        case .tracksRename where approvedSessionRepair?.supports(step) == true:
+            response = await approvedSessionRepair!.performName(step, router: router)
         case .tracksRename:
             response = await TrackDispatcher.handle(
                 command: "rename",

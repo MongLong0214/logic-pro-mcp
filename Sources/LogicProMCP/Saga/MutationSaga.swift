@@ -339,6 +339,7 @@ actor MutationSaga {
             }
 
             let approvedView = approvedSessionRepair?.supports(step) == true
+                && step.operationID == .navigateToggleView
                 && plan.canonicalPlanID == approvedSessionRepair?.plan.canonicalPlanID
                 && plan.canonicalDigest == approvedSessionRepair?.plan.canonicalDigest
             let definition = approvedView ? ReversibleDefinition(tool: .logicNavigate, command: "toggle_view",

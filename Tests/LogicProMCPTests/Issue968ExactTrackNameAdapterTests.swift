@@ -60,7 +60,12 @@ private final class ExactNameFixture: @unchecked Sendable {
     var menuEditorSetterAcknowledgesOnly = false
     var onMenuEditorValueSet: (@Sendable () -> Void)?
     var coupledNameField: AXUIElement?
+    var coupledPeerNameField: AXUIElement?
     var onMirrorReadAfterWrite: (@Sendable () -> Void)?
+    var peerNameReadsAfterWrite = 0
+    var onPeerNameReadAfterWrite: (@Sendable (Int) -> Void)?
+    var rawHelpReads = 0
+    var countRawHelpReads = false
 
     init(_ name: String = "A") {
         app = builder.element(968_100)
@@ -93,6 +98,12 @@ private final class ExactNameFixture: @unchecked Sendable {
             ax: builder.makeAXRuntime(
                 appElement: app,
                 attributeValueHandler: { [self] element, attribute in
+                    if countRawHelpReads, attribute == kAXHelpAttribute as String { rawHelpReads += 1 }
+                    if !writes.isEmpty, additionalNameFields.contains(where: { CFEqual($0, element) }),
+                       attribute == kAXDescriptionAttribute as String {
+                        peerNameReadsAfterWrite += 1
+                        onPeerNameReadAfterWrite?(peerNameReadsAfterWrite)
+                    }
                     if !writes.isEmpty, let coupledNameField, CFEqual(element, coupledNameField),
                        attribute == kAXValueAttribute as String { onMirrorReadAfterWrite?() }
                     if let renameMenuItem, CFEqual(element, renameMenuItem), attribute == kAXTitleAttribute as String {
@@ -324,7 +335,7 @@ private final class ExactNameFixture: @unchecked Sendable {
         )
     }
 
-    func coupledCapture(link: String = "observed") async throws -> (SessionPopulationObservation.Capture, TargetReference, TargetReference, AXUIElement, AXUIElement) {
+    func coupledCapture(link: String = "observed", peerStripName: String? = nil) async throws -> (SessionPopulationObservation.Capture, TargetReference, TargetReference, AXUIElement, AXUIElement) {
         let mixer = builder.element(968_170)
         let strip = builder.element(968_171)
         let name = builder.element(968_172)
@@ -337,7 +348,18 @@ private final class ExactNameFixture: @unchecked Sendable {
         builder.setAttribute(name, kAXValueAttribute as String, link == "different_name" ? "B" : "A")
         builder.setChildren(name, [])
         builder.setChildren(strip, [name])
-        builder.setChildren(mixer, [strip])
+        if let peerStripName {
+            let peer = builder.element(968_173)
+            let peerName = builder.element(968_174)
+            coupledPeerNameField = peerName
+            builder.setRole(peer, kAXLayoutItemRole as String)
+            builder.setRole(peerName, kAXTextFieldRole as String)
+            builder.setAttribute(peerName, kAXDescriptionAttribute as String, "name")
+            builder.setAttribute(peerName, kAXValueAttribute as String, peerStripName)
+            builder.setChildren(peerName, [])
+            builder.setChildren(peer, [peerName])
+            builder.setChildren(mixer, [strip, peer])
+        } else { builder.setChildren(mixer, [strip]) }
         builder.setChildren(window, [rail, mixer])
         await cache.updateProject(.init(name: "ExactName", filePath: "/tmp/ExactName.logicx"))
         let (project, target) = try await prepare(typedProducer: true)
@@ -374,6 +396,33 @@ private final class ExactNameFixture: @unchecked Sendable {
             liveTrackName: { AXLogicProElements.trackName(at: $0, runtime: runtime) },
             liveTrackNames: { AXLogicProElements.trackNames(runtime: runtime) })
     }
+
+    func canonicalNameApproval(_ capture: SessionPopulationObservation.Capture, project: TargetReference,
+                               target: TargetReference, desired: String, key: String,
+                               journal: SagaJournal) async throws -> ApprovedSessionRepair {
+        let request = SessionPopulationObservation.Request(domains: [.tracks, .strips, .associations])
+        let report = SessionPopulationObservation.build(request: request, capture: capture)
+        let json = String(decoding: try JSONEncoder().encode(report), as: UTF8.self)
+        let retained = await cache.retainSessionReport(id: capture.captureID, json: json,
+            capturedEpoch: capture.projectEpoch, capturedPath: capture.project.filePath,
+            capture: capture, request: request)
+        #expect(retained)
+        let raw: [String: Value] = ["schema": .string(ProjectSessionAudit.intentPolicySchema),
+            "project_ref": .string(project.rawValue),
+            "targets": .array([.object(["handle": .string("exact"), "track_ref": .string(target.rawValue)])])]
+        guard case .accepted(let policy) = ProjectSessionAudit.parseIntentPolicy(raw) else {
+            throw NSError(domain: "ExactNameFixture", code: 1)
+        }
+        let plan = try ProjectSessionAudit.buildCanonicalRepairPlan(policy: policy, policyValue: .object(raw),
+            names: [.init(target: "exact", name: desired)], capture: capture,
+            request: request, snapshotCurrent: true)
+        let executable = try #require(sharedJSONObject(plan.json)?["executable"] as? Bool)
+        #expect(executable)
+        let stored = await cache.retainRepairPlan(plan, snapshotID: capture.captureID)
+        #expect(stored)
+        return try #require(await ApprovedSessionRepair.retained(id: plan.id, digest: plan.digest,
+            key: key, cache: cache, registry: registry, journal: journal))
+    }
 }
 
 private actor ExactNameChannel: Channel {
@@ -393,6 +442,314 @@ private actor ExactNameChannel: Channel {
 
 @Suite("#968 exact-local track naming adapter")
 struct Issue968ExactTrackNameAdapterTests {
+    @Test(arguments: ["Canonical, \"한글\" 😀", "Peer"])
+    func aRetainedSingleCoupledNameUsesTheExistingCanonicalSaga(_ desired: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = ExactNameFixture()
+                let (_, peer) = f.appendTrack(name: "Peer", selected: false)
+                let (capture, project, target, _, mirror) = try await f.coupledCapture(peerStripName: "Peer")
+                let request = SessionPopulationObservation.Request(domains: [.tracks, .strips, .associations])
+                let report = SessionPopulationObservation.build(request: request, capture: capture)
+                let reportJSON = String(decoding: try JSONEncoder().encode(report), as: UTF8.self)
+                let retained = await f.cache.retainSessionReport(id: capture.captureID, json: reportJSON,
+                    capturedEpoch: capture.projectEpoch, capturedPath: capture.project.filePath,
+                    capture: capture, request: request)
+                #expect(retained)
+                let raw: [String: Value] = ["schema": .string(ProjectSessionAudit.intentPolicySchema),
+                    "project_ref": .string(project.rawValue),
+                    "targets": .array([.object(["handle": .string("exact"), "track_ref": .string(target.rawValue)])])]
+                guard case .accepted(let policy) = ProjectSessionAudit.parseIntentPolicy(raw) else {
+                    Issue.record("the explicit single naming policy must parse"); return
+                }
+                let plan = try ProjectSessionAudit.buildCanonicalRepairPlan(policy: policy, policyValue: .object(raw),
+                    names: [.init(target: "exact", name: desired)], capture: capture,
+                    request: request, snapshotCurrent: true)
+                let body = try #require(sharedJSONObject(plan.json))
+                let executable = try #require(body["executable"] as? Bool)
+                #expect(executable)
+                let stored = await f.cache.retainRepairPlan(plan, snapshotID: capture.captureID)
+                #expect(stored)
+                let journal = SagaJournal()
+                let approval = try #require(await ApprovedSessionRepair.retained(id: plan.id, digest: plan.digest,
+                    key: "one-coupled-name", cache: f.cache, registry: f.registry, journal: journal))
+                let runtime = f.runtime
+                func run() async -> CallTool.Result {
+                    await SystemDispatcher.handle(command: "saga_execute", params: [:], router: f.router,
+                        cache: f.cache, targetRegistry: f.registry, dialogPresent: { false },
+                        sagaJournal: journal, mutationGate: LogicMutationGate(), sagaRefreshAfterWrite: {},
+                        liveTrackName: { AXLogicProElements.trackName(at: $0, runtime: runtime) },
+                        liveTrackNames: { AXLogicProElements.trackNames(runtime: runtime) },
+                        sagaLiveReadback: .unavailable, approvedSessionRepair: approval)
+                }
+                let outcome = try #require(sharedJSONObject(sharedToolText(await run())))
+                #expect(outcome["saga_state"] as? String == "completed")
+                let verified = try #require(outcome["verified"] as? Bool)
+                #expect(verified)
+                #expect((outcome["steps"] as? [[String: Any]])?.count == 1)
+                #expect(f.writes == [desired])
+                #expect(f.builder.attributeValue(f.field, kAXDescriptionAttribute as String) as? String == desired)
+                #expect(f.builder.attributeValue(mirror, kAXValueAttribute as String) as? String == desired)
+                #expect(f.builder.attributeValue(peer, kAXDescriptionAttribute as String) as? String == "Peer")
+                #expect(f.routedOperations == ["track.rename"])
+                let replay = try #require(sharedJSONObject(sharedToolText(await run())))
+                let duplicate = try #require(replay["duplicate"] as? Bool)
+                #expect(duplicate)
+                #expect(f.writes == [desired])
+            }
+        }
+    }
+
+    @Test(arguments: ["healthy", "newer_peer", "newer_own_name", "inverse_peer_effect"])
+    func canonicalNameCompensationPreservesNewerNamesAndVerifiesItsActualFootprint(_ change: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = ExactNameFixture()
+                let (_, peer) = f.appendTrack(name: "Peer", selected: false)
+                let (capture, project, target, _, mirror) = try await f.coupledCapture(peerStripName: "Peer")
+                let peerMirror = try #require(f.coupledPeerNameField)
+                let journal = SagaJournal()
+                let approval = try await f.canonicalNameApproval(capture, project: project, target: target,
+                    desired: "Canonical", key: "cancel-coupled-name", journal: journal)
+                let runtime = f.runtime
+                let executor = ProductionSagaStepExecutor(router: f.router, cache: f.cache,
+                    targetRegistry: f.registry, dialogPresent: { false }, liveReadback: .unavailable,
+                    liveTrackName: { AXLogicProElements.trackName(at: $0, runtime: runtime) },
+                    liveTrackNames: { AXLogicProElements.trackNames(runtime: runtime) },
+                    approvedSessionRepair: approval)
+                let saga = MutationSaga(targetRegistry: f.registry, approvedSessionRepair: approval,
+                    routeAvailable: { _ in true })
+                let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: { true })
+                await OperationTraceContext.$current.withValue(context) {
+                    let outcome = await saga.execute(approval.plan, executor: executor)
+                    #expect(outcome.state == .completed)
+                    #expect(f.writes == ["Canonical"])
+                    if change == "newer_peer" || change == "inverse_peer_effect" {
+                        f.builder.setAttribute(peer, kAXDescriptionAttribute as String, "Newer peer")
+                        f.builder.setAttribute(peerMirror, kAXValueAttribute as String, "Newer peer")
+                    }
+                    if change == "newer_own_name" {
+                        f.builder.setAttribute(f.field, kAXDescriptionAttribute as String, "Human")
+                        f.builder.setAttribute(mirror, kAXValueAttribute as String, "Human")
+                    }
+                    if change == "inverse_peer_effect" {
+                        f.onConfirm = {
+                            f.builder.setAttribute(mirror, kAXValueAttribute as String,
+                                f.builder.attributeValue(f.field, kAXDescriptionAttribute as String) as Any)
+                            f.builder.setAttribute(peerMirror, kAXValueAttribute as String, "Unexpected")
+                        }
+                    }
+                    let cancelled = await saga.cancel(outcome: outcome, executor: executor)
+                    if change == "newer_own_name" || change == "inverse_peer_effect" {
+                        #expect(cancelled.state == .rollbackUncertain)
+                    } else {
+                        #expect(cancelled.state == .fullyCompensated)
+                    }
+                    #expect(f.writes == (change == "newer_own_name" ? ["Canonical"] : ["Canonical", "A"]))
+                    #expect(f.builder.attributeValue(f.field, kAXDescriptionAttribute as String) as? String
+                        == (change == "newer_own_name" ? "Human" : "A"))
+                    #expect(f.builder.attributeValue(mirror, kAXValueAttribute as String) as? String
+                        == (change == "newer_own_name" ? "Human" : "A"))
+                    #expect(f.builder.attributeValue(peer, kAXDescriptionAttribute as String) as? String
+                        == (change == "newer_peer" || change == "inverse_peer_effect" ? "Newer peer" : "Peer"))
+                    #expect(f.builder.attributeValue(peerMirror, kAXValueAttribute as String) as? String
+                        == (change == "inverse_peer_effect" ? "Unexpected" : change == "newer_peer" ? "Newer peer" : "Peer"))
+                }
+            }
+        }
+    }
+
+    @Test(arguments: ["committed", "newer_name", "peer_changed", "project_changed", "membership_changed", "gate_lost",
+                      "editing_elsewhere", "focus_unreadable"])
+    func canonicalCancellationCanRestoreASetterCommittedNameWithoutPostingIntoLostEditor(_ change: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = ExactNameFixture()
+                let (peerHeader, peer) = f.appendTrack(name: "Peer", selected: false)
+                f.passiveHeaderNameLabel = true
+                f.builder.setAttribute(f.field, kAXValueAttribute as String, NSNumber(value: 0))
+                f.builder.setAttributeSettable(f.field, kAXValueAttribute as String, false)
+                let bar = f.builder.element(968_230), trackMenu = f.builder.element(968_231)
+                let menu = f.builder.element(968_232), rename = f.builder.element(968_233)
+                let editor = f.builder.element(968_234)
+                f.renameMenuItem = rename
+                f.menuFocusedEditor = editor
+                f.builder.setAttribute(f.app, kAXMenuBarAttribute as String, bar)
+                for (element, role) in [(bar, kAXMenuBarRole), (trackMenu, kAXMenuBarItemRole),
+                                       (menu, kAXMenuRole), (rename, kAXMenuItemRole), (editor, kAXTextFieldRole)] {
+                    f.builder.setAttribute(element, kAXRoleAttribute as String, role as String)
+                }
+                f.builder.setAttribute(trackMenu, kAXTitleAttribute as String, AXLocalePolicy.trackMenuBar.canonical)
+                f.builder.setAttribute(rename, kAXTitleAttribute as String, AXLocalePolicy.renameTrackMenuItem.canonical)
+                f.builder.setAttribute(editor, kAXWindowAttribute as String, f.window)
+                f.builder.setAttribute(editor, kAXValueAttribute as String, "A")
+                f.builder.setAttributeSettable(editor, kAXValueAttribute as String, true)
+                f.builder.setChildren(bar, [trackMenu])
+                f.builder.setChildren(trackMenu, [menu])
+                f.builder.setChildren(menu, [rename])
+                let (capture, project, target, _, mirror) = try await f.coupledCapture(peerStripName: "Peer")
+                f.onRenameMenuRead = {
+                    f.builder.setAttribute(editor, kAXValueAttribute as String,
+                        f.builder.attributeValue(f.field, kAXDescriptionAttribute as String) as Any)
+                }
+                f.onMenuEditorValueSet = {
+                    // This models a successful actual String setter which commits the
+                    // original pair and closes its editor. It is not a channel ack-only.
+                    let name = f.builder.attributeValue(editor, kAXValueAttribute as String) as? String
+                    f.builder.setAttribute(f.field, kAXDescriptionAttribute as String, name as Any)
+                    f.builder.setAttribute(mirror, kAXValueAttribute as String, name as Any)
+                    f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String,
+                        change == "editing_elsewhere" ? peer : change == "focus_unreadable" ? f.builder.element(968_242) : f.rail)
+                    if change == "newer_name" {
+                        f.builder.setAttribute(f.field, kAXDescriptionAttribute as String, "Human")
+                        f.builder.setAttribute(mirror, kAXValueAttribute as String, "Human")
+                    }
+                    if change == "peer_changed" { f.builder.setAttribute(peer, kAXDescriptionAttribute as String, "Human peer") }
+                    if change == "project_changed" {
+                        f.builder.setAttribute(f.window, kAXDocumentAttribute as String, "file:///tmp/Other.logicx")
+                    }
+                    if change == "membership_changed" {
+                        let added = f.builder.element(968_240), addedName = f.builder.element(968_241)
+                        f.builder.setRole(added, kAXLayoutItemRole as String)
+                        f.builder.setAttribute(added, kAXSelectedAttribute as String, false)
+                        f.builder.setRole(addedName, kAXTextFieldRole as String)
+                        f.builder.setAttribute(addedName, kAXDescriptionAttribute as String, "Unexpected")
+                        f.builder.setChildren(addedName, [])
+                        f.builder.setChildren(added, [addedName])
+                        f.builder.setChildren(f.rail, [f.header, peerHeader, added])
+                    }
+                    if change == "gate_lost" { f.boundaryOwnership = false }
+                }
+                let approval = try await f.canonicalNameApproval(capture, project: project, target: target,
+                    desired: "Canonical", key: "cancel-auto-committed-name", journal: SagaJournal())
+                let runtime = f.runtime
+                let executor = ProductionSagaStepExecutor(router: f.router, cache: f.cache,
+                    targetRegistry: f.registry, dialogPresent: { false }, liveReadback: .unavailable,
+                    liveTrackName: { AXLogicProElements.trackName(at: $0, runtime: runtime) },
+                    liveTrackNames: { AXLogicProElements.trackNames(runtime: runtime) }, approvedSessionRepair: approval)
+                let saga = MutationSaga(targetRegistry: f.registry, approvedSessionRepair: approval, routeAvailable: { _ in true })
+                let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: { f.boundaryOwnership })
+                await OperationTraceContext.$current.withValue(context) {
+                    let outcome = await saga.execute(approval.plan, executor: executor,
+                        cancellationRequested: { !f.menuEditorValueWrites.isEmpty })
+                    #expect(outcome.state == (change == "committed" ? .fullyCompensated : .rollbackUncertain))
+                    #expect(f.menuEditorValueWrites == (change == "committed" ? ["Canonical", "A"] : ["Canonical"]))
+                    #expect(f.builder.attributeValue(f.field, kAXDescriptionAttribute as String) as? String
+                        == (change == "committed" ? "A" : change == "newer_name" ? "Human" : "Canonical"))
+                    #expect(f.builder.attributeValue(mirror, kAXValueAttribute as String) as? String
+                        == (change == "committed" ? "A" : change == "newer_name" ? "Human" : "Canonical"))
+                    #expect(!f.postedReturn && f.typedCodeUnits.isEmpty)
+                    #expect(f.builder.attributeValue(peer, kAXDescriptionAttribute as String) as? String
+                        == (change == "peer_changed" ? "Human peer" : "Peer"))
+                }
+            }
+        }
+    }
+
+    @Test(arguments: ["different_name", "missing", "duplicate", "unrequested", "stale"])
+    func canonicalNameOptInCannotReplaceMissingCapturedCoupling(_ observation: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = ExactNameFixture()
+                let (capture, project, target, _, _) = try await f.coupledCapture(link: observation)
+                let raw: [String: Value] = ["schema": .string(ProjectSessionAudit.intentPolicySchema),
+                    "project_ref": .string(project.rawValue),
+                    "targets": .array([.object(["handle": .string("exact"), "track_ref": .string(target.rawValue)])])]
+                guard case .accepted(let policy) = ProjectSessionAudit.parseIntentPolicy(raw) else {
+                    Issue.record("the explicit naming policy must parse"); return
+                }
+                let domains: [SessionPopulationObservation.Domain] = observation == "unrequested"
+                    ? [.tracks, .strips] : [.tracks, .strips, .associations]
+                let plan = try ProjectSessionAudit.buildCanonicalRepairPlan(policy: policy, policyValue: .object(raw),
+                    names: [.init(target: "exact", name: "Canonical")], capture: capture,
+                    request: .init(domains: domains), snapshotCurrent: observation != "stale")
+                let executable = try #require(sharedJSONObject(plan.json)?["executable"] as? Bool)
+                #expect(!executable)
+                #expect(f.writes.isEmpty && f.routedOperations.isEmpty && f.events.isEmpty)
+            }
+        }
+    }
+
+    @Test(arguments: ["primary_name", "mirror_name", "document", "physical_peer"])
+    func canonicalNameRevalidatesTheOriginalFootprintBeforeAnyWrite(_ change: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = ExactNameFixture()
+                let (capture, project, target, _, mirror) = try await f.coupledCapture()
+                let journal = SagaJournal()
+                let approval = try await f.canonicalNameApproval(capture, project: project, target: target,
+                    desired: "Canonical", key: "stale-coupled-name", journal: journal)
+                switch change {
+                case "primary_name": f.builder.setAttribute(f.field, kAXDescriptionAttribute as String, "Human")
+                case "mirror_name": f.builder.setAttribute(mirror, kAXValueAttribute as String, "Human")
+                case "document": f.builder.setAttribute(f.window, kAXDocumentAttribute as String, "file:///tmp/Other.logicx")
+                default: _ = f.appendTrack(name: "New physical member", selected: false)
+                }
+                let runtime = f.runtime
+                let result = await SystemDispatcher.handle(command: "saga_execute", params: [:], router: f.router,
+                    cache: f.cache, targetRegistry: f.registry, dialogPresent: { false },
+                    sagaJournal: journal, mutationGate: LogicMutationGate(), sagaRefreshAfterWrite: {},
+                    liveTrackName: { AXLogicProElements.trackName(at: $0, runtime: runtime) },
+                    liveTrackNames: { AXLogicProElements.trackNames(runtime: runtime) },
+                    sagaLiveReadback: .unavailable, approvedSessionRepair: approval)
+                #expect(sharedJSONObject(sharedToolText(result))?["state"] as? String == "C")
+                #expect(f.writes.isEmpty && f.routedOperations.isEmpty && f.events.isEmpty)
+            }
+        }
+    }
+
+    @Test func canonicalNameJournalCancellationUsesTheSameOwnedInverseAndReplay() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = ExactNameFixture()
+                let (capture, project, target, _, mirror) = try await f.coupledCapture()
+                let journal = SagaJournal()
+                let key = "cancel-canonical-name-in-dispatcher"
+                let approval = try await f.canonicalNameApproval(capture, project: project, target: target,
+                    desired: "Canonical", key: key, journal: journal)
+                let runtime = f.runtime
+                func run() async -> CallTool.Result {
+                    await SystemDispatcher.handle(command: "saga_execute", params: [:], router: f.router,
+                        cache: f.cache, targetRegistry: f.registry, dialogPresent: { false },
+                        sagaJournal: journal, mutationGate: LogicMutationGate(), sagaRefreshAfterWrite: {
+                            if f.writes == ["Canonical"] {
+                                #expect(await journal.cancel(idempotencyKey: key) == .requested)
+                            }
+                        }, liveTrackName: { AXLogicProElements.trackName(at: $0, runtime: runtime) },
+                        liveTrackNames: { AXLogicProElements.trackNames(runtime: runtime) },
+                        sagaLiveReadback: .unavailable, approvedSessionRepair: approval)
+                }
+                let outcome = try #require(sharedJSONObject(sharedToolText(await run())))
+                #expect(outcome["saga_state"] as? String == "fullyCompensated")
+                #expect(f.writes == ["Canonical", "A"])
+                #expect(f.builder.attributeValue(f.field, kAXDescriptionAttribute as String) as? String == "A")
+                #expect(f.builder.attributeValue(mirror, kAXValueAttribute as String) as? String == "A")
+                guard case .cancelled(_, verified: true)? = await journal.record(for: key) else {
+                    Issue.record("actual canonical journal cancellation must verify its own inverse"); return
+                }
+                let planID = try #require(approval.plan.canonicalPlanID)
+                let digest = try #require(approval.plan.canonicalDigest)
+                let request = try #require(ApprovedSessionRepair.ApplyRequest.parse([
+                    "plan_id": .string(planID), "digest": .string(digest),
+                    "confirmed": .bool(true), "idempotency_key": .string(key)]))
+                let dependencies = HandlerDependencies(router: f.router, cache: f.cache,
+                    targetRegistry: f.registry,
+                    poller: StatePoller(axChannel: AccessibilityChannel(), cache: f.cache,
+                        runtime: .init(hasVisibleWindow: { false })),
+                    dialogPresent: { false }, supportBundleExporter: nil, sagaJournal: journal,
+                    mutationGate: LogicMutationGate(),
+                    liveTrackNames: { AXLogicProElements.trackNames(runtime: runtime) },
+                    projectFileReader: .unavailable)
+                let replay = try #require(sharedJSONObject(sharedToolText(
+                    await ApprovedSessionRepair.apply(request: request, dependencies: dependencies))))
+                #expect(replay["saga_state"] as? String == "fullyCompensated")
+                let duplicate = try #require(replay["duplicate"] as? Bool)
+                #expect(duplicate)
+                #expect(f.writes == ["Canonical", "A"])
+            }
+        }
+    }
+
     @Test(arguments: ["observed", "different_name", "missing", "duplicate", "unrequested", "stale"])
     func canonicalNamePreviewAccountsForOnlyProducerObservedAssociatedStrips(_ observation: String) async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
@@ -522,6 +879,185 @@ struct Issue968ExactTrackNameAdapterTests {
             #expect(restored.after == "A")
             #expect(f.builder.attributeValue(mirror, kAXValueAttribute as String) as? String == "A")
             #expect(f.writes == ["C", "A"])
+        }
+    }
+
+    @Test(arguments: ["before", "after"])
+    func coupledRenameDoesNotCertifyAnUnexpectedCapturedPeerRename(phase: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (_, peer) = f.appendTrack(name: "Peer", selected: false)
+            let (capture, project, target, _, mirror) = try await f.coupledCapture()
+            if phase == "before" {
+                f.builder.setAttribute(peer, kAXDescriptionAttribute as String, "Newer peer")
+            } else {
+                let commitPair = f.onConfirm
+                f.onConfirm = {
+                    commitPair?()
+                    f.builder.setAttribute(peer, kAXDescriptionAttribute as String, "Newer peer")
+                }
+            }
+            let result = await f.applyCoupled(capture, project: project, target: target)
+            #expect(result.status == (phase == "before" ? .rejectedBeforeWrite : .attemptedUnverified))
+            #expect(result.inverse == nil)
+            #expect(f.writes == (phase == "before" ? [] : ["C"]))
+            #expect(f.builder.attributeValue(mirror, kAXValueAttribute as String) as? String
+                == (phase == "before" ? "A" : "C"))
+            #expect(f.builder.attributeValue(peer, kAXDescriptionAttribute as String) as? String == "Newer peer")
+            let receipt = try #require(sharedJSONObject(sharedToolText(result.result)))
+            #expect(receipt["state"] as? String == (phase == "before" ? "C" : "B"))
+        }
+    }
+
+    @Test(arguments: ["before", "after"])
+    func coupledRenameAlsoPreservesAnObservedMixerOnlyPeer(phase: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (capture, project, target, _, _) = try await f.coupledCapture(peerStripName: "Aux")
+            let peer = try #require(f.coupledPeerNameField)
+            if phase == "before" {
+                f.builder.setAttribute(peer, kAXValueAttribute as String, "Newer aux")
+            } else {
+                let commitPair = f.onConfirm
+                f.onConfirm = {
+                    commitPair?()
+                    f.builder.setAttribute(peer, kAXValueAttribute as String, "Newer aux")
+                }
+            }
+            let result = await f.applyCoupled(capture, project: project, target: target)
+            #expect(result.status == (phase == "before" ? .rejectedBeforeWrite : .attemptedUnverified))
+            #expect(result.inverse == nil)
+            #expect(f.writes == (phase == "before" ? [] : ["C"]))
+            #expect(f.builder.attributeValue(peer, kAXValueAttribute as String) as? String == "Newer aux")
+        }
+    }
+
+    @Test func coupledRenamePreservesIntentionalDuplicatesAndDoesNotUndoANewerPeerName() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (_, peer) = f.appendTrack(name: "A", selected: false)
+            let (capture, project, target, _, mirror) = try await f.coupledCapture(peerStripName: "A")
+            let stripPeer = try #require(f.coupledPeerNameField)
+            let forward = await f.applyCoupled(capture, project: project, target: target)
+            #expect(forward.status == .applied)
+            let inverse = try #require(forward.inverse)
+            #expect(f.builder.attributeValue(peer, kAXDescriptionAttribute as String) as? String == "A")
+            #expect(f.builder.attributeValue(stripPeer, kAXValueAttribute as String) as? String == "A")
+            f.builder.setAttribute(peer, kAXDescriptionAttribute as String, "Newer track")
+            f.builder.setAttribute(stripPeer, kAXValueAttribute as String, "Newer aux")
+            let restored = await f.inverse(inverse)
+            #expect(restored.status == .applied)
+            #expect(f.writes == ["C", "A"])
+            #expect(f.builder.attributeValue(mirror, kAXValueAttribute as String) as? String == "A")
+            #expect(f.builder.attributeValue(peer, kAXDescriptionAttribute as String) as? String == "Newer track")
+            #expect(f.builder.attributeValue(stripPeer, kAXValueAttribute as String) as? String == "Newer aux")
+        }
+    }
+
+    @Test func aFinalPeerReadCannotCertifyANewerPrimaryAndMirrorName() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let healthy = ExactNameFixture()
+            _ = healthy.appendTrack(name: "Peer", selected: false)
+            let (baseline, baselineProject, baselineTarget, _, _) = try await healthy.coupledCapture()
+            #expect((await healthy.applyCoupled(baseline, project: baselineProject, target: baselineTarget)).status == .applied)
+            let finalRead = healthy.peerNameReadsAfterWrite
+            #expect(finalRead > 0)
+            let f = ExactNameFixture()
+            _ = f.appendTrack(name: "Peer", selected: false)
+            let (capture, project, target, _, mirror) = try await f.coupledCapture()
+            f.onPeerNameReadAfterWrite = { count in
+                if count == finalRead {
+                    f.builder.setAttribute(f.field, kAXDescriptionAttribute as String, "Newer pair")
+                    f.builder.setAttribute(mirror, kAXValueAttribute as String, "Newer pair")
+                }
+            }
+            let result = await f.applyCoupled(capture, project: project, target: target)
+            #expect(f.peerNameReadsAfterWrite >= finalRead)
+            #expect(f.builder.attributeValue(f.field, kAXDescriptionAttribute as String) as? String == "Newer pair")
+            #expect(result.status == .attemptedUnverified)
+            #expect(result.inverse == nil && result.survivingReference == nil)
+            #expect(f.writes == ["C"])
+            let receipt = try #require(sharedJSONObject(sharedToolText(result.result)))
+            #expect(receipt["state"] as? String == "B")
+        }
+    }
+
+    @Test func ownedInverseCannotCertifyItsOwnUnexpectedChangeToANewerPeerName() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (_, peer) = f.appendTrack(name: "Peer", selected: false)
+            let (capture, project, target, _, _) = try await f.coupledCapture()
+            let forward = await f.applyCoupled(capture, project: project, target: target)
+            let proof = try #require(forward.inverse)
+            f.builder.setAttribute(peer, kAXDescriptionAttribute as String, "Newer peer")
+            let commitPair = f.onConfirm
+            f.onConfirm = {
+                commitPair?()
+                f.builder.setAttribute(peer, kAXDescriptionAttribute as String, "Unexpected peer")
+            }
+            let restored = await f.inverse(proof)
+            #expect(restored.status == .attemptedUnverified)
+            #expect(restored.inverse == nil)
+            #expect(f.writes == ["C", "A"])
+            #expect(f.builder.attributeValue(peer, kAXDescriptionAttribute as String) as? String == "Unexpected peer")
+            let receipt = try #require(sharedJSONObject(sharedToolText(restored.result)))
+            #expect(receipt["state"] as? String == "B")
+        }
+    }
+
+    @Test(arguments: ["track_before", "track_after", "strip_before", "strip_after"])
+    func aCoupledNameCannotCertifyAnUnexpectedNewPhysicalMember(phase: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (capture, project, target, strip, mirror) = try await f.coupledCapture()
+            let mixer: AXUIElement = try #require(AXHelpers.getAttribute(strip, kAXParentAttribute as String, runtime: f.runtime.ax))
+            let added = f.builder.element(968_180)
+            let addedName = f.builder.element(968_181)
+            f.builder.setRole(added, kAXLayoutItemRole as String)
+            f.builder.setRole(addedName, kAXTextFieldRole as String)
+            f.builder.setAttribute(addedName, kAXDescriptionAttribute as String, phase.hasPrefix("track") ? "New track" : "name")
+            f.builder.setAttribute(addedName, kAXValueAttribute as String, "New strip")
+            f.builder.setChildren(addedName, [])
+            f.builder.setChildren(added, [addedName])
+            let addMember: @Sendable () -> Void = {
+                if phase.hasPrefix("track") { f.builder.setChildren(f.rail, [f.header, added]) }
+                else { f.builder.setChildren(mixer, [strip, added]) }
+            }
+            if phase.hasSuffix("before") { addMember() }
+            else {
+                f.onConfirm = {
+                    f.builder.setAttribute(mirror, kAXValueAttribute as String,
+                        f.builder.attributeValue(f.field, kAXDescriptionAttribute as String))
+                    addMember()
+                }
+            }
+            let result = await f.applyCoupled(capture, project: project, target: target)
+            #expect(result.status == (phase.hasSuffix("before") ? .rejectedBeforeWrite : .attemptedUnverified))
+            #expect(result.inverse == nil)
+            #expect(result.survivingReference == nil)
+            #expect(f.writes == (phase.hasSuffix("before") ? [] : ["C"]))
+            let members = try #require(AXLogicProElements.childrenIfRead(phase.hasPrefix("track") ? f.rail : mixer,
+                runtime: f.runtime.ax))
+            #expect(members.contains { CFEqual($0, added) })
+        }
+    }
+
+    @Test func inversePeerBaselineDoesNotReadFocusMovingHelpInTheMixerCensus() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (capture, project, target, strip, _) = try await f.coupledCapture(peerStripName: "Aux")
+            let forward = await f.applyCoupled(capture, project: project, target: target)
+            let proof = try #require(forward.inverse)
+            let mixer: AXUIElement = try #require(AXHelpers.getAttribute(strip, kAXParentAttribute as String, runtime: f.runtime.ax))
+            // The same original source now uses the actual description-based
+            // census instead of its legacy identifier fast path.
+            f.builder.removeAttribute(mixer, kAXIdentifierAttribute as String)
+            f.builder.setAttribute(mixer, kAXDescriptionAttribute as String, "Mixer")
+            f.countRawHelpReads = true
+            let restored = await f.inverse(proof)
+            #expect(restored.status == .applied)
+            #expect(f.writes == ["C", "A"])
+            #expect(f.rawHelpReads == 0)
         }
     }
 
