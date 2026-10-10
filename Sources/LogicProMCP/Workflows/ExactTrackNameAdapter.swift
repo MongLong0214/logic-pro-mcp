@@ -88,7 +88,9 @@ enum ExactTrackNameAdapter {
         let rows = capture.channelStrips.indices.filter { capture.channelStrips[$0].physicalBinding?.matches(pair.strip) == true }
         guard rows.count == 1, let row = rows.first, let stripRef = capture.mixerReference(at: row),
               capture.channelStrips[row].name?.utf8.elementsEqual(action.expectedBefore.utf8) == true else { return reject() }
-        let mirror = CoupledMirror(pair: pair, reference: stripRef, snapshot: snapshot)
+        let mirror = CoupledMirror(pair: pair, reference: stripRef, snapshot: snapshot,
+            preservedTracks: capture.tracks.filter { $0.physicalBinding?.matches(pair.track) != true },
+            preservedStrips: capture.channelStrips.filter { $0.physicalBinding?.matches(pair.strip) != true })
         return await applyChecked(action, router: router, cache: cache, registry: registry,
             liveTrackName: liveTrackName, liveTrackNames: liveTrackNames, mirror: mirror)
     }
@@ -97,6 +99,32 @@ enum ExactTrackNameAdapter {
         let pair: AccessibilityChannel.HeldSelectionAssociation.Pair
         let reference: TargetReference
         let snapshot: TargetRegistrySnapshot
+        // Only names on already observed physical peers. This is not a new
+        // population scan or a claim about hidden/unobserved host effects.
+        var preservedTracks: [TrackState] = []
+        var preservedStrips: [ChannelStripState] = []
+
+        private func peerNamesStillHeld() -> Bool {
+            for row in preservedTracks {
+                guard operationPermitted(), let source = row.physicalBinding,
+                      source.document.utf8.elementsEqual(pair.track.document.utf8),
+                      CFEqual(source.window, pair.track.window), let index = source.currentIndex(),
+                      case .success(.some(let name)) = AXValueExtractors.extractTrackNameResult(
+                        from: source.header, runtime: source.runtime.ax),
+                      name.utf8.elementsEqual(row.name.utf8), source.currentIndex() == index else { return false }
+            }
+            for row in preservedStrips {
+                guard operationPermitted(), let source = row.physicalBinding, let expected = row.name,
+                      source.document.utf8.elementsEqual(pair.strip.document.utf8),
+                      CFEqual(source.window, pair.strip.window), CFEqual(source.mixer, pair.strip.mixer),
+                      let index = source.currentIndex(runtime: pair.track.runtime),
+                      case .success(.some(let name)) = AXPluginInstanceIdentity.stripNameResult(
+                        source.strip, runtime: pair.track.runtime.ax),
+                      name.utf8.elementsEqual(expected.utf8),
+                      source.currentIndex(runtime: pair.track.runtime) == index else { return false }
+            }
+            return operationPermitted()
+        }
 
         func namesStillHeld(before: String, after: String? = nil) -> Bool {
             let guardHelp = AXHelpers.HelpReadGuard(allowHelpReads: false, stop: { !operationPermitted() })
@@ -104,14 +132,14 @@ enum ExactTrackNameAdapter {
                 func matches(_ name: String) -> Bool {
                     name.utf8.elementsEqual(before.utf8) || after.map { name.utf8.elementsEqual($0.utf8) } == true
                 }
-                guard operationPermitted(), pair.track.currentIndex() != nil,
+                guard operationPermitted(), peerNamesStillHeld(), pair.track.currentIndex() != nil,
                       pair.strip.currentIndex(runtime: pair.track.runtime) != nil,
                       case .success(.some(let stripName)) = AXPluginInstanceIdentity.stripNameResult(pair.strip.strip,
                         runtime: pair.track.runtime.ax), matches(stripName),
                       case .success(.some(let trackName)) = AXValueExtractors.extractTrackNameResult(
                         from: pair.track.header, runtime: pair.track.runtime.ax), matches(trackName),
                       pair.strip.currentIndex(runtime: pair.track.runtime) != nil,
-                      pair.track.currentIndex() != nil, operationPermitted() else { return false }
+                      pair.track.currentIndex() != nil, peerNamesStillHeld(), operationPermitted() else { return false }
                 return true
             }
         }
@@ -219,10 +247,16 @@ enum ExactTrackNameAdapter {
         liveTrackName: @escaping @Sendable (Int) -> String?,
         liveTrackNames: @escaping @Sendable () -> [Int: String]?
     ) async -> Receipt {
-        await applyChecked(Action(projectReference: proof.project, targetReference: proof.target,
+        // The owned inverse restores only this pair. A later peer rename is
+        // neither ours to restore nor permission to overwrite it. Retain the
+        // original pair/reference proof, without requiring peers' old names.
+        var mirror = proof.mirror
+        mirror?.preservedTracks = []
+        mirror?.preservedStrips = []
+        return await applyChecked(Action(projectReference: proof.project, targetReference: proof.target,
                            expectedBefore: proof.written, desiredAfter: proof.before),
                     router: router, cache: proof.cache, registry: proof.registry,
-                    liveTrackName: liveTrackName, liveTrackNames: liveTrackNames, mirror: proof.mirror)
+                    liveTrackName: liveTrackName, liveTrackNames: liveTrackNames, mirror: mirror)
     }
 
     private static func sharedText(_ result: CallTool.Result) -> String {

@@ -60,6 +60,7 @@ private final class ExactNameFixture: @unchecked Sendable {
     var menuEditorSetterAcknowledgesOnly = false
     var onMenuEditorValueSet: (@Sendable () -> Void)?
     var coupledNameField: AXUIElement?
+    var coupledPeerNameField: AXUIElement?
     var onMirrorReadAfterWrite: (@Sendable () -> Void)?
 
     init(_ name: String = "A") {
@@ -324,7 +325,7 @@ private final class ExactNameFixture: @unchecked Sendable {
         )
     }
 
-    func coupledCapture(link: String = "observed") async throws -> (SessionPopulationObservation.Capture, TargetReference, TargetReference, AXUIElement, AXUIElement) {
+    func coupledCapture(link: String = "observed", peerStripName: String? = nil) async throws -> (SessionPopulationObservation.Capture, TargetReference, TargetReference, AXUIElement, AXUIElement) {
         let mixer = builder.element(968_170)
         let strip = builder.element(968_171)
         let name = builder.element(968_172)
@@ -337,7 +338,18 @@ private final class ExactNameFixture: @unchecked Sendable {
         builder.setAttribute(name, kAXValueAttribute as String, link == "different_name" ? "B" : "A")
         builder.setChildren(name, [])
         builder.setChildren(strip, [name])
-        builder.setChildren(mixer, [strip])
+        if let peerStripName {
+            let peer = builder.element(968_173)
+            let peerName = builder.element(968_174)
+            coupledPeerNameField = peerName
+            builder.setRole(peer, kAXLayoutItemRole as String)
+            builder.setRole(peerName, kAXTextFieldRole as String)
+            builder.setAttribute(peerName, kAXDescriptionAttribute as String, "name")
+            builder.setAttribute(peerName, kAXValueAttribute as String, peerStripName)
+            builder.setChildren(peerName, [])
+            builder.setChildren(peer, [peerName])
+            builder.setChildren(mixer, [strip, peer])
+        } else { builder.setChildren(mixer, [strip]) }
         builder.setChildren(window, [rail, mixer])
         await cache.updateProject(.init(name: "ExactName", filePath: "/tmp/ExactName.logicx"))
         let (project, target) = try await prepare(typedProducer: true)
@@ -522,6 +534,78 @@ struct Issue968ExactTrackNameAdapterTests {
             #expect(restored.after == "A")
             #expect(f.builder.attributeValue(mirror, kAXValueAttribute as String) as? String == "A")
             #expect(f.writes == ["C", "A"])
+        }
+    }
+
+    @Test(arguments: ["before", "after"])
+    func coupledRenameDoesNotCertifyAnUnexpectedCapturedPeerRename(phase: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (_, peer) = f.appendTrack(name: "Peer", selected: false)
+            let (capture, project, target, _, mirror) = try await f.coupledCapture()
+            if phase == "before" {
+                f.builder.setAttribute(peer, kAXDescriptionAttribute as String, "Newer peer")
+            } else {
+                let commitPair = f.onConfirm
+                f.onConfirm = {
+                    commitPair?()
+                    f.builder.setAttribute(peer, kAXDescriptionAttribute as String, "Newer peer")
+                }
+            }
+            let result = await f.applyCoupled(capture, project: project, target: target)
+            #expect(result.status == (phase == "before" ? .rejectedBeforeWrite : .attemptedUnverified))
+            #expect(result.inverse == nil)
+            #expect(f.writes == (phase == "before" ? [] : ["C"]))
+            #expect(f.builder.attributeValue(mirror, kAXValueAttribute as String) as? String
+                == (phase == "before" ? "A" : "C"))
+            #expect(f.builder.attributeValue(peer, kAXDescriptionAttribute as String) as? String == "Newer peer")
+            let receipt = try #require(sharedJSONObject(sharedToolText(result.result)))
+            #expect(receipt["state"] as? String == (phase == "before" ? "C" : "B"))
+        }
+    }
+
+    @Test(arguments: ["before", "after"])
+    func coupledRenameAlsoPreservesAnObservedMixerOnlyPeer(phase: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (capture, project, target, _, _) = try await f.coupledCapture(peerStripName: "Aux")
+            let peer = try #require(f.coupledPeerNameField)
+            if phase == "before" {
+                f.builder.setAttribute(peer, kAXValueAttribute as String, "Newer aux")
+            } else {
+                let commitPair = f.onConfirm
+                f.onConfirm = {
+                    commitPair?()
+                    f.builder.setAttribute(peer, kAXValueAttribute as String, "Newer aux")
+                }
+            }
+            let result = await f.applyCoupled(capture, project: project, target: target)
+            #expect(result.status == (phase == "before" ? .rejectedBeforeWrite : .attemptedUnverified))
+            #expect(result.inverse == nil)
+            #expect(f.writes == (phase == "before" ? [] : ["C"]))
+            #expect(f.builder.attributeValue(peer, kAXValueAttribute as String) as? String == "Newer aux")
+        }
+    }
+
+    @Test func coupledRenamePreservesIntentionalDuplicatesAndDoesNotUndoANewerPeerName() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (_, peer) = f.appendTrack(name: "A", selected: false)
+            let (capture, project, target, _, mirror) = try await f.coupledCapture(peerStripName: "A")
+            let stripPeer = try #require(f.coupledPeerNameField)
+            let forward = await f.applyCoupled(capture, project: project, target: target)
+            #expect(forward.status == .applied)
+            let inverse = try #require(forward.inverse)
+            #expect(f.builder.attributeValue(peer, kAXDescriptionAttribute as String) as? String == "A")
+            #expect(f.builder.attributeValue(stripPeer, kAXValueAttribute as String) as? String == "A")
+            f.builder.setAttribute(peer, kAXDescriptionAttribute as String, "Newer track")
+            f.builder.setAttribute(stripPeer, kAXValueAttribute as String, "Newer aux")
+            let restored = await f.inverse(inverse)
+            #expect(restored.status == .applied)
+            #expect(f.writes == ["C", "A"])
+            #expect(f.builder.attributeValue(mirror, kAXValueAttribute as String) as? String == "A")
+            #expect(f.builder.attributeValue(peer, kAXDescriptionAttribute as String) as? String == "Newer track")
+            #expect(f.builder.attributeValue(stripPeer, kAXValueAttribute as String) as? String == "Newer aux")
         }
     }
 
