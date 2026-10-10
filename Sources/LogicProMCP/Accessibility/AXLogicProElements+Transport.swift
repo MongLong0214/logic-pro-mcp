@@ -572,7 +572,12 @@ extension AXLogicProElements {
             among: checkboxes, matching: labels, runtime: runtime
         ) else { return nil }
         if let n: NSNumber = AXHelpers.getAttribute(cb, kAXValueAttribute, runtime: runtime.ax) {
-            return n.boolValue
+            // Mixed and malformed values do not establish a transport state.
+            switch n.doubleValue {
+            case 0: return false
+            case 1: return true
+            default: return nil
+            }
         }
         if let b: Bool = AXHelpers.getAttribute(cb, kAXValueAttribute, runtime: runtime.ax) {
             return b

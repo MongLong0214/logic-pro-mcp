@@ -24,6 +24,10 @@ struct Issue904TickTransportReadbackTests {
         b.setAttribute(play, kAXRoleAttribute as String, kAXCheckBoxRole as String)
         b.setAttribute(play, kAXDescriptionAttribute as String, "Play")
         b.setAttribute(play, kAXValueAttribute as String, 0)
+        let record = b.element(90475)
+        b.setAttribute(record, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+        b.setAttribute(record, kAXDescriptionAttribute as String, "Record")
+        b.setAttribute(record, kAXValueAttribute as String, 0)
         b.setAttribute(position, kAXRoleAttribute as String, kAXGroupRole as String)
         b.setAttribute(position, kAXDescriptionAttribute as String, owner)
         let values = [6, 2, 3, 120]
@@ -41,7 +45,7 @@ struct Issue904TickTransportReadbackTests {
             return slider
         }
         b.setChildren(position, sliders)
-        b.setChildren(bar, [play, position])
+        b.setChildren(bar, [play, record, position])
         let logic = b.makeLogicRuntime(appElement: app, setAttributeHandler: { _, _, _ in
             Issue.record("readback attempted an AX write"); return false
         }, performActionHandler: { _, _ in

@@ -34,16 +34,17 @@ extension AccessibilityChannel {
         // leaves the same state — an unreadable bar is not a bar whose controls read false.
         if let controlBar {
             let checkboxes = AXLogicProElements.controlBarCheckboxes(in: controlBar, runtime: runtime)
-            if let isPlaying = AXLogicProElements.readControlBarCheckboxValue(
+            // These nonoptional fields must not retain the extractor's false defaults
+            // when an observed modern control bar cannot establish Play or Record.
+            guard let isPlaying = AXLogicProElements.readControlBarCheckboxValue(
                 among: checkboxes, matching: AXLocalePolicy.transportPlayControl, runtime: runtime
-            ) {
-                state.isPlaying = isPlaying
-            }
-            if let isRecording = AXLogicProElements.readControlBarCheckboxValue(
+            ), let isRecording = AXLogicProElements.readControlBarCheckboxValue(
                 among: checkboxes, matching: AXLocalePolicy.transportRecordControl, runtime: runtime
-            ) {
-                state.isRecording = isRecording
+            ) else {
+                return .error("Control bar Play or Record state could not be read")
             }
+            state.isPlaying = isPlaying
+            state.isRecording = isRecording
             if let isCycleEnabled = AXLogicProElements.readControlBarCheckboxValue(
                 among: checkboxes, matching: AXLocalePolicy.transportCycleControl, runtime: runtime
             ) {
@@ -3562,9 +3563,21 @@ extension AccessibilityChannel {
         runtime: AXLogicProElements.Runtime
     ) -> Bool? {
         guard let raw = AXHelpers.getValue(element, runtime: runtime.ax) else { return nil }
-        if let n = raw as? NSNumber { return n.boolValue }
+        if let n = raw as? NSNumber {
+            switch n.doubleValue {
+            case 0: return false
+            case 1: return true
+            default: return nil
+            }
+        }
         if let b = raw as? Bool { return b }
-        if let i = raw as? Int { return i != 0 }
+        if let i = raw as? Int {
+            switch i {
+            case 0: return false
+            case 1: return true
+            default: return nil
+            }
+        }
         if let s = raw as? String {
             let normalized = s.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             if ["1", "true", "yes", "on"].contains(normalized) { return true }
