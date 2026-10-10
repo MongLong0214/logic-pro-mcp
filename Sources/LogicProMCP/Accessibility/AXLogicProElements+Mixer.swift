@@ -53,6 +53,23 @@ struct AXMixerInputSlotBinding: @unchecked Sendable {
 }
 
 extension AXLogicProElements {
+    /// Ephemeral read-only control custody from the existing complete send census.
+    /// Neither the displayed destination nor a knob level supplies endpoint identity.
+    struct AssignedSendMenuControl {
+        let ordinal: Int
+        let group: AXUIElement
+        let list: AXUIElement
+        let bypass: AXUIElement
+        let sourcePath: [AXUIElement]
+        let parentProxy: AXUIElement
+
+        func matches(_ other: Self) -> Bool {
+            ordinal == other.ordinal && CFEqual(group, other.group) && CFEqual(list, other.list)
+                && CFEqual(bypass, other.bypass) && CFEqual(parentProxy, other.parentProxy)
+                && sourcePath.count == other.sourcePath.count
+                && zip(sourcePath, other.sourcePath).allSatisfy { CFEqual($0, $1) }
+        }
+    }
     // MARK: - Mixer
 
     /// What looking for the Mixer found (#982). A children read that failed at or inside a
@@ -1031,7 +1048,8 @@ extension AXLogicProElements {
     /// a slot missing from a list that says it is whole.
     static func sendSlotObservations(
         in strip: AXUIElement,
-        runtime: AXHelpers.Runtime = .production
+        runtime: AXHelpers.Runtime = .production,
+        observingAssignedGroup: ((AssignedSendMenuControl) -> Void)? = nil
     ) -> [SendSlotObservation]? {
         guard let walk = preOrderDescendants(of: strip, maxDepth: 4, runtime: runtime) else {
             return nil
@@ -1039,6 +1057,7 @@ extension AXLogicProElements {
         var observations: [SendSlotObservation] = []
         var consumedGroups: Set<Int> = []
         var recognizedControls: [AXUIElement] = []
+        var assignedControls: [AssignedSendMenuControl] = []
         // This path comes from the already-read source walk, not a later AXParent lookup
         // that could adopt a group after it migrated to another strip.
         func sourcePath(at index: Int) -> [AXUIElement]? {
@@ -1062,6 +1081,16 @@ extension AXLogicProElements {
             }
             recognizedControls.append(contentsOf: controls)
             return true
+        }
+        func retainMenuControl(at index: Int, ordinal: Int, bypass: AXUIElement) {
+            guard observingAssignedGroup != nil, let path = sourcePath(at: index),
+                  let children = childrenIfRead(walk[index].element, runtime: runtime), children.count == 2,
+                  CFEqual(children[0], bypass),
+                  let proxy: AXUIElement = AXHelpers.getAttribute(walk[index].element, kAXParentAttribute as String, runtime: runtime),
+                  let peers = childrenIfRead(proxy, runtime: runtime),
+                  peers.filter({ CFEqual($0, walk[index].element) }).count == 1 else { return }
+            assignedControls.append(AssignedSendMenuControl(ordinal: ordinal, group: walk[index].element,
+                list: children[1], bypass: bypass, sourcePath: path, parentProxy: proxy))
         }
         func sendAnchor(before index: Int) -> Bool? {
             var previous = index - 1
@@ -1136,6 +1165,7 @@ extension AXLogicProElements {
                     for (offset, group) in groups.enumerated() {
                         consumedGroups.insert(group)
                         let originalParent: AXUIElement? = AXHelpers.getAttribute(walk[group].element, kAXParentAttribute as String, runtime: runtime)
+                        retainMenuControl(at: group, ordinal: observations.count, bypass: bypassControls[offset])
                         observations.append(SendSlotObservation(
                             ordinal: observations.count, state: .occupiedUnknownDestination,
                             bypassed: observedSendBypass(group: walk[group].element, control: bypassControls[offset], runtime: runtime),
@@ -1155,6 +1185,7 @@ extension AXLogicProElements {
                     var observation = occupiedSendSlot(ordinal: observations.count, knob: walk[sibling].element, runtime: runtime)
                     observation.bypassed = bypassControl.flatMap { observedSendBypass(group: visit.element, control: $0, runtime: runtime) }
                     observation.destinationDisplay = bypassControl.flatMap { observedSendDisplay(group: visit.element, control: $0, sourcePath: sourcePath(at: index), originalParent: originalParent, runtime: runtime) }
+                    if let bypassControl { retainMenuControl(at: index, ordinal: observations.count, bypass: bypassControl) }
                     observations.append(observation)
                 }
                 continue
@@ -1178,6 +1209,8 @@ extension AXLogicProElements {
             guard claim(controls) else { return nil }
             observations.append(observation)
         }
+        // No partial walk may publish an ordinal/control selection to an acquisition caller.
+        assignedControls.forEach { observingAssignedGroup?($0) }
         return observations
     }
 
