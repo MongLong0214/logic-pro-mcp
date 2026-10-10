@@ -993,9 +993,21 @@ extension AccessibilityChannel {
                 let exposed = entry.afterHeaders.filter { row in !entry.beforeHeaders.contains { CFEqual($0, row) } }
                 let members = exposed.compactMap(binding)
                 guard members.count == exposed.count else { return [] }
+                // A leaf that became a stack after the deciding pass cannot
+                // inherit its earlier direct-child qualifier. Reuse the actual
+                // captured metadata; only our held descendant gestures explain
+                // a closed stack becoming open during this acquisition.
+                let directChildren = entry.revealedStacksWereClosed && exposed.allSatisfy { header in
+                    guard let track = tracks.first(where: { $0.physicalBinding.map { CFEqual($0.header, header) } == true })
+                    else { return false }
+                    if acquired.contains(where: { CFEqual($0.target.header, header) }) {
+                        return track.isStackHeader == true && track.stackCollapsed == false
+                    }
+                    return track.isStackHeader == false
+                }
                 if !members.isEmpty {
                     observations.append(.init(stack: stack, exposed: members,
-                        revealedStacksWereClosed: entry.revealedStacksWereClosed))
+                        revealedStacksWereClosed: directChildren))
                 }
             }
             return observations

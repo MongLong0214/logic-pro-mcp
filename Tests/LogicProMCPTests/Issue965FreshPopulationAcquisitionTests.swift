@@ -670,7 +670,7 @@ struct Issue965FreshPopulationAcquisitionTests {
             verifyHierarchy: true, verifyDirectChildren: true)
     }
 
-    @Test(arguments: ["open", "boolean"])
+    @Test(arguments: ["open", "boolean", "late_open"])
     func registeredHierarchyDoesNotPromoteAnOpenOrUntypedChildStackToDirectMembership(child: String) async throws {
         try await observeStack(navigation: true, initiallyExpanded: false,
             verifyHierarchy: true, verifyDirectChildren: true, revealedStack: child)
@@ -1725,7 +1725,7 @@ struct Issue965FreshPopulationAcquisitionTests {
             #expect(!collapsed.contains { CFEqual($0, headers[1]) })
             #expect(!headers.contains { row in grandchildren.contains { CFEqual(row, $0) } })
         }
-        if let revealedStack {
+        if let revealedStack, revealedStack != "late_open" {
             fixture.builder.setRole(inner, kAXDisclosureTriangleRole as String)
             fixture.builder.setAttribute(inner, kAXValueAttribute as String,
                 revealedStack == "boolean" ? NSNumber(value: true) : NSNumber(value: 1))
@@ -1991,6 +1991,15 @@ struct Issue965FreshPopulationAcquisitionTests {
                     }
                     return true
                 }, observingAttribute: { element, attribute in
+                    if revealedStack == "late_open", fixture.events.count == 2,
+                       CFEqual(element, headers[1]), attribute == kAXTitleAttribute as String,
+                       fixture.reads.recorded.contains("revealed_disclosure_scan_completed"),
+                       !fixture.reads.recorded.contains("revealed_stack_opened_after_scan") {
+                        fixture.reads.record("revealed_stack_opened_after_scan")
+                        fixture.builder.setRole(inner, kAXDisclosureTriangleRole as String)
+                        fixture.builder.setAttribute(inner, kAXValueAttribute as String, 1)
+                        fixture.builder.setChildren(headers[1], [inner])
+                    }
                     if headerFocus == "radio_role_sample", fixture.events.count == 2,
                        CFEqual(element, passiveLabel), attribute == kAXRoleAttribute as String {
                         passiveRoleReads.record("role")
@@ -2161,6 +2170,11 @@ struct Issue965FreshPopulationAcquisitionTests {
                     fixture.reads.record("focus_read_missing_after_true_down")
                     return .success(nil)
                 }, observingChildren: { element in
+                    if revealedStack == "late_open", fixture.events.count == 2,
+                       CFEqual(element, headers[23]),
+                       Thread.callStackSymbols.contains(where: { $0.contains("disclosureStates") }) {
+                        fixture.reads.record("revealed_disclosure_scan_completed")
+                    }
                     if hiddenViewLoss, CFEqual(element, fixture.rail),
                        fixture.reads.recorded.contains("hidden_view_parent_read"),
                        !fixture.reads.recorded.contains("hidden_view_held_header_missing") {
@@ -2668,6 +2682,13 @@ struct Issue965FreshPopulationAcquisitionTests {
                 }
                 #expect(exposures.allSatisfy { $0["source"] as? String == "owned_disclosure_exposure" })
                 if verifyDirectChildren {
+                    if revealedStack == "late_open" {
+                        #expect(fixture.reads.recorded.contains("revealed_stack_opened_after_scan"))
+                        let isStack = try #require(rows[1]["is_stack_header"] as? Bool)
+                        let collapsed = try #require(rows[1]["stack_collapsed"] as? Bool)
+                        #expect(isStack)
+                        #expect(!collapsed)
+                    }
                     if revealedStack == nil {
                         #expect(exposures.allSatisfy {
                             $0["direct_child_track_refs"] as? [String] == $0["exposed_track_refs"] as? [String]
