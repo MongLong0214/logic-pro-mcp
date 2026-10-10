@@ -31,6 +31,8 @@ enum AXHelpers {
         /// Observation navigation must hit the retained disclosure, not just a coordinate.
         /// Omission refuses; an injected runtime never falls through to native hit testing.
         let elementAtPosition: (@Sendable (AXUIElement, CGPoint) -> Result<AXUIElement?, AXStatusError>)?
+        /// One fresh native request on one element; never a cached observation.
+        let attributeValuesResult: (@Sendable (AXUIElement, [String]) -> Result<[AnyObject], AXStatusError>)?
 
         /// Explicit memberwise initializer, replacing the compiler-synthesized one so
         /// `childrenResult` can default to `nil`. Every existing construction that omits
@@ -48,7 +50,8 @@ enum AXHelpers {
             childrenResult: (@Sendable (AXUIElement) -> Result<[AXUIElement], AXStatusError>)? = nil,
             attributeValueResult: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXStatusError>)? = nil,
             performActionResult: (@Sendable (AXUIElement, String) -> Result<Void, AXStatusError>)? = nil,
-            elementAtPosition: (@Sendable (AXUIElement, CGPoint) -> Result<AXUIElement?, AXStatusError>)? = nil
+            elementAtPosition: (@Sendable (AXUIElement, CGPoint) -> Result<AXUIElement?, AXStatusError>)? = nil,
+            attributeValuesResult: (@Sendable (AXUIElement, [String]) -> Result<[AnyObject], AXStatusError>)? = nil
         ) {
             self.axApp = axApp
             self.attributeValue = attributeValue
@@ -63,6 +66,7 @@ enum AXHelpers {
             self.attributeValueResult = attributeValueResult
             self.performActionResult = performActionResult
             self.elementAtPosition = elementAtPosition
+            self.attributeValuesResult = attributeValuesResult
         }
 
         static let production = Runtime(
@@ -152,6 +156,13 @@ enum AXHelpers {
                 let status = AXUIElementCopyElementAtPosition(app, Float(point.x), Float(point.y), &element)
                 guard status == .success else { return .failure(AXStatusError(raw: status.rawValue)) }
                 return .success(element)
+            },
+            attributeValuesResult: { element, attributes in
+                var values: CFArray?
+                let status = AXUIElementCopyMultipleAttributeValues(element, attributes as CFArray, [], &values)
+                guard status == .success else { return .failure(AXStatusError(raw: status.rawValue)) }
+                guard let values else { return .failure(AXStatusError(raw: AXError.cannotComplete.rawValue)) }
+                return .success(values as [AnyObject])
             }
         )
     }
@@ -230,6 +241,52 @@ enum AXHelpers {
             }
         }
         return .success(runtime.attributeValue(element, attribute).flatMap { $0 as? T })
+    }
+
+    /// Preserve each requested position and its native status. AXHelp is intentionally
+    /// forbidden: it must continue through its existing per-read ownership/editing guard.
+    static func getNonHelpAttributes(
+        _ element: AXUIElement, _ attributes: [String], runtime: Runtime = .production,
+        permittingRead: @Sendable () -> Bool = { true }
+    ) -> [Result<AnyObject?, AXStatusError>] {
+        func failures(_ error: AXStatusError) -> [Result<AnyObject?, AXStatusError>] {
+            attributes.map { _ in .failure(error) }
+        }
+        let unavailable = AXStatusError(raw: AXError.cannotComplete.rawValue)
+        guard !attributes.contains(kAXHelpAttribute as String) else {
+            return failures(AXStatusError(raw: AXError.illegalArgument.rawValue))
+        }
+        guard permittingRead() else { return failures(unavailable) }
+        guard let batch = runtime.attributeValuesResult else {
+            return attributes.map { attribute in
+                guard permittingRead() else { return .failure(unavailable) }
+                return getAttributeResult(element, attribute, runtime: runtime) as Result<AnyObject?, AXStatusError>
+            }
+        }
+        switch batch(element, attributes) {
+        case .failure(let error): return failures(error)
+        case .success(let values):
+            guard permittingRead(), values.count == attributes.count else { return failures(unavailable) }
+            return zip(attributes, values).map { attribute, value in
+                guard permittingRead() else { return .failure(unavailable) }
+                if CFGetTypeID(value) == CFNullGetTypeID() {
+                    // The native API may return CFNull instead of an error. Only an
+                    // actual individual status read can establish definitive absence.
+                    return getAttributeResult(element, attribute, runtime: runtime) as Result<AnyObject?, AXStatusError>
+                }
+                if CFGetTypeID(value) == AXValueGetTypeID() {
+                    let wrapped = unsafeBitCast(value, to: AXValue.self)
+                    if AXValueGetType(wrapped) == .axError {
+                        var error = AXError.success
+                        guard AXValueGetValue(wrapped, .axError, &error), error != .success else {
+                            return .failure(unavailable)
+                        }
+                        return .failure(AXStatusError(raw: error.rawValue))
+                    }
+                }
+                return .success(value)
+            }
+        }
     }
 
     /// The raw shape of an AX attribute that vends a collection of UI elements.
