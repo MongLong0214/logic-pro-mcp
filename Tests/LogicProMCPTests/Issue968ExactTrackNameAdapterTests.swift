@@ -559,6 +559,93 @@ struct Issue968ExactTrackNameAdapterTests {
         }
     }
 
+    @Test(arguments: ["committed", "newer_name", "peer_changed", "project_changed", "membership_changed", "gate_lost",
+                      "editing_elsewhere", "focus_unreadable"])
+    func canonicalCancellationCanRestoreASetterCommittedNameWithoutPostingIntoLostEditor(_ change: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = ExactNameFixture()
+                let (peerHeader, peer) = f.appendTrack(name: "Peer", selected: false)
+                f.passiveHeaderNameLabel = true
+                f.builder.setAttribute(f.field, kAXValueAttribute as String, NSNumber(value: 0))
+                f.builder.setAttributeSettable(f.field, kAXValueAttribute as String, false)
+                let bar = f.builder.element(968_230), trackMenu = f.builder.element(968_231)
+                let menu = f.builder.element(968_232), rename = f.builder.element(968_233)
+                let editor = f.builder.element(968_234)
+                f.renameMenuItem = rename
+                f.menuFocusedEditor = editor
+                f.builder.setAttribute(f.app, kAXMenuBarAttribute as String, bar)
+                for (element, role) in [(bar, kAXMenuBarRole), (trackMenu, kAXMenuBarItemRole),
+                                       (menu, kAXMenuRole), (rename, kAXMenuItemRole), (editor, kAXTextFieldRole)] {
+                    f.builder.setAttribute(element, kAXRoleAttribute as String, role as String)
+                }
+                f.builder.setAttribute(trackMenu, kAXTitleAttribute as String, AXLocalePolicy.trackMenuBar.canonical)
+                f.builder.setAttribute(rename, kAXTitleAttribute as String, AXLocalePolicy.renameTrackMenuItem.canonical)
+                f.builder.setAttribute(editor, kAXWindowAttribute as String, f.window)
+                f.builder.setAttribute(editor, kAXValueAttribute as String, "A")
+                f.builder.setAttributeSettable(editor, kAXValueAttribute as String, true)
+                f.builder.setChildren(bar, [trackMenu])
+                f.builder.setChildren(trackMenu, [menu])
+                f.builder.setChildren(menu, [rename])
+                let (capture, project, target, _, mirror) = try await f.coupledCapture(peerStripName: "Peer")
+                f.onRenameMenuRead = {
+                    f.builder.setAttribute(editor, kAXValueAttribute as String,
+                        f.builder.attributeValue(f.field, kAXDescriptionAttribute as String) as Any)
+                }
+                f.onMenuEditorValueSet = {
+                    // This models a successful actual String setter which commits the
+                    // original pair and closes its editor. It is not a channel ack-only.
+                    let name = f.builder.attributeValue(editor, kAXValueAttribute as String) as? String
+                    f.builder.setAttribute(f.field, kAXDescriptionAttribute as String, name as Any)
+                    f.builder.setAttribute(mirror, kAXValueAttribute as String, name as Any)
+                    f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String,
+                        change == "editing_elsewhere" ? peer : change == "focus_unreadable" ? f.builder.element(968_242) : f.rail)
+                    if change == "newer_name" {
+                        f.builder.setAttribute(f.field, kAXDescriptionAttribute as String, "Human")
+                        f.builder.setAttribute(mirror, kAXValueAttribute as String, "Human")
+                    }
+                    if change == "peer_changed" { f.builder.setAttribute(peer, kAXDescriptionAttribute as String, "Human peer") }
+                    if change == "project_changed" {
+                        f.builder.setAttribute(f.window, kAXDocumentAttribute as String, "file:///tmp/Other.logicx")
+                    }
+                    if change == "membership_changed" {
+                        let added = f.builder.element(968_240), addedName = f.builder.element(968_241)
+                        f.builder.setRole(added, kAXLayoutItemRole as String)
+                        f.builder.setAttribute(added, kAXSelectedAttribute as String, false)
+                        f.builder.setRole(addedName, kAXTextFieldRole as String)
+                        f.builder.setAttribute(addedName, kAXDescriptionAttribute as String, "Unexpected")
+                        f.builder.setChildren(addedName, [])
+                        f.builder.setChildren(added, [addedName])
+                        f.builder.setChildren(f.rail, [f.header, peerHeader, added])
+                    }
+                    if change == "gate_lost" { f.boundaryOwnership = false }
+                }
+                let approval = try await f.canonicalNameApproval(capture, project: project, target: target,
+                    desired: "Canonical", key: "cancel-auto-committed-name", journal: SagaJournal())
+                let runtime = f.runtime
+                let executor = ProductionSagaStepExecutor(router: f.router, cache: f.cache,
+                    targetRegistry: f.registry, dialogPresent: { false }, liveReadback: .unavailable,
+                    liveTrackName: { AXLogicProElements.trackName(at: $0, runtime: runtime) },
+                    liveTrackNames: { AXLogicProElements.trackNames(runtime: runtime) }, approvedSessionRepair: approval)
+                let saga = MutationSaga(targetRegistry: f.registry, approvedSessionRepair: approval, routeAvailable: { _ in true })
+                let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: { f.boundaryOwnership })
+                await OperationTraceContext.$current.withValue(context) {
+                    let outcome = await saga.execute(approval.plan, executor: executor,
+                        cancellationRequested: { !f.menuEditorValueWrites.isEmpty })
+                    #expect(outcome.state == (change == "committed" ? .fullyCompensated : .rollbackUncertain))
+                    #expect(f.menuEditorValueWrites == (change == "committed" ? ["Canonical", "A"] : ["Canonical"]))
+                    #expect(f.builder.attributeValue(f.field, kAXDescriptionAttribute as String) as? String
+                        == (change == "committed" ? "A" : change == "newer_name" ? "Human" : "Canonical"))
+                    #expect(f.builder.attributeValue(mirror, kAXValueAttribute as String) as? String
+                        == (change == "committed" ? "A" : change == "newer_name" ? "Human" : "Canonical"))
+                    #expect(!f.postedReturn && f.typedCodeUnits.isEmpty)
+                    #expect(f.builder.attributeValue(peer, kAXDescriptionAttribute as String) as? String
+                        == (change == "peer_changed" ? "Human peer" : "Peer"))
+                }
+            }
+        }
+    }
+
     @Test(arguments: ["different_name", "missing", "duplicate", "unrequested", "stale"])
     func canonicalNameOptInCannotReplaceMissingCapturedCoupling(_ observation: String) async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
