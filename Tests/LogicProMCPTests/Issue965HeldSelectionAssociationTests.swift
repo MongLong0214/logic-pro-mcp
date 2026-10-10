@@ -6,6 +6,14 @@ import Testing
 
 @Suite("#965 held selection association", .serialized)
 struct Issue965HeldSelectionAssociationTests {
+    @Test func publicDescriptionDistinguishesPhysicalPairsFromWholePopulation() {
+        let description = ProjectDispatcher.tool.description ?? ""
+        #expect(description.contains("held exclusive selection"), "Describe the implemented physical observation, not name/index joins")
+        #expect(description.contains("partial association pairs"), "A bounded pair witness is not complete population coverage")
+        #expect(!description.contains("actual track-to-strip associations remain unimplemented"), "The registered producer already publishes verified physical pairs")
+        #expect(description.contains("complete population remain unqualified"), "Do not turn a capability-description correction into a native/global acceptance claim")
+    }
+
     private final class Fixture: @unchecked Sendable {
         let builder = FakeAXRuntimeBuilder()
         let app: AXUIElement
