@@ -248,10 +248,17 @@ struct MixerDispatcher: OperationTraceDispatching {
                 routedParams["expected_current"] = expected.token
             }
             routedParams["index"] = String(index)
+            let outputAssociation: AccessibilityChannel.HeldSelectionAssociation.Pair?
+            if let physical, let resolvedReference, let targetRegistry {
+                outputAssociation = await cache.retainedMixerAssociation(reference: resolvedReference,
+                    source: physical, snapshot: await targetRegistry.currentSnapshot)
+            } else { outputAssociation = nil }
             let traceID = await startTraceIfEnabled(command: command)
             let routed = await withWriteBoundaryArmed(traceID) {
                 await AXMixerStripBinding.$current.withValue(physical) {
-                    await routedTextResult(router, operation: "mixer.set_output_verified", params: routedParams)
+                    await AXMixerStripBinding.$outputAssociation.withValue(outputAssociation) {
+                        await routedTextResult(router, operation: "mixer.set_output_verified", params: routedParams)
+                    }
                 }
             }
             let result = TargetRefResolver.addEvidence(

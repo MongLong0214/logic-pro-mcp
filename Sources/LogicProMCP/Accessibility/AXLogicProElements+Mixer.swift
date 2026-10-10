@@ -50,6 +50,7 @@ enum AXMixerStripBinding {
     }
 
     @TaskLocal static var current: Binding?
+    @TaskLocal static var outputAssociation: AccessibilityChannel.HeldSelectionAssociation.Pair?
 }
 
 /// The unique input control observed on one physical strip in a captured AX frame.
