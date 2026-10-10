@@ -234,6 +234,21 @@ struct Issue965TracksCoverageTests {
         #expect(row["type_source"] as? String == "header_aggregate")
     }
 
+    @Test func cachedAndDecodedRowsCannotImportFreshHideButtonEvidence() throws {
+        var track = liveTrack(0)
+        track.hideButtonReadback = true
+        let report = try encodedReport(makeCapture(tracks: [track], fileTrackCount: 1))
+        let row = try rows(section(report, "tracks"))[0]
+        #expect(row["hidden"] as? String == "unknown")
+        let encoded = try JSONEncoder().encode(track)
+        var object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
+        #expect(object["hideButtonReadback"] == nil)
+        object["hideButtonReadback"] = true
+        object["hidden"] = true
+        let decoded = try JSONDecoder().decode(TrackState.self, from: JSONSerialization.data(withJSONObject: object))
+        #expect(decoded.hideButtonReadback == nil)
+    }
+
     @Test func fileCountMismatchIsAReadbackGap() throws {
         let report = try encodedReport(makeCapture(tracks: liveTracks(19), fileTrackCount: 20))
         let tracks = try section(report, "tracks")

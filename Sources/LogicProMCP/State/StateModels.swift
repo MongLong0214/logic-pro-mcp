@@ -96,6 +96,8 @@ struct TrackState: Sendable, Codable, Identifiable {
     /// Typed AX read only. The legacy Boolean folds unreadable into false; this keeps
     /// that distinction for request observations without importing it from Codable/MCU.
     var selectionReadback: Bool? = nil
+    /// Fresh-request direct Hide checkbox read only; never imported from Codable/MCU.
+    var hideButtonReadback: Bool? = nil
     var volume: Double = 0.0   // dB, 0 = unity
     var pan: Double = 0.0      // -1.0 (L) to 1.0 (R)
     var automationMode: AutomationMode = .off

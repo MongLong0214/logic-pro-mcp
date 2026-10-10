@@ -669,7 +669,7 @@ enum SessionPopulationObservation {
         let typeSource = "header_aggregate"
         let isStackHeader: Bool?
         let stackCollapsed: Bool?
-        let hidden = "unknown"
+        var hidden: Bool? = nil
         let parent = "unknown"
         let depth = "unknown"
         let isSelected: Bool?
@@ -703,7 +703,8 @@ enum SessionPopulationObservation {
             try container.encode(typeSource, forKey: .typeSource)
             try container.encode(isStackHeader, forKey: .isStackHeader)
             try container.encode(stackCollapsed, forKey: .stackCollapsed)
-            try container.encode(hidden, forKey: .hidden)
+            if let hidden { try container.encode(hidden, forKey: .hidden) }
+            else { try container.encode("unknown", forKey: .hidden) }
             try container.encode(parent, forKey: .parent)
             try container.encode(depth, forKey: .depth)
             try container.encode(isSelected, forKey: .isSelected)
@@ -956,6 +957,7 @@ enum SessionPopulationObservation {
                 type: track.type.rawValue,
                 isStackHeader: track.isStackHeader,
                 stackCollapsed: track.stackCollapsed,
+                hidden: !moved && capture.freshPopulation?.stable == true ? track.hideButtonReadback : nil,
                 isSelected: track.selectionReadback,
                 placeholder: track.placeholder,
                 trackRef: reference

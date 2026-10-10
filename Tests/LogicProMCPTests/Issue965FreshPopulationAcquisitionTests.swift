@@ -190,6 +190,92 @@ struct Issue965FreshPopulationAcquisitionTests {
         #expect(fixture.reads.helpCount == 0)
     }
 
+    @Test(arguments: [false, true])
+    func registeredInspectionReadsTheActualHeaderHideButton(hidden: Bool) async throws {
+        let fixture = hiddenViewFixture(shown: true)
+        let button = fixture.builder.element(965_980)
+        fixture.builder.setRole(button, kAXCheckBoxRole as String)
+        fixture.builder.setAttribute(button, kAXDescriptionAttribute as String, "Hide Track")
+        fixture.builder.setAttribute(button, kAXValueAttribute as String, NSNumber(value: hidden ? 1 : 0))
+        fixture.builder.setAttribute(button, kAXParentAttribute as String, fixture.header)
+        fixture.builder.setAttribute(button, kAXWindowAttribute as String, fixture.window)
+        fixture.builder.setChildren(fixture.header, [button])
+        let result = try await inspect(fixture: fixture, domains: ["tracks"])
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+        let tracks = try #require(body["tracks"] as? [String: Any])
+        let rows = try #require(tracks["rows"] as? [[String: Any]])
+        let actual = try #require(rows.first?["hidden"] as? Bool)
+        #expect(actual == hidden)
+        #expect(tracks["coverage"] as? String == "partial")
+        #expect(fixture.events.recorded.isEmpty)
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+        #expect(fixture.reads.helpCount == 0)
+    }
+
+    @Test(arguments: ["missing", "duplicate", "fractional", "nonbinary", "wrong_role",
+                      "wrong_parent", "wrong_window", "extended_label", "unread_value"])
+    func registeredInspectionCannotInventAHeaderHideFlag(fault: String) async throws {
+        let fixture = hiddenViewFixture(shown: true)
+        let button = fixture.builder.element(965_980)
+        fixture.builder.setRole(button, kAXCheckBoxRole as String)
+        fixture.builder.setAttribute(button, kAXDescriptionAttribute as String, "Hide Track")
+        fixture.builder.setAttribute(button, kAXValueAttribute as String, NSNumber(value: 1))
+        fixture.builder.setAttribute(button, kAXParentAttribute as String, fixture.header)
+        fixture.builder.setAttribute(button, kAXWindowAttribute as String, fixture.window)
+        fixture.builder.setChildren(fixture.header, [button])
+        switch fault {
+        case "missing": fixture.builder.setChildren(fixture.header, [])
+        case "duplicate":
+            let other = fixture.builder.element(965_981)
+            fixture.builder.setRole(other, kAXCheckBoxRole as String)
+            fixture.builder.setAttribute(other, kAXDescriptionAttribute as String, "Hide Track")
+            fixture.builder.setChildren(fixture.header, [button, other])
+        case "fractional": fixture.builder.setAttribute(button, kAXValueAttribute as String, NSNumber(value: 0.5))
+        case "nonbinary": fixture.builder.setAttribute(button, kAXValueAttribute as String, NSNumber(value: 2))
+        case "wrong_role": fixture.builder.setRole(button, kAXButtonRole as String)
+        case "wrong_parent": fixture.builder.setAttribute(button, kAXParentAttribute as String, fixture.rail)
+        case "wrong_window": fixture.builder.setAttribute(button, kAXWindowAttribute as String, fixture.builder.element(965_982))
+        case "extended_label": fixture.builder.setAttribute(button, kAXDescriptionAttribute as String, "Hide Track elsewhere")
+        case "unread_value": fixture.builder.setAttribute(button, kAXValueAttribute as String, "unread")
+        default: Issue.record("unexpected hide flag fault")
+        }
+        let result = try await inspect(fixture: fixture, domains: ["tracks"])
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+        let tracks = try #require(body["tracks"] as? [String: Any])
+        let rows = try #require(tracks["rows"] as? [[String: Any]])
+        #expect(rows.first?["hidden"] as? String == "unknown")
+        #expect(fixture.events.recorded.isEmpty)
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+        #expect(fixture.reads.helpCount == 0)
+    }
+
+    @Test func registeredInspectionRejectsChangingHeaderHideValues() async throws {
+        let fixture = hiddenViewFixture(shown: true)
+        let button = fixture.builder.element(965_980)
+        fixture.builder.setRole(button, kAXCheckBoxRole as String)
+        fixture.builder.setAttribute(button, kAXDescriptionAttribute as String, "Hide Track")
+        fixture.builder.setAttribute(button, kAXValueAttribute as String, NSNumber(value: 1))
+        fixture.builder.setAttribute(button, kAXParentAttribute as String, fixture.header)
+        fixture.builder.setAttribute(button, kAXWindowAttribute as String, fixture.window)
+        fixture.builder.setChildren(fixture.header, [button])
+        let values = Reads()
+        let result = try await inspect(fixture: fixture, domains: ["tracks"], readingAttribute: { element, attribute in
+            guard CFEqual(element, button), attribute == kAXValueAttribute as String else { return nil }
+            values.record(attribute)
+            return .success(NSNumber(value: values.count.isMultiple(of: 2) ? 0 : 1))
+        })
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+        let tracks = try #require(body["tracks"] as? [String: Any])
+        let rows = try #require(tracks["rows"] as? [[String: Any]])
+        #expect(tracks["coverage"] as? String == "unstable")
+        #expect(tracks["reasons"] as? [String] == ["live_population_moved"])
+        #expect(rows.first?["hidden"] as? String == "unknown")
+        #expect(rows.first?["track_ref"] == nil)
+        #expect(values.count >= 6, "all bounded attempts must actually read the changing value")
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+        #expect(fixture.reads.helpCount == 0)
+    }
+
     private func hiddenViewFixture(shown: Bool, fault: String? = nil) -> Fixture {
         let fixture = Fixture()
         let split = fixture.builder.element(965_970)
