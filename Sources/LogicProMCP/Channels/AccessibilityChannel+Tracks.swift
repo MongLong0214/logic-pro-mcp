@@ -2493,6 +2493,13 @@ extension AccessibilityChannel {
         ) else {
             return .unreadable(.focusedElement)
         }
+        return readLogicKeyboardFocus(of: focused, runtime: runtime)
+    }
+
+    /// Classify this retained focus witness, not a second app-focused lookup.
+    static func readLogicKeyboardFocus(
+        of focused: AXUIElement, runtime: AXLogicProElements.Runtime
+    ) -> LogicKeyboardFocus {
         guard let role = AXHelpers.getRole(focused, runtime: runtime.ax) else {
             return .unreadable(.role)
         }

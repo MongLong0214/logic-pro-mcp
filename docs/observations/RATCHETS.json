@@ -94,7 +94,9 @@
       "2026-10-05-1084-ko-KR-positioning-diagnostic-preflight",
       "2026-10-05-1084-readonly-dialog-modality",
       "2026-10-10-exact-adapter-passive-name-editor",
-      "2026-10-10-exact-track-name-scalar-roundtrip"
+      "2026-10-10-exact-track-name-scalar-roundtrip",
+      "2026-10-10-exact-mixer-name-owned-inverse",
+      "2026-10-10-physical-mixer-name-scalar-roundtrip"
     ],
     "records_from_a_superseded_build": [
       "2026-09-23-972-en-US-plugin-instance-identity",
@@ -162,7 +164,9 @@
       "2026-09-15-an-auxiliary-window-steals-the-track-menu-and-that-is-the-sweep-only-failure",
       "2026-09-15-german-logic-blocks-in-the-new-track-sheet-because-three-labelsets-never-had-a-german-reading",
       "2026-10-10-exact-adapter-passive-name-editor",
-      "2026-10-10-exact-track-name-scalar-roundtrip"
+      "2026-10-10-exact-track-name-scalar-roundtrip",
+      "2026-10-10-exact-mixer-name-owned-inverse",
+      "2026-10-10-physical-mixer-name-scalar-roundtrip"
     ],
     "schema_v1_records": [
       "2026-09-03-sort-settle-witness-accepts-prescroll-order",
@@ -443,17 +447,21 @@
       "date": "2026-10-10",
       "members": [
         "2026-10-10-exact-adapter-passive-name-editor",
-        "2026-10-10-exact-track-name-scalar-roundtrip"
+        "2026-10-10-exact-track-name-scalar-roundtrip",
+        "2026-10-10-exact-mixer-name-owned-inverse",
+        "2026-10-10-physical-mixer-name-scalar-roundtrip"
       ],
-      "reason": "#968: only these two new partial scalar/adapter observations require an exclusively owned stopped development fixture, actual issued physical references, live name writes and independent UI comparison. The recorded standalone drivers are not committed headless replays. This admits exactly the two manual replay gaps, not a coupled naming-plan, protected-state or release qualification. Historical rationale retained from 2026-10-05: #1107: these four actual Korean/English observations require an owned disposable Logic project, independently named Arrange/Mixer targets, occupied-editor reads and inverse writes, safe empty-slot insertion, locale relaunch, and backup restoration. Their live GUI preparation and restoration are not a headless CI replay, so each retains its explicit manual reverify steps. The committed arrange-binding and terminal-guard-repair evidence receipts preserve the distinct immutable binaries, first-refusal/retry outcomes, failed description reads and restored projections. All four verdicts remain partial on Logic 12.3 build 6674; this records the manual-replay gap, not E-clean or Logic 12.4 qualification. #1084: the added Korean positioning smoke requires an exclusively owned disposable Logic fixture and live dialog/transport observation, so it retains manual replay steps. Both actual requests refused before the ownership gate; its inconclusive receipt establishes neither native ownership diagnostics nor a remedy on Logic 12.4. #1084 read-only modality: the new historical structural record needs an exclusive read-only Logic lane and a transient AXWindows/PID/modality/children snapshot, about 2 minutes. Its private historical probe is not a committed headless replay; only this new record is added to the manual set. Failed descendant and sheet readings remain unknown, later installed metadata is not atomic host binding, and no operation or release qualification is granted."
+      "reason": "#968: the two additional partial physical Mixer writer/adapter records require an exclusively owned stopped fixture, actual issued physical references, live editor acquisition/name writes and independent UI comparison. Their standalone development drivers are not committed headless replays. This admits exactly these two additional manual-reverification gaps, not coupled naming, full preservation, public planner or clean-release qualification. Prior rationale retained: #968: only these two new partial scalar/adapter observations require an exclusively owned stopped development fixture, actual issued physical references, live name writes and independent UI comparison. The recorded standalone drivers are not committed headless replays. This admits exactly the two manual replay gaps, not a coupled naming-plan, protected-state or release qualification. Historical rationale retained from 2026-10-05: #1107: these four actual Korean/English observations require an owned disposable Logic project, independently named Arrange/Mixer targets, occupied-editor reads and inverse writes, safe empty-slot insertion, locale relaunch, and backup restoration. Their live GUI preparation and restoration are not a headless CI replay, so each retains its explicit manual reverify steps. The committed arrange-binding and terminal-guard-repair evidence receipts preserve the distinct immutable binaries, first-refusal/retry outcomes, failed description reads and restored projections. All four verdicts remain partial on Logic 12.3 build 6674; this records the manual-replay gap, not E-clean or Logic 12.4 qualification. #1084: the added Korean positioning smoke requires an exclusively owned disposable Logic fixture and live dialog/transport observation, so it retains manual replay steps. Both actual requests refused before the ownership gate; its inconclusive receipt establishes neither native ownership diagnostics nor a remedy on Logic 12.4. #1084 read-only modality: the new historical structural record needs an exclusive read-only Logic lane and a transient AXWindows/PID/modality/children snapshot, about 2 minutes. Its private historical probe is not a committed headless replay; only this new record is added to the manual set. Failed descendant and sheet readings remain unknown, later installed metadata is not atomic host binding, and no operation or release qualification is granted."
     },
     "records_without_evidence": {
       "date": "2026-10-10",
       "members": [
         "2026-10-10-exact-adapter-passive-name-editor",
-        "2026-10-10-exact-track-name-scalar-roundtrip"
+        "2026-10-10-exact-track-name-scalar-roundtrip",
+        "2026-10-10-exact-mixer-name-owned-inverse",
+        "2026-10-10-physical-mixer-name-scalar-roundtrip"
       ],
-      "reason": "#968: only these two new partial observations carry exact raw and executable digests but no committed external evidence file. Their private native bytes are not public replay artifacts; the observations remain bounded transcriptions. This records exactly the two evidence-file gaps rather than inventing a public file or granting preservation/plan qualification. Historical rationale retained from 2026-09-19: The same eight. None cites an evidence file: each was measured by reading AX or a preference file in the moment and the reading is transcribed into `observations` rather than dumped to a census. That is a real gap -- a transcription cannot be re-checked against bytes -- and it is recorded as one rather than closed by inventing a file."
+      "reason": "#968: the two additional partial Mixer records retain raw/executable digests but no committed external evidence file. Private native receipts remain bounded transcriptions, not public replay artifacts. This declares exactly these two additional evidence-file gaps and does not invent evidence or promote semantic acceptance. Prior rationale retained: #968: only these two new partial observations carry exact raw and executable digests but no committed external evidence file. Their private native bytes are not public replay artifacts; the observations remain bounded transcriptions. This records exactly the two evidence-file gaps rather than inventing a public file or granting preservation/plan qualification. Historical rationale retained from 2026-09-19: The same eight. None cites an evidence file: each was measured by reading AX or a preference file in the moment and the reading is transcribed into `observations` rather than dumped to a census. That is a real gap -- a transcription cannot be re-checked against bytes -- and it is recorded as one rather than closed by inventing a file."
     },
     "surfaces_without_records": {
       "date": "2026-09-18",
