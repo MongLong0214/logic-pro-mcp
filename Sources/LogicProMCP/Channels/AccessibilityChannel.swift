@@ -400,6 +400,7 @@ actor AccessibilityChannel: Channel {
                 var checked: [SessionPopulationObservation.HeldCheckedOutput] = []
                 for strip in population.strips ?? [] {
                     guard !stop(), await navigationReferenceIsCurrent() else {
+                        try SessionPopulationObservation.requireOwnedAcquisition()
                         throw SessionPopulationObservation.AcquisitionError.ownershipLost
                     }
                     // This bounded projection publishes only checked bus edges. A
