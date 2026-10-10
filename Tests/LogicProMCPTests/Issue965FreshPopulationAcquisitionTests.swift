@@ -1146,7 +1146,7 @@ struct Issue965FreshPopulationAcquisitionTests {
             headerFocus: headerFocus, focusRestoration: "restored")
     }
 
-    @Test(arguments: ["radio_foreign", "radio_replacement", "radio_ambiguous", "radio_ambiguous_late", "radio_editable", "radio_changed", "radio_unknown", "radio_role"])
+    @Test(arguments: ["radio_foreign", "radio_replacement", "radio_ambiguous", "radio_ambiguous_late", "radio_editable", "radio_changed", "radio_unknown", "radio_role", "radio_role_sample"])
     func registeredStackDoesNotAdoptUnownedOrChangedRadioFocus(headerFocus: String) async throws {
         try await observeStack(navigation: true, initiallyExpanded: false, headerFocus: headerFocus)
     }
@@ -1521,6 +1521,7 @@ struct Issue965FreshPopulationAcquisitionTests {
         }
         let collapsed = [headers[0]] + Array(headers[24...])
         let passiveLabel = fixture.builder.element(965_240)
+        let passiveRoleReads = Reads()
         let otherLabel = fixture.builder.element(965_241)
         let workspace = fixture.builder.element(965_242)
         let shownLabel = fixture.builder.element(965_243)
@@ -1839,6 +1840,14 @@ struct Issue965FreshPopulationAcquisitionTests {
                     }
                     return true
                 }, observingAttribute: { element, attribute in
+                    if headerFocus == "radio_role_sample", fixture.events.count == 2,
+                       CFEqual(element, passiveLabel), attribute == kAXRoleAttribute as String {
+                        passiveRoleReads.record("role")
+                        let changed = passiveRoleReads.count == 2
+                        fixture.builder.setRole(passiveLabel, changed ? kAXTextFieldRole as String : kAXRadioButtonRole as String)
+                        fixture.builder.setAttribute(passiveLabel, kAXValueAttribute as String, changed ? 0 : 1)
+                        if changed { fixture.reads.record("passive_classifier_role_changed") }
+                    }
                     if nested, fixture.events.count == (hiddenView ? 9 : 8),
                        CFEqual(element, fixture.app), attribute == kAXFocusedUIElementAttribute as String {
                         focusBoundaryReads.record("focus")
@@ -2349,6 +2358,9 @@ struct Issue965FreshPopulationAcquisitionTests {
             return
         }
         if let headerFocus {
+            if headerFocus == "radio_role_sample" {
+                #expect(fixture.reads.recorded.contains("passive_classifier_role_changed"))
+            }
             let passive = headerFocus == "passive"
             #expect(fixture.events.recorded == (passive
                 ? ["disclosure_down", "disclosure_up", "disclosure_down", "disclosure_up"]

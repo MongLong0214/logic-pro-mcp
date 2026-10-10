@@ -609,8 +609,9 @@ extension AccessibilityChannel {
             }
         }
 
-        private func isPassiveFocusControl(_ field: AXUIElement) -> Bool {
+        private func isPassiveFocusControl(_ field: AXUIElement, expectedRole: String) -> Bool {
             guard let role = AXHelpers.getRole(field, runtime: logic.ax),
+                  role == expectedRole,
                   role == kAXTextFieldRole as String || role == kAXRadioButtonRole as String,
                   AXHelpers.isAttributeSettable(field, kAXValueAttribute as String, runtime: logic.ax) == false,
                   case .success(.some(let value)) = AXHelpers.getAttributeResult(
@@ -631,7 +632,7 @@ extension AccessibilityChannel {
                 guard let role = AXHelpers.getRole(child, runtime: logic.ax) else { return [] }
                 if role == kAXTextFieldRole as String || role == kAXRadioButtonRole as String {
                     guard roles.insert(role).inserted else { return [] }
-                    if isPassiveFocusControl(child) { controls.append(.init(element: child, role: role)) }
+                    if isPassiveFocusControl(child, expectedRole: role) { controls.append(.init(element: child, role: role)) }
                 }
             }
             return controls
@@ -659,7 +660,8 @@ extension AccessibilityChannel {
                   same(rows.filter { row in originalHeaders.contains { CFEqual($0, row) } }, originalHeaders),
                   let currentSelection = Self.selectedHeaders(rows, ax: logic.ax), same(currentSelection, selected),
                   completed.controls.filter({ CFEqual($0.element, focus) }).count == 1,
-                  AXHelpers.getRole(focus, runtime: logic.ax) == held.role, isPassiveFocusControl(focus),
+                  AXHelpers.getRole(focus, runtime: logic.ax) == held.role,
+                  isPassiveFocusControl(focus, expectedRole: held.role),
                   case .success(let children) = AXHelpers.childrenResult(completed.target.header, runtime: logic.ax),
                   children.filter({ CFEqual($0, focus) }).count == 1,
                   passiveFocusControls(completed.target).contains(where: { CFEqual($0.element, focus) && $0.role == held.role }),
