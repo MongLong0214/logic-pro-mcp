@@ -4,6 +4,11 @@ import MCP
 /// #968 N1: one exact-local Arrange name action, not a coupled naming plan executor.
 /// The canonical repair planner's preservation-footprint blocker remains authoritative.
 enum ExactTrackNameAdapter {
+    @TaskLocal private static var coupledWriteBoundary: (@Sendable (Bool) -> Bool)?
+
+    static func coupledWritePermitted(allowOwnPreview: Bool = false) -> Bool {
+        coupledWriteBoundary?(allowOwnPreview) ?? true
+    }
     struct Action: Sendable {
         let projectReference: TargetReference
         let targetReference: TargetReference
@@ -27,6 +32,7 @@ enum ExactTrackNameAdapter {
         fileprivate let written: String
         fileprivate let registry: TargetRegistry
         fileprivate let cache: StateCache
+        fileprivate let mirror: CoupledMirror?
     }
 
     struct Receipt: Sendable {
@@ -52,18 +58,112 @@ enum ExactTrackNameAdapter {
         liveTrackName: @escaping @Sendable (Int) -> String?,
         liveTrackNames: @escaping @Sendable () -> [Int: String]?
     ) async -> Receipt {
+        await applyChecked(action, router: router, cache: cache, registry: registry,
+            liveTrackName: liveTrackName, liveTrackNames: liveTrackNames, mirror: nil)
+    }
+
+    /// One producer-observed track/strip pair. This is additive local coupling
+    /// qualification, not the canonical planner's complete preservation footprint.
+    /// A decoded report, equal names or matching ordinals cannot supply the pair.
+    static func applyCoupled(
+        _ action: Action, capture: SessionPopulationObservation.Capture,
+        router: ChannelRouter, cache: StateCache, registry: TargetRegistry,
+        liveTrackName: @escaping @Sendable (Int) -> String?,
+        liveTrackNames: @escaping @Sendable () -> [Int: String]?
+    ) async -> Receipt {
+        func reject() -> Receipt {
+            .init(status: .rejectedBeforeWrite, before: nil, after: nil, survivingReference: nil, inverse: nil,
+                result: TargetRefResolver.staleTargetReferenceResult(action.targetReference.rawValue, operation: "track.rename"))
+        }
+        guard capture.before == capture.after, capture.referencesEnabled, !capture.referencesStale,
+              let fresh = capture.freshPopulation, fresh.stable, fresh.uiEffects.restoration == "restored",
+              let snapshot = capture.targetSnapshot, await registry.currentSnapshot == snapshot,
+              case .issued(let project)? = capture.projectIssuance, project == action.projectReference,
+              let target = await registry.resolve(action.targetReference), let source = target.physicalTrack,
+              target.kind == .track else { return reject() }
+        let pairs = fresh.selectionAssociations.filter { $0.track.matches(source) }
+        guard pairs.count == 1, let pair = pairs.first,
+              fresh.selectionAssociations.filter({ $0.strip.matches(pair.strip) }).count == 1,
+              capture.tracks.filter({ $0.physicalBinding?.matches(source) == true }).count == 1 else { return reject() }
+        let rows = capture.channelStrips.indices.filter { capture.channelStrips[$0].physicalBinding?.matches(pair.strip) == true }
+        guard rows.count == 1, let row = rows.first, let stripRef = capture.mixerReference(at: row),
+              capture.channelStrips[row].name?.utf8.elementsEqual(action.expectedBefore.utf8) == true else { return reject() }
+        let mirror = CoupledMirror(pair: pair, reference: stripRef, snapshot: snapshot)
+        return await applyChecked(action, router: router, cache: cache, registry: registry,
+            liveTrackName: liveTrackName, liveTrackNames: liveTrackNames, mirror: mirror)
+    }
+
+    fileprivate struct CoupledMirror: Sendable {
+        let pair: AccessibilityChannel.HeldSelectionAssociation.Pair
+        let reference: TargetReference
+        let snapshot: TargetRegistrySnapshot
+
+        func namesStillHeld(before: String, after: String? = nil) -> Bool {
+            let guardHelp = AXHelpers.HelpReadGuard(allowHelpReads: false, stop: { !operationPermitted() })
+            return AXHelpers.HelpReadGuard.$current.withValue(guardHelp) {
+                func matches(_ name: String) -> Bool {
+                    name.utf8.elementsEqual(before.utf8) || after.map { name.utf8.elementsEqual($0.utf8) } == true
+                }
+                guard operationPermitted(), pair.track.currentIndex() != nil,
+                      pair.strip.currentIndex(runtime: pair.track.runtime) != nil,
+                      case .success(.some(let stripName)) = AXPluginInstanceIdentity.stripNameResult(pair.strip.strip,
+                        runtime: pair.track.runtime.ax), matches(stripName),
+                      case .success(.some(let trackName)) = AXValueExtractors.extractTrackNameResult(
+                        from: pair.track.header, runtime: pair.track.runtime.ax), matches(trackName),
+                      pair.strip.currentIndex(runtime: pair.track.runtime) != nil,
+                      pair.track.currentIndex() != nil, operationPermitted() else { return false }
+                return true
+            }
+        }
+
+        func isCurrent(name: String, project: TargetReference, target: TargetReference,
+                       registry: TargetRegistry) async -> Bool {
+            guard operationPermitted(), await registry.currentSnapshot == snapshot,
+                  let projectBinding = await registry.resolveCurrentProject(project),
+                  let path = projectBinding.descriptor.projectFilePath,
+                  pair.strip.projectPath?.utf8.elementsEqual(path.utf8) == true,
+                  pair.track.document.utf8.elementsEqual(pair.strip.document.utf8),
+                  await registry.resolve(target)?.physicalTrack?.matches(pair.track) == true,
+                  await registry.resolve(reference)?.physicalMixerStrip?.matches(pair.strip) == true else { return false }
+            let read = namesStillHeld(before: name)
+            guard read, await registry.currentSnapshot == snapshot,
+                  await registry.resolveCurrentProject(project)?.descriptor == projectBinding.descriptor,
+                  // Actor bookends cannot replace the later native pair read.
+                  namesStillHeld(before: name), operationPermitted() else { return false }
+            return true
+        }
+    }
+
+    private static func applyChecked(
+        _ action: Action, router: ChannelRouter, cache: StateCache, registry: TargetRegistry,
+        liveTrackName: @escaping @Sendable (Int) -> String?,
+        liveTrackNames: @escaping @Sendable () -> [Int: String]?, mirror: CoupledMirror?
+    ) async -> Receipt {
         if let failure = TrackDispatcher.renameNameFailure(action.desiredAfter) {
             return Receipt(status: .rejectedBeforeWrite, before: nil, after: nil,
                            survivingReference: nil, inverse: nil, result: failure)
         }
-        let result = await TrackDispatcher.handle(
+        if let mirror, !(await mirror.isCurrent(name: action.expectedBefore, project: action.projectReference,
+                                               target: action.targetReference, registry: registry)) {
+            return .init(status: .rejectedBeforeWrite, before: nil, after: nil, survivingReference: nil, inverse: nil,
+                result: TargetRefResolver.staleTargetReferenceResult(action.targetReference.rawValue, operation: "track.rename"))
+        }
+        let prewrite: (@Sendable (Bool) -> Bool)?
+        if let mirror {
+            prewrite = { allowPreview in
+                mirror.namesStillHeld(before: action.expectedBefore, after: allowPreview ? action.desiredAfter : nil)
+            }
+        } else { prewrite = nil }
+        let result = await $coupledWriteBoundary.withValue(prewrite) {
+            await TrackDispatcher.handle(
             command: "rename",
             params: ["project_ref": .string(action.projectReference.rawValue),
                      "target_ref": .string(action.targetReference.rawValue),
                      "expected_name": .string(action.expectedBefore), "name": .string(action.desiredAfter)],
             router: router, cache: cache, targetRegistry: registry,
             liveTrackName: liveTrackName, liveTrackNames: liveTrackNames
-        )
+            )
+        }
         let body = decodedJSONObject(sharedText(result))
         let before = body?["before"] as? String
         let after = body?["observed"] as? String
@@ -106,8 +206,10 @@ enum ExactTrackNameAdapter {
                   currentName.utf8.elementsEqual(after.utf8),
                   source.currentIndex() != nil else { return unverified() }
         }
+        if let mirror, !(await mirror.isCurrent(name: after, project: action.projectReference,
+                                               target: action.targetReference, registry: registry)) { return unverified() }
         let inverse = wrote ? OwnedInverse(project: action.projectReference, target: action.targetReference,
-                                          before: before, written: after, registry: registry, cache: cache) : nil
+                                          before: before, written: after, registry: registry, cache: cache, mirror: mirror) : nil
         return Receipt(status: wrote ? .applied : .alreadySatisfied, before: before, after: after,
                        survivingReference: action.targetReference, inverse: inverse, result: result)
     }
@@ -117,10 +219,10 @@ enum ExactTrackNameAdapter {
         liveTrackName: @escaping @Sendable (Int) -> String?,
         liveTrackNames: @escaping @Sendable () -> [Int: String]?
     ) async -> Receipt {
-        await apply(Action(projectReference: proof.project, targetReference: proof.target,
+        await applyChecked(Action(projectReference: proof.project, targetReference: proof.target,
                            expectedBefore: proof.written, desiredAfter: proof.before),
                     router: router, cache: proof.cache, registry: proof.registry,
-                    liveTrackName: liveTrackName, liveTrackNames: liveTrackNames)
+                    liveTrackName: liveTrackName, liveTrackNames: liveTrackNames, mirror: proof.mirror)
     }
 
     private static func sharedText(_ result: CallTool.Result) -> String {
