@@ -670,6 +670,43 @@ struct Issue968ExactTrackNameAdapterTests {
         }
     }
 
+    @Test(arguments: ["track_before", "track_after", "strip_before", "strip_after"])
+    func aCoupledNameCannotCertifyAnUnexpectedNewPhysicalMember(phase: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (capture, project, target, strip, mirror) = try await f.coupledCapture()
+            let mixer: AXUIElement = try #require(AXHelpers.getAttribute(strip, kAXParentAttribute as String, runtime: f.runtime.ax))
+            let added = f.builder.element(968_180)
+            let addedName = f.builder.element(968_181)
+            f.builder.setRole(added, kAXLayoutItemRole as String)
+            f.builder.setRole(addedName, kAXTextFieldRole as String)
+            f.builder.setAttribute(addedName, kAXDescriptionAttribute as String, phase.hasPrefix("track") ? "New track" : "name")
+            f.builder.setAttribute(addedName, kAXValueAttribute as String, "New strip")
+            f.builder.setChildren(addedName, [])
+            f.builder.setChildren(added, [addedName])
+            let addMember: @Sendable () -> Void = {
+                if phase.hasPrefix("track") { f.builder.setChildren(f.rail, [f.header, added]) }
+                else { f.builder.setChildren(mixer, [strip, added]) }
+            }
+            if phase.hasSuffix("before") { addMember() }
+            else {
+                f.onConfirm = {
+                    f.builder.setAttribute(mirror, kAXValueAttribute as String,
+                        f.builder.attributeValue(f.field, kAXDescriptionAttribute as String))
+                    addMember()
+                }
+            }
+            let result = await f.applyCoupled(capture, project: project, target: target)
+            #expect(result.status == (phase.hasSuffix("before") ? .rejectedBeforeWrite : .attemptedUnverified))
+            #expect(result.inverse == nil)
+            #expect(result.survivingReference == nil)
+            #expect(f.writes == (phase.hasSuffix("before") ? [] : ["C"]))
+            let members = try #require(AXLogicProElements.childrenIfRead(phase.hasPrefix("track") ? f.rail : mixer,
+                runtime: f.runtime.ax))
+            #expect(members.contains { CFEqual($0, added) })
+        }
+    }
+
     @Test func inversePeerBaselineDoesNotReadFocusMovingHelpInTheMixerCensus() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let f = ExactNameFixture()
