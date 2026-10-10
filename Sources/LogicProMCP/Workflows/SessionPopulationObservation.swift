@@ -42,6 +42,13 @@ enum SessionPopulationObservation {
         /// These are historical observations, not current target authority or absolute
         /// depths. Direct children additionally require observed closed descendant stacks.
         var disclosureExposures: [HeldDisclosureExposure] = []
+        /// Request-held menu observations, never reconstructed from cached labels or JSON.
+        var checkedOutputs: [HeldCheckedOutput] = []
+    }
+
+    struct HeldCheckedOutput: Sendable {
+        let source: AXMixerStripBinding.Binding
+        let assignment: OutputAssignment
     }
 
     struct HeldDisclosureExposure: Sendable {
@@ -863,12 +870,13 @@ enum SessionPopulationObservation {
     }
 
     /// The routing domain (#291): existing coverage under `graph` stays wire-compatible;
-    /// additive `nodes` carries the same publication's actual source endpoints.
+    /// Additive nodes and edges carry the same capture-bound publication.
     struct RoutingSection: Encodable, Sendable {
         let coverage: Coverage
         let reasons: [Reason]
         let graph: RoutingCoverage
         let nodes: [RoutingNode]
+        let edges: [RoutingEdge]
         let snapshotId: String
 
         enum CodingKeys: String, CodingKey {
@@ -876,6 +884,7 @@ enum SessionPopulationObservation {
             case reasons
             case graph
             case nodes
+            case edges
             case snapshotId = "snapshot_id"
         }
     }
@@ -1294,6 +1303,7 @@ enum SessionPopulationObservation {
             reasons: reasons,
             graph: graph.coverage,
             nodes: graph.nodes,
+            edges: graph.edges,
             snapshotId: graph.snapshotId
         )
     }
