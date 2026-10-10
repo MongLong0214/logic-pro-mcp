@@ -908,6 +908,19 @@ extension AccessibilityChannel {
 
         private func permitsHeldFocusRestoration() -> Bool {
             if permitsHeldPassiveLabelFocus() { return true }
+            // The final paired inverse can leave focus on its exact disclosure,
+            // not a label. Admit only that completed, accepted, collapsed target
+            // for restoring the original workspace; owned() and the final action
+            // boundary still verify the full scope before the focus setter.
+            if !releaseUnverified, restorationStarted, acquired.isEmpty, hiddenControl == nil,
+               let completed = completedClickFocus,
+               CFEqual(completed.target.header, header), CFEqual(completed.target.disclosure, disclosure),
+               let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
+               CFEqual(focus, observedFocus), CFEqual(focus, disclosure),
+               AXHelpers.getRole(focus, runtime: logic.ax) == kAXDisclosureTriangleRole as String,
+               AXLogicProElements.heldTrackDisclosureValue(header: header, disclosure: disclosure, runtime: logic) == 0,
+               let finalFocus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
+               CFEqual(finalFocus, focus) { return true }
             guard let hiddenControl, completedClickFocus.map({ CFEqual($0.target.disclosure, hiddenControl) }) == true,
                   let current: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax)
             else { return false }
