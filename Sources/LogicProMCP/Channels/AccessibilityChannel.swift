@@ -356,7 +356,10 @@ actor AccessibilityChannel: Channel {
                 window: window, runtime: runtime.logicRuntime,
                 expectedProject: navigationProject, requiresProjectReference: request.projectRef != nil,
                 referenceIsCurrent: navigationReferenceIsCurrent)
-            await navigation?.reveal(stoppingWhen: stop)
+            // An eligible association already holds the exposed Mixer and its
+            // original physical path. A second whole-window discovery is not a
+            // reveal prerequisite; later population and custody checks remain.
+            if association == nil { await navigation?.reveal(stoppingWhen: stop) }
         }
         if request.allowUINavigation, request.needsTracks, runtime.canPostEvents(),
            let mouse = runtime.observationMouseRuntime,
