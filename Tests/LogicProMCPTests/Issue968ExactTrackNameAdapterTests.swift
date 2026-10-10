@@ -53,6 +53,7 @@ private final class ExactNameFixture: @unchecked Sendable {
     var legacyHeaderRoleObservations = 0
     var onLegacyHeaderRoleRead: (@Sendable () -> Void)?
     var boundaryCancellation = false
+    var adapterPermissionReads = 0
     var passiveHeaderNameLabel = false
     var menuEditorValueWrites: [String] = []
     var menuEditorSetterAcknowledgesOnly = false
@@ -335,6 +336,52 @@ private actor ExactNameChannel: Channel {
 
 @Suite("#968 exact-local track naming adapter")
 struct Issue968ExactTrackNameAdapterTests {
+    @Test func losingTheFinalAdapterPermissionCannotReturnTheWritersEarlierStateA() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            // Learn the last adapter check from the same healthy production path,
+            // then lose ownership exactly there, after the writer has committed.
+            let healthy = ExactNameFixture()
+            let (healthyProject, healthyTarget) = try await healthy.prepare(typedProducer: true)
+            let healthyContext = OperationTraceContext(ownsGate: {
+                healthy.adapterPermissionReads += 1
+                return true
+            })
+            let confirmed = await OperationTraceContext.$current.withValue(healthyContext) {
+                await healthy.apply(project: healthyProject, target: healthyTarget, before: "A", after: "C")
+            }
+            #expect(confirmed.status == .applied)
+            #expect(confirmed.inverse != nil)
+            let finalCheck = healthy.adapterPermissionReads
+            #expect(finalCheck > 0)
+
+            let lost = ExactNameFixture()
+            let (project, target) = try await lost.prepare(typedProducer: true)
+            let lostContext = OperationTraceContext(ownsGate: {
+                lost.adapterPermissionReads += 1
+                return lost.adapterPermissionReads < finalCheck
+            })
+            let receipt = await OperationTraceContext.$current.withValue(lostContext) {
+                await lost.apply(project: project, target: target, before: "A", after: "C")
+            }
+            #expect(lost.adapterPermissionReads == finalCheck)
+            #expect(receipt.status == .attemptedUnverified)
+            #expect(receipt.inverse == nil)
+            #expect(receipt.survivingReference == nil)
+            #expect(lost.writes == ["C"])
+            #expect(receipt.before == "A")
+            #expect(receipt.after == "C")
+            let body = try #require(sharedJSONObject(sharedToolText(receipt.result)))
+            #expect(body["state"] as? String == "B")
+            let verified = try #require(body["verified"] as? Bool)
+            #expect(!verified)
+            #expect(body["reason"] as? String == "readback_unavailable")
+            let attempted = try #require(body["write_attempted"] as? Bool)
+            #expect(attempted)
+            let isError = try #require(receipt.result.isError)
+            #expect(isError)
+        }
+    }
+
     @Test(arguments: ["C", "B"])
     func staleBeforeAfterVerifiedRenameOnSameReferenceRefusesBeforeWrite(desired: String) async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {

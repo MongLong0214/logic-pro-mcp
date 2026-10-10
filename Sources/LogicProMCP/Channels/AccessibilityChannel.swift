@@ -976,6 +976,11 @@ actor AccessibilityChannel: Channel {
             return runtime.setTrackToggle(params, "Record")
         case "track.rename":
             return runtime.renameTrack(params)
+        case "mixer.rename_exact":
+            // Internal #968 primitive only. A caller must retain physical Mixer
+            // custody; no public command, index fallback or new registry is added.
+            return Self.renamePhysicalMixerStrip(params: params, runtime: runtime.logicRuntime,
+                mouse: runtime.observationMouseRuntime ?? .production, canPostEvents: runtime.canPostEvents)
         case "track.sort_verified":
             return runtime.sortTracks(params)
         case "track.set_color":
