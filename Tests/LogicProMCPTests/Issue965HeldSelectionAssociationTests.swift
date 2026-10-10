@@ -35,6 +35,8 @@ struct Issue965HeldSelectionAssociationTests {
         var batchReadCalls = 0
         var reciprocalPathBatchCalls = 0
         var pathBatchFault: String?
+        var windowScopeBatchCalls = 0
+        var windowScopeBatchFault: String?
         var fault: String?
         var transientEditorRead = false
         var transientForeignRead = false
@@ -242,6 +244,20 @@ struct Issue965HeldSelectionAssociationTests {
                     performActionResult: base.ax.performActionResult, elementAtPosition: base.ax.elementAtPosition,
                     attributeValuesResult: { [self] element, attributes in
                         batchReadCalls += 1
+                        let scopeBatch = CFEqual(element, window)
+                            && attributes == [kAXTitleAttribute as String, kAXDocumentAttribute as String]
+                        if scopeBatch {
+                            windowScopeBatchCalls += 1
+                            switch windowScopeBatchFault {
+                            case "failure": return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                            case "short": return .success(["Selection fixture - Tracks" as NSString])
+                            case "title_type": return .success([NSNumber(value: 0), bundle.absoluteString as NSString])
+                            case "document_type": return .success(["Selection fixture - Tracks" as NSString, NSNumber(value: 0)])
+                            case "foreign_title": return .success(["Foreign - Tracks" as NSString, bundle.absoluteString as NSString])
+                            case "foreign_document": return .success(["Selection fixture - Tracks" as NSString, "file:///tmp/Foreign.logicx" as NSString])
+                            default: break
+                            }
+                        }
                         if attributes == [kAXChildrenAttribute as String, kAXParentAttribute as String] {
                             reciprocalPathBatchCalls += 1
                             if CFEqual(element, builder.element(1_965_720)), let pathBatchFault {
@@ -266,6 +282,9 @@ struct Issue965HeldSelectionAssociationTests {
                                 guard let wrapped = AXValueCreate(.axError, &nativeError) else { return .failure(error) }
                                 values.append(wrapped)
                             }
+                        }
+                        if scopeBatch, windowScopeBatchFault == "document_after_batch" {
+                            builder.setAttribute(window, kAXDocumentAttribute as String, "file:///tmp/Foreign.logicx")
                         }
                         return .success(values)
                     })
@@ -296,6 +315,29 @@ struct Issue965HeldSelectionAssociationTests {
         let result = await LogicProServer.runWithDeadline(tool: "logic_project", command: "inspect_session",
             commandParams: params, mutationGate: gate) { await handler(dependencies, params) }
         return try #require(sharedJSONObject(sharedToolText(result)))
+    }
+
+    @Test(arguments: [false, true])
+    func heldWindowScopeUsesFreshTitleDocumentBatchOnlyOnCapableRuntimes(bulk: Bool) async throws {
+        let f = try Fixture()
+        f.useBulkReads = bulk
+        let body = try await inspect(f)
+        let rows = try #require((body["associations"] as? [String: Any])?["rows"] as? [[String: Any]])
+        #expect(rows.count == 2 && f.selections == [1, 0])
+        #expect(bulk ? f.windowScopeBatchCalls > 0 : f.windowScopeBatchCalls == 0)
+    }
+
+    @Test(arguments: ["failure", "short", "title_type", "document_type",
+                      "foreign_title", "foreign_document", "document_after_batch"])
+    func failedFreshWindowScopeBatchOrLaterDocumentChangeCannotAuthorizeSelection(fault: String) async throws {
+        let f = try Fixture()
+        f.useBulkReads = true
+        f.windowScopeBatchFault = fault
+        let body = try await inspect(f)
+        #expect(f.windowScopeBatchCalls > 0)
+        #expect(f.selections.isEmpty)
+        let rows = (body["associations"] as? [String: Any])?["rows"] as? [[String: Any]]
+        #expect((rows?.count ?? 0) == 0)
     }
 
     @Test func explicitNavigationPublishesPhysicalPairsWithoutNameOrOrdinalJoin() async throws {

@@ -172,6 +172,25 @@ extension AccessibilityChannel {
             return current
         }
 
+        private func currentWindowScopeMatches() -> Bool {
+            guard logic.ax.attributeValuesResult != nil else {
+                guard AXHelpers.getTitle(window, runtime: logic.ax)?.utf8.elementsEqual(title.utf8) == true,
+                      case .success(.some(let currentDocument)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: logic)
+                else { return false }
+                return document.utf8.elementsEqual(currentDocument.utf8)
+            }
+            // Fresh values from this exact held window, not an earlier scope
+            // receipt. The separate final Document/PID/deadline bookend remains.
+            let values = AXHelpers.getNonHelpAttributes(window,
+                [kAXTitleAttribute, kAXDocumentAttribute] as [String], runtime: logic.ax,
+                permittingRead: { (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil })
+            guard case .success(.some(let rawTitle)) = values[0], CFGetTypeID(rawTitle) == CFStringGetTypeID(),
+                  let currentTitle = rawTitle as? String, currentTitle.utf8.elementsEqual(title.utf8),
+                  case .success(.some(let rawDocument)) = values[1], CFGetTypeID(rawDocument) == CFStringGetTypeID(),
+                  let currentDocument = rawDocument as? String else { return false }
+            return document.utf8.elementsEqual(currentDocument.utf8)
+        }
+
         private func owned() -> Bool {
             guard !lost, (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
                   logic.logicProPID() == pid, logic.focusedApplicationPID() == pid,
@@ -193,9 +212,7 @@ extension AccessibilityChannel {
             guard
                   windows.filter({ CFEqual($0, window) }).count == 1,
                   CFEqual(main, window), CFEqual(focusedWindow, window),
-                  AXHelpers.getTitle(window, runtime: logic.ax)?.utf8.elementsEqual(title.utf8) == true,
-                  case .success(.some(let currentDocument)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: logic),
-                  document.utf8.elementsEqual(currentDocument.utf8), !AXLogicProElements.dialogPresent(runtime: logic),
+                  currentWindowScopeMatches(), !AXLogicProElements.dialogPresent(runtime: logic),
                   let currentRailPath = Self.path(rail, to: window, ax: logic.ax), Self.same(railPath, currentRailPath),
                   case .success(let currentHeaders) = AXHelpers.childrenResult(rail, runtime: logic.ax),
                   Self.same(headers, currentHeaders),
