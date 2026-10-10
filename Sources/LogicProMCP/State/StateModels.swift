@@ -392,7 +392,7 @@ enum AutomationMode: String, Sendable, Codable {
 /// MCU connection state.
 /// Codable (audit P2 #25) so `ResourceHandlers.readMCUState` can serialize it
 /// directly instead of hand-mapping into a duplicate wire DTO.
-struct MCUConnectionState: Sendable, Codable {
+struct MCUConnectionState: Sendable, Codable, Equatable {
     var isConnected: Bool
     var registeredAsDevice: Bool
     var lastFeedbackAt: Date?

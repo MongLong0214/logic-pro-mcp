@@ -394,7 +394,12 @@ actor StateCache {
         let sections = population.strips == nil
             ? request?.acquisitionSections ?? SessionPopulationObservation.watchedSections
             : SessionPopulationObservation.watchedSections
-        guard !stop(), captureBoundary(watching: sections) == before else { return nil }
+        guard !stop(), captureBoundary(watching: sections) == before else {
+            let current = captureBoundary(watching: sections)
+            let changed = sections.filter { current.versions[$0] != before.versions[$0] }.map(\.rawValue)
+            Log.info("Fresh population acceptance unavailable: changed_sections=\(changed), document_changed=\(current.hasDocument != before.hasDocument), occlusion_changed=\(current.occlusionRevision != before.occlusionRevision || current.axOccluded != before.axOccluded), stable=\(population.stable)", subsystem: "poller")
+            return nil
+        }
         if population.stable, let info = population.project {
             updateProject(info)
             updateDocumentState(true)
@@ -864,8 +869,12 @@ actor StateCache {
     }
 
     func updateMCUConnection(_ state: MCUConnectionState) {
+        var previous = mcuConnection
+        // LCD/keepalive feedback updates liveness, not the physical Mixer observation.
+        // Connection, registration and endpoint identity changes still invalidate it.
+        previous.lastFeedbackAt = state.lastFeedbackAt
         mcuConnection = state
-        advanceSectionRevision(.mixer)
+        if previous != state { advanceSectionRevision(.mixer) }
     }
 
     /// Applies the connection state only if the mixer has not changed since
@@ -888,8 +897,10 @@ actor StateCache {
     /// stop()'s read and its write). Mutating in place on the actor closes
     /// that window structurally.
     func updateMCUConnection(mutator: (inout MCUConnectionState) -> Void) {
+        var previous = mcuConnection
         mutator(&mcuConnection)
-        advanceSectionRevision(.mixer)
+        previous.lastFeedbackAt = mcuConnection.lastFeedbackAt
+        if previous != mcuConnection { advanceSectionRevision(.mixer) }
     }
 
     /// Applies the connection mutation only if the mixer has not changed
