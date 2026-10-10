@@ -2635,10 +2635,87 @@ struct Issue965FreshPopulationAcquisitionTests {
         #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
     }
 
+    @Test(arguments: [-1.0, 2.0, 0.9, Double.nan, Double.infinity, -Double.infinity])
+    func registeredInspectionKeepsUnreadableSelectionUnknown(value: Double) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(false) {
+            let fixture = Fixture()
+            fixture.builder.setAttribute(fixture.header, kAXSelectedAttribute as String, NSNumber(value: value))
+            let result = try await inspect(fixture: fixture, domains: ["tracks"])
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            let tracks = try #require(body["tracks"] as? [String: Any])
+            let rows = try #require(tracks["rows"] as? [[String: Any]])
+            #expect(rows.count == 1)
+            #expect(rows.first?["is_selected"] is NSNull,
+                    "a failed strict selection read is not an observed unselected row")
+            #expect(fixture.reads.helpCount == 0)
+            #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func registeredInspectionKeepsObservedSelection(selected: Bool) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(false) {
+            let fixture = Fixture()
+            fixture.builder.setAttribute(fixture.header, kAXSelectedAttribute as String, selected)
+            let result = try await inspect(fixture: fixture, domains: ["tracks"])
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            let tracks = try #require(body["tracks"] as? [String: Any])
+            let rows = try #require(tracks["rows"] as? [[String: Any]])
+            let observed = try #require(rows.first?["is_selected"] as? Bool)
+            if selected { #expect(observed) } else { #expect(!observed) }
+            #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func registeredSelectionScopeUsesOnlyObservedSelection(selected: Bool) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(false) {
+            let fixture = Fixture()
+            fixture.builder.setAttribute(fixture.header, kAXSelectedAttribute as String, selected)
+            let result = try await inspect(fixture: fixture, domains: ["tracks"], scope: "selection")
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            let tracks = try #require(body["tracks"] as? [String: Any])
+            let rows = try #require(tracks["rows"] as? [[String: Any]])
+            #expect(rows.count == (selected ? 1 : 0))
+            let reasons = try #require(tracks["reasons"] as? [String])
+            #expect(!reasons.contains("selection_state_unverified"))
+            #expect(tracks["coverage"] as? String == "partial", "observed selection does not prove the global rail end")
+            #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+        }
+    }
+
+    @Test func disappearingSelectionReadIsNotAStablePopulation() async throws {
+        let fixture = Fixture()
+        let selectionReads = Reads()
+        let channel = fixture.channel(observingAttribute: { element, attribute in
+            guard CFEqual(element, fixture.header), attribute == kAXSelectedAttribute as String else { return }
+            selectionReads.record(attribute)
+            if selectionReads.count.isMultiple(of: 2) {
+                fixture.builder.removeAttribute(fixture.header, kAXSelectedAttribute as String)
+            } else {
+                fixture.builder.setAttribute(fixture.header, kAXSelectedAttribute as String, false)
+            }
+        })
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: { gate.stillOwns(claim) })
+        let population = try await OperationTraceContext.$current.withValue(context) {
+            try await channel.readFreshSessionPopulation(
+                request: .init(domains: [.tracks]), fileReader: .unavailable, stoppingWhen: { false }
+            )
+        }
+        #expect(!population.stable,
+                "legacy false wire equality cannot hide loss of the actual selection read")
+        #expect(selectionReads.count == 6, "all three before/after attempts must consume the disagreement")
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+    }
+
     private func inspect(
         fixture: Fixture, unreadableRail: Bool = false, cancelBeforeRead: Bool = false,
         hasVisibleWindow: Bool = true,
         domains: [String] = ["tracks", "strips"],
+        scope: String = "whole_project",
         navigation: Bool = false,
         stopBeforeRead: Bool? = nil,
         keyboardFocus: @escaping @Sendable () -> AccessibilityChannel.LogicKeyboardFocus = { .notTextEditing },
@@ -2666,7 +2743,8 @@ struct Issue965FreshPopulationAcquisitionTests {
         let handler = try #require(OperationHandlerRegistry.handler(
             tool: "logic_project", command: "inspect_session"
         ))
-        let params: [String: Value] = ["domains": .array(domains.map(Value.string)), "allow_ui_navigation": .bool(navigation)]
+        let params: [String: Value] = ["domains": .array(domains.map(Value.string)), "scope": .string(scope),
+                                       "allow_ui_navigation": .bool(navigation)]
         return await LogicProServer.runWithDeadline(
             tool: "logic_project", command: "inspect_session", commandParams: params,
             mutationGate: gate
