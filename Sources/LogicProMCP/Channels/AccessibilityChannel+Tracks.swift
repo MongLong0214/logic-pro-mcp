@@ -238,6 +238,7 @@ extension AccessibilityChannel {
         }
         private var completedClickFocus: (target: Disclosure, controls: [PassiveFocusControl])?
         private var acceptedPassiveClickFocus: (target: Disclosure, controls: [PassiveFocusControl])?
+        private var originalPassiveFocus: (target: Disclosure, controls: [PassiveFocusControl])?
         private var restorationStarted = false
         private var acquired: [AcquiredDisclosure] = []
         private var pending: [Disclosure]
@@ -310,6 +311,15 @@ extension AccessibilityChannel {
                 }
             }
             self.transport = transport; self.viewport = viewport; self.referenceIsCurrent = referenceIsCurrent
+            // A saved/current collapsed header may already own keyboard focus on
+            // its immutable numeric name field. Hold that exact child; never
+            // admit arbitrary text focus or acquire an editing value as passive.
+            if hiddenControl == nil, selected.count == 1, CFEqual(selected[0], first.0) {
+                let controls = passiveFocusControls(first)
+                if controls.filter({ CFEqual($0.element, focus) }).count == 1 {
+                    originalPassiveFocus = (first, controls)
+                }
+            }
         }
 
         /// The bound AX leaf does not dispatch an input event to the system's
@@ -648,6 +658,12 @@ extension AccessibilityChannel {
         /// Their role/value and unique child identity remain required; this read
         /// exception grants no radio action, selection setter or keyboard command.
         func permitsHeldPassiveHeaderFocus() -> Bool {
+            let usingOriginal = !effects.navigationPerformed && originalPassiveFocus != nil
+            var permitted = false
+            defer {
+                // A sampled loss cannot renew the initial read exception on a retry.
+                if usingOriginal && !permitted { originalPassiveFocus = nil }
+            }
             guard !releaseUnverified,
                   let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
                   let completed = passiveClickFocus(matching: focus),
@@ -662,6 +678,7 @@ extension AccessibilityChannel {
                   case .success(.some(let doc)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: logic),
                   doc.utf8.elementsEqual(document.utf8),
                   case .success(let rows) = AXHelpers.childrenResult(rail, runtime: logic.ax),
+                  !usingOriginal || same(rows, originalHeaders),
                   rows.filter({ CFEqual($0, completed.target.header) }).count == 1,
                   same(rows.filter { row in originalHeaders.contains { CFEqual($0, row) } }, originalHeaders),
                   let currentSelection = Self.selectedHeaders(rows, ax: logic.ax), same(currentSelection, selected),
@@ -672,13 +689,17 @@ extension AccessibilityChannel {
                   children.filter({ CFEqual($0, focus) }).count == 1,
                   passiveFocusControls(completed.target).contains(where: { CFEqual($0.element, focus) && $0.role == held.role }),
                   AXLogicProElements.heldTrackDisclosureValue(header: completed.target.header,
-                    disclosure: completed.target.disclosure, runtime: logic) != nil,
+                    disclosure: completed.target.disclosure, runtime: logic).map({ !usingOriginal || $0 == 0 }) == true,
                   let finalFocus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
                   CFEqual(finalFocus, focus) else { return false }
+            permitted = true
             return true
         }
 
         private func passiveClickFocus(matching focus: AXUIElement) -> (target: Disclosure, controls: [PassiveFocusControl])? {
+            if !effects.navigationPerformed, !restorationStarted, acquired.isEmpty,
+               let original = originalPassiveFocus, CFEqual(focus, originalFocus),
+               original.controls.filter({ CFEqual($0.element, focus) }).count == 1 { return original }
             if let completed = completedClickFocus,
                completed.controls.filter({ CFEqual($0.element, focus) }).count == 1 { return completed }
             // A nested owned click can leave focus on the outer control. Retain

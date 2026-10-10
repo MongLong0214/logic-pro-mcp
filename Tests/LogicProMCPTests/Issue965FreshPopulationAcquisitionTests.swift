@@ -588,6 +588,16 @@ struct Issue965FreshPopulationAcquisitionTests {
             nestedFault: fault, verifyHierarchy: true)
     }
 
+    @Test func registeredStackReadsItsOriginalNoneditablePassiveName() async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, headerFocus: "initial_passive")
+    }
+
+    @Test(arguments: ["initial_editable", "initial_insertion", "initial_foreign", "initial_range",
+        "initial_alias", "initial_string", "initial_value", "initial_wrong_window"])
+    func registeredStackInitialFocusExceptionCannotAcquireAnEditorOrOtherField(focus: String) async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, headerFocus: focus)
+    }
+
     @Test(arguments: [false, true])
     func registeredSiblingStacksCaptureAllDeclaredRowsAndRestoreOrdinaryCache(navigation: Bool) async throws {
         try await observeSiblingStacks(navigation: navigation)
@@ -1564,14 +1574,21 @@ struct Issue965FreshPopulationAcquisitionTests {
                 fixture.builder.setAttribute(label, kAXValueAttribute as String, headerFocus.hasPrefix("radio_") ? 1 : 0)
                 fixture.builder.setAttribute(label, kAXWindowAttribute as String, fixture.window)
             }
-            if headerFocus == "editable" {
+            if headerFocus == "editable" || headerFocus == "initial_editable" {
                 fixture.builder.setAttributeSettable(passiveLabel, kAXValueAttribute as String, true)
                 fixture.builder.setAttribute(passiveLabel, kAXValueAttribute as String, "Track 1")
             }
-            if headerFocus == "insertion" {
+            if headerFocus == "insertion" || headerFocus == "initial_insertion" {
                 fixture.builder.setAttribute(passiveLabel, kAXInsertionPointLineNumberAttribute as String, 0)
             }
+            if headerFocus == "initial_range" { fixture.builder.setAttribute(passiveLabel, kAXSelectedTextRangeAttribute as String, 0) }
+            if headerFocus == "initial_string" { fixture.builder.setAttribute(passiveLabel, kAXValueAttribute as String, "0") }
+            if headerFocus == "initial_value" { fixture.builder.setAttribute(passiveLabel, kAXValueAttribute as String, 1) }
+            if headerFocus == "initial_wrong_window" {
+                fixture.builder.setAttribute(passiveLabel, kAXWindowAttribute as String, fixture.builder.element(965_999))
+            }
             if headerFocus != "foreign" { fixture.builder.setChildren(headers[0], [disclosure, passiveLabel]) }
+            if headerFocus == "initial_alias" { fixture.builder.setChildren(headers[0], [disclosure, passiveLabel, otherLabel]) }
             if headerFocus == "radio_with_name" {
                 fixture.builder.setRole(shownLabel, kAXTextFieldRole as String)
                 fixture.builder.setAttribute(shownLabel, kAXValueAttribute as String, 0)
@@ -1611,6 +1628,10 @@ struct Issue965FreshPopulationAcquisitionTests {
         fixture.builder.setAttribute(fixture.app, kAXFocusedWindowAttribute as String, fixture.window)
         fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String,
                                      focusRestoration == nil ? fixture.rail : workspace)
+        if let headerFocus, headerFocus.hasPrefix("initial_") {
+            fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String,
+                headerFocus == "initial_foreign" ? otherLabel : passiveLabel)
+        }
         fixture.builder.setAttribute(fixture.app, kAXFrontmostAttribute as String, true)
         fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String, bundle.absoluteString)
         fixture.builder.setAttribute(fixture.rail, kAXSelectedChildrenAttribute as String, [headers[0]])
@@ -2061,7 +2082,8 @@ struct Issue965FreshPopulationAcquisitionTests {
                     if helpMovesFocus, fixture.reads.recorded.contains("focus_moving_help_read") {
                         return .textEditing(role: kAXTextFieldRole as String, byInsertionPoint: false)
                     }
-                    if (mouseCase == "unrelated_text_focus" || headerFocus != nil), fixture.events.count > 0 {
+                    if headerFocus?.hasPrefix("initial_") == true
+                        || ((mouseCase == "unrelated_text_focus" || headerFocus != nil) && fixture.events.count > 0) {
                         return .textEditing(role: kAXTextFieldRole as String, byInsertionPoint: false)
                     }
                     return .notTextEditing
@@ -2379,6 +2401,20 @@ struct Issue965FreshPopulationAcquisitionTests {
             // FakeAXRuntimeBuilder's default setter ledger is bypassed by it.
             #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
             #expect(gate.currentOperation() == nil)
+            return
+        }
+        if let headerFocus, headerFocus.hasPrefix("initial_") {
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            if headerFocus == "initial_passive" {
+                #expect(fixture.events.recorded == ["disclosure_down", "disclosure_up", "disclosure_down", "disclosure_up"])
+                #expect((body["tracks"] as? [String: Any])?["rows"] as? [[String: Any]] != nil)
+                #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "restored")
+                #expect(await cache.getTracks().count == 19)
+            } else {
+                #expect(fixture.events.recorded.isEmpty)
+                #expect(body["state"] as? String == "C" && body["tracks"] == nil)
+            }
+            #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty && gate.currentOperation() == nil)
             return
         }
         if let headerFocus {
