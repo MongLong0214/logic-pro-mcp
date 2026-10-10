@@ -145,12 +145,23 @@ extension AccessibilityChannel {
         private func owned() -> Bool {
             guard !lost, (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
                   logic.logicProPID() == pid, logic.focusedApplicationPID() == pid,
-                  let currentApp = AXLogicProElements.appRoot(runtime: logic), CFEqual(app, currentApp),
-                  AXHelpers.getAttribute(app, kAXFrontmostAttribute as String, runtime: logic.ax) as Bool? == true,
-                  case .success(.elements(let windows)) = AXHelpers.getAXUIElementArrayRead(app, kAXWindowsAttribute as String, runtime: logic.ax),
+                  let currentApp = AXLogicProElements.appRoot(runtime: logic), CFEqual(app, currentApp) else {
+                lost = true; return false
+            }
+            let application = AXHelpers.getNonHelpAttributes(app,
+                [kAXFrontmostAttribute, kAXWindowsAttribute, kAXMainWindowAttribute, kAXFocusedWindowAttribute] as [String],
+                runtime: logic.ax, permittingRead: { (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil })
+            guard case .success(.some(let frontmost)) = application[0], frontmost as? Bool == true,
+                  case .success(.some(let windowValues)) = application[1], CFGetTypeID(windowValues) == CFArrayGetTypeID(),
+                  case .success(.some(let mainValue)) = application[2], CFGetTypeID(mainValue) == AXUIElementGetTypeID(),
+                  case .success(.some(let focusedValue)) = application[3], CFGetTypeID(focusedValue) == AXUIElementGetTypeID() else {
+                lost = true; return false
+            }
+            let windows = AXHelpers.decodeChildrenArray(windowValues)
+            let main = unsafeBitCast(mainValue, to: AXUIElement.self)
+            let focusedWindow = unsafeBitCast(focusedValue, to: AXUIElement.self)
+            guard
                   windows.filter({ CFEqual($0, window) }).count == 1,
-                  let main: AXUIElement = AXHelpers.getAttribute(app, kAXMainWindowAttribute as String, runtime: logic.ax),
-                  let focusedWindow: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedWindowAttribute as String, runtime: logic.ax),
                   CFEqual(main, window), CFEqual(focusedWindow, window),
                   AXHelpers.getTitle(window, runtime: logic.ax)?.utf8.elementsEqual(title.utf8) == true,
                   case .success(.some(let currentDocument)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: logic),
@@ -163,10 +174,11 @@ extension AccessibilityChannel {
                   Self.same(strips, currentStrips.strips),
                   transportPaths.allSatisfy({ held in
                       guard let control = held.first, let current = Self.path(control, to: window, ax: logic.ax),
-                            Self.same(held, current),
-                            AXHelpers.getRole(control, runtime: logic.ax) == kAXCheckBoxRole as String,
-                            case .success(.some(let value)) = AXHelpers.getAttributeResult(control, kAXValueAttribute as String,
-                                runtime: logic.ax) as Result<NSNumber?, AXHelpers.AXStatusError> else { return false }
+                            Self.same(held, current) else { return false }
+                      let attributes = AXHelpers.getNonHelpAttributes(control, [kAXRoleAttribute, kAXValueAttribute] as [String],
+                          runtime: logic.ax, permittingRead: { (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil })
+                      guard case .success(.some(let role)) = attributes[0], role as? String == kAXCheckBoxRole as String,
+                            case .success(.some(let rawValue)) = attributes[1], let value = rawValue as? NSNumber else { return false }
                       return value == 0
                   }),
                   case .success(.some(let finalDocument)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: logic),
@@ -189,9 +201,11 @@ extension AccessibilityChannel {
                   CFEqual(focus, expectedFocus), strips.filter({ CFEqual($0, focus) }).count == 1,
                   AXHelpers.getRole(focus, runtime: logic.ax) == kAXLayoutItemRole as String,
                   AXHelpers.isAttributeSettable(focus, kAXValueAttribute as String, runtime: logic.ax) == false else { lost = true; return false }
-            for attribute in [kAXValueAttribute as String, kAXSelectedTextAttribute as String,
-                              kAXNumberOfCharactersAttribute as String, kAXInsertionPointLineNumberAttribute as String] {
-                let reading = AXHelpers.getAttributeResult(focus, attribute, runtime: logic.ax) as Result<AnyObject?, AXHelpers.AXStatusError>
+            let attributes = [kAXValueAttribute, kAXSelectedTextAttribute,
+                              kAXNumberOfCharactersAttribute, kAXInsertionPointLineNumberAttribute] as [String]
+            let readings = AXHelpers.getNonHelpAttributes(focus, attributes, runtime: logic.ax,
+                permittingRead: { (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil })
+            for (attribute, reading) in zip(attributes, readings) {
                 switch reading {
                 case .failure(let error) where error.isDefinitiveAbsence: continue
                 case .success(.some(let value)):

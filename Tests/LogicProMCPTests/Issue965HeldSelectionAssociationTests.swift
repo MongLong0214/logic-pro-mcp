@@ -31,6 +31,8 @@ struct Issue965HeldSelectionAssociationTests {
         var viewportFaultAtRead: Int?
         var viewportFaultInjected = false
         var referenceCurrent = true
+        var useBulkReads = false
+        var batchReadCalls = 0
         var fault: String?
         var transientEditorRead = false
         var transientForeignRead = false
@@ -228,7 +230,32 @@ struct Issue965HeldSelectionAssociationTests {
                     return true
                 }, performActionHandler: { _, _ in Issue.record("no action fallback"); return false },
                 executeAppleScript: { _ in Issue.record("no scripts"); return .error("forbidden") })
-            let logic = AXLogicProElements.Runtime(logicProPID: { 4242 }, ax: base.ax,
+            let ax: AXHelpers.Runtime
+            if useBulkReads {
+                ax = AXHelpers.Runtime(axApp: base.ax.axApp, attributeValue: base.ax.attributeValue,
+                    attributeIsSettable: base.ax.attributeIsSettable, setAttributeValue: base.ax.setAttributeValue,
+                    children: base.ax.children, performAction: base.ax.performAction, childCount: base.ax.childCount,
+                    actionNames: base.ax.actionNames, actionNamesResult: base.ax.actionNamesResult,
+                    childrenResult: base.ax.childrenResult, attributeValueResult: base.ax.attributeValueResult,
+                    performActionResult: base.ax.performActionResult, elementAtPosition: base.ax.elementAtPosition,
+                    attributeValuesResult: { [self] element, attributes in
+                        batchReadCalls += 1
+                        var values: [AnyObject] = []
+                        for attribute in attributes {
+                            let reading = AXHelpers.getAttributeResult(element, attribute, runtime: base.ax)
+                                as Result<AnyObject?, AXHelpers.AXStatusError>
+                            switch reading {
+                            case .success(let value): values.append(value ?? NSNull())
+                            case .failure(let error):
+                                var nativeError = AXError(rawValue: error.raw) ?? .cannotComplete
+                                guard let wrapped = AXValueCreate(.axError, &nativeError) else { return .failure(error) }
+                                values.append(wrapped)
+                            }
+                        }
+                        return .success(values)
+                    })
+            } else { ax = base.ax }
+            let logic = AXLogicProElements.Runtime(logicProPID: { 4242 }, ax: ax,
                 executeAppleScript: { _ in Issue.record("no scripts"); return .error("forbidden") },
                 onScreenWindowList: { [] }, postPopupMenuEscape: { Issue.record("no Escape") },
                 focusedApplicationPID: { 4242 })
@@ -280,8 +307,10 @@ struct Issue965HeldSelectionAssociationTests {
         #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "restored")
     }
 
-    @Test func selectionInducedViewportDriftRestoresOnlyItsOriginalControl() async throws {
+    @Test(arguments: [false, true])
+    func selectionInducedViewportDriftRestoresOnlyItsOriginalControl(bulk: Bool) async throws {
         let f = try Fixture(withViewport: true)
+        f.useBulkReads = bulk
         f.fault = "selection_scroll"
         let body = try await inspect(f)
         #expect(f.selections == [1, 0])
@@ -289,15 +318,18 @@ struct Issue965HeldSelectionAssociationTests {
         #expect((f.builder.attributeValue(f.scroll, kAXValueAttribute as String) as? NSNumber)?.doubleValue == 0.8)
         #expect((body["associations"] as? [String: Any])?["rows"] as? [[String: Any]] != nil)
         #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "restored")
+        #expect(bulk ? f.batchReadCalls > 0 : f.batchReadCalls == 0)
     }
 
-    @Test(arguments: ["scroll_document", "scroll_focus", "scroll_replacement", "scroll_newer", "scroll_playback", "scroll_cancel"])
-    func decidingViewportLossCannotAuthorizeItsInverse(fault: String) async throws {
+    @Test(arguments: ["scroll_document", "scroll_focus", "scroll_replacement", "scroll_newer", "scroll_playback", "scroll_cancel"], [false, true])
+    func decidingViewportLossCannotAuthorizeItsInverse(fault: String, bulk: Bool) async throws {
         let calibration = try Fixture(withViewport: true)
+        calibration.useBulkReads = bulk
         calibration.fault = "selection_scroll"
         _ = try await inspect(calibration)
         #expect(calibration.scrollWrites == [0.8])
         let f = try Fixture(withViewport: true)
+        f.useBulkReads = bulk
         f.fault = fault
         f.viewportFaultAtRead = calibration.inverseValueReadCount
         let body = try await inspect(f)
@@ -440,9 +472,10 @@ struct Issue965HeldSelectionAssociationTests {
         #expect(rows == nil, "non-Boolean numeric selection is not physical association evidence")
     }
 
-    @Test(arguments: ["foreign_focus", "transient_foreign_focus", "unchanged_focus", "document", "header_replacement", "strip_replacement", "playback", "transient_editor"])
-    func observedCustodyLossCannotAuthorizeAnotherSelection(fault: String) async throws {
+    @Test(arguments: ["foreign_focus", "transient_foreign_focus", "unchanged_focus", "document", "header_replacement", "strip_replacement", "playback", "transient_editor"], [false, true])
+    func observedCustodyLossCannotAuthorizeAnotherSelection(fault: String, bulk: Bool) async throws {
         let f = try Fixture()
+        f.useBulkReads = bulk
         f.fault = fault
         let body = try await inspect(f)
         #expect(f.selections == [1], "never rebind a replacement or overwrite a sampled foreign/editor state")
