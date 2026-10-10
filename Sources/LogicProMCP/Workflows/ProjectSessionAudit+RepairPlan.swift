@@ -632,6 +632,7 @@ extension ProjectSessionAudit {
         guard decision.allowed else {
             for rejection in decision.rejections {
                 if case .slotOccupied = rejection { reasons.insert("send_replacement_not_allowed") }
+                else if case .cycleIntroduced = rejection { reasons.insert("routing_prefix_cycle_detected") }
                 else { reasons.insert("send_graph_unsafe_\(String(describing: rejection))") }
             }
             return unverified()

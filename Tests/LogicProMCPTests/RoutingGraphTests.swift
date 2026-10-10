@@ -4,6 +4,36 @@ import Testing
 
 @Suite("RoutingGraphTests")
 struct RoutingGraphTests {
+    @Test(arguments: ["replacement", "empty_slot", "existing", "acyclic", "ambiguous", "ambiguous_acyclic", "partial"])
+    func standaloneSendGateRefusesNewCyclesAndAmbiguousSources(_ change: String) {
+        let aux = RoutingNode(id: "aux", kind: .aux, displayName: "Same", busNumber: nil, targetRef: nil)
+        var ns = [trackNode, busNode(1), busNode(2), aux]
+        var es = [assignment(.inputAssignment, source: "bus-1", destination: "aux")]
+        if change != "acyclic" && change != "ambiguous_acyclic" { es.append(assignment(.mainOutput, source: "aux", destination: "track-1")) }
+        let oldBus = change == "existing" ? 1 : 2
+        es.append(sendEdge(send(slot: 0, bus: oldBus, level: 0.5), destination: "bus-\(oldBus)"))
+        if change == "ambiguous" || change == "ambiguous_acyclic" {
+            ns.append(RoutingNode(id: "alias", kind: .track, displayName: "Same", busNumber: nil, targetRef: sourceRef))
+        }
+        let candidate = graph(complete: change != "partial", partialReason: change == "partial" ? "unread" : nil,
+            nodes: ns, edges: es)
+        #expect(candidate.isConsistent)
+        let decision = evaluate(request(physicalSlot: change == "empty_slot" ? 1 : 0,
+            replaceExisting: change != "empty_slot"), against: candidate)
+        if change == "existing" || change == "acyclic" {
+            #expect(decision.allowed)
+            #expect(decision.rejections.isEmpty)
+        } else {
+            #expect(!decision.allowed)
+            if change == "ambiguous" || change == "ambiguous_acyclic" {
+                #expect(decision.rejections == [.sourceAmbiguous])
+            } else if change == "partial" {
+                #expect(decision.rejections == [.partialGraphUnsafe(reason: "unread")])
+            } else { #expect(decision.rejections == [.cycleIntroduced]) }
+        }
+        #expect(!decision.writeAttempted)
+    }
+
     @Test(arguments: ["new_cycle", "self_loop", "existing", "removal", "scalar", "acyclic", "partial", "inconsistent", "cross_capture"])
     func structuralCycleChangesRequireBoundEvidenceWithoutRewritingExistingLoops(_ change: String) throws {
         let aux = RoutingNode(id: "aux", kind: .aux, displayName: "Same", busNumber: nil, targetRef: nil)

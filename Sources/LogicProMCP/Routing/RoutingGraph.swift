@@ -315,6 +315,19 @@ func routingIntroducesCycle(before: RoutingGraph, after: RoutingGraph) -> Bool? 
     return false
 }
 
+/// Test one proposed endpoint connection without inventing send scalar metadata.
+/// An already recorded arc is not a new structural cycle. Capture binding and native
+/// execution safety remain the caller's responsibility, as with routingIntroducesCycle.
+func routingConnectionIntroducesCycle(from source: String, to destination: String,
+                                      in graph: RoutingGraph) -> Bool? {
+    guard graph.complete, graph.isConsistent,
+          graph.nodes.filter({ $0.id == source }).count == 1,
+          graph.nodes.filter({ $0.id == destination }).count == 1 else { return nil }
+    let adjacency = Dictionary(grouping: graph.edges, by: \.source)
+    if (adjacency[source] ?? []).contains(where: { $0.destination == destination }) { return false }
+    return routingNodeReachable(from: destination, to: source, adjacency: adjacency)
+}
+
 private func routingNodeReachable(from source: String, to destination: String,
                                   adjacency: [String: [RoutingEdge]]) -> Bool {
     var pending = [source]
