@@ -111,6 +111,60 @@ struct Issue966ApprovedRoutingDiffTests {
         try JSONDecoder().decode(RoutingEdge.self, from: Data(encodeJSONStrict(value, compact: true).utf8))
     }
 
+    @Test(arguments: ["output", "send", "intermediate", "acyclic"])
+    func aNewStructuralCycleBlocksItsCanonicalPrefix(_ change: String) throws {
+        // Abstract complete graph evidence, not a claim that these endpoints were acquired live.
+        // The existing send returns from bus 4; replacing it with bus 3 closes the return path.
+        var es = edges().filter { !($0.kind == .send && $0.source == "source_opaque") }
+        es.append(RoutingEdge(kind: .send, source: "source_opaque", destination: "previous_opaque",
+            send: SendEdge(sourceTrackRef: source, physicalSlot: 5,
+                destinationBusNumber: 4, destinationRef: nil,
+                displayedName: "Same", level: 0, mode: "pre-fader", enabled: false), provenance: .axMixerStrip))
+        if change != "acyclic" && change != "intermediate" {
+            es.append(edge(.inputAssignment, "receiver_one", "source_opaque"))
+        }
+        var ns = nodes()
+        var extras: [String: Value] = [:]
+        if change == "intermediate" {
+            ns.append(RoutingNode(id: "safe_bus", kind: .bus, displayName: "Same", busNumber: 5, targetRef: nil))
+            es.removeAll { $0.kind == .mainOutput || $0.kind == .send }
+            es += [edge(.mainOutput, "source_opaque", "safe_bus"),
+                edge(.mainOutput, "other_opaque", "safe_bus"),
+                edge(.inputAssignment, "receiver_one", "other_opaque"),
+                edge(.inputAssignment, "previous_opaque", "source_opaque")]
+            es.append(RoutingEdge(kind: .send, source: "other_opaque", destination: "previous_opaque",
+                send: SendEdge(sourceTrackRef: other, physicalSlot: 5, destinationBusNumber: 4,
+                    destinationRef: nil, displayedName: "Same", level: 0, mode: "pre-fader", enabled: false), provenance: .axMixerStrip))
+            extras["targets"] = .array([
+                .object(["handle": .string("approved"), "track_ref": .string(source.rawValue)]),
+                .object(["handle": .string("return"), "track_ref": .string(other.rawValue)])])
+            // Removing the returning send cannot make an earlier cyclic prefix safe.
+            extras["sends"] = .array([.object(["target": .string("return"),
+                "physical_slot": .int(5), "remove": .bool(true)])])
+        }
+        let candidate = graph(nodes: ns, edges: es)
+        #expect(candidate.isConsistent)
+        var options = Audit.PlanningOptions(); options.allowReplaceSend = true
+        let sendTask: [Value]? = change == "send" ? [.object(["target": .string("approved"),
+            "physical_slot": .int(5), "bus": .int(3)])] : nil
+        let body = try plan(candidate, sends: sendTask, options: options, policyExtras: extras)
+        let steps = try #require(body["steps"]?.arrayValue).map { try #require($0.objectValue) }
+        let first = try #require(steps.first)
+        let blocked = try #require(first["blocked_reasons"]?.arrayValue)
+        let reasons = try #require(body["reasons"]?.arrayValue)
+        if change != "acyclic" {
+            #expect(blocked.contains(.string("routing_prefix_cycle_detected")))
+            #expect(reasons.contains(.string("routing_prefix_cycle_detected")))
+        } else {
+            #expect(!blocked.contains(.string("routing_prefix_cycle_detected")))
+            #expect(!reasons.contains(.string("routing_prefix_cycle_detected")))
+        }
+        #expect(body["steps"] == body["preview"])
+        let executable = try #require(body["executable"]?.boolValue as Bool?)
+        #expect(!executable)
+        if change == "intermediate" { #expect(steps.count == 2) }
+    }
+
     private func sendPolicy(_ sends: Value) -> [String: Value] {
         ["schema": .string(Audit.intentPolicySchema), "project_ref": .string(project.rawValue),
          "targets": .array([.object(["handle": .string("approved"), "track_ref": .string(source.rawValue)])]),
