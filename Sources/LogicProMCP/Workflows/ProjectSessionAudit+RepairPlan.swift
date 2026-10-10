@@ -152,8 +152,21 @@ extension ProjectSessionAudit {
             if baseline == .disconnected { reasons.insert("protected_path_not_observed") }
             return .init(targetRef: target.trackRef, sinkNodeID: path.sinkNodeID, baseline: baseline, final: baseline)
         }
-        func recordRoutingPrefix(_ id: String, after: RoutingGraph?) {
-            if let after { proposedGraph = after } else { proposedGraphKnown = false }
+        @discardableResult
+        func recordRoutingPrefix(_ id: String, after: RoutingGraph?) -> Set<String> {
+            var blocked = Set<String>()
+            if let after {
+                if !proposedGraphKnown { blocked.insert("routing_prefix_cycle_unverified") }
+                else {
+                    switch routingIntroducesCycle(before: proposedGraph, after: after) {
+                    case true?: blocked.insert("routing_prefix_cycle_detected")
+                    case nil: blocked.insert("routing_prefix_cycle_unverified")
+                    case false?: break
+                    }
+                }
+                proposedGraph = after
+            } else { proposedGraphKnown = false }
+            reasons.formUnion(blocked)
             for index in protectedReads.indices {
                 let current = proposedGraphKnown ? pathState(protectedReads[index].targetRef,
                     protectedReads[index].sinkNodeID, in: proposedGraph) : .unverified
@@ -165,6 +178,7 @@ extension ProjectSessionAudit {
                 }
                 if current == .unverified { reasons.insert("protected_path_evidence_unavailable") }
             }
+            return blocked
         }
         // Even an unchanged send needs a fresh exact-slot verifier which the retained apply
         // provider does not have. A pure graph fixture cannot advertise runtime availability.
@@ -288,7 +302,7 @@ extension ProjectSessionAudit {
             var proposalReasons = proposalReadReasons
             if blocked.contains("bus_receiver_unverified") { proposalReasons.insert("bus_receiver_unverified") }
             let proposal = try proposedExistingBusOutput(finding: finding, graph: proposedGraph, readReasons: proposalReasons)
-            recordRoutingPrefix(id, after: proposal.after)
+            blocked.formUnion(recordRoutingPrefix(id, after: proposal.after))
             blocked.formUnion(proposal.reasons)
             reasons.formUnion(blocked)
             var before: Value = .object([:])
@@ -327,7 +341,7 @@ extension ProjectSessionAudit {
             }
             let proposal = try proposedExistingSend(finding: finding, graph: proposedGraph,
                 readReasons: proposalReasons, allowReplace: options.allowReplaceSend)
-            recordRoutingPrefix(id, after: proposal.after)
+            blocked.formUnion(recordRoutingPrefix(id, after: proposal.after))
             blocked.formUnion(proposal.reasons)
             blocked.formUnion(["exact_target_send_adapter_unavailable", "send_preservation_adapter_unavailable"])
             reasons.formUnion(blocked)
