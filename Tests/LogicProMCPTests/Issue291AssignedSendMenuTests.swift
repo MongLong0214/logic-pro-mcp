@@ -72,6 +72,23 @@ struct Issue291AssignedSendMenuTests {
         #expect(try #require(body["write_attempted"] as? Bool) == false)
         #expect(p.f.mutations.count == 2)
     }
+    @Test("Rejected bus roots remain routing competitors, not panner marks",
+          arguments:["Bus 257","Bus 999999","Bus 257 → Aux 1"],[false,true])
+    func rejectedBusCompetitorIsNotAbsence(_ title: String, _ checked: Bool) async throws {
+        let p = try prepare(), f = p.f
+        let competitor = f.b.element(291_930)
+        f.b.setRole(competitor,kAXMenuItemRole as String)
+        f.b.setAttribute(competitor,kAXTitleAttribute as String,title)
+        f.b.setAttribute(competitor,"AXMenuItemMarkChar",checked ? "✓" : "")
+        f.b.setChildren(competitor,[])
+        f.b.setChildren(f.root,[p.checkedEcho,competitor,f.b.element(291_914),f.b.element(291_911)])
+        let body = try #require(sharedJSONObject(await read(p).message))
+        #expect(body["state"] as? String == (checked ? "C" : "A"))
+        if checked { #expect(body["current_destination"] == nil) }
+        #expect(body["popup_menu_state"] as? String == "closed")
+        #expect(try #require(body["write_attempted"] as? Bool) == false)
+        #expect(f.mutations.count == 2)
+    }
     @Test("Retained assigned list reads checked destination, never display or bypass/level", arguments:[false,true])
     func assignedSendReadsOwnedCheckmarks(_ failedACK: Bool) async throws {
         let p = try prepare(), f = p.f

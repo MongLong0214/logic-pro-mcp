@@ -455,7 +455,12 @@ extension AccessibilityChannel {
         guard let roots = titledMenuItems(of: root, runtime: runtime) else { return nil }
         var echo: [OutputAssignment] = []
         for item in roots where !item.hasSubmenu {
-            guard let assignment = destination(item.title) else { continue }
+            guard let assignment = destination(item.title) else {
+                if OutputAssignment.isBusMenuItemTitle(item.title) {
+                    guard mark(item.element) == "" else { return nil }
+                }
+                continue
+            }
             guard let checked = mark(item.element), checked == "" || checked == "✓" else { return nil }
             if checked == "✓" { echo.append(assignment) }
         }
