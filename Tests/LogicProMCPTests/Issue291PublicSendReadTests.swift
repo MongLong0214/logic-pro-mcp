@@ -22,14 +22,16 @@ struct Issue291PublicSendReadTests {
         #expect(body["send_ordinal"] as? Int == 1)
         #expect(body["popup_menu_state"] as? String == "closed")
         #expect(body["focus_restoration"] as? String == "not_restored")
-        #expect(try #require(body["navigation_attempted"] as? Bool) == true)
+        let navigationAttempted = try #require(body["navigation_attempted"] as? Bool)
+        #expect(navigationAttempted)
     }
     @Test func registeredReadOnlyPhysicalSendContract() throws {
         let spec = try #require(OperationRegistry.spec(tool:"logic_mixer",command:"get_send_destination_verified"))
         #expect(spec.mutability == .readOnly)
         #expect(spec.allowedParams == Set(["target_ref","project_ref","ordinal"]))
         #expect(ChannelRouter.v2RoutingTable["mixer.get_send_destination_verified"] == [.accessibility])
-        #expect(WorkflowSkillCatalog.publicCommands["logic_mixer"]?.contains("get_send_destination_verified") == true)
+        let commands = try #require(WorkflowSkillCatalog.publicCommands["logic_mixer"])
+        #expect(commands.contains("get_send_destination_verified"))
     }
     @Test("Malformed ordinals never reach a channel", arguments:[Value.int(-1),.double(1.5),.string("1.5"),.bool(true),.null])
     func invalidOrdinalHasNoAction(_ ordinal: Value) async throws {

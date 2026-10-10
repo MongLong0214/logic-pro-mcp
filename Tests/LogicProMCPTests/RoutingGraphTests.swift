@@ -21,7 +21,7 @@ struct RoutingGraphTests {
     }
 
     @Test(arguments: [1, 256])
-    func completeGraphsAcceptLogicalBusRangeBoundaries(_ number: Int) {
+    func completeGraphsAcceptLogicalBusRangeBoundaries(_ number: Int) throws {
         let bus = busNode(number)
         let candidate = graph(nodes: [trackNode, bus],
             edges: [assignment(.mainOutput, source: "track-1", destination: bus.id)])
@@ -32,7 +32,8 @@ struct RoutingGraphTests {
         #expect(decision.allowed)
         #expect(!decision.writeAttempted)
         #expect(routingPath(from: sourceRef, to: bus.id, in: candidate) == .connected)
-        #expect(routingConnectionIntroducesCycle(from: "track-1", to: bus.id, in: candidate) == false)
+        let introducesCycle = try #require(routingConnectionIntroducesCycle(from: "track-1", to: bus.id, in: candidate))
+        #expect(!introducesCycle)
     }
 
     @Test func partialGraphsPreserveUnresolvedLogicalBusEvidence() {

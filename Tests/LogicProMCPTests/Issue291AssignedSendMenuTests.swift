@@ -69,7 +69,8 @@ struct Issue291AssignedSendMenuTests {
             #expect(body["current_destination"] == nil)
         }
         #expect(body["popup_menu_state"] as? String == "closed")
-        #expect(try #require(body["write_attempted"] as? Bool) == false)
+        let writeAttempted = try #require(body["write_attempted"] as? Bool)
+        #expect(!writeAttempted)
         #expect(p.f.mutations.count == 2)
     }
     @Test("Rejected bus roots remain routing competitors, not panner marks",
@@ -86,7 +87,8 @@ struct Issue291AssignedSendMenuTests {
         #expect(body["state"] as? String == (checked ? "C" : "A"))
         if checked { #expect(body["current_destination"] == nil) }
         #expect(body["popup_menu_state"] as? String == "closed")
-        #expect(try #require(body["write_attempted"] as? Bool) == false)
+        let writeAttempted = try #require(body["write_attempted"] as? Bool)
+        #expect(!writeAttempted)
         #expect(f.mutations.count == 2)
     }
     @Test("Retained assigned list reads checked destination, never display or bypass/level", arguments:[false,true])
@@ -100,7 +102,8 @@ struct Issue291AssignedSendMenuTests {
         #expect(destination["kind"] as? String == "bus")
         #expect(destination["number"] as? Int == 1)
         #expect(body["popup_menu_state"] as? String == "closed")
-        #expect(try #require(body["write_attempted"] as? Bool) == false)
+        let writeAttempted = try #require(body["write_attempted"] as? Bool)
+        #expect(!writeAttempted)
         #expect(f.mutations.count == 2)
         if f.mutations.count == 2 {
             #expect(CFEqual(f.mutations[0].0,f.outputs[0]))
@@ -168,7 +171,8 @@ struct Issue291AssignedSendMenuTests {
         let body = try #require(sharedJSONObject(await read(p).message))
         #expect(body["state"] as? String == "C")
         #expect(body["current_destination"] == nil)
-        #expect(try #require(body["navigation_attempted"] as? Bool) == true)
+        let navigationAttempted = try #require(body["navigation_attempted"] as? Bool)
+        #expect(navigationAttempted)
         #expect(f.mutations.count == 1)
         #expect(f.mutations.allSatisfy { CFEqual($0.0,f.outputs[0]) && $0.1 == kAXPressAction as String })
     }
