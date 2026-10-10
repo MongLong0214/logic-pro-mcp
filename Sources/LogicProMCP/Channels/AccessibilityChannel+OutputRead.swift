@@ -2,6 +2,13 @@
 import Foundation
 
 extension AccessibilityChannel {
+    /// Internal bus-only input acquisition; no public operation or graph-edge qualification.
+    static func getInputBusVerified(
+        runtime: AXLogicProElements.Runtime = .production,
+        timing: OutputAssignmentTiming = .live
+    ) async -> ChannelResult {
+        await getCheckedRoutingDestination(params: [:], sendOrdinal: nil, inputBusOnly: true, runtime: runtime, timing: timing)
+    }
     /// A checked assigned-send choice, not a routing-graph completeness claim.
     static func getAssignedSendVerified(
         ordinal: Int, runtime: AXLogicProElements.Runtime = .production,
@@ -19,10 +26,10 @@ extension AccessibilityChannel {
     }
 
     private static func getCheckedRoutingDestination(
-        params: [String: String], sendOrdinal: Int?, runtime: AXLogicProElements.Runtime,
+        params: [String: String], sendOrdinal: Int?, inputBusOnly: Bool = false, runtime: AXLogicProElements.Runtime,
         timing: OutputAssignmentTiming
     ) async -> ChannelResult {
-        let operation = sendOrdinal == nil ? "mixer.get_output_verified" : "mixer.get_send_destination_verified"
+        let operation = inputBusOnly ? "mixer.get_input_bus_verified" : (sendOrdinal == nil ? "mixer.get_output_verified" : "mixer.get_send_destination_verified")
         var extras: [String: Any] = ["operation": operation, "write_attempted": false,
                                    "navigation_attempted": false, "popup_menu_state": "not_opened"]
         func refuse(_ error: HonestContract.FailureError, _ hint: String) -> ChannelResult {
@@ -59,6 +66,11 @@ extension AccessibilityChannel {
             return refuse(.readbackUnavailable, "The requested ordinal has no uniquely qualified assigned-send list control; nothing was pressed.")
         }
         func selectedControl() -> AXUIElement? {
+            if inputBusOnly {
+                let read = AXLogicProElements.inputSlotRead(in: physical.strip, runtime: runtime.ax)
+                guard case .source = read.reading else { return nil }
+                return read.control
+            }
             if let assigned {
                 guard let current = assignedControl(), assigned.matches(current),
                       AXHelpers.getRole(current.group, runtime: runtime.ax) == kAXGroupRole as String,
@@ -103,10 +115,10 @@ extension AccessibilityChannel {
         let app = AXLogicProElements.appRoot(runtime: runtime)
         let originalFocus: AXUIElement? = app.flatMap { AXHelpers.getAttribute($0, kAXFocusedUIElementAttribute as String, runtime: runtime.ax) }
         guard sourceOwned() else { return refuse(.staleTargetReference, "Source custody changed before acquisition; nothing was pressed.") }
-        if sendOrdinal != nil {
+        if sendOrdinal != nil || inputBusOnly {
             guard case .success(let actions) = AXHelpers.getActionNamesResult(slot, runtime: runtime.ax),
                   actions.contains(kAXPressAction as String), sourceOwned() else {
-                return refuse(.readbackUnavailable, "The held assigned-send list does not advertise a current press capability; nothing was pressed.")
+                return refuse(.readbackUnavailable, "The held routing control does not advertise a current press capability; nothing was pressed.")
             }
             extras["send_ordinal"] = sendOrdinal
         }
@@ -130,8 +142,12 @@ extension AccessibilityChannel {
             return current.count == 1 && CFEqual(current[0], root) && ownerBoundaryStillCurrent()
         }
         // Two agreeing reads bracketed by the same source/menu, not an atomic graph snapshot.
-        let first = currentOutputMenuAssignment(in: root, runtime: runtime.ax)
-        let second = menuOwned() ? currentOutputMenuAssignment(in: root, runtime: runtime.ax) : nil
+        func checkedChoice() -> OutputAssignment? {
+            if inputBusOnly { return currentInputMenuBusAssignment(in: root, runtime: runtime.ax).map(OutputAssignment.bus) }
+            return currentOutputMenuAssignment(in: root, runtime: runtime.ax)
+        }
+        let first = checkedChoice()
+        let second = menuOwned() ? checkedChoice() : nil
         let dataOwned = menuOwned()
         var cancelSucceeded = false
         if dataOwned, runtime.ax.actionNames(root).contains(kAXCancelAction as String), menuOwned() {
@@ -158,8 +174,9 @@ extension AccessibilityChannel {
         guard sendOrdinal == nil || first != .noOutput else {
             return refuse(.readbackUnavailable, "An output-only No Output marker is not an assigned-send destination.")
         }
-        extras[sendOrdinal == nil ? "current_output" : "current_destination"] = first.json
-        extras["verify_source"] = sendOrdinal == nil ? "ax_output_menu_checkmark" : "ax_send_menu_checkmark"
+        extras[inputBusOnly ? "current_input" : (sendOrdinal == nil ? "current_output" : "current_destination")] = first.json
+        extras["verify_source"] = inputBusOnly ? "ax_input_menu_checkmark" : (sendOrdinal == nil ? "ax_output_menu_checkmark" : "ax_send_menu_checkmark")
+        if inputBusOnly { extras["input_scope"] = "bus_only" }
         extras["snapshot_atomic"] = false
         return .success(HonestContract.encodeStateA(extras: extras))
     }
