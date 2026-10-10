@@ -990,6 +990,38 @@ struct Issue291PhysicalStripReferenceTests {
         }
     }
 
+    @Test(arguments: [-1.0, 2.0, 0.9, Double.nan, Double.infinity, -Double.infinity], ["play", "record"])
+    func malformedTransportDoesNotClaimPlayingOrRecording(value: Double, control: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let fixture = try Fixture()
+            let (cache, registry, router, rows) = try await publish(fixture)
+            let reference = try #require(rows[0]["mixer_strip_ref"] as? String)
+            let checkbox = fixture.b.element(control == "play" ? 2_910_301 : 2_910_302)
+            fixture.b.setAttribute(checkbox, kAXValueAttribute as String, NSNumber(value: value))
+            let result = await MixerDispatcher.handle(command: "set_output_verified",
+                params: ["target_ref": .string(reference), "destination": .object(["kind": .string("physical"),
+                         "ports": .array([.int(3), .int(4)])])], router: router, cache: cache,
+                targetRegistry: registry, liveTrackName: { [0: "A", 1: "B"][$0] }, liveTrackNames: { [0: "A", 1: "B"] })
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            #expect(body["state"] as? String == "C")
+            #expect(body["error"] as? String == "transport_state_unknown")
+            #expect(body["transport"] == nil, "a nonbinary reading is not observed playing or recording")
+            let playRead = try #require(body["transport_play_read"] as? Bool)
+            let recordRead = try #require(body["transport_record_read"] as? Bool)
+            if control == "play" {
+                #expect(!playRead)
+                #expect(recordRead)
+            } else {
+                #expect(playRead)
+                #expect(!recordRead)
+            }
+            let attempted = try #require(body["write_attempted"] as? Bool)
+            #expect(!attempted)
+            #expect(fixture.mutations.isEmpty)
+            #expect(fixture.b.attributeValue(fixture.outputs[0], kAXDescriptionAttribute as String) as? String == "Stereo Output")
+        }
+    }
+
     @Test(arguments: [false, true])
     func mixerOnlyAuxGetsIndependentUsableReference(background: Bool) async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
