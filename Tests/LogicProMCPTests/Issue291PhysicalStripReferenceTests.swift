@@ -1561,4 +1561,88 @@ struct Issue291PhysicalStripReferenceTests {
             #expect(!fixture.mutations.contains { CFEqual($0.0, fixture.outputs[1]) })
         }
     }
+
+    @Test(arguments: ["slot_help", "mixer_membership"])
+    func physicalOutputRenewsProjectAfterLastPopupSourceRead(boundary: String) async throws {
+        let fixture = try Fixture()
+        let original = AXMixerStripBinding.Binding(window: fixture.window, mixer: fixture.mixer,
+            strip: fixture.strips[0], document: fixture.bundle.absoluteString)
+        let firstCensus = Once(), drift = Once()
+        @Sendable func popupOpenedWithoutDestination() -> Bool {
+            fixture.mutations.contains { CFEqual($0.0, fixture.outputs[0]) && $0.1 == kAXPressAction as String }
+                && !fixture.mutations.contains { CFEqual($0.0, fixture.pair) }
+        }
+        let changedDocument = fixture.bundle.appendingPathComponent("different-project.logicx").absoluteString
+        if boundary == "slot_help" {
+            fixture.onAttributeRead = { element, attribute in
+                if CFEqual(element, fixture.outputs[0]), attribute == kAXHelpAttribute as String,
+                   popupOpenedWithoutDestination(), drift.take() {
+                    fixture.b.setAttribute(fixture.window, kAXDocumentAttribute as String, changedDocument)
+                }
+            }
+        } else {
+            fixture.onChildrenResultRead = { element in
+                guard CFEqual(element, fixture.mixer), popupOpenedWithoutDestination() else { return }
+                if firstCensus.take() { return }
+                if drift.take() {
+                    fixture.b.setAttribute(fixture.window, kAXDocumentAttribute as String, changedDocument)
+                }
+            }
+        }
+        defer { fixture.onAttributeRead = nil; fixture.onChildrenResultRead = nil }
+        let result = await AXMixerStripBinding.$current.withValue(original) {
+            await AccessibilityChannel.setOutputVerified(params: ["index": "0", "destination": "physical:3-4"],
+                runtime: fixture.logic, timing: .immediate)
+        }
+        let receipt = try #require(sharedJSONObject(result.message))
+        #expect(!drift.take(), "the deciding read must actually change the held document before the leaf press")
+        #expect(receipt["state"] as? String == "C")
+        let attempted: Bool = try #require(receipt["write_attempted"] as? Bool)
+        #expect(!attempted)
+        #expect(!fixture.mutations.contains { CFEqual($0.0, fixture.pair) })
+        #expect(fixture.b.attributeValue(fixture.outputs[0], kAXDescriptionAttribute as String) as? String == "Stereo Output")
+        #expect(!fixture.mutations.contains { $0.1 == kAXCancelAction as String },
+            "lost project custody must not authorize cancelling a popup in the new scope")
+    }
+
+    @Test(arguments: ["source", "slot"])
+    func physicalOutputRenewsControlsAfterFinalHelpRead(replacement: String) async throws {
+        let fixture = try Fixture()
+        let original = AXMixerStripBinding.Binding(window: fixture.window, mixer: fixture.mixer,
+            strip: fixture.strips[0], document: fixture.bundle.absoluteString)
+        let successor = fixture.b.element(2_916_000)
+        if replacement == "source" {
+            fixture.b.setRole(successor, kAXLayoutItemRole as String)
+            fixture.b.setChildren(successor, fixture.b.makeAXRuntime().children(fixture.strips[0]))
+        } else {
+            fixture.b.setButton(successor, description: "Stereo Output", help: "Output slot. Choose the channel strip output.",
+                x: 0, y: 150, width: 60, height: 20)
+            fixture.b.setChildren(successor, [])
+        }
+        let drift = Once()
+        fixture.onAttributeRead = { element, attribute in
+            guard CFEqual(element, fixture.outputs[0]), attribute == kAXHelpAttribute as String,
+                  fixture.mutations.contains(where: { CFEqual($0.0, fixture.outputs[0]) && $0.1 == kAXPressAction as String }),
+                  !fixture.mutations.contains(where: { CFEqual($0.0, fixture.pair) }), drift.take() else { return }
+            if replacement == "source" {
+                fixture.b.setChildren(fixture.mixer, [successor, fixture.strips[1], fixture.root])
+            } else {
+                let children = fixture.b.makeAXRuntime().children(fixture.strips[0])
+                fixture.b.setChildren(fixture.strips[0], children.map { CFEqual($0, fixture.outputs[0]) ? successor : $0 })
+            }
+        }
+        defer { fixture.onAttributeRead = nil }
+        let result = await AXMixerStripBinding.$current.withValue(original) {
+            await AccessibilityChannel.setOutputVerified(params: ["index": "0", "destination": "physical:3-4"],
+                runtime: fixture.logic, timing: .immediate)
+        }
+        let receipt = try #require(sharedJSONObject(result.message))
+        #expect(!drift.take())
+        #expect(receipt["state"] as? String == "C")
+        let attempted: Bool = try #require(receipt["write_attempted"] as? Bool)
+        #expect(!attempted)
+        #expect(!fixture.mutations.contains { CFEqual($0.0, fixture.pair) })
+        #expect(fixture.b.attributeValue(fixture.outputs[0], kAXDescriptionAttribute as String) as? String == "Stereo Output")
+        #expect(!fixture.mutations.contains { $0.1 == kAXCancelAction as String })
+    }
 }
