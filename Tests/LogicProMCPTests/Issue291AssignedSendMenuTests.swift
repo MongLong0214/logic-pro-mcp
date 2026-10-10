@@ -5,6 +5,20 @@ import Testing
 
 @Suite("#291 assigned-send owned checked-menu acquisition", .serialized)
 struct Issue291AssignedSendMenuTests {
+    private final class FinalFocusRevocation: @unchecked Sendable {
+        private let lock = NSLock()
+        private var armed = false
+        private var values = 0
+        private var fired = false
+        func arm() { lock.withLock { armed = true } }
+        func valueRead() { lock.withLock { if armed { values += 1 } } }
+        func take() -> Bool {
+            lock.withLock {
+                guard armed, values >= 2, !fired else { return false }
+                fired = true; return true
+            }
+        }
+    }
     struct Prepared {
         let f: Issue291PhysicalStripReferenceTests.Fixture
         let anchor: AXUIElement
@@ -52,6 +66,127 @@ struct Issue291AssignedSendMenuTests {
         return await AXMixerStripBinding.$current.withValue(binding) {
             await AccessibilityChannel.getAssignedSendVerified(ordinal:ordinal,runtime:f.logic,timing:.immediate)
         }
+    }
+    private func passiveHeaderFocus(_ f: Issue291PhysicalStripReferenceTests.Fixture) -> AXUIElement {
+        let label = f.b.element(291_940)
+        f.b.setRole(label, kAXTextFieldRole as String)
+        f.b.setAttribute(label, kAXValueAttribute as String, NSNumber(value: 0))
+        f.b.setAttributeSettable(label, kAXValueAttribute as String, false)
+        f.b.setAttribute(label, kAXWindowAttribute as String, f.window)
+        f.b.setAttribute(label, kAXParentAttribute as String, f.headers[0])
+        f.b.setChildren(label, [])
+        f.b.setChildren(f.headers[0], [label, f.headerVolumes[0], f.headerPans[0]])
+        f.b.setAttribute(f.app, kAXFocusedUIElementAttribute as String, label)
+        f.b.setAttribute(f.app, kAXFrontmostAttribute as String, true)
+        // The generic fake builder bridges NSNumber(0) through Bool. Preserve
+        // the native CFNumber payload rather than qualifying a CFBoolean.
+        f.attributeReadResult = { element, attribute in
+            if CFEqual(element, label), attribute == kAXValueAttribute as String {
+                return .success(f.b.attributeValue(element, attribute).map { $0 as AnyObject })
+            }
+            return nil
+        }
+        return label
+    }
+    @Test("A retained noneditable Arrange label permits only the owned routing-popup read")
+    func passiveHeaderAllowsRoutingReadWithoutRelaxingKeyboardGate() async throws {
+        let p = try prepare(), f = p.f
+        let label = passiveHeaderFocus(f)
+        #expect(AccessibilityChannel.readLogicKeyboardFocus(of: label, runtime: f.logic) != .notTextEditing)
+        let body = try #require(sharedJSONObject(await read(p).message))
+        #expect(body["state"] as? String == "A")
+        #expect((body["current_destination"] as? [String: Any])?["number"] as? Int == 1)
+        #expect(body["popup_menu_state"] as? String == "closed")
+        let writeAttempted = try #require(body["write_attempted"] as? Bool)
+        #expect(!writeAttempted)
+        #expect(f.mutations.count == 2)
+        #expect(f.mutations.allSatisfy {
+            (CFEqual($0.0, f.outputs[0]) && $0.1 == kAXPressAction as String)
+                || (CFEqual($0.0, f.root) && $0.1 == kAXCancelAction as String)
+        })
+        #expect(AccessibilityChannel.readLogicKeyboardFocus(of: label, runtime: f.logic) != .notTextEditing)
+    }
+    @Test("Editing, ambiguous, foreign, or unreadable focus never permits a routing press",
+          arguments: ["editable", "insertion", "selection", "text", "characters", "string_value", "boolean_value",
+                      "wrong_window", "wrong_parent", "detached", "duplicate", "unread_attribute", "background"])
+    func unsafeHeaderFocusHasNoAction(_ fault: String) async throws {
+        let p = try prepare(), f = p.f
+        let label = passiveHeaderFocus(f)
+        switch fault {
+        case "editable": f.b.setAttributeSettable(label, kAXValueAttribute as String, true)
+        case "insertion": f.b.setAttribute(label, kAXInsertionPointLineNumberAttribute as String, 0)
+        case "selection": f.b.setAttribute(label, kAXSelectedTextRangeAttribute as String, "0:0")
+        case "text": f.b.setAttribute(label, kAXSelectedTextAttribute as String, "")
+        case "characters": f.b.setAttribute(label, kAXNumberOfCharactersAttribute as String, 0)
+        case "string_value": f.b.setAttribute(label, kAXValueAttribute as String, "0")
+        case "boolean_value": f.b.setAttribute(label, kAXValueAttribute as String, false)
+        case "wrong_window": f.b.setAttribute(label, kAXWindowAttribute as String, f.app)
+        case "wrong_parent": f.b.setAttribute(label, kAXParentAttribute as String, f.headers[1])
+        case "detached": f.b.setChildren(f.headers[0], [f.headerVolumes[0], f.headerPans[0]])
+        case "duplicate": f.b.setChildren(f.headers[0], [label, label, f.headerVolumes[0], f.headerPans[0]])
+        case "unread_attribute":
+            f.attributeReadResult = { element, attribute in
+                if CFEqual(element, label), attribute == kAXSelectedTextRangeAttribute as String {
+                    return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                }
+                if CFEqual(element, label), attribute == kAXValueAttribute as String {
+                    return .success(f.b.attributeValue(element, attribute).map { $0 as AnyObject })
+                }
+                return nil
+            }
+        case "background": f.b.setAttribute(f.app, kAXFrontmostAttribute as String, false)
+        default: Issue.record("unknown injected fault")
+        }
+        let body = try #require(sharedJSONObject(await read(p).message))
+        #expect(body["state"] as? String == "C")
+        #expect(body["current_destination"] == nil)
+        #expect(f.mutations.isEmpty)
+    }
+    @Test("Focus or original header custody lost during capability lookup prevents the press",
+          arguments: ["focus", "editable", "parent", "document"])
+    func passiveFocusRevocationBeforePressHasNoAction(_ fault: String) async throws {
+        let p = try prepare(), f = p.f
+        let label = passiveHeaderFocus(f)
+        f.onActionNamesRead = { control in
+            guard CFEqual(control, f.outputs[0]) else { return }
+            switch fault {
+            case "focus": f.b.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.headers[1])
+            case "editable": f.b.setAttributeSettable(label, kAXValueAttribute as String, true)
+            case "parent": f.b.setChildren(f.headers[0], [f.headerVolumes[0], f.headerPans[0]])
+            case "document": f.b.setAttribute(f.window, kAXDocumentAttribute as String, "file:///wrong.logicx")
+            default: Issue.record("unknown injected revocation")
+            }
+        }
+        let body = try #require(sharedJSONObject(await read(p).message))
+        #expect(body["state"] as? String == "C")
+        #expect(body["current_destination"] == nil)
+        #expect(f.mutations.isEmpty)
+    }
+    @Test("The final held-focus read cannot press a source whose project it just revoked")
+    func documentRevocationInFinalFocusReadHasNoAction() async throws {
+        let p = try prepare(), f = p.f
+        let label = passiveHeaderFocus(f), revocation = FinalFocusRevocation()
+        f.onActionNamesRead = { control in
+            if CFEqual(control, f.outputs[0]) { revocation.arm() }
+        }
+        f.attributeReadResult = { element, attribute in
+            if CFEqual(element, label), attribute == kAXValueAttribute as String {
+                revocation.valueRead()
+                return .success(f.b.attributeValue(element, attribute).map { $0 as AnyObject })
+            }
+            return nil
+        }
+        f.onAttributeRead = { element, attribute in
+            if CFEqual(element, f.app), attribute == kAXFocusedUIElementAttribute as String, revocation.take() {
+                f.b.setAttribute(f.window, kAXDocumentAttribute as String, "file:///wrong.logicx")
+            }
+        }
+        let body = try #require(sharedJSONObject(await read(p).message))
+        #expect(f.b.attributeValue(f.window, kAXDocumentAttribute as String) as? String == "file:///wrong.logicx")
+        #expect(body["state"] as? String == "C")
+        let navigated = try #require(body["navigation_attempted"] as? Bool)
+        #expect(!navigated)
+        #expect(f.mutations.isEmpty)
     }
     @Test("Bare checked bus echoes cannot bypass the legal bus domain", arguments:[1,256,257,999999])
     func checkedSendBusDomain(_ number: Int) async throws {
