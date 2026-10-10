@@ -430,6 +430,8 @@ actor AccessibilityChannel: Channel {
                     }
                 }
             }
+            let disclosureExposures = request.domains.contains(.hierarchy) && population.stable
+                ? stackNavigation?.capturedDisclosureExposures(in: population.tracks) ?? [] : []
             let stackEffects = await stackNavigation?.restore(stoppingWhen: stop) ?? .init()
             if let navigation {
                 population.uiEffects = mergedEffects(population.uiEffects, await navigation.restore(stoppingWhen: stop))
@@ -471,6 +473,9 @@ actor AccessibilityChannel: Channel {
                     population.restoredTracks = current.tracks
                 }
                 if population.restoredTracks == nil || stackEffects.restoration != "restored" { population.stable = false }
+            }
+            if population.stable, stackEffects.restoration == "restored" {
+                population.disclosureExposures = disclosureExposures
             }
             try SessionPopulationObservation.requireOwnedAcquisition()
             return population

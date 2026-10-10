@@ -572,6 +572,23 @@ struct Issue965FreshPopulationAcquisitionTests {
     }
 
     @Test(arguments: [false, true])
+    func registeredHierarchyPublishesOnlyHeldDisclosureMembership(nested: Bool) async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, nested: nested,
+            verifyHierarchy: true)
+    }
+
+    @Test(arguments: [false, true])
+    func registeredHierarchyDoesNotInferMembershipFromVisibleRowOrder(expanded: Bool) async throws {
+        try await observeStack(navigation: false, initiallyExpanded: expanded, verifyHierarchy: true)
+    }
+
+    @Test(arguments: ["inner_closed", "replacement", "focus", "project", "viewport", "cancel", "deadline"])
+    func registeredHierarchyDiscardsUnrestoredOrConflictedExposure(fault: String) async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, nested: true,
+            nestedFault: fault, verifyHierarchy: true)
+    }
+
+    @Test(arguments: [false, true])
     func registeredSiblingStacksCaptureAllDeclaredRowsAndRestoreOrdinaryCache(navigation: Bool) async throws {
         try await observeSiblingStacks(navigation: navigation)
     }
@@ -1500,7 +1517,8 @@ struct Issue965FreshPopulationAcquisitionTests {
                               helpMovesFocus: Bool = false, focusRestoration: String? = nil,
                               originalFocusRole: String = "AXLayoutArea",
                               hiddenViewLoss: Bool = false, hiddenView: Bool = false,
-                              hiddenFocusFault: String? = nil, lateScopeFault: String? = nil) async throws {
+                              hiddenFocusFault: String? = nil, lateScopeFault: String? = nil,
+                              verifyHierarchy: Bool = false) async throws {
         let fixture = Fixture()
         let focusBoundaryReads = Reads()
         let bundle = FileManager.default.temporaryDirectory.appendingPathComponent("lpm965-stack-\(UUID().uuidString).logicx")
@@ -2051,7 +2069,8 @@ struct Issue965FreshPopulationAcquisitionTests {
             dialogPresent: { false }, supportBundleExporter: nil, mutationGate: gate,
             liveTrackNames: { [:] }, projectFileReader: fileReader)
         let handler = try #require(OperationHandlerRegistry.handler(tool: "logic_project", command: "inspect_session"))
-        let params: [String: Value] = ["domains": .array([.string("tracks")]), "allow_ui_navigation": .bool(navigation)]
+        let params: [String: Value] = ["domains": .array(verifyHierarchy
+            ? [.string("tracks"), .string("hierarchy")] : [.string("tracks")]), "allow_ui_navigation": .bool(navigation)]
         let result = await LogicProServer.runWithDeadline(tool: "logic_project", command: "inspect_session",
             commandParams: params, mutationGate: gate) {
                 if let nestedFault, ["cancel", "deadline"].contains(nestedFault),
@@ -2069,6 +2088,11 @@ struct Issue965FreshPopulationAcquisitionTests {
                 }
                 return await FeatureFlags.withAdr002TargetRefForTests(true) { await handler(dependencies, params) }
             }
+        if verifyHierarchy, nestedFault != nil {
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            #expect((body["hierarchy"] as? [String: Any])?["disclosure_exposures"] == nil,
+                "an incomplete inverse, changed project/control/focus/viewport or interruption grants no hierarchy evidence")
+        }
         if helpMovesFocus {
             #expect(!fixture.reads.recorded.contains("focus_moving_help_read"),
                     "fresh population must not query AXHelp, which moves native Logic focus")
@@ -2448,6 +2472,30 @@ struct Issue965FreshPopulationAcquisitionTests {
         })
         #expect(rows.compactMap { $0["track_ref"] as? String }.count == expectedHeaders.count)
         #expect(tracks["coverage"] as? String == "partial", "exposure alone does not prove hidden/nested/global completion")
+        if verifyHierarchy {
+            let hierarchy = try #require(body["hierarchy"] as? [String: Any])
+            if navigation {
+                let exposures = try #require(hierarchy["disclosure_exposures"] as? [[String: Any]])
+                #expect(hierarchy["coverage"] as? String == "partial")
+                #expect(exposures.count == (nested ? 2 : 1))
+                #expect(exposures.first?["stack_ref"] as? String == rows[0]["track_ref"] as? String)
+                #expect(exposures.first?["exposed_track_refs"] as? [String]
+                    == headers[1...23].compactMap { header in
+                        expectedHeaders.firstIndex(where: { CFEqual($0, header) }).flatMap { rows[$0]["track_ref"] as? String }
+                    })
+                if nested {
+                    #expect(exposures[1]["stack_ref"] as? String == rows[1]["track_ref"] as? String)
+                    #expect(exposures[1]["exposed_track_refs"] as? [String] == rows[2...3].compactMap { $0["track_ref"] as? String })
+                }
+                #expect(exposures.allSatisfy { $0["source"] as? String == "owned_disclosure_exposure" })
+            } else {
+                #expect(hierarchy["coverage"] as? String == "unavailable")
+                #expect(hierarchy["disclosure_exposures"] == nil)
+            }
+            #expect(rows.allSatisfy { $0["parent"] as? String == "unknown" && $0["depth"] as? String == "unknown" },
+                "a disclosure delta does not establish immediate parents or absolute depth")
+            #expect((body["overall"] as? [String: Any])?["complete"] as? Bool == false)
+        }
         let current = await cache.getTracks()
         #expect(current.count == (initiallyExpanded ? 42 : 19), "collapsed descendants must not become ordinary current cache rows")
         if delayedLanding {

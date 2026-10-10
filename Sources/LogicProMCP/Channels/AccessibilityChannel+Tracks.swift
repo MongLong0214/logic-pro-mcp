@@ -796,6 +796,36 @@ extension AccessibilityChannel {
             }
         }
 
+        /// Reuse the already collected physical rows and the exact owned disclosure deltas.
+        /// No new scanner, ordinal/name join or AX access. The caller may publish these
+        /// historical facts only after the inverse and independent restored-rail checks.
+        func capturedDisclosureExposures(in tracks: [TrackState]?) -> [SessionPopulationObservation.HeldDisclosureExposure] {
+            guard effects.reason == nil, pending.isEmpty, !restorationStarted,
+                  let exposure, !exposure.hasEnded, !exposure.hasObservedLoss,
+                  let headers = expandedHeaders, let tracks,
+                  tracks.count == headers.count,
+                  zip(tracks, headers).allSatisfy({ state, header in
+                      state.physicalBinding.map { CFEqual($0.header, header) && CFEqual($0.window, window)
+                          && $0.document.utf8.elementsEqual(document.utf8)
+                          && ($0.exposure == nil || $0.exposure === exposure) } == true
+                  }) else { return [] }
+            func binding(_ header: AXUIElement) -> AXTrackBinding.Binding? {
+                let matches = tracks.compactMap(\.physicalBinding).filter { CFEqual($0.header, header) }
+                return matches.count == 1 ? matches.first : nil
+            }
+            var observations: [SessionPopulationObservation.HeldDisclosureExposure] = []
+            for entry in acquired {
+                // Hide View is a presentation toggle, not a stack/parent witness.
+                if hiddenControl.map({ CFEqual($0, entry.target.disclosure) }) == true { continue }
+                guard let stack = binding(entry.target.header) else { return [] }
+                let exposed = entry.afterHeaders.filter { row in !entry.beforeHeaders.contains { CFEqual($0, row) } }
+                let members = exposed.compactMap(binding)
+                guard members.count == exposed.count else { return [] }
+                if !members.isEmpty { observations.append(.init(stack: stack, exposed: members)) }
+            }
+            return observations
+        }
+
         func restore(stoppingWhen stop: @Sendable () -> Bool) async -> SessionPopulationObservation.UIEffects {
             // Captured descendant authority ends before the first inverse gesture.
             // Cleanup is guarded by the separate held navigation facts below.

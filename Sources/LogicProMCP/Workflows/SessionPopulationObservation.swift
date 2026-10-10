@@ -38,6 +38,15 @@ enum SessionPopulationObservation {
         /// A new full reading after verified selection restoration. This is not
         /// permission to accept changes during that reading or across projects.
         var associationReadbackBoundary: StateCache.CaptureBoundary? = nil
+        /// Actual closed-to-open disclosure deltas, retained only after verified restoration.
+        /// These are historical membership observations, not current target authority,
+        /// immediate-parent links or absolute depths.
+        var disclosureExposures: [HeldDisclosureExposure] = []
+    }
+
+    struct HeldDisclosureExposure: Sendable {
+        let stack: AXTrackBinding.Binding
+        let exposed: [AXTrackBinding.Binding]
     }
 
     struct PresentationObservation: Encodable, Equatable, Sendable {
@@ -820,6 +829,20 @@ enum SessionPopulationObservation {
         let coverage: Coverage
         let reasons: [Reason]
         var rows: [AssociationRow]? = nil
+        var disclosureExposures: [DisclosureExposureRow]? = nil
+        enum CodingKeys: String, CodingKey {
+            case coverage, reasons, rows
+            case disclosureExposures = "disclosure_exposures"
+        }
+    }
+
+    struct DisclosureExposureRow: Encodable, Sendable {
+        let stackRef: String
+        let exposedTrackRefs: [String]
+        let source = "owned_disclosure_exposure"
+        enum CodingKeys: String, CodingKey {
+            case stackRef = "stack_ref", exposedTrackRefs = "exposed_track_refs", source
+        }
     }
 
     struct AssociationRow: Encodable, Sendable {
@@ -1120,7 +1143,30 @@ enum SessionPopulationObservation {
                 associations = .init(coverage: .partial, reasons: [.associationPopulationNotObserved], rows: rows)
             }
         }
-        let hierarchy = deferred(.parentDepthNotObserved)
+        var hierarchy = deferred(.parentDepthNotObserved)
+        if movementReason == nil, request.allowUINavigation, request.domains.contains(.hierarchy),
+           tracksCoverage == .partial || tracksCoverage == .complete,
+           let observations = capture.freshPopulation?.disclosureExposures, !observations.isEmpty {
+            func reference(for physical: AXTrackBinding.Binding) -> (Int, String)? {
+                let matches = live.indices.filter { live[$0].physicalBinding?.matches(physical) == true }
+                guard matches.count == 1, let row = matches.first, let ref = allRows[row].trackRef else { return nil }
+                return (row, ref)
+            }
+            var exposures: [DisclosureExposureRow] = []
+            var qualified = true
+            for observation in observations {
+                guard let (_, stackRef) = reference(for: observation.stack) else { qualified = false; break }
+                let members = observation.exposed.compactMap { reference(for: $0) }
+                guard members.count == observation.exposed.count,
+                      Set(members.map(\.1)).count == members.count,
+                      !members.contains(where: { $0.1 == stackRef }) else { qualified = false; break }
+                let refs = members.filter { request.scope == .wholeProject || live[$0.0].selectionReadback == true }.map(\.1)
+                if !refs.isEmpty { exposures.append(.init(stackRef: stackRef, exposedTrackRefs: refs)) }
+            }
+            if qualified, !exposures.isEmpty {
+                hierarchy = .init(coverage: .partial, reasons: [.parentDepthNotObserved], disclosureExposures: exposures)
+            }
+        }
         let routing = request.domains.contains(.routing) ? routingSection(capture: capture, moved: moved) : nil
         let color = request.domains.contains(.color) ? deferred(.colorDeferredToIssue970) : nil
 
