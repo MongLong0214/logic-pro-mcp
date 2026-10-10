@@ -2755,13 +2755,15 @@ extension AccessibilityChannel {
         // lpm-evidence/1029/probe-kc-ko.json). When the headers carry selection state and another
         // row is not read as unselected, the target is selected alone before anything is written,
         // under the rule the key rungs use; when that cannot be shown, nothing is renamed.
+        // All-unread is still unknown, not a reason to bypass this multi-track guard.
         let selectionStates = AXLogicProElements.allTrackHeaders(runtime: runtime)
             .map { AXValueExtractors.extractSelectedState($0, runtime: runtime.ax) }
         let otherRowsNotUnselected = selectionStates.enumerated()
             .contains { $0.offset != index && $0.element != false }
-        if selectionStates.contains(where: { $0 != nil }) && otherRowsNotUnselected {
-            _ = ProcessUtils.activateLogicPro(runtime: processRuntime)
-            guard confirmExclusiveSelection(index: index, runtime: runtime) else {
+        if otherRowsNotUnselected {
+            let hasSelectionMetadata = selectionStates.contains(where: { $0 != nil })
+            if hasSelectionMetadata { _ = ProcessUtils.activateLogicPro(runtime: processRuntime) }
+            guard hasSelectionMetadata, confirmExclusiveSelection(index: index, runtime: runtime) else {
                 let states = AXLogicProElements.allTrackHeaders(runtime: runtime)
                     .map { AXValueExtractors.extractSelectedState($0, runtime: runtime.ax) }
                 return .error(HonestContract.encodeStateC(
