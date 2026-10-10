@@ -96,7 +96,7 @@ extension AccessibilityChannel {
             }
             func permits() -> Bool {
                 let held = lock.withLock { (navigation, passiveMixer, association) }
-                return held.0?.permitsHeldPassiveLabelFocus() == true || held.1?.permits() == true
+                return held.0?.permitsHeldPassiveHeaderFocus() == true || held.1?.permits() == true
                     || held.2?.permitsRead() == true
             }
 
@@ -226,8 +226,12 @@ extension AccessibilityChannel {
         private var observedFocus: AXUIElement
         private var expandedHeaders: [AXUIElement]?
         private var releaseUnverified = false
-        private var completedClickFocus: (target: Disclosure, labels: [AXUIElement])?
-        private var acceptedPassiveClickFocus: (target: Disclosure, labels: [AXUIElement])?
+        private struct PassiveFocusControl {
+            let element: AXUIElement
+            let role: String
+        }
+        private var completedClickFocus: (target: Disclosure, controls: [PassiveFocusControl])?
+        private var acceptedPassiveClickFocus: (target: Disclosure, controls: [PassiveFocusControl])?
         private var restorationStarted = false
         private var acquired: [AcquiredDisclosure] = []
         private var pending: [Disclosure]
@@ -605,12 +609,13 @@ extension AccessibilityChannel {
             }
         }
 
-        private func isPassiveLabel(_ field: AXUIElement) -> Bool {
-            guard AXHelpers.getRole(field, runtime: logic.ax) == kAXTextFieldRole as String,
+        private func isPassiveFocusControl(_ field: AXUIElement) -> Bool {
+            guard let role = AXHelpers.getRole(field, runtime: logic.ax),
+                  role == kAXTextFieldRole as String || role == kAXRadioButtonRole as String,
                   AXHelpers.isAttributeSettable(field, kAXValueAttribute as String, runtime: logic.ax) == false,
                   case .success(.some(let value)) = AXHelpers.getAttributeResult(
                     field, kAXValueAttribute as String, runtime: logic.ax) as Result<NSNumber?, AXHelpers.AXStatusError>,
-                  value.doubleValue == 0,
+                  value.doubleValue == (role == kAXRadioButtonRole as String ? 1 : 0),
                   noEditingAttribute(field, kAXInsertionPointLineNumberAttribute as String),
                   noEditingAttribute(field, kAXSelectedTextRangeAttribute as String),
                   let owner: AXUIElement = AXHelpers.getAttribute(field, kAXWindowAttribute as String, runtime: logic.ax),
@@ -618,23 +623,28 @@ extension AccessibilityChannel {
             return true
         }
 
-        private func passiveLabels(_ target: Disclosure) -> [AXUIElement] {
+        private func passiveFocusControls(_ target: Disclosure) -> [PassiveFocusControl] {
             guard case .success(let children) = AXHelpers.childrenResult(target.header, runtime: logic.ax) else { return [] }
-            var labels: [AXUIElement] = []
+            var controls: [PassiveFocusControl] = []
+            var roles = Set<String>()
             for child in children {
-                guard AXHelpers.getRole(child, runtime: logic.ax) != nil else { return [] }
-                if isPassiveLabel(child) { labels.append(child) }
+                guard let role = AXHelpers.getRole(child, runtime: logic.ax) else { return [] }
+                if role == kAXTextFieldRole as String || role == kAXRadioButtonRole as String {
+                    guard roles.insert(role).inserted else { return [] }
+                    if isPassiveFocusControl(child) { controls.append(.init(element: child, role: role)) }
+                }
             }
-            return labels.count == 1 ? labels : []
+            return controls
         }
 
-        /// Logic may focus its noneditable numeric-valued header label after
-        /// our completed click. This request-local Help/read exception is not
-        /// keyboard-command permission and cannot admit an editor or new label.
-        func permitsHeldPassiveLabelFocus() -> Bool {
+        /// A completed click can focus its pre-held passive name or selected radio.
+        /// Their role/value and unique child identity remain required; this read
+        /// exception grants no radio action, selection setter or keyboard command.
+        func permitsHeldPassiveHeaderFocus() -> Bool {
             guard !releaseUnverified,
                   let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
                   let completed = passiveClickFocus(matching: focus),
+                  let held = completed.controls.first(where: { CFEqual($0.element, focus) }),
                   (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
                   logic.logicProPID() == pid, logic.focusedApplicationPID() == pid,
                   let currentApp = AXLogicProElements.appRoot(runtime: logic), CFEqual(currentApp, app),
@@ -648,9 +658,11 @@ extension AccessibilityChannel {
                   rows.filter({ CFEqual($0, completed.target.header) }).count == 1,
                   same(rows.filter { row in originalHeaders.contains { CFEqual($0, row) } }, originalHeaders),
                   let currentSelection = Self.selectedHeaders(rows, ax: logic.ax), same(currentSelection, selected),
-                  CFEqual(focus, completed.labels[0]), isPassiveLabel(focus),
+                  completed.controls.filter({ CFEqual($0.element, focus) }).count == 1,
+                  AXHelpers.getRole(focus, runtime: logic.ax) == held.role, isPassiveFocusControl(focus),
                   case .success(let children) = AXHelpers.childrenResult(completed.target.header, runtime: logic.ax),
                   children.filter({ CFEqual($0, focus) }).count == 1,
+                  passiveFocusControls(completed.target).contains(where: { CFEqual($0.element, focus) && $0.role == held.role }),
                   AXLogicProElements.heldTrackDisclosureValue(header: completed.target.header,
                     disclosure: completed.target.disclosure, runtime: logic) != nil,
                   let finalFocus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
@@ -658,13 +670,13 @@ extension AccessibilityChannel {
             return true
         }
 
-        private func passiveClickFocus(matching focus: AXUIElement) -> (target: Disclosure, labels: [AXUIElement])? {
-            if let completed = completedClickFocus, completed.labels.count == 1,
-               CFEqual(focus, completed.labels[0]) { return completed }
-            // A nested owned click can leave focus on the outer label. Retain
+        private func passiveClickFocus(matching focus: AXUIElement) -> (target: Disclosure, controls: [PassiveFocusControl])? {
+            if let completed = completedClickFocus,
+               completed.controls.filter({ CFEqual($0.element, focus) }).count == 1 { return completed }
+            // A nested owned click can leave focus on the outer control. Retain
             // only the exact already accepted focus, not arbitrary past labels.
-            guard let accepted = acceptedPassiveClickFocus, accepted.labels.count == 1,
-                  CFEqual(focus, observedFocus), CFEqual(focus, accepted.labels[0]) else { return nil }
+            guard let accepted = acceptedPassiveClickFocus, CFEqual(focus, observedFocus),
+                  accepted.controls.filter({ CFEqual($0.element, focus) }).count == 1 else { return nil }
             return accepted
         }
 
@@ -685,7 +697,7 @@ extension AccessibilityChannel {
             guard await owned(target: target, expectedHeaders: expectedHeaders, expectedValue: expectedValue, stoppingWhen: stop),
                   let frame = frame(target),
                   let pair = mouse.prepareMouseClick(CGPoint(x: frame.midX, y: frame.midY), 1) else { return false }
-            let labels = passiveLabels(target)
+            let controls = passiveFocusControls(target)
             guard
                   let hitTest = logic.ax.elementAtPosition,
                   case .success(.some(let hit)) = hitTest(app, CGPoint(x: frame.midX, y: frame.midY)), CFEqual(hit, target.disclosure),
@@ -712,7 +724,7 @@ extension AccessibilityChannel {
             // or another authorization here can strand Down inside Logic's loop.
             guard pair.postUp() else { return false }
             releaseUnverified = false
-            completedClickFocus = (target, labels)
+            completedClickFocus = (target, controls)
             return true
         }
 
@@ -907,7 +919,7 @@ extension AccessibilityChannel {
         }
 
         private func permitsHeldFocusRestoration() -> Bool {
-            if permitsHeldPassiveLabelFocus() { return true }
+            if permitsHeldPassiveHeaderFocus() { return true }
             // The final paired inverse can leave focus on its exact disclosure,
             // not a label. Admit only that completed, accepted, collapsed target
             // for restoring the original workspace; owned() and the final action
@@ -935,9 +947,9 @@ extension AccessibilityChannel {
                     || CFEqual(focus, target.disclosure) || CFEqual(focus, target.header)
                     || (completedClickFocus.map { CFEqual($0.target.header, target.header)
                         && CFEqual($0.target.disclosure, target.disclosure) } == true
-                        && permitsHeldPassiveLabelFocus()) else { return false }
-            if let completed = completedClickFocus, completed.labels.count == 1,
-               CFEqual(focus, completed.labels[0]), permitsHeldPassiveLabelFocus() {
+                        && permitsHeldPassiveHeaderFocus()) else { return false }
+            if let completed = completedClickFocus,
+               completed.controls.filter({ CFEqual($0.element, focus) }).count == 1, permitsHeldPassiveHeaderFocus() {
                 acceptedPassiveClickFocus = completed
             } else if !CFEqual(focus, observedFocus) {
                 acceptedPassiveClickFocus = nil
