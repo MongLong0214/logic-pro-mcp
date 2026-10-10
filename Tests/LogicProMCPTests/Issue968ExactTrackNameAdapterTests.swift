@@ -62,6 +62,8 @@ private final class ExactNameFixture: @unchecked Sendable {
     var coupledNameField: AXUIElement?
     var coupledPeerNameField: AXUIElement?
     var onMirrorReadAfterWrite: (@Sendable () -> Void)?
+    var peerNameReadsAfterWrite = 0
+    var onPeerNameReadAfterWrite: (@Sendable (Int) -> Void)?
 
     init(_ name: String = "A") {
         app = builder.element(968_100)
@@ -94,6 +96,11 @@ private final class ExactNameFixture: @unchecked Sendable {
             ax: builder.makeAXRuntime(
                 appElement: app,
                 attributeValueHandler: { [self] element, attribute in
+                    if !writes.isEmpty, additionalNameFields.contains(where: { CFEqual($0, element) }),
+                       attribute == kAXDescriptionAttribute as String {
+                        peerNameReadsAfterWrite += 1
+                        onPeerNameReadAfterWrite?(peerNameReadsAfterWrite)
+                    }
                     if !writes.isEmpty, let coupledNameField, CFEqual(element, coupledNameField),
                        attribute == kAXValueAttribute as String { onMirrorReadAfterWrite?() }
                     if let renameMenuItem, CFEqual(element, renameMenuItem), attribute == kAXTitleAttribute as String {
@@ -606,6 +613,57 @@ struct Issue968ExactTrackNameAdapterTests {
             #expect(f.builder.attributeValue(mirror, kAXValueAttribute as String) as? String == "A")
             #expect(f.builder.attributeValue(peer, kAXDescriptionAttribute as String) as? String == "Newer track")
             #expect(f.builder.attributeValue(stripPeer, kAXValueAttribute as String) as? String == "Newer aux")
+        }
+    }
+
+    @Test func aFinalPeerReadCannotCertifyANewerPrimaryAndMirrorName() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let healthy = ExactNameFixture()
+            _ = healthy.appendTrack(name: "Peer", selected: false)
+            let (baseline, baselineProject, baselineTarget, _, _) = try await healthy.coupledCapture()
+            #expect((await healthy.applyCoupled(baseline, project: baselineProject, target: baselineTarget)).status == .applied)
+            let finalRead = healthy.peerNameReadsAfterWrite
+            #expect(finalRead > 0)
+            let f = ExactNameFixture()
+            _ = f.appendTrack(name: "Peer", selected: false)
+            let (capture, project, target, _, mirror) = try await f.coupledCapture()
+            f.onPeerNameReadAfterWrite = { count in
+                if count == finalRead {
+                    f.builder.setAttribute(f.field, kAXDescriptionAttribute as String, "Newer pair")
+                    f.builder.setAttribute(mirror, kAXValueAttribute as String, "Newer pair")
+                }
+            }
+            let result = await f.applyCoupled(capture, project: project, target: target)
+            #expect(f.peerNameReadsAfterWrite >= finalRead)
+            #expect(f.builder.attributeValue(f.field, kAXDescriptionAttribute as String) as? String == "Newer pair")
+            #expect(result.status == .attemptedUnverified)
+            #expect(result.inverse == nil && result.survivingReference == nil)
+            #expect(f.writes == ["C"])
+            let receipt = try #require(sharedJSONObject(sharedToolText(result.result)))
+            #expect(receipt["state"] as? String == "B")
+        }
+    }
+
+    @Test func ownedInverseCannotCertifyItsOwnUnexpectedChangeToANewerPeerName() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (_, peer) = f.appendTrack(name: "Peer", selected: false)
+            let (capture, project, target, _, _) = try await f.coupledCapture()
+            let forward = await f.applyCoupled(capture, project: project, target: target)
+            let proof = try #require(forward.inverse)
+            f.builder.setAttribute(peer, kAXDescriptionAttribute as String, "Newer peer")
+            let commitPair = f.onConfirm
+            f.onConfirm = {
+                commitPair?()
+                f.builder.setAttribute(peer, kAXDescriptionAttribute as String, "Unexpected peer")
+            }
+            let restored = await f.inverse(proof)
+            #expect(restored.status == .attemptedUnverified)
+            #expect(restored.inverse == nil)
+            #expect(f.writes == ["C", "A"])
+            #expect(f.builder.attributeValue(peer, kAXDescriptionAttribute as String) as? String == "Unexpected peer")
+            let receipt = try #require(sharedJSONObject(sharedToolText(restored.result)))
+            #expect(receipt["state"] as? String == "B")
         }
     }
 

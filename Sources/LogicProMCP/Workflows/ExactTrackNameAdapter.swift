@@ -104,6 +104,30 @@ enum ExactTrackNameAdapter {
         var preservedTracks: [TrackState] = []
         var preservedStrips: [ChannelStripState] = []
 
+        /// An inverse preserves peers' current names, never the old capture's
+        /// names. Original physical sources still decide membership/ownership.
+        func withCurrentPeerNames() -> CoupledMirror? {
+            var renewed = self
+            for index in preservedTracks.indices {
+                guard operationPermitted(), let source = preservedTracks[index].physicalBinding,
+                      let ordinal = source.currentIndex(),
+                      case .success(.some(let name)) = AXValueExtractors.extractTrackNameResult(
+                        from: source.header, runtime: source.runtime.ax),
+                      source.currentIndex() == ordinal else { return nil }
+                renewed.preservedTracks[index].name = name
+            }
+            for index in preservedStrips.indices {
+                guard operationPermitted(), let source = preservedStrips[index].physicalBinding,
+                      let ordinal = source.currentIndex(runtime: pair.track.runtime),
+                      case .success(.some(let name)) = AXPluginInstanceIdentity.stripNameResult(
+                        source.strip, runtime: pair.track.runtime.ax),
+                      source.currentIndex(runtime: pair.track.runtime) == ordinal else { return nil }
+                renewed.preservedStrips[index].name = name
+            }
+            guard renewed.peerNamesStillHeld(), operationPermitted() else { return nil }
+            return renewed
+        }
+
         private func peerNamesStillHeld() -> Bool {
             for row in preservedTracks {
                 guard operationPermitted(), let source = row.physicalBinding,
@@ -134,12 +158,15 @@ enum ExactTrackNameAdapter {
                 }
                 guard operationPermitted(), peerNamesStillHeld(), pair.track.currentIndex() != nil,
                       pair.strip.currentIndex(runtime: pair.track.runtime) != nil,
+                      // Peer reads can redraw or change the pair. Its deciding
+                      // native name/custody reads must follow the last peer read.
+                      peerNamesStillHeld(),
                       case .success(.some(let stripName)) = AXPluginInstanceIdentity.stripNameResult(pair.strip.strip,
                         runtime: pair.track.runtime.ax), matches(stripName),
                       case .success(.some(let trackName)) = AXValueExtractors.extractTrackNameResult(
                         from: pair.track.header, runtime: pair.track.runtime.ax), matches(trackName),
                       pair.strip.currentIndex(runtime: pair.track.runtime) != nil,
-                      pair.track.currentIndex() != nil, peerNamesStillHeld(), operationPermitted() else { return false }
+                      pair.track.currentIndex() != nil, operationPermitted() else { return false }
                 return true
             }
         }
@@ -247,12 +274,17 @@ enum ExactTrackNameAdapter {
         liveTrackName: @escaping @Sendable (Int) -> String?,
         liveTrackNames: @escaping @Sendable () -> [Int: String]?
     ) async -> Receipt {
-        // The owned inverse restores only this pair. A later peer rename is
-        // neither ours to restore nor permission to overwrite it. Retain the
-        // original pair/reference proof, without requiring peers' old names.
-        var mirror = proof.mirror
-        mirror?.preservedTracks = []
-        mirror?.preservedStrips = []
+        // Only this pair is restored. Observe newer peers as the preservation
+        // baseline, rather than overwriting them or dropping their proof.
+        let mirror: CoupledMirror?
+        if let original = proof.mirror {
+            guard let current = original.withCurrentPeerNames() else {
+                return .init(status: .rejectedBeforeWrite, before: nil, after: nil,
+                    survivingReference: nil, inverse: nil,
+                    result: TargetRefResolver.staleTargetReferenceResult(proof.target.rawValue, operation: "track.rename"))
+            }
+            mirror = current
+        } else { mirror = nil }
         return await applyChecked(Action(projectReference: proof.project, targetReference: proof.target,
                            expectedBefore: proof.written, desiredAfter: proof.before),
                     router: router, cache: proof.cache, registry: proof.registry,
