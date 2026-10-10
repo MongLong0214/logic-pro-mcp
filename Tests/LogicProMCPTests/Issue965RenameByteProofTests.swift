@@ -11,6 +11,7 @@ private final class RenameByteProofFixture: @unchecked Sendable {
     let field: AXUIElement
     let requested: String
     let nameAfterSet: String
+    var refuseSelection = false
     private(set) var events: [String] = []
 
     init(initial: String, requested: String, nameAfterSet: String) {
@@ -49,6 +50,8 @@ private final class RenameByteProofFixture: @unchecked Sendable {
             ax: builder.makeAXRuntime(
                 appElement: app,
                 setAttributeHandler: { [self] element, attribute, value in
+                    if refuseSelection, attribute == kAXSelectedChildrenAttribute as String
+                        || attribute == kAXSelectedAttribute as String { return false }
                     guard CFEqual(element, field), attribute == kAXValueAttribute as String,
                           let written = value as? String else {
                         Issue.record("Unexpected fixture AX setter")
@@ -60,6 +63,10 @@ private final class RenameByteProofFixture: @unchecked Sendable {
                     return true
                 },
                 performActionHandler: { [self] element, action in
+                    if refuseSelection, !CFEqual(element, field), action == kAXPressAction as String {
+                        events.append("selection_attempt")
+                        return false
+                    }
                     guard CFEqual(element, field),
                           action == kAXPressAction as String || action == kAXConfirmAction as String else {
                         Issue.record("Unexpected fixture AX action")
@@ -135,6 +142,29 @@ private actor RenameByteProofChannel: Channel {
 struct Issue965RenameByteProofTests {
     private static let oldName = "q\u{0301}\u{0323}"
     private static let newName = "q\u{0323}\u{0301}"
+
+    @Test(arguments: [-1.0, 2.0, 0.9, Double.nan, Double.infinity, -Double.infinity])
+    func allMalformedSelectionCannotBypassLegacyRenameExclusivity(value: Double) throws {
+        let f = RenameByteProofFixture(initial: "Before", requested: "Changed", nameAfterSet: "Changed")
+        f.refuseSelection = true
+        let rail: AXUIElement = try #require(AXHelpers.getAttribute(f.header, kAXParentAttribute as String,
+            runtime: f.builder.makeAXRuntime()))
+        let other = f.builder.element(965_305)
+        f.builder.setRole(other, kAXLayoutItemRole as String)
+        f.builder.setChildren(other, [])
+        for header in [f.header, other] {
+            f.builder.setAttribute(header, kAXSelectedAttribute as String, NSNumber(value: value))
+        }
+        f.builder.setChildren(rail, [f.header, other])
+        let result = f.rename(["index": "0", "name": "Changed"])
+        let body = try #require(sharedJSONObject(result.message))
+        #expect(body["state"] as? String == "C")
+        #expect(body["error"] as? String == "selection_not_exclusive")
+        #expect(!f.events.contains("set_name"))
+        #expect(!f.events.contains(kAXPressAction as String))
+        #expect(!f.events.contains(kAXConfirmAction as String))
+        f.expectNoFallbackInput()
+    }
 
     @Test func byteDistinctEquivalentRenameRequiresAnActualWriteAndExactReadback() throws {
         let f = RenameByteProofFixture(
