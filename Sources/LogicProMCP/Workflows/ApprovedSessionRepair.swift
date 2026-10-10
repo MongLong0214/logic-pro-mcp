@@ -3,7 +3,7 @@ import CryptoKit
 import Foundation
 import MCP
 
-/// The native counterpart of one retained canonical view task. It is not a wire
+/// The native counterpart of one retained canonical view or coupled name task. It is not a wire
 /// token: only the retained capture supplies its process-local AX custody.
 final class ApprovedSessionRepair: @unchecked Sendable {
     struct ApplyRequest: Sendable {
@@ -37,6 +37,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
     }
     private struct NameGoal: Sendable {
         let reference: TargetReference
+        let before: String
         let name: String
         let binding: AXTrackBinding.Binding
     }
@@ -45,6 +46,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         let document: String
         let mixer: MixerTask?
         let names: [NameGoal]
+        let renameCapture: SessionPopulationObservation.Capture?
     }
 
     /// The existing adapter's finite scope and captured footprint, shared with planning.
@@ -78,20 +80,32 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                       case .located(let index) = ProjectSessionAudit.locate(target.trackRef, in: references) else { return nil }
                 let rows = source.tracks.filter { $0.id == index }
                 guard rows.count == 1, let row = rows.first,
-                      row.name.utf8.elementsEqual(name.name.utf8), let binding = row.physicalBinding,
+                      let binding = row.physicalBinding,
                       binding.exposure?.hasEnded != true,
                       binding.projectPath?.utf8.elementsEqual(projectPath.utf8) == true,
                       goals.allSatisfy({ !CFEqual($0.binding.header, binding.header) }) else { return nil }
-                goals.append(.init(reference: target.trackRef, name: name.name, binding: binding))
+                goals.append(.init(reference: target.trackRef, before: row.name, name: name.name, binding: binding))
             }
             guard let document = goals.first?.binding.document,
                   goals.allSatisfy({ $0.binding.document.utf8.elementsEqual(document.utf8)
                       && CFEqual($0.binding.window, goals[0].binding.window) }) else { return nil }
         }
+        let changed = goals.filter { !$0.before.utf8.elementsEqual($0.name.utf8) }
+        // One captured coupled action is qualified. Multi-change plans and
+        // composed topology/view effects retain their existing unavailability.
+        guard changed.count <= 1 else { return nil }
+        if let goal = changed.first {
+            guard FeatureFlags.adr004MutationSaga, policy.mixerVisible == nil,
+                  request.domains.contains(.strips), request.domains.contains(.associations),
+                  ExactTrackNameAdapter.hasCapturedCoupledFootprint(.init(projectReference: issued,
+                    targetReference: goal.reference, expectedBefore: goal.before, desiredAfter: goal.name),
+                    capture: source) else { return nil }
+        }
         guard let desired = policy.mixerVisible else {
             guard policyValue.objectValue?["presentation"] == nil,
                   let document = goals.first?.binding.document else { return nil }
-            return .init(projectRef: issued, document: document, mixer: nil, names: goals)
+            return .init(projectRef: issued, document: document, mixer: nil, names: goals,
+                renameCapture: changed.isEmpty ? nil : source)
         }
         guard policyValue.objectValue?["presentation"]?.objectValue.map({ Set($0.keys) == ["mixer_visible"] }) == true,
               let fresh = source.freshPopulation, fresh.stable,
@@ -104,12 +118,16 @@ final class ApprovedSessionRepair: @unchecked Sendable {
               goals.allSatisfy({ CFEqual($0.binding.window, binding.window)
                   && $0.binding.document.utf8.elementsEqual(binding.document.utf8) }) else { return nil }
         return .init(projectRef: issued, document: binding.document,
-            mixer: .init(before: before, desired: desired, binding: binding), names: goals)
+            mixer: .init(before: before, desired: desired, binding: binding), names: goals, renameCapture: nil)
     }
     let plan: SagaPlan
     let projectRef: TargetReference
     private let mixerTask: MixerTask?
     private let nameGoals: [NameGoal]
+    private let renameCapture: SessionPopulationObservation.Capture?
+    private var ranName = false
+    private var ownedNameInverse: ExactTrackNameAdapter.OwnedInverse?
+    private var restoredNameProof: ExactTrackNameAdapter.OwnedInverse?
     private let document: String
     private let cache: StateCache
     private let registry: TargetRegistry
@@ -122,11 +140,13 @@ final class ApprovedSessionRepair: @unchecked Sendable {
     private var ownedMixer: AXUIElement?
 
     private init(plan: SagaPlan, projectRef: TargetReference, document: String,
-                 mixerTask: MixerTask? = nil, nameGoals: [NameGoal] = [], cacheProjectEpoch: UInt64,
+                 mixerTask: MixerTask? = nil, nameGoals: [NameGoal] = [],
+                 renameCapture: SessionPopulationObservation.Capture? = nil, cacheProjectEpoch: UInt64,
                  registryProjectEpoch: UInt64,
                  cache: StateCache, registry: TargetRegistry, journal: SagaJournal) {
         self.plan = plan; self.projectRef = projectRef; self.document = document
         self.mixerTask = mixerTask; self.nameGoals = nameGoals
+        self.renameCapture = renameCapture
         self.cacheProjectEpoch = cacheProjectEpoch; self.registryProjectEpoch = registryProjectEpoch
         self.cache = cache; self.registry = registry; self.journal = journal
     }
@@ -153,10 +173,16 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                   object[$0]?.arrayValue?.isEmpty == true
               }),
               let unchanged = object["unchanged_tasks"]?.arrayValue,
-              unchanged.count == names.count,
-              Set(unchanged.compactMap(\.stringValue)) == Set(names.map { "name_" + $0.target }),
               let captured = capturedGoals(policy: policy, policyValue: .object(policyObject), names: names,
                   source: source.capture, request: source.request) else { return nil }
+        let unchangedNames = names.filter { name in
+            captured.names.contains { goal in
+                policy.targets.first(where: { $0.handle == name.target })?.trackRef == goal.reference
+                    && goal.before.utf8.elementsEqual(goal.name.utf8)
+            }
+        }
+        guard unchanged.count == unchangedNames.count,
+              Set(unchanged.compactMap(\.stringValue)) == Set(unchangedNames.map { "name_" + $0.target }) else { return nil }
         let issued = captured.projectRef
         let goals = captured.names
         // Ordinary polls advance content revisions even for identical values.
@@ -172,6 +198,22 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         for goal in goals {
             guard let current = await registry.resolve(goal.reference), current.kind == .track,
                   current.physicalTrack?.matches(goal.binding) == true else { return nil }
+        }
+        if let renameCapture = captured.renameCapture,
+           let goal = goals.first(where: { !$0.before.utf8.elementsEqual($0.name.utf8) }) {
+            guard steps.count == 1, let step = steps.first?.objectValue,
+                  step["kind"] == .string("name"), step["target_ref"] == .string(goal.reference.rawValue),
+                  step["before"]?.objectValue?["name"] == .string(goal.before),
+                  step["after"]?.objectValue?["name"] == .string(goal.name),
+                  step["blocked_reasons"]?.arrayValue?.isEmpty == true,
+                  step["dependencies"]?.arrayValue?.isEmpty == true else { return nil }
+            let saga = SagaPlan(steps: [.init(operationID: .tracksRename, targetRef: goal.reference,
+                params: ["name": .string(goal.name)],
+                expectedInverse: .init(operationID: .tracksRename, valueParameter: "name"))],
+                idempotencyKey: key, canonicalPlanID: id, canonicalDigest: digest)
+            return .init(plan: saga, projectRef: issued, document: captured.document, nameGoals: goals,
+                renameCapture: renameCapture, cacheProjectEpoch: source.capture.projectEpoch,
+                registryProjectEpoch: targetSnapshot.projectEpoch, cache: cache, registry: registry, journal: journal)
         }
         if steps.isEmpty {
             guard captured.mixer == nil else { return nil }
@@ -200,10 +242,26 @@ final class ApprovedSessionRepair: @unchecked Sendable {
     }
 
     func supports(_ step: SagaStep) -> Bool {
-        mixerTask != nil && step.operationID == .navigateToggleView && step.targetRef == projectRef
+        if let goal = changedNameGoal {
+            return step.operationID == .tracksRename && step.targetRef == goal.reference
+                && Set(step.params.keys) == ["name"]
+                && (step.params["name"] == .string(goal.name) || step.params["name"] == .string(goal.before))
+                && step.expectedInverse.operationID == .tracksRename && step.expectedInverse.valueParameter == "name"
+        }
+        return mixerTask != nil && step.operationID == .navigateToggleView && step.targetRef == projectRef
             && Set(step.params.keys) == ["view", "visible"] && step.params["view"] == .string("mixer")
             && step.params["visible"]?.boolValue != nil
             && step.expectedInverse.operationID == .navigateToggleView && step.expectedInverse.valueParameter == "visible"
+    }
+
+    private var changedNameGoal: NameGoal? {
+        guard renameCapture != nil else { return nil }
+        return nameGoals.first { !$0.before.utf8.elementsEqual($0.name.utf8) }
+    }
+
+    private func nameAction(_ goal: NameGoal) -> ExactTrackNameAdapter.Action {
+        .init(projectReference: projectRef, targetReference: goal.reference,
+            expectedBefore: goal.before, desiredAfter: goal.name)
     }
 
     private func projectIsCurrent(allowPendingCancellation: Bool = false) async -> Bool {
@@ -257,6 +315,25 @@ final class ApprovedSessionRepair: @unchecked Sendable {
     }
 
     func readState(_ step: SagaStep) async -> ObservedState? {
+        if let goal = changedNameGoal, let capture = renameCapture {
+            guard supports(step), await projectIsCurrent(allowPendingCancellation: true) else { return nil }
+            let observed: String?
+            if ranName, ownedNameInverse == nil, step.params["name"] == .string(goal.before) {
+                guard let proof = restoredNameProof else { return nil }
+                observed = await ExactTrackNameAdapter.readOwnedCoupledName(proof)
+            } else {
+                observed = await ExactTrackNameAdapter.readCapturedCoupledName(nameAction(goal),
+                    capture: capture, registry: registry,
+                    preserveCurrentPeers: ownedNameInverse != nil && step.params["name"] == .string(goal.before))
+            }
+            guard let name = observed,
+                  let index = goal.binding.currentIndex(),
+                  await projectIsCurrent(allowPendingCancellation: true) else { return nil }
+            let evidence = SagaReadEvidence(readSource: .axTrackName, provenance: .liveIndependent,
+                trackIndex: index, projectReference: projectRef.rawValue, field: "name",
+                observed: .string(name), sampledAt: ISO8601DateFormatter.cacheFormatter.string(from: Date()))
+            return .init(value: .string(name), evidence: evidence.summary, read: evidence)
+        }
         guard supports(step), let (value, _) = await reading() else { return nil }
         let evidence = SagaReadEvidence(readSource: .axProjectMixerVisibility, provenance: .liveIndependent,
             trackIndex: nil, projectReference: projectRef.rawValue, field: "mixer_visible",
@@ -269,24 +346,32 @@ final class ApprovedSessionRepair: @unchecked Sendable {
 
     /// The same issued-name proof is used before a composed forward action and
     /// for the final whole-goal receipt. It never supplies inverse permission.
-    func nameGoalEvidence(requiringMixerGoal: Bool = false) async -> [[String: Any]]? {
+    var hasMixerGoal: Bool { mixerTask != nil }
+
+    func nameGoalEvidence(requiringMixerGoal: Bool = false, afterExecution: Bool = false) async -> [[String: Any]]? {
         guard hasMatchingNameGoals, FeatureFlags.adr004MutationSaga,
               await projectIsCurrent(), await registry.resolveCurrentProject(projectRef) != nil else {
             return nil
         }
         func independentRead(_ goal: NameGoal) async -> SagaReadEvidence? {
+            let expected = afterExecution ? goal.name : goal.before
             guard await projectIsCurrent(),
                   let target = await registry.resolve(goal.reference), target.kind == .track,
                   target.physicalTrack?.matches(goal.binding) == true,
-                  target.descriptor.trackName.utf8.elementsEqual(goal.name.utf8),
+                  target.descriptor.trackName.utf8.elementsEqual(expected.utf8),
                   let index = goal.binding.currentIndex(),
                   case .success(let name?) = AXValueExtractors.extractTrackNameResult(
                     from: goal.binding.header, runtime: goal.binding.runtime.ax),
-                  name.utf8.elementsEqual(goal.name.utf8),
+                  name.utf8.elementsEqual(expected.utf8),
                   goal.binding.currentIndex() == index,
                   let after = await registry.resolve(goal.reference), after.physicalTrack?.matches(goal.binding) == true,
                   await projectIsCurrent() else {
                 return nil
+            }
+            if let capture = renameCapture, let changed = changedNameGoal, goal.reference == changed.reference {
+                guard let coupled = await ExactTrackNameAdapter.readCapturedCoupledName(nameAction(goal),
+                    capture: capture, registry: registry), coupled.utf8.elementsEqual(expected.utf8),
+                    await projectIsCurrent() else { return nil }
             }
             return SagaReadEvidence(readSource: .axTrackName, provenance: .liveIndependent,
                 trackIndex: index, projectReference: projectRef.rawValue, field: "name",
@@ -326,6 +411,36 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             return nil
         }
         return evidence
+    }
+
+    func performName(_ step: SagaStep, router: ChannelRouter) async -> CallTool.Result {
+        guard supports(step), let goal = changedNameGoal, let capture = renameCapture else {
+            return toolStateCResult(.unsupportedState, extras: ["write_attempted": false])
+        }
+        let restoring = ranName && ownedNameInverse != nil && step.params["name"] == .string(goal.before)
+        guard await projectIsCurrent(allowPendingCancellation: restoring) else {
+            return toolStateCResult(.staleTargetReference, extras: ["write_attempted": false])
+        }
+        let runtime = goal.binding.runtime
+        let receipt: ExactTrackNameAdapter.Receipt
+        if restoring, let proof = ownedNameInverse {
+            ownedNameInverse = nil
+            receipt = await ExactTrackNameAdapter.inverse(proof, router: router,
+                liveTrackName: { AXLogicProElements.trackName(at: $0, runtime: runtime) },
+                liveTrackNames: { AXLogicProElements.trackNames(runtime: runtime) })
+            restoredNameProof = receipt.inverse
+        } else {
+            guard !ranName, step.params["name"] == .string(goal.name) else {
+                return toolStateCResult(.staleTargetReference, extras: ["write_attempted": false])
+            }
+            ranName = true
+            receipt = await ExactTrackNameAdapter.applyCoupled(nameAction(goal), capture: capture,
+                router: router, cache: cache, registry: registry,
+                liveTrackName: { AXLogicProElements.trackName(at: $0, runtime: runtime) },
+                liveTrackNames: { AXLogicProElements.trackNames(runtime: runtime) })
+            ownedNameInverse = receipt.inverse
+        }
+        return receipt.result
     }
 
     /// No scalar operation is dispatched for the names-only case.

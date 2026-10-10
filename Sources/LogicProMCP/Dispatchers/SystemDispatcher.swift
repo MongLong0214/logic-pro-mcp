@@ -1164,11 +1164,12 @@ struct SystemDispatcher: OperationTraceDispatching {
                             var nameGoalFailed = false
                             if finalOutcome.state == .completed,
                                let approval = approvedSessionRepair, approval.hasMatchingNameGoals {
-                                finalNameEvidence = await approval.nameGoalEvidence(requiringMixerGoal: true)
+                                finalNameEvidence = await approval.nameGoalEvidence(
+                                    requiringMixerGoal: approval.hasMixerGoal, afterExecution: true)
                                 if finalNameEvidence == nil {
                                     nameGoalFailed = true
-                                    // Only the owned view effect is compensated; a human name
-                                    // edit is never overwritten or used to block a safe inverse.
+                                    // Compensate only the owned effect. The adapter refuses
+                                    // to overwrite a newer edit to its own named pair.
                                     finalOutcome = await saga.cancel(outcome: finalOutcome,
                                         executor: surfaceExecutor, deadlineReached: deadlineReached)
                                     finalOutcome.complete = false

@@ -412,9 +412,12 @@ extension ProjectSessionAudit {
                     }
                 } else { blocked.insert("target_ambiguous_in_snapshot") }
             } else { blocked.insert("target_not_in_snapshot") }
-            // Legacy rename does not accept the approved plan's coupled-name/inverse footprint.
-            // Its existence alone cannot make this richer task executable.
-            blocked.insert("naming_preservation_adapter_unavailable")
+            // A registered rename alone cannot prove this richer footprint.
+            // Only the finite retained producer-bound adapter can qualify it.
+            if !ApprovedSessionRepair.canVerifyCapturedGoals(policy: policy, policyValue: policyValue,
+                names: names, source: capture, request: request) {
+                blocked.insert("naming_preservation_adapter_unavailable")
+            }
             if OperationRegistry.spec(tool: "logic_tracks", command: "rename") == nil {
                 blocked.insert("naming_operation_unregistered")
             }

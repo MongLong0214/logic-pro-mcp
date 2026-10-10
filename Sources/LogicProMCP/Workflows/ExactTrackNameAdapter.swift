@@ -1,8 +1,8 @@
 import Foundation
 import MCP
 
-/// #968 N1: one exact-local Arrange name action, not a coupled naming plan executor.
-/// The canonical repair planner's preservation-footprint blocker remains authoritative.
+/// #968: exact-local Arrange naming, including one producer-observed coupled
+/// pair. The canonical planner still rejects unqualified multi-change footprints.
 enum ExactTrackNameAdapter {
     @TaskLocal private static var coupledWriteBoundary: (@Sendable (Bool) -> Bool)?
 
@@ -63,7 +63,7 @@ enum ExactTrackNameAdapter {
     }
 
     /// One producer-observed track/strip pair. This is additive local coupling
-    /// qualification, not the canonical planner's complete preservation footprint.
+    /// qualification, not an arbitrary canonical plan's preservation footprint.
     /// A decoded report, equal names or matching ordinals cannot supply the pair.
     static func applyCoupled(
         _ action: Action, capture: SessionPopulationObservation.Capture,
@@ -75,24 +75,80 @@ enum ExactTrackNameAdapter {
             .init(status: .rejectedBeforeWrite, before: nil, after: nil, survivingReference: nil, inverse: nil,
                 result: TargetRefResolver.staleTargetReferenceResult(action.targetReference.rawValue, operation: "track.rename"))
         }
+        guard let snapshot = capture.targetSnapshot, await registry.currentSnapshot == snapshot,
+              let target = await registry.resolve(action.targetReference), let source = target.physicalTrack,
+              target.kind == .track,
+              let mirror = capturedMirror(action, capture: capture, source: source) else { return reject() }
+        return await applyChecked(action, router: router, cache: cache, registry: registry,
+            liveTrackName: liveTrackName, liveTrackNames: liveTrackNames, mirror: mirror)
+    }
+
+    /// Pure availability over the retained producer capture, not permission to
+    /// act. Canonical execution repeats the native/registry proof above.
+    static func hasCapturedCoupledFootprint(_ action: Action, capture: SessionPopulationObservation.Capture) -> Bool {
+        guard TrackDispatcher.renameNameFailure(action.desiredAfter) == nil,
+              let issued = capture.issued,
+              case .located(let index) = ProjectSessionAudit.locate(action.targetReference, in: issued) else { return false }
+        let rows = capture.tracks.filter { $0.id == index }
+        guard rows.count == 1, let source = rows.first?.physicalBinding else { return false }
+        return capturedMirror(action, capture: capture, source: source) != nil
+    }
+
+    private static func capturedMirror(_ action: Action, capture: SessionPopulationObservation.Capture,
+                                      source: AXTrackBinding.Binding) -> CoupledMirror? {
         guard capture.before == capture.after, capture.referencesEnabled, !capture.referencesStale,
               let fresh = capture.freshPopulation, fresh.stable, fresh.uiEffects.restoration == "restored",
-              let snapshot = capture.targetSnapshot, await registry.currentSnapshot == snapshot,
-              case .issued(let project)? = capture.projectIssuance, project == action.projectReference,
-              let target = await registry.resolve(action.targetReference), let source = target.physicalTrack,
-              target.kind == .track else { return reject() }
+              let snapshot = capture.targetSnapshot,
+              case .issued(let project)? = capture.projectIssuance, project == action.projectReference else { return nil }
         let pairs = fresh.selectionAssociations.filter { $0.track.matches(source) }
         guard pairs.count == 1, let pair = pairs.first,
               fresh.selectionAssociations.filter({ $0.strip.matches(pair.strip) }).count == 1,
-              capture.tracks.filter({ $0.physicalBinding?.matches(source) == true }).count == 1 else { return reject() }
+              capture.tracks.filter({ $0.physicalBinding?.matches(source) == true }).count == 1,
+              capture.tracks.first(where: { $0.physicalBinding?.matches(source) == true })?.name
+                .utf8.elementsEqual(action.expectedBefore.utf8) == true else { return nil }
         let rows = capture.channelStrips.indices.filter { capture.channelStrips[$0].physicalBinding?.matches(pair.strip) == true }
         guard rows.count == 1, let row = rows.first, let stripRef = capture.mixerReference(at: row),
-              capture.channelStrips[row].name?.utf8.elementsEqual(action.expectedBefore.utf8) == true else { return reject() }
-        let mirror = CoupledMirror(pair: pair, reference: stripRef, snapshot: snapshot,
+              capture.channelStrips[row].name?.utf8.elementsEqual(action.expectedBefore.utf8) == true else { return nil }
+        return CoupledMirror(pair: pair, reference: stripRef, snapshot: snapshot,
             preservedTracks: capture.tracks.filter { $0.physicalBinding?.matches(pair.track) != true },
             preservedStrips: capture.channelStrips.filter { $0.physicalBinding?.matches(pair.strip) != true })
-        return await applyChecked(action, router: router, cache: cache, registry: registry,
-            liveTrackName: liveTrackName, liveTrackNames: liveTrackNames, mirror: mirror)
+    }
+
+    static func readCapturedCoupledName(_ action: Action, capture: SessionPopulationObservation.Capture,
+                                       registry: TargetRegistry, preserveCurrentPeers: Bool = false) async -> String? {
+        guard let target = await registry.resolve(action.targetReference), target.kind == .track,
+              let source = target.physicalTrack,
+              var mirror = capturedMirror(action, capture: capture, source: source) else { return nil }
+        if preserveCurrentPeers {
+            guard let renewed = mirror.withCurrentPeerNames() else { return nil }
+            mirror = renewed
+        }
+        return await readHeldCoupledName(mirror, project: action.projectReference,
+            target: action.targetReference, registry: registry)
+    }
+
+    /// Read the exact footprint that the actual inverse preserved. An old
+    /// capture or a newly sampled baseline cannot certify an inverse's effects.
+    static func readOwnedCoupledName(_ proof: OwnedInverse) async -> String? {
+        guard let mirror = proof.mirror else { return nil }
+        return await readHeldCoupledName(mirror, project: proof.project,
+            target: proof.target, registry: proof.registry)
+    }
+
+    private static func readHeldCoupledName(_ mirror: CoupledMirror, project: TargetReference,
+                                           target: TargetReference, registry: TargetRegistry) async -> String? {
+        let guardHelp = AXHelpers.HelpReadGuard(allowHelpReads: false, stop: { !operationPermitted() })
+        return await AXHelpers.HelpReadGuard.$current.withValue(guardHelp) {
+            guard operationPermitted(), let index = mirror.pair.track.currentIndex(),
+                  case .success(.some(let name)) = AXValueExtractors.extractTrackNameResult(
+                    from: mirror.pair.track.header, runtime: mirror.pair.track.runtime.ax),
+                  await mirror.isCurrent(name: name, project: project, target: target, registry: registry),
+                  case .success(.some(let finalName)) = AXValueExtractors.extractTrackNameResult(
+                    from: mirror.pair.track.header, runtime: mirror.pair.track.runtime.ax),
+                  finalName.utf8.elementsEqual(name.utf8), mirror.pair.track.currentIndex() == index,
+                  operationPermitted() else { return nil }
+            return finalName
+        }
     }
 
     fileprivate struct CoupledMirror: Sendable {
