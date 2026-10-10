@@ -96,6 +96,16 @@ enum ExactTrackNameAdapter {
         guard wrote || noOp else {
             return unverified()
         }
+        // A committed writer/rebound descriptor is historical evidence. Before
+        // granting an inverse, corroborate the retained physical header again;
+        // a same-name replacement or a newer edit is not our written state.
+        if let source = binding.physicalTrack {
+            guard source.currentIndex() != nil,
+                  case .success(.some(let currentName)) = AXValueExtractors.extractTrackNameResult(
+                    from: source.header, runtime: source.runtime.ax),
+                  currentName.utf8.elementsEqual(after.utf8),
+                  source.currentIndex() != nil else { return unverified() }
+        }
         let inverse = wrote ? OwnedInverse(project: action.projectReference, target: action.targetReference,
                                           before: before, written: after, registry: registry, cache: cache) : nil
         return Receipt(status: wrote ? .applied : .alreadySatisfied, before: before, after: after,

@@ -336,6 +336,60 @@ private actor ExactNameChannel: Channel {
 
 @Suite("#968 exact-local track naming adapter")
 struct Issue968ExactTrackNameAdapterTests {
+    @Test(arguments: ["header", "name", "document"])
+    func latePhysicalCustodyLossCannotGrantAnInverse(change: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            // Measure the unchanged scalar dispatcher, not the adapter being
+            // repaired. The next permission read is the adapter's own boundary
+            // after committed writer readback and reference rebind.
+            let healthy = ExactNameFixture()
+            let (healthyProject, healthyTarget) = try await healthy.prepare(typedProducer: true)
+            let healthyContext = OperationTraceContext(ownsGate: {
+                healthy.adapterPermissionReads += 1
+                return true
+            })
+            let scalar = await OperationTraceContext.$current.withValue(healthyContext) {
+                await healthy.rename(project: healthyProject, target: healthyTarget, expected: "A", desired: "C")
+            }
+            let scalarBody = try #require(sharedJSONObject(sharedToolText(scalar)))
+            #expect(scalarBody["state"] as? String == "A")
+            let adapterBoundary = healthy.adapterPermissionReads + 1
+
+            let f = ExactNameFixture()
+            let (project, target) = try await f.prepare(typedProducer: true)
+            let replacement = f.appendTrack(name: "C", selected: true).0
+            // Keep the original starting population equal to the scalar control.
+            f.builder.setChildren(f.rail, [f.header])
+            let context = OperationTraceContext(ownsGate: {
+                f.adapterPermissionReads += 1
+                if f.adapterPermissionReads == adapterBoundary {
+                    switch change {
+                    case "header": f.builder.setChildren(f.rail, [replacement])
+                    case "name": f.builder.setAttribute(f.field, kAXDescriptionAttribute as String, "Newer edit")
+                    default: f.builder.setAttribute(f.window, kAXDocumentAttribute as String, "file:///tmp/Other.logicx")
+                    }
+                }
+                return true
+            })
+            let receipt = await OperationTraceContext.$current.withValue(context) {
+                await f.apply(project: project, target: target, before: "A", after: "C")
+            }
+            #expect(f.adapterPermissionReads >= adapterBoundary)
+            #expect(f.writes == ["C"])
+            #expect(receipt.status == .attemptedUnverified)
+            #expect(receipt.inverse == nil)
+            #expect(receipt.survivingReference == nil)
+            #expect(receipt.before == "A")
+            #expect(receipt.after == "C")
+            let body = try #require(sharedJSONObject(sharedToolText(receipt.result)))
+            #expect(body["state"] as? String == "B")
+            let verified = try #require(body["verified"] as? Bool)
+            #expect(!verified)
+            let wrote = try #require(body["write_attempted"] as? Bool)
+            #expect(wrote)
+        }
+    }
+
     @Test func losingTheFinalAdapterPermissionCannotReturnTheWritersEarlierStateA() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             // Learn the last adapter check from the same healthy production path,
