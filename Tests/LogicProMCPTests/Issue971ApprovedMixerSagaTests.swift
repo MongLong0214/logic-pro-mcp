@@ -324,6 +324,83 @@ struct Issue971ApprovedMixerSagaTests {
         }
     }
 
+    @Test(arguments: [true, false])
+    func independentProjectEpochCountersStillVerifyTheSameOwnedProject(cacheAhead: Bool) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: false)
+                // These actors own independent counters. A normal lifecycle can
+                // advance one without advancing the other; equality is not identity.
+                if cacheAhead { await f.cache.clearProjectState() }
+                else { await f.registry.bumpProjectEpoch(); await f.registry.bumpProjectEpoch() }
+                await f.router.register(f.view.channel())
+                let names = ["Bass", "Lead"]
+                _ = f.installNameHeaders(names)
+                let plan = try await f.namesPlan(names,
+                    policyExtras: ["presentation": .object(["mixer_visible": .bool(true)])])
+                let executable = try #require(plan["executable"] as? Bool)
+                #expect(executable)
+                let cacheIdentity = try #require(await f.cache.currentProjectIdentity())
+                let registrySnapshot = await f.registry.currentSnapshot
+                #expect(cacheIdentity.epoch != registrySnapshot.projectEpoch)
+                let params = try f.applyParameters(plan, key: "independent-project-epochs")
+                let outcome = try await f.call("apply_session_repair", params: params)
+                #expect(outcome["saga_state"] as? String == "completed")
+                let verified = try #require(outcome["verified"] as? Bool)
+                #expect(verified)
+                #expect(f.view.events == ["open_view", "show_mixer"])
+                #expect(f.view.showing)
+                let evidence = try #require(outcome["goal_evidence"] as? [[String: Any]])
+                #expect(evidence.count == names.count)
+                let actions = f.view.events
+                let replay = try await f.call("apply_session_repair", params: params)
+                let duplicate = try #require(replay["duplicate"] as? Bool)
+                #expect(duplicate)
+                #expect(f.view.events == actions)
+            }
+        }
+    }
+
+    @Test(arguments: [true, false])
+    func eitherProjectEpochChangingAfterRetentionRefusesBeforeTheViewWrite(cacheChanges: Bool) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: false)
+                await f.cache.clearProjectState()
+                _ = f.installNameHeaders(["Bass"])
+                let channel = AfterVerifiedSetterChannel(base: f.view.channel(), journal: f.journal,
+                    cancel: false, beforeForward: {
+                        if cacheChanges {
+                            let project = await f.cache.getProject()
+                            await f.cache.clearProjectState()
+                            await f.cache.updateProject(project)
+                        } else {
+                            await f.registry.bumpProjectEpoch()
+                        }
+                    })
+                await f.router.register(channel)
+                let plan = try await f.namesPlan(["Bass"],
+                    policyExtras: ["presentation": .object(["mixer_visible": .bool(true)])])
+                let executable = try #require(plan["executable"] as? Bool)
+                #expect(executable)
+                let outcome = try await f.call("apply_session_repair",
+                    params: f.applyParameters(plan, key: "changed-owned-epoch"))
+                #expect(await channel.entered)
+                #expect(outcome["state"] as? String == "C")
+                let verified = try #require(outcome["verified"] as? Bool)
+                #expect(!verified)
+                let steps = try #require(outcome["steps"] as? [[String: Any]])
+                #expect(steps.count == 1)
+                let result = try #require(steps.first?["result"] as? [String: Any])
+                #expect(result["state"] as? String == "C")
+                let attempted = try #require(result["write_boundary_crossed"] as? Bool)
+                #expect(!attempted)
+                #expect(f.view.events.isEmpty)
+                #expect(!f.view.showing)
+            }
+        }
+    }
+
     @Test
     func namesOnlyOracleDescribesActualZeroWriteGoalEvidence() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
