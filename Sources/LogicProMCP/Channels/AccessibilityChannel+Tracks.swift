@@ -79,6 +79,21 @@ extension AccessibilityChannel {
     // One mutation-gate-owned request mutates this navigation. The request-local
     // reader below only corroborates retained AX facts; it never actuates UI.
     final class OwnedTrackStackObservationNavigation: @unchecked Sendable {
+        @TaskLocal private static var interruptedInverse = false
+        static var restoringInterruptedAcquisition: Bool { interruptedInverse }
+
+        /// Cancel the reading, not its already-owned inverse. The child inherits
+        /// the original trace, live gate and deadline, but can await click landing
+        /// despite caller cancellation. All physical custody checks still apply.
+        /// No population read or publication is inside this private scope.
+        func restoreAfterInterruptedRead(stoppingWhen stop: @escaping @Sendable () -> Bool) async -> SessionPopulationObservation.UIEffects {
+            await Task {
+                await Self.$interruptedInverse.withValue(true) {
+                    await self.restore(stoppingWhen: stop)
+                }
+            }.value
+        }
+
         final class ReadFocusScope: @unchecked Sendable {
             private let lock = NSLock()
             private var navigation: OwnedTrackStackObservationNavigation?

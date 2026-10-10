@@ -481,7 +481,7 @@ actor AccessibilityChannel: Channel {
             return population
         } catch {
             Log.info("Population acquisition failed: \(error)", subsystem: "ax")
-            let stack = await stackNavigation?.restore(stoppingWhen: stop) ?? .init()
+            let stack = await stackNavigation?.restoreAfterInterruptedRead(stoppingWhen: stop) ?? .init()
             let mixer = await navigation?.restore(stoppingWhen: stop) ?? .init()
             let effects = mergedEffects(association?.effects ?? .init(), mergedEffects(stack, mixer))
             throw SessionPopulationObservation.NavigationAcquisitionError(cause: error, effects: effects)

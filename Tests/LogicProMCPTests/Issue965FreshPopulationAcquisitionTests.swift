@@ -1329,8 +1329,14 @@ struct Issue965FreshPopulationAcquisitionTests {
         try await observeStack(navigation: true, initiallyExpanded: false, nested: true, nestedFault: nestedFault)
     }
 
-    @Test(arguments: ["cancel", "deadline"])
-    func registeredNestedStackStopsAfterTheAcquisitionCutoff(nestedFault: String) async throws {
+    @Test(arguments: ["cancel", "deadline", "cancel_read", "cancel_task_read"])
+    func registeredNestedStackRestoresOnCancellationButNotAfterDeadline(nestedFault: String) async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, nested: true, nestedFault: nestedFault)
+    }
+
+    @Test(arguments: ["cancel_read_focus", "cancel_read_project", "cancel_read_viewport",
+                      "cancel_read_control", "cancel_read_gate", "cancel_read_deadline"])
+    func cancelledOwnedStackStillRequiresItsOriginalCustody(nestedFault: String) async throws {
         try await observeStack(navigation: true, initiallyExpanded: false, nested: true, nestedFault: nestedFault)
     }
 
@@ -1651,7 +1657,7 @@ struct Issue965FreshPopulationAcquisitionTests {
         fixture.builder.setAttribute(scrollbar, kAXValueAttribute as String, 0.25)
         fixture.builder.setChildren(scrollbar, [])
         fixture.builder.setChildren(fixture.window, [fixture.rail, controlBar]
-            + (nestedFault == "viewport" ? [scrollbar] : []) + (focusRestoration == nil ? [] : [workspace]))
+            + (nestedFault == "viewport" || nestedFault == "cancel_read_viewport" ? [scrollbar] : []) + (focusRestoration == nil ? [] : [workspace]))
         if hiddenView {
             fixture.builder.setRole(shownLabel, kAXTextFieldRole as String)
             fixture.builder.setAttribute(shownLabel, kAXDescriptionAttribute as String, "Track 1")
@@ -1978,12 +1984,25 @@ struct Issue965FreshPopulationAcquisitionTests {
                         if attribute == kAXRoleAttribute as String { fixture.reads.record("replacement_disclosure_role_read") }
                         if attribute == kAXValueAttribute as String { fixture.reads.record("replacement_disclosure_value_read") }
                     }
-                    guard let nestedFault, ["inner_closed", "replacement"].contains(nestedFault),
+                    guard let nestedFault,
+                          ["inner_closed", "replacement", "cancel_task_read"].contains(nestedFault) || nestedFault.hasPrefix("cancel_read"),
                           fixture.events.count == 4, attribute == kAXTitleAttribute as String,
                           CFEqual(element, grandchildren[1]) else { return }
                     fixture.reads.record("last_grandchild_title")
                     guard fixture.reads.recorded.filter({ $0 == "last_grandchild_title" }).count == 3 else { return }
                     fixture.reads.record("last_grandchild_fault")
+                    if nestedFault.hasPrefix("cancel_read") || nestedFault == "cancel_task_read" {
+                        switch nestedFault {
+                        case "cancel_read_focus": fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, replacement)
+                        case "cancel_read_project": fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String, "file:///tmp/Other.logicx")
+                        case "cancel_read_viewport": fixture.builder.setAttribute(scrollbar, kAXValueAttribute as String, 0.75)
+                        case "cancel_read_control": fixture.builder.setRole(inner, kAXButtonRole as String)
+                        case "cancel_read_deadline": Thread.sleep(forTimeInterval: 0.6)
+                        default: break
+                        }
+                        if nestedFault == "cancel_task_read" { withUnsafeCurrentTask { $0?.cancel() } }
+                        return
+                    }
                     if nestedFault == "inner_closed" {
                         fixture.builder.setAttribute(inner, kAXValueAttribute as String, 0)
                         fixture.builder.setChildren(fixture.rail, headers)
@@ -1996,6 +2015,12 @@ struct Issue965FreshPopulationAcquisitionTests {
                     if helpMovesFocus, fixture.events.count > 0, attribute == kAXHelpAttribute as String {
                         fixture.reads.record("focus_moving_help_read")
                         fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, otherLabel)
+                    }
+                    if nestedFault == "cancel_task_read", fixture.events.count == 6,
+                       CFEqual(element, inner), attribute == kAXValueAttribute as String,
+                       !fixture.reads.recorded.contains("cancelled_inverse_pending_landing") {
+                        fixture.reads.record("cancelled_inverse_pending_landing")
+                        return .success(NSNumber(value: 1))
                     }
                     if delayedLanding, CFEqual(element, disclosure), attribute == kAXValueAttribute as String,
                        [2, 4].contains(fixture.events.count) {
@@ -2095,14 +2120,19 @@ struct Issue965FreshPopulationAcquisitionTests {
             ? [.string("tracks"), .string("hierarchy")] : [.string("tracks")]), "allow_ui_navigation": .bool(navigation)]
         let result = await LogicProServer.runWithDeadline(tool: "logic_project", command: "inspect_session",
             commandParams: params, mutationGate: gate) {
-                if let nestedFault, ["cancel", "deadline"].contains(nestedFault),
+                if let nestedFault,
+                   ["cancel", "deadline", "cancel_task_read"].contains(nestedFault) || nestedFault.hasPrefix("cancel_read"),
                    let inherited = OperationTraceContext.current {
                     let context = OperationTraceContext(parentTraceID: inherited.parentTraceID,
-                        mutationGateAcquired: inherited.mutationGateAcquired, ownsGate: inherited.ownsGate,
-                        deadline: nestedFault == "deadline" ? ContinuousClock.now.advanced(by: .milliseconds(100)) : inherited.deadline,
+                        mutationGateAcquired: inherited.mutationGateAcquired,
+                        ownsGate: { inherited.ownsGate() && !(nestedFault == "cancel_read_gate"
+                            && fixture.reads.recorded.contains("last_grandchild_fault")) },
+                        deadline: nestedFault == "deadline" ? ContinuousClock.now.advanced(by: .milliseconds(100))
+                            : nestedFault == "cancel_read_deadline" ? ContinuousClock.now.advanced(by: .milliseconds(500)) : inherited.deadline,
                         cancellationRequested: {
                             inherited.cancellationRequested() || (nestedFault == "cancel"
                                 && fixture.reads.recorded.contains("child_custody_fault"))
+                                || (nestedFault.hasPrefix("cancel_read") && fixture.reads.recorded.contains("last_grandchild_fault"))
                         })
                     return await OperationTraceContext.$current.withValue(context) {
                         await FeatureFlags.withAdr002TargetRefForTests(true) { await handler(dependencies, params) }
@@ -2227,19 +2257,26 @@ struct Issue965FreshPopulationAcquisitionTests {
             return
         }
         if let nestedFault {
-            let lastReadFault = ["inner_closed", "replacement"].contains(nestedFault)
+            let lastReadFault = ["inner_closed", "replacement", "cancel_task_read"].contains(nestedFault)
+                || nestedFault.hasPrefix("cancel_read")
             #expect(fixture.reads.recorded.filter { $0 == (lastReadFault ? "last_grandchild_fault" : "child_custody_fault") }.count == 1)
             if lastReadFault {
                 #expect(fixture.reads.recorded.filter { $0 == "last_grandchild_title" }.count >= 3,
                         "fault reaches the last grandchild after actual row extraction has begun")
             }
-            #expect(fixture.events.recorded == ["disclosure_down", "disclosure_up", "inner_down", "inner_up"],
-                    "known child conflict must not start an inner inverse or collapse its outer owner")
-            #expect((fixture.builder.attributeValue(disclosure, kAXValueAttribute as String) as? NSNumber)?.intValue == 1)
-            #expect((fixture.builder.attributeValue(inner, kAXValueAttribute as String) as? NSNumber)?.intValue == (nestedFault == "inner_closed" ? 0 : 1))
+            let cancelled = nestedFault == "cancel_read" || nestedFault == "cancel_task_read"
+            let expectedEvents = ["disclosure_down", "disclosure_up", "inner_down", "inner_up"]
+                + (cancelled ? ["inner_down", "inner_up", "disclosure_down", "disclosure_up"] : [])
+            #expect(fixture.events.recorded == expectedEvents,
+                    "cancellation restores held disclosures; actual custody conflicts and expired deadlines forbid inverses")
+            #expect((fixture.builder.attributeValue(disclosure, kAXValueAttribute as String) as? NSNumber)?.intValue == (cancelled ? 0 : 1))
+            #expect((fixture.builder.attributeValue(inner, kAXValueAttribute as String) as? NSNumber)?.intValue == (cancelled || nestedFault == "inner_closed" ? 0 : 1))
+            if cancelled {
+                #expect(fixture.builder.makeAXRuntime().children(fixture.rail).count == collapsed.count)
+            }
             let body = try #require(sharedJSONObject(sharedToolText(result)))
             let effects = try #require(body["ui_effects"] as? [String: Any])
-            #expect(effects["restoration"] as? String == "not_restored")
+            #expect(effects["restoration"] as? String == (cancelled ? "restored" : "not_restored"))
             let current = await cache.getTracks()
             #expect(current.isEmpty, "conflicted temporary rows are never current cache authority")
             if nestedFault.hasPrefix("retained_label_") {
@@ -2247,16 +2284,16 @@ struct Issue965FreshPopulationAcquisitionTests {
                 #expect(!fixture.reads.recorded.contains("workspace_focus_setter"),
                         "lost passive focus never authorizes overwriting the current focus")
             }
-            if lastReadFault {
+            if lastReadFault && !cancelled && !nestedFault.hasPrefix("cancel_read") {
                 #expect(body["state"] as? String == "C")
                 #expect(body["error"] as? String == "stale_snapshot")
                 #expect(body["tracks"] == nil && body["snapshot_id"] == nil,
                         "the conflicted capture is discarded, not issued as a new domain report")
                 #expect(effects["reason"] as? String == "stack_navigation_ownership_lost")
             }
-            if nestedFault == "cancel" || nestedFault == "deadline" {
+            if nestedFault == "cancel" || nestedFault == "deadline" || cancelled || nestedFault.hasPrefix("cancel_read") {
                 #expect(body["state"] as? String == "C")
-                #expect(body["error"] as? String == (nestedFault == "cancel" ? "cancelled" : "operation_timeout"))
+                #expect(body["error"] as? String == (nestedFault == "deadline" ? "operation_timeout" : "cancelled"))
                 #expect(body["tracks"] == nil && body["snapshot_id"] == nil)
             }
             #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty && gate.currentOperation() == nil)
