@@ -11,6 +11,8 @@ struct Issue291AssignedSendMenuTests {
         let group: AXUIElement
         let bypass: AXUIElement
         let knob: AXUIElement
+        let checkedEcho: AXUIElement
+        let checkedLeaf: AXUIElement
     }
     private func prepare() throws -> Prepared {
         let f = try Issue291PhysicalStripReferenceTests.Fixture()
@@ -42,7 +44,7 @@ struct Issue291AssignedSendMenuTests {
         for e in [echo,leaf,panner] { f.b.setAttribute(e,"AXMenuItemMarkChar","✓") }
         f.b.setRole(menu,kAXMenuRole as String); f.b.setChildren(menu,[leaf]); f.b.setChildren(parent,[menu])
         f.b.setChildren(f.root,[echo,panner,parent])
-        return Prepared(f:f,anchor:anchor,group:group,bypass:bypass,knob:knob)
+        return Prepared(f:f,anchor:anchor,group:group,bypass:bypass,knob:knob,checkedEcho:echo,checkedLeaf:leaf)
     }
     private func read(_ p: Prepared, ordinal: Int = 1, document: String? = nil) async -> ChannelResult {
         let f = p.f
@@ -50,6 +52,25 @@ struct Issue291AssignedSendMenuTests {
         return await AXMixerStripBinding.$current.withValue(binding) {
             await AccessibilityChannel.getAssignedSendVerified(ordinal:ordinal,runtime:f.logic,timing:.immediate)
         }
+    }
+    @Test("Bare checked bus echoes cannot bypass the legal bus domain", arguments:[1,256,257,999999])
+    func checkedSendBusDomain(_ number: Int) async throws {
+        let p = try prepare()
+        for element in [p.checkedEcho,p.checkedLeaf] {
+            p.f.b.setAttribute(element,kAXTitleAttribute as String,"Bus \(number)")
+        }
+        let body = try #require(sharedJSONObject(await read(p).message))
+        if OutputAssignment.busNumbers.contains(number) {
+            #expect(body["state"] as? String == "A")
+            let destination = try #require(body["current_destination"] as? [String:Any])
+            #expect(destination["number"] as? Int == number)
+        } else {
+            #expect(body["state"] as? String == "C")
+            #expect(body["current_destination"] == nil)
+        }
+        #expect(body["popup_menu_state"] as? String == "closed")
+        #expect(try #require(body["write_attempted"] as? Bool) == false)
+        #expect(p.f.mutations.count == 2)
     }
     @Test("Retained assigned list reads checked destination, never display or bypass/level", arguments:[false,true])
     func assignedSendReadsOwnedCheckmarks(_ failedACK: Bool) async throws {

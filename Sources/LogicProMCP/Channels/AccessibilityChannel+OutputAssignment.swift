@@ -447,7 +447,10 @@ extension AccessibilityChannel {
         }
         func destination(_ title: String) -> OutputAssignment? {
             if let bus = OutputAssignment.busNumber(ofMenuItemTitle: title) { return .bus(bus) }
-            return OutputAssignment.observed(slotLabel: title)
+            guard let observed = OutputAssignment.observed(slotLabel: title) else { return nil }
+            // Display classification cannot re-authorize a bus rejected by the checked domain.
+            if case .bus = observed { return nil }
+            return observed
         }
         guard let roots = titledMenuItems(of: root, runtime: runtime) else { return nil }
         var echo: [OutputAssignment] = []
