@@ -68,20 +68,33 @@ enum ExactTrackNameAdapter {
         let before = body?["before"] as? String
         let after = body?["observed"] as? String
         let rejected = body?["state"] as? String == "C" && body?["write_attempted"] as? Bool == false
+        func unverified() -> Receipt {
+            let response: CallTool.Result
+            if body?["state"] as? String == "A" {
+                // The writer's earlier observation is not this adapter's later
+                // custody proof. Retain actual effects without claiming current A.
+                var extras = body ?? [:]
+                for key in ["state", "verified", "reason", "error"] { extras.removeValue(forKey: key) }
+                extras["hint"] = "The writer completed, but the adapter could not retain the exact-source proof. Reread before another action."
+                response = toolTextResult(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras), isError: true)
+            } else {
+                response = result
+            }
+            return Receipt(status: rejected ? .rejectedBeforeWrite : .attemptedUnverified,
+                           before: before, after: after, survivingReference: nil, inverse: nil, result: response)
+        }
         guard body?["state"] as? String == "A", body?["verified"] as? Bool == true,
               let before, before.utf8.elementsEqual(action.expectedBefore.utf8),
               let after, after.utf8.elementsEqual(action.desiredAfter.utf8),
               let binding = await registry.resolve(action.targetReference), binding.kind == .track,
               binding.descriptor.trackName.utf8.elementsEqual(after.utf8),
               await registry.resolveCurrentProject(action.projectReference) != nil, operationPermitted() else {
-            return Receipt(status: rejected ? .rejectedBeforeWrite : .attemptedUnverified,
-                           before: before, after: after, survivingReference: nil, inverse: nil, result: result)
+            return unverified()
         }
         let wrote = body?["write_attempted"] as? Bool == true
         let noOp = body?["via"] as? String == "no-op" && body?["write_attempted"] as? Bool == false
         guard wrote || noOp else {
-            return Receipt(status: .attemptedUnverified, before: before, after: after,
-                           survivingReference: nil, inverse: nil, result: result)
+            return unverified()
         }
         let inverse = wrote ? OwnedInverse(project: action.projectReference, target: action.targetReference,
                                           before: before, written: after, registry: registry, cache: cache) : nil
