@@ -336,6 +336,7 @@ extension AccessibilityChannel {
         }
         if interrupted() { return await cancelledReading() }
         guard sourceOwned() else {
+            if interrupted() { return await cancelledReading() }
             extras["popup_menu_state"] = "not_restored"
             return refuse(.readbackUnavailable, "The acquired popup lost original source custody; no unowned cleanup was attempted.")
         }

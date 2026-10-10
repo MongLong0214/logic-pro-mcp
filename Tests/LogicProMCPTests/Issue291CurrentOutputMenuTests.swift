@@ -190,7 +190,7 @@ struct Issue291OwnedCurrentOutputTests {
     }
 
     @Test("Cancellation reverses only an already-owned popup under its live original scope",
-          arguments: ["owned", "remembered", "document", "source", "slot", "popup", "gate", "deadline"])
+          arguments: ["owned", "remembered", "source_read", "document", "source", "slot", "popup", "gate", "deadline"])
     func cancelledOutputReadCleansOnlyItsOwnedPopup(_ revocation: String) async throws {
         let f = try Issue291PhysicalStripReferenceTests.Fixture()
         defer { try? FileManager.default.removeItem(at: f.bundle) }
@@ -198,6 +198,7 @@ struct Issue291OwnedCurrentOutputTests {
         f.b.setAttribute(f.app, kAXFrontmostAttribute as String, true)
         let interrupted = "291-interrupted-popup"
         f.onActionNamesRead = { node in
+            guard revocation != "source_read" else { return }
             guard CFEqual(node, f.root), f.b.attributeValue(f.window, interrupted) as? Bool != true else { return }
             f.b.setAttribute(f.window, interrupted, true)
             switch revocation {
@@ -220,7 +221,14 @@ struct Issue291OwnedCurrentOutputTests {
             // not reset it or grant a fresh Help/assignment acquisition.
             _ = AXHelpers.getHelp(f.outputs[0], runtime: f.logic.ax)
         }
-        f.onAttributeRead = { _, attribute in
+        f.onAttributeRead = { node, attribute in
+            if revocation == "source_read", CFEqual(node, f.outputs[0]),
+               attribute == kAXDescriptionAttribute as String, f.mutations.count == 1,
+               f.b.attributeValue(f.window, interrupted) as? Bool != true {
+                f.b.setAttribute(f.window, interrupted, true)
+                withUnsafeCurrentTask { $0?.cancel() }
+                _ = AXHelpers.getHelp(f.outputs[0], runtime: f.logic.ax)
+            }
             if attribute == kAXHelpAttribute as String, f.b.attributeValue(f.window, interrupted) as? Bool == true {
                 f.b.setAttribute(f.window, "291-help-after-interruption", true)
             }
@@ -254,7 +262,7 @@ struct Issue291OwnedCurrentOutputTests {
         let writeAttempted = try #require(body["write_attempted"] as? Bool)
         #expect(!writeAttempted)
         let cancels = f.mutations.filter { $0.1 == kAXCancelAction as String }
-        let cleanupOwned = revocation == "owned" || revocation == "remembered"
+        let cleanupOwned = revocation == "owned" || revocation == "remembered" || revocation == "source_read"
         #expect(cancels.count == (cleanupOwned ? 1 : 0))
         #expect(f.mutations.filter { $0.1 == kAXPressAction as String }.count == 1)
         if cleanupOwned {
