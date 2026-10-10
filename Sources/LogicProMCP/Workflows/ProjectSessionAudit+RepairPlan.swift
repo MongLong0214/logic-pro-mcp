@@ -423,6 +423,8 @@ extension ProjectSessionAudit {
                 "id": .string("name_" + desired.target), "kind": .string("name"),
                 "target_ref": .string(target.trackRef.rawValue),
                 "before": .object(before), "after": .object(["name": .string(desired.name)]),
+                "associated_strip_names": associatedStripNames(target: target.trackRef, policy: policy,
+                    capture: capture, request: request, snapshotCurrent: snapshotCurrent),
                 "blocked_reasons": .array(blocked.sorted().map(Value.string)),
                 "dependencies": .array(topologyIDs.map(Value.string)),
                 "required_invariants": .array([
@@ -543,6 +545,41 @@ extension ProjectSessionAudit {
         body["plan_id"] = .string(id)
         return CanonicalRepairPlan(id: id, digest: digest,
             json: try encodeJSONStrict(Value.object(body), compact: true))
+    }
+
+    /// Immutable producer-observed association facts for the same canonical
+    /// preview. Association is not proof of name coupling or an apply capability:
+    /// no strip after-name is inferred and the preservation blocker remains.
+    private static func associatedStripNames(
+        target: TargetReference, policy: IntentPolicy, capture: SessionPopulationObservation.Capture,
+        request: SessionPopulationObservation.Request, snapshotCurrent: Bool
+    ) -> Value {
+        guard snapshotCurrent, request.domains.contains(.strips), request.domains.contains(.associations),
+              capture.referencesEnabled, !capture.referencesStale, capture.before == capture.after,
+              !capture.before.axOccluded, capture.requestedProjectMatches != false,
+              let fresh = capture.freshPopulation, fresh.stable, fresh.uiEffects.restoration == "restored",
+              case .issued(let project)? = capture.projectIssuance, policy.projectRef == project,
+              let issued = capture.issued, case .located(let index) = locate(target, in: issued),
+              let path = capture.project.filePath else { return .null }
+        let tracks = capture.tracks.filter { $0.id == index }
+        guard tracks.count == 1, let source = tracks.first?.physicalBinding,
+              source.exposure?.hasEnded != true, source.projectPath?.utf8.elementsEqual(path.utf8) == true,
+              capture.tracks.filter({ $0.physicalBinding?.matches(source) == true }).count == 1 else { return .null }
+        let pairs = fresh.selectionAssociations.filter { $0.track.matches(source) }
+        guard pairs.count == 1, let pair = pairs.first,
+              fresh.selectionAssociations.filter({ $0.strip.matches(pair.strip) }).count == 1,
+              CFEqual(pair.track.window, pair.strip.window),
+              pair.track.document.utf8.elementsEqual(pair.strip.document.utf8),
+              pair.strip.projectPath?.utf8.elementsEqual(path.utf8) == true else { return .null }
+        let rows = capture.channelStrips.indices.filter {
+            capture.channelStrips[$0].physicalBinding?.matches(pair.strip) == true
+        }
+        guard rows.count == 1, let row = rows.first, let reference = capture.mixerReference(at: row),
+              let name = capture.channelStrips[row].name else { return .null }
+        return .array([.object([
+            "target_ref": .string(reference.rawValue), "observed_name": .string(name),
+            "source": .string("held_exclusive_selection_focus")
+        ])])
     }
 
     /// A desired-policy delta, not an observed after-state or an audio-safety verdict. All
