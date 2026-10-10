@@ -129,21 +129,119 @@ extension AccessibilityChannel {
             private let lock = NSLock()
             private var navigation: OwnedTrackStackObservationNavigation?
             private var passiveMixer: PassiveMixerReadFocus?
+            private var passiveHeader: PassiveHeaderReadFocus?
             private var association: HeldSelectionAssociation?
             func retain(_ navigation: OwnedTrackStackObservationNavigation?) {
-                lock.withLock { self.navigation = navigation; passiveMixer = nil; association = nil }
+                lock.withLock { self.navigation = navigation; passiveMixer = nil; passiveHeader = nil; association = nil }
             }
             func retainAssociation(_ observation: HeldSelectionAssociation) {
                 lock.withLock { association = observation }
             }
             func retainPassiveMixer(in window: AXUIElement, logic: AXLogicProElements.Runtime) {
                 let candidate = PassiveMixerReadFocus(window: window, logic: logic)
-                lock.withLock { passiveMixer = candidate }
+                let header = PassiveHeaderReadFocus(window: window, logic: logic)
+                lock.withLock { passiveMixer = candidate; passiveHeader = header }
             }
             func permits() -> Bool {
-                let held = lock.withLock { (navigation, passiveMixer, association) }
+                let held = lock.withLock { (navigation, passiveMixer, association, passiveHeader) }
                 return held.0?.permitsHeldPassiveHeaderFocus() == true || held.1?.permits() == true
-                    || held.2?.permitsRead() == true
+                    || held.2?.permitsRead() == true || held.3?.permits() == true
+            }
+
+            /// An original immutable numeric name label is not a rename editor.
+            /// Held only for navigation-disabled, Help-free track acquisition;
+            /// this witness never reaches keyboard, selection or musical setters.
+            final class PassiveHeaderReadFocus: @unchecked Sendable {
+                let logic: AXLogicProElements.Runtime
+                let pid: pid_t
+                let app: AXUIElement
+                let window: AXUIElement
+                let title: String
+                let document: String
+                let focus: AXUIElement
+                let header: AXUIElement
+                let rail: AXUIElement
+                let path: [AXUIElement]
+                private var lost = false
+
+                init?(window: AXUIElement, logic: AXLogicProElements.Runtime) {
+                    guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                          let pid = logic.logicProPID(), let app = AXLogicProElements.appRoot(runtime: logic),
+                          let title = AXHelpers.getTitle(window, runtime: logic.ax),
+                          case .success(.some(let document)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: logic),
+                          let url = URL(string: document), url.isFileURL,
+                          url.host == nil || url.host == "" || url.host == "localhost",
+                          let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
+                          let header: AXUIElement = AXHelpers.getAttribute(focus, kAXParentAttribute as String, runtime: logic.ax),
+                          let rail = AXLogicProElements.uniqueTrackHeaderRail(in: window, runtime: logic),
+                          case .read(let rows) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: logic),
+                          rows.filter({ CFEqual($0, header) }).count == 1 else { return nil }
+                    var path = [rail]
+                    while !CFEqual(path.last!, window) {
+                        guard path.count < 12,
+                              let parent: AXUIElement = AXHelpers.getAttribute(path.last!, kAXParentAttribute as String, runtime: logic.ax),
+                              !path.contains(where: { CFEqual($0, parent) }) else { return nil }
+                        path.append(parent)
+                    }
+                    self.logic = logic; self.pid = pid; self.app = app; self.window = window
+                    self.title = title; self.document = document; self.focus = focus
+                    self.header = header; self.rail = rail; self.path = path
+                    guard permits() else { return nil }
+                }
+
+                private func absent(_ attribute: String) -> Bool {
+                    switch AXHelpers.getAttributeResult(focus, attribute, runtime: logic.ax)
+                        as Result<AnyObject?, AXHelpers.AXStatusError> {
+                    case .success(nil): return true
+                    case .failure(let error) where error.isDefinitiveAbsence: return true
+                    default: return false
+                    }
+                }
+
+                func permits() -> Bool {
+                    var permitted = false
+                    defer { if !permitted { lost = true } }
+                    guard !lost, (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                          logic.logicProPID() == pid, logic.focusedApplicationPID() == pid,
+                          let currentApp = AXLogicProElements.appRoot(runtime: logic), CFEqual(currentApp, app),
+                          AXHelpers.getAttribute(app, kAXFrontmostAttribute as String, runtime: logic.ax) as Bool? == true,
+                          let main: AXUIElement = AXHelpers.getAttribute(app, kAXMainWindowAttribute as String, runtime: logic.ax),
+                          let focusedWindow: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedWindowAttribute as String, runtime: logic.ax),
+                          CFEqual(main, window), CFEqual(focusedWindow, window),
+                          AXHelpers.getTitle(window, runtime: logic.ax)?.utf8.elementsEqual(title.utf8) == true,
+                          case .success(.some(let doc)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: logic),
+                          doc.utf8.elementsEqual(document.utf8),
+                          let currentFocus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
+                          CFEqual(currentFocus, focus),
+                          AXHelpers.getRole(focus, runtime: logic.ax) == kAXTextFieldRole as String,
+                          AXHelpers.isAttributeSettable(focus, kAXValueAttribute as String, runtime: logic.ax) == false,
+                          case .success(.some(let raw)) = AXHelpers.getAttributeResult(focus, kAXValueAttribute as String,
+                              runtime: logic.ax) as Result<AnyObject?, AXHelpers.AXStatusError>,
+                          CFGetTypeID(raw) == CFNumberGetTypeID(), let number = raw as? NSNumber, number.doubleValue == 0,
+                          absent(kAXInsertionPointLineNumberAttribute as String), absent(kAXSelectedTextRangeAttribute as String),
+                          absent(kAXSelectedTextAttribute as String),
+                          let owner: AXUIElement = AXHelpers.getAttribute(focus, kAXWindowAttribute as String, runtime: logic.ax),
+                          CFEqual(owner, window),
+                          case .read(let rows) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: logic),
+                          rows.filter({ CFEqual($0, header) }).count == 1,
+                          case .success(let children) = AXHelpers.childrenResult(header, runtime: logic.ax),
+                          children.filter({ CFEqual($0, focus) }).count == 1 else { return false }
+                    let roles = children.map { AXHelpers.getRole($0, runtime: logic.ax) }
+                    guard roles.allSatisfy({ $0 != nil }), roles.filter({ $0 == kAXTextFieldRole as String }).count == 1 else { return false }
+                    for (child, parent) in zip([focus, header] + path.dropLast(), [header] + path) {
+                        guard case .success(let siblings) = AXHelpers.childrenResult(parent, runtime: logic.ax),
+                              siblings.filter({ CFEqual($0, child) }).count == 1,
+                              let actualParent: AXUIElement = AXHelpers.getAttribute(child, kAXParentAttribute as String, runtime: logic.ax),
+                              CFEqual(actualParent, parent) else { return false }
+                    }
+                    guard let finalFocus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
+                          CFEqual(finalFocus, focus),
+                          case .success(.some(let finalDoc)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: logic),
+                          finalDoc.utf8.elementsEqual(document.utf8),
+                          (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+                    permitted = true
+                    return true
+                }
             }
 
             /// A passive strip exposes a zero insertion sentinel on Logic 12.3.

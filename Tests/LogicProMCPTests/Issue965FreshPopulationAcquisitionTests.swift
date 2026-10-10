@@ -2759,6 +2759,130 @@ struct Issue965FreshPopulationAcquisitionTests {
         #expect(gate.currentOperation() == nil)
     }
 
+    private func passiveHeaderFocusFixture(fault: String? = nil) -> (Fixture, AXUIElement) {
+        let fixture = Fixture()
+        let label = fixture.builder.element(965_984)
+        fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String, "file:///tmp/965-passive-header.logicx/")
+        fixture.builder.setRole(label, kAXTextFieldRole as String)
+        fixture.builder.setAttribute(label, kAXValueAttribute as String, NSNumber(value: 0))
+        fixture.builder.setAttribute(label, kAXWindowAttribute as String, fixture.window)
+        fixture.builder.setAttributeSettable(label, kAXValueAttribute as String, false)
+        fixture.builder.setChildren(label, [])
+        fixture.builder.setChildren(fixture.header, [label])
+        fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, label)
+        fixture.builder.setAttribute(fixture.app, kAXFrontmostAttribute as String, true)
+        fixture.builder.setAttribute(fixture.app, kAXFocusedWindowAttribute as String, fixture.window)
+        switch fault {
+        case "editable": fixture.builder.setAttributeSettable(label, kAXValueAttribute as String, true)
+        case "string": fixture.builder.setAttribute(label, kAXValueAttribute as String, "0")
+        case "boolean": fixture.builder.setAttribute(label, kAXValueAttribute as String, false)
+        case "nonzero": fixture.builder.setAttribute(label, kAXValueAttribute as String, 1)
+        case "insertion": fixture.builder.setAttribute(label, kAXInsertionPointLineNumberAttribute as String, 0)
+        case "range": fixture.builder.setAttribute(label, kAXSelectedTextRangeAttribute as String, "")
+        case "selected_text": fixture.builder.setAttribute(label, kAXSelectedTextAttribute as String, "")
+        case "wrong_window": fixture.builder.setAttribute(label, kAXWindowAttribute as String, fixture.builder.element(965_985))
+        case "wrong_parent": fixture.builder.setAttribute(label, kAXParentAttribute as String, fixture.rail)
+        case "duplicate": fixture.builder.setChildren(fixture.header, [label, label])
+        case "other_field":
+            let other = fixture.builder.element(965_985)
+            fixture.builder.setRole(other, kAXTextFieldRole as String)
+            fixture.builder.setChildren(fixture.header, [label, other])
+        case "not_frontmost": fixture.builder.setAttribute(fixture.app, kAXFrontmostAttribute as String, false)
+        case "wrong_focused_window": fixture.builder.setAttribute(fixture.app, kAXFocusedWindowAttribute as String, fixture.builder.element(965_985))
+        case "unbound": fixture.builder.removeAttribute(fixture.window, kAXDocumentAttribute as String)
+        default: break
+        }
+        return (fixture, label)
+    }
+
+    @Test("a held immutable numeric track-name label permits only the navigation-disabled track read")
+    func registeredPassiveHeaderLabelAllowsOnlyTrackRead() async throws {
+        let (fixture, label) = passiveHeaderFocusFixture()
+        let result = try await inspect(fixture: fixture, domains: ["tracks"],
+            keyboardFocus: { .textEditing(role: kAXTextFieldRole as String, byInsertionPoint: false) },
+            readingAttribute: { element, attribute in
+                guard CFEqual(element, label), attribute == kAXValueAttribute as String else { return nil }
+                // Preserve NSNumber versus CFBoolean; the generic fake bridge
+                // otherwise casts NSNumber(0) through its earlier Bool case.
+                return .success(fixture.builder.attributeValue(label, attribute) as AnyObject?)
+            })
+        let error = result.isError ?? false
+        #expect(!error)
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+        let rows = try #require((body["tracks"] as? [String: Any])?["rows"] as? [[String: Any]])
+        #expect(rows.compactMap { $0["name"] as? String } == [" Fresh track "])
+        #expect(fixture.reads.helpCount == 0)
+        #expect(fixture.events.recorded.isEmpty)
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+    }
+
+    @Test(arguments: ["editable", "string", "boolean", "nonzero", "insertion", "range", "selected_text",
+                      "wrong_window", "wrong_parent", "duplicate", "other_field", "not_frontmost",
+                      "wrong_focused_window", "unbound"])
+    func registeredPassiveHeaderLabelRejectsUnsafeOrAmbiguousFocus(fault: String) async throws {
+        let (fixture, label) = passiveHeaderFocusFixture(fault: fault)
+        let result = try await inspect(fixture: fixture, domains: ["tracks"],
+            keyboardFocus: { .textEditing(role: kAXTextFieldRole as String, byInsertionPoint: false) },
+            readingAttribute: { element, attribute in
+                guard CFEqual(element, label), attribute == kAXValueAttribute as String else { return nil }
+                return .success(fixture.builder.attributeValue(label, attribute) as AnyObject?)
+            })
+        let error = result.isError ?? false
+        #expect(error)
+        #expect(fixture.events.recorded.isEmpty)
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+    }
+
+    @Test(arguments: [false, true])
+    func registeredPassiveHeaderLabelCannotAuthorizeHelpOrNavigation(navigation: Bool) async throws {
+        let (fixture, label) = passiveHeaderFocusFixture()
+        let result = try await inspect(fixture: fixture, domains: navigation ? ["tracks"] : ["tracks", "strips"],
+            navigation: navigation,
+            keyboardFocus: { .textEditing(role: kAXTextFieldRole as String, byInsertionPoint: false) },
+            readingAttribute: { element, attribute in
+                guard CFEqual(element, label), attribute == kAXValueAttribute as String else { return nil }
+                return .success(fixture.builder.attributeValue(label, attribute) as AnyObject?)
+            })
+        let error = result.isError ?? false
+        #expect(error)
+        #expect(fixture.events.recorded.isEmpty)
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+    }
+
+    @Test(arguments: ["focus", "document", "editable", "label", "rail", "window"])
+    func registeredPassiveHeaderLabelLosesOriginalReadCustody(fault: String) async throws {
+        let (fixture, label) = passiveHeaderFocusFixture()
+        let checks = Reads()
+        let result = try await inspect(fixture: fixture, domains: ["tracks"],
+            keyboardFocus: { .textEditing(role: kAXTextFieldRole as String, byInsertionPoint: false) },
+            readingAttribute: { element, attribute in
+                guard CFEqual(element, label) else { return nil }
+                if attribute == kAXSelectedTextAttribute as String {
+                    checks.record(attribute)
+                    if checks.count == 2 {
+                        switch fault {
+                        case "focus": fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, fixture.header)
+                        case "document": fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String, "file:///tmp/other.logicx/")
+                        case "editable": fixture.builder.setAttributeSettable(label, kAXValueAttribute as String, true)
+                        case "label": fixture.builder.setChildren(fixture.header, [])
+                        case "rail": fixture.builder.setChildren(fixture.window, [])
+                        default: fixture.builder.setAttribute(fixture.app, kAXFocusedWindowAttribute as String, fixture.builder.element(965_986))
+                        }
+                    }
+                }
+                if attribute == kAXValueAttribute as String {
+                    return .success(fixture.builder.attributeValue(label, attribute) as AnyObject?)
+                }
+                return nil
+            })
+        let error = result.isError ?? false
+        #expect(error)
+        #expect(checks.count >= 2)
+        #expect(fixture.reads.helpCount == 0)
+        #expect(fixture.events.recorded.isEmpty)
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+    }
+
     private func passiveMixerFocusFixture(fault: String? = nil) -> (Fixture, AXUIElement) {
         let fixture = Fixture()
         let outer = fixture.builder.element(965_980)
