@@ -294,13 +294,35 @@ func routingPath(from sourceRef: TargetReference, to sinkNodeID: String, in grap
     guard Dictionary(grouping: outputs, by: \.source).values.allSatisfy({ $0.count == 1 }) else {
         return .unverified
     }
-    let adjacency = Dictionary(grouping: graph.edges, by: \.source)
-    var pending = [source.id]
+    return routingNodeReachable(from: source.id, to: sinkNodeID,
+        adjacency: Dictionary(grouping: graph.edges, by: \.source)) ? .connected : .disconnected
+}
+
+/// Whether newly connected endpoints introduce a directed cycle in the recorded graph.
+/// Existing cycles and scalar-only send changes are not new connections. This is structural
+/// evidence only, not audio safety or permission to repair an intentional existing path.
+/// The caller owns capture binding and execution-time observation; absent evidence stays unknown.
+func routingIntroducesCycle(before: RoutingGraph, after: RoutingGraph) -> Bool? {
+    guard before.complete, after.complete, before.isConsistent, after.isConsistent,
+          before.projectReference == after.projectReference,
+          before.projectEpoch == after.projectEpoch, before.snapshotId == after.snapshotId else { return nil }
+    let previous = Dictionary(grouping: before.edges, by: \.source)
+    let adjacency = Dictionary(grouping: after.edges, by: \.source)
+    for edge in after.edges {
+        guard !(previous[edge.source] ?? []).contains(where: { $0.destination == edge.destination }) else { continue }
+        if routingNodeReachable(from: edge.destination, to: edge.source, adjacency: adjacency) { return true }
+    }
+    return false
+}
+
+private func routingNodeReachable(from source: String, to destination: String,
+                                  adjacency: [String: [RoutingEdge]]) -> Bool {
+    var pending = [source]
     var visited = Set<String>()
     while let node = pending.popLast() {
         guard visited.insert(node).inserted else { continue }
-        if node == sinkNodeID { return .connected }
+        if node == destination { return true }
         pending.append(contentsOf: (adjacency[node] ?? []).map(\.destination))
     }
-    return .disconnected
+    return false
 }
