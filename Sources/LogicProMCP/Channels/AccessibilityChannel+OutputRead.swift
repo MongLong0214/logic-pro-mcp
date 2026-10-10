@@ -2,6 +2,68 @@
 import Foundation
 
 extension AccessibilityChannel {
+    /// A passive Arrange name is not an editable field despite its AXTextField
+    /// role. This retained witness grants only this reader's semantic popup
+    /// press, never a keyboard command, selection change, or parameter write.
+    private struct PassiveRoutingReadFocus {
+        let pid: pid_t
+        let app: AXUIElement
+        let window: AXUIElement
+        let document: String
+        let rail: AXUIElement
+        let header: AXUIElement
+        let focus: AXUIElement
+
+        init?(window: AXUIElement, document: String, runtime: AXLogicProElements.Runtime) {
+            guard let pid = runtime.logicProPID(), let app = AXLogicProElements.appRoot(runtime: runtime),
+                  let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: runtime.ax),
+                  let header: AXUIElement = AXHelpers.getAttribute(focus, kAXParentAttribute as String, runtime: runtime.ax),
+                  let rail = AXLogicProElements.uniqueTrackHeaderRail(in: window, runtime: runtime) else { return nil }
+            self.pid = pid; self.app = app; self.window = window; self.document = document
+            self.rail = rail; self.header = header; self.focus = focus
+            guard permits(runtime: runtime) else { return nil }
+        }
+
+        func permits(runtime: AXLogicProElements.Runtime) -> Bool {
+            guard !Task.isCancelled, runtime.logicProPID() == pid, runtime.focusedApplicationPID() == pid,
+                  let currentApp = AXLogicProElements.appRoot(runtime: runtime), CFEqual(currentApp, app),
+                  AXHelpers.getAttribute(app, kAXFrontmostAttribute as String, runtime: runtime.ax) as Bool? == true,
+                  let currentFocus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: runtime.ax),
+                  CFEqual(currentFocus, focus),
+                  let currentRail = AXLogicProElements.uniqueTrackHeaderRail(in: window, runtime: runtime), CFEqual(currentRail, rail),
+                  case .success(let rows) = AXHelpers.childrenResult(rail, runtime: runtime.ax),
+                  rows.filter({ CFEqual($0, header) }).count == 1,
+                  AXHelpers.getRole(header, runtime: runtime.ax) == kAXLayoutItemRole as String,
+                  case .success(let children) = AXHelpers.childrenResult(header, runtime: runtime.ax),
+                  children.filter({ CFEqual($0, focus) }).count == 1,
+                  AXHelpers.getRole(focus, runtime: runtime.ax) == kAXTextFieldRole as String,
+                  let parent: AXUIElement = AXHelpers.getAttribute(focus, kAXParentAttribute as String, runtime: runtime.ax),
+                  CFEqual(parent, header),
+                  let owner: AXUIElement = AXHelpers.getAttribute(focus, kAXWindowAttribute as String, runtime: runtime.ax),
+                  CFEqual(owner, window),
+                  AXHelpers.isAttributeSettable(focus, kAXValueAttribute as String, runtime: runtime.ax) == false,
+                  case .success(.some(let raw)) = AXHelpers.getAttributeResult(focus, kAXValueAttribute as String,
+                    runtime: runtime.ax) as Result<AnyObject?, AXHelpers.AXStatusError>,
+                  CFGetTypeID(raw) == CFNumberGetTypeID(), let value = raw as? NSNumber, value.doubleValue == 0 else { return false }
+            for attribute in [kAXInsertionPointLineNumberAttribute, kAXSelectedTextRangeAttribute,
+                              kAXSelectedTextAttribute, kAXNumberOfCharactersAttribute] {
+                switch AXHelpers.getAttributeResult(focus, attribute as String, runtime: runtime.ax)
+                    as Result<AnyObject?, AXHelpers.AXStatusError> {
+                case .success(nil): break
+                case .failure(let error) where error.isDefinitiveAbsence: break
+                default: return false
+                }
+            }
+            guard let main: AXUIElement = AXHelpers.getAttribute(app, kAXMainWindowAttribute as String, runtime: runtime.ax),
+                  let focusedWindow: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedWindowAttribute as String, runtime: runtime.ax),
+                  CFEqual(main, window), CFEqual(focusedWindow, window),
+                  case .success(.some(let currentDocument)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: runtime),
+                  currentDocument.utf8.elementsEqual(document.utf8), runtime.logicProPID() == pid,
+                  let finalFocus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: runtime.ax),
+                  CFEqual(finalFocus, focus) else { return false }
+            return true
+        }
+    }
     /// Internal bus-only input acquisition; no public operation or graph-edge qualification.
     static func getInputBusVerified(
         runtime: AXLogicProElements.Runtime = .production,
@@ -41,7 +103,13 @@ extension AccessibilityChannel {
         guard physical.currentIndex(runtime: runtime) != nil else {
             return refuse(.staleTargetReference, "The original physical source is no longer in its bound project/window.")
         }
-        guard readLogicKeyboardFocus(runtime: runtime) == .notTextEditing,
+        let passiveFocus = readLogicKeyboardFocus(runtime: runtime) == .notTextEditing ? nil
+            : PassiveRoutingReadFocus(window: physical.window, document: physical.document, runtime: runtime)
+        func focusAllowsAcquisition() -> Bool {
+            if let passiveFocus { return passiveFocus.permits(runtime: runtime) }
+            return readLogicKeyboardFocus(runtime: runtime) == .notTextEditing
+        }
+        guard focusAllowsAcquisition(),
               !AXLogicProElements.dialogPresenceReason(runtime: runtime).isBlocked else {
             return refuse(.readbackUnavailable, "Cannot acquire an output menu while focus or modal state is unsafe or unreadable.")
         }
@@ -121,6 +189,11 @@ extension AccessibilityChannel {
                 return refuse(.readbackUnavailable, "The held routing control does not advertise a current press capability; nothing was pressed.")
             }
             extras["send_ordinal"] = sendOrdinal
+        }
+        // The last focus read can itself observe a project transition. Renew
+        // original source/document custody afterward, before any menu action.
+        guard focusAllowsAcquisition(), sourceOwned(), focusAllowsAcquisition(), sourceOwned() else {
+            return refuse(.readbackUnavailable, "Focus or source custody changed before the routing-popup press; nothing was pressed.")
         }
         extras["navigation_attempted"] = true
         let press = AXHelpers.performActionResult(slot, kAXPressAction as String, runtime: runtime.ax)
