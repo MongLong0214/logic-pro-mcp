@@ -68,17 +68,20 @@ struct Issue291OwnedInputBusMenuTests {
         let write: Bool = try #require(body["write_attempted"] as? Bool)
         #expect(!write)
     }
-    @Test("Cancel retiring the original input source withholds its checked bus", arguments: [false, true])
-    func originalInputMustSurviveCancel(_ retires: Bool) async throws {
+    @Test("Cleanup requires original input membership even when its AX role stays readable",
+          arguments: ["healthy", "invalid_element", "readable_nonmember"])
+    func originalInputMustSurviveCancel(_ mode: String) async throws {
         let p = try prepare(), f = p.f
+        let retires = mode != "healthy"
         f.attributeReadResult = { element, _ in
             guard retires, f.mutations.contains(where: {
                 CFEqual($0.0, f.root) && $0.1 == kAXCancelAction as String
             }) else { return nil }
-            // The live host retained the window, Mixer and document but retired
-            // the original source after Cancel. Never adopt another strip here.
+            // Model loss of the original member after cleanup. The separate native
+            // re-click observation kept readable attributes but lost membership;
+            // it does not qualify that gesture as Cancel or a successful getter.
             f.reorder([1])
-            if CFEqual(element, f.strips[0]) || CFEqual(element, f.outputs[0]) {
+            if mode == "invalid_element", CFEqual(element, f.strips[0]) || CFEqual(element, f.outputs[0]) {
                 return .failure(.init(raw: AXError.invalidUIElement.rawValue))
             }
             return nil
@@ -101,9 +104,13 @@ struct Issue291OwnedInputBusMenuTests {
             for original in [f.strips[0], f.outputs[0]] {
                 let retired: Result<String?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
                     original, kAXRoleAttribute as String, runtime: f.logic.ax)
-                if case .failure(let status) = retired {
-                    #expect(status.raw == AXError.invalidUIElement.rawValue)
-                } else { Issue.record("The original source and input control must be retired") }
+                if mode == "invalid_element" {
+                    if case .failure(let status) = retired {
+                        #expect(status.raw == AXError.invalidUIElement.rawValue)
+                    } else { Issue.record("The original source and input control must be retired") }
+                } else if case .success(.some(let role)) = retired {
+                    #expect(role == (CFEqual(original, f.strips[0]) ? kAXLayoutItemRole : kAXButtonRole) as String)
+                } else { Issue.record("The nonmember source and control must remain AX-readable") }
             }
         } else {
             let input = try #require(body["current_input"] as? [String: Any])
