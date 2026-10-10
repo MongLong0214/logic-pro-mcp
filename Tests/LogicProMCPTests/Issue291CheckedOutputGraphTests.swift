@@ -10,19 +10,23 @@ struct Issue291CheckedOutputGraphTests {
         var unrelatedChildrenReads = 0
         var permitted: Bool?
     }
-    private func preparedFixture() throws -> Issue291PhysicalStripReferenceTests.Fixture {
+    private func preparedFixture(bus: Bool = false) throws -> Issue291PhysicalStripReferenceTests.Fixture {
         let f = try Issue291PhysicalStripReferenceTests.Fixture()
+        let destination = bus ? "Bus 1" : "Stereo Output"
+        if bus {
+            for output in f.outputs { f.b.setAttribute(output, kAXDescriptionAttribute as String, destination) }
+        }
         let stereo = f.b.element(2_919_001)
         f.b.setRole(stereo, "AXMenuItem")
-        f.b.setAttribute(stereo, "AXTitle", "Stereo Output")
+        f.b.setAttribute(stereo, "AXTitle", destination)
         f.b.setAttribute(stereo, "AXMenuItemMarkChar", "✓")
         f.b.setChildren(stereo, [])
         let parent = f.b.element(2_919_002)
         let menu = f.b.element(2_919_003)
         let leaf = f.b.element(2_919_004)
-        f.b.setRole(parent, "AXMenuItem"); f.b.setAttribute(parent, "AXTitle", "Output")
+        f.b.setRole(parent, "AXMenuItem"); f.b.setAttribute(parent, "AXTitle", bus ? "Bus" : "Output")
         f.b.setRole(menu, "AXMenu")
-        f.b.setRole(leaf, "AXMenuItem"); f.b.setAttribute(leaf, "AXTitle", "Stereo Output")
+        f.b.setRole(leaf, "AXMenuItem"); f.b.setAttribute(leaf, "AXTitle", destination)
         f.b.setAttribute(leaf, "AXMenuItemMarkChar", "✓"); f.b.setChildren(leaf, [])
         f.b.setChildren(menu, [leaf]); f.b.setChildren(parent, [menu])
         f.b.setChildren(f.root, [stereo, parent])
@@ -45,7 +49,7 @@ struct Issue291CheckedOutputGraphTests {
 
     @Test("Fresh inspection acquires checked outputs only with explicit navigation permission", arguments: [false, true])
     func freshInspectionOwnsCheckedOutputs(navigation: Bool) async throws {
-        let f = try preparedFixture()
+        let f = try preparedFixture(bus: true)
         defer { try? FileManager.default.removeItem(at: f.bundle) }
         let gate = LogicMutationGate()
         let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
@@ -58,8 +62,25 @@ struct Issue291CheckedOutputGraphTests {
         #expect(population.stable)
         #expect(try #require(population.strips).count == 2)
         #expect(population.checkedOutputs.count == (navigation ? 2 : 0))
-        #expect(population.checkedOutputs.allSatisfy { $0.assignment == .stereoOutput })
+        #expect(population.checkedOutputs.allSatisfy { $0.assignment == .bus(1) })
         #expect(f.mutations.map { $0.1 } == (navigation ? ["AXPress", "AXCancel", "AXPress", "AXCancel"] : []))
+    }
+
+    @Test("The bus-only graph does not acquire unrelated Stereo Output menus")
+    func busGraphSkipsUnpublishedDestinationKinds() async throws {
+        let f = try preparedFixture()
+        defer { try? FileManager.default.removeItem(at: f.bundle) }
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: { gate.stillOwns(claim) })
+        let population = try await OperationTraceContext.$current.withValue(context) {
+            try await f.channel().readFreshSessionPopulation(request: .init(domains: [.routing],
+                allowUINavigation: true), fileReader: .unavailable, stoppingWhen: { false })
+        }
+        #expect(population.stable)
+        #expect(population.checkedOutputs.isEmpty)
+        #expect(f.mutations.isEmpty)
     }
 
     @Test("Only request-held checked output contributes a physical-source bus edge",
@@ -121,7 +142,7 @@ struct Issue291CheckedOutputGraphTests {
 
     @Test("Interrupted acquisition retains the already restored popup effects", arguments: [false, true])
     func interruptedReadRetainsKnownEffects(revoked: Bool) async throws {
-        let f = try preparedFixture()
+        let f = try preparedFixture(bus: true)
         defer { try? FileManager.default.removeItem(at: f.bundle) }
         let gate = LogicMutationGate()
         let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
@@ -146,7 +167,7 @@ struct Issue291CheckedOutputGraphTests {
 
     @Test("An observed popup that cannot be cancelled remains an explicit UI change")
     func unclosedPopupWithholdsCheckedOutputs() async throws {
-        let f = try preparedFixture()
+        let f = try preparedFixture(bus: true)
         defer { try? FileManager.default.removeItem(at: f.bundle) }
         f.b.setActionNames(f.root, [])
         let gate = LogicMutationGate()
@@ -168,7 +189,7 @@ struct Issue291CheckedOutputGraphTests {
     @Test("The acquisition Help guard permits only its owned popup search focus",
           arguments: [false, true], ["AXGroup", "AXMenuItem"])
     func ownedPopupSearchDoesNotStopCleanup(foreignFocus: Bool, wrapperRole: String) async throws {
-        let f = try preparedFixture()
+        let f = try preparedFixture(bus: true)
         defer { try? FileManager.default.removeItem(at: f.bundle) }
         let search = f.b.element(2_919_010)
         let group = f.b.element(2_919_011)

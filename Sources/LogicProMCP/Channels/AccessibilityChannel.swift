@@ -402,6 +402,11 @@ actor AccessibilityChannel: Channel {
                     guard !stop(), await navigationReferenceIsCurrent() else {
                         throw SessionPopulationObservation.AcquisitionError.ownershipLost
                     }
+                    // This bounded projection publishes only checked bus edges. A
+                    // display classification selects candidates to acquire; it never
+                    // supplies the assignment, source identity or receiver identity.
+                    guard let label = strip.output,
+                          RoutingGraphPublication.classifyOutputLabel(label).0 == .bus else { continue }
                     guard let owner = strip.physicalBinding,
                           population.strips?.filter({ $0.physicalBinding?.matches(owner) == true }).count == 1 else { continue }
                     let read = await AXMixerStripBinding.$current.withValue(owner) {
