@@ -177,7 +177,13 @@ struct Issue105GotoNoteTests {
         builder.setAttribute(controlBar, kAXDescriptionAttribute as String, "Control Bar")
         // This is the measured six-level Control Bar topology from the Logic 12.3 locator
         // fixture: Control Bar → outer → middle → inner → Playhead Position → components → slider.
-        builder.setChildren(controlBar, [positionOuter])
+        let play = builder.element(1150), record = builder.element(1151)
+        for (box, label) in [(play, "Play"), (record, "Record")] {
+            builder.setAttribute(box, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+            builder.setAttribute(box, kAXDescriptionAttribute as String, label)
+            builder.setAttribute(box, kAXValueAttribute as String, NSNumber(value: false))
+        }
+        builder.setChildren(controlBar, [positionOuter, play, record])
         builder.setChildren(positionOuter, [positionMiddle])
         builder.setChildren(positionMiddle, [positionInner])
         builder.setChildren(positionInner, [playheadPosition])
@@ -241,7 +247,13 @@ struct Issue105GotoNoteTests {
             builder.setChildren(window, [controlBar])
             builder.setAttribute(controlBar, kAXRoleAttribute as String, kAXGroupRole as String)
             builder.setAttribute(controlBar, kAXDescriptionAttribute as String, "Control Bar")
-            builder.setChildren(controlBar, [positionOuter])
+            let play = builder.element(1160), record = builder.element(1161)
+            for (box, label) in [(play, "Play"), (record, "Record")] {
+                builder.setAttribute(box, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+                builder.setAttribute(box, kAXDescriptionAttribute as String, label)
+                builder.setAttribute(box, kAXValueAttribute as String, NSNumber(value: false))
+            }
+            builder.setChildren(controlBar, [positionOuter, play, record])
             builder.setChildren(positionOuter, [positionMiddle])
             builder.setChildren(positionMiddle, [positionInner])
             builder.setChildren(positionInner, [playheadPosition])
