@@ -6,6 +6,21 @@ import Testing
 
 @Suite("#968 exact-local physical Mixer naming adapter", .serialized)
 struct Issue968ExactMixerNameAdapterTests {
+    private final class FinalNameRead: @unchecked Sendable {
+        private let lock = NSLock()
+        private var reads = 0
+        private var changed = false
+        func observedName() { lock.withLock { reads += 1 } }
+        func shouldChange(afterReads: Int = 2) -> Bool {
+            lock.withLock {
+                guard reads >= afterReads, !changed else { return false }
+                changed = true
+                return true
+            }
+        }
+        var didChange: Bool { lock.withLock { changed } }
+    }
+
     private struct Harness {
         let fixture: Issue968MixerNameWriterTests.Fixture
         let channel: AccessibilityChannel
@@ -180,6 +195,97 @@ struct Issue968ExactMixerNameAdapterTests {
             #expect(isError)
             #expect(result.survivingReference == nil)
             #expect(result.rereadRequired)
+            #expect(AXPluginInstanceIdentity.stripName(h.fixture.source.strips[2], runtime: h.fixture.logic.ax) == "Changed")
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func aNewerNameDuringTheFinalMembershipReadCannotGrantAnInverse(newerEdit: Bool) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let h = try await Harness.make()
+            let boundary = FinalNameRead()
+            // Only the adapter's post-writer runtime observes this transition.
+            // The writer has already committed on the original physical Aux.
+            let postRead = h.fixture.source.b.makeLogicRuntime(pid: h.fixture.source.pid, appElement: h.fixture.source.app,
+                attributeValueHandler: { element, attribute in
+                    if CFEqual(element, h.fixture.plate), attribute == kAXValueAttribute as String {
+                        boundary.observedName()
+                    }
+                    if newerEdit, CFEqual(element, h.fixture.source.strips[0]),
+                       attribute == kAXRoleAttribute as String, boundary.shouldChange() {
+                        h.fixture.source.b.setAttribute(h.fixture.plate, kAXValueAttribute as String, "Newer external name")
+                    }
+                    return nil
+                },
+                setAttributeHandler: { _, _, _ in Issue.record("Post-read must not write"); return false },
+                performActionHandler: { _, _ in Issue.record("Post-read must not act"); return false },
+                executeAppleScript: { _ in Issue.record("No post-read scripting"); return .error("forbidden") })
+            let result = await h.apply(expected: "Aux", desired: "Changed", runtime: postRead)
+            #expect(h.fixture.events == ["down1", "up1", "down2", "up2", "name_value", "commit"])
+            let body = try #require(sharedJSONObject(sharedToolText(result.result)))
+            let attempted = try #require(body["write_attempted"] as? Bool)
+            #expect(attempted)
+            if newerEdit {
+                #expect(boundary.didChange)
+                #expect(result.status == .attemptedUnverified)
+                #expect(result.inverse == nil)
+                #expect(result.survivingReference == nil)
+                #expect(result.rereadRequired)
+                #expect(body["state"] as? String == "B")
+                let verified = try #require(body["verified"] as? Bool)
+                #expect(!verified)
+                #expect(AXPluginInstanceIdentity.stripName(h.fixture.source.strips[2], runtime: h.fixture.logic.ax) == "Newer external name")
+            } else {
+                #expect(!boundary.didChange)
+                #expect(result.status == .applied)
+                #expect(result.inverse != nil)
+                #expect(result.survivingReference == h.target)
+                #expect(body["state"] as? String == "A")
+            }
+            #expect(AXPluginInstanceIdentity.stripName(h.fixture.source.strips[0], runtime: h.fixture.logic.ax) == "B")
+        }
+    }
+
+    @Test(arguments: ["document", "replacement"])
+    func theAddedFinalNameReadCannotLosePhysicalOwnerCustody(change: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let h = try await Harness.make()
+            let boundary = FinalNameRead()
+            let postRead = h.fixture.source.b.makeLogicRuntime(pid: h.fixture.source.pid, appElement: h.fixture.source.app,
+                attributeValueHandler: { element, attribute in
+                    if CFEqual(element, h.fixture.plate), attribute == kAXValueAttribute as String {
+                        boundary.observedName()
+                        if boundary.shouldChange(afterReads: 3) {
+                            if change == "document" {
+                                h.fixture.source.b.setAttribute(h.fixture.source.window, kAXDocumentAttribute as String,
+                                    "file:///tmp/Other.logicx")
+                            } else {
+                                let replacement = h.fixture.source.b.element(968_509)
+                                h.fixture.source.b.setRole(replacement, "AXLayoutItem")
+                                h.fixture.source.b.setChildren(replacement, h.fixture.originalChildren)
+                                h.fixture.source.b.setChildren(h.fixture.source.mixer,
+                                    [h.fixture.source.strips[0], h.fixture.source.strips[1], replacement])
+                            }
+                        }
+                    }
+                    return nil
+                },
+                setAttributeHandler: { _, _, _ in Issue.record("Post-read must not write"); return false },
+                performActionHandler: { _, _ in Issue.record("Post-read must not act"); return false },
+                executeAppleScript: { _ in Issue.record("No post-read scripting"); return .error("forbidden") })
+            let result = await h.apply(expected: "Aux", desired: "Changed", runtime: postRead)
+            #expect(boundary.didChange)
+            #expect(h.fixture.events == ["down1", "up1", "down2", "up2", "name_value", "commit"])
+            #expect(result.status == .attemptedUnverified)
+            #expect(result.inverse == nil)
+            #expect(result.survivingReference == nil)
+            #expect(result.rereadRequired)
+            let body = try #require(sharedJSONObject(sharedToolText(result.result)))
+            #expect(body["state"] as? String == "B")
+            let attempted = try #require(body["write_attempted"] as? Bool)
+            let verified = try #require(body["verified"] as? Bool)
+            #expect(attempted)
+            #expect(!verified)
             #expect(AXPluginInstanceIdentity.stripName(h.fixture.source.strips[2], runtime: h.fixture.logic.ax) == "Changed")
         }
     }
