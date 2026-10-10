@@ -1795,6 +1795,7 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     let liveMetronome = builder.element(116)
     let tempoSlider = builder.element(117)
     let staleCycleDuplicate = builder.element(118)
+    let livePlay = builder.element(119), liveRecord = builder.element(120)
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
     builder.setChildren(window, [staleTransport, controlBar])
@@ -1808,7 +1809,13 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
 
     builder.setAttribute(controlBar, kAXRoleAttribute as String, kAXGroupRole as String)
     builder.setAttribute(controlBar, kAXDescriptionAttribute as String, "Control Bar")
-    builder.setChildren(controlBar, [liveCycle, liveMetronome, tempoSlider, staleCycleDuplicate])
+    builder.setChildren(controlBar, [liveCycle, liveMetronome, tempoSlider, staleCycleDuplicate,
+                                     livePlay, liveRecord])
+    for (box, label) in [(livePlay, "Play"), (liveRecord, "Record")] {
+        builder.setAttribute(box, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+        builder.setAttribute(box, kAXTitleAttribute as String, label)
+        builder.setAttribute(box, kAXValueAttribute as String, NSNumber(value: false))
+    }
     builder.setAttribute(liveCycle, kAXRoleAttribute as String, kAXCheckBoxRole as String)
     builder.setAttribute(liveCycle, kAXTitleAttribute as String, "Cycle")
     builder.setAttribute(liveCycle, kAXValueAttribute as String, NSNumber(value: true))

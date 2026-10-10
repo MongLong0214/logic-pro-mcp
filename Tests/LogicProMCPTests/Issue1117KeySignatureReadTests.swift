@@ -323,6 +323,13 @@ struct Issue1117KeySignatureReadTests {
         fixture.builder.setAttribute(app, kAXMainWindowAttribute as String, window)
         fixture.builder.setChildren(window, [fixture.bar])
         fixture.builder.setAttribute(fixture.bar, kAXDescriptionAttribute as String, "Control Bar")
+        let play = fixture.builder.element(111_712), record = fixture.builder.element(111_713)
+        for (box, label) in [(play, "Play"), (record, "Record")] {
+            fixture.builder.setAttribute(box, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+            fixture.builder.setAttribute(box, kAXDescriptionAttribute as String, label)
+            fixture.builder.setAttribute(box, kAXValueAttribute as String, NSNumber(value: false))
+        }
+        fixture.builder.setChildren(fixture.bar, [fixture.group, fixture.sibling, play, record])
         let result = AccessibilityChannel.defaultGetTransportState(
             runtime: fixture.builder.makeLogicRuntime(appElement: app)
         )
