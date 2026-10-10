@@ -3025,7 +3025,8 @@ extension AccessibilityChannel {
                 guard editorIsHeld(),
                       let value: String = AXHelpers.getAttribute(editor, kAXValueAttribute as String, runtime: runtime.ax),
                       value.utf8.elementsEqual(expected.utf8),
-                      case .textEditing = readLogicKeyboardFocus(runtime: runtime), editorIsHeld() else {
+                      case .textEditing = readLogicKeyboardFocus(runtime: runtime),
+                      ExactTrackNameAdapter.coupledWritePermitted(), editorIsHeld() else {
                     return refusal("Ordinary rename lost its held editor before the value setter")
                 }
                 attempted = true
@@ -3036,6 +3037,7 @@ extension AccessibilityChannel {
                       let value: String = AXHelpers.getAttribute(editor, kAXValueAttribute as String, runtime: runtime.ax),
                       value.utf8.elementsEqual(desired.utf8),
                       case .textEditing = readLogicKeyboardFocus(runtime: runtime),
+                      ExactTrackNameAdapter.coupledWritePermitted(allowOwnPreview: true),
                       editorIsHeld(allowOwnNamePreview: true), mouseRuntime.postKeyEvent(0x24),
                       targetStillHeld(requiringExclusiveSelection: true),
                       let after = readHeldName(), after.utf8.elementsEqual(desired.utf8) else {
@@ -3046,6 +3048,9 @@ extension AccessibilityChannel {
                     "track_index": physical?.currentIndex() ?? index,
                 ]))
             }
+            // Opening the menu is a UI attempt, not ownership of a name preview.
+            // The first name input must still match both original before names.
+            var nameInputStarted = false
             let typing = typeRenameName(desired,
                 focus: {
                     guard editorIsHeld() else { return .unreadable(.focusedElement) }
@@ -3055,7 +3060,9 @@ extension AccessibilityChannel {
                 mouseRuntime: mouseRuntime,
                 permittingPost: {
                     guard editorIsHeld(), case .textEditing = readLogicKeyboardFocus(runtime: runtime),
+                          ExactTrackNameAdapter.coupledWritePermitted(allowOwnPreview: nameInputStarted),
                           editorIsHeld() else { return false }
+                    nameInputStarted = true
                     attempted = true
                     return true
                 })
@@ -3068,7 +3075,8 @@ extension AccessibilityChannel {
                 "track_index": physical?.currentIndex() ?? index,
             ]))
         }
-        guard let field, targetStillHeld(requiringExclusiveSelection: true) else {
+        guard let field, ExactTrackNameAdapter.coupledWritePermitted(),
+              targetStillHeld(requiringExclusiveSelection: true) else {
             return refusal("Held name field could not be opened")
         }
         attempted = true
@@ -3078,10 +3086,12 @@ extension AccessibilityChannel {
         // Opening the editor is not proof that its target or raw value survived.
         // This deciding live read precedes the setter, including the early no-op path above.
         guard let boundaryName = readHeldName(), boundaryName.utf8.elementsEqual(expected.utf8),
+              ExactTrackNameAdapter.coupledWritePermitted(),
               targetStillHeld(requiringExclusiveSelection: true) else { return refusal("Exact rename precondition changed before the setter") }
         actualBefore = boundaryName
         attempted = true
         guard AXHelpers.setAttribute(field, kAXValueAttribute, desired as CFTypeRef, runtime: runtime.ax),
+              ExactTrackNameAdapter.coupledWritePermitted(allowOwnPreview: true),
               targetStillHeld(requiringExclusiveSelection: true),
               AXHelpers.performAction(field, kAXConfirmAction, runtime: runtime.ax),
               let after = readHeldName(), after.utf8.elementsEqual(desired.utf8) else {

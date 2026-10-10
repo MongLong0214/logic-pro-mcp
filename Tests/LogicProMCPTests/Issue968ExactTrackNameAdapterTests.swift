@@ -59,6 +59,8 @@ private final class ExactNameFixture: @unchecked Sendable {
     var menuEditorValueWrites: [String] = []
     var menuEditorSetterAcknowledgesOnly = false
     var onMenuEditorValueSet: (@Sendable () -> Void)?
+    var coupledNameField: AXUIElement?
+    var onMirrorReadAfterWrite: (@Sendable () -> Void)?
 
     init(_ name: String = "A") {
         app = builder.element(968_100)
@@ -91,6 +93,8 @@ private final class ExactNameFixture: @unchecked Sendable {
             ax: builder.makeAXRuntime(
                 appElement: app,
                 attributeValueHandler: { [self] element, attribute in
+                    if !writes.isEmpty, let coupledNameField, CFEqual(element, coupledNameField),
+                       attribute == kAXValueAttribute as String { onMirrorReadAfterWrite?() }
                     if let renameMenuItem, CFEqual(element, renameMenuItem), attribute == kAXTitleAttribute as String {
                         onRenameMenuRead?()
                     }
@@ -319,6 +323,57 @@ private final class ExactNameFixture: @unchecked Sendable {
             liveTrackNames: { AXLogicProElements.trackNames(runtime: runtime) }
         )
     }
+
+    func coupledCapture(link: String = "observed") async throws -> (SessionPopulationObservation.Capture, TargetReference, TargetReference, AXUIElement, AXUIElement) {
+        let mixer = builder.element(968_170)
+        let strip = builder.element(968_171)
+        let name = builder.element(968_172)
+        coupledNameField = name
+        builder.setRole(mixer, kAXGroupRole as String)
+        builder.setAttribute(mixer, kAXIdentifierAttribute as String, "Mixer")
+        builder.setRole(strip, kAXLayoutItemRole as String)
+        builder.setRole(name, kAXTextFieldRole as String)
+        builder.setAttribute(name, kAXDescriptionAttribute as String, "name")
+        builder.setAttribute(name, kAXValueAttribute as String, "A")
+        builder.setChildren(name, [])
+        builder.setChildren(strip, [name])
+        builder.setChildren(mixer, [strip])
+        builder.setChildren(window, [rail, mixer])
+        await cache.updateProject(.init(name: "ExactName", filePath: "/tmp/ExactName.logicx"))
+        let (project, target) = try await prepare(typedProducer: true)
+        let tracks = await cache.getTracks()
+        let physical = try #require(tracks.first?.physicalBinding)
+        let strips = try #require(AccessibilityChannel.defaultGetMixerStates(runtime: runtime, stoppingWhen: { false }).states)
+        let source = try #require(strips.first?.physicalBinding)
+        await cache.updateChannelStrips(strips)
+        let pair = AccessibilityChannel.HeldSelectionAssociation.Pair(track: physical, strip: source)
+        var population = SessionPopulationObservation.FreshPopulation(project: await cache.getProject(),
+            tracks: tracks, strips: strips, fileTrackCount: nil, beganAt: Date(), endedAt: Date(), stable: true)
+        population.selectionAssociations = link == "missing" ? [] : (link == "duplicate" ? [pair, pair] : [pair])
+        population.uiEffects.restoration = "restored"
+        let boundary = await cache.captureBoundary(watching: SessionPopulationObservation.watchedSections)
+        let accepted = SessionPopulationObservation.AcceptedPopulation(
+            reading: .init(state: await cache.auditSnapshot(), fileTrackCount: nil, projectFileNotBound: false),
+            boundary: boundary, population: population)
+        let capture = await SessionPopulationObservation.capture(cache: cache, targetRegistry: registry,
+            fileReader: .unavailable,
+            requestedProjectRef: project.rawValue, accepted: accepted)
+        onConfirm = { [self] in
+            builder.setAttribute(name, kAXValueAttribute as String,
+                builder.attributeValue(field, kAXDescriptionAttribute as String))
+        }
+        return (capture, project, target, strip, name)
+    }
+
+    func applyCoupled(_ capture: SessionPopulationObservation.Capture, project: TargetReference,
+                      target: TargetReference, before: String = "A", after: String = "C") async -> ExactTrackNameAdapter.Receipt {
+        let runtime = runtime
+        return await ExactTrackNameAdapter.applyCoupled(
+            .init(projectReference: project, targetReference: target, expectedBefore: before, desiredAfter: after),
+            capture: capture, router: router, cache: cache, registry: registry,
+            liveTrackName: { AXLogicProElements.trackName(at: $0, runtime: runtime) },
+            liveTrackNames: { AXLogicProElements.trackNames(runtime: runtime) })
+    }
 }
 
 private actor ExactNameChannel: Channel {
@@ -338,6 +393,144 @@ private actor ExactNameChannel: Channel {
 
 @Suite("#968 exact-local track naming adapter")
 struct Issue968ExactTrackNameAdapterTests {
+    @Test func openingTheRenameMenuCannotClaimAnExternalDesiredMirrorAsOwnTypingPreview() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (capture, project, target, _, mirror) = try await f.coupledCapture()
+            f.passiveHeaderNameLabel = true
+            f.builder.setAttribute(f.field, kAXValueAttribute as String, NSNumber(value: 0))
+            f.builder.setAttributeSettable(f.field, kAXValueAttribute as String, false)
+            let bar = f.builder.element(968_180)
+            let trackMenu = f.builder.element(968_181)
+            let menu = f.builder.element(968_182)
+            let rename = f.builder.element(968_183)
+            let editor = f.builder.element(968_184)
+            f.renameMenuItem = rename
+            f.menuFocusedEditor = editor
+            f.builder.setAttribute(f.app, kAXMenuBarAttribute as String, bar)
+            for (element, role) in [(bar, kAXMenuBarRole), (trackMenu, kAXMenuBarItemRole),
+                                   (menu, kAXMenuRole), (rename, kAXMenuItemRole), (editor, kAXTextFieldRole)] {
+                f.builder.setAttribute(element, kAXRoleAttribute as String, role as String)
+            }
+            f.builder.setAttribute(trackMenu, kAXTitleAttribute as String, AXLocalePolicy.trackMenuBar.canonical)
+            f.builder.setAttribute(rename, kAXTitleAttribute as String, AXLocalePolicy.renameTrackMenuItem.canonical)
+            f.builder.setAttribute(editor, kAXWindowAttribute as String, f.window)
+            f.builder.setAttribute(editor, kAXValueAttribute as String, "A")
+            f.builder.setAttributeSettable(editor, kAXValueAttribute as String, false)
+            f.builder.setChildren(bar, [trackMenu])
+            f.builder.setChildren(trackMenu, [menu])
+            f.builder.setChildren(menu, [rename])
+            f.onRenameMenuRead = { f.builder.setAttribute(mirror, kAXValueAttribute as String, "C") }
+            let result = await f.applyCoupled(capture, project: project, target: target)
+            #expect(result.status == .attemptedUnverified)
+            #expect(result.inverse == nil)
+            #expect(f.events == ["rename_menu"])
+            #expect(f.typedCodeUnits.isEmpty)
+            #expect(!f.postedReturn)
+            #expect(f.menuEditorValueWrites.isEmpty && f.writes.isEmpty)
+            #expect(f.builder.attributeValue(mirror, kAXValueAttribute as String) as? String == "C")
+            #expect(f.builder.attributeValue(f.field, kAXDescriptionAttribute as String) as? String == "A")
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func aNewerMirrorAtTheEditorBoundaryStopsTheNextCoupledWrite(inverting: Bool) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (capture, project, target, _, mirror) = try await f.coupledCapture()
+            let proof: ExactTrackNameAdapter.OwnedInverse?
+            if inverting {
+                proof = try #require((await f.applyCoupled(capture, project: project, target: target)).inverse)
+            } else { proof = nil }
+            f.onPress = { f.builder.setAttribute(mirror, kAXValueAttribute as String, "Human") }
+            let result: ExactTrackNameAdapter.Receipt
+            if let proof { result = await f.inverse(proof) }
+            else { result = await f.applyCoupled(capture, project: project, target: target) }
+            #expect(result.status == .attemptedUnverified)
+            #expect(result.inverse == nil)
+            #expect(f.writes == (inverting ? ["C"] : []))
+            #expect(f.builder.attributeValue(mirror, kAXValueAttribute as String) as? String == "Human")
+        }
+    }
+
+    @Test func aLaterMirrorReadCannotHideANewerPrimaryName() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (capture, project, target, _, _) = try await f.coupledCapture()
+            f.onMirrorReadAfterWrite = { f.builder.setAttribute(f.field, kAXDescriptionAttribute as String, "Human") }
+            let result = await f.applyCoupled(capture, project: project, target: target)
+            #expect(result.status == .attemptedUnverified)
+            #expect(result.inverse == nil)
+            #expect(result.survivingReference == nil)
+            #expect(f.writes == ["C"])
+        }
+    }
+
+    @Test func capturedCoupledNameIsReadBackAndInvertedOnBothOriginalSources() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (capture, project, target, _, mirror) = try await f.coupledCapture()
+            let result = await f.applyCoupled(capture, project: project, target: target)
+            #expect(result.status == .applied)
+            #expect(f.builder.attributeValue(mirror, kAXValueAttribute as String) as? String == "C")
+            let proof = try #require(result.inverse)
+            let restored = await f.inverse(proof)
+            #expect(restored.status == .applied)
+            #expect(restored.after == "A")
+            #expect(f.builder.attributeValue(mirror, kAXValueAttribute as String) as? String == "A")
+            #expect(f.writes == ["C", "A"])
+        }
+    }
+
+    @Test(arguments: ["missing", "duplicate", "stale_mirror"])
+    func aCoupledNameNeedsOneCurrentCapturedPhysicalPairBeforeWriting(fault: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (capture, project, target, _, mirror) = try await f.coupledCapture(link: fault)
+            if fault == "stale_mirror" { f.builder.setAttribute(mirror, kAXValueAttribute as String, "Newer") }
+            let result = await f.applyCoupled(capture, project: project, target: target)
+            #expect(result.status == .rejectedBeforeWrite)
+            #expect(result.inverse == nil)
+            #expect(f.writes.isEmpty && f.events.isEmpty)
+        }
+    }
+
+    @Test func anUnchangedMirrorAfterTheActualTrackWriteCannotGrantACoupledInverse() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (capture, project, target, _, _) = try await f.coupledCapture()
+            f.onConfirm = nil
+            let result = await f.applyCoupled(capture, project: project, target: target)
+            #expect(result.status == .attemptedUnverified)
+            #expect(result.inverse == nil)
+            #expect(result.survivingReference == nil)
+            #expect(sharedJSONObject(sharedToolText(result.result))?["state"] as? String == "B")
+            #expect(f.writes == ["C"])
+        }
+    }
+
+    @Test(arguments: ["newer", "replacement"])
+    func aCoupledInverseCannotOverwriteANewerOrReplacedMirror(fault: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (capture, project, target, strip, mirror) = try await f.coupledCapture()
+            let applied = await f.applyCoupled(capture, project: project, target: target)
+            let proof = try #require(applied.inverse)
+            if fault == "newer" { f.builder.setAttribute(mirror, kAXValueAttribute as String, "Human") }
+            else {
+                let replacement = f.builder.element(968_173)
+                f.builder.setRole(replacement, kAXLayoutItemRole as String)
+                let parent: AXUIElement? = AXHelpers.getAttribute(strip, kAXParentAttribute as String, runtime: f.runtime.ax)
+                let mixer = try #require(parent)
+                f.builder.setChildren(mixer, [replacement])
+            }
+            let result = await f.inverse(proof)
+            #expect(result.status == .rejectedBeforeWrite)
+            #expect(result.inverse == nil)
+            #expect(f.writes == ["C"])
+        }
+    }
+
     @Test(arguments: ["ownership", "cancel", "deadline", "healthy"])
     func successfulFinalAdapterNameReadCannotOutliveOperationAuthority(loss: String) async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
