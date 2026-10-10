@@ -2684,7 +2684,9 @@ struct Issue965FreshPopulationAcquisitionTests {
             }
             #expect(rows.allSatisfy { $0["parent"] as? String == "unknown" && $0["depth"] as? String == "unknown" },
                 "a disclosure delta does not establish immediate parents or absolute depth")
-            #expect((body["overall"] as? [String: Any])?["complete"] as? Bool == false)
+            let overall = try #require(body["overall"] as? [String: Any])
+            let complete = try #require(overall["complete"] as? Bool)
+            #expect(!complete)
         }
         let current = await cache.getTracks()
         #expect(current.count == (initiallyExpanded ? 42 : 19), "collapsed descendants must not become ordinary current cache rows")
