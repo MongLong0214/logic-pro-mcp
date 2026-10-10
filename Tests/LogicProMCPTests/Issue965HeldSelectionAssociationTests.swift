@@ -47,6 +47,11 @@ struct Issue965HeldSelectionAssociationTests {
         var scopeLossInjected = false
         var loseNextSelectionRead = false
         var postRestoreSelectionFaults = 0
+        var volatileSlider: AXUIElement?
+        var transientZoomRoleObserved = false
+        var zoomRoleReadsAfterSelection = 0
+        var zoomRoleReadsAtFirstValue: Int?
+        var zoomRoleFaultAtRead: Int?
 
         init(withViewport: Bool = false) throws {
             bundle = FileManager.default.temporaryDirectory.appendingPathComponent("965-selection-\(UUID().uuidString).logicx")
@@ -113,6 +118,18 @@ struct Issue965HeldSelectionAssociationTests {
         func channel() -> AccessibilityChannel {
             let base = builder.makeLogicRuntime(appElement: app,
                 attributeValueHandler: { [self] element, attribute in
+                    if CFEqual(element, scroll), selections.count == 1 {
+                        if attribute == kAXRoleAttribute as String {
+                            zoomRoleReadsAfterSelection += 1
+                            if zoomRoleReadsAfterSelection == zoomRoleFaultAtRead {
+                                transientZoomRoleObserved = true
+                                return .some(kAXTextFieldRole as NSString)
+                            }
+                        }
+                        if attribute == kAXValueAttribute as String, zoomRoleReadsAtFirstValue == nil {
+                            zoomRoleReadsAtFirstValue = zoomRoleReadsAfterSelection
+                        }
+                    }
                     if CFEqual(element, scroll), attribute == kAXValueAttribute as String, selections.count == 2 {
                         viewportReadsAfterSelection += 1
                         if viewportFaultAtRead == viewportReadsAfterSelection {
@@ -167,6 +184,10 @@ struct Issue965HeldSelectionAssociationTests {
                     }
                     return nil
                 }, attributeValueResultHandler: { [self] element, attribute in
+                    if let volatileSlider, CFEqual(element, volatileSlider), !selections.isEmpty,
+                       attribute == kAXDescriptionAttribute as String {
+                        return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                    }
                     if strips.contains(where: { CFEqual($0, element) }),
                        attribute == kAXValueAttribute as String || attribute == kAXSelectedTextAttribute as String {
                         if fault == "transient_editor", selections.count == 1,
@@ -420,6 +441,46 @@ struct Issue965HeldSelectionAssociationTests {
         #expect(f.selections.isEmpty, "a malformed successful description is not proof that an owned viewport control is absent")
         #expect(f.scrollWrites.isEmpty)
         #expect((f.builder.attributeValue(f.scroll, kAXValueAttribute as String) as? NSNumber)?.doubleValue == 0.8)
+    }
+
+    @Test func anUnrelatedInspectorSliderCannotPreventOriginalZoomRestoration() async throws {
+        let f = try Fixture(withViewport: true)
+        f.builder.setRole(f.scroll, kAXSliderRole as String)
+        f.builder.setAttribute(f.scroll, kAXDescriptionAttribute as String, "Vertical Zoom")
+        let unrelated = f.builder.element(1_965_780)
+        f.builder.setRole(unrelated, kAXSliderRole as String)
+        f.builder.setAttribute(unrelated, kAXDescriptionAttribute as String, "Gain")
+        f.builder.setChildren(unrelated, [])
+        f.builder.setChildren(f.window, [f.rail, f.mixer, f.builder.element(1_965_720), f.scroll, unrelated])
+        f.volatileSlider = unrelated
+        f.fault = "selection_scroll"
+        let body = try await inspect(f)
+        #expect(f.selections == [1, 0], "do not abandon the owned selection because a non-viewport Inspector slider was redrawn")
+        #expect(f.scrollWrites == [0.8])
+        #expect((f.builder.attributeValue(f.scroll, kAXValueAttribute as String) as? NSNumber)?.doubleValue == 0.8)
+        #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "restored")
+    }
+
+    @Test func aSampledOriginalZoomRoleContradictionCannotBeRenewedAway() async throws {
+        let calibration = try Fixture(withViewport: true)
+        calibration.builder.setRole(calibration.scroll, kAXSliderRole as String)
+        calibration.builder.setAttribute(calibration.scroll, kAXDescriptionAttribute as String, "Vertical Zoom")
+        calibration.fault = "selection_scroll"
+        _ = try await inspect(calibration)
+        let firstValueRoleReads = try #require(calibration.zoomRoleReadsAtFirstValue)
+        #expect(firstValueRoleReads >= 2)
+        let f = try Fixture(withViewport: true)
+        f.builder.setRole(f.scroll, kAXSliderRole as String)
+        f.builder.setAttribute(f.scroll, kAXDescriptionAttribute as String, "Vertical Zoom")
+        f.fault = "selection_scroll"
+        // The last role read before this viewport value is the direct held
+        // role check; the preceding read is its fresh complete census sample.
+        f.zoomRoleFaultAtRead = firstValueRoleReads - 1
+        let body = try await inspect(f)
+        #expect(f.transientZoomRoleObserved)
+        #expect(f.selections == [1])
+        #expect(f.scrollWrites.isEmpty)
+        #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "not_restored")
     }
 
     @Test(arguments: ["unreadable", "malformed_children", "foreign_children", "malformed_parent"])
