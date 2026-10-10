@@ -5,6 +5,11 @@ import Testing
 
 @Suite("#291 captured checked-output graph", .serialized)
 struct Issue291CheckedOutputGraphTests {
+    private final class FocusProofProbe: @unchecked Sendable {
+        var checking = false
+        var unrelatedChildrenReads = 0
+        var permitted: Bool?
+    }
     private func preparedFixture() throws -> Issue291PhysicalStripReferenceTests.Fixture {
         let f = try Issue291PhysicalStripReferenceTests.Fixture()
         let stereo = f.b.element(2_919_001)
@@ -201,5 +206,48 @@ struct Issue291CheckedOutputGraphTests {
             #expect(!guardian.stopped)
         }
         #expect(!scope.permits())
+    }
+
+    @Test("Owned popup focus proof does not enumerate unrelated destination submenus")
+    func popupFocusProofReadsOnlyTheFocusedParent() async throws {
+        let f = try preparedFixture()
+        defer { try? FileManager.default.removeItem(at: f.bundle) }
+        let search = f.b.element(2_919_020), group = f.b.element(2_919_021)
+        f.b.setRole(search, kAXTextFieldRole as String)
+        f.b.setRole(group, kAXGroupRole as String)
+        f.b.setChildren(search, []); f.b.setChildren(group, [search])
+        f.b.setChildren(f.root, [group, f.b.element(2_919_001), f.b.element(2_919_002)])
+        f.b.setAttribute(f.app, kAXFrontmostAttribute as String, true)
+        let probe = FocusProofProbe()
+        f.onAttributeRead = { _, _ in
+            f.b.setAttribute(f.app, kAXFocusedUIElementAttribute as String,
+                f.mutations.count % 2 == 1 ? search : f.window)
+        }
+        f.onChildrenResultRead = { element in
+            if probe.checking,
+               CFEqual(element, f.b.element(2_919_001)) || CFEqual(element, f.b.element(2_919_002)) {
+                probe.unrelatedChildrenReads += 1
+            }
+        }
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: { gate.stillOwns(claim) })
+        let owner = AXMixerStripBinding.Binding(window: f.window, mixer: f.mixer,
+            strip: f.strips[0], document: f.bundle.absoluteString)
+        _ = await OperationTraceContext.$current.withValue(context) {
+            await AXMixerStripBinding.$current.withValue(owner) {
+                await AccessibilityChannel.getOutputObservation(runtime: f.logic, timing: .immediate,
+                    observingPopupFocus: { proof in
+                        guard let proof else { return }
+                        probe.checking = true
+                        probe.permitted = proof()
+                        probe.checking = false
+                    })
+            }
+        }
+        let permitted = try #require(probe.permitted)
+        #expect(permitted)
+        #expect(probe.unrelatedChildrenReads == 0)
     }
 }

@@ -243,13 +243,21 @@ extension AccessibilityChannel {
                       let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: runtime.ax),
                       AXHelpers.getRole(focus, runtime: runtime.ax) == kAXTextFieldRole as String,
                       case .success(let rows) = AXHelpers.childrenResult(root, runtime: runtime.ax) else { return false }
-                var matches = 0
-                for row in rows {
-                    if CFEqual(row, focus) { matches += 1; continue }
-                    guard case .success(let children) = AXHelpers.childrenResult(row, runtime: runtime.ax) else { return false }
-                    matches += children.filter { CFEqual($0, focus) }.count
+                // Follow the actual focused parent, not every unrelated destination
+                // submenu on every Help read. Positively renew both directions of
+                // this original root/search path; no cached permission is retained.
+                guard let parent: AXUIElement = AXHelpers.getAttribute(focus, kAXParentAttribute as String, runtime: runtime.ax) else { return false }
+                if CFEqual(parent, root) {
+                    guard rows.filter({ CFEqual($0, focus) }).count == 1 else { return false }
+                } else {
+                    guard rows.filter({ CFEqual($0, parent) }).count == 1,
+                          AXHelpers.getRole(parent, runtime: runtime.ax) == kAXGroupRole as String,
+                          let parentRoot: AXUIElement = AXHelpers.getAttribute(parent, kAXParentAttribute as String, runtime: runtime.ax),
+                          CFEqual(parentRoot, root),
+                          case .success(let children) = AXHelpers.childrenResult(parent, runtime: runtime.ax),
+                          children.filter({ CFEqual($0, focus) }).count == 1 else { return false }
                 }
-                guard matches == 1,
+                guard
                       let currentFocus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: runtime.ax),
                       CFEqual(currentFocus, focus),
                       case .success(.some(let doc)) = AXLogicProElements.projectPickerDocumentRead(physical.window, runtime: runtime),
