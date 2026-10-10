@@ -251,7 +251,8 @@ extension AccessibilityChannel {
                     guard rows.filter({ CFEqual($0, focus) }).count == 1 else { return false }
                 } else {
                     guard rows.filter({ CFEqual($0, parent) }).count == 1,
-                          AXHelpers.getRole(parent, runtime: runtime.ax) == kAXGroupRole as String,
+                          let parentRole = AXHelpers.getRole(parent, runtime: runtime.ax),
+                          parentRole == kAXGroupRole as String || parentRole == "AXMenuItem",
                           let parentRoot: AXUIElement = AXHelpers.getAttribute(parent, kAXParentAttribute as String, runtime: runtime.ax),
                           CFEqual(parentRoot, root),
                           case .success(let children) = AXHelpers.childrenResult(parent, runtime: runtime.ax),

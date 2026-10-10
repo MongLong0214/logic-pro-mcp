@@ -165,14 +165,15 @@ struct Issue291CheckedOutputGraphTests {
         #expect(f.mutations.map { $0.1 } == ["AXPress"])
     }
 
-    @Test("The acquisition Help guard permits only its owned popup search focus", arguments: [false, true])
-    func ownedPopupSearchDoesNotStopCleanup(foreignFocus: Bool) async throws {
+    @Test("The acquisition Help guard permits only its owned popup search focus",
+          arguments: [false, true], ["AXGroup", "AXMenuItem"])
+    func ownedPopupSearchDoesNotStopCleanup(foreignFocus: Bool, wrapperRole: String) async throws {
         let f = try preparedFixture()
         defer { try? FileManager.default.removeItem(at: f.bundle) }
         let search = f.b.element(2_919_010)
         let group = f.b.element(2_919_011)
         f.b.setRole(search, kAXTextFieldRole as String)
-        f.b.setRole(group, kAXGroupRole as String)
+        f.b.setRole(group, wrapperRole)
         f.b.setChildren(search, []); f.b.setChildren(group, [search])
         f.b.setChildren(f.root, [group, f.b.element(2_919_001), f.b.element(2_919_002)])
         f.b.setAttribute(f.app, kAXFrontmostAttribute as String, true)
