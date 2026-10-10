@@ -879,13 +879,23 @@ actor StateCache {
 
     /// Applies the connection state only if the mixer has not changed since
     /// `observed` was captured before the read that produced it.
+    /// The material version is not a heartbeat certificate: retain newer
+    /// liveness received during the read of the same connection state.
+    /// Material transitions and atomic mutations can intentionally clear it.
     @discardableResult
     func updateMCUConnection(
         _ state: MCUConnectionState,
         ifCurrent observed: SectionVersion
     ) -> Bool {
         guard accepts(observed, for: .mixer) else { return false }
-        updateMCUConnection(state)
+        var replacement = state
+        var current = mcuConnection
+        current.lastFeedbackAt = replacement.lastFeedbackAt
+        if current == replacement, let latest = mcuConnection.lastFeedbackAt,
+           replacement.lastFeedbackAt.map({ $0 < latest }) ?? true {
+            replacement.lastFeedbackAt = latest
+        }
+        updateMCUConnection(replacement)
         return true
     }
 

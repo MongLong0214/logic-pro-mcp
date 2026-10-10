@@ -2,6 +2,84 @@ import Foundation
 import Testing
 @testable import LogicProMCP
 
+@Test(arguments: ["older", "absent", "equal", "newer"])
+func testConditionalMCUReplacementRetainsTheNewestHeartbeat(kind: String) async {
+    let cache = StateCache()
+    let initial = MCUConnectionState(isConnected: true, registeredAsDevice: true,
+        lastFeedbackAt: Date(timeIntervalSince1970: 1), portName: "LogicProMCP-MCU-Internal")
+    await cache.updateMCUConnection(initial)
+    let version = await cache.currentVersion(for: .mixer)
+    let boundary = await cache.captureBoundary(watching: [.mixer])
+    await cache.updateMCUConnection { $0.lastFeedbackAt = Date(timeIntervalSince1970: 2) }
+    var replacement = initial
+    switch kind {
+    case "absent": replacement.lastFeedbackAt = nil
+    case "equal": replacement.lastFeedbackAt = Date(timeIntervalSince1970: 2)
+    case "newer": replacement.lastFeedbackAt = Date(timeIntervalSince1970: 3)
+    default: break
+    }
+    let accepted = await cache.updateMCUConnection(replacement, ifCurrent: version)
+    #expect(accepted)
+    let actual = await cache.getMCUConnection()
+    #expect(actual.lastFeedbackAt == Date(timeIntervalSince1970: kind == "newer" ? 3 : 2))
+    #expect(actual.isConnected && actual.registeredAsDevice)
+    #expect(await cache.captureBoundary(watching: [.mixer]) == boundary)
+}
+
+@Test func testConditionalMCUReplacementStillRejectsAMateriallyStaleVersion() async {
+    let cache = StateCache()
+    let original = MCUConnectionState(isConnected: true, registeredAsDevice: true,
+        lastFeedbackAt: Date(timeIntervalSince1970: 1), portName: "Original port")
+    await cache.updateMCUConnection(original)
+    let version = await cache.currentVersion(for: .mixer)
+    await cache.updateMCUConnection {
+        $0.portName = "Replacement port"
+        $0.lastFeedbackAt = Date(timeIntervalSince1970: 2)
+    }
+    let current = await cache.getMCUConnection()
+    let accepted = await cache.updateMCUConnection(original, ifCurrent: version)
+    #expect(!accepted)
+    #expect(await cache.getMCUConnection() == current)
+}
+
+@Test func testConditionalMCUReplacementDoesNotTransferHeartbeatToANewPort() async {
+    let cache = StateCache()
+    await cache.updateMCUConnection(MCUConnectionState(isConnected: true, registeredAsDevice: true,
+        lastFeedbackAt: Date(timeIntervalSince1970: 2), portName: "Original port"))
+    let version = await cache.currentVersion(for: .mixer)
+    let accepted = await cache.updateMCUConnection(MCUConnectionState(isConnected: true,
+        registeredAsDevice: true, portName: "Replacement port"), ifCurrent: version)
+    #expect(accepted)
+    let actual = await cache.getMCUConnection()
+    #expect(actual.portName == "Replacement port")
+    #expect(actual.lastFeedbackAt == nil, "feedback from the old endpoint is not liveness of the replacement")
+    #expect(await cache.currentVersion(for: .mixer) != version)
+}
+
+@Test(arguments: ["replacement", "conditional_replacement", "atomic_mutator", "conditional_atomic_mutator"])
+func testIntentionalMCUConnectionResetCanStillClearFeedback(kind: String) async {
+    let cache = StateCache()
+    await cache.updateMCUConnection(MCUConnectionState(isConnected: true,
+        lastFeedbackAt: Date(timeIntervalSince1970: 2)))
+    let version = await cache.currentVersion(for: .mixer)
+    switch kind {
+    case "replacement": await cache.updateMCUConnection(MCUConnectionState())
+    case "conditional_replacement":
+        let accepted = await cache.updateMCUConnection(MCUConnectionState(), ifCurrent: version)
+        #expect(accepted)
+    case "atomic_mutator":
+        await cache.updateMCUConnection { $0.isConnected = false; $0.lastFeedbackAt = nil }
+    default:
+        let accepted = await cache.updateMCUConnection(ifCurrent: version) {
+            $0.isConnected = false; $0.lastFeedbackAt = nil
+        }
+        #expect(accepted)
+    }
+    let reset = await cache.getMCUConnection()
+    #expect(!reset.isConnected)
+    #expect(reset.lastFeedbackAt == nil)
+}
+
 @Test(arguments: ["lcd", "ignored", "replacement"])
 func testMCUHeartbeatPreservesPhysicalMixerCaptureBoundary(kind: String) async throws {
     let cache = StateCache()
