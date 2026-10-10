@@ -371,6 +371,7 @@ extension AccessibilityChannel {
             let target: Disclosure
             let beforeHeaders: [AXUIElement]
             let afterHeaders: [AXUIElement]
+            var revealedStacksWereClosed = false
         }
         private let viewport: [Viewport]
         private var observedFocus: AXUIElement
@@ -426,7 +427,7 @@ extension AccessibilityChannel {
                 guard expectedProject?.projectName?.utf8.elementsEqual(AccessibilityChannel.projectName(fromWindowTitle: title).utf8) == true,
                       expectedProject?.projectFilePath?.utf8.elementsEqual(url.path.utf8) == true else { return nil }
             }
-            guard let collapsed = Self.collapsedDisclosures(in: headers, runtime: logic) else { return nil }
+            guard let disclosureRead = Self.disclosureStates(in: headers, runtime: logic) else { return nil }
             let hiddenView = AXLogicProElements.hiddenTrackViewRead(headers: headers, in: window, runtime: logic)
             let hiddenControl = hiddenView?.shown == false ? hiddenView?.control : nil
             let hiddenMenuPath = hiddenControl == nil ? nil : Self.hiddenMenuPath(in: app, runtime: logic)
@@ -434,7 +435,7 @@ extension AccessibilityChannel {
             guard hiddenMenuPath != nil || focusedPID == pid else {
                 Log.info("Population navigation acquisition unavailable: foreground process identity", subsystem: "ax"); return nil
             }
-            let targets = (hiddenControl.flatMap { control in headers.first.map { [($0, control)] } } ?? []) + collapsed
+            let targets = (hiddenControl.flatMap { control in headers.first.map { [($0, control)] } } ?? []) + disclosureRead.collapsed
             guard let first = targets.first else {
                 Log.info("Population navigation acquisition unavailable: no held exposure control", subsystem: "ax"); return nil
             }
@@ -553,9 +554,12 @@ extension AccessibilityChannel {
         }
 
         /// Reuse the same status-preserving direct-child shape at every revealed rail.
-        /// Newly observed peer membership is not parent/depth evidence.
-        private static func collapsedDisclosures(in headers: [AXUIElement], runtime logic: AXLogicProElements.Runtime) -> [Disclosure]? {
+        /// An open revealed stack can also reveal grandchildren. Retain the actually
+        /// deciding closed states separately from the historical exposure delta.
+        private static func disclosureStates(in headers: [AXUIElement], runtime logic: AXLogicProElements.Runtime)
+            -> (collapsed: [Disclosure], allStacksClosed: Bool)? {
             var collapsed: [Disclosure] = []
+            var allStacksClosed = true
             for header in headers {
                 guard case .success(let children) = AXHelpers.childrenResult(header, runtime: logic.ax) else { return nil }
                 var triangles: [AXUIElement] = []
@@ -569,6 +573,7 @@ extension AccessibilityChannel {
                     guard case .success(.some(let value)) = AXHelpers.getAttributeResult(
                         triangle, kAXValueAttribute as String, runtime: logic.ax) as Result<NSNumber?, AXHelpers.AXStatusError>,
                           value == 0 || value == 1 else { return nil }
+                    if value != 0 || CFGetTypeID(value) != CFNumberGetTypeID() { allStacksClosed = false }
                     if value == 0 {
                         // Two rows cannot authorize two gestures on one physical control.
                         guard !collapsed.contains(where: {
@@ -578,7 +583,7 @@ extension AccessibilityChannel {
                     }
                 }
             }
-            return collapsed
+            return (collapsed, allStacksClosed)
         }
 
         private static func selectedHeaders(_ headers: [AXUIElement], ax: AXHelpers.Runtime) -> [AXUIElement]? {
@@ -947,9 +952,11 @@ extension AccessibilityChannel {
                 let effect = hiddenControl.map({ CFEqual($0, target.disclosure) }) == true ? "hidden_track_view" : "stack_disclosure"
                 if !effects.changed.contains(effect) { effects.changed.append(effect) }
                 let newlyExposed = headers.filter { row in !beforeHeaders.contains { CFEqual($0, row) } }
-                guard let collapsed = Self.collapsedDisclosures(in: newlyExposed, runtime: logic) else {
+                guard let disclosureRead = Self.disclosureStates(in: newlyExposed, runtime: logic) else {
                     effects.reason = "stack_disclosure_unreadable"; return
                 }
+                let collapsed = disclosureRead.collapsed
+                acquired[acquired.count - 1].revealedStacksWereClosed = disclosureRead.allStacksClosed
                 guard collapsed.allSatisfy({ next in
                     !pending.contains(where: { CFEqual($0.header, next.header) || CFEqual($0.disclosure, next.disclosure) })
                         && !acquired.contains(where: { CFEqual($0.target.header, next.header) || CFEqual($0.target.disclosure, next.disclosure) })
@@ -986,7 +993,22 @@ extension AccessibilityChannel {
                 let exposed = entry.afterHeaders.filter { row in !entry.beforeHeaders.contains { CFEqual($0, row) } }
                 let members = exposed.compactMap(binding)
                 guard members.count == exposed.count else { return [] }
-                if !members.isEmpty { observations.append(.init(stack: stack, exposed: members)) }
+                // A leaf that became a stack after the deciding pass cannot
+                // inherit its earlier direct-child qualifier. Reuse the actual
+                // captured metadata; only our held descendant gestures explain
+                // a closed stack becoming open during this acquisition.
+                let directChildren = entry.revealedStacksWereClosed && exposed.allSatisfy { header in
+                    guard let track = tracks.first(where: { $0.physicalBinding.map { CFEqual($0.header, header) } == true })
+                    else { return false }
+                    if acquired.contains(where: { CFEqual($0.target.header, header) }) {
+                        return track.isStackHeader == true && track.stackCollapsed == false
+                    }
+                    return track.isStackHeader == false
+                }
+                if !members.isEmpty {
+                    observations.append(.init(stack: stack, exposed: members,
+                        revealedStacksWereClosed: directChildren))
+                }
             }
             return observations
         }
