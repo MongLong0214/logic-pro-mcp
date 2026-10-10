@@ -92,7 +92,9 @@
       "2026-10-05-1107-en-US-plugin-terminal-guard-repair",
       "2026-10-05-1107-ko-KR-plugin-terminal-guard-repair",
       "2026-10-05-1084-ko-KR-positioning-diagnostic-preflight",
-      "2026-10-05-1084-readonly-dialog-modality"
+      "2026-10-05-1084-readonly-dialog-modality",
+      "2026-10-10-exact-adapter-passive-name-editor",
+      "2026-10-10-exact-track-name-scalar-roundtrip"
     ],
     "records_from_a_superseded_build": [
       "2026-09-23-972-en-US-plugin-instance-identity",
@@ -158,7 +160,9 @@
       "2026-09-14-the-transport-shows-ticks-when-the-display-mode-does",
       "2026-09-14-two-menu-items-one-name-and-every-ax-attribute-identical",
       "2026-09-15-an-auxiliary-window-steals-the-track-menu-and-that-is-the-sweep-only-failure",
-      "2026-09-15-german-logic-blocks-in-the-new-track-sheet-because-three-labelsets-never-had-a-german-reading"
+      "2026-09-15-german-logic-blocks-in-the-new-track-sheet-because-three-labelsets-never-had-a-german-reading",
+      "2026-10-10-exact-adapter-passive-name-editor",
+      "2026-10-10-exact-track-name-scalar-roundtrip"
     ],
     "schema_v1_records": [
       "2026-09-03-sort-settle-witness-accepts-prescroll-order",
@@ -436,25 +440,20 @@
   "note": "What the ledger does not know, as SETS of identities. A member may leave; a new member fails CI. Sets rather than counts because a count is defeated by a swap — add one undocumented variant, document a different one, and the total is unchanged while the ledger knows strictly less about a new string. The guard also compares against the MERGE BASE, so raising the file in the same commit as the regression does not help. Raising requires a dated reason under `raised`. ADR-019 D8. Live: observations-status.py --unproven",
   "raised": {
     "manual_reverify": {
-      "date": "2026-10-05",
+      "date": "2026-10-10",
       "members": [
-        "2026-10-05-1084-readonly-dialog-modality"
+        "2026-10-10-exact-adapter-passive-name-editor",
+        "2026-10-10-exact-track-name-scalar-roundtrip"
       ],
-      "reason": "#1107: these four actual Korean/English observations require an owned disposable Logic project, independently named Arrange/Mixer targets, occupied-editor reads and inverse writes, safe empty-slot insertion, locale relaunch, and backup restoration. Their live GUI preparation and restoration are not a headless CI replay, so each retains its explicit manual reverify steps. The committed arrange-binding and terminal-guard-repair evidence receipts preserve the distinct immutable binaries, first-refusal/retry outcomes, failed description reads and restored projections. All four verdicts remain partial on Logic 12.3 build 6674; this records the manual-replay gap, not E-clean or Logic 12.4 qualification. #1084: the added Korean positioning smoke requires an exclusively owned disposable Logic fixture and live dialog/transport observation, so it retains manual replay steps. Both actual requests refused before the ownership gate; its inconclusive receipt establishes neither native ownership diagnostics nor a remedy on Logic 12.4. #1084 read-only modality: the new historical structural record needs an exclusive read-only Logic lane and a transient AXWindows/PID/modality/children snapshot, about 2 minutes. Its private historical probe is not a committed headless replay; only this new record is added to the manual set. Failed descendant and sheet readings remain unknown, later installed metadata is not atomic host binding, and no operation or release qualification is granted."
+      "reason": "#968: only these two new partial scalar/adapter observations require an exclusively owned stopped development fixture, actual issued physical references, live name writes and independent UI comparison. The recorded standalone drivers are not committed headless replays. This admits exactly the two manual replay gaps, not a coupled naming-plan, protected-state or release qualification. Historical rationale retained from 2026-10-05: #1107: these four actual Korean/English observations require an owned disposable Logic project, independently named Arrange/Mixer targets, occupied-editor reads and inverse writes, safe empty-slot insertion, locale relaunch, and backup restoration. Their live GUI preparation and restoration are not a headless CI replay, so each retains its explicit manual reverify steps. The committed arrange-binding and terminal-guard-repair evidence receipts preserve the distinct immutable binaries, first-refusal/retry outcomes, failed description reads and restored projections. All four verdicts remain partial on Logic 12.3 build 6674; this records the manual-replay gap, not E-clean or Logic 12.4 qualification. #1084: the added Korean positioning smoke requires an exclusively owned disposable Logic fixture and live dialog/transport observation, so it retains manual replay steps. Both actual requests refused before the ownership gate; its inconclusive receipt establishes neither native ownership diagnostics nor a remedy on Logic 12.4. #1084 read-only modality: the new historical structural record needs an exclusive read-only Logic lane and a transient AXWindows/PID/modality/children snapshot, about 2 minutes. Its private historical probe is not a committed headless replay; only this new record is added to the manual set. Failed descendant and sheet readings remain unknown, later installed metadata is not atomic host binding, and no operation or release qualification is granted."
     },
     "records_without_evidence": {
-      "date": "2026-09-19",
+      "date": "2026-10-10",
       "members": [
-        "2026-09-14-a-korean-input-source-silently-breaks-every-key-command-operation",
-        "2026-09-14-arm-named-its-own-precondition-and-the-router-threw-it-away",
-        "2026-09-14-the-arm-key-setup-could-not-see-a-window-that-was-open-in-front-of-it",
-        "2026-09-14-the-control-surface-channels-are-not-set-up-so-six-operations-send-into-nothing",
-        "2026-09-14-the-routing-graph-publishes-nothing-or-23-nodes-depending-on-read-order",
-        "2026-09-14-two-menu-items-one-name-and-every-ax-attribute-identical",
-        "2026-09-15-an-auxiliary-window-steals-the-track-menu-and-that-is-the-sweep-only-failure",
-        "2026-09-15-german-logic-blocks-in-the-new-track-sheet-because-three-labelsets-never-had-a-german-reading"
+        "2026-10-10-exact-adapter-passive-name-editor",
+        "2026-10-10-exact-track-name-scalar-roundtrip"
       ],
-      "reason": "The same eight. None cites an evidence file: each was measured by reading AX or a preference file in the moment and the reading is transcribed into `observations` rather than dumped to a census. That is a real gap -- a transcription cannot be re-checked against bytes -- and it is recorded as one rather than closed by inventing a file."
+      "reason": "#968: only these two new partial observations carry exact raw and executable digests but no committed external evidence file. Their private native bytes are not public replay artifacts; the observations remain bounded transcriptions. This records exactly the two evidence-file gaps rather than inventing a public file or granting preservation/plan qualification. Historical rationale retained from 2026-09-19: The same eight. None cites an evidence file: each was measured by reading AX or a preference file in the moment and the reading is transcribed into `observations` rather than dumped to a census. That is a real gap -- a transcription cannot be re-checked against bytes -- and it is recorded as one rather than closed by inventing a file."
     },
     "surfaces_without_records": {
       "date": "2026-09-18",

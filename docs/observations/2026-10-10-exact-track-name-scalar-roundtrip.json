@@ -1,0 +1,49 @@
+{
+  "schema": 3,
+  "id": "2026-10-10-exact-track-name-scalar-roundtrip",
+  "date": "2026-10-10",
+  "subject": "A current track reference survives a scalar rename and same-reference return, with coupled Mixer names",
+  "question": "Does the public scalar rename act on the issued physical track and retain its reference through a comma-containing name and return?",
+  "verdict": "partial",
+  "surface": "arrange.track_headers",
+  "issues": [968],
+  "host": {"app": "Logic Pro", "version": "12.3", "build": "6674", "locale": "en-US", "os": "macOS 26.3 (25D125)"},
+  "reverify": {
+    "kind": "manual",
+    "command": "In a stopped development project with an expanded stack and All Mixer visible, obtain current project and physical track references. Refuse nonexistent track and project references before writes. Rename one observed Audio track to a comma-containing name through logic_tracks.rename. Independently read its Arrange header and Mixer name, then use the same issued reference to return to its original name and independently read both again. Close only the separately owned candidate process.",
+    "expected": "Both scalar calls return State A with actual before/observed names, verified true and the same reference. Arrange and Mixer name fields change together and return together. Invalid references return State C with write_attempted false. The track selected before acquisition is not automatically restored.",
+    "cost": "Two development-only scalar name writes and their selection/editor acquisition. No routing, parameter, project-save or transport write."
+  },
+  "depends": [
+    "Sources/LogicProMCP/Dispatchers/TrackDispatcher.swift:rename",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+Tracks.swift",
+    "Sources/LogicProMCP/Workflows/ExactTrackNameAdapter.swift"
+  ],
+  "method": "The public MCP candidate issued the project and track references from its actual live resources. The observed unique original name located the issued reference for this experiment only; it was not used to bridge a replacement or grant production identity. Independent Accessibility observations compared the Arrange track header and Mixer name before, after each scalar call and after returning to the original name. No internal owned-inverse action was invoked.",
+  "canon": [{"ref": "logic-canon://nibstrings/en#value", "value": "Output 3-4", "used_for": "Only the observed output label vocabulary; not physical reference continuity, naming authority or destination identity.", "binding": {"kind": "record"}}],
+  "observations": [
+    {
+      "what": "Measured public scalar roundtrip",
+      "candidate_sha256": "59e80e846cfdbbc15394b9ec8e6af8750f89c4effbfb69c891a0843772f3eb61",
+      "raw_sha256": "d950826ed8e73657b4ed2e6d2699296a9ebd916ea1365dcfd08fbe5ebf974f4c",
+      "before": "Audio 1", "requested": "LPM968 Native, Audio 1", "returned": "Audio 1",
+      "forward_state": "A", "return_state": "A", "verified": true,
+      "same_reference_in_both_receipts": true, "write_attempted_in_both_calls": true,
+      "via": "track_menu_ax_set_value",
+      "wrong_target_state": "C", "wrong_project_state": "C", "negative_write_attempted": false,
+      "independent_arrange_and_mixer_names_agree": true,
+      "observed_input_before_and_after": "Input 1", "observed_output_before_and_after": "Output 3-4",
+      "transport_play_and_record_before_and_after": false,
+      "selected_track_before": "Sub 1", "selected_track_after": "Audio 1",
+      "owned_process_exit": 0, "harness_exit": 0
+    }
+  ],
+  "conclusion": "The measured scalar writer renamed and returned the original physical track using the same issued reference, and the Arrange/Mixer name fields were coupled. Name restoration is not selection restoration: the acquired Audio track remained selected. This qualifies this scalar experiment only, not the internal adapter's process-owned inverse or a coupled canonical naming plan.",
+  "limits": [
+    "The measured executable includes a separate input-reader work-in-progress; its exact binary digest is retained rather than claiming this was the clean historical adapter executable.",
+    "Track population completeness was explicitly unverified in the resource. No universal inventory, duplicate-name, Mixer-only name or all-region preservation claim is made.",
+    "The two calls were ordinary public scalar calls, not ExactTrackNameAdapter.OwnedInverse or canonical repair-plan execution.",
+    "Full protected state, automatic selection/focus restoration and whole-issue acceptance remain unqualified. The canonical naming-preservation blocker is not removed."
+  ],
+  "supersedes": null
+}

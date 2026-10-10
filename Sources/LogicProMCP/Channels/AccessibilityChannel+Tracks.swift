@@ -2835,7 +2835,11 @@ extension AccessibilityChannel {
     ) -> ChannelResult {
         let expected = params["expected_name"]
         let physical = AXTrackBinding.current
-        let acquire = physical != nil && AXTrackBinding.ordinaryRenameAcquisition
+        let ordinaryAcquisition = physical != nil && AXTrackBinding.ordinaryRenameAcquisition
+        // A physical exact adapter may open the existing name editor only while
+        // its original target is already exclusively selected. It never selects
+        // another track; that compatibility acquisition remains scalar-only.
+        let acquire = physical != nil
         var actualBefore: String?
         var attempted = false
         func refusal(_ hint: String) -> ChannelResult {
@@ -2864,7 +2868,8 @@ extension AccessibilityChannel {
             // Logic may expose the header name as a noneditable numeric-zero label.
             // It cannot accept the direct String setter. Ordinary acquisition uses
             // the existing held-target menu/editor route instead, before any press
-            // on that label; exact adapters retain their existing no-acquisition rule.
+            // on that label. Exact adapters use the same editor only under their
+            // original physical target's observed exclusive selection.
             if acquire,
                AXHelpers.isAttributeSettable(candidate, kAXValueAttribute as String, runtime: runtime.ax) == false,
                case .success(.some(let value)) = AXHelpers.getAttributeResult(
@@ -2921,7 +2926,7 @@ extension AccessibilityChannel {
                 "before": before, "observed": before, "via": "no-op", "write_attempted": false,
             ]))
         }
-        if acquire, !targetStillHeld(requiringExclusiveSelection: true) {
+        if ordinaryAcquisition, !targetStillHeld(requiringExclusiveSelection: true) {
             guard let position = physical?.currentIndex(), targetStillHeld() else {
                 return refusal("Ordinary rename lost its held target before selection")
             }
