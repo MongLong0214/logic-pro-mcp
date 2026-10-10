@@ -115,6 +115,7 @@ struct SendEdge: Codable, Equatable, Sendable {
 
 enum RoutingProvenance: String, Codable, Sendable {
     case axMixerStrip
+    case axOutputMenuCheckmark
     case mcuEcho
     case other
 }

@@ -338,6 +338,7 @@ actor AccessibilityChannel: Channel {
         var stackNavigation: OwnedTrackStackObservationNavigation?
         var originalPresentation: SessionPopulationObservation.FreshPopulation?
         var association: HeldSelectionAssociation?
+        var routingEffects = SessionPopulationObservation.UIEffects()
         if request.allowUINavigation, request.domains.contains(.associations),
            case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime.logicRuntime),
            let candidate = HeldSelectionAssociation(window: window, logic: runtime.logicRuntime,
@@ -391,6 +392,68 @@ actor AccessibilityChannel: Channel {
                 exposure: stackNavigation?.effects.navigationPerformed == true ? stackNavigation?.exposure : nil,
                 stoppingBeforeAXRead: stopBeforeAXRead ?? stop, stoppingWhen: stop
             )
+            // Start with the already exposed Mixer, without composing popup focus
+            // changes with a held selection, stack or temporary-view inverse.
+            if request.allowUINavigation, request.domains.contains(.routing), population.stable,
+               association == nil, stackNavigation?.effects.navigationPerformed != true,
+               navigation?.effects.navigationPerformed != true {
+                var checked: [SessionPopulationObservation.HeldCheckedOutput] = []
+                for strip in population.strips ?? [] {
+                    guard !stop(), await navigationReferenceIsCurrent() else {
+                        throw SessionPopulationObservation.AcquisitionError.ownershipLost
+                    }
+                    guard let owner = strip.physicalBinding,
+                          population.strips?.filter({ $0.physicalBinding?.matches(owner) == true }).count == 1 else { continue }
+                    let read = await AXMixerStripBinding.$current.withValue(owner) {
+                        await Self.getOutputObservation(runtime: runtime.logicRuntime)
+                    }
+                    let receipt = read.result.message.data(using: .utf8).flatMap {
+                        try? JSONSerialization.jsonObject(with: $0) as? [String: Any]
+                    }
+                    if receipt?["navigation_attempted"] as? Bool == true {
+                        population.uiEffects.navigationPerformed = true
+                        if !population.uiEffects.attempted.contains("routing_popup") {
+                            population.uiEffects.attempted.append("routing_popup")
+                        }
+                        if receipt?["popup_menu_state"] as? String == "closed"
+                            || receipt?["menu_custody_at_read"] as? Bool == true {
+                            if !population.uiEffects.changed.contains("routing_popup") {
+                                population.uiEffects.changed.append("routing_popup")
+                            }
+                        }
+                        let restored = receipt?["popup_menu_state"] as? String == "closed"
+                            && receipt?["focus_restoration"] as? String == "restored"
+                        population.uiEffects.restoration = restored ? "restored" : "partially_restored"
+                        routingEffects = population.uiEffects
+                        if !restored {
+                            population.stable = false
+                            population.uiEffects.reason = "routing_popup_not_restored"
+                            break
+                        }
+                    }
+                    if let assignment = read.assignment {
+                        checked.append(.init(source: owner, assignment: assignment))
+                    }
+                }
+                if population.stable, !checked.isEmpty {
+                    let current = try await readExposedSessionPopulation(request: request, fileReader: fileReader,
+                        stoppingBeforeAXRead: stopBeforeAXRead ?? stop, stoppingWhen: stop)
+                    let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
+                    let valuesAgree = (try? encoder.encode(population.strips)) == (try? encoder.encode(current.strips))
+                    let ownersAgree = zip(population.strips ?? [], current.strips ?? []).allSatisfy { old, new in
+                        guard let owner = old.physicalBinding else { return new.physicalBinding == nil }
+                        return new.physicalBinding?.matches(owner) == true
+                    }
+                    if current.stable, valuesAgree, ownersAgree,
+                       current.project?.filePath == population.project?.filePath,
+                       await navigationReferenceIsCurrent(), !stop() {
+                        population.checkedOutputs = checked
+                    } else {
+                        population.stable = false
+                        population.uiEffects.reason = "routing_population_moved"
+                    }
+                }
+            }
             if let association, stackNavigation?.effects.navigationPerformed != true,
                navigation?.effects.navigationPerformed != true, population.stable {
                 population.selectionAssociations = await association.observe(
@@ -484,7 +547,8 @@ actor AccessibilityChannel: Channel {
             Log.info("Population acquisition failed: \(error)", subsystem: "ax")
             let stack = await stackNavigation?.restoreAfterInterruptedRead(stoppingWhen: stop) ?? .init()
             let mixer = await navigation?.restore(stoppingWhen: stop) ?? .init()
-            let effects = mergedEffects(association?.effects ?? .init(), mergedEffects(stack, mixer))
+            let effects = mergedEffects(routingEffects,
+                mergedEffects(association?.effects ?? .init(), mergedEffects(stack, mixer)))
             throw SessionPopulationObservation.NavigationAcquisitionError(cause: error, effects: effects)
         }
     }

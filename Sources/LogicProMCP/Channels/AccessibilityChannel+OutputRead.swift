@@ -69,14 +69,14 @@ extension AccessibilityChannel {
         runtime: AXLogicProElements.Runtime = .production,
         timing: OutputAssignmentTiming = .live
     ) async -> ChannelResult {
-        await getCheckedRoutingDestination(params: [:], sendOrdinal: nil, inputBusOnly: true, runtime: runtime, timing: timing)
+        (await getCheckedRoutingDestination(params: [:], sendOrdinal: nil, inputBusOnly: true, runtime: runtime, timing: timing)).result
     }
     /// A checked assigned-send choice, not a routing-graph completeness claim.
     static func getAssignedSendVerified(
         ordinal: Int, runtime: AXLogicProElements.Runtime = .production,
         timing: OutputAssignmentTiming = .live
     ) async -> ChannelResult {
-        await getCheckedRoutingDestination(params: [:], sendOrdinal: ordinal, runtime: runtime, timing: timing)
+        (await getCheckedRoutingDestination(params: [:], sendOrdinal: ordinal, runtime: runtime, timing: timing)).result
     }
     /// Read-only output-popup acquisition on a retained physical source. No routing leaf is
     /// pressed, and a successful observation does not claim focus/viewport restoration.
@@ -84,18 +84,29 @@ extension AccessibilityChannel {
         params: [String: String], runtime: AXLogicProElements.Runtime = .production,
         timing: OutputAssignmentTiming = .live
     ) async -> ChannelResult {
-        await getCheckedRoutingDestination(params: params, sendOrdinal: nil, runtime: runtime, timing: timing)
+        (await getCheckedRoutingDestination(params: params, sendOrdinal: nil, runtime: runtime, timing: timing)).result
+    }
+
+    struct CheckedOutputReading: Sendable {
+        let result: ChannelResult
+        let assignment: OutputAssignment?
+    }
+
+    /// Shares the exact owned reader; wire receipt decoding never supplies graph identity.
+    static func getOutputObservation(runtime: AXLogicProElements.Runtime,
+                                     timing: OutputAssignmentTiming = .live) async -> CheckedOutputReading {
+        await getCheckedRoutingDestination(params: [:], sendOrdinal: nil, runtime: runtime, timing: timing)
     }
 
     private static func getCheckedRoutingDestination(
         params: [String: String], sendOrdinal: Int?, inputBusOnly: Bool = false, runtime: AXLogicProElements.Runtime,
         timing: OutputAssignmentTiming
-    ) async -> ChannelResult {
+    ) async -> CheckedOutputReading {
         let operation = inputBusOnly ? "mixer.get_input_bus_verified" : (sendOrdinal == nil ? "mixer.get_output_verified" : "mixer.get_send_destination_verified")
         var extras: [String: Any] = ["operation": operation, "write_attempted": false,
                                    "navigation_attempted": false, "popup_menu_state": "not_opened"]
-        func refuse(_ error: HonestContract.FailureError, _ hint: String) -> ChannelResult {
-            .error(HonestContract.encodeStateC(error: error, hint: hint, extras: extras))
+        func refuse(_ error: HonestContract.FailureError, _ hint: String) -> CheckedOutputReading {
+            .init(result: .error(HonestContract.encodeStateC(error: error, hint: hint, extras: extras)), assignment: nil)
         }
         guard params.isEmpty, sendOrdinal.map({ $0 >= 0 }) != false, let physical = AXMixerStripBinding.current else {
             return refuse(.invalidParams, "A current physical Mixer target_ref is required; no write inputs or indices are accepted.")
@@ -255,7 +266,7 @@ extension AccessibilityChannel {
         extras["verify_source"] = inputBusOnly ? "ax_input_menu_checkmark" : (sendOrdinal == nil ? "ax_output_menu_checkmark" : "ax_send_menu_checkmark")
         if inputBusOnly { extras["input_scope"] = "bus_only" }
         extras["snapshot_atomic"] = false
-        return .success(HonestContract.encodeStateA(extras: extras))
+        return .init(result: .success(HonestContract.encodeStateA(extras: extras)), assignment: first)
     }
 
     static func outputReadContextFailure(_ result: ChannelResult, operation: String) -> ChannelResult {

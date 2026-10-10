@@ -27,6 +27,8 @@ enum RoutingProjectBinding: Sendable {
 /// published: occupancy is read at the source strip, and the destination an assigned send's group
 /// names is not read. Physical-strip nodes retain classification as display evidence only; no
 /// track association, bus/port identity or edge is derived from their ordinal or labels.
+/// Request-held, checked output menus can additionally publish a physical source's bus edge;
+/// this does not identify the receiving strip or establish complete graph coverage.
 ///
 /// This function is pure: it never sees the registry and never reads another resource. Every
 /// domain it cannot answer carries its reasons in `coverage`, and `partialReason` is those reasons
@@ -141,9 +143,9 @@ enum RoutingGraphPublication {
 
             guard let issued else { continue }
 
-            // Physical ownership supplies a source endpoint independently of Arrange. Its
-            // output is still display evidence, never a bus/port identity or an edge.
-            if strip.physicalBinding != nil {
+            // Physical ownership supplies a source independently of Arrange. Its output label
+            // remains display evidence; only a held checked-menu observation supplies an edge.
+            if let owner = strip.physicalBinding {
                 if let reference = capture.mixerReference(at: row) {
                     let label = nonEmptyObservedLabel(strip.output)
                     let input: InputSlotObservation?
@@ -160,6 +162,19 @@ enum RoutingGraphPublication {
                         outputClassification: label.map { classifyOutputLabel($0).0 },
                         observedInputSlot: input
                     )
+                    if capture.freshPopulation?.stable == true {
+                        let checked = capture.freshPopulation?.checkedOutputs.filter {
+                            $0.source.matches(owner)
+                        } ?? []
+                        if checked.count == 1, case .bus(let number) = checked[0].assignment,
+                           OutputAssignment.busNumbers.contains(number) {
+                            let busID = "bus_\(number)"
+                            nodesByID[busID] = RoutingNode(id: busID, kind: .bus,
+                                displayName: "Bus \(number)", busNumber: number, targetRef: nil)
+                            edges.append(RoutingEdge(kind: .mainOutput, source: reference.rawValue,
+                                destination: busID, send: nil, provenance: .axOutputMenuCheckmark))
+                        }
+                    }
                 } else {
                     population.partial("physical strip membership or reference unavailable at observed row=\(row)")
                 }
@@ -253,7 +268,8 @@ enum RoutingGraphPublication {
             partialReason: partialReasons.isEmpty ? nil : partialReasons.joined(separator: "; "),
             nodes: nodesByID.values.sorted { $0.id < $1.id },
             edges: edges,
-            provenance: [.axMixerStrip],
+            provenance: edges.contains { $0.provenance == .axOutputMenuCheckmark }
+                ? [.axMixerStrip, .axOutputMenuCheckmark] : [.axMixerStrip],
             snapshotId: snapshotId,
             coverage: coverage
         )
