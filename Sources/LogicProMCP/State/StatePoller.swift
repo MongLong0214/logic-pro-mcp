@@ -300,6 +300,7 @@ actor StatePoller {
                   acceptanceBoundary.occlusionRevision == before.occlusionRevision,
                   acceptanceBoundary.hasDocument == before.hasDocument,
                   acceptanceBoundary.axOccluded == before.axOccluded else {
+                Log.info("Fresh population acceptance unavailable: project or occlusion boundary changed during navigation", subsystem: "poller")
                 throw SessionPopulationObservation.AcquisitionError.ownershipLost
             }
             guard let accepted = await cache.acceptFreshPopulation(population, ifCurrent: acceptanceBoundary,

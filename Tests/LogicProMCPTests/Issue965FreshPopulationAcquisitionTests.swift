@@ -3380,6 +3380,9 @@ struct Issue965FreshPopulationAcquisitionTests {
             #expect(isError)
             let body = try #require(sharedJSONObject(sharedToolText(result)))
             let hint = try #require(body["hint"] as? String)
+            if causeName == "ownershipLost" {
+                #expect(hint.contains("operation ownership or cache/project custody"))
+            }
             let expectedError = causeName == "cancelled" ? "cancelled"
                 : causeName == "deadline" ? "operation_timeout" : "readback_unavailable"
             #expect(body["error"] as? String == expectedError)
@@ -3400,6 +3403,30 @@ struct Issue965FreshPopulationAcquisitionTests {
             #expect(effects["changed"] as? [String] == [])
             #expect(effects["restoration"] as? String == (wrapped ? "not_restored" : "not_applicable"))
         }
+    }
+
+    @Test(arguments: [false, true])
+    func operationOnlyCustodyLossDoesNotAssertThatTheProjectChanged(revokedGate: Bool) async throws {
+        let cache = StateCache()
+        await cache.updateProject(ProjectInfo(name: "Session", filePath: "/tmp/Session.logicx"))
+        let before = await cache.captureBoundary(watching: SessionPopulationObservation.watchedSections)
+        let context = revokedGate ? OperationTraceContext(mutationGateAcquired: true, ownsGate: { false }) : nil
+        let result = await OperationTraceContext.$current.withValue(context) {
+            await ProjectDispatcher.handle(command: "inspect_session", params: [:], router: ChannelRouter(), cache: cache,
+                dialogPresent: { false }, cleanupAuditFileReader: .unavailable, acquireSessionPopulation: { _ in
+                    try SessionPopulationObservation.requireOwnedAcquisition()
+                    throw SessionPopulationObservation.AcquisitionError.pollerStopped
+                })
+        }
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+        let hint = try #require(body["hint"] as? String)
+        #expect(hint.contains("operation ownership"))
+        #expect(body["error"] as? String == "readback_unavailable")
+        #expect(body["state"] as? String == "C")
+        let writeAttempted = try #require(body["write_attempted"] as? Bool)
+        #expect(!writeAttempted)
+        #expect(body["snapshot_id"] == nil)
+        #expect(await cache.captureBoundary(watching: SessionPopulationObservation.watchedSections) == before)
     }
 
     @Test(arguments: [false, true])

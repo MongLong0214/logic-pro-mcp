@@ -394,7 +394,12 @@ actor StateCache {
         let sections = population.strips == nil
             ? request?.acquisitionSections ?? SessionPopulationObservation.watchedSections
             : SessionPopulationObservation.watchedSections
-        guard !stop(), captureBoundary(watching: sections) == before else { return nil }
+        guard !stop(), captureBoundary(watching: sections) == before else {
+            let current = captureBoundary(watching: sections)
+            let changed = sections.filter { current.versions[$0] != before.versions[$0] }.map(\.rawValue)
+            Log.info("Fresh population acceptance unavailable: changed_sections=\(changed), document_changed=\(current.hasDocument != before.hasDocument), occlusion_changed=\(current.occlusionRevision != before.occlusionRevision || current.axOccluded != before.axOccluded), stable=\(population.stable)", subsystem: "poller")
+            return nil
+        }
         if population.stable, let info = population.project {
             updateProject(info)
             updateDocumentState(true)
