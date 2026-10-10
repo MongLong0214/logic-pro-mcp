@@ -410,6 +410,7 @@ actor AccessibilityChannel: Channel {
                     if current?.stable != true || !sameValues(population.project, current?.project)
                         || !sameValues(population.tracks, current?.tracks)
                         || population.tracks?.map(\.selectionReadback) != current?.tracks?.map(\.selectionReadback)
+                        || population.tracks?.map(\.hideButtonReadback) != current?.tracks?.map(\.hideButtonReadback)
                         || !sameValues(population.strips, current?.strips) {
                         population.selectionAssociations = []
                         population.stable = false
@@ -768,6 +769,9 @@ actor AccessibilityChannel: Channel {
                             if stack.isStackHeader != state.isStackHeader || stack.collapsed != state.stackCollapsed {
                                 sameStackExposure = false
                             }
+                            if Self.readTrackHideButton(header, in: window, runtime: logic, exposure: exposure) != state.hideButtonReadback {
+                                sameStackExposure = false
+                            }
                         }
                     } else { sameStackExposure = false }
                 } else { sameStackExposure = false }
@@ -801,6 +805,7 @@ actor AccessibilityChannel: Channel {
                 && before.presentation?.presentation == after.presentation?.presentation
                 && before.tracks?.map(\.liveIdentityBacked) == after.tracks?.map(\.liveIdentityBacked)
                 && before.tracks?.map(\.selectionReadback) == after.tracks?.map(\.selectionReadback)
+                && before.tracks?.map(\.hideButtonReadback) == after.tracks?.map(\.hideButtonReadback)
                 && zip(before.strips ?? [], after.strips ?? []).allSatisfy {
                     switch ($0.physicalBinding, $1.physicalBinding) {
                     case (nil, nil): return true

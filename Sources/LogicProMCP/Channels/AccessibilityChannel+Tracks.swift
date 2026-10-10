@@ -58,6 +58,9 @@ extension AccessibilityChannel {
                 readingTypeHelp: readingTypeHelp,
                 stoppingBeforeHelp: stop
             ) else { return (nil, true) }
+            if !readingTypeHelp, let window {
+                state.hideButtonReadback = readTrackHideButton(header, in: window, runtime: runtime, exposure: exposure)
+            }
             exposure?.observeStackState(header: header, isStackHeader: state.isStackHeader, collapsed: state.stackCollapsed)
             if let window, let document, state.liveIdentityBacked, state.placeholder != true {
                 // Baseline rows were already exposed and keep ordinary custody. Only
@@ -71,6 +74,34 @@ extension AccessibilityChannel {
             states.append(state)
         }
         return (states, false)
+    }
+
+    /// Read the one direct physical Hide checkbox, never an aggregate/name/ordinal join.
+    /// Missing, ambiguous, foreign or unreadable controls stay unknown; no Help or actuation.
+    static func readTrackHideButton(_ header: AXUIElement, in window: AXUIElement,
+                                    runtime: AXLogicProElements.Runtime, exposure: AXTrackBinding.Exposure? = nil) -> Bool? {
+        let ax = runtime.ax
+        guard case .success(let children) = AXHelpers.childrenResult(header, runtime: ax) else { return nil }
+        exposure?.observeChildren(element: header, children: children)
+        var matches: [AXUIElement] = []
+        for child in children {
+            guard case .success(.some(let role)) = AXHelpers.getAttributeResult(
+                child, kAXRoleAttribute as String, runtime: ax) as Result<String?, AXHelpers.AXStatusError> else { return nil }
+            exposure?.observeRole(element: child, role: role)
+            guard role == kAXCheckBoxRole as String else { continue }
+            guard case .success(.some(let label)) = AXHelpers.getAttributeResult(
+                child, kAXDescriptionAttribute as String, runtime: ax) as Result<String?, AXHelpers.AXStatusError> else { return nil }
+            if AXLocalePolicy.trackHideControl.matches(label) { matches.append(child) }
+        }
+        guard matches.count == 1, let control = matches.first,
+              let parent: AXUIElement = AXHelpers.getAttribute(control, kAXParentAttribute as String, runtime: ax),
+              CFEqual(parent, header),
+              let owner: AXUIElement = AXHelpers.getAttribute(control, kAXWindowAttribute as String, runtime: ax),
+              CFEqual(owner, window),
+              case .success(.some(let value)) = AXHelpers.getAttributeResult(
+                control, kAXValueAttribute as String, runtime: ax) as Result<NSNumber?, AXHelpers.AXStatusError>,
+              value == 0 || value == 1, exposure?.isCurrent ?? true else { return nil }
+        return value == 1
     }
 
     /// One request's observed disclosure. No selection, viewport or musical
