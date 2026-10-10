@@ -25,6 +25,7 @@ private final class ExactNameFixture: @unchecked Sendable {
     var onPress: (@Sendable () -> Void)?
     var onConfirm: (@Sendable () -> Void)?
     var onNameReadAfterWrite: (@Sendable () -> Void)?
+    var nameReadsAfterWrite = 0
     var permitsSelection = false
     var exposeFieldWhenSelected = false
     var renameMenuItem: AXUIElement?
@@ -94,6 +95,7 @@ private final class ExactNameFixture: @unchecked Sendable {
                         onRenameMenuRead?()
                     }
                     if !writes.isEmpty, CFEqual(element, field), attribute == kAXDescriptionAttribute as String {
+                        nameReadsAfterWrite += 1
                         onNameReadAfterWrite?()
                     }
                     if hideReadbackAfterSet, !writes.isEmpty, CFEqual(element, field),
@@ -336,6 +338,59 @@ private actor ExactNameChannel: Channel {
 
 @Suite("#968 exact-local track naming adapter")
 struct Issue968ExactTrackNameAdapterTests {
+    @Test(arguments: ["ownership", "cancel", "deadline", "healthy"])
+    func successfulFinalAdapterNameReadCannotOutliveOperationAuthority(loss: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let healthy = ExactNameFixture()
+            let (healthyProject, healthyTarget) = try await healthy.prepare(typedProducer: true)
+            let confirmed = await OperationTraceContext.$current.withValue(OperationTraceContext(ownsGate: { true })) {
+                await healthy.apply(project: healthyProject, target: healthyTarget, before: "A", after: "C")
+            }
+            #expect(confirmed.status == .applied)
+            let finalNameRead = healthy.nameReadsAfterWrite
+            #expect(finalNameRead > 0)
+
+            let f = ExactNameFixture()
+            let (project, target) = try await f.prepare(typedProducer: true)
+            let deadline = loss == "deadline" ? ContinuousClock.now.advanced(by: .seconds(1)) : nil
+            f.onNameReadAfterWrite = {
+                guard f.nameReadsAfterWrite == finalNameRead else { return }
+                if loss == "ownership" { f.boundaryOwnership = false }
+                if loss == "cancel" { f.boundaryCancellation = true }
+                // The final AX read remains successful and returns our written
+                // name; only the operation authority expires during that read.
+                if let deadline {
+                    while ContinuousClock.now < deadline { Thread.sleep(forTimeInterval: 0.001) }
+                }
+            }
+            let context = OperationTraceContext(ownsGate: { f.boundaryOwnership }, deadline: deadline,
+                                                cancellationRequested: { f.boundaryCancellation })
+            let receipt = await OperationTraceContext.$current.withValue(context) {
+                await f.apply(project: project, target: target, before: "A", after: "C")
+            }
+            #expect(f.nameReadsAfterWrite == finalNameRead)
+            #expect(f.writes == ["C"])
+            #expect(receipt.before == "A")
+            #expect(receipt.after == "C")
+            let body = try #require(sharedJSONObject(sharedToolText(receipt.result)))
+            if loss == "healthy" {
+                #expect(receipt.status == .applied)
+                #expect(receipt.inverse != nil)
+                #expect(receipt.survivingReference == target)
+                #expect(body["state"] as? String == "A")
+            } else {
+                #expect(receipt.status == .attemptedUnverified)
+                #expect(receipt.inverse == nil)
+                #expect(receipt.survivingReference == nil)
+                #expect(body["state"] as? String == "B")
+                let verified = try #require(body["verified"] as? Bool)
+                let wrote = try #require(body["write_attempted"] as? Bool)
+                #expect(!verified)
+                #expect(wrote)
+            }
+        }
+    }
+
     @Test(arguments: ["header", "name", "document"])
     func latePhysicalCustodyLossCannotGrantAnInverse(change: String) async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
