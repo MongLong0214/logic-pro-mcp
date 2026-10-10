@@ -105,8 +105,12 @@ extension AccessibilityChannel {
         }
         let passiveFocus = readLogicKeyboardFocus(runtime: runtime) == .notTextEditing ? nil
             : PassiveRoutingReadFocus(window: physical.window, document: physical.document, runtime: runtime)
+        let passiveMixerFocus = readLogicKeyboardFocus(runtime: runtime) == .notTextEditing ? nil
+            : OwnedTrackStackObservationNavigation.ReadFocusScope.PassiveMixerReadFocus(
+                window: physical.window, logic: runtime, acquisitionPermitted: { !Task.isCancelled })
         func focusAllowsAcquisition() -> Bool {
             if let passiveFocus { return passiveFocus.permits(runtime: runtime) }
+            if let passiveMixerFocus { return passiveMixerFocus.permits() }
             return readLogicKeyboardFocus(runtime: runtime) == .notTextEditing
         }
         guard focusAllowsAcquisition(),

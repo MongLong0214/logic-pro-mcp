@@ -88,6 +88,88 @@ struct Issue291AssignedSendMenuTests {
         }
         return label
     }
+    private func passivePhysicalFocus(_ f: Issue291PhysicalStripReferenceTests.Fixture) throws -> AXUIElement {
+        // Focus a different physical source, never the requested send's strip.
+        let focus = f.strips[1], outer = f.b.element(291_950)
+        let children = try AXHelpers.childrenResult(f.window, runtime: f.logic.ax).get()
+        f.b.setRole(outer, kAXGroupRole as String)
+        f.b.setAttribute(outer, kAXDescriptionAttribute as String, "Mixer")
+        f.b.setChildren(outer, [f.mixer])
+        f.b.setChildren(f.window, children.map { CFEqual($0, f.mixer) ? outer : $0 })
+        f.b.setAttribute(f.app, kAXFocusedUIElementAttribute as String, focus)
+        f.b.setAttribute(f.app, kAXFrontmostAttribute as String, true)
+        f.b.setAttributeSettable(focus, kAXValueAttribute as String, false)
+        f.b.setAttribute(focus, kAXNumberOfCharactersAttribute as String, 0)
+        f.b.setAttribute(focus, kAXInsertionPointLineNumberAttribute as String, 0)
+        f.attributeReadResult = { element, attribute in
+            guard CFEqual(element, focus) else { return nil }
+            if attribute == kAXValueAttribute as String || attribute == kAXSelectedTextAttribute as String {
+                return .failure(.init(raw: AXError.noValue.rawValue))
+            }
+            return nil
+        }
+        return focus
+    }
+    @Test("An exact passive physical focus permits the different retained source's checked send read")
+    func passivePhysicalFocusAllowsOnlyOwnedSendRead() async throws {
+        let p = try prepare(), f = p.f
+        let focus = try passivePhysicalFocus(f)
+        #expect(AccessibilityChannel.readLogicKeyboardFocus(of: focus, runtime: f.logic) != .notTextEditing)
+        let body = try #require(sharedJSONObject(await read(p).message))
+        #expect(body["state"] as? String == "A")
+        #expect((body["current_destination"] as? [String: Any])?["number"] as? Int == 1)
+        #expect(body["popup_menu_state"] as? String == "closed")
+        #expect(body["focus_restoration"] as? String == "restored")
+        let wrote = try #require(body["write_attempted"] as? Bool)
+        #expect(!wrote)
+        #expect(f.mutations.count == 2)
+        #expect(f.mutations.allSatisfy {
+            (CFEqual($0.0, f.outputs[0]) && $0.1 == kAXPressAction as String)
+                || (CFEqual($0.0, f.root) && $0.1 == kAXCancelAction as String)
+        })
+        #expect(AccessibilityChannel.readLogicKeyboardFocus(of: focus, runtime: f.logic) != .notTextEditing)
+    }
+    @Test("A passive physical focus exception still refuses editing, ambiguous and foreign ownership",
+          arguments: ["editor", "settable", "characters", "line", "boolean_line", "detached", "duplicate", "parent", "window", "background", "unread"])
+    func unsafePhysicalFocusCannotPress(_ fault: String) async throws {
+        let p = try prepare(), f = p.f
+        let focus = try passivePhysicalFocus(f)
+        switch fault {
+        case "editor": f.b.setRole(focus, kAXTextFieldRole as String)
+        case "settable": f.b.setAttributeSettable(focus, kAXValueAttribute as String, true)
+        case "characters": f.b.setAttribute(focus, kAXNumberOfCharactersAttribute as String, 1)
+        case "line": f.b.setAttribute(focus, kAXInsertionPointLineNumberAttribute as String, 1)
+        case "boolean_line": f.b.setAttribute(focus, kAXInsertionPointLineNumberAttribute as String, false)
+        case "detached": f.b.setChildren(f.mixer, [f.strips[0]])
+        case "duplicate": f.b.setChildren(f.mixer, [f.strips[0], focus, focus])
+        case "parent": f.b.setAttribute(focus, kAXParentAttribute as String, f.window)
+        case "window": f.b.setAttribute(f.app, kAXFocusedWindowAttribute as String, f.app)
+        case "background": f.b.setAttribute(f.app, kAXFrontmostAttribute as String, false)
+        case "unread":
+            f.attributeReadResult = { element, attribute in
+                guard CFEqual(element, focus) else { return nil }
+                return .failure(.init(raw: attribute == kAXValueAttribute as String ? AXError.cannotComplete.rawValue : AXError.noValue.rawValue))
+            }
+        default: Issue.record("unknown physical focus fault")
+        }
+        let body = try #require(sharedJSONObject(await read(p).message))
+        #expect(body["state"] as? String == "C")
+        #expect(body["current_destination"] == nil)
+        #expect(f.mutations.isEmpty)
+    }
+    @Test("Revoking held physical focus at routing capability lookup refuses before the press")
+    func passivePhysicalFocusRevocationBeforePress() async throws {
+        let p = try prepare(), f = p.f
+        _ = try passivePhysicalFocus(f)
+        f.onActionNamesRead = { control in
+            if CFEqual(control, f.outputs[0]) {
+                f.b.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.window)
+            }
+        }
+        let body = try #require(sharedJSONObject(await read(p).message))
+        #expect(body["state"] as? String == "C")
+        #expect(f.mutations.isEmpty)
+    }
     @Test("A retained noneditable Arrange label permits only the owned routing-popup read")
     func passiveHeaderAllowsRoutingReadWithoutRelaxingKeyboardGate() async throws {
         let p = try prepare(), f = p.f

@@ -89,14 +89,44 @@ extension AccessibilityChannel {
 
         private static func path(_ mixer: AXUIElement, to window: AXUIElement, ax: AXHelpers.Runtime) -> [AXUIElement]? {
             var path = [mixer]
+            // Preserve the status-bearing childrenResult seam of older runtimes.
+            guard ax.attributeValuesResult != nil else {
+                while !CFEqual(path.last!, window) {
+                    guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                          path.count < 32,
+                          let parent: AXUIElement = AXHelpers.getAttribute(path.last!, kAXParentAttribute as String, runtime: ax),
+                          !path.contains(where: { CFEqual($0, parent) }),
+                          case .success(let children) = AXHelpers.childrenResult(parent, runtime: ax),
+                          children.filter({ CFEqual($0, path.last!) }).count == 1 else { return nil }
+                    path.append(parent)
+                }
+                return path
+            }
+            if CFEqual(mixer, window) { return path }
+            guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                  let firstParent: AXUIElement = AXHelpers.getAttribute(mixer, kAXParentAttribute as String, runtime: ax) else { return nil }
+            var parent = firstParent
             while !CFEqual(path.last!, window) {
                 guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
                       path.count < 32,
-                      let parent: AXUIElement = AXHelpers.getAttribute(path.last!, kAXParentAttribute as String, runtime: ax),
-                      !path.contains(where: { CFEqual($0, parent) }),
-                      case .success(let children) = AXHelpers.childrenResult(parent, runtime: ax),
-                      children.filter({ CFEqual($0, path.last!) }).count == 1 else { return nil }
+                      !path.contains(where: { CFEqual($0, parent) }) else { return nil }
+                let atWindow = CFEqual(parent, window)
+                // Fresh reciprocal witnesses on this original parent, not a
+                // cached path or a second hierarchy/name/ordinal lookup. Help
+                // remains outside the batch and under its full per-read guard.
+                let attributes = atWindow ? [kAXChildrenAttribute as String]
+                    : [kAXChildrenAttribute as String, kAXParentAttribute as String]
+                let readings = AXHelpers.getNonHelpAttributes(parent, attributes, runtime: ax,
+                    permittingRead: { (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil })
+                guard case .success(.some(let rawChildren)) = readings[0],
+                      CFGetTypeID(rawChildren) == CFArrayGetTypeID(),
+                      AXHelpers.decodeChildrenArray(rawChildren).filter({ CFEqual($0, path.last!) }).count == 1 else { return nil }
                 path.append(parent)
+                if !atWindow {
+                    guard case .success(.some(let rawParent)) = readings[1],
+                          CFGetTypeID(rawParent) == AXUIElementGetTypeID() else { return nil }
+                    parent = unsafeBitCast(rawParent, to: AXUIElement.self)
+                }
             }
             return path
         }

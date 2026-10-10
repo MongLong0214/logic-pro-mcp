@@ -33,6 +33,8 @@ struct Issue965HeldSelectionAssociationTests {
         var referenceCurrent = true
         var useBulkReads = false
         var batchReadCalls = 0
+        var reciprocalPathBatchCalls = 0
+        var pathBatchFault: String?
         var fault: String?
         var transientEditorRead = false
         var transientForeignRead = false
@@ -240,10 +242,23 @@ struct Issue965HeldSelectionAssociationTests {
                     performActionResult: base.ax.performActionResult, elementAtPosition: base.ax.elementAtPosition,
                     attributeValuesResult: { [self] element, attributes in
                         batchReadCalls += 1
+                        if attributes == [kAXChildrenAttribute as String, kAXParentAttribute as String] {
+                            reciprocalPathBatchCalls += 1
+                            if CFEqual(element, builder.element(1_965_720)), let pathBatchFault {
+                                if pathBatchFault == "unreadable" { return .failure(.init(raw: AXError.cannotComplete.rawValue)) }
+                                if pathBatchFault == "malformed_children" { return .success(["not children" as NSString, window]) }
+                                if pathBatchFault == "foreign_children" { return .success([[] as CFArray, window]) }
+                                if pathBatchFault == "malformed_parent" { return .success([[builder.element(1_965_721), builder.element(1_965_722)] as CFArray, "not parent" as NSString]) }
+                            }
+                        }
                         var values: [AnyObject] = []
                         for attribute in attributes {
-                            let reading = AXHelpers.getAttributeResult(element, attribute, runtime: base.ax)
-                                as Result<AnyObject?, AXHelpers.AXStatusError>
+                            let reading: Result<AnyObject?, AXHelpers.AXStatusError>
+                            if attribute == kAXChildrenAttribute as String {
+                                reading = AXHelpers.childrenResult(element, runtime: base.ax).map { $0 as CFArray }
+                            } else {
+                                reading = AXHelpers.getAttributeResult(element, attribute, runtime: base.ax)
+                            }
                             switch reading {
                             case .success(let value): values.append(value ?? NSNull())
                             case .failure(let error):
@@ -319,6 +334,19 @@ struct Issue965HeldSelectionAssociationTests {
         #expect((body["associations"] as? [String: Any])?["rows"] as? [[String: Any]] != nil)
         #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "restored")
         #expect(bulk ? f.batchReadCalls > 0 : f.batchReadCalls == 0)
+        #expect(bulk ? f.reciprocalPathBatchCalls > 0 : f.reciprocalPathBatchCalls == 0)
+    }
+
+    @Test(arguments: ["unreadable", "malformed_children", "foreign_children", "malformed_parent"])
+    func aFailedFreshReciprocalPathBatchCannotAuthorizeSelection(fault: String) async throws {
+        let f = try Fixture()
+        f.useBulkReads = true
+        f.pathBatchFault = fault
+        let body = try await inspect(f)
+        #expect(f.reciprocalPathBatchCalls > 0, "exercise the original intermediate transport parent")
+        #expect(f.selections.isEmpty, "do not reconstruct a failed physical reciprocal path")
+        let rows = (body["associations"] as? [String: Any])?["rows"] as? [[String: Any]]
+        #expect((rows ?? []).isEmpty, "no physical pairs without the original reciprocal path")
     }
 
     @Test(arguments: ["scroll_document", "scroll_focus", "scroll_replacement", "scroll_newer", "scroll_playback", "scroll_cancel"], [false, true])

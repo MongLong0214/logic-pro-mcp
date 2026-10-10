@@ -101,9 +101,11 @@ extension AccessibilityChannel {
             }
 
             /// A passive strip exposes a zero insertion sentinel on Logic 12.3.
-            /// This custody is installed only for a no-navigation, tracks-only read.
-            /// It never grants Help, keyboard, navigation or write permission.
-            private struct PassiveMixerReadFocus {
+            /// This witness grants only its caller's bounded semantic read:
+            /// no-navigation track acquisition or an owned routing-popup read.
+            /// It never grants Help, keyboard commands or musical write permission.
+            struct PassiveMixerReadFocus {
+                private let acquisitionPermitted: @Sendable () -> Bool
                 let logic: AXLogicProElements.Runtime
                 let pid: pid_t
                 let app: AXUIElement
@@ -113,8 +115,11 @@ extension AccessibilityChannel {
                 let focus: AXUIElement
                 let binding: AXLogicProElements.MixerAreaBinding
 
-                init?(window: AXUIElement, logic: AXLogicProElements.Runtime) {
-                    guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                init?(window: AXUIElement, logic: AXLogicProElements.Runtime,
+                      acquisitionPermitted: @escaping @Sendable () -> Bool = {
+                          (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil
+                      }) {
+                    guard acquisitionPermitted(),
                           let pid = logic.logicProPID(),
                           let app = AXLogicProElements.appRoot(runtime: logic),
                           let title = AXHelpers.getTitle(window, runtime: logic.ax),
@@ -139,6 +144,7 @@ extension AccessibilityChannel {
                         reversePath.append(parent)
                     }
                     let binding = AXLogicProElements.MixerAreaBinding(mixer: mixer, owners: [], path: reversePath.reversed())
+                    self.acquisitionPermitted = acquisitionPermitted
                     self.logic = logic; self.pid = pid; self.app = app; self.window = window
                     self.title = title; self.document = document; self.focus = focus; self.binding = binding
                     guard permits() else { return nil }
@@ -158,7 +164,7 @@ extension AccessibilityChannel {
                 }
 
                 func permits() -> Bool {
-                    guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                    guard acquisitionPermitted(),
                           logic.logicProPID() == pid, logic.focusedApplicationPID() == pid,
                           let currentApp = AXLogicProElements.appRoot(runtime: logic), CFEqual(app, currentApp),
                           AXHelpers.getAttribute(app, kAXFrontmostAttribute as String, runtime: logic.ax) as Bool? == true,
