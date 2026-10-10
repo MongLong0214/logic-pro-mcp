@@ -124,10 +124,15 @@ enum AXValueExtractors {
         guard let value: AnyObject = AXHelpers.getAttribute(element, kAXSelectedAttribute, runtime: runtime) else {
             return nil
         }
-        if let number = value as? NSNumber {
-            return number.boolValue
+        guard let number = value as? NSNumber else { return nil }
+        // Selection authorizes held-target navigation and restoration. A nonzero
+        // number is not necessarily a Boolean selected state (for example 2 or
+        // 0.9), so preserve malformed readback as unknown, not selected.
+        switch number.doubleValue {
+        case 0: return false
+        case 1: return true
+        default: return nil
         }
-        return nil
     }
 
     /// Extract slider range (min/max) for interpreting fader values.
