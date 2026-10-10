@@ -31,6 +31,8 @@ enum RoutingWriteRejection: Equatable, Sendable {
     case destinationNotBusDistinguished
     case unknownDestination
     case sourceNotFound
+    case sourceAmbiguous
+    case cycleIntroduced
 }
 
 struct RoutingWriteDecision: Equatable, Sendable {
@@ -60,15 +62,17 @@ func evaluate(
     if !routingPhysicalSendSlots.contains(request.physicalSlot) {
         rejections.append(.slotOutOfRange(slot: request.physicalSlot))
     }
-    if !graph.nodes.contains(where: {
-        $0.kind == .track && $0.targetRef == request.sourceTrackRef
-    }) {
+    let sources = graph.nodes.filter { $0.targetRef == request.sourceTrackRef }
+    if sources.count > 1 {
+        rejections.append(.sourceAmbiguous)
+    } else if sources.first?.kind != .track {
         rejections.append(.sourceNotFound)
     }
 
+    let destinations = matchingDestinations(for: request, in: graph)
     if request.destinationBusNumber == nil && request.destinationRef == nil {
         rejections.append(.destinationNotBusDistinguished)
-    } else if matchingDestinations(for: request, in: graph).count != 1 {
+    } else if destinations.count != 1 {
         rejections.append(.unknownDestination)
     }
 
@@ -79,6 +83,14 @@ func evaluate(
     }
     if occupied && !request.replaceExisting {
         rejections.append(.slotOccupied(slot: request.physicalSlot))
+    }
+
+    if rejections.isEmpty, let source = sources.first, let destination = destinations.first {
+        switch routingConnectionIntroducesCycle(from: source.id, to: destination.id, in: graph) {
+        case true?: rejections.append(.cycleIntroduced)
+        case nil: rejections.append(.partialGraphUnsafe(reason: "routing cycle evidence unavailable"))
+        case false?: break
+        }
     }
 
     return RoutingWriteDecision(

@@ -109,8 +109,18 @@ enum OutputAssignment: Equatable, Sendable {
     /// Apple ships no row composing `Bus 1 → Aux 1`: Logic appends ` → <receiver>` at run time to a
     /// bus that already feeds a strip. The entry is therefore cut at the arrow (U+2192) and the part
     /// before it classified exactly as a slot description is, by R1's `classifyOutputLabel`.
-    static func busNumber(ofMenuItemTitle title: String) -> Int? {
-        let head = title.split(separator: "\u{2192}", maxSplits: 1, omittingEmptySubsequences: false)
+    static func busNumber(ofMenuItemTitle title: String, receiverArrow: Character = "\u{2192}") -> Int? {
+        guard let number = classifiedMenuBusNumber(title, receiverArrow: receiverArrow), busNumbers.contains(number) else { return nil }
+        return number
+    }
+
+    /// Recognizable routing titles still compete even when their number is out of domain.
+    static func isBusMenuItemTitle(_ title: String, receiverArrow: Character = "\u{2192}") -> Bool {
+        classifiedMenuBusNumber(title, receiverArrow: receiverArrow) != nil
+    }
+
+    private static func classifiedMenuBusNumber(_ title: String, receiverArrow: Character) -> Int? {
+        let head = title.split(separator: receiverArrow, maxSplits: 1, omittingEmptySubsequences: false)
             .first.map(String.init) ?? title
         let (classification, busNumber) = RoutingGraphPublication.classifyOutputLabel(
             head.trimmingCharacters(in: .whitespacesAndNewlines)

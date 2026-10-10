@@ -210,6 +210,34 @@ extension ProjectSessionAudit {
         func observedReceiver(_ bus: Int) -> ReceivingAux {
             graphBound ? receivingAux(bus: bus, graph: graph) : .unverified
         }
+        // #967 B1: retain exact existing candidates in this same canonical preview.
+        // Receiver absence is not an unused-bus or allocation observation. These
+        // captured facts grant neither live reference authority nor creation permission.
+        func existingReceiverObservation(_ bus: Int) -> Value {
+            func result(_ candidates: [Value]? = nil) -> Value {
+                .object(["bus": .int(bus), "state": .string(candidates == nil ? "unverified" : "observed"),
+                    "candidates": .array(candidates ?? []), "namespace_availability": .string("not_observed")])
+            }
+            guard graphBound, graph.projectReference != nil, snapshotCurrent, request.scope == .wholeProject,
+                  request.domains.contains(.routing), capture.referencesEnabled,
+                  graph.coverage.population.state == .complete,
+                  graph.coverage.busToAuxInput.state == .complete,
+                  receivingAux(bus: bus, graph: graph) != .unverified else { return result() }
+            let busIDs = Set(graph.nodes.filter { $0.kind == .bus && $0.busNumber == bus }.map(\.id))
+            let edges = graph.edges.filter { $0.kind == .inputAssignment && busIDs.contains($0.source) }
+            guard Set(edges.map(\.destination)).count == edges.count,
+                  edges.allSatisfy({ $0.send == nil && graph.provenance.contains($0.provenance) }) else { return result() }
+            let nodesByID = Dictionary(grouping: graph.nodes, by: \.id)
+            var candidates: [Value] = []
+            for edge in edges.sorted(by: { $0.destination < $1.destination }) {
+                guard let nodes = nodesByID[edge.destination], nodes.count == 1, let node = nodes.first,
+                      node.kind == .aux, let reference = node.targetRef, !reference.rawValue.isEmpty,
+                      graph.nodes.filter({ $0.targetRef == reference }).count == 1 else { return result() }
+                candidates.append(.object(["node_id": .string(node.id), "target_ref": .string(reference.rawValue),
+                    "display_name": .string(node.displayName)]))
+            }
+            return result(candidates)
+        }
         // Blocked reasons an output onto `bus` inherits from the receiver decision for that bus.
         var receiverBlocks: [Int: Set<String>] = [:]
         func planAux(_ bus: Int) {
@@ -501,6 +529,12 @@ extension ProjectSessionAudit {
             "executable": .bool(reasons.isEmpty),
             "reasons": .array(reasons.sorted().map(Value.string))
         ]
+        let receiverBuses = Set(policy.receivers.keys)
+            .union(assessment.findings.compactMap { $0.expected.output == .bus ? $0.expected.busNumber : nil })
+            .union((assessment.sendFindings ?? []).compactMap { $0.expected.bus })
+        if !receiverBuses.isEmpty {
+            body["existing_receiver_observations"] = .array(receiverBuses.sorted().map(existingReceiverObservation))
+        }
         if !protectedReads.isEmpty { body["protected_invariants"] = .array(protectedReads.map(\.wire)) }
         let canonical = try encodeJSONStrict(Value.object(body), compact: true)
         let digest = SHA256.hash(data: Data(canonical.utf8)).map { String(format: "%02x", $0) }.joined()
@@ -632,6 +666,7 @@ extension ProjectSessionAudit {
         guard decision.allowed else {
             for rejection in decision.rejections {
                 if case .slotOccupied = rejection { reasons.insert("send_replacement_not_allowed") }
+                else if case .cycleIntroduced = rejection { reasons.insert("routing_prefix_cycle_detected") }
                 else { reasons.insert("send_graph_unsafe_\(String(describing: rejection))") }
             }
             return unverified()

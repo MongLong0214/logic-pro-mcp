@@ -123,7 +123,13 @@ enum ExactMixerNameAdapter {
               rebound.physicalMixerStrip?.matches(source) == true,
               rebound.descriptor.trackName.utf8.elementsEqual(after.utf8),
               await registry.resolveCurrentProject(action.projectReference)?.descriptor == project.descriptor,
-              observedOrdinal() != nil, ExactTrackNameAdapter.operationPermitted() else { return unverified() }
+              observedOrdinal() != nil,
+              // Membership revalidation does not read the name. A newer edit
+              // during that read must not inherit the writer's earlier A.
+              case .success(.some(let finalName)) = AXPluginInstanceIdentity.stripNameResult(source.strip, runtime: runtime.ax),
+              finalName.utf8.elementsEqual(after.utf8),
+              source.currentIndex(runtime: runtime) != nil,
+              ExactTrackNameAdapter.operationPermitted() else { return unverified() }
         let inverse = wrote ? OwnedInverse(action: .init(projectReference: action.projectReference,
             targetReference: action.targetReference, expectedBefore: after, desiredAfter: before),
             source: source, channel: channel, cache: cache, registry: registry, runtime: runtime) : nil

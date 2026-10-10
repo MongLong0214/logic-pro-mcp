@@ -32,6 +32,7 @@ struct OperationRegistryTests {
         (.mixerBank, "bank"),
         (.mixerSetOutputVerified, "set_output_verified"),
         (.mixerGetOutputVerified, "get_output_verified"),
+        (.mixerGetSendDestinationVerified, "get_send_destination_verified"),
     ]
 
     private static let navigateCommands: [(String, String)] = [
@@ -167,7 +168,7 @@ struct OperationRegistryTests {
     @Test("all mixer metadata matches current runtime truth")
     func mixerMetadata() throws {
         let mixerSpecs = OperationRegistry.specs.filter { $0.tool == .logicMixer }
-        let targetBearingCommands: Set<String> = ["set_volume", "set_pan", "set_output_verified", "get_output_verified"]
+        let targetBearingCommands: Set<String> = ["set_volume", "set_pan", "set_output_verified", "get_output_verified", "get_send_destination_verified"]
         #expect(Set(Self.mixerCommands.map(\.1)) == Set(mixerSpecs.map(\.command)))
 
         for (id, command) in Self.mixerCommands {
@@ -175,7 +176,7 @@ struct OperationRegistryTests {
             #expect(spec.id == id)
             #expect(spec.tool == .logicMixer)
             #expect(spec.command == command)
-            #expect(spec.mutability == (command == "get_output_verified" ? .readOnly : .mutating))
+            #expect(spec.mutability == (["get_output_verified", "get_send_destination_verified"].contains(command) ? .readOnly : .mutating))
             #expect(spec.confirmation == (command == "insert_plugin" ? .l2 : .none))
             #expect(spec.target == (targetBearingCommands.contains(command) ? .acceptsStableTarget : .none))
             #expect(spec.verification == .readbackRequired)
@@ -188,11 +189,11 @@ struct OperationRegistryTests {
 
     @Test("derived mixer mutations and deadlines match server decisions")
     func mixerLegacyParity() {
-        #expect(OperationRegistry.mutatingCommands(tool: .logicMixer) == Set(Self.mixerCommands.map(\.1)).subtracting(["get_output_verified"]))
+        #expect(OperationRegistry.mutatingCommands(tool: .logicMixer) == Set(Self.mixerCommands.map(\.1)).subtracting(["get_output_verified", "get_send_destination_verified"]))
         for (_, command) in Self.mixerCommands {
             #expect(OperationRegistry.deadlineSeconds(tool: ToolID.logicMixer.rawValue, command: command) == 25)
             let isMutating = LogicProServer.isMutatingCommand(tool: ToolID.logicMixer.rawValue, command: command)
-            if command == "get_output_verified" { #expect(!isMutating) }
+            if ["get_output_verified", "get_send_destination_verified"].contains(command) { #expect(!isMutating) }
             else { #expect(isMutating) }
             #expect(LogicProServer.commandDeadlineSeconds(tool: ToolID.logicMixer.rawValue, command: command) == 25)
         }
@@ -220,7 +221,7 @@ struct OperationRegistryTests {
     func mixerFlagOff() {
         for (_, command) in Self.mixerCommands {
             let isMutating = LogicProServer.isMutatingCommand(tool: "logic_mixer", command: command)
-            if command == "get_output_verified" { #expect(!isMutating) }
+            if ["get_output_verified", "get_send_destination_verified"].contains(command) { #expect(!isMutating) }
             else { #expect(isMutating) }
             #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_mixer", command: command) == 25)
         }
@@ -232,7 +233,7 @@ struct OperationRegistryTests {
     func mixerFlagOn() {
         for (_, command) in Self.mixerCommands {
             let isMutating = LogicProServer.isMutatingCommand(tool: "logic_mixer", command: command)
-            if command == "get_output_verified" { #expect(!isMutating) }
+            if ["get_output_verified", "get_send_destination_verified"].contains(command) { #expect(!isMutating) }
             else { #expect(isMutating) }
             #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_mixer", command: command) == 25)
         }
@@ -268,7 +269,7 @@ struct OperationRegistryTests {
             ToolID.logicTransport, .logicMixer, .logicNavigate,
         ].contains(spec.tool) {
             let isMutating = LogicProServer.isMutatingCommand(tool: spec.tool.rawValue, command: spec.command)
-            if spec.id == .mixerGetOutputVerified { #expect(!isMutating) }
+            if [.mixerGetOutputVerified, .mixerGetSendDestinationVerified].contains(spec.id) { #expect(!isMutating) }
             else { #expect(isMutating) }
             #expect(LogicProServer.commandDeadlineSeconds(tool: spec.tool.rawValue, command: spec.command) == 25)
         }

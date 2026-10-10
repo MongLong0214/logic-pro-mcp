@@ -4,6 +4,83 @@ import Testing
 
 @Suite("RoutingGraphTests")
 struct RoutingGraphTests {
+    @Test(arguments: [nil, -1, 0, 257] as [Int?])
+    func completeGraphsRejectInvalidLogicalBusNumbers(_ number: Int?) {
+        let bus = RoutingNode(id: "invalid-bus", kind: .bus, displayName: "Bus",
+            busNumber: number, targetRef: destinationRef(1))
+        let candidate = graph(nodes: [trackNode, bus],
+            edges: [assignment(.mainOutput, source: "track-1", destination: bus.id)])
+
+        #expect(!candidate.isConsistent)
+        let decision = evaluate(request(physicalSlot: 1, destinationBusNumber: number), against: candidate)
+        #expect(!decision.allowed)
+        #expect(decision.rejections.contains(.partialGraphUnsafe(reason: "routing graph is incomplete or inconsistent")))
+        #expect(!decision.writeAttempted)
+        #expect(routingPath(from: sourceRef, to: bus.id, in: candidate) == .unverified)
+        #expect(routingConnectionIntroducesCycle(from: "track-1", to: bus.id, in: candidate) == nil)
+    }
+
+    @Test(arguments: [1, 256])
+    func completeGraphsAcceptLogicalBusRangeBoundaries(_ number: Int) throws {
+        let bus = busNode(number)
+        let candidate = graph(nodes: [trackNode, bus],
+            edges: [assignment(.mainOutput, source: "track-1", destination: bus.id)])
+
+        #expect(candidate.isConsistent)
+        let decision = evaluate(request(physicalSlot: 1, destinationBusNumber: number,
+            destinationRef: destinationRef(number)), against: candidate)
+        #expect(decision.allowed)
+        #expect(!decision.writeAttempted)
+        #expect(routingPath(from: sourceRef, to: bus.id, in: candidate) == .connected)
+        let introducesCycle = try #require(routingConnectionIntroducesCycle(from: "track-1", to: bus.id, in: candidate))
+        #expect(!introducesCycle)
+    }
+
+    @Test func partialGraphsPreserveUnresolvedLogicalBusEvidence() {
+        let bus = RoutingNode(id: "unresolved-bus", kind: .bus, displayName: "Bus",
+            busNumber: nil, targetRef: destinationRef(1))
+        let candidate = graph(complete: false, partialReason: "bus number unread",
+            nodes: [trackNode, bus], edges: [])
+
+        #expect(candidate.isConsistent)
+        let decision = evaluate(request(physicalSlot: 1, destinationBusNumber: nil), against: candidate)
+        #expect(!decision.allowed)
+        #expect(decision.rejections == [.partialGraphUnsafe(reason: "bus number unread")])
+        #expect(!decision.writeAttempted)
+        #expect(routingPath(from: sourceRef, to: bus.id, in: candidate) == .unverified)
+        #expect(routingConnectionIntroducesCycle(from: "track-1", to: bus.id, in: candidate) == nil)
+    }
+
+    @Test(arguments: ["replacement", "empty_slot", "existing", "acyclic", "ambiguous", "ambiguous_acyclic", "partial"])
+    func standaloneSendGateRefusesNewCyclesAndAmbiguousSources(_ change: String) {
+        let aux = RoutingNode(id: "aux", kind: .aux, displayName: "Same", busNumber: nil, targetRef: nil)
+        var ns = [trackNode, busNode(1), busNode(2), aux]
+        var es = [assignment(.inputAssignment, source: "bus-1", destination: "aux")]
+        if change != "acyclic" && change != "ambiguous_acyclic" { es.append(assignment(.mainOutput, source: "aux", destination: "track-1")) }
+        let oldBus = change == "existing" ? 1 : 2
+        es.append(sendEdge(send(slot: 0, bus: oldBus, level: 0.5), destination: "bus-\(oldBus)"))
+        if change == "ambiguous" || change == "ambiguous_acyclic" {
+            ns.append(RoutingNode(id: "alias", kind: .track, displayName: "Same", busNumber: nil, targetRef: sourceRef))
+        }
+        let candidate = graph(complete: change != "partial", partialReason: change == "partial" ? "unread" : nil,
+            nodes: ns, edges: es)
+        #expect(candidate.isConsistent)
+        let decision = evaluate(request(physicalSlot: change == "empty_slot" ? 1 : 0,
+            replaceExisting: change != "empty_slot"), against: candidate)
+        if change == "existing" || change == "acyclic" {
+            #expect(decision.allowed)
+            #expect(decision.rejections.isEmpty)
+        } else {
+            #expect(!decision.allowed)
+            if change == "ambiguous" || change == "ambiguous_acyclic" {
+                #expect(decision.rejections == [.sourceAmbiguous])
+            } else if change == "partial" {
+                #expect(decision.rejections == [.partialGraphUnsafe(reason: "unread")])
+            } else { #expect(decision.rejections == [.cycleIntroduced]) }
+        }
+        #expect(!decision.writeAttempted)
+    }
+
     @Test(arguments: ["new_cycle", "self_loop", "existing", "removal", "scalar", "acyclic", "partial", "inconsistent", "cross_capture"])
     func structuralCycleChangesRequireBoundEvidenceWithoutRewritingExistingLoops(_ change: String) throws {
         let aux = RoutingNode(id: "aux", kind: .aux, displayName: "Same", busNumber: nil, targetRef: nil)

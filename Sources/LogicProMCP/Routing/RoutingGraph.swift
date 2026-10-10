@@ -230,6 +230,13 @@ struct RoutingGraph: Codable, Equatable, Sendable {
             return partialReason?.isEmpty == false
         }
         guard partialReason == nil else { return false }
+        // A complete logical bus must name a destination the routing API can address.
+        // Partial captures may retain an unresolved bus as display evidence only.
+        guard nodes.allSatisfy({ node in
+            guard node.kind == .bus else { return true }
+            guard let number = node.busNumber else { return false }
+            return OutputAssignment.busNumbers.contains(number)
+        }) else { return false }
 
         let nodeIDs = Set(nodes.map(\.id))
         guard nodeIDs.count == nodes.count,
@@ -313,6 +320,19 @@ func routingIntroducesCycle(before: RoutingGraph, after: RoutingGraph) -> Bool? 
         if routingNodeReachable(from: edge.destination, to: edge.source, adjacency: adjacency) { return true }
     }
     return false
+}
+
+/// Test one proposed endpoint connection without inventing send scalar metadata.
+/// An already recorded arc is not a new structural cycle. Capture binding and native
+/// execution safety remain the caller's responsibility, as with routingIntroducesCycle.
+func routingConnectionIntroducesCycle(from source: String, to destination: String,
+                                      in graph: RoutingGraph) -> Bool? {
+    guard graph.complete, graph.isConsistent,
+          graph.nodes.filter({ $0.id == source }).count == 1,
+          graph.nodes.filter({ $0.id == destination }).count == 1 else { return nil }
+    let adjacency = Dictionary(grouping: graph.edges, by: \.source)
+    if (adjacency[source] ?? []).contains(where: { $0.destination == destination }) { return false }
+    return routingNodeReachable(from: destination, to: source, adjacency: adjacency)
 }
 
 private func routingNodeReachable(from source: String, to destination: String,

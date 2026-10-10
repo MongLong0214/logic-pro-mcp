@@ -435,6 +435,19 @@ extension AccessibilityChannel {
     static func currentOutputMenuAssignment(
         in root: AXUIElement, runtime: AXHelpers.Runtime
     ) -> OutputAssignment? {
+        currentRoutingMenuAssignment(in: root, runtime: runtime, inputBusOnly: false)
+    }
+
+    /// Input bus echoes use the incoming arrow. Other input kinds stay unqualified.
+    static func currentInputMenuBusAssignment(in root: AXUIElement, runtime: AXHelpers.Runtime) -> Int? {
+        guard case .bus(let number)? = currentRoutingMenuAssignment(in: root, runtime: runtime, inputBusOnly: true) else { return nil }
+        return number
+    }
+
+    private static func currentRoutingMenuAssignment(
+        in root: AXUIElement, runtime: AXHelpers.Runtime, inputBusOnly: Bool
+    ) -> OutputAssignment? {
+        let receiverArrow: Character = inputBusOnly ? "\u{2190}" : "\u{2192}"
         func mark(_ item: AXUIElement) -> String? {
             let result: Result<AnyObject?, AXHelpers.AXStatusError> =
                 AXHelpers.getAttributeResult(item, "AXMenuItemMarkChar", runtime: runtime)
@@ -446,35 +459,53 @@ extension AccessibilityChannel {
             }
         }
         func destination(_ title: String) -> OutputAssignment? {
-            if let bus = OutputAssignment.busNumber(ofMenuItemTitle: title) { return .bus(bus) }
-            return OutputAssignment.observed(slotLabel: title)
+            if let bus = OutputAssignment.busNumber(ofMenuItemTitle: title, receiverArrow: receiverArrow) { return .bus(bus) }
+            guard !inputBusOnly else { return nil }
+            guard let observed = OutputAssignment.observed(slotLabel: title) else { return nil }
+            // Display classification cannot re-authorize a bus rejected by the checked domain.
+            if case .bus = observed { return nil }
+            return observed
         }
         guard let roots = titledMenuItems(of: root, runtime: runtime) else { return nil }
         var echo: [OutputAssignment] = []
         for item in roots where !item.hasSubmenu {
-            guard let assignment = destination(item.title) else { continue }
+            guard let assignment = destination(item.title) else {
+                if inputBusOnly || OutputAssignment.isBusMenuItemTitle(item.title, receiverArrow: receiverArrow) {
+                    guard mark(item.element) == "" else { return nil }
+                }
+                continue
+            }
             guard let checked = mark(item.element), checked == "" || checked == "✓" else { return nil }
             if checked == "✓" { echo.append(assignment) }
         }
         guard echo.count == 1, let current = echo.first else { return nil }
         var checkedLeaves: [OutputAssignment] = []
-        for labels in [AXLocalePolicy.outputPopupOutputSubmenuTitle, AXLocalePolicy.outputPopupBusSubmenuTitle] {
-            let lookup = submenu(titled: labels, among: roots, runtime: runtime)
-            switch lookup {
-            case .missing: continue
-            case .repeated: return nil
-            case .found(let title, let menu):
-                guard let leaves = leafItems(under: menu, path: [title], depth: 0, runtime: runtime) else { return nil }
-                for item in leaves {
-                    guard let checked = mark(item.element), checked == "" || checked == "✓" else { return nil }
-                    if checked == "✓" {
-                        guard let assignment = destination(item.title) else { return nil }
-                        // Bus numbers only have authority under Bus, never a panner/Output branch.
-                        let isBusParent = AXLocalePolicy.outputPopupBusSubmenuTitle.matches(title, mode: .exact)
-                        if case .bus = assignment { guard isBusParent else { return nil } }
-                        else { guard !isBusParent else { return nil } }
-                        checkedLeaves.append(assignment)
-                    }
+        var branches: [(String,AXUIElement)] = []
+        if inputBusOnly {
+            guard case .found = submenu(titled: AXLocalePolicy.outputPopupBusSubmenuTitle, among: roots, runtime: runtime) else { return nil }
+            // Every other input branch must also read as unselected; it cannot be hidden behind
+            // the bus-only capability's narrower result type.
+            branches = roots.compactMap { item in item.submenu.map { (item.title,$0) } }
+        } else {
+            for labels in [AXLocalePolicy.outputPopupOutputSubmenuTitle, AXLocalePolicy.outputPopupBusSubmenuTitle] {
+                switch submenu(titled: labels, among: roots, runtime: runtime) {
+                case .missing: continue
+                case .repeated: return nil
+                case .found(let title, let menu): branches.append((title,menu))
+                }
+            }
+        }
+        for (title,menu) in branches {
+            guard let leaves = leafItems(under: menu, path: [title], depth: 0, runtime: runtime) else { return nil }
+            for item in leaves {
+                guard let checked = mark(item.element), checked == "" || checked == "✓" else { return nil }
+                if checked == "✓" {
+                    guard let assignment = destination(item.title) else { return nil }
+                    // Bus numbers only have authority under Bus, never a panner/Output branch.
+                    let isBusParent = AXLocalePolicy.outputPopupBusSubmenuTitle.matches(title, mode: .exact)
+                    if case .bus = assignment { guard isBusParent else { return nil } }
+                    else { guard !isBusParent else { return nil } }
+                    checkedLeaves.append(assignment)
                 }
             }
         }

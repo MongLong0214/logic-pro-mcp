@@ -1614,6 +1614,66 @@ private func planSteps(_ body: [String: Any]) throws -> [[String: Any]] {
 
 @Suite("Receiving-aux steps over a bound graph (#966 P2)")
 struct Issue966ReceivingAuxBoundGraphTests {
+    @Test("Canonical preview retains exact receiver candidates without allocating a bus (#967 B1)",
+          arguments: ["healthy", "absent", "snapshot", "epoch", "project", "partial", "missing_ref", "duplicate_ref",
+              "stale", "duplicate_bus", "duplicate_edge", "unrelated_ref_alias", "population_partial", "no_project", "selected_scope",
+              "unrelated_partial", "edge_provenance", "edge_send_payload"])
+    func exactReceiverCandidates(_ mode: String) throws {
+        let (policy, value) = try twoTargetPolicy(receiver: "keep")
+        let first = RoutingNode(id: "aux_b", kind: .aux, displayName: "Reverb", busNumber: nil,
+            targetRef: mode == "missing_ref" ? nil : TargetReference(rawValue: "mix_aux_b"))
+        let second = RoutingNode(id: "aux_a", kind: .aux, displayName: "Reverb", busNumber: nil,
+            targetRef: TargetReference(rawValue: mode == "duplicate_ref" ? "mix_aux_b" : "mix_aux_a"))
+        let inputPartial = RoutingCoverage(population: completeDomain, stripTrackAssociation: completeDomain,
+            mainOutput: completeDomain, physicalOutput: completeDomain,
+            busToAuxInput: .init(state: .partial, reasons: ["input_unread"]), sends: completeDomain)
+        let populationPartial = RoutingCoverage(population: .init(state: .partial, reasons: ["hidden_aux"]),
+            stripTrackAssociation: completeDomain, mainOutput: completeDomain, physicalOutput: completeDomain,
+            busToAuxInput: completeDomain, sends: completeDomain)
+        var nodes = [trackNode(0), trackNode(1), drumBus, reverbBus, first, second]
+        var edges = [mainOutput(from: 0, to: reverbBus.id), mainOutput(from: 1, to: reverbBus.id)]
+        if mode != "absent" { edges += [inputAssignment(from: drumBus, to: first), inputAssignment(from: drumBus, to: second)] }
+        if mode == "duplicate_bus" { nodes.append(busNode(3, id: "another_bus")) }
+        if mode == "duplicate_edge" { edges.append(inputAssignment(from: drumBus, to: first)) }
+        if mode == "unrelated_ref_alias" {
+            nodes.append(RoutingNode(id: "unrelated", kind: .physicalStrip, displayName: "Not Reverb", busNumber: nil,
+                targetRef: first.targetRef))
+        }
+        if ["edge_provenance", "edge_send_payload"].contains(mode) {
+            let input = try #require(edges.firstIndex { $0.kind == .inputAssignment })
+            edges[input] = RoutingEdge(kind: .inputAssignment, source: drumBus.id, destination: first.id,
+                send: mode == "edge_send_payload" ? sendEdge(from: 0, slot: 0, to: drumBus, level: 0, enabled: true).send : nil,
+                provenance: mode == "edge_provenance" ? .other : .axMixerStrip)
+        }
+        let candidateGraph = graph(projectReference: mode == "no_project" ? nil :
+            (mode == "project" ? TargetReference(rawValue: "prj_other") : songReference),
+            projectEpoch: mode == "epoch" ? 4 : 3,
+            snapshotId: mode == "snapshot" ? "another_capture" : baselineSnapshotId,
+            coverage: mode == "partial" ? inputPartial : (mode == "population_partial" ? populationPartial :
+                (["unrelated_partial", "edge_provenance", "edge_send_payload"].contains(mode) ? sendsPartialCoverage : completeCoverage)),
+            nodes: nodes, edges: edges)
+        let capture = mode == "no_project" ? makeCapture(tracks: threeTracks, issued: issuedReferences(for: threeTracks),
+            projectIssuance: nil) : threeTrackCapture
+        let plan = try Audit.buildCanonicalRepairPlan(policy: policy, policyValue: value, names: [],
+            capture: capture, request: Observation.Request(scope: mode == "selected_scope" ? .selection : .wholeProject,
+                domains: [.tracks, .strips, .routing]),
+            snapshotCurrent: mode != "stale", graphOverride: candidateGraph)
+        let body = try #require(sharedJSONObject(plan.json))
+        let observations = try #require(body["existing_receiver_observations"] as? [[String: Any]])
+        let observation = try #require(observations.first { $0["bus"] as? Int == 3 })
+        let candidates = try #require(observation["candidates"] as? [[String: Any]])
+        #expect(observation["namespace_availability"] as? String == "not_observed")
+        #expect(observation["state"] as? String == (["healthy", "absent", "unrelated_partial"].contains(mode) ? "observed" : "unverified"))
+        if ["healthy", "unrelated_partial"].contains(mode) {
+            #expect(candidates.compactMap { $0["node_id"] as? String } == ["aux_a", "aux_b"])
+            #expect(candidates.compactMap { $0["target_ref"] as? String } == ["mix_aux_a", "mix_aux_b"])
+            #expect(candidates.compactMap { $0["display_name"] as? String } == ["Reverb", "Reverb"])
+        } else { #expect(candidates.isEmpty) }
+        let steps = try planSteps(body)
+        #expect(!steps.contains { $0["kind"] as? String == "create_aux" })
+        let executable: Bool = try #require(body["executable"] as? Bool)
+        #expect(!executable)
+    }
     /// Control for the fixture: the gate accepts this graph for this capture and both outputs are
     /// violations, so the receiver branches below run over evidence the planner may use.
     @Test func theFixtureGraphIsBoundToItsCaptureAndBothRoutesAreWrong() throws {

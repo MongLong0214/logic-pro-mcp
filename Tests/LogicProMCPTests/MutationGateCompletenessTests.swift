@@ -33,7 +33,7 @@ struct MutationGateCompletenessTests {
     /// Non-mutating query commands. Each transiently reads (cache/disk/AX) but
     /// changes no project state, so it stays OUT of the mutation gate on purpose.
     private static let readOnlyAllowlist: [String: Set<String>] = [
-        "logic_mixer": ["get_output_verified"],
+        "logic_mixer": ["get_output_verified", "get_send_destination_verified"],
         "logic_tracks": ["list_library", "resolve_path", "scan_library", "scan_plugin_presets"],
         "logic_midi": ["list_ports"],
         "logic_project": ["audit", "cleanup_plan", "export_plan", "get_regions", "inspect_session", "plan_session_repair", "is_running"],
