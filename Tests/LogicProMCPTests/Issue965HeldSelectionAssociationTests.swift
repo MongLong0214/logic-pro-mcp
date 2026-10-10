@@ -32,6 +32,8 @@ struct Issue965HeldSelectionAssociationTests {
         var scopeLossPhase: Int?
         var scopeLossRead: Int?
         var scopeLossInjected = false
+        var loseNextSelectionRead = false
+        var postRestoreSelectionFaults = 0
 
         init() throws {
             bundle = FileManager.default.temporaryDirectory.appendingPathComponent("965-selection-\(UUID().uuidString).logicx")
@@ -93,6 +95,15 @@ struct Issue965HeldSelectionAssociationTests {
         func channel() -> AccessibilityChannel {
             let base = builder.makeLogicRuntime(appElement: app,
                 attributeValueHandler: { [self] element, attribute in
+                    if fault == "post_restore_selection_missing" || fault == "post_restore_selection_malformed",
+                       selections == [1, 0], CFEqual(element, headers[1]) {
+                        if attribute == kAXTitleAttribute as String { loseNextSelectionRead = true }
+                        if attribute == kAXSelectedAttribute as String, loseNextSelectionRead {
+                            loseNextSelectionRead = false
+                            postRestoreSelectionFaults += 1
+                            return fault == "post_restore_selection_missing" ? .some(nil) : .some(NSNumber(value: 2))
+                        }
+                    }
                     if CFEqual(element, app), attribute == kAXFocusedUIElementAttribute as String,
                        selections.count < 2 {
                         focusReadsBeforeWrite[selections.count] += 1
@@ -219,6 +230,20 @@ struct Issue965HeldSelectionAssociationTests {
         let focus: AXUIElement = try #require(AXHelpers.getAttribute(f.app, kAXFocusedUIElementAttribute as String,
             runtime: f.builder.makeAXRuntime()))
         #expect(CFEqual(focus, f.strips[1]))
+        #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "restored")
+    }
+
+    @Test(arguments: ["post_restore_selection_missing", "post_restore_selection_malformed"])
+    func restoredPopulationCannotLoseOriginalSelectionReadback(fault: String) async throws {
+        let f = try Fixture()
+        f.fault = fault
+        let body = try await inspect(f)
+        #expect(f.selections == [1, 0], "the physical challenge and restoration must actually run")
+        #expect(f.postRestoreSelectionFaults == 4, "all four post-restoration title-associated selection samples must consume the fault")
+        #expect(body["associations"] == nil, "do not retain pairs after initial-vs-restored selection provenance changes")
+        #expect(body["state"] as? String == "C")
+        #expect(body["error"] as? String == "stale_snapshot")
+        #expect((body["ui_effects"] as? [String: Any])?["reason"] as? String == "association_population_moved")
         #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "restored")
     }
 

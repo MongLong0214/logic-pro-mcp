@@ -346,7 +346,7 @@ enum AXValueExtractors {
         // Input Monitoring is read the way Mute and Solo are, through its own label set (#1040), and
         // is unread (nil) on the same terms.
         let inputMonitoring = extractTrackButtonState(from: header, prefix: "Input Monitoring", runtime: runtime, observingExposure: observingExposure)
-        let selected = extractSelectedState(header, runtime: runtime) ?? false
+        let selected = extractSelectedState(header, runtime: runtime)
         let trackType: TrackType
         if readingTypeHelp {
             guard let inferred = inferTrackType(from: header, runtime: runtime, observingExposure: observingExposure, stoppingBeforeHelp: stop) else {
@@ -370,7 +370,8 @@ enum AXValueExtractors {
             isSoloed: soloed,
             isArmed: armed,
             isInputMonitoring: inputMonitoring,
-            isSelected: selected,
+            isSelected: selected ?? false,
+            selectionReadback: selected,
             volume: extractTrackHeaderVolume(from: header, runtime: runtime, observingExposure: observingExposure),
             pan: extractTrackHeaderPan(from: header, runtime: runtime, observingExposure: observingExposure),
             automationMode: extractTrackAutomationMode(from: header, runtime: runtime, observingExposure: observingExposure),

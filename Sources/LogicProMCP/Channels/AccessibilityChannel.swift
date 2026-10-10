@@ -405,7 +405,9 @@ actor AccessibilityChannel: Channel {
                         return a == b
                     }
                     if current?.stable != true || !sameValues(population.project, current?.project)
-                        || !sameValues(population.tracks, current?.tracks) || !sameValues(population.strips, current?.strips) {
+                        || !sameValues(population.tracks, current?.tracks)
+                        || population.tracks?.map(\.selectionReadback) != current?.tracks?.map(\.selectionReadback)
+                        || !sameValues(population.strips, current?.strips) {
                         population.selectionAssociations = []
                         population.stable = false
                         population.uiEffects.reason = "association_population_moved"
@@ -790,6 +792,7 @@ actor AccessibilityChannel: Channel {
                 && sameElements(before.presentation?.elements, after.presentation?.elements)
                 && before.presentation?.presentation == after.presentation?.presentation
                 && before.tracks?.map(\.liveIdentityBacked) == after.tracks?.map(\.liveIdentityBacked)
+                && before.tracks?.map(\.selectionReadback) == after.tracks?.map(\.selectionReadback)
                 && zip(before.strips ?? [], after.strips ?? []).allSatisfy {
                     switch ($0.physicalBinding, $1.physicalBinding) {
                     case (nil, nil): return true

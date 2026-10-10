@@ -662,6 +662,7 @@ actor StateCache {
         guard tracks.indices.contains(index) else { return }
         for i in tracks.indices {
             tracks[i].isSelected = (i == index)
+            tracks[i].selectionReadback = nil
         }
         advanceSectionRevision(.tracks)
     }

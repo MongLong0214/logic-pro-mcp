@@ -187,6 +187,18 @@ import Testing
     #expect(after[5].isSelected)
 }
 
+@Test(arguments: [false, true])
+func testFeedbackSelectionCannotPreserveAXReadProvenance(on: Bool) async throws {
+    let cache = StateCache()
+    let parser = MCUFeedbackParser(cache: cache)
+    await cache.updateTracks([TrackState(id: 0, name: "Observed", type: .audio,
+                                        isSelected: true, selectionReadback: true)])
+    await parser.handle(.noteOn(channel: 0, note: 0x18, velocity: on ? 0x7F : 0))
+    let track = try #require(await cache.getTracks().first)
+    #expect(track.selectionReadback == nil)
+    if on { #expect(track.isSelected) } else { #expect(!track.isSelected) }
+}
+
 @Test func testFeedbackParserIgnoresControlChangeAndDefaultEventsAfterUpdatingConnection() async throws {
     let cache = StateCache()
     let parser = MCUFeedbackParser(cache: cache)

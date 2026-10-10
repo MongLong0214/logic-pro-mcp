@@ -120,7 +120,10 @@ actor MCUFeedbackParser {
             if button.on {
                 await cache.selectOnly(trackAt: trackIndex)
             } else {
-                await cache.updateTrack(at: trackIndex) { $0.isSelected = false }
+                await cache.updateTrack(at: trackIndex) {
+                    $0.isSelected = false
+                    $0.selectionReadback = nil
+                }
             }
         default:
             break

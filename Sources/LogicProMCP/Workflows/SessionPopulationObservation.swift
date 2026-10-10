@@ -662,7 +662,7 @@ enum SessionPopulationObservation {
         let hidden = "unknown"
         let parent = "unknown"
         let depth = "unknown"
-        let isSelected: Bool
+        let isSelected: Bool?
         let placeholder: Bool?
         let trackRef: String?
 
@@ -682,9 +682,8 @@ enum SessionPopulationObservation {
             case trackRef = "track_ref"
         }
 
-        // The three readback fields are written as explicit nulls: a header whose stack state
-        // could not be examined is a different observation from one that is not a stack, and an
-        // omitted key would let a consumer read the two the same way.
+        // Unread selection/stack/placeholder fields are explicit nulls: unavailable metadata
+        // differs from an observed negative, and an omitted key could hide that distinction.
         func encode(to encoder: Encoder) throws {
             var container = encoder.container(keyedBy: CodingKeys.self)
             try container.encode(row, forKey: .row)
@@ -933,7 +932,7 @@ enum SessionPopulationObservation {
                 type: track.type.rawValue,
                 isStackHeader: track.isStackHeader,
                 stackCollapsed: track.stackCollapsed,
-                isSelected: track.isSelected,
+                isSelected: track.selectionReadback,
                 placeholder: track.placeholder,
                 trackRef: reference
             )
@@ -1002,10 +1001,9 @@ enum SessionPopulationObservation {
                 // Without an independent expected count nothing rules out rows the rail does not show.
                 if !tracksReasons.contains(.hiddenTracksUnobserved) { tracksReasons.append(.hiddenTracksUnobserved) }
             }
-            if request.scope == .selection {
-                // The AX reader folds an AXSelected read that failed into `false`
-                // (`AXValueExtractors.extractTrackState`), so an unselected row may be a selected
-                // one whose state was not read: the selected set, empty or not, is not observed.
+            if request.scope == .selection && (live.isEmpty || live.contains(where: { $0.selectionReadback == nil })) {
+                // Unknown is not unselected. Even agreeing rows cannot certify the selected
+                // set when one strict AXSelected read was unavailable.
                 tracksReasons.append(.selectionStateUnverified)
             }
             tracksCoverage = tracksReasons.isEmpty ? .complete : .partial
@@ -1016,7 +1014,7 @@ enum SessionPopulationObservation {
         case .wholeProject:
             rows = allRows
         case .selection:
-            rows = allRows.filter(\.isSelected)
+            rows = allRows.filter { $0.isSelected == true }
         }
         let tracks = TracksSection(
             coverage: tracksCoverage,
@@ -1114,7 +1112,7 @@ enum SessionPopulationObservation {
                       let trackRef = allRows[trackRow].trackRef,
                       let stripRef = capture.mixerReference(at: stripRow)?.rawValue else { qualified = false; break }
                 heldTracks.append(pair.track); heldStrips.append(pair.strip)
-                if request.scope == .wholeProject || live[trackRow].isSelected == true {
+                if request.scope == .wholeProject || live[trackRow].selectionReadback == true {
                     rows.append(.init(trackIndex: live[trackRow].id, trackRef: trackRef, mixerStripRef: stripRef))
                 }
             }
