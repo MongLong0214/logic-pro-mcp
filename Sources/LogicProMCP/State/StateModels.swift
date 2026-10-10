@@ -93,6 +93,9 @@ struct TrackState: Sendable, Codable, Identifiable {
     /// control, so there is no `false` to default to.
     var isInputMonitoring: Bool?
     var isSelected: Bool = false
+    /// Typed AX read only. The legacy Boolean folds unreadable into false; this keeps
+    /// that distinction for request observations without importing it from Codable/MCU.
+    var selectionReadback: Bool? = nil
     var volume: Double = 0.0   // dB, 0 = unity
     var pan: Double = 0.0      // -1.0 (L) to 1.0 (R)
     var automationMode: AutomationMode = .off

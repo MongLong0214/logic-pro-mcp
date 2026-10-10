@@ -226,6 +226,23 @@ struct StateModelsCodableTests {
         #expect(decoded.positionSource == .parser)
     }
 
+    @Test func trackSelectionReadbackCannotBeImportedFromCodable() throws {
+        let typed = TrackState(id: 0, name: "Observed", type: .audio,
+                               isSelected: true, selectionReadback: true)
+        var legacy = typed
+        legacy.selectionReadback = nil
+        let bytes = try encoder().encode(typed)
+        let legacyBytes = try encoder().encode(legacy)
+        #expect(bytes == legacyBytes, "the existing tracks resource wire shape stays unchanged")
+        let decoded = try decoder().decode(TrackState.self, from: bytes)
+        #expect(decoded.selectionReadback == nil)
+        #expect(decoded.isSelected)
+        var injected = try #require(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        injected["selectionReadback"] = true
+        let untrusted = try decoder().decode(TrackState.self, from: JSONSerialization.data(withJSONObject: injected))
+        #expect(untrusted.selectionReadback == nil, "wire input cannot mint a typed AX read")
+    }
+
     @Test func trackStateOmittedPlaceholderDecodesAsNil() throws {
         // Live AX rows omit `placeholder`; a pre-v3.1.8 snapshot lacking the
         // field must decode cleanly with placeholder == nil.

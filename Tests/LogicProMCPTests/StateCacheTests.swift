@@ -126,9 +126,9 @@ import Testing
 
 @Test func testStateCacheSelectOnlyEnforcesSingleSelection() async {
     let cache = StateCache()
-    await cache.updateTrack(at: 0) { $0.isSelected = true }
-    await cache.updateTrack(at: 1) { $0.isSelected = true }
-    await cache.updateTrack(at: 2) { $0.isSelected = true }
+    await cache.updateTrack(at: 0) { $0.isSelected = true; $0.selectionReadback = true }
+    await cache.updateTrack(at: 1) { $0.isSelected = true; $0.selectionReadback = true }
+    await cache.updateTrack(at: 2) { $0.isSelected = true; $0.selectionReadback = true }
 
     await cache.selectOnly(trackAt: 1)
 
@@ -137,6 +137,7 @@ import Testing
     #expect(tracks[1].isSelected)
     #expect(!(tracks[2].isSelected))
     #expect(await cache.getSelectedTrack()?.id == 1)
+    #expect(tracks.allSatisfy { $0.selectionReadback == nil }, "a synthesized selection is not an AX read")
 }
 
 @Test func testStateCacheBlockingDialogButtonsRoundTrip() async throws {

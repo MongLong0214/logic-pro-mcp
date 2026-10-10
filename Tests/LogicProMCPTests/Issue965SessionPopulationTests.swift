@@ -442,6 +442,7 @@ struct Issue965StabilityScopeReferenceTests {
         var tracks = liveTracks(5)
         tracks[1] = liveTrack(1, isSelected: true)
         tracks[3] = liveTrack(3, isSelected: true)
+        for index in tracks.indices { tracks[index].selectionReadback = tracks[index].isSelected }
         let report = try encodedReport(
             makeCapture(tracks: tracks, fileTrackCount: 5),
             request: Observation.Request(scope: .selection, domains: [.tracks])
@@ -457,7 +458,7 @@ struct Issue965StabilityScopeReferenceTests {
         #expect(witnesses["count"] as? Int == 2)
         #expect(witnesses["expected_count"] as? Int == 5)
         #expect(try coverage(tracksSection) == "partial")
-        #expect(try reasons(tracksSection) == ["count_is_the_only_end_witness", "selection_state_unverified"])
+        #expect(try reasons(tracksSection) == ["count_is_the_only_end_witness"])
     }
 
     // SP-03: the selected header's AXSelected read failed, which the AX reader folds into `false`,

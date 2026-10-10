@@ -790,6 +790,7 @@ actor AccessibilityChannel: Channel {
                 && sameElements(before.presentation?.elements, after.presentation?.elements)
                 && before.presentation?.presentation == after.presentation?.presentation
                 && before.tracks?.map(\.liveIdentityBacked) == after.tracks?.map(\.liveIdentityBacked)
+                && before.tracks?.map(\.selectionReadback) == after.tracks?.map(\.selectionReadback)
                 && zip(before.strips ?? [], after.strips ?? []).allSatisfy {
                     switch ($0.physicalBinding, $1.physicalBinding) {
                     case (nil, nil): return true
