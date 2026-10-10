@@ -39,14 +39,15 @@ enum SessionPopulationObservation {
         /// permission to accept changes during that reading or across projects.
         var associationReadbackBoundary: StateCache.CaptureBoundary? = nil
         /// Actual closed-to-open disclosure deltas, retained only after verified restoration.
-        /// These are historical membership observations, not current target authority,
-        /// immediate-parent links or absolute depths.
+        /// These are historical observations, not current target authority or absolute
+        /// depths. Direct children additionally require observed closed descendant stacks.
         var disclosureExposures: [HeldDisclosureExposure] = []
     }
 
     struct HeldDisclosureExposure: Sendable {
         let stack: AXTrackBinding.Binding
         let exposed: [AXTrackBinding.Binding]
+        var revealedStacksWereClosed = false
     }
 
     struct PresentationObservation: Encodable, Equatable, Sendable {
@@ -842,8 +843,12 @@ enum SessionPopulationObservation {
         let stackRef: String
         let exposedTrackRefs: [String]
         let source = "owned_disclosure_exposure"
+        var directChildTrackRefs: [String]? = nil
+        var directChildrenSource: String? = nil
         enum CodingKeys: String, CodingKey {
             case stackRef = "stack_ref", exposedTrackRefs = "exposed_track_refs", source
+            case directChildTrackRefs = "direct_child_track_refs"
+            case directChildrenSource = "direct_children_source"
         }
     }
 
@@ -1164,7 +1169,11 @@ enum SessionPopulationObservation {
                       Set(members.map(\.1)).count == members.count,
                       !members.contains(where: { $0.1 == stackRef }) else { qualified = false; break }
                 let refs = members.filter { request.scope == .wholeProject || live[$0.0].selectionReadback == true }.map(\.1)
-                if !refs.isEmpty { exposures.append(.init(stackRef: stackRef, exposedTrackRefs: refs)) }
+                if !refs.isEmpty {
+                    exposures.append(.init(stackRef: stackRef, exposedTrackRefs: refs,
+                        directChildTrackRefs: observation.revealedStacksWereClosed ? refs : nil,
+                        directChildrenSource: observation.revealedStacksWereClosed ? "owned_disclosure_closed_descendants" : nil))
+                }
             }
             if qualified, !exposures.isEmpty {
                 hierarchy = .init(coverage: .partial, reasons: [.parentDepthNotObserved], disclosureExposures: exposures)

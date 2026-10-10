@@ -665,6 +665,18 @@ struct Issue965FreshPopulationAcquisitionTests {
     }
 
     @Test(arguments: [false, true])
+    func registeredHierarchyRetainsDirectChildrenOnlyWhenRevealedStacksWereClosed(nested: Bool) async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false, nested: nested,
+            verifyHierarchy: true, verifyDirectChildren: true)
+    }
+
+    @Test(arguments: ["open", "boolean"])
+    func registeredHierarchyDoesNotPromoteAnOpenOrUntypedChildStackToDirectMembership(child: String) async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false,
+            verifyHierarchy: true, verifyDirectChildren: true, revealedStack: child)
+    }
+
+    @Test(arguments: [false, true])
     func registeredHierarchyDoesNotInferMembershipFromVisibleRowOrder(expanded: Bool) async throws {
         try await observeStack(navigation: false, initiallyExpanded: expanded, verifyHierarchy: true)
     }
@@ -1621,7 +1633,8 @@ struct Issue965FreshPopulationAcquisitionTests {
                               originalFocusRole: String = "AXLayoutArea",
                               hiddenViewLoss: Bool = false, hiddenView: Bool = false,
                               hiddenFocusFault: String? = nil, lateScopeFault: String? = nil,
-                              verifyHierarchy: Bool = false) async throws {
+                              verifyHierarchy: Bool = false, verifyDirectChildren: Bool = false,
+                              revealedStack: String? = nil) async throws {
         let fixture = Fixture()
         let focusBoundaryReads = Reads()
         let bundle = FileManager.default.temporaryDirectory.appendingPathComponent("lpm965-stack-\(UUID().uuidString).logicx")
@@ -1711,6 +1724,12 @@ struct Issue965FreshPopulationAcquisitionTests {
             }
             #expect(!collapsed.contains { CFEqual($0, headers[1]) })
             #expect(!headers.contains { row in grandchildren.contains { CFEqual(row, $0) } })
+        }
+        if let revealedStack {
+            fixture.builder.setRole(inner, kAXDisclosureTriangleRole as String)
+            fixture.builder.setAttribute(inner, kAXValueAttribute as String,
+                revealedStack == "boolean" ? NSNumber(value: true) : NSNumber(value: 1))
+            fixture.builder.setChildren(headers[1], [inner])
         }
         fixture.builder.setChildren(fixture.rail, initiallyExpanded ? headers : collapsed)
         if hiddenViewLoss || hiddenView {
@@ -2648,6 +2667,17 @@ struct Issue965FreshPopulationAcquisitionTests {
                     #expect(exposures[1]["exposed_track_refs"] as? [String] == rows[2...3].compactMap { $0["track_ref"] as? String })
                 }
                 #expect(exposures.allSatisfy { $0["source"] as? String == "owned_disclosure_exposure" })
+                if verifyDirectChildren {
+                    if revealedStack == nil {
+                        #expect(exposures.allSatisfy {
+                            $0["direct_child_track_refs"] as? [String] == $0["exposed_track_refs"] as? [String]
+                        }, "closed revealed descendants distinguish direct children from an arbitrary exposure delta")
+                        #expect(exposures.allSatisfy { $0["direct_children_source"] as? String == "owned_disclosure_closed_descendants" })
+                    } else {
+                        #expect(exposures.allSatisfy { $0["direct_child_track_refs"] == nil && $0["direct_children_source"] == nil },
+                            "an already-open or Boolean child control cannot rule out exposed grandchildren")
+                    }
+                }
             } else {
                 #expect(hierarchy["coverage"] as? String == "unavailable")
                 #expect(hierarchy["disclosure_exposures"] == nil)
