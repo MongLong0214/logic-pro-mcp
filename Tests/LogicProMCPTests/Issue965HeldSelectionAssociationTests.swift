@@ -22,8 +22,15 @@ struct Issue965HeldSelectionAssociationTests {
         let mixer: AXUIElement
         let headers: [AXUIElement]
         let strips: [AXUIElement]
+        let scroll: AXUIElement
         let bundle: URL
         var selections: [Int] = []
+        var scrollWrites: [Double] = []
+        var viewportReadsAfterSelection = 0
+        var inverseValueReadCount = 0
+        var viewportFaultAtRead: Int?
+        var viewportFaultInjected = false
+        var referenceCurrent = true
         var fault: String?
         var transientEditorRead = false
         var transientForeignRead = false
@@ -35,7 +42,7 @@ struct Issue965HeldSelectionAssociationTests {
         var loseNextSelectionRead = false
         var postRestoreSelectionFaults = 0
 
-        init() throws {
+        init(withViewport: Bool = false) throws {
             bundle = FileManager.default.temporaryDirectory.appendingPathComponent("965-selection-\(UUID().uuidString).logicx")
             try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: false)
             app = builder.element(1_965_700)
@@ -44,6 +51,7 @@ struct Issue965HeldSelectionAssociationTests {
             mixer = builder.element(1_965_703)
             headers = [builder.element(1_965_704), builder.element(1_965_705)]
             strips = [builder.element(1_965_706), builder.element(1_965_707)]
+            scroll = builder.element(1_965_708)
             builder.setRole(window, kAXWindowRole as String)
             builder.setAttribute(window, kAXTitleAttribute as String, "Selection fixture - Tracks")
             builder.setAttribute(window, kAXDocumentAttribute as String, bundle.absoluteString)
@@ -87,7 +95,11 @@ struct Issue965HeldSelectionAssociationTests {
                 builder.setChildren(control, [])
             }
             builder.setChildren(bar, [play, record])
-            builder.setChildren(window, [rail, mixer, bar])
+            builder.setRole(scroll, kAXScrollBarRole as String)
+            builder.setAttribute(scroll, kAXValueAttribute as String, NSNumber(value: 0.8))
+            builder.setAttributeSettable(scroll, kAXValueAttribute as String, true)
+            builder.setChildren(scroll, [])
+            builder.setChildren(window, [rail, mixer, bar] + (withViewport ? [scroll] : []))
         }
 
         deinit { try? FileManager.default.removeItem(at: bundle) }
@@ -95,6 +107,28 @@ struct Issue965HeldSelectionAssociationTests {
         func channel() -> AccessibilityChannel {
             let base = builder.makeLogicRuntime(appElement: app,
                 attributeValueHandler: { [self] element, attribute in
+                    if CFEqual(element, scroll), attribute == kAXValueAttribute as String, selections.count == 2 {
+                        viewportReadsAfterSelection += 1
+                        if viewportFaultAtRead == viewportReadsAfterSelection {
+                            viewportFaultInjected = true
+                            if fault == "scroll_document" { builder.setAttribute(window, kAXDocumentAttribute as String, "file:///tmp/Foreign.logicx") }
+                            if fault == "scroll_focus" { builder.setAttribute(app, kAXFocusedUIElementAttribute as String, builder.element(1_965_730)) }
+                            if fault == "scroll_playback" { builder.setAttribute(builder.element(1_965_721), kAXValueAttribute as String, 1) }
+                            if fault == "scroll_cancel" { withUnsafeCurrentTask { $0?.cancel() } }
+                            if fault == "scroll_reference" { referenceCurrent = false }
+                            if fault == "scroll_replacement" {
+                                let replacement = builder.element(1_965_741)
+                                builder.setRole(replacement, kAXScrollBarRole as String)
+                                builder.setAttribute(replacement, kAXValueAttribute as String, NSNumber(value: 0.1))
+                                builder.setChildren(replacement, [])
+                                builder.setChildren(window, [rail, mixer, builder.element(1_965_720), replacement])
+                            }
+                            if fault == "scroll_newer" {
+                                builder.setAttribute(scroll, attribute, NSNumber(value: 0.6))
+                                return .some(NSNumber(value: 0.6))
+                            }
+                        }
+                    }
                     if fault == "post_restore_selection_missing" || fault == "post_restore_selection_malformed",
                        selections == [1, 0], CFEqual(element, headers[1]) {
                         if attribute == kAXTitleAttribute as String { loseNextSelectionRead = true }
@@ -139,6 +173,14 @@ struct Issue965HeldSelectionAssociationTests {
                     return nil
                 },
                 setAttributeHandler: { [self] element, attribute, value in
+                    if CFEqual(element, scroll), attribute == kAXValueAttribute as String,
+                       let number = value as? NSNumber {
+                        scrollWrites.append(number.doubleValue)
+                        inverseValueReadCount = viewportReadsAfterSelection
+                        if fault == "scroll_no_effect" { return true }
+                        builder.setAttribute(scroll, attribute, number)
+                        return true
+                    }
                     guard CFEqual(element, rail), attribute == kAXSelectedChildrenAttribute as String,
                           let chosen = value as? [AXUIElement], chosen.count == 1,
                           let index = headers.firstIndex(where: { CFEqual($0, chosen[0]) }) else {
@@ -151,6 +193,11 @@ struct Issue965HeldSelectionAssociationTests {
                     }
                     // The actual physical relationship is deliberately not positional.
                     builder.setAttribute(app, kAXFocusedUIElementAttribute as String, strips[1 - index])
+                    if fault == "selection_scroll" || fault?.hasPrefix("scroll_") == true {
+                        // Native R11: restoring the selected header/focused strip did
+                        // not restore the Tracks scrollbar's original value.
+                        builder.setAttribute(scroll, kAXValueAttribute as String, NSNumber(value: 0.1))
+                    }
                     if selections.count == 1 {
                         if fault == "foreign_focus" { builder.setAttribute(app, kAXFocusedUIElementAttribute as String, builder.element(1_965_730)) }
                         if fault == "unchanged_focus" { builder.setAttribute(app, kAXFocusedUIElementAttribute as String, strips[1]) }
@@ -231,6 +278,88 @@ struct Issue965HeldSelectionAssociationTests {
             runtime: f.builder.makeAXRuntime()))
         #expect(CFEqual(focus, f.strips[1]))
         #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "restored")
+    }
+
+    @Test func selectionInducedViewportDriftRestoresOnlyItsOriginalControl() async throws {
+        let f = try Fixture(withViewport: true)
+        f.fault = "selection_scroll"
+        let body = try await inspect(f)
+        #expect(f.selections == [1, 0])
+        #expect(f.scrollWrites == [0.8], "restore the exact held scrollbar, not a new matching control")
+        #expect((f.builder.attributeValue(f.scroll, kAXValueAttribute as String) as? NSNumber)?.doubleValue == 0.8)
+        #expect((body["associations"] as? [String: Any])?["rows"] as? [[String: Any]] != nil)
+        #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "restored")
+    }
+
+    @Test(arguments: ["scroll_document", "scroll_focus", "scroll_replacement", "scroll_newer", "scroll_playback", "scroll_cancel"])
+    func decidingViewportLossCannotAuthorizeItsInverse(fault: String) async throws {
+        let calibration = try Fixture(withViewport: true)
+        calibration.fault = "selection_scroll"
+        _ = try await inspect(calibration)
+        #expect(calibration.scrollWrites == [0.8])
+        let f = try Fixture(withViewport: true)
+        f.fault = fault
+        f.viewportFaultAtRead = calibration.inverseValueReadCount
+        let body = try await inspect(f)
+        #expect(f.viewportFaultInjected, "exercise the actual last deciding viewport-value read")
+        #expect(f.selections == [1, 0])
+        #expect(f.scrollWrites.isEmpty, "do not overwrite a newer view or act through lost control/document/focus custody")
+        #expect(body["associations"] == nil)
+        #expect(body["state"] as? String == "C")
+        #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "not_restored")
+    }
+
+    @Test func scrollbarAckWithoutReadbackDoesNotClaimRestoration() async throws {
+        let f = try Fixture(withViewport: true)
+        f.fault = "scroll_no_effect"
+        let body = try await inspect(f)
+        #expect(f.scrollWrites == [0.8])
+        #expect((f.builder.attributeValue(f.scroll, kAXValueAttribute as String) as? NSNumber)?.doubleValue == 0.1)
+        #expect(body["associations"] == nil)
+        #expect(body["state"] as? String == "C")
+        #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "not_restored")
+    }
+
+    @Test func unwriteableOriginalScrollbarCannotAuthorizeAnInverse() async throws {
+        let f = try Fixture(withViewport: true)
+        f.fault = "selection_scroll"
+        f.builder.setAttributeSettable(f.scroll, kAXValueAttribute as String, false)
+        let body = try await inspect(f)
+        #expect(f.selections == [1, 0])
+        #expect(f.scrollWrites.isEmpty)
+        #expect((f.builder.attributeValue(f.scroll, kAXValueAttribute as String) as? NSNumber)?.doubleValue == 0.1)
+        #expect(body["associations"] == nil)
+        #expect(body["state"] as? String == "C")
+        #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "not_restored")
+    }
+
+    @Test func decidingViewportReferenceRetirementCannotAuthorizeAnInverse() async throws {
+        func observe(_ f: Fixture) async throws -> SessionPopulationObservation.FreshPopulation {
+            let gate = LogicMutationGate()
+            let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+            defer { gate.release(claim) }
+            let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: { gate.stillOwns(claim) })
+            return try await OperationTraceContext.$current.withValue(context) {
+                try await f.channel().readFreshSessionPopulation(
+                    request: .init(domains: [.tracks, .strips, .associations], allowUINavigation: true),
+                    fileReader: .unavailable,
+                    navigationReferenceIsCurrent: { f.referenceCurrent }, stoppingWhen: { false })
+            }
+        }
+        let calibration = try Fixture(withViewport: true)
+        calibration.fault = "selection_scroll"
+        let positive = try await observe(calibration)
+        #expect(calibration.scrollWrites == [0.8])
+        #expect(positive.selectionAssociations.count == 2)
+        let f = try Fixture(withViewport: true)
+        f.fault = "scroll_reference"
+        f.viewportFaultAtRead = calibration.inverseValueReadCount
+        let refused = try await observe(f)
+        #expect(f.viewportFaultInjected && !f.referenceCurrent)
+        #expect(f.selections == [1, 0], "all physical custody remains unchanged at reference retirement")
+        #expect(f.scrollWrites.isEmpty, "renew the request's current-reference authority after deciding AX reads")
+        #expect(refused.selectionAssociations.isEmpty)
+        #expect(refused.uiEffects.restoration == "not_restored")
     }
 
     @Test(arguments: ["post_restore_selection_missing", "post_restore_selection_malformed"])

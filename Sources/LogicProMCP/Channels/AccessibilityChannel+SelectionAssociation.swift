@@ -26,6 +26,8 @@ extension AccessibilityChannel {
         let transport: AXLogicProElements.ObservedTransportActivity
         let transportPaths: [[AXUIElement]]
         let viewport: [(AXUIElement, Double)]
+        let viewportPaths: [[AXUIElement]]
+        private var expectedViewport: [(AXUIElement, Double)]
         private var expectedIndex: Int
         private var expectedFocus: AXUIElement
         private var lost = false
@@ -56,6 +58,7 @@ extension AccessibilityChannel {
                   enumeration.strips.filter({ CFEqual($0, focus) }).count == 1,
                   let path = Self.path(mixer, to: window, ax: logic.ax),
                   let viewport = Self.viewport(window, ax: logic.ax),
+                  let viewportPaths = Self.viewportPaths(viewport, window: window, ax: logic.ax),
                   let activity = try? AXLogicProElements.observedTransportActivity(in: window, runtime: logic,
                     checking: { try SessionPopulationObservation.requireOwnedAcquisition() }),
                   !activity.isPlaying, !activity.isRecording,
@@ -68,6 +71,7 @@ extension AccessibilityChannel {
             self.mixer = mixer; strips = enumeration.strips; self.path = path
             originalIndex = selected; originalFocus = focus; expectedIndex = selected; expectedFocus = focus
             transport = activity; self.viewport = viewport
+            self.viewportPaths = viewportPaths; expectedViewport = viewport
             transportPaths = [playPath, recordPath]
             guard permitsRead(), AXHelpers.isAttributeSettable(rail, kAXSelectedChildrenAttribute as String,
                 runtime: logic.ax) == true else { return nil }
@@ -108,6 +112,34 @@ extension AccessibilityChannel {
                 result.append((control, value.doubleValue))
             }
             return result
+        }
+
+        private static func viewportPaths(_ viewport: [(AXUIElement, Double)], window: AXUIElement,
+                                          ax: AXHelpers.Runtime) -> [[AXUIElement]]? {
+            var paths: [[AXUIElement]] = []
+            for (control, _) in viewport {
+                guard let path = Self.path(control, to: window, ax: ax) else { return nil }
+                paths.append(path)
+            }
+            return paths
+        }
+
+        private static func sameViewport(_ lhs: [(AXUIElement, Double)], _ rhs: [(AXUIElement, Double)],
+                                         includingValues: Bool = true) -> Bool {
+            lhs.count == rhs.count && zip(lhs, rhs).allSatisfy {
+                CFEqual($0.0, $1.0) && (!includingValues || $0.1 == $1.1)
+            }
+        }
+
+        private func currentViewport() -> [(AXUIElement, Double)]? {
+            guard let current = Self.viewport(window, ax: logic.ax),
+                  Self.sameViewport(current, viewport, includingValues: false),
+                  let paths = Self.viewportPaths(current, window: window, ax: logic.ax),
+                  paths.count == viewportPaths.count,
+                  zip(paths, viewportPaths).allSatisfy({ Self.same($0, $1) }) else {
+                lost = true; return nil
+            }
+            return current
         }
 
         private func owned() -> Bool {
@@ -178,6 +210,8 @@ extension AccessibilityChannel {
         private func select(_ index: Int, stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
             guard permitsRead(), !stop(), AXHelpers.isAttributeSettable(rail, kAXSelectedChildrenAttribute as String,
                 runtime: logic.ax) == true, permitsRead(), !stop(),
+                  let beforeViewport = currentViewport(), Self.sameViewport(beforeViewport, expectedViewport),
+                  permitsRead(),
                   (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
                   owned() else { return false }
             // R965-ASSOC-C001: the deciding focus/selection reads in permitsRead
@@ -198,7 +232,9 @@ extension AccessibilityChannel {
                     lost = true; return false
                 }
                 if selectionChanged, !CFEqual(focus, previousFocus) {
+                    guard let afterViewport = currentViewport(), owned() else { return false }
                     expectedIndex = index; expectedFocus = focus
+                    expectedViewport = afterViewport
                     return permitsRead() && !stop() && accepted
                 }
                 if attempt < 3 {
@@ -206,6 +242,36 @@ extension AccessibilityChannel {
                 }
             }
             return false
+        }
+
+        /// Reverse only scroll values sampled immediately after our held-rail selections.
+        /// A newer viewport, replacement control/path or scope loss ends cleanup authority.
+        private func restoreViewport(referenceIsCurrent: @Sendable () async -> Bool,
+                                     stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
+            guard let current = currentViewport(), Self.sameViewport(current, expectedViewport) else { return false }
+            for index in viewport.indices where viewport[index].1 != expectedViewport[index].1 {
+                let (control, original) = viewport[index]
+                guard !stop(), await referenceIsCurrent(), permitsRead(),
+                      (0...1).contains(original),
+                      AXHelpers.isAttributeSettable(control, kAXValueAttribute as String, runtime: logic.ax) == true,
+                      let decidingViewport = currentViewport(), Self.sameViewport(decidingViewport, expectedViewport),
+                      permitsRead(), owned(), await referenceIsCurrent(), !stop(),
+                      (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+                // R965-VIEW-C001: the deciding AX reads can retire the request's
+                // reference without changing physical custody. Renew it last,
+                // then require pure acquisition/cancellation authority before writing.
+                if !effects.attempted.contains("viewport") { effects.attempted.append("viewport") }
+                let accepted = AXHelpers.setAttribute(control, kAXValueAttribute as String,
+                    NSNumber(value: original), runtime: logic.ax)
+                guard let after = currentViewport() else { return false }
+                if after[index].1 == original, !effects.changed.contains("viewport") { effects.changed.append("viewport") }
+                guard accepted, after[index].1 == original,
+                      zip(after.indices, after).allSatisfy({ entry in
+                          entry.0 == index || entry.1.1 == expectedViewport[entry.0].1
+                      }), permitsRead(), owned(), !stop() else { return false }
+                expectedViewport = after
+            }
+            return Self.sameViewport(expectedViewport, viewport)
         }
 
         func observe(referenceIsCurrent: @Sendable () async -> Bool,
@@ -220,10 +286,13 @@ extension AccessibilityChannel {
             } else if await referenceIsCurrent() {
                 restored = await select(originalIndex, stoppingWhen: stop) && CFEqual(expectedFocus, originalFocus)
             } else { restored = false }
-            let currentViewport = Self.viewport(window, ax: logic.ax)
-            let viewRestored = currentViewport.map { values in
-                values.count == viewport.count && zip(values, viewport).allSatisfy { CFEqual($0.0, $1.0) && $0.1 == $1.1 }
-            } ?? false
+            let inverseVerified: Bool
+            if restored { inverseVerified = await restoreViewport(referenceIsCurrent: referenceIsCurrent, stoppingWhen: stop) }
+            else { inverseVerified = false }
+            let sampledViewport = currentViewport()
+            let viewRestored = inverseVerified && (sampledViewport.map { values in
+                Self.sameViewport(values, viewport)
+            } ?? false)
             guard restored, viewRestored, await referenceIsCurrent(), permitsRead(), !stop() else {
                 effects.reason = "association_restoration_unverified"; return []
             }
