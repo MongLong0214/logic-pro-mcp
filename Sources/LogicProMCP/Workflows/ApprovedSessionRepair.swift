@@ -135,7 +135,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                          registry: TargetRegistry, journal: SagaJournal) async -> ApprovedSessionRepair? {
         guard FeatureFlags.adr002TargetRef,
               let (canonical, source) = await cache.retainedRepairSource(id: id, digest: digest),
-              await cache.inspectionIsCurrent(source.capture),
+              SessionPopulationObservation.captureMovementReason(capture: source.capture) == nil,
               let targetSnapshot = source.capture.targetSnapshot,
               let data = canonical.json.data(using: .utf8),
               var object = try? JSONDecoder().decode(Value.self, from: data).objectValue,
@@ -159,6 +159,16 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                   source: source.capture, request: source.request) else { return nil }
         let issued = captured.projectRef
         let goals = captured.names
+        // Ordinary polls advance content revisions even for identical values.
+        // This finite native adapter does not execute those cached rows: its
+        // original physical goals are independently re-read before any effect.
+        // Keep project/occlusion history strict; do not relax draft freshness.
+        let boundary = await cache.captureBoundary(watching: SessionPopulationObservation.watchedSections)
+        guard boundary.hasDocument, !boundary.axOccluded,
+              boundary.occlusionRevision == source.capture.after.occlusionRevision,
+              boundary.versions.values.allSatisfy({ $0.projectEpoch == source.capture.projectEpoch }),
+              let currentProject = await registry.resolveCurrentProject(issued),
+              currentProject.projectEpoch == targetSnapshot.projectEpoch else { return nil }
         for goal in goals {
             guard let current = await registry.resolve(goal.reference), current.kind == .track,
                   current.physicalTrack?.matches(goal.binding) == true else { return nil }

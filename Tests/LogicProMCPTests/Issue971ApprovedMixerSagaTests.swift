@@ -361,6 +361,117 @@ struct Issue971ApprovedMixerSagaTests {
         }
     }
 
+    @Test(arguments: ["project", "tracks", "mixer"], [false, true])
+    func identicalPollDoesNotInvalidateTheRetainedNativeViewGoal(section: String, initial: Bool) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: initial)
+                await f.router.register(f.view.channel())
+                let plan = try await f.plan(desired: !initial)
+                let executable = try #require(plan["executable"] as? Bool)
+                #expect(executable)
+                let before = await f.cache.captureBoundary(watching: SessionPopulationObservation.watchedSections)
+                switch section {
+                case "project": await f.cache.updateProject(await f.cache.getProject())
+                case "tracks": await f.cache.updateTracks(await f.cache.getTracks())
+                case "mixer": await f.cache.updateChannelStrips(await f.cache.getChannelStrips())
+                default: Issue.record("unknown poll fixture")
+                }
+                let after = await f.cache.captureBoundary(watching: SessionPopulationObservation.watchedSections)
+                #expect(after != before, "the ordinary identical poll must actually advance a watched revision")
+                let params = try f.applyParameters(plan, key: "identical-poll-" + section)
+                let result = try await f.call("apply_session_repair", params: params)
+                #expect(result["saga_state"] as? String == "completed")
+                let verified = try #require(result["verified"] as? Bool)
+                #expect(verified)
+                let visibilityMatches = f.view.showing == !initial
+                #expect(visibilityMatches)
+                #expect(f.view.events == ["open_view", initial ? "hide_mixer" : "show_mixer"])
+                if result["saga_state"] as? String == "completed" {
+                    let events = f.view.events
+                    let replay = try await f.call("apply_session_repair", params: params)
+                    let duplicate = try #require(replay["duplicate"] as? Bool)
+                    #expect(duplicate)
+                    #expect(f.view.events == events)
+                }
+            }
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func identicalPollingStillVerifiesEveryOriginalNameGoal(includeView: Bool) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: false)
+                await f.router.register(f.view.channel())
+                _ = f.installNameHeaders(["Bass", "e\u{301}"])
+                let plan = try await f.namesPlan(["Bass", "e\u{301}"], policyExtras: includeView
+                    ? ["presentation": .object(["mixer_visible": .bool(true)])] : [:])
+                let executable = try #require(plan["executable"] as? Bool)
+                #expect(executable)
+                await f.cache.updateProject(await f.cache.getProject())
+                await f.cache.updateTracks(await f.cache.getTracks())
+                await f.cache.updateChannelStrips(await f.cache.getChannelStrips())
+                let result = try await f.call("apply_session_repair",
+                    params: f.applyParameters(plan, key: "polled-name-goals"))
+                #expect(result["saga_state"] as? String == "completed")
+                let verified = try #require(result["verified"] as? Bool)
+                #expect(verified)
+                let evidence = try #require(result["goal_evidence"] as? [[String: Any]])
+                #expect(evidence.count == 2)
+                #expect(f.view.events == (includeView ? ["open_view", "show_mixer"] : []))
+                if includeView {
+                    let steps = try #require(result["steps"] as? [[String: Any]])
+                    let scalar = try #require(steps.first?["result"] as? [String: Any])
+                    let crossed = try #require(scalar["write_boundary_crossed"] as? Bool)
+                    #expect(crossed)
+                } else {
+                    let attempted = try #require(result["write_attempted"] as? Bool)
+                    #expect(!attempted)
+                    #expect(result["writes_performed"] as? Int == 0)
+                }
+            }
+        }
+    }
+
+    @Test(arguments: ["cache_epoch", "cache_roundtrip", "registry_epoch", "occlusion", "occlusion_roundtrip",
+                      "document", "play", "record"])
+    func pollingCannotRenewLostProjectOrHostAuthority(kind: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+                let f = try Fixture(showing: false)
+                await f.router.register(f.view.channel())
+                let plan = try await f.plan(desired: true)
+                let executable = try #require(plan["executable"] as? Bool)
+                #expect(executable)
+                await f.cache.updateProject(await f.cache.getProject())
+                switch kind {
+                case "cache_epoch": await f.cache.advanceProjectEpoch()
+                case "cache_roundtrip":
+                    let project = await f.cache.getProject()
+                    await f.cache.updateProject(.init(name: "Other", filePath: "/tmp/Other.logicx"))
+                    await f.cache.updateProject(project)
+                case "registry_epoch": await f.registry.bumpProjectEpoch()
+                case "occlusion": await f.cache.updateAXOccluded(true)
+                case "occlusion_roundtrip":
+                    await f.cache.updateAXOccluded(true)
+                    await f.cache.updateAXOccluded(false)
+                case "document": f.view.builder.setAttribute(f.view.window, kAXDocumentAttribute as String, "file:///tmp/Other.logicx")
+                case "play": f.view.builder.setAttribute(f.play, kAXValueAttribute as String, 1)
+                case "record": f.view.builder.setAttribute(f.record, kAXValueAttribute as String, 1)
+                default: Issue.record("unknown lost-authority fixture")
+                }
+                let result = try await f.call("apply_session_repair",
+                    params: f.applyParameters(plan, key: "poll-authority-loss"))
+                #expect(result["state"] as? String == "C")
+                let verified = try #require(result["verified"] as? Bool)
+                #expect(!verified)
+                #expect(f.view.events.isEmpty)
+                #expect(!f.view.showing)
+            }
+        }
+    }
+
     @Test(arguments: [true, false])
     func eitherProjectEpochChangingAfterRetentionRefusesBeforeTheViewWrite(cacheChanges: Bool) async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
