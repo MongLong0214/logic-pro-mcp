@@ -379,6 +379,49 @@ struct Issue965HeldSelectionAssociationTests {
         #expect(bulk ? f.reciprocalPathBatchCalls > 0 : f.reciprocalPathBatchCalls == 0)
     }
 
+    @Test(arguments: ["Vertical Zoom", "수직 확대/축소"], [false, true])
+    func selectionInducedZoomDriftCannotClaimRestoration(label: String, noEffect: Bool) async throws {
+        let f = try Fixture(withViewport: true)
+        f.useBulkReads = true
+        f.builder.setRole(f.scroll, kAXSliderRole as String)
+        f.builder.setAttribute(f.scroll, kAXDescriptionAttribute as String, label)
+        f.fault = noEffect ? "scroll_no_effect" : "selection_scroll"
+        let body = try await inspect(f)
+        #expect(f.selections == [1, 0])
+        #expect(f.scrollWrites == [0.8], "selection-owned zoom drift requires the original physical control's inverse")
+        let restoration = try #require((body["ui_effects"] as? [String: Any])?["restoration"] as? String)
+        if noEffect {
+            #expect(restoration != "restored", "a successful AX write without exact zoom readback is not restoration")
+            #expect((f.builder.attributeValue(f.scroll, kAXValueAttribute as String) as? NSNumber)?.doubleValue == 0.1)
+        } else {
+            #expect(restoration == "restored")
+            #expect((f.builder.attributeValue(f.scroll, kAXValueAttribute as String) as? NSNumber)?.doubleValue == 0.8)
+        }
+    }
+
+    @Test(arguments: ["Volume", "Pan", "Zoom", "Vertical Zoom calibration"])
+    func viewportInverseCannotUseAnUnrelatedSliderDescription(label: String) async throws {
+        let f = try Fixture(withViewport: true)
+        f.builder.setRole(f.scroll, kAXSliderRole as String)
+        f.builder.setAttribute(f.scroll, kAXDescriptionAttribute as String, label)
+        f.fault = "selection_scroll"
+        _ = try await inspect(f)
+        #expect(f.selections == [1, 0])
+        #expect(f.scrollWrites.isEmpty, "neither generic zoom containment nor a musical slider authorizes a viewport write")
+        #expect((f.builder.attributeValue(f.scroll, kAXValueAttribute as String) as? NSNumber)?.doubleValue == 0.1)
+    }
+
+    @Test func malformedZoomDescriptionCannotBeTreatedAsAbsent() async throws {
+        let f = try Fixture(withViewport: true)
+        f.builder.setRole(f.scroll, kAXSliderRole as String)
+        f.builder.setAttribute(f.scroll, kAXDescriptionAttribute as String, NSNumber(value: 42))
+        f.fault = "selection_scroll"
+        _ = try await inspect(f)
+        #expect(f.selections.isEmpty, "a malformed successful description is not proof that an owned viewport control is absent")
+        #expect(f.scrollWrites.isEmpty)
+        #expect((f.builder.attributeValue(f.scroll, kAXValueAttribute as String) as? NSNumber)?.doubleValue == 0.8)
+    }
+
     @Test(arguments: ["unreadable", "malformed_children", "foreign_children", "malformed_parent"])
     func aFailedFreshReciprocalPathBatchCannotAuthorizeSelection(fault: String) async throws {
         let f = try Fixture()

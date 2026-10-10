@@ -132,11 +132,30 @@ extension AccessibilityChannel {
         }
 
         private static func viewport(_ window: AXUIElement, ax: AXHelpers.Runtime) -> [(AXUIElement, Double)]? {
+            var sliders: [AXUIElement] = []
             guard case .success(let census) = AXHelpers.censusDescendantResult(of: window, role: kAXScrollBarRole as String,
                 maxDepth: 32, runtime: ax, requiresCompleteTraversal: true,
-                permittingRead: { (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil }) else { return nil }
+                permittingRead: { (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil },
+                observingRole: { element, role in
+                    if role == kAXSliderRole as String { sliders.append(element) }
+                }) else { return nil }
+            var controls = census.matches
+            let zoomLabels = AXLocalePolicy.horizontalZoomSlider.labels + AXLocalePolicy.verticalZoomSlider.labels
+            for slider in sliders {
+                guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return nil }
+                switch AXHelpers.getAttributeResult(slider, kAXDescriptionAttribute as String,
+                    runtime: ax) as Result<AnyObject?, AXHelpers.AXStatusError> {
+                case .success(.some(let rawDescription)):
+                    guard CFGetTypeID(rawDescription) == CFStringGetTypeID(),
+                          let description = rawDescription as? String else { return nil }
+                    if zoomLabels.contains(description) { controls.append(slider) }
+                case .success(.none): continue
+                case .failure(let error) where error.isDefinitiveAbsence: continue
+                default: return nil
+                }
+            }
             var result: [(AXUIElement, Double)] = []
-            for control in census.matches {
+            for control in controls {
                 guard case .success(.some(let value)) = AXHelpers.getAttributeResult(control, kAXValueAttribute as String,
                     runtime: ax) as Result<NSNumber?, AXHelpers.AXStatusError>, value.doubleValue.isFinite else { return nil }
                 result.append((control, value.doubleValue))
@@ -305,7 +324,7 @@ extension AccessibilityChannel {
             return false
         }
 
-        /// Reverse only scroll values sampled immediately after our held-rail selections.
+        /// Reverse only scroll/own-zoom values sampled immediately after our held-rail selections.
         /// A newer viewport, replacement control/path or scope loss ends cleanup authority.
         private func restoreViewport(referenceIsCurrent: @Sendable () async -> Bool,
                                      stoppingWhen stop: @Sendable () -> Bool) async -> Bool {

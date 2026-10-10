@@ -1971,6 +1971,15 @@ enum AXLocalePolicy {
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Horizontal%20Zoom#value"
     )
 
+    /// Own arrange vertical-zoom slider; exact description identifies a held viewport control.
+    static let verticalZoomSlider = LabelSet(
+        canonical: "Vertical Zoom",
+        variants: ["수직 확대/축소", "縦方向にズーム", "Vertikal-Zoom", "Zoom vertical",
+                   "Zoom verticale", "垂直缩放", "垂直縮放"],
+        rationale: "Exact own AXSlider description for selection-owned viewport restoration. Values read from the installed Vertical Zoom row; static derivation is not ten-locale native qualification.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Vertical%20Zoom#value"
+    )
+
     // --- Track-header read-only locators ---
 
     /// The suffix Logic appends to the arrange window's title. Measured live on 2026-08-11: an
@@ -3636,6 +3645,7 @@ enum AXLocalePolicy {
         tempoSliderLabel,
         tempoSliderContainsLabel,
         horizontalZoomSlider,
+        verticalZoomSlider,
         arrangeWindowTitleSuffix,
         trackMuteButton,
         trackSoloButton,
