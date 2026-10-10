@@ -64,6 +64,8 @@ private final class ExactNameFixture: @unchecked Sendable {
     var onMirrorReadAfterWrite: (@Sendable () -> Void)?
     var peerNameReadsAfterWrite = 0
     var onPeerNameReadAfterWrite: (@Sendable (Int) -> Void)?
+    var rawHelpReads = 0
+    var countRawHelpReads = false
 
     init(_ name: String = "A") {
         app = builder.element(968_100)
@@ -96,6 +98,7 @@ private final class ExactNameFixture: @unchecked Sendable {
             ax: builder.makeAXRuntime(
                 appElement: app,
                 attributeValueHandler: { [self] element, attribute in
+                    if countRawHelpReads, attribute == kAXHelpAttribute as String { rawHelpReads += 1 }
                     if !writes.isEmpty, additionalNameFields.contains(where: { CFEqual($0, element) }),
                        attribute == kAXDescriptionAttribute as String {
                         peerNameReadsAfterWrite += 1
@@ -664,6 +667,25 @@ struct Issue968ExactTrackNameAdapterTests {
             #expect(f.builder.attributeValue(peer, kAXDescriptionAttribute as String) as? String == "Unexpected peer")
             let receipt = try #require(sharedJSONObject(sharedToolText(restored.result)))
             #expect(receipt["state"] as? String == "B")
+        }
+    }
+
+    @Test func inversePeerBaselineDoesNotReadFocusMovingHelpInTheMixerCensus() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (capture, project, target, strip, _) = try await f.coupledCapture(peerStripName: "Aux")
+            let forward = await f.applyCoupled(capture, project: project, target: target)
+            let proof = try #require(forward.inverse)
+            let mixer: AXUIElement = try #require(AXHelpers.getAttribute(strip, kAXParentAttribute as String, runtime: f.runtime.ax))
+            // The same original source now uses the actual description-based
+            // census instead of its legacy identifier fast path.
+            f.builder.removeAttribute(mixer, kAXIdentifierAttribute as String)
+            f.builder.setAttribute(mixer, kAXDescriptionAttribute as String, "Mixer")
+            f.countRawHelpReads = true
+            let restored = await f.inverse(proof)
+            #expect(restored.status == .applied)
+            #expect(f.writes == ["C", "A"])
+            #expect(f.rawHelpReads == 0)
         }
     }
 

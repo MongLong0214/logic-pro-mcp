@@ -107,6 +107,13 @@ enum ExactTrackNameAdapter {
         /// An inverse preserves peers' current names, never the old capture's
         /// names. Original physical sources still decide membership/ownership.
         func withCurrentPeerNames() -> CoupledMirror? {
+            let guardHelp = AXHelpers.HelpReadGuard(allowHelpReads: false, stop: { !operationPermitted() })
+            return AXHelpers.HelpReadGuard.$current.withValue(guardHelp) {
+                readCurrentPeerNames()
+            }
+        }
+
+        private func readCurrentPeerNames() -> CoupledMirror? {
             var renewed = self
             for index in preservedTracks.indices {
                 guard operationPermitted(), let source = preservedTracks[index].physicalBinding,
