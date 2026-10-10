@@ -9,6 +9,7 @@ extension AccessibilityChannel {
             let track: AXTrackBinding.Binding
             let strip: AXMixerStripBinding.Binding
         }
+        typealias ViewportControl = (element: AXUIElement, value: Double, zoomDescription: String?)
         let logic: AXLogicProElements.Runtime
         let app: AXUIElement
         let pid: pid_t
@@ -25,9 +26,9 @@ extension AccessibilityChannel {
         let originalFocus: AXUIElement
         let transport: AXLogicProElements.ObservedTransportActivity
         let transportPaths: [[AXUIElement]]
-        let viewport: [(AXUIElement, Double)]
+        let viewport: [ViewportControl]
         let viewportPaths: [[AXUIElement]]
-        private var expectedViewport: [(AXUIElement, Double)]
+        private var expectedViewport: [ViewportControl]
         private var expectedIndex: Int
         private var expectedFocus: AXUIElement
         private var lost = false
@@ -131,38 +132,72 @@ extension AccessibilityChannel {
             return path
         }
 
-        private static func viewport(_ window: AXUIElement, ax: AXHelpers.Runtime) -> [(AXUIElement, Double)]? {
+        private static func viewport(_ window: AXUIElement, ax: AXHelpers.Runtime,
+                                     held: [ViewportControl]? = nil) -> [ViewportControl]? {
+            var sliders: [AXUIElement] = []
             guard case .success(let census) = AXHelpers.censusDescendantResult(of: window, role: kAXScrollBarRole as String,
                 maxDepth: 32, runtime: ax, requiresCompleteTraversal: true,
-                permittingRead: { (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil }) else { return nil }
-            var result: [(AXUIElement, Double)] = []
-            for control in census.matches {
+                permittingRead: { (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil },
+                observingRole: { element, role in
+                    if role == kAXSliderRole as String { sliders.append(element) }
+                }) else { return nil }
+            var controls: [(AXUIElement, String?)] = census.matches.map { ($0, nil) }
+            let zoomLabels = AXLocalePolicy.horizontalZoomSlider.labels + AXLocalePolicy.verticalZoomSlider.labels
+            // Discover own zoom controls before navigation. Inspector selection
+            // may redraw unrelated sliders; their descriptions cannot revoke
+            // custody of an original, reciprocally held viewport control.
+            let zooms = held.map { $0.filter { $0.zoomDescription != nil }.map { ($0.element, $0.zoomDescription) } }
+                ?? sliders.map { ($0, nil as String?) }
+            for (slider, heldDescription) in zooms {
+                guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return nil }
+                if heldDescription != nil {
+                    // A role contradiction sampled by this fresh census is
+                    // irreversible; a later role read cannot erase it.
+                    guard sliders.filter({ CFEqual($0, slider) }).count == 1,
+                          AXHelpers.getRole(slider, runtime: ax) == kAXSliderRole as String else { return nil }
+                }
+                switch AXHelpers.getAttributeResult(slider, kAXDescriptionAttribute as String,
+                    runtime: ax) as Result<AnyObject?, AXHelpers.AXStatusError> {
+                case .success(.some(let rawDescription)):
+                    guard CFGetTypeID(rawDescription) == CFStringGetTypeID(),
+                          let description = rawDescription as? String else { return nil }
+                    if let heldDescription {
+                        guard description.utf8.elementsEqual(heldDescription.utf8) else { return nil }
+                        controls.append((slider, heldDescription))
+                    } else if zoomLabels.contains(description) { controls.append((slider, description)) }
+                case .success(.none): if heldDescription != nil { return nil }
+                case .failure(let error) where error.isDefinitiveAbsence: if heldDescription != nil { return nil }
+                default: return nil
+                }
+            }
+            var result: [ViewportControl] = []
+            for (control, description) in controls {
                 guard case .success(.some(let value)) = AXHelpers.getAttributeResult(control, kAXValueAttribute as String,
                     runtime: ax) as Result<NSNumber?, AXHelpers.AXStatusError>, value.doubleValue.isFinite else { return nil }
-                result.append((control, value.doubleValue))
+                result.append((control, value.doubleValue, description))
             }
             return result
         }
 
-        private static func viewportPaths(_ viewport: [(AXUIElement, Double)], window: AXUIElement,
+        private static func viewportPaths(_ viewport: [ViewportControl], window: AXUIElement,
                                           ax: AXHelpers.Runtime) -> [[AXUIElement]]? {
             var paths: [[AXUIElement]] = []
-            for (control, _) in viewport {
+            for (control, _, _) in viewport {
                 guard let path = Self.path(control, to: window, ax: ax) else { return nil }
                 paths.append(path)
             }
             return paths
         }
 
-        private static func sameViewport(_ lhs: [(AXUIElement, Double)], _ rhs: [(AXUIElement, Double)],
+        private static func sameViewport(_ lhs: [ViewportControl], _ rhs: [ViewportControl],
                                          includingValues: Bool = true) -> Bool {
             lhs.count == rhs.count && zip(lhs, rhs).allSatisfy {
-                CFEqual($0.0, $1.0) && (!includingValues || $0.1 == $1.1)
+                CFEqual($0.0, $1.0) && $0.2 == $1.2 && (!includingValues || $0.1 == $1.1)
             }
         }
 
-        private func currentViewport() -> [(AXUIElement, Double)]? {
-            guard let current = Self.viewport(window, ax: logic.ax),
+        private func currentViewport() -> [ViewportControl]? {
+            guard let current = Self.viewport(window, ax: logic.ax, held: viewport),
                   Self.sameViewport(current, viewport, includingValues: false),
                   let paths = Self.viewportPaths(current, window: window, ax: logic.ax),
                   paths.count == viewportPaths.count,
@@ -305,13 +340,13 @@ extension AccessibilityChannel {
             return false
         }
 
-        /// Reverse only scroll values sampled immediately after our held-rail selections.
+        /// Reverse only scroll/own-zoom values sampled immediately after our held-rail selections.
         /// A newer viewport, replacement control/path or scope loss ends cleanup authority.
         private func restoreViewport(referenceIsCurrent: @Sendable () async -> Bool,
                                      stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
             guard let current = currentViewport(), Self.sameViewport(current, expectedViewport) else { return false }
             for index in viewport.indices where viewport[index].1 != expectedViewport[index].1 {
-                let (control, original) = viewport[index]
+                let (control, original, _) = viewport[index]
                 guard !stop(), await referenceIsCurrent(), permitsRead(),
                       (0...1).contains(original),
                       AXHelpers.isAttributeSettable(control, kAXValueAttribute as String, runtime: logic.ax) == true,
