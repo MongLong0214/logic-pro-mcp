@@ -114,16 +114,20 @@ final class ApprovedSessionRepair: @unchecked Sendable {
     private let cache: StateCache
     private let registry: TargetRegistry
     private let journal: SagaJournal
-    private let projectEpoch: UInt64
+    // Cache observations and issued references have independently owned epochs.
+    private let cacheProjectEpoch: UInt64
+    private let registryProjectEpoch: UInt64
     private var ran = false
     private var ownedVisibility: Bool?
     private var ownedMixer: AXUIElement?
 
     private init(plan: SagaPlan, projectRef: TargetReference, document: String,
-                 mixerTask: MixerTask? = nil, nameGoals: [NameGoal] = [], projectEpoch: UInt64,
+                 mixerTask: MixerTask? = nil, nameGoals: [NameGoal] = [], cacheProjectEpoch: UInt64,
+                 registryProjectEpoch: UInt64,
                  cache: StateCache, registry: TargetRegistry, journal: SagaJournal) {
         self.plan = plan; self.projectRef = projectRef; self.document = document
-        self.mixerTask = mixerTask; self.nameGoals = nameGoals; self.projectEpoch = projectEpoch
+        self.mixerTask = mixerTask; self.nameGoals = nameGoals
+        self.cacheProjectEpoch = cacheProjectEpoch; self.registryProjectEpoch = registryProjectEpoch
         self.cache = cache; self.registry = registry; self.journal = journal
     }
 
@@ -132,6 +136,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         guard FeatureFlags.adr002TargetRef,
               let (canonical, source) = await cache.retainedRepairSource(id: id, digest: digest),
               await cache.inspectionIsCurrent(source.capture),
+              let targetSnapshot = source.capture.targetSnapshot,
               let data = canonical.json.data(using: .utf8),
               var object = try? JSONDecoder().decode(Value.self, from: data).objectValue,
               object["executable"]?.boolValue == true,
@@ -161,7 +166,8 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         if steps.isEmpty {
             guard captured.mixer == nil else { return nil }
             return .init(plan: .init(steps: [], idempotencyKey: key, canonicalPlanID: id, canonicalDigest: digest),
-                projectRef: issued, document: captured.document, nameGoals: goals, projectEpoch: source.capture.projectEpoch,
+                projectRef: issued, document: captured.document, nameGoals: goals,
+                cacheProjectEpoch: source.capture.projectEpoch, registryProjectEpoch: targetSnapshot.projectEpoch,
                 cache: cache, registry: registry, journal: journal)
         }
         guard steps.count == 1,
@@ -179,7 +185,8 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             idempotencyKey: key, canonicalPlanID: id, canonicalDigest: digest)
         return .init(plan: saga, projectRef: issued, document: captured.document,
             mixerTask: mixer, nameGoals: goals,
-            projectEpoch: source.capture.projectEpoch, cache: cache, registry: registry, journal: journal)
+            cacheProjectEpoch: source.capture.projectEpoch, registryProjectEpoch: targetSnapshot.projectEpoch,
+            cache: cache, registry: registry, journal: journal)
     }
 
     func supports(_ step: SagaStep) -> Bool {
@@ -195,11 +202,12 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             return false
         }
         guard let target = await registry.resolve(projectRef), target.kind == .project,
-              target.projectEpoch == projectEpoch,
+              target.projectEpoch == registryProjectEpoch,
               let url = URL(string: document), url.isFileURL,
               url.host == nil || url.host == "" || url.host == "localhost",
               target.descriptor.projectFilePath?.utf8.elementsEqual(url.path.utf8) == true,
               await cache.getProject().filePath?.utf8.elementsEqual(url.path.utf8) == true,
+              await cache.currentProjectIdentity()?.epoch == cacheProjectEpoch,
               (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
         return true
     }
