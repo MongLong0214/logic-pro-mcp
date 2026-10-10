@@ -38,6 +38,15 @@ enum SessionPopulationObservation {
         /// A new full reading after verified selection restoration. This is not
         /// permission to accept changes during that reading or across projects.
         var associationReadbackBoundary: StateCache.CaptureBoundary? = nil
+        /// Actual closed-to-open disclosure deltas, retained only after verified restoration.
+        /// These are historical membership observations, not current target authority,
+        /// immediate-parent links or absolute depths.
+        var disclosureExposures: [HeldDisclosureExposure] = []
+    }
+
+    struct HeldDisclosureExposure: Sendable {
+        let stack: AXTrackBinding.Binding
+        let exposed: [AXTrackBinding.Binding]
     }
 
     struct PresentationObservation: Encodable, Equatable, Sendable {
@@ -144,7 +153,8 @@ enum SessionPopulationObservation {
 
     static func requireOwnedAcquisition() throws {
         let context = OperationTraceContext.current
-        if Task.isCancelled || context?.cancellationRequested() == true {
+        if (Task.isCancelled || context?.cancellationRequested() == true)
+            && !AccessibilityChannel.OwnedTrackStackObservationNavigation.restoringInterruptedAcquisition {
             throw AcquisitionError.cancelled
         }
         guard let context,
@@ -659,7 +669,7 @@ enum SessionPopulationObservation {
         let typeSource = "header_aggregate"
         let isStackHeader: Bool?
         let stackCollapsed: Bool?
-        let hidden = "unknown"
+        var hidden: Bool? = nil
         let parent = "unknown"
         let depth = "unknown"
         let isSelected: Bool?
@@ -693,7 +703,8 @@ enum SessionPopulationObservation {
             try container.encode(typeSource, forKey: .typeSource)
             try container.encode(isStackHeader, forKey: .isStackHeader)
             try container.encode(stackCollapsed, forKey: .stackCollapsed)
-            try container.encode(hidden, forKey: .hidden)
+            if let hidden { try container.encode(hidden, forKey: .hidden) }
+            else { try container.encode("unknown", forKey: .hidden) }
             try container.encode(parent, forKey: .parent)
             try container.encode(depth, forKey: .depth)
             try container.encode(isSelected, forKey: .isSelected)
@@ -820,6 +831,20 @@ enum SessionPopulationObservation {
         let coverage: Coverage
         let reasons: [Reason]
         var rows: [AssociationRow]? = nil
+        var disclosureExposures: [DisclosureExposureRow]? = nil
+        enum CodingKeys: String, CodingKey {
+            case coverage, reasons, rows
+            case disclosureExposures = "disclosure_exposures"
+        }
+    }
+
+    struct DisclosureExposureRow: Encodable, Sendable {
+        let stackRef: String
+        let exposedTrackRefs: [String]
+        let source = "owned_disclosure_exposure"
+        enum CodingKeys: String, CodingKey {
+            case stackRef = "stack_ref", exposedTrackRefs = "exposed_track_refs", source
+        }
     }
 
     struct AssociationRow: Encodable, Sendable {
@@ -932,6 +957,7 @@ enum SessionPopulationObservation {
                 type: track.type.rawValue,
                 isStackHeader: track.isStackHeader,
                 stackCollapsed: track.stackCollapsed,
+                hidden: !moved && capture.freshPopulation?.stable == true ? track.hideButtonReadback : nil,
                 isSelected: track.selectionReadback,
                 placeholder: track.placeholder,
                 trackRef: reference
@@ -1120,7 +1146,30 @@ enum SessionPopulationObservation {
                 associations = .init(coverage: .partial, reasons: [.associationPopulationNotObserved], rows: rows)
             }
         }
-        let hierarchy = deferred(.parentDepthNotObserved)
+        var hierarchy = deferred(.parentDepthNotObserved)
+        if movementReason == nil, request.allowUINavigation, request.domains.contains(.hierarchy),
+           tracksCoverage == .partial || tracksCoverage == .complete,
+           let observations = capture.freshPopulation?.disclosureExposures, !observations.isEmpty {
+            func reference(for physical: AXTrackBinding.Binding) -> (Int, String)? {
+                let matches = live.indices.filter { live[$0].physicalBinding?.matches(physical) == true }
+                guard matches.count == 1, let row = matches.first, let ref = allRows[row].trackRef else { return nil }
+                return (row, ref)
+            }
+            var exposures: [DisclosureExposureRow] = []
+            var qualified = true
+            for observation in observations {
+                guard let (_, stackRef) = reference(for: observation.stack) else { qualified = false; break }
+                let members = observation.exposed.compactMap { reference(for: $0) }
+                guard members.count == observation.exposed.count,
+                      Set(members.map(\.1)).count == members.count,
+                      !members.contains(where: { $0.1 == stackRef }) else { qualified = false; break }
+                let refs = members.filter { request.scope == .wholeProject || live[$0.0].selectionReadback == true }.map(\.1)
+                if !refs.isEmpty { exposures.append(.init(stackRef: stackRef, exposedTrackRefs: refs)) }
+            }
+            if qualified, !exposures.isEmpty {
+                hierarchy = .init(coverage: .partial, reasons: [.parentDepthNotObserved], disclosureExposures: exposures)
+            }
+        }
         let routing = request.domains.contains(.routing) ? routingSection(capture: capture, moved: moved) : nil
         let color = request.domains.contains(.color) ? deferred(.colorDeferredToIssue970) : nil
 

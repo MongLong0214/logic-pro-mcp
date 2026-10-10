@@ -58,6 +58,9 @@ extension AccessibilityChannel {
                 readingTypeHelp: readingTypeHelp,
                 stoppingBeforeHelp: stop
             ) else { return (nil, true) }
+            if !readingTypeHelp, let window {
+                state.hideButtonReadback = readTrackHideButton(header, in: window, runtime: runtime, exposure: exposure)
+            }
             exposure?.observeStackState(header: header, isStackHeader: state.isStackHeader, collapsed: state.stackCollapsed)
             if let window, let document, state.liveIdentityBacked, state.placeholder != true {
                 // Baseline rows were already exposed and keep ordinary custody. Only
@@ -73,12 +76,55 @@ extension AccessibilityChannel {
         return (states, false)
     }
 
+    /// Read the one direct physical Hide checkbox, never an aggregate/name/ordinal join.
+    /// Missing, ambiguous, foreign or unreadable controls stay unknown; no Help or actuation.
+    static func readTrackHideButton(_ header: AXUIElement, in window: AXUIElement,
+                                    runtime: AXLogicProElements.Runtime, exposure: AXTrackBinding.Exposure? = nil) -> Bool? {
+        let ax = runtime.ax
+        guard case .success(let children) = AXHelpers.childrenResult(header, runtime: ax) else { return nil }
+        exposure?.observeChildren(element: header, children: children)
+        var matches: [AXUIElement] = []
+        for child in children {
+            guard case .success(.some(let role)) = AXHelpers.getAttributeResult(
+                child, kAXRoleAttribute as String, runtime: ax) as Result<String?, AXHelpers.AXStatusError> else { return nil }
+            exposure?.observeRole(element: child, role: role)
+            guard role == kAXCheckBoxRole as String else { continue }
+            guard case .success(.some(let label)) = AXHelpers.getAttributeResult(
+                child, kAXDescriptionAttribute as String, runtime: ax) as Result<String?, AXHelpers.AXStatusError> else { return nil }
+            if AXLocalePolicy.trackHideControl.matches(label) { matches.append(child) }
+        }
+        guard matches.count == 1, let control = matches.first,
+              let parent: AXUIElement = AXHelpers.getAttribute(control, kAXParentAttribute as String, runtime: ax),
+              CFEqual(parent, header),
+              let owner: AXUIElement = AXHelpers.getAttribute(control, kAXWindowAttribute as String, runtime: ax),
+              CFEqual(owner, window),
+              case .success(.some(let value)) = AXHelpers.getAttributeResult(
+                control, kAXValueAttribute as String, runtime: ax) as Result<NSNumber?, AXHelpers.AXStatusError>,
+              value == 0 || value == 1, exposure?.isCurrent ?? true else { return nil }
+        return value == 1
+    }
+
     /// One request's observed disclosure. No selection, viewport or musical
     /// writes recover custody. Only its still-owned original workspace focus
     /// may be restored after all acquired disclosures have been reversed.
     // One mutation-gate-owned request mutates this navigation. The request-local
     // reader below only corroborates retained AX facts; it never actuates UI.
     final class OwnedTrackStackObservationNavigation: @unchecked Sendable {
+        @TaskLocal private static var interruptedInverse = false
+        static var restoringInterruptedAcquisition: Bool { interruptedInverse }
+
+        /// Cancel the reading, not its already-owned inverse. The child inherits
+        /// the original trace, live gate and deadline, but can await click landing
+        /// despite caller cancellation. All physical custody checks still apply.
+        /// No population read or publication is inside this private scope.
+        func restoreAfterInterruptedRead(stoppingWhen stop: @escaping @Sendable () -> Bool) async -> SessionPopulationObservation.UIEffects {
+            await Task {
+                await Self.$interruptedInverse.withValue(true) {
+                    await self.restore(stoppingWhen: stop)
+                }
+            }.value
+        }
+
         final class ReadFocusScope: @unchecked Sendable {
             private let lock = NSLock()
             private var navigation: OwnedTrackStackObservationNavigation?
@@ -238,6 +284,7 @@ extension AccessibilityChannel {
         }
         private var completedClickFocus: (target: Disclosure, controls: [PassiveFocusControl])?
         private var acceptedPassiveClickFocus: (target: Disclosure, controls: [PassiveFocusControl])?
+        private var originalPassiveFocus: (target: Disclosure, controls: [PassiveFocusControl])?
         private var restorationStarted = false
         private var acquired: [AcquiredDisclosure] = []
         private var pending: [Disclosure]
@@ -310,6 +357,15 @@ extension AccessibilityChannel {
                 }
             }
             self.transport = transport; self.viewport = viewport; self.referenceIsCurrent = referenceIsCurrent
+            // A saved/current collapsed header may already own keyboard focus on
+            // its immutable numeric name field. Hold that exact child; never
+            // admit arbitrary text focus or acquire an editing value as passive.
+            if hiddenControl == nil, selected.count == 1, CFEqual(selected[0], first.0) {
+                let controls = passiveFocusControls(first)
+                if controls.filter({ CFEqual($0.element, focus) }).count == 1 {
+                    originalPassiveFocus = (first, controls)
+                }
+            }
         }
 
         /// The bound AX leaf does not dispatch an input event to the system's
@@ -648,6 +704,12 @@ extension AccessibilityChannel {
         /// Their role/value and unique child identity remain required; this read
         /// exception grants no radio action, selection setter or keyboard command.
         func permitsHeldPassiveHeaderFocus() -> Bool {
+            let usingOriginal = !effects.navigationPerformed && originalPassiveFocus != nil
+            var permitted = false
+            defer {
+                // A sampled loss cannot renew the initial read exception on a retry.
+                if usingOriginal && !permitted { originalPassiveFocus = nil }
+            }
             guard !releaseUnverified,
                   let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
                   let completed = passiveClickFocus(matching: focus),
@@ -662,6 +724,7 @@ extension AccessibilityChannel {
                   case .success(.some(let doc)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: logic),
                   doc.utf8.elementsEqual(document.utf8),
                   case .success(let rows) = AXHelpers.childrenResult(rail, runtime: logic.ax),
+                  !usingOriginal || same(rows, originalHeaders),
                   rows.filter({ CFEqual($0, completed.target.header) }).count == 1,
                   same(rows.filter { row in originalHeaders.contains { CFEqual($0, row) } }, originalHeaders),
                   let currentSelection = Self.selectedHeaders(rows, ax: logic.ax), same(currentSelection, selected),
@@ -672,13 +735,17 @@ extension AccessibilityChannel {
                   children.filter({ CFEqual($0, focus) }).count == 1,
                   passiveFocusControls(completed.target).contains(where: { CFEqual($0.element, focus) && $0.role == held.role }),
                   AXLogicProElements.heldTrackDisclosureValue(header: completed.target.header,
-                    disclosure: completed.target.disclosure, runtime: logic) != nil,
+                    disclosure: completed.target.disclosure, runtime: logic).map({ !usingOriginal || $0 == 0 }) == true,
                   let finalFocus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
                   CFEqual(finalFocus, focus) else { return false }
+            permitted = true
             return true
         }
 
         private func passiveClickFocus(matching focus: AXUIElement) -> (target: Disclosure, controls: [PassiveFocusControl])? {
+            if !effects.navigationPerformed, !restorationStarted, acquired.isEmpty,
+               let original = originalPassiveFocus, CFEqual(focus, originalFocus),
+               original.controls.filter({ CFEqual($0.element, focus) }).count == 1 { return original }
             if let completed = completedClickFocus,
                completed.controls.filter({ CFEqual($0.element, focus) }).count == 1 { return completed }
             // A nested owned click can leave focus on the outer control. Retain
@@ -794,6 +861,36 @@ extension AccessibilityChannel {
                 pending.append(contentsOf: collapsed)
                 beforeHeaders = headers
             }
+        }
+
+        /// Reuse the already collected physical rows and the exact owned disclosure deltas.
+        /// No new scanner, ordinal/name join or AX access. The caller may publish these
+        /// historical facts only after the inverse and independent restored-rail checks.
+        func capturedDisclosureExposures(in tracks: [TrackState]?) -> [SessionPopulationObservation.HeldDisclosureExposure] {
+            guard effects.reason == nil, pending.isEmpty, !restorationStarted,
+                  let exposure, !exposure.hasEnded, !exposure.hasObservedLoss,
+                  let headers = expandedHeaders, let tracks,
+                  tracks.count == headers.count,
+                  zip(tracks, headers).allSatisfy({ state, header in
+                      state.physicalBinding.map { CFEqual($0.header, header) && CFEqual($0.window, window)
+                          && $0.document.utf8.elementsEqual(document.utf8)
+                          && ($0.exposure == nil || $0.exposure === exposure) } == true
+                  }) else { return [] }
+            func binding(_ header: AXUIElement) -> AXTrackBinding.Binding? {
+                let matches = tracks.compactMap(\.physicalBinding).filter { CFEqual($0.header, header) }
+                return matches.count == 1 ? matches.first : nil
+            }
+            var observations: [SessionPopulationObservation.HeldDisclosureExposure] = []
+            for entry in acquired {
+                // Hide View is a presentation toggle, not a stack/parent witness.
+                if hiddenControl.map({ CFEqual($0, entry.target.disclosure) }) == true { continue }
+                guard let stack = binding(entry.target.header) else { return [] }
+                let exposed = entry.afterHeaders.filter { row in !entry.beforeHeaders.contains { CFEqual($0, row) } }
+                let members = exposed.compactMap(binding)
+                guard members.count == exposed.count else { return [] }
+                if !members.isEmpty { observations.append(.init(stack: stack, exposed: members)) }
+            }
+            return observations
         }
 
         func restore(stoppingWhen stop: @Sendable () -> Bool) async -> SessionPopulationObservation.UIEffects {
