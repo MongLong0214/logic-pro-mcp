@@ -334,7 +334,7 @@ private final class ExactNameFixture: @unchecked Sendable {
         builder.setRole(strip, kAXLayoutItemRole as String)
         builder.setRole(name, kAXTextFieldRole as String)
         builder.setAttribute(name, kAXDescriptionAttribute as String, "name")
-        builder.setAttribute(name, kAXValueAttribute as String, "A")
+        builder.setAttribute(name, kAXValueAttribute as String, link == "different_name" ? "B" : "A")
         builder.setChildren(name, [])
         builder.setChildren(strip, [name])
         builder.setChildren(mixer, [strip])
@@ -393,6 +393,49 @@ private actor ExactNameChannel: Channel {
 
 @Suite("#968 exact-local track naming adapter")
 struct Issue968ExactTrackNameAdapterTests {
+    @Test(arguments: ["observed", "different_name", "missing", "duplicate", "unrequested", "stale"])
+    func canonicalNamePreviewAccountsForOnlyProducerObservedAssociatedStrips(_ observation: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = ExactNameFixture()
+            let (capture, project, target, _, _) = try await f.coupledCapture(link: observation)
+            let raw: [String: Value] = [
+                "schema": .string(ProjectSessionAudit.intentPolicySchema),
+                "project_ref": .string(project.rawValue),
+                "targets": .array([.object(["handle": .string("exact"), "track_ref": .string(target.rawValue)])])
+            ]
+            guard case .accepted(let policy) = ProjectSessionAudit.parseIntentPolicy(raw) else {
+                Issue.record("The explicit naming policy was rejected")
+                return
+            }
+            let desired = "Exact, \"한글\" 😀"
+            let domains: [SessionPopulationObservation.Domain] = observation == "unrequested"
+                ? [.tracks, .strips] : [.tracks, .strips, .associations]
+            let plan = try ProjectSessionAudit.buildCanonicalRepairPlan(policy: policy, policyValue: .object(raw),
+                names: [.init(target: "exact", name: desired)], capture: capture,
+                request: .init(domains: domains), snapshotCurrent: observation != "stale")
+            let wire = try JSONDecoder().decode(Value.self, from: Data(plan.json.utf8))
+            let body = try #require(wire.objectValue)
+            let steps = try #require(body["steps"]?.arrayValue)
+            let step = try #require(steps.first?.objectValue)
+            #expect(body["preview"] == body["steps"])
+            #expect(step["after"]?.objectValue?["name"] == .string(desired))
+            if observation == "observed" || observation == "different_name" {
+                let strip = try #require(capture.mixerReference(at: 0))
+                #expect(step["associated_strip_names"] == .array([.object([
+                    "target_ref": .string(strip.rawValue), "observed_name": .string(observation == "different_name" ? "B" : "A"),
+                    "source": .string("held_exclusive_selection_focus")
+                ])]))
+            } else {
+                // Unknown association is not an observed empty affected-object set.
+                #expect(step["associated_strip_names"] == .null)
+            }
+            #expect(body["executable"] == .bool(false))
+            let blocked = try #require(step["blocked_reasons"]?.arrayValue)
+            #expect(blocked.contains(.string("naming_preservation_adapter_unavailable")))
+            #expect(f.routedOperations.isEmpty && f.writes.isEmpty && f.events.isEmpty)
+        }
+    }
+
     @Test func openingTheRenameMenuCannotClaimAnExternalDesiredMirrorAsOwnTypingPreview() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let f = ExactNameFixture()
