@@ -131,8 +131,12 @@ extension AccessibilityChannel {
             private var passiveMixer: PassiveMixerReadFocus?
             private var passiveHeader: PassiveHeaderReadFocus?
             private var association: HeldSelectionAssociation?
+            private var routingPopupFocus: (@Sendable () -> Bool)?
             func retain(_ navigation: OwnedTrackStackObservationNavigation?) {
-                lock.withLock { self.navigation = navigation; passiveMixer = nil; passiveHeader = nil; association = nil }
+                lock.withLock { self.navigation = navigation; passiveMixer = nil; passiveHeader = nil; association = nil; routingPopupFocus = nil }
+            }
+            func retainRoutingPopupFocus(_ proof: (@Sendable () -> Bool)?) {
+                lock.withLock { routingPopupFocus = proof }
             }
             func retainAssociation(_ observation: HeldSelectionAssociation) {
                 lock.withLock { association = observation }
@@ -143,9 +147,9 @@ extension AccessibilityChannel {
                 lock.withLock { passiveMixer = candidate; passiveHeader = header }
             }
             func permits() -> Bool {
-                let held = lock.withLock { (navigation, passiveMixer, association, passiveHeader) }
+                let held = lock.withLock { (navigation, passiveMixer, association, passiveHeader, routingPopupFocus) }
                 return held.0?.permitsHeldPassiveHeaderFocus() == true || held.1?.permits() == true
-                    || held.2?.permitsRead() == true || held.3?.permits() == true
+                    || held.2?.permitsRead() == true || held.3?.permits() == true || held.4?() == true
             }
 
             /// An original immutable numeric name label is not a rename editor.

@@ -405,7 +405,8 @@ actor AccessibilityChannel: Channel {
                     guard let owner = strip.physicalBinding,
                           population.strips?.filter({ $0.physicalBinding?.matches(owner) == true }).count == 1 else { continue }
                     let read = await AXMixerStripBinding.$current.withValue(owner) {
-                        await Self.getOutputObservation(runtime: runtime.logicRuntime)
+                        await Self.getOutputObservation(runtime: runtime.logicRuntime,
+                            observingPopupFocus: { readFocusScope?.retainRoutingPopupFocus($0) })
                     }
                     let receipt = read.result.message.data(using: .utf8).flatMap {
                         try? JSONSerialization.jsonObject(with: $0) as? [String: Any]

@@ -94,13 +94,16 @@ extension AccessibilityChannel {
 
     /// Shares the exact owned reader; wire receipt decoding never supplies graph identity.
     static func getOutputObservation(runtime: AXLogicProElements.Runtime,
-                                     timing: OutputAssignmentTiming = .live) async -> CheckedOutputReading {
-        await getCheckedRoutingDestination(params: [:], sendOrdinal: nil, runtime: runtime, timing: timing)
+                                     timing: OutputAssignmentTiming = .live,
+                                     observingPopupFocus: @escaping @Sendable ((@Sendable () -> Bool)?) -> Void = { _ in }) async -> CheckedOutputReading {
+        await getCheckedRoutingDestination(params: [:], sendOrdinal: nil, runtime: runtime, timing: timing,
+            observingPopupFocus: observingPopupFocus)
     }
 
     private static func getCheckedRoutingDestination(
         params: [String: String], sendOrdinal: Int?, inputBusOnly: Bool = false, runtime: AXLogicProElements.Runtime,
-        timing: OutputAssignmentTiming
+        timing: OutputAssignmentTiming,
+        observingPopupFocus: @escaping @Sendable ((@Sendable () -> Bool)?) -> Void = { _ in }
     ) async -> CheckedOutputReading {
         let operation = inputBusOnly ? "mixer.get_input_bus_verified" : (sendOrdinal == nil ? "mixer.get_output_verified" : "mixer.get_send_destination_verified")
         var extras: [String: Any] = ["operation": operation, "write_attempted": false,
@@ -221,6 +224,40 @@ extension AccessibilityChannel {
             if opened == nil || !(opened?.isEmpty ?? true) || !sourceOwned() { break }
             if timing.pollIntervalMs > 0 { try? await Task.sleep(for: .milliseconds(timing.pollIntervalMs)) }
         } while !Task.isCancelled && Date() < deadline
+        defer { observingPopupFocus(nil) }
+        if let opened, opened.count == 1, let root = opened.first {
+            observingPopupFocus {
+                // Permit guarded reads for this exact menu's search field, not arbitrary
+                // text focus. This uses no Help, and the ordinary source/menu checks still
+                // decide every read and Cancel action.
+                guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                      runtime.logicProPID() == pid, runtime.focusedApplicationPID() == pid,
+                      let app = AXLogicProElements.appRoot(runtime: runtime),
+                      AXHelpers.getAttribute(app, kAXFrontmostAttribute as String, runtime: runtime.ax) as Bool? == true,
+                      let main: AXUIElement = AXHelpers.getAttribute(app, kAXMainWindowAttribute as String, runtime: runtime.ax),
+                      CFEqual(main, physical.window),
+                      let strips = AXLogicProElements.mixerChannelStripsIfCompletelyRead(in: physical.mixer, runtime: runtime.ax),
+                      strips.strips.filter({ CFEqual($0, physical.strip) }).count == 1,
+                      let menus = checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax),
+                      menus.count == 1, CFEqual(menus[0], root),
+                      let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: runtime.ax),
+                      AXHelpers.getRole(focus, runtime: runtime.ax) == kAXTextFieldRole as String,
+                      case .success(let rows) = AXHelpers.childrenResult(root, runtime: runtime.ax) else { return false }
+                var matches = 0
+                for row in rows {
+                    if CFEqual(row, focus) { matches += 1; continue }
+                    guard case .success(let children) = AXHelpers.childrenResult(row, runtime: runtime.ax) else { return false }
+                    matches += children.filter { CFEqual($0, focus) }.count
+                }
+                guard matches == 1,
+                      let currentFocus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: runtime.ax),
+                      CFEqual(currentFocus, focus),
+                      case .success(.some(let doc)) = AXLogicProElements.projectPickerDocumentRead(physical.window, runtime: runtime),
+                      doc.utf8.elementsEqual(physical.document.utf8),
+                      (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+                return true
+            }
+        }
         guard let opened, opened.count == 1, let root = opened.first, sourceOwned() else {
             extras["popup_menu_state"] = opened?.isEmpty == true ? "not_observed" : "unknown"
             return refuse(.readbackUnavailable, "The press did not establish one popup owned by the unchanged source; no destination was selected and no unowned cleanup was attempted.")

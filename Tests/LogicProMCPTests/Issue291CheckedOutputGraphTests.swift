@@ -1,4 +1,5 @@
 import Foundation
+@preconcurrency import ApplicationServices
 import Testing
 @testable import LogicProMCP
 
@@ -157,5 +158,48 @@ struct Issue291CheckedOutputGraphTests {
         #expect(population.uiEffects.restoration == "partially_restored")
         #expect(population.uiEffects.changed.contains("routing_popup"))
         #expect(f.mutations.map { $0.1 } == ["AXPress"])
+    }
+
+    @Test("The acquisition Help guard permits only its owned popup search focus", arguments: [false, true])
+    func ownedPopupSearchDoesNotStopCleanup(foreignFocus: Bool) async throws {
+        let f = try preparedFixture()
+        defer { try? FileManager.default.removeItem(at: f.bundle) }
+        let search = f.b.element(2_919_010)
+        let group = f.b.element(2_919_011)
+        f.b.setRole(search, kAXTextFieldRole as String)
+        f.b.setRole(group, kAXGroupRole as String)
+        f.b.setChildren(search, []); f.b.setChildren(group, [search])
+        f.b.setChildren(f.root, [group, f.b.element(2_919_001), f.b.element(2_919_002)])
+        f.b.setAttribute(f.app, kAXFrontmostAttribute as String, true)
+        let foreign = f.b.element(2_919_012)
+        f.b.setRole(foreign, kAXTextFieldRole as String); f.b.setChildren(foreign, [])
+        f.onAttributeRead = { _, _ in
+            f.b.setAttribute(f.app, kAXFocusedUIElementAttribute as String,
+                f.mutations.count % 2 == 1 ? (foreignFocus ? foreign : search) : f.window)
+        }
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: { gate.stillOwns(claim) })
+        let scope = AccessibilityChannel.OwnedTrackStackObservationNavigation.ReadFocusScope()
+        let guardian = AXHelpers.HelpReadGuard(stop: { f.mutations.count % 2 == 1 && !scope.permits() })
+        let population = try await OperationTraceContext.$current.withValue(context) {
+            try await AXHelpers.HelpReadGuard.$current.withValue(guardian) {
+                try await f.channel().readFreshSessionPopulation(request: .init(domains: [.routing],
+                    allowUINavigation: true), fileReader: .unavailable, readFocusScope: scope,
+                    stoppingBeforeAXRead: { guardian.stopped }, stoppingWhen: { guardian.stopped })
+            }
+        }
+        if foreignFocus {
+            #expect(!population.stable)
+            #expect(population.checkedOutputs.isEmpty)
+        } else {
+            #expect(population.stable)
+            #expect(population.checkedOutputs.count == 2)
+            #expect(population.uiEffects.restoration == "restored")
+            #expect(f.mutations.map { $0.1 } == ["AXPress", "AXCancel", "AXPress", "AXCancel"])
+            #expect(!guardian.stopped)
+        }
+        #expect(!scope.permits())
     }
 }
