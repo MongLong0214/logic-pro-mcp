@@ -8551,6 +8551,32 @@
     "zh-TW": "derived"
    }
   },
+  "verticalZoomSlider": {
+   "canonical": "Vertical Zoom",
+   "variants": [
+    "수직 확대/축소",
+    "縦方向にズーム",
+    "Vertikal-Zoom",
+    "Zoom vertical",
+    "Zoom verticale",
+    "垂直缩放",
+    "垂直縮放"
+   ],
+   "rationale": "Exact own AXSlider description for selection-owned viewport restoration. Values read from the installed Vertical Zoom row; static derivation is not ten-locale native qualification.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
   "viewMenuBar": {
    "canonical": "View",
    "variants": [

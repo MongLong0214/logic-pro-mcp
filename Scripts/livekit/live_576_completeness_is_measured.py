@@ -42,6 +42,9 @@ if not WT or not HEAD:
 
 E.REPO = WT
 E.BIN = f"{WT}/.build/release/LogicProMCP"
+ZOOM_LABELS = E.label_set("verticalZoomSlider", WT)
+if not ZOOM_LABELS:
+    sys.exit("cannot run: AXLocalePolicy.verticalZoomSlider was not found in the worktree")
 missing = E.have_tools()
 if missing:
     sys.exit(f"cannot run: missing {missing}")
@@ -79,6 +82,8 @@ def osa(script):
 
 
 def zoom_script(body):
+    zoom_predicate = " or ".join(
+        f'description is {json.dumps(label, ensure_ascii=False)}' for label in ZOOM_LABELS)
     return ('tell application "System Events" to tell process "Logic Pro"\n'
             'set w to first window whose name ends with "Tracks"\n'
             'repeat with g in (every group of w)\n'
@@ -86,7 +91,7 @@ def zoom_script(body):
             'try\n'
             'if (description of e as text) is "Tracks" then\n'
             'try\n'
-            'set s to (first slider of e whose description is "Vertical Zoom")\n'
+            f'set s to (first slider of e whose ({zoom_predicate}))\n'
             f'{body}\n'
             'end try\n'
             'end if\n'
