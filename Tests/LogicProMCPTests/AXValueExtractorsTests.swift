@@ -91,6 +91,25 @@ import Testing
     #expect(AXValueExtractors.extractSliderRange(slider, runtime: runtime)?.max == 1.0)
 }
 
+@Test(arguments: [-1.0, 2.0, 0.9, Double.nan, Double.infinity, -Double.infinity])
+func testAXSelectedRejectsNonBooleanNumbers(value: Double) {
+    let builder = FakeAXRuntimeBuilder()
+    let header = builder.element(965_401)
+    builder.setAttribute(header, kAXSelectedAttribute as String, NSNumber(value: value))
+    let observed = AXValueExtractors.extractSelectedState(header, runtime: builder.makeAXRuntime())
+    let unread = observed == nil
+    #expect(unread)
+}
+
+@Test(arguments: [false, true])
+func testAXSelectedKeepsExactBooleanValues(selected: Bool) throws {
+    let builder = FakeAXRuntimeBuilder()
+    let header = builder.element(965_402)
+    builder.setAttribute(header, kAXSelectedAttribute as String, NSNumber(value: selected))
+    let observed = try #require(AXValueExtractors.extractSelectedState(header, runtime: builder.makeAXRuntime()))
+    if selected { #expect(observed) } else { #expect(!observed) }
+}
+
 @Test func testAXValueExtractorsNormalizeLogicMixerVolumeAndPanRanges() {
     let builder = FakeAXRuntimeBuilder()
     let volume = builder.element(101)

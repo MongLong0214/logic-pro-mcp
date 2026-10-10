@@ -276,6 +276,16 @@ struct Issue965HeldSelectionAssociationTests {
         #expect(f.selections.isEmpty)
     }
 
+    @Test(arguments: [-1.0, 2.0, 0.9, Double.nan, Double.infinity, -Double.infinity])
+    func malformedSelectedValueCannotAuthorizeAssociationNavigation(value: Double) async throws {
+        let f = try Fixture()
+        f.builder.setAttribute(f.headers[0], kAXSelectedAttribute as String, NSNumber(value: value))
+        let body = try await inspect(f)
+        #expect(f.selections.isEmpty, "an unread selection cannot authorize a forward or restoration write")
+        let rows = (body["associations"] as? [String: Any])?["rows"] as? [[String: Any]]
+        #expect(rows == nil, "non-Boolean numeric selection is not physical association evidence")
+    }
+
     @Test(arguments: ["foreign_focus", "transient_foreign_focus", "unchanged_focus", "document", "header_replacement", "strip_replacement", "playback", "transient_editor"])
     func observedCustodyLossCannotAuthorizeAnotherSelection(fault: String) async throws {
         let f = try Fixture()
