@@ -1189,6 +1189,13 @@ actor AccessibilityChannel: Channel {
             return await AccessibilityChannel.setOutputVerified(params: params, runtime: runtime.logicRuntime)
         case "mixer.get_output_verified":
             return await AccessibilityChannel.getOutputVerified(params: params, runtime: runtime.logicRuntime)
+        case "mixer.get_send_destination_verified":
+            guard params.count == 1, let raw = params["ordinal"], let ordinal = Int(raw), ordinal >= 0 else {
+                return .error(HonestContract.encodeStateC(error:.invalidParams,
+                    hint:"A nonnegative assigned-send ordinal is required; no write inputs are accepted.",
+                    extras:["operation":operation,"write_attempted":false]))
+            }
+            return await AccessibilityChannel.getAssignedSendVerified(ordinal:ordinal, runtime:runtime.logicRuntime)
         // #592: `mixer.set_send` routes `[.mcu]` and MCUChannel implements it, so this arm was
         // unreachable — a reader who grepped the operation found a refusal that is not what it does.
 

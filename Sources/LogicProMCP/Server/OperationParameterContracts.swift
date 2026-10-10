@@ -228,6 +228,10 @@ extension OperationRegistry {
             "mixer.get_output_verified": .init(params: [
                 "target_ref": .enforced(.string, .string("mix_lpm_contract_291")), "project_ref": projectRef,
             ], required: [["target_ref"]]),
+            "mixer.get_send_destination_verified": .init(params: [
+                "target_ref": .enforced(.string, .string("mix_lpm_contract_291")), "project_ref": projectRef,
+                "ordinal": index(1),
+            ], required: [["target_ref"],["ordinal"]]),
 
             // logic_navigate
             "navigate.goto_bar": .init(params: ["bar": index(9)], required: [["bar"]]),

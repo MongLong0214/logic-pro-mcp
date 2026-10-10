@@ -2,7 +2,7 @@
 import Foundation
 
 extension AccessibilityChannel {
-    /// Internal acquisition first; no public operation or routing-graph completeness claim.
+    /// A checked assigned-send choice, not a routing-graph completeness claim.
     static func getAssignedSendVerified(
         ordinal: Int, runtime: AXLogicProElements.Runtime = .production,
         timing: OutputAssignmentTiming = .live
@@ -168,7 +168,7 @@ extension AccessibilityChannel {
         var extras: [String: Any] = ["operation": operation, "write_attempted": false]
         let receiptKeys: Set<String> = ["navigation_attempted", "popup_menu_state", "popup_cancel_succeeded",
             "focus_restoration", "popup_press_succeeded", "source_custody_after_cleanup",
-            "menu_custody_at_read", "output_checkmark_reads_observed", "output_checkmark_reads_agree"]
+            "menu_custody_at_read", "output_checkmark_reads_observed", "output_checkmark_reads_agree", "send_ordinal"]
         if let data = result.message.data(using: .utf8),
            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             for (key, value) in object where receiptKeys.contains(key) { extras[key] = value }

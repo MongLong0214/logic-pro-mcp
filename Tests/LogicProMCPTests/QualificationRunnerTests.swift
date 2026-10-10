@@ -240,7 +240,7 @@ struct QualificationRunnerTests {
         let readOnlyCount = OperationRegistry.specs.filter { $0.mutability == .readOnly }.count
         let marked = Set(SemanticOracleTable.all
             .filter { $0.independentReadbackDeferral != nil }.map(\.operationID))
-        #expect(marked == Set<OperationID>([.midiListPorts, .mixerGetOutputVerified]))
+        #expect(marked == Set<OperationID>([.midiListPorts, .mixerGetOutputVerified, .mixerGetSendDestinationVerified]))
         let readOnlyIDs = Set(OperationRegistry.specs.filter { $0.mutability == .readOnly }.map(\.id.rawValue))
         let markedIDs = Set(marked.map(\.rawValue))
         let passed = operationCases.filter { $0.status == .passed }
@@ -4636,7 +4636,7 @@ struct QualificationRunnerTests {
         let readOnlyCount = OperationRegistry.specs.filter { $0.mutability == .readOnly }.count
         let marked = Set(SemanticOracleTable.all
             .filter { $0.independentReadbackDeferral != nil }.map(\.operationID))
-        #expect(marked == Set<OperationID>([.midiListPorts, .mixerGetOutputVerified]))
+        #expect(marked == Set<OperationID>([.midiListPorts, .mixerGetOutputVerified, .mixerGetSendDestinationVerified]))
         let markedIDs = Set(marked.map(\.rawValue))
         let readOnlyIDs = Set(OperationRegistry.specs.filter { $0.mutability == .readOnly }.map(\.id.rawValue))
         let passed = operationCases.filter { $0.status == .passed }

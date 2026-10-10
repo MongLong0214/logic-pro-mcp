@@ -115,7 +115,8 @@ enum OutputAssignment: Equatable, Sendable {
         let (classification, busNumber) = RoutingGraphPublication.classifyOutputLabel(
             head.trimmingCharacters(in: .whitespacesAndNewlines)
         )
-        return classification == .bus ? busNumber : nil
+        guard classification == .bus, let busNumber, busNumbers.contains(busNumber) else { return nil }
+        return busNumber
     }
 
     /// The two ports a physical pair label names (`Output 3-4`, `출력 3-4`, `Ausgang 3-4`), or nil.

@@ -538,6 +538,7 @@ enum SemanticOracleTable {
         audioRecommendEQ,
         audioCompareSpectra,
         mixerGetOutputVerified,
+        mixerGetSendDestinationVerified,
         midiListPorts,
         tracksListLibrary,
         tracksScanLibrary,
@@ -1305,6 +1306,30 @@ enum SemanticOracleTable {
         independentReadbackDeferral: QualificationDeferral(
             code: .semanticValidatorUnavailable,
             detail: "Two owned output-menu checkmarks are same-host observations; Mixer resource labels do not provide independent typed checked-route readback"
+        )
+    )
+
+    // Same-host checked-send receipts pin response shape only, never independent graph credit.
+    static let mixerGetSendDestinationVerified = OperationOracle(
+        .mixerGetSendDestinationVerified,
+        strength: .shapeAndDomain,
+        constraints: [
+            .valueEquals(key: "state", expected: .string("A")),
+            .valueEquals(key: "success", expected: .bool(true)),
+            .valueEquals(key: "verified", expected: .bool(true)),
+            .valueEquals(key: "operation", expected: .string("mixer.get_send_destination_verified")),
+            .valueEquals(key: "write_attempted", expected: .bool(false)),
+            .valueEquals(key: "snapshot_atomic", expected: .bool(false)),
+            .valueEquals(key: "verify_source", expected: .string("ax_send_menu_checkmark")),
+            .valueEquals(key: "menu_custody_at_read", expected: .bool(true)),
+            .valueEquals(key: "source_custody_after_cleanup", expected: .bool(true)),
+            .valueEquals(key: "output_checkmark_reads_observed", expected: .number(2)),
+            .valueEquals(key: "output_checkmark_reads_agree", expected: .bool(true)),
+            .enumMember(key: "current_destination.kind", allowed: ["bus", "physical", "stereo_output"]),
+        ],
+        independentReadbackDeferral: QualificationDeferral(
+            code: .semanticValidatorUnavailable,
+            detail: "Two owned send-menu checkmarks are same-host observations, not independent typed endpoint or graph-edge readback"
         )
     )
 

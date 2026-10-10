@@ -109,6 +109,7 @@ struct OperationCatalogTests {
         .mixerSetVolume: ["value", "volume"],
         .mixerSetPan: ["pan", "value"],
         .mixerSetOutputVerified: ["destination", "expected_current"],
+        .mixerGetSendDestinationVerified: ["ordinal"],
         .mixerSetMasterVolume: ["value", "volume"],
         .mixerBank: ["count", "direction"],
         .mixerSetPluginParam: ["insert", "param", "value"],
