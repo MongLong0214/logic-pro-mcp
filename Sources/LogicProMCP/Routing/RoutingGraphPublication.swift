@@ -246,10 +246,17 @@ enum RoutingGraphPublication {
             ))
         }
 
+        let checkedMainOutputObserved = edges.contains { $0.provenance == .axOutputMenuCheckmark }
+        // Missing Arrange attribution still limits coverage, but cannot erase
+        // an actually observed physical-source edge. No complete claim follows.
+        let mainOutputCoverage = checkedMainOutputObserved
+            ? RoutingDomainCoverage(state: .partial, reasons: mainOutput.coverage.reasons
+                + ["only request-held bus main outputs have checked-menu evidence"])
+            : mainOutput.coverage
         let coverage = RoutingCoverage(
             population: population.coverage,
             stripTrackAssociation: association.coverage,
-            mainOutput: mainOutput.coverage,
+            mainOutput: mainOutputCoverage,
             physicalOutput: physicalOutput.coverage,
             busToAuxInput: RoutingDomainCoverage(state: .notObserved, reasons: [busToAuxInputReason]),
             sends: sends.coverage
@@ -268,7 +275,7 @@ enum RoutingGraphPublication {
             partialReason: partialReasons.isEmpty ? nil : partialReasons.joined(separator: "; "),
             nodes: nodesByID.values.sorted { $0.id < $1.id },
             edges: edges,
-            provenance: edges.contains { $0.provenance == .axOutputMenuCheckmark }
+            provenance: checkedMainOutputObserved
                 ? [.axMixerStrip, .axOutputMenuCheckmark] : [.axMixerStrip],
             snapshotId: snapshotId,
             coverage: coverage

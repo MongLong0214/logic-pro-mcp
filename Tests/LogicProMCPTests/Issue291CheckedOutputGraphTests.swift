@@ -126,6 +126,7 @@ struct Issue291CheckedOutputGraphTests {
                 #expect(edge.destination == "bus_1")
                 #expect(graph.nodes.first { $0.id == "bus_1" }?.kind == .bus)
                 #expect(graph.nodes.first { $0.id == "bus_1" }?.targetRef == nil)
+                #expect(graph.coverage.mainOutput.state == .partial)
             } else { #expect(edges.isEmpty) }
             #expect(!graph.complete)
             #expect(graph.snapshotId == base.captureID)
