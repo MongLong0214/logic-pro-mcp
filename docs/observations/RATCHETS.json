@@ -446,8 +446,6 @@
     "manual_reverify": {
       "date": "2026-10-10",
       "members": [
-        "2026-10-10-exact-adapter-passive-name-editor",
-        "2026-10-10-exact-track-name-scalar-roundtrip",
         "2026-10-10-exact-mixer-name-owned-inverse",
         "2026-10-10-physical-mixer-name-scalar-roundtrip"
       ],
@@ -456,8 +454,6 @@
     "records_without_evidence": {
       "date": "2026-10-10",
       "members": [
-        "2026-10-10-exact-adapter-passive-name-editor",
-        "2026-10-10-exact-track-name-scalar-roundtrip",
         "2026-10-10-exact-mixer-name-owned-inverse",
         "2026-10-10-physical-mixer-name-scalar-roundtrip"
       ],
