@@ -230,6 +230,13 @@ struct RoutingGraph: Codable, Equatable, Sendable {
             return partialReason?.isEmpty == false
         }
         guard partialReason == nil else { return false }
+        // A complete logical bus must name a destination the routing API can address.
+        // Partial captures may retain an unresolved bus as display evidence only.
+        guard nodes.allSatisfy({ node in
+            guard node.kind == .bus else { return true }
+            guard let number = node.busNumber else { return false }
+            return OutputAssignment.busNumbers.contains(number)
+        }) else { return false }
 
         let nodeIDs = Set(nodes.map(\.id))
         guard nodeIDs.count == nodes.count,
