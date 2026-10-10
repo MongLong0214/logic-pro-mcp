@@ -1122,6 +1122,18 @@ struct Issue965FreshPopulationAcquisitionTests {
             headerFocus: "passive", focusRestoration: focusRestoration)
     }
 
+    @Test(arguments: ["restored", "unavailable", "declined", "wrong_readback", "reparented", "foreign_focus"],
+          [kAXLayoutAreaRole as String, kAXGroupRole as String])
+    func registeredStackRestoresWorkspaceAfterItsHeldDisclosureTakesFocus(
+        focusRestoration: String, originalFocusRole: String
+    ) async throws {
+        // Native Logic can leave focus on the exact clicked disclosure after
+        // a successful expand/collapse, rather than on its passive label.
+        try await observeStack(navigation: true, initiallyExpanded: false,
+            mouseCase: "held_focus", focusRestoration: focusRestoration,
+            originalFocusRole: originalFocusRole)
+    }
+
     @Test(arguments: ["restored", "unavailable", "declined", "wrong_readback", "reparented", "foreign_focus"])
     func registeredStackRestoresOnlyItsOriginalOwnedContainerFocus(focusRestoration: String) async throws {
         try await observeStack(navigation: true, initiallyExpanded: false,
