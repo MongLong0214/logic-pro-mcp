@@ -16,6 +16,19 @@ enum AXMixerStripBinding {
                 && document.utf8.elementsEqual(other.document.utf8)
         }
 
+        private func currentMixerLookup(runtime: AXLogicProElements.Runtime) -> AXLogicProElements.MixerAreaLookup {
+            guard runtime.ax.attributeValuesResult != nil else {
+                return AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime)
+            }
+            // Only this held-source proof uses the existing fresh census. The
+            // ordinary discovery/poller and older runtimes keep their own path.
+            // No earlier discovery or batched value becomes an identity token.
+            return (try? AXLogicProElements.mixerPopulationAreaLookup(in: window, runtime: runtime,
+                requiresCompleteAbsence: true, checking: {
+                    if Task.isCancelled { throw SessionPopulationObservation.AcquisitionError.cancelled }
+                }))?.lookup ?? .childrenUnread
+        }
+
         /// Re-read owner and complete current membership, not the cached ordinal or strip name.
         func currentIndex(runtime: AXLogicProElements.Runtime) -> Int? {
             guard !Task.isCancelled,
@@ -27,7 +40,7 @@ enum AXMixerStripBinding {
                   windows.contains(where: { CFEqual($0, window) }),
                   case .success(.some(let currentDocument)) = AXLogicProElements.projectPickerDocumentRead(window, runtime: runtime),
                   document.utf8.elementsEqual(currentDocument.utf8),
-                  case .found(let currentMixer) = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime),
+                  case .found(let currentMixer) = currentMixerLookup(runtime: runtime),
                   CFEqual(mixer, currentMixer),
                   let enumeration = AXLogicProElements.mixerChannelStripsIfCompletelyRead(in: mixer, runtime: runtime.ax)
             else { return nil }

@@ -131,6 +131,25 @@ struct Issue965MixerPresentationWitnessTests {
     }
 
     @Test(arguments: [false, true])
+    func heldPhysicalStripMembershipUsesTheExistingFreshCensusWithoutChangingOrdinaryDiscovery(korean: Bool) throws {
+        let fixture = Fixture(korean: korean), batches = Counter(), singles = Counter(), help = Counter()
+        fixture.builder.setAttribute(fixture.app, kAXWindowsAttribute as String, [fixture.window])
+        fixture.builder.setAttribute(fixture.window, kAXDocumentAttribute as String, "file:///tmp/HeldMixer.logicx")
+        let runtime = batchedCensusRuntime(fixture, batches: batches, singles: singles, help: help)
+        guard case .found(let ordinary) = AXLogicProElements.mixerAreaLookup(in: fixture.window, runtime: runtime) else {
+            Issue.record("The ordinary legacy discovery must still find the fixture"); return
+        }
+        #expect(CFEqual(ordinary, fixture.layout))
+        #expect(batches.count == 0, "ordinary discovery retains its existing individual reader")
+        let strip = try #require(AXHelpers.getChildren(fixture.layout, runtime: runtime.ax).first)
+        let source = AXMixerStripBinding.Binding(window: fixture.window, mixer: fixture.layout,
+            strip: strip, document: "file:///tmp/HeldMixer.logicx")
+        #expect(source.currentIndex(runtime: runtime) == 0)
+        #expect(batches.count > 0, "held physical membership uses the already qualified fresh non-Help census")
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+    }
+
+    @Test(arguments: [false, true])
     func strictMixerCensusUsesFreshNonHelpBatchesWithoutChangingItsWinner(korean: Bool) throws {
         let fixture = Fixture(korean: korean), batches = Counter(), singles = Counter(), help = Counter()
         let result = try AXLogicProElements.mixerPopulationAreaLookup(in: fixture.window,
