@@ -92,6 +92,66 @@ actor StateCache {
         return RetainedInspection(capture: capture, request: request, expiresAt: report.expiresAt)
     }
 
+    /// Recover an actual prior own-gesture pair for this exact issued physical
+    /// source. This is a historical tether, never current membership or write
+    /// permission; the scalar operation must independently renew both ends.
+    func retainedMixerAssociation(reference: TargetReference, source: AXMixerStripBinding.Binding,
+                                  snapshot: TargetRegistrySnapshot) -> AccessibilityChannel.HeldSelectionAssociation.Pair? {
+        let now = sessionCaptureNow()
+        sessionReports.removeAll {
+            $0.expiresAt <= now || $0.projectEpoch != projectEpoch || $0.projectPath != project.filePath || $0.hasDocument != hasDocument
+        }
+        var result: AccessibilityChannel.HeldSelectionAssociation.Pair?
+        for report in sessionReports {
+            guard let capture = report.capture, capture.targetSnapshot == snapshot,
+                  capture.before == capture.after, capture.referencesEnabled, !capture.referencesStale,
+                  let population = capture.freshPopulation, population.stable,
+                  population.uiEffects.restoration == "restored" else { continue }
+            let rows = capture.channelStrips.indices.filter {
+                capture.mixerReference(at: $0) == reference && capture.channelStrips[$0].physicalBinding?.matches(source) == true
+            }
+            guard rows.count == 1 else { continue }
+            let pairs = population.selectionAssociations.filter { $0.strip.matches(source) }
+            guard pairs.count == 1, let pair = pairs.first,
+                  population.selectionAssociations.filter({ $0.track.matches(pair.track) }).count == 1 else { return nil }
+            if let result, !result.track.matches(pair.track) { return nil }
+            result = pair
+        }
+        return result
+    }
+
+    /// An Arrange reference cannot address a Mixer ordinal. Retain only the
+    /// actual issued header's unique own-gesture physical pair; the writer
+    /// still revalidates current CF membership before every action.
+    func retainedTrackMixerAssociation(reference: TargetReference, track: AXTrackBinding.Binding,
+                                       snapshot: TargetRegistrySnapshot) -> AccessibilityChannel.HeldSelectionAssociation.Pair? {
+        let now = sessionCaptureNow()
+        sessionReports.removeAll {
+            $0.expiresAt <= now || $0.projectEpoch != projectEpoch || $0.projectPath != project.filePath || $0.hasDocument != hasDocument
+        }
+        var result: AccessibilityChannel.HeldSelectionAssociation.Pair?
+        for report in sessionReports {
+            guard let capture = report.capture, capture.targetSnapshot == snapshot,
+                  capture.before == capture.after, capture.referencesEnabled, !capture.referencesStale,
+                  let issued = capture.issued, let population = capture.freshPopulation, population.stable,
+                  population.uiEffects.restoration == "restored" else { continue }
+            let tracks = TrackReferenceIssuance.liveInventory(capture.tracks)
+            let rows = tracks.indices.filter {
+                $0 < issued.byRow.count && issued.byRow[$0] == reference && tracks[$0].physicalBinding?.matches(track) == true
+            }
+            guard rows.count == 1 else { continue }
+            let pairs = population.selectionAssociations.filter { $0.track.matches(track) }
+            guard pairs.count == 1, let pair = pairs.first,
+                  population.selectionAssociations.filter({ $0.strip.matches(pair.strip) }).count == 1,
+                  capture.channelStrips.indices.filter({
+                      capture.mixerReference(at: $0) != nil && capture.channelStrips[$0].physicalBinding?.matches(pair.strip) == true
+                  }).count == 1 else { return nil }
+            if let result, !result.strip.matches(pair.strip) { return nil }
+            result = pair
+        }
+        return result
+    }
+
     func inspectionIsCurrent(_ capture: SessionPopulationObservation.Capture) -> Bool {
         SessionPopulationObservation.captureMovementReason(capture: capture) == nil &&
             capture.after == captureBoundary(watching: SessionPopulationObservation.watchedSections)

@@ -207,6 +207,7 @@ struct MixerDispatcher: OperationTraceDispatching {
             let resolvedReference: TargetReference?
             let resolvedFingerprint: String?
             let physical: AXMixerStripBinding.Binding?
+            var trackAssociation: AccessibilityChannel.HeldSelectionAssociation.Pair?
             switch await TargetRefResolver.resolveMutationIndex(
                 params,
                 targetRegistry: targetRegistry,
@@ -225,7 +226,19 @@ struct MixerDispatcher: OperationTraceDispatching {
                 index = resolved.index
                 resolvedReference = resolved.reference
                 resolvedFingerprint = resolved.binding?.observedFingerprint
-                physical = resolved.binding?.physicalMixerStrip
+                if let reference = resolved.reference, resolved.binding?.kind == .track {
+                    guard let track = resolved.binding?.physicalTrack, let targetRegistry,
+                          let pair = await cache.retainedTrackMixerAssociation(reference: reference,
+                            track: track, snapshot: await targetRegistry.currentSnapshot) else {
+                        return TargetRefResolver.staleTargetReferenceResult(reference.rawValue,
+                            operation: "mixer.set_output_verified",
+                            hint: "The track reference has no current retained physical Mixer association. Capture an actual association or use a fresh physical Mixer reference; nothing was pressed.")
+                    }
+                    physical = pair.strip
+                    trackAssociation = pair
+                } else {
+                    physical = resolved.binding?.physicalMixerStrip
+                }
             case .failure(let result):
                 return result
             }
@@ -248,10 +261,19 @@ struct MixerDispatcher: OperationTraceDispatching {
                 routedParams["expected_current"] = expected.token
             }
             routedParams["index"] = String(index)
+            let outputAssociation: AccessibilityChannel.HeldSelectionAssociation.Pair?
+            if let trackAssociation {
+                outputAssociation = trackAssociation
+            } else if let physical, let resolvedReference, let targetRegistry {
+                outputAssociation = await cache.retainedMixerAssociation(reference: resolvedReference,
+                    source: physical, snapshot: await targetRegistry.currentSnapshot)
+            } else { outputAssociation = nil }
             let traceID = await startTraceIfEnabled(command: command)
             let routed = await withWriteBoundaryArmed(traceID) {
                 await AXMixerStripBinding.$current.withValue(physical) {
-                    await routedTextResult(router, operation: "mixer.set_output_verified", params: routedParams)
+                    await AXMixerStripBinding.$outputAssociation.withValue(outputAssociation) {
+                        await routedTextResult(router, operation: "mixer.set_output_verified", params: routedParams)
+                    }
                 }
             }
             let result = TargetRefResolver.addEvidence(

@@ -52,6 +52,14 @@ struct Issue965HeldSelectionAssociationTests {
         var zoomRoleReadsAfterSelection = 0
         var zoomRoleReadsAtFirstValue: Int?
         var zoomRoleFaultAtRead: Int?
+        var routingReplacement: AXUIElement?
+        var routingAction: (@Sendable (AXUIElement, String) -> Bool)?
+        var routingDestinationPresses = 0
+        var routingWrongSourcePressed = false
+        var expireRetainedCapture = false
+        var routingRead: (@Sendable (AXUIElement, String) -> Void)?
+        var routingSelection: (@Sendable (Int) -> Void)?
+        var routingLateScopeInjected = false
 
         init(withViewport: Bool = false) throws {
             bundle = FileManager.default.temporaryDirectory.appendingPathComponent("965-selection-\(UUID().uuidString).logicx")
@@ -118,6 +126,7 @@ struct Issue965HeldSelectionAssociationTests {
         func channel() -> AccessibilityChannel {
             let base = builder.makeLogicRuntime(appElement: app,
                 attributeValueHandler: { [self] element, attribute in
+                    routingRead?(element, attribute)
                     if CFEqual(element, scroll), selections.count == 1 {
                         if attribute == kAXRoleAttribute as String {
                             zoomRoleReadsAfterSelection += 1
@@ -184,11 +193,15 @@ struct Issue965HeldSelectionAssociationTests {
                     }
                     return nil
                 }, attributeValueResultHandler: { [self] element, attribute in
+                    if routingReplacement != nil, CFEqual(element, strips[1]) {
+                        return .failure(.init(raw: AXError.invalidUIElement.rawValue))
+                    }
                     if let volatileSlider, CFEqual(element, volatileSlider), !selections.isEmpty,
                        attribute == kAXDescriptionAttribute as String {
                         return .failure(.init(raw: AXError.cannotComplete.rawValue))
                     }
-                    if strips.contains(where: { CFEqual($0, element) }),
+                    let isReplacement = routingReplacement.map { CFEqual($0, element) } ?? false
+                    if strips.contains(where: { CFEqual($0, element) }) || isReplacement,
                        attribute == kAXValueAttribute as String || attribute == kAXSelectedTextAttribute as String {
                         if fault == "transient_editor", selections.count == 1,
                            CFEqual(element, strips[0]), attribute == kAXValueAttribute as String, !transientEditorRead {
@@ -214,12 +227,14 @@ struct Issue965HeldSelectionAssociationTests {
                         Issue.record("only exact held rail selection is authorized"); return false
                     }
                     selections.append(index)
+                    routingSelection?(index)
                     if fault == "no_op" { return true }
                     for (row, header) in headers.enumerated() {
                         builder.setAttribute(header, kAXSelectedAttribute as String, row == index)
                     }
                     // The actual physical relationship is deliberately not positional.
-                    builder.setAttribute(app, kAXFocusedUIElementAttribute as String, strips[1 - index])
+                    builder.setAttribute(app, kAXFocusedUIElementAttribute as String,
+                        index == 0 ? routingReplacement ?? strips[1] : strips[0])
                     if fault == "selection_scroll" || fault?.hasPrefix("scroll_") == true {
                         // Native R11: restoring the selected header/focused strip did
                         // not restore the Tracks scrollbar's original value.
@@ -253,7 +268,10 @@ struct Issue965HeldSelectionAssociationTests {
                         builder.setAttribute(app, kAXFocusedUIElementAttribute as String, builder.element(1_965_730))
                     }
                     return true
-                }, performActionHandler: { _, _ in Issue.record("no action fallback"); return false },
+                }, performActionHandler: { [self] element, action in
+                    if let routingAction { return routingAction(element, action) }
+                    Issue.record("no action fallback"); return false
+                },
                 executeAppleScript: { _ in Issue.record("no scripts"); return .error("forbidden") })
             let ax: AXHelpers.Runtime
             if useBulkReads {
@@ -336,6 +354,196 @@ struct Issue965HeldSelectionAssociationTests {
         let result = await LogicProServer.runWithDeadline(tool: "logic_project", command: "inspect_session",
             commandParams: params, mutationGate: gate) { await handler(dependencies, params) }
         return try #require(sharedJSONObject(sharedToolText(result)))
+    }
+
+    @Test func retainedMixerPairUsesActualCaptureAndExactPhysicalReferenceOnly() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = try Fixture()
+            let cache = StateCache()
+            let registry = TargetRegistry()
+            let body = try await inspect(f, cache: cache, registry: registry)
+            let id = try #require(body["snapshot_id"] as? String)
+            let retained = try #require(await cache.retainedInspection(id: id))
+            let pair = try #require(retained.capture.freshPopulation?.selectionAssociations.first)
+            let row = try #require(retained.capture.channelStrips.indices.first {
+                retained.capture.channelStrips[$0].physicalBinding?.matches(pair.strip) == true
+            })
+            let ref = try #require(retained.capture.mixerReference(at: row))
+            let source = try #require(await registry.resolve(ref)?.physicalMixerStrip)
+            let found = try #require(await cache.retainedMixerAssociation(
+                reference: ref, source: source, snapshot: await registry.currentSnapshot))
+            #expect(found.track.matches(pair.track) && found.strip.matches(source))
+            #expect(await cache.retainedMixerAssociation(reference: .init(rawValue: "mix_unissued"),
+                source: source, snapshot: await registry.currentSnapshot) == nil)
+            let other = AXMixerStripBinding.Binding(window: source.window, mixer: source.mixer,
+                strip: f.builder.element(1_965_999), document: source.document)
+            #expect(await cache.retainedMixerAssociation(reference: ref, source: other,
+                snapshot: await registry.currentSnapshot) == nil)
+            await registry.bumpTopologyGeneration()
+            #expect(await cache.retainedMixerAssociation(reference: ref, source: source,
+                snapshot: await registry.currentSnapshot) == nil)
+        }
+    }
+
+    @Test(arguments: ["paired", "missing_pair", "replaced_header", "foreign_project", "foreign_focus", "deciding_read", "partial_restore", "track_ref", "track_ref_missing_pair", "track_ref_replaced_strip"])
+    func outputReadbackRenewsRetiredSourceOnlyThroughOriginalCapturedHeader(condition: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let f = try Fixture()
+            if condition.hasPrefix("track_ref") {
+                f.builder.setAttribute(f.headers[0], kAXTitleAttribute as String, "Original")
+                f.builder.setAttribute(f.headers[1], kAXTitleAttribute as String, "Other")
+            }
+            let captureNow = ContinuousClock.now
+            let cache = StateCache(sessionCaptureNow: {
+                f.expireRetainedCapture ? captureNow.advanced(by: StateCache.sessionCaptureLifetime) : captureNow
+            }), registry = TargetRegistry()
+            let output = f.builder.element(1_965_950), replacement = f.builder.element(1_965_951)
+            let newOutput = f.builder.element(1_965_952), root = f.builder.element(1_965_953)
+            let parent = f.builder.element(1_965_954), submenu = f.builder.element(1_965_955)
+            let leaf = f.builder.element(1_965_956)
+            let decoyOutput = f.builder.element(1_965_959)
+            for (button, label) in [(output, "Stereo Output"), (newOutput, "Output 3-4"), (decoyOutput, "Stereo Output")] {
+                f.builder.setButton(button, description: label, help: "Output slot. Choose the channel strip output.",
+                    x: 0, y: 0, width: 1, height: 1)
+                f.builder.setChildren(button, [])
+            }
+            f.builder.setChildren(f.strips[1], f.builder.makeAXRuntime().children(f.strips[1]) + [output])
+            f.builder.setChildren(f.strips[0], f.builder.makeAXRuntime().children(f.strips[0]) + [decoyOutput])
+            f.builder.setRole(replacement, kAXLayoutItemRole as String)
+            f.builder.setAttribute(replacement, kAXNumberOfCharactersAttribute as String, 0)
+            f.builder.setAttribute(replacement, kAXInsertionPointLineNumberAttribute as String, 0)
+            f.builder.setChildren(replacement, [newOutput])
+            for menu in [root, submenu] { f.builder.setRole(menu, kAXMenuRole as String) }
+            for (item, title) in [(parent, "Output"), (leaf, "Output 3-4")] {
+                f.builder.setRole(item, kAXMenuItemRole as String)
+                f.builder.setAttribute(item, kAXTitleAttribute as String, title)
+                f.builder.setAttribute(item, kAXEnabledAttribute as String, true)
+            }
+            f.builder.setChildren(leaf, []); f.builder.setChildren(submenu, [leaf])
+            f.builder.setChildren(parent, [submenu]); f.builder.setChildren(root, [parent])
+            if condition == "deciding_read" {
+                f.routingRead = { element, attribute in
+                    if f.selections.count == 4, CFEqual(element, newOutput), attribute == kAXDescriptionAttribute as String {
+                        f.routingLateScopeInjected = true
+                        f.builder.setAttribute(f.window, kAXDocumentAttribute as String, "file:///tmp/Foreign.logicx")
+                    }
+                }
+            } else if condition == "partial_restore" {
+                f.routingSelection = { _ in
+                    if f.selections.count == 3 {
+                        f.routingLateScopeInjected = true
+                        f.builder.setAttribute(f.window, kAXDocumentAttribute as String, "file:///tmp/Foreign.logicx")
+                    }
+                }
+            }
+            f.routingAction = { element, action in
+                guard action == kAXPressAction as String else { Issue.record("unexpected routing action"); return false }
+                if CFEqual(element, output) { f.builder.setChildren(f.mixer, f.strips + [root]); return true }
+                if CFEqual(element, decoyOutput) {
+                    f.routingWrongSourcePressed = true
+                    f.builder.setChildren(f.mixer, f.strips + [root]); return true
+                }
+                if CFEqual(element, leaf) {
+                    f.routingDestinationPresses += 1
+                    if f.routingWrongSourcePressed {
+                        f.builder.setAttribute(decoyOutput, kAXDescriptionAttribute as String, "Output 3-4")
+                        f.builder.setChildren(f.mixer, f.strips)
+                        return true
+                    }
+                    f.routingReplacement = replacement
+                    f.builder.setChildren(f.mixer, [f.strips[0], replacement])
+                    f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, replacement)
+                    if condition == "replaced_header" {
+                        let foreign = f.builder.element(1_965_957)
+                        f.builder.setRole(foreign, kAXLayoutItemRole as String)
+                        f.builder.setAttribute(foreign, kAXTitleAttribute as String, "Duplicate")
+                        f.builder.setAttribute(foreign, kAXSelectedAttribute as String, true)
+                        f.builder.setChildren(foreign, [])
+                        f.builder.setChildren(f.rail, [foreign, f.headers[1]])
+                    } else if condition == "foreign_project" {
+                        f.builder.setAttribute(f.window, kAXDocumentAttribute as String, "file:///tmp/Foreign.logicx")
+                    } else if condition == "foreign_focus" {
+                        let foreign = f.builder.element(1_965_958)
+                        f.builder.setRole(foreign, kAXTextFieldRole as String)
+                        f.builder.setAttributeSettable(foreign, kAXValueAttribute as String, true)
+                        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, foreign)
+                    }
+                    return true
+                }
+                Issue.record("unowned routing action"); return false
+            }
+            let before = try await inspect(f, cache: cache, registry: registry)
+            let id = try #require(before["snapshot_id"] as? String)
+            let capture = try #require(await cache.retainedInspection(id: id)).capture
+            let sourceRow = try #require(capture.channelStrips.indices.first {
+                capture.channelStrips[$0].physicalBinding.map { CFEqual($0.strip, f.strips[1]) } == true
+            })
+            var target = try #require(capture.mixerReference(at: sourceRow))
+            if condition.hasPrefix("track_ref") {
+                let tracks = TrackReferenceIssuance.liveInventory(capture.tracks)
+                let trackRow = try #require(tracks.indices.first {
+                    tracks[$0].physicalBinding.map { CFEqual($0.header, f.headers[0]) } == true
+                })
+                target = try #require(capture.issued?.byRow[trackRow])
+            }
+            let project: String
+            if case .issued(let issued)? = capture.projectIssuance { project = issued.rawValue }
+            else { Issue.record("the actual capture must issue a project reference"); return }
+            if condition == "missing_pair" || condition == "track_ref_missing_pair" { f.expireRetainedCapture = true }
+            if condition == "track_ref_replaced_strip" {
+                f.builder.setChildren(f.mixer, [f.strips[0], replacement])
+                f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, replacement)
+            }
+            let router = ChannelRouter(); await router.register(f.channel())
+            let gate = LogicMutationGate()
+            let dependencies = HandlerDependencies(router: router, cache: cache, targetRegistry: registry,
+                poller: StatePoller(axChannel: f.channel(), cache: cache,
+                    runtime: .init(hasVisibleWindow: { true }, projectFileReader: .unavailable,
+                        keyboardFocus: { .notTextEditing })),
+                dialogPresent: { false }, supportBundleExporter: nil, mutationGate: gate,
+                liveTrackNames: { condition.hasPrefix("track_ref") ? [0: "Original", 1: "Other"] : [0: "Duplicate", 1: "Duplicate"] })
+            let handler = try #require(OperationHandlerRegistry.handler(tool: "logic_mixer", command: "set_output_verified"))
+            let params: [String: Value] = ["project_ref": .string(project), "target_ref": .string(target.rawValue),
+                "destination": .object(["kind": .string("physical"), "ports": .array([.int(3), .int(4)])]),
+                "expected_current": .object(["kind": .string("stereo_output")])]
+            let result = await LogicProServer.runWithDeadline(tool: "logic_mixer", command: "set_output_verified",
+                commandParams: params, mutationGate: gate) { await handler(dependencies, params) }
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            #expect(!f.routingWrongSourcePressed, "An Arrange ordinal must never choose an unrelated physical Mixer strip")
+            if condition == "track_ref_missing_pair" || condition == "track_ref_replaced_strip" {
+                #expect(body["state"] as? String == "C")
+                let wrote = try #require(body["write_attempted"] as? Bool)
+                #expect(!wrote && f.routingDestinationPresses == 0)
+                #expect(f.selections == [1, 0])
+                return
+            }
+            let succeeds = condition == "paired" || condition == "track_ref"
+            #expect(body["state"] as? String == (succeeds ? "A" : "B"), "Actual response: \(sharedToolText(result))")
+            let verified = try #require(body["verified"] as? Bool)
+            if succeeds {
+                #expect(verified)
+                let reread = try #require(body["reference_reread_required"] as? Bool)
+                #expect(reread)
+            } else { #expect(!verified) }
+            #expect(f.routingReplacement != nil)
+            let expectedSelections = condition == "partial_restore" ? [1, 0, 1]
+                : ((succeeds || condition == "deciding_read") ? [1, 0, 1, 0] : [1, 0])
+            #expect(f.selections == expectedSelections)
+            if condition == "deciding_read" || condition == "partial_restore" { #expect(f.routingLateScopeInjected) }
+            if condition == "partial_restore" {
+                let effects = try #require(body["ui_effects"] as? [String: Any])
+                #expect(effects["restoration"] as? String == "not_restored")
+                let attempted = try #require(effects["attempted"] as? [String])
+                #expect(attempted.contains("track_selection"))
+            }
+            #expect(f.routingDestinationPresses == 1)
+            let refused = await LogicProServer.runWithDeadline(tool: "logic_mixer", command: "set_output_verified",
+                commandParams: params, mutationGate: gate) { await handler(dependencies, params) }
+            let refusal = try #require(sharedJSONObject(sharedToolText(refused)))
+            #expect(refusal["state"] as? String == "C")
+            let wrote = try #require(refusal["write_attempted"] as? Bool)
+            #expect(!wrote && f.routingDestinationPresses == 1)
+        }
     }
 
     @Test(arguments: [false, true])

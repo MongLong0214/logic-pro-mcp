@@ -64,6 +64,10 @@ extension AccessibilityChannel {
             ))
         }
         let physical = AXMixerStripBinding.current
+        let outputAssociation: HeldSelectionAssociation.Pair?
+        if let physical, let pair = AXMixerStripBinding.outputAssociation,
+           pair.strip.matches(physical), pair.track.currentIndex() != nil { outputAssociation = pair }
+        else { outputAssociation = nil }
         var index = requestedIndex
         if let physical {
             guard let current = physical.currentIndex(runtime: runtime) else {
@@ -304,7 +308,8 @@ extension AccessibilityChannel {
 
         // Opening the popup must not change which source owns it. Reuse one complete
         // fresh census for this binding and the bus check immediately before selection.
-        // After the terminal press, legitimate element replacement still uses ordinal readback.
+        // A physical replacement requires an independently renewed held-header association;
+        // the explicit legacy selector retains its historical ordinal readback.
         var refused: (HonestContract.FailureError, String, [String: Any])?
         let fresh = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime.ax)
         if let physical, physical.currentIndex(runtime: runtime) != index {
@@ -366,6 +371,7 @@ extension AccessibilityChannel {
         var afterLabel: String?
         var after: OutputAssignment?
         var countAfter: Int?
+        var attemptedAssociation = false
         let deadline = Date().addingTimeInterval(Double(timing.readbackTimeoutMs) / 1000.0)
         repeat {
             let enumeration = (physical?.mixer ?? AXLogicProElements.getMixerArea(runtime: runtime))
@@ -385,6 +391,21 @@ extension AccessibilityChannel {
                 }
             }
             after = afterLabel.flatMap(OutputAssignment.observed(slotLabel:))
+            if afterLabel == nil, !attemptedAssociation, let physical, let outputAssociation,
+               enumeration?.strips.count == strips.count, physical.currentIndex(runtime: runtime) == nil {
+                attemptedAssociation = true
+                let observed = await readOutputThroughOriginalHeader(outputAssociation, original: physical, runtime: runtime)
+                extras["ui_effects"] = ["navigation_performed": observed.effects.navigationPerformed,
+                    "attempted": observed.effects.attempted, "changed": observed.effects.changed,
+                    "restoration": observed.effects.restoration, "reason": observed.effects.reason as Any? ?? NSNull()]
+                if let label = observed.label, let renewedIndex = observed.index {
+                    afterLabel = label
+                    after = OutputAssignment.observed(slotLabel: label)
+                    extras["source_renewal"] = "held_exclusive_selection_focus"
+                    extras["reference_reread_required"] = true
+                    extras["source_index_after"] = renewedIndex
+                }
+            }
             if after == destination { break }
             if timing.pollIntervalMs > 0 { try? await Task.sleep(for: .milliseconds(timing.pollIntervalMs)) }
         } while Date() < deadline
@@ -414,6 +435,42 @@ extension AccessibilityChannel {
             return .success(HonestContract.encodeStateB(reason: .readbackMismatch, extras: extras))
         }
         return .success(HonestContract.encodeStateA(extras: extras))
+    }
+
+    /// One post-press observation under the existing operation's gate/deadline.
+    /// Never rebind the retired reference or infer a replacement from its name,
+    /// ordinal, destination or unchanged population count.
+    private static func readOutputThroughOriginalHeader(
+        _ originalPair: HeldSelectionAssociation.Pair, original: AXMixerStripBinding.Binding,
+        runtime: AXLogicProElements.Runtime
+    ) async -> (label: String?, index: Int?, effects: SessionPopulationObservation.UIEffects) {
+        guard originalPair.strip.matches(original), originalPair.track.currentIndex() != nil,
+              let observation = HeldSelectionAssociation(window: original.window, logic: runtime,
+                  expectedProject: nil, requiresProjectReference: false),
+              CFEqual(observation.mixer, original.mixer),
+              observation.document.utf8.elementsEqual(original.document.utf8),
+              CFEqual(observation.headers[observation.originalIndex], originalPair.track.header) else { return (nil, nil, .init()) }
+        let pairs = await observation.observe(referenceIsCurrent: {
+            originalPair.track.currentIndex() != nil
+                && (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil
+        }, stoppingWhen: { (try? SessionPopulationObservation.requireOwnedAcquisition()) == nil })
+        let candidates = pairs.filter { $0.track.matches(originalPair.track) }
+        guard candidates.count == 1, let pair = candidates.first,
+              pairs.filter({ $0.strip.matches(pair.strip) }).count == 1,
+              observation.effects.restoration == "restored",
+              !pair.strip.matches(original), originalPair.track.currentIndex() != nil,
+              let index = pair.strip.currentIndex(runtime: runtime),
+              let label = AXLogicProElements.outputSlotDestination(in: pair.strip.strip, runtime: runtime.ax),
+              pair.strip.currentIndex(runtime: runtime) == index,
+              originalPair.track.currentIndex() != nil,
+              observation.permitsRead(),
+              case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime),
+              CFEqual(window, original.window),
+              case .success(.some(let document)) = AXLogicProElements.projectPickerDocumentRead(original.window, runtime: runtime),
+              document.utf8.elementsEqual(original.document.utf8),
+              runtime.logicProPID() == observation.pid, runtime.focusedApplicationPID() == observation.pid,
+              (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return (nil, nil, observation.effects) }
+        return (label, index, observation.effects)
     }
 
     /// Picks the popup entry for `destination` by structure: the parent submenu that owns it, then
