@@ -2,6 +2,9 @@
 import Foundation
 
 extension AccessibilityChannel {
+    @TaskLocal private static var interruptedOutputPopupInverse = false
+    static var restoringInterruptedOutputPopup: Bool { interruptedOutputPopupInverse }
+
     /// A passive Arrange name is not an editable field despite its AXTextField
     /// role. This retained witness grants only this reader's semantic popup
     /// press, never a keyboard command, selection change, or parameter write.
@@ -176,7 +179,7 @@ extension AccessibilityChannel {
         // Deciding reads may themselves observe a host transition. Recheck the
         // held physical membership, then the exact current main window/document
         // after those reads. AX still offers no atomic compare-and-act primitive.
-        func ownerBoundaryStillCurrent() -> Bool {
+        @Sendable func ownerBoundaryStillCurrent() -> Bool {
             guard !Task.isCancelled, runtime.logicProPID() == pid,
                   physical.currentIndex(runtime: runtime) != nil,
                   case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime),
@@ -267,9 +270,75 @@ extension AccessibilityChannel {
                 return true
             }
         }
-        guard let opened, opened.count == 1, let root = opened.first, sourceOwned() else {
+        guard let opened, opened.count == 1, let root = opened.first else {
             extras["popup_menu_state"] = opened?.isEmpty == true ? "not_observed" : "unknown"
             return refuse(.readbackUnavailable, "The press did not establish one popup owned by the unchanged source; no destination was selected and no unowned cleanup was attempted.")
+        }
+        func interrupted() -> Bool {
+            Task.isCancelled || OperationTraceContext.current?.cancellationRequested() == true
+        }
+        // Cleanup renews the exact already-acquired output control without Help.
+        // A stopped reading stays stopped: no checkmark, scan result or assignment
+        // is recovered or published by this private cancellation inverse.
+        @Sendable func cleanupSourceOwned() -> Bool {
+            guard sendOrdinal == nil, !inputBusOnly,
+                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                  runtime.logicProPID() == pid, runtime.focusedApplicationPID() == pid,
+                  let app, AXHelpers.getAttribute(app, kAXFrontmostAttribute as String, runtime: runtime.ax) as Bool? == true,
+                  physical.currentIndex(runtime: runtime) != nil,
+                  case .success(let children) = AXHelpers.childrenResult(physical.strip, runtime: runtime.ax),
+                  children.filter({ CFEqual($0, slot) }).count == 1,
+                  AXHelpers.getRole(slot, runtime: runtime.ax) == kAXButtonRole as String,
+                  case .success(.some(let label)) = AXHelpers.getAttributeResult(slot,
+                    kAXDescriptionAttribute as String, runtime: runtime.ax) as Result<String?, AXHelpers.AXStatusError>,
+                  label.utf8.elementsEqual(originalLabel.utf8),
+                  AXLogicProElements.readControlBarCheckboxValue(matching: AXLocalePolicy.transportPlayControl, runtime: runtime) == false,
+                  AXLogicProElements.readControlBarCheckboxValue(matching: AXLocalePolicy.transportRecordControl, runtime: runtime) == false,
+                  !AXLogicProElements.dialogPresenceReason(runtime: runtime).isBlocked else { return false }
+            return ownerBoundaryStillCurrent()
+                && (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil
+        }
+        @Sendable func cleanupMenuOwned() -> Bool {
+            guard cleanupSourceOwned(), let current = checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax),
+                  current.count == 1, CFEqual(current[0], root) else { return false }
+            return cleanupSourceOwned()
+        }
+        func cancelledReading(priorCancelSucceeded: Bool = false) async -> CheckedOutputReading {
+            let cleanup = await Task { @Sendable in
+                Self.$interruptedOutputPopupInverse.withValue(true) {
+                    let noHelp = AXHelpers.HelpReadGuard(allowHelpReads: false,
+                        stop: { (try? SessionPopulationObservation.requireOwnedAcquisition()) == nil })
+                    return AXHelpers.HelpReadGuard.$current.withValue(noHelp) { () -> (Bool, Bool) in
+                        if cleanupSourceOwned(),
+                           checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax)?.isEmpty == true,
+                           runtime.onScreenWindowList().map({ LogicOnScreenWindows.popupMenuCount($0, logicPID: pid) == 0 }) == true {
+                            return (false, true)
+                        }
+                        guard cleanupMenuOwned(), runtime.ax.actionNames(root).contains(kAXCancelAction as String),
+                              cleanupMenuOwned() else { return (false, false) }
+                        let accepted: Bool
+                        if case .success = AXHelpers.performActionResult(root, kAXCancelAction as String, runtime: runtime.ax) {
+                            accepted = true
+                        } else { accepted = false }
+                        let closed = cleanupSourceOwned()
+                            && checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax)?.isEmpty == true
+                            && runtime.onScreenWindowList().map { LogicOnScreenWindows.popupMenuCount($0, logicPID: pid) == 0 } == true
+                        return (accepted, closed)
+                    }
+                }
+            }.value
+            extras["popup_cancel_succeeded"] = priorCancelSucceeded || cleanup.0
+            extras["popup_menu_state"] = cleanup.1 ? "closed" : "not_restored"
+            let focus: AXUIElement? = app.flatMap { AXHelpers.getAttribute($0, kAXFocusedUIElementAttribute as String, runtime: runtime.ax) }
+            extras["focus_restoration"] = originalFocus.flatMap { old in focus.map { CFEqual(old, $0) } } == true
+                ? "restored" : "not_restored"
+            return refuse(.cancelled, "The output reading was cancelled; no assignment is published and only its still-owned popup may be reversed.")
+        }
+        if interrupted() { return await cancelledReading() }
+        guard sourceOwned() else {
+            if interrupted() { return await cancelledReading() }
+            extras["popup_menu_state"] = "not_restored"
+            return refuse(.readbackUnavailable, "The acquired popup lost original source custody; no unowned cleanup was attempted.")
         }
         func menuOwned() -> Bool {
             guard sourceOwned(), let current = checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax) else { return false }
@@ -284,9 +353,10 @@ extension AccessibilityChannel {
         let second = menuOwned() ? checkedChoice() : nil
         let dataOwned = menuOwned()
         var cancelSucceeded = false
-        if dataOwned, runtime.ax.actionNames(root).contains(kAXCancelAction as String), menuOwned() {
+        if dataOwned, runtime.ax.actionNames(root).contains(kAXCancelAction as String), menuOwned(), !interrupted() {
             if case .success = AXHelpers.performActionResult(root, kAXCancelAction as String, runtime: runtime.ax) { cancelSucceeded = true }
         }
+        if interrupted() { return await cancelledReading(priorCancelSucceeded: cancelSucceeded) }
         let closed = sourceOwned() && checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax)?.isEmpty == true
             && runtime.onScreenWindowList().map { LogicOnScreenWindows.popupMenuCount($0, logicPID: pid) == 0 } == true
         extras["popup_menu_state"] = closed ? "closed" : "not_restored"

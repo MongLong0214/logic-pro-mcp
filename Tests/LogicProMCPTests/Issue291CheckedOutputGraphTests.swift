@@ -166,6 +166,34 @@ struct Issue291CheckedOutputGraphTests {
         #expect(f.mutations.map { $0.1 } == ["AXPress", "AXCancel"])
     }
 
+    @Test("Cancellation after popup restoration keeps its cause at the next strip boundary")
+    func restoredOutputCancellationKeepsItsCause() async throws {
+        let f = try preparedFixture(bus: true)
+        defer { try? FileManager.default.removeItem(at: f.bundle) }
+        f.b.setAttribute(f.app, kAXFrontmostAttribute as String, true)
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        let context = OperationTraceContext(mutationGateAcquired: true,
+            ownsGate: { gate.stillOwns(claim) },
+            cancellationRequested: { f.mutations.count >= 2 })
+        do {
+            _ = try await OperationTraceContext.$current.withValue(context) {
+                try await f.channel().readFreshSessionPopulation(request: .init(domains: [.routing],
+                    allowUINavigation: true), fileReader: .unavailable,
+                    stoppingWhen: { f.mutations.count >= 2 })
+            }
+            Issue.record("Cancelled routing acquisition must not return a population")
+        } catch let error as SessionPopulationObservation.NavigationAcquisitionError {
+            #expect(error.cause as? SessionPopulationObservation.AcquisitionError == .cancelled)
+            #expect(error.effects.navigationPerformed)
+            #expect(error.effects.attempted == ["routing_popup"])
+            #expect(error.effects.changed == ["routing_popup"])
+            #expect(error.effects.restoration == "restored")
+        }
+        #expect(f.mutations.map { $0.1 } == ["AXPress", "AXCancel"])
+    }
+
     @Test("An observed popup that cannot be cancelled remains an explicit UI change")
     func unclosedPopupWithholdsCheckedOutputs() async throws {
         let f = try preparedFixture(bus: true)

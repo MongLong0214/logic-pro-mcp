@@ -228,6 +228,27 @@ extension AccessibilityChannel {
             return refusal(.elementNotFound, "The strip's output slot button was not found; nothing was pressed.")
         }
 
+        var heldPopup: AXUIElement?
+        func popupSourceStillCurrent() -> Bool {
+            guard let physical else { return true } // Preserve the explicit legacy selector path.
+            guard !Task.isCancelled, let root = heldPopup,
+                  AXHelpers.getRole(physical.strip, runtime: runtime.ax) == kAXLayoutItemRole as String,
+                  let currentSlot = AXLogicProElements.outputSlotButton(in: physical.strip, runtime: runtime.ax),
+                  CFEqual(currentSlot, slotButton),
+                  case .success(let sourceChildren) = AXHelpers.childrenResult(physical.strip, runtime: runtime.ax),
+                  sourceChildren.filter({ CFEqual($0, slotButton) }).count == 1,
+                  case .success(let children) = AXHelpers.childrenResult(mixer, runtime: runtime.ax),
+                  children.filter({ CFEqual($0, root) }).count == 1,
+                  physical.currentIndex(runtime: runtime) == index,
+                  runtime.logicProPID() == logicPID,
+                  case .found(let currentWindow) = AXLogicProElements.arrangeWindowRead(runtime: runtime),
+                  CFEqual(currentWindow, physical.window),
+                  case .success(.some(let currentDocument)) = AXLogicProElements.projectPickerDocumentRead(
+                    physical.window, runtime: runtime),
+                  currentDocument.utf8.elementsEqual(physical.document.utf8), !Task.isCancelled else { return false }
+            return true
+        }
+
         // Open the popup of THIS strip and find the menu it opened: a new AXMenu among the Mixer
         // layout area's children, which is where Logic parents it (measured in ko and de).
         let menusBefore = popupMenus(in: mixer, runtime: runtime.ax)
@@ -238,7 +259,7 @@ extension AccessibilityChannel {
         let opened = await newPopupMenus(in: mixer, excluding: menusBefore, timing: timing, runtime: runtime.ax)
         guard opened.count == 1, let root = opened.first else {
             let cleanup = await closeOutputPopup(runtime: runtime, timing: timing, waitForSelfClose: false,
-                                                 cleaner: popupCleaner)
+                                                 cleaner: popupCleaner, permittingCleanup: popupSourceStillCurrent)
             return refusal(.elementNotFound, opened.isEmpty
                 ? "The output slot press opened no popup menu under the Mixer; nothing was selected."
                 : "The output slot press opened \(opened.count) menus under the Mixer, so which one is "
@@ -247,10 +268,12 @@ extension AccessibilityChannel {
                                  "menus_opened": opened.count]) { _, new in new })
         }
 
+        heldPopup = root
+
         let choice = outputMenuChoice(for: destination, in: root, runtime: runtime.ax)
         guard case .item(let item, let path) = choice else {
             let cleanup = await closeOutputPopup(runtime: runtime, timing: timing, waitForSelfClose: false,
-                                                 cleaner: popupCleaner)
+                                                 cleaner: popupCleaner, permittingCleanup: popupSourceStillCurrent)
             var more = cleanup
             more["menu_failure"] = choice.failureLabel
             switch choice {
@@ -273,7 +296,7 @@ extension AccessibilityChannel {
         }
         guard (AXHelpers.getAttribute(item, kAXEnabledAttribute, runtime: runtime.ax) as Bool?) == true else {
             let cleanup = await closeOutputPopup(runtime: runtime, timing: timing, waitForSelfClose: false,
-                                                 cleaner: popupCleaner)
+                                                 cleaner: popupCleaner, permittingCleanup: popupSourceStillCurrent)
             return refusal(.elementNotFound, "The popup entry for this destination is disabled or its "
                 + "enabled state did not read; nothing was selected.",
                 cleanup.merging(["menu_failure": "destination_entry_not_enabled", "menu_path": path]) { _, new in new })
@@ -306,16 +329,31 @@ extension AccessibilityChannel {
         }
         if let (error, hint, more) = refused {
             let cleanup = await closeOutputPopup(runtime: runtime, timing: timing, waitForSelfClose: false,
-                                                 cleaner: popupCleaner)
+                                                 cleaner: popupCleaner, permittingCleanup: popupSourceStillCurrent)
             return refusal(error, hint + ", read again with the popup open; nothing was selected.",
                 cleanup.merging(more.merging(["read_with_popup_open": true]) { _, new in new }) { _, new in new })
+        }
+
+        if physical != nil {
+            // Source-slot and bus deciding reads can coincide with a project
+            // transition after currentIndex's earlier Document sample. Renew
+            // the original source/control/menu, then read the main Document
+            // last, with no further AX read before the destination action.
+            guard popupSourceStillCurrent() else {
+                // Lost scope also revokes popup cleanup authority. A generic
+                // Cancel/Escape could affect the newly active project.
+                return refusal(.staleTargetReference,
+                    "Original source/project custody changed during the final popup reads; no destination was selected.",
+                    ["popup_menu_state": "custody_lost",
+                     "recovery_hint": "Re-read the current project and Mixer before retrying; popup cleanup was not authorized."])
+            }
         }
 
         extras["write_attempted"] = true
         extras["menu_path"] = path
         _ = AXHelpers.performAction(item, kAXPressAction, runtime: runtime.ax)
         let closed = await closeOutputPopup(runtime: runtime, timing: timing, waitForSelfClose: true,
-                                            cleaner: popupCleaner)
+                                            cleaner: popupCleaner, permittingCleanup: popupSourceStillCurrent)
         extras.merge(closed) { _, new in new }
 
         // The committed output, by R1's reader, from the strip at the SAME ordinal, found again on
@@ -804,7 +842,8 @@ extension AccessibilityChannel {
         runtime: AXLogicProElements.Runtime,
         timing: OutputAssignmentTiming,
         waitForSelfClose: Bool,
-        cleaner: PluginPopupMenuCleaner
+        cleaner: PluginPopupMenuCleaner,
+        permittingCleanup: () -> Bool = { true }
     ) async -> [String: Any] {
         if waitForSelfClose {
             let deadline = Date().addingTimeInterval(Double(timing.popupCloseTimeoutMs) / 1000.0)
@@ -815,6 +854,16 @@ extension AccessibilityChannel {
                 }
                 if timing.pollIntervalMs > 0 { try? await Task.sleep(for: .milliseconds(timing.pollIntervalMs)) }
             } while Date() < deadline
+        }
+        guard permittingCleanup() else {
+            // A self-closed popup needs no cleanup authority or action. The
+            // original source may legitimately have retired after the write.
+            if let pid = runtime.logicProPID(), let windows = runtime.onScreenWindowList(),
+               LogicOnScreenWindows.popupMenuCount(windows, logicPID: pid) == 0 {
+                return ["popup_menu_state": "closed"]
+            }
+            return ["popup_menu_state": "custody_lost",
+                    "recovery_hint": "Original popup/source/project custody was lost; cleanup was not authorized."]
         }
         switch cleaner(runtime) {
         case .noPopupObserved:
