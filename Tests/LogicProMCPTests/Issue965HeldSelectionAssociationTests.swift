@@ -55,6 +55,7 @@ struct Issue965HeldSelectionAssociationTests {
         var routingReplacement: AXUIElement?
         var routingAction: (@Sendable (AXUIElement, String) -> Bool)?
         var routingDestinationPresses = 0
+        var routingWrongSourcePressed = false
         var expireRetainedCapture = false
         var routingRead: (@Sendable (AXUIElement, String) -> Void)?
         var routingSelection: (@Sendable (Int) -> Void)?
@@ -384,10 +385,14 @@ struct Issue965HeldSelectionAssociationTests {
         }
     }
 
-    @Test(arguments: ["paired", "missing_pair", "replaced_header", "foreign_project", "foreign_focus", "deciding_read", "partial_restore"])
+    @Test(arguments: ["paired", "missing_pair", "replaced_header", "foreign_project", "foreign_focus", "deciding_read", "partial_restore", "track_ref", "track_ref_missing_pair", "track_ref_replaced_strip"])
     func outputReadbackRenewsRetiredSourceOnlyThroughOriginalCapturedHeader(condition: String) async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let f = try Fixture()
+            if condition.hasPrefix("track_ref") {
+                f.builder.setAttribute(f.headers[0], kAXTitleAttribute as String, "Original")
+                f.builder.setAttribute(f.headers[1], kAXTitleAttribute as String, "Other")
+            }
             let captureNow = ContinuousClock.now
             let cache = StateCache(sessionCaptureNow: {
                 f.expireRetainedCapture ? captureNow.advanced(by: StateCache.sessionCaptureLifetime) : captureNow
@@ -396,12 +401,14 @@ struct Issue965HeldSelectionAssociationTests {
             let newOutput = f.builder.element(1_965_952), root = f.builder.element(1_965_953)
             let parent = f.builder.element(1_965_954), submenu = f.builder.element(1_965_955)
             let leaf = f.builder.element(1_965_956)
-            for (button, label) in [(output, "Stereo Output"), (newOutput, "Output 3-4")] {
+            let decoyOutput = f.builder.element(1_965_959)
+            for (button, label) in [(output, "Stereo Output"), (newOutput, "Output 3-4"), (decoyOutput, "Stereo Output")] {
                 f.builder.setButton(button, description: label, help: "Output slot. Choose the channel strip output.",
                     x: 0, y: 0, width: 1, height: 1)
                 f.builder.setChildren(button, [])
             }
             f.builder.setChildren(f.strips[1], f.builder.makeAXRuntime().children(f.strips[1]) + [output])
+            f.builder.setChildren(f.strips[0], f.builder.makeAXRuntime().children(f.strips[0]) + [decoyOutput])
             f.builder.setRole(replacement, kAXLayoutItemRole as String)
             f.builder.setAttribute(replacement, kAXNumberOfCharactersAttribute as String, 0)
             f.builder.setAttribute(replacement, kAXInsertionPointLineNumberAttribute as String, 0)
@@ -432,8 +439,17 @@ struct Issue965HeldSelectionAssociationTests {
             f.routingAction = { element, action in
                 guard action == kAXPressAction as String else { Issue.record("unexpected routing action"); return false }
                 if CFEqual(element, output) { f.builder.setChildren(f.mixer, f.strips + [root]); return true }
+                if CFEqual(element, decoyOutput) {
+                    f.routingWrongSourcePressed = true
+                    f.builder.setChildren(f.mixer, f.strips + [root]); return true
+                }
                 if CFEqual(element, leaf) {
                     f.routingDestinationPresses += 1
+                    if f.routingWrongSourcePressed {
+                        f.builder.setAttribute(decoyOutput, kAXDescriptionAttribute as String, "Output 3-4")
+                        f.builder.setChildren(f.mixer, f.strips)
+                        return true
+                    }
                     f.routingReplacement = replacement
                     f.builder.setChildren(f.mixer, [f.strips[0], replacement])
                     f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, replacement)
@@ -462,18 +478,30 @@ struct Issue965HeldSelectionAssociationTests {
             let sourceRow = try #require(capture.channelStrips.indices.first {
                 capture.channelStrips[$0].physicalBinding.map { CFEqual($0.strip, f.strips[1]) } == true
             })
-            let target = try #require(capture.mixerReference(at: sourceRow))
+            var target = try #require(capture.mixerReference(at: sourceRow))
+            if condition.hasPrefix("track_ref") {
+                let tracks = TrackReferenceIssuance.liveInventory(capture.tracks)
+                let trackRow = try #require(tracks.indices.first {
+                    tracks[$0].physicalBinding.map { CFEqual($0.header, f.headers[0]) } == true
+                })
+                target = try #require(capture.issued?.byRow[trackRow])
+            }
             let project: String
             if case .issued(let issued)? = capture.projectIssuance { project = issued.rawValue }
             else { Issue.record("the actual capture must issue a project reference"); return }
-            if condition == "missing_pair" { f.expireRetainedCapture = true }
+            if condition == "missing_pair" || condition == "track_ref_missing_pair" { f.expireRetainedCapture = true }
+            if condition == "track_ref_replaced_strip" {
+                f.builder.setChildren(f.mixer, [f.strips[0], replacement])
+                f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, replacement)
+            }
             let router = ChannelRouter(); await router.register(f.channel())
             let gate = LogicMutationGate()
             let dependencies = HandlerDependencies(router: router, cache: cache, targetRegistry: registry,
                 poller: StatePoller(axChannel: f.channel(), cache: cache,
                     runtime: .init(hasVisibleWindow: { true }, projectFileReader: .unavailable,
                         keyboardFocus: { .notTextEditing })),
-                dialogPresent: { false }, supportBundleExporter: nil, mutationGate: gate)
+                dialogPresent: { false }, supportBundleExporter: nil, mutationGate: gate,
+                liveTrackNames: { condition.hasPrefix("track_ref") ? [0: "Original", 1: "Other"] : [0: "Duplicate", 1: "Duplicate"] })
             let handler = try #require(OperationHandlerRegistry.handler(tool: "logic_mixer", command: "set_output_verified"))
             let params: [String: Value] = ["project_ref": .string(project), "target_ref": .string(target.rawValue),
                 "destination": .object(["kind": .string("physical"), "ports": .array([.int(3), .int(4)])]),
@@ -481,16 +509,25 @@ struct Issue965HeldSelectionAssociationTests {
             let result = await LogicProServer.runWithDeadline(tool: "logic_mixer", command: "set_output_verified",
                 commandParams: params, mutationGate: gate) { await handler(dependencies, params) }
             let body = try #require(sharedJSONObject(sharedToolText(result)))
-            #expect(body["state"] as? String == (condition == "paired" ? "A" : "B"))
+            #expect(!f.routingWrongSourcePressed, "An Arrange ordinal must never choose an unrelated physical Mixer strip")
+            if condition == "track_ref_missing_pair" || condition == "track_ref_replaced_strip" {
+                #expect(body["state"] as? String == "C")
+                let wrote = try #require(body["write_attempted"] as? Bool)
+                #expect(!wrote && f.routingDestinationPresses == 0)
+                #expect(f.selections == [1, 0])
+                return
+            }
+            let succeeds = condition == "paired" || condition == "track_ref"
+            #expect(body["state"] as? String == (succeeds ? "A" : "B"), "Actual response: \(sharedToolText(result))")
             let verified = try #require(body["verified"] as? Bool)
-            if condition == "paired" {
+            if succeeds {
                 #expect(verified)
                 let reread = try #require(body["reference_reread_required"] as? Bool)
                 #expect(reread)
             } else { #expect(!verified) }
             #expect(f.routingReplacement != nil)
             let expectedSelections = condition == "partial_restore" ? [1, 0, 1]
-                : ((condition == "paired" || condition == "deciding_read") ? [1, 0, 1, 0] : [1, 0])
+                : ((succeeds || condition == "deciding_read") ? [1, 0, 1, 0] : [1, 0])
             #expect(f.selections == expectedSelections)
             if condition == "deciding_read" || condition == "partial_restore" { #expect(f.routingLateScopeInjected) }
             if condition == "partial_restore" {
