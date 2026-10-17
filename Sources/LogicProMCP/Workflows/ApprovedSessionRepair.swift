@@ -67,6 +67,8 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         let ordinal: Int
         let before: OutputAssignment
         let desired: OutputAssignment?
+        let footprint: [SendSlotObservation]
+        let goalID: String
         let handle: String
     }
     private struct ReceiverKeep: Sendable {
@@ -269,7 +271,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         let checked = fresh.checkedOutputs.filter { $0.source.matches(pair.strip) && $0.sendOrdinal == ordinal }
         guard rows.count == 1, let row = rows.first, let mixerRef = source.mixerReference(at: row),
               checked.count == 1, let reading = checked.first,
-              intent.localOutput.map({ AccessibilityChannel.supportsOccupiedSendChange(before: reading.assignment, after: $0) })
+              intent.localOutput.map({ reading.assignment == $0 || AccessibilityChannel.supportsOccupiedSendChange(before: reading.assignment, after: $0) })
                 ?? (intent.isRemoval && reading.assignment == .stereoOutput),
               reading.sendNonRoutingChecks == ["Post Fader"] || reading.sendNonRoutingChecks == ["포스트 페이더"],
               let control = reading.sendControl, control.ordinal == ordinal,
@@ -278,13 +280,23 @@ final class ApprovedSessionRepair: @unchecked Sendable {
               let occupied = slots.first(where: { $0.state == .occupiedUnknownDestination }),
               occupied.ordinal == ordinal, occupied.levelRaw == 0, occupied.bypassed == false else { return nil }
         return .init(reference: target.trackRef, mixerRef: mixerRef, pair: pair,
-            control: control, ordinal: ordinal, before: reading.assignment, desired: intent.localOutput, handle: target.handle)
+            control: control, ordinal: ordinal, before: reading.assignment, desired: intent.localOutput,
+            footprint: slots, goalID: "send.target.\(intent.target).\(intent.selectorID)", handle: target.handle)
+    }
+
+    static func capturedMatchingSendID(policy: ProjectSessionAudit.IntentPolicy,
+        names: [ProjectSessionAudit.ApprovedName], source: SessionPopulationObservation.Capture,
+        request: SessionPopulationObservation.Request) -> String? {
+        guard let task = capturedSend(policy: policy, names: names, source: source, request: request),
+              task.desired == task.before else { return nil }
+        return task.goalID
     }
 
     static func capturedSendStep(policy: ProjectSessionAudit.IntentPolicy,
         names: [ProjectSessionAudit.ApprovedName], source: SessionPopulationObservation.Capture,
         request: SessionPopulationObservation.Request) -> Value? {
         guard let task = capturedSend(policy: policy, names: names, source: source, request: request),
+              task.desired != task.before,
               var before = assignmentValue(task.before).objectValue else { return nil }
         before["mode"] = .string("post_fader")
         before["level_raw"] = .int(0)
@@ -556,6 +568,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         }
         let unchangedIDs = unchangedNames.map { "name_" + $0.target }
             + Set(captured.receivers.map(\.bus)).sorted().map { "receiver_keep_bus_\($0)" }
+            + (captured.send.flatMap { $0.desired == $0.before ? $0.goalID : nil }.map { [$0] } ?? [])
         guard unchanged.count == unchangedIDs.count,
               Set(unchanged.compactMap(\.stringValue)) == Set(unchangedIDs) else { return nil }
         let issued = captured.projectRef
@@ -576,11 +589,18 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         }
         let changed = goals.filter { !$0.before.utf8.elementsEqual($0.name.utf8) }
         if let send = captured.send {
-            guard steps == [capturedSendStep(policy: policy, names: names, source: source.capture, request: source.request)],
-                  let current = await registry.resolve(send.reference), current.kind == .track,
+            guard let current = await registry.resolve(send.reference), current.kind == .track,
                   current.physicalTrack?.matches(send.pair.track) == true,
                   let mixer = await registry.resolve(send.mixerRef), mixer.kind == .mixerStrip,
                   mixer.physicalMixerStrip?.matches(send.pair.strip) == true else { return nil }
+            if send.desired == send.before {
+                guard steps.isEmpty else { return nil }
+                return .init(plan: .init(steps: [], idempotencyKey: key, canonicalPlanID: id, canonicalDigest: digest),
+                    projectRef: issued, document: captured.document,
+                    cacheProjectEpoch: source.capture.projectEpoch, sendTask: send,
+                    registryProjectEpoch: targetSnapshot.projectEpoch, cache: cache, registry: registry, journal: journal)
+            }
+            guard steps == [capturedSendStep(policy: policy, names: names, source: source.capture, request: source.request)] else { return nil }
             let saga = SagaPlan(steps: [.init(operationID: .mixerSetSendOutputVerified, targetRef: send.mixerRef,
                 params: ["ordinal": .int(send.ordinal),
                     "destination": send.desired.map(assignmentValue) ?? .object(["kind": .string("no_send")]),
@@ -1301,6 +1321,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
 
     var verifiesMatchingNamesOnly: Bool { !nameGoals.isEmpty && mixerTask == nil && plan.steps.isEmpty }
     var verifiesReceiverKeepsOnly: Bool { !receiverKeeps.isEmpty && nameGoals.isEmpty && mixerTask == nil && plan.steps.isEmpty }
+    var verifiesMatchingSendOnly: Bool { sendTask.map { $0.desired == $0.before } == true && plan.steps.isEmpty }
     var hasMatchingNameGoals: Bool { !nameGoals.isEmpty }
 
     /// The same issued-name proof is used before a composed forward action and
@@ -1498,6 +1519,54 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                 "plan_id": plan.canonicalPlanID as Any, "digest": plan.canonicalDigest as Any,
                 "goal_verification_failure": "approved_name_set_unverified",
                 "write_attempted": false, "writes_performed": 0]))
+    }
+
+    /// A matching destination is a goal observation, never a scalar no-op or inverse capsule.
+    func verifyMatchingSend() async -> SagaJournal.StoredOutcome {
+        func refused(_ read: AccessibilityChannel.CheckedOutputReading? = nil) -> SagaJournal.StoredOutcome {
+            var extras: [String: Any] = ["goal_verification_failure": "approved_matching_send_unverified",
+                "idempotency_key": plan.idempotencyKey, "write_attempted": false, "writes_performed": 0]
+            if let read, let receipt = decodedJSONObject(read.result.message) { extras["send_read_receipt"] = receipt }
+            return SagaWire.storedOutcome(from: SagaWire.scopedStateC(.staleTargetReference,
+                hint: "The approved Send's original native control or independently checked destination no longer agrees.", extras: extras))
+        }
+        guard verifiesMatchingSendOnly, let task = sendTask else { return refused() }
+        func current() async -> Bool {
+            let runtime = task.pair.track.runtime
+            guard await projectIsCurrent(),
+                  let track = await registry.resolve(task.reference), track.kind == .track,
+                  track.physicalTrack?.matches(task.pair.track) == true,
+                  let mixer = await registry.resolve(task.mixerRef), mixer.kind == .mixerStrip,
+                  mixer.physicalMixerStrip?.matches(task.pair.strip) == true,
+                  task.pair.track.currentIndex() != nil, task.pair.strip.currentIndex(runtime: runtime) != nil,
+                  let control = AXLogicProElements.assignedSendMenuControl(in: task.pair.strip.strip,
+                    ordinal: task.ordinal, runtime: runtime.ax), task.control.matches(control),
+                  AXLogicProElements.sendSlotObservations(in: task.pair.strip.strip, runtime: runtime.ax) == task.footprint,
+                  await projectIsCurrent() else { return false }
+            return true
+        }
+        guard await current() else { return refused() }
+        let read = await AXMixerStripBinding.$current.withValue(task.pair.strip) {
+            await AXMixerStripBinding.$outputAssociation.withValue(task.pair) {
+                await AccessibilityChannel.getOutputObservation(runtime: task.pair.track.runtime, sendOrdinal: task.ordinal,
+                    requiringOriginalSendControl: task.control)
+            }
+        }
+        guard read.result.isSuccess, let receipt = decodedJSONObject(read.result.message),
+              receipt["popup_menu_state"] as? String == "closed",
+              receipt["focus_restoration"] as? String == "restored",
+              read.assignment == task.before, read.sendControl?.matches(task.control) == true,
+              read.sendNonRoutingChecks == ["Post Fader"] || read.sendNonRoutingChecks == ["포스트 페이더"],
+              await current() else { return refused(read) }
+        let outcome = SagaOutcome(idempotencyKey: plan.idempotencyKey, state: .completed, complete: true,
+            journal: [], stateHistory: [.validated, .running, .completed], preflightIssues: [])
+        let stored = SagaWire.storedOutcome(plan: plan, outcome: outcome)
+        guard var body = decodedJSONObject(stored.body) else { return refused() }
+        body["write_attempted"] = false; body["writes_performed"] = 0
+        body["goal_evidence"] = [["target_ref": task.reference.rawValue, "mixer_ref": task.mixerRef.rawValue,
+            "observed_ordinal": task.ordinal, "read": ["read_source": "ax_send_menu_checkmark",
+                "provenance": "live_independent", "observed": task.before.token]]]
+        return .init(body: HonestContract.jsonString(body), isError: stored.isError)
     }
 
     private func receiverCurrent(_ goal: ReceiverKeep, renewal: ReceiverRenewal? = nil) async -> Bool {

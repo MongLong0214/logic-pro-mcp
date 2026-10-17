@@ -2814,6 +2814,24 @@ struct Issue965HeldSelectionAssociationTests {
         }
     }
 
+    @Test(arguments: [false, true])
+    func alreadyMatchingCanonicalSendVerifiesItsGoalWithoutASetter(physical: Bool) async throws {
+        try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+            try await assertOccupiedSingleSendRenewal(restoring: true, emptyModeMenu: true,
+                canonicalSend: "matching", canonicalPhysical: true,
+                freshPhysicalReturn: physical, canonicalMatching: true)
+        }
+    }
+
+    @Test(arguments: ["replacement", "late_replacement", "wrong_project", "destination", "level", "bypass", "mode", "unread_mark", "source_retired", "wrong_digest", "unconfirmed", "cleanup_focus"], [false, true])
+    func matchingCanonicalSendRefusesStaleOrUnapprovedGoalsWithoutASetter(fault: String, physical: Bool) async throws {
+        try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+            try await assertOccupiedSingleSendRenewal(restoring: true, emptyModeMenu: true,
+                canonicalSend: "matching", canonicalPhysical: true,
+                freshPhysicalReturn: physical, canonicalMatching: true, matchingFault: fault)
+        }
+    }
+
     @Test("Registered inspection preserves raw checked nonrouting titles without calling them a typed send mode")
     func registeredInspectionPreservesItsCheckedSendNonroutingWitness() async throws {
         try await assertOccupiedSingleSendRenewal(inspectSendWitness: "observed")
@@ -3284,7 +3302,9 @@ struct Issue965HeldSelectionAssociationTests {
                                                creationSaga: String? = nil,
                                                canonicalSend: String? = nil,
                                                canonicalPhysical: Bool = false,
-                                               freshPhysicalReturn: Bool = false) async throws {
+                                               freshPhysicalReturn: Bool = false,
+                                               canonicalMatching: Bool = false,
+                                               matchingFault: String? = nil) async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let f = try Fixture(), b = f.builder
             let inspectTypedMode = inspectSendWitness?.hasPrefix("typed_mode") == true
@@ -3654,7 +3674,7 @@ struct Issue965HeldSelectionAssociationTests {
                     if canonicalSend == "late_replacement", CFEqual(element, b.element(1_965_2799)) {
                         f.routingBypassMenuOpens += 1
                     }
-                    if bypassMode != nil { f.routingBypassMenuOpens += 1 }
+                    if bypassMode != nil || canonicalMatching { f.routingBypassMenuOpens += 1 }
                     if f.routingBypassMenuOpens == 3, let pending = f.routingBypassPendingValue {
                         f.routingLateScopeInjected = true
                         b.setAttribute(b.element(1_965_2622), kAXValueAttribute as String, pending ? 1 : 0)
@@ -3887,8 +3907,8 @@ struct Issue965HeldSelectionAssociationTests {
                 var sendIntent: [String: Value] = ["target": .string("source"),
                     canonicalSend == "physical_slot" ? "physical_slot" : "observed_ordinal": .int(1)]
                 if canonicalPhysical {
-                    sendIntent["output"] = freshPhysicalReturn && canonicalSend != "unsupported_pair" ? .object(["kind": .string("stereo_output")])
-                        : .object(["kind": .string("physical"), "ports": .array([.int(3), .int(4)])])
+                    sendIntent["output"] = (canonicalMatching ? !freshPhysicalReturn : freshPhysicalReturn && canonicalSend != "unsupported_pair") ? .object(["kind": .string("stereo_output")])
+                        : .object(["kind": .string("physical"), "ports": .array(canonicalSend == "unsupported_pair" ? [.int(1), .int(2)] : [.int(3), .int(4)])])
                 } else { sendIntent["remove"] = .bool(true) }
                 if canonicalSend == "physical_removal" {
                     sendIntent["output"] = nil
@@ -3942,6 +3962,92 @@ struct Issue965HeldSelectionAssociationTests {
                 let planID = try #require(planned["plan_id"] as? String)
                 let digest = try #require(planned["digest"] as? String)
                 let preview = try #require(planned["steps"] as? [[String: Any]])
+                if canonicalMatching {
+                    try #require(executable)
+                    #expect(preview.isEmpty)
+                    #expect(planned["unchanged_tasks"] as? [String] == ["send.target.source.ordinal.1"])
+                    let apply = try #require(OperationHandlerRegistry.handler(tool: "logic_project", command: "apply_session_repair"))
+                    let arguments: [String: Value] = ["plan_id": .string(planID),
+                        "digest": .string(matchingFault == "wrong_digest" ? String(repeating: "0", count: 64) : digest),
+                        "confirmed": .bool(matchingFault != "unconfirmed"), "idempotency_key": .string(key)]
+                    switch matchingFault {
+                    case "replacement":
+                        let decoy = b.element(1_965_2799)
+                        b.setButton(decoy, description: "list", x: 0, y: 0, width: 1, height: 1)
+                        b.setChildren(decoy, []); b.setActionNames(decoy, [kAXPressAction as String])
+                        b.setChildren(b.element(1_965_2621), [b.element(1_965_2622), decoy])
+                    case "late_replacement":
+                        f.routingRead = { element, attribute in
+                            guard CFEqual(element, b.element(1_965_721)), attribute == kAXValueAttribute as String,
+                                  !f.routingLateScopeInjected else { return }
+                            f.routingLateScopeInjected = true
+                            let decoy = b.element(1_965_2799)
+                            b.setButton(decoy, description: "list", x: 0, y: 0, width: 1, height: 1)
+                            b.setChildren(decoy, []); b.setActionNames(decoy, [kAXPressAction as String])
+                            b.setChildren(b.element(1_965_2621), [b.element(1_965_2622), decoy])
+                        }
+                    case "wrong_project": b.setAttribute(f.window, kAXDocumentAttribute as String, "file:///tmp/Foreign.logicx")
+                    case "destination":
+                        b.setAttribute(echo, kAXTitleAttribute as String, freshPhysicalReturn ? "Stereo Output" : "Output 3-4")
+                        b.setAttribute(stereo, "AXMenuItemMarkChar", "")
+                        b.setAttribute(destination, "AXMenuItemMarkChar", "✓")
+                    case "level": b.setAttribute(b.element(1_965_2624), kAXValueAttribute as String, 1)
+                    case "bypass": b.setAttribute(b.element(1_965_2622), kAXValueAttribute as String, 1)
+                    case "mode": b.setAttribute(mode, kAXTitleAttribute as String, "Pre Fader")
+                    case "unread_mark":
+                        b.setAttribute(echo, "AXMenuItemMarkChar", "")
+                        b.setAttribute(stereo, "AXMenuItemMarkChar", "")
+                    case "source_retired": b.setChildren(f.mixer, [f.strips[0]])
+                    case "cleanup_focus":
+                        let prior = f.routingAction
+                        f.routingAction = { element, action in
+                            let result = prior?(element, action) ?? false
+                            if CFEqual(element, root), action == kAXCancelAction as String {
+                                f.routingLateScopeInjected = true
+                                b.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.strips[0])
+                            }
+                            return result
+                        }
+                    default: break
+                    }
+                    let readsBeforeApply = f.routingBypassMenuOpens
+                    let result = await apply(dependencies, arguments)
+                    let body = try #require(sharedJSONObject(sharedToolText(result)))
+                    if let matchingFault {
+                        #expect(body["state"] as? String == "C", "Actual refusal for \(matchingFault): \(sharedToolText(result))")
+                        #expect(f.routingDestinationPresses == 0)
+                        if matchingFault == "cleanup_focus" {
+                            #expect(f.routingLateScopeInjected)
+                            let receipt = try #require(body["send_read_receipt"] as? [String: Any])
+                            #expect(receipt["focus_restoration"] as? String == "not_restored")
+                            #expect(receipt["popup_menu_state"] as? String == "closed")
+                        }
+                        if matchingFault == "late_replacement" { #expect(f.routingLateScopeInjected) }
+                        if ["replacement", "late_replacement", "wrong_project", "level", "bypass", "source_retired", "wrong_digest", "unconfirmed"].contains(matchingFault) {
+                            #expect(f.routingBypassMenuOpens == readsBeforeApply, "Invalid custody/approval refuses before opening a popup")
+                        } else { #expect(f.routingBypassMenuOpens > readsBeforeApply) }
+                        #expect(!gate.isHeldByEntitledHolder())
+                        return
+                    }
+                    #expect(body["saga_state"] as? String == "completed")
+                    let attempted = try #require(body["write_attempted"] as? Bool)
+                    #expect(!attempted)
+                    #expect(body["writes_performed"] as? Int == 0)
+                    #expect(f.routingDestinationPresses == 0)
+                    #expect(f.routingBypassMenuOpens > readsBeforeApply)
+                    let evidence = try #require(body["goal_evidence"] as? [[String: Any]])
+                    #expect(evidence.count == 1)
+                    let read = try #require(evidence.first?["read"] as? [String: Any])
+                    #expect(read["read_source"] as? String == "ax_send_menu_checkmark")
+                    #expect(read["provenance"] as? String == "live_independent")
+                    #expect(read["observed"] as? String == (freshPhysicalReturn ? OutputAssignment.physical(3, 4) : .stereoOutput).token)
+                    let readsBeforeReplay = f.routingBypassMenuOpens
+                    _ = await apply(dependencies, arguments)
+                    #expect(f.routingDestinationPresses == 0)
+                    #expect(f.routingBypassMenuOpens == readsBeforeReplay)
+                    #expect(!gate.isHeldByEntitledHolder())
+                    return
+                }
                 #expect(preview.count == 1 && preview[0]["kind"] as? String == (canonicalPhysical ? "local_send_output" : "local_send_removal"))
                 #expect(preview[0]["observed_ordinal"] as? Int == 1 && preview[0]["physical_slot"] == nil)
                 if canonicalPhysical {

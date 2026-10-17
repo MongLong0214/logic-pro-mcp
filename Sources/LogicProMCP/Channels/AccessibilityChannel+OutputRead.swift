@@ -496,10 +496,11 @@ extension AccessibilityChannel {
                                      timing: OutputAssignmentTiming = .live,
                                      observingSendMode: Bool = false,
                                      requiringSendMode: Bool = true,
+                                     requiringOriginalSendControl: AXLogicProElements.AssignedSendMenuControl? = nil,
                                      observingPopupFocus: @escaping @Sendable ((@Sendable () -> Bool)?) -> Void = { _ in }) async -> CheckedOutputReading {
         await getCheckedRoutingDestination(params: [:], sendOrdinal: sendOrdinal, runtime: runtime, timing: timing,
             observingPopupFocus: observingPopupFocus, observingSendMode: observingSendMode,
-            requiringSendMode: requiringSendMode)
+            requiringSendMode: requiringSendMode, requiringOriginalSendControl: requiringOriginalSendControl)
     }
 
     private static func getCheckedRoutingDestination(
@@ -509,7 +510,8 @@ extension AccessibilityChannel {
         observingPopupFocus: @escaping @Sendable ((@Sendable () -> Bool)?) -> Void = { _ in },
         observingRenewedFocus: @escaping @Sendable (HeldSelectionAssociation) -> Void = { _ in },
         sendReplacement: SendReplacement? = nil, observingSendMode: Bool = false,
-        requiringSendMode: Bool = true
+        requiringSendMode: Bool = true,
+        requiringOriginalSendControl: AXLogicProElements.AssignedSendMenuControl? = nil
     ) async -> CheckedOutputReading {
         let operation = sendReplacement?.modeChange != nil ? "mixer.set_send_mode_verified" : sendReplacement != nil ? "mixer.set_send_output_verified" :
             (inputBusOnly ? "mixer.get_input_bus_verified" : (sendOrdinal == nil ? "mixer.get_output_verified" : "mixer.get_send_destination_verified"))
@@ -549,7 +551,7 @@ extension AccessibilityChannel {
                 ordinal: sendOrdinal, runtime: runtime.ax)
         }
         let assigned = assignedControl()
-        let requiredSendControl = sendReplacement != nil ? SendRemovalSagaAdapter.requiredSendControl : nil
+        let requiredSendControl = sendReplacement != nil ? SendRemovalSagaAdapter.requiredSendControl : requiringOriginalSendControl
         guard requiredSendControl.map({ captured in assigned.map(captured.matches) == true }) ?? true else {
             return refuse(.staleTargetReference, "The previewed native Send control is no longer current; nothing was pressed.")
         }

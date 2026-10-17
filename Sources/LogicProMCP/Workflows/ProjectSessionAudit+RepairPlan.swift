@@ -122,7 +122,9 @@ extension ProjectSessionAudit {
             source: capture, request: request)
         let localSendStep = ApprovedSessionRepair.capturedSendStep(policy: policy, names: names,
             source: capture, request: request)
-        let capturedLocalTask = localOutputStep != nil || localSendStep != nil
+        let matchingSendID = ApprovedSessionRepair.capturedMatchingSendID(policy: policy, names: names,
+            source: capture, request: request)
+        let capturedLocalTask = localOutputStep != nil || localSendStep != nil || matchingSendID != nil
         let viewOnly = policy.mixerVisible != nil && policy.trackSort == nil && policy.targets.isEmpty && policy.roles.isEmpty
             && policy.outputs.isEmpty && policy.sends.isEmpty && policy.receivers.isEmpty && names.isEmpty && policy.protectedPaths.isEmpty
         var reasons = Set<String>()
@@ -188,9 +190,8 @@ extension ProjectSessionAudit {
             }
             return blocked
         }
-        // Even an unchanged send needs a fresh exact-slot verifier which the retained apply
-        // provider does not have. A pure graph fixture cannot advertise runtime availability.
-        if !policy.sends.isEmpty && localSendStep == nil { reasons.insert("send_goal_verification_unavailable") }
+        // Graph compliance alone cannot advertise a retained native goal verifier.
+        if !policy.sends.isEmpty && localSendStep == nil && matchingSendID == nil { reasons.insert("send_goal_verification_unavailable") }
         if options.onAmbiguity == .reportOnly { reasons.insert("report_only_requested") }
         // Steps that create a receiving aux come before the outputs that need one
         // (destination before source), and each bus gets at most one.
@@ -372,6 +373,10 @@ extension ProjectSessionAudit {
         if !assessment.questions.isEmpty { reasons.insert("unresolved_intent") }
 
         for finding in assessment.sendFindings ?? [] {
+            if finding.id == matchingSendID {
+                unchanged.append(.string(finding.id))
+                continue
+            }
             if let localSendStep {
                 steps.append(localSendStep)
                 continue
@@ -579,7 +584,7 @@ extension ProjectSessionAudit {
             "unchanged_tasks": .array(unchanged), "questions": try repairPlanValue(assessment.questions),
             "receiver_questions": .array(receiverQuestions.keys.sorted().compactMap { receiverQuestions[$0] }),
             "findings": .array(try (capturedLocalTask ? [] : assessment.findings).map { try repairPlanValue($0) }
-                + (localSendStep == nil ? assessment.sendFindings ?? [] : []).map { try repairPlanValue($0) }),
+                + (localSendStep == nil && matchingSendID == nil ? assessment.sendFindings ?? [] : []).map { try repairPlanValue($0) }),
             "new_object_inventory": .array(inventory),
             "planning_options": options.wire,
             "executable": .bool(reasons.isEmpty),
