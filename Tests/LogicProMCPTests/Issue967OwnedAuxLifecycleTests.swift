@@ -102,6 +102,9 @@ struct Issue967OwnedAuxLifecycleTests {
         var cancelOnOptions = false
         var cancelled = false
         var invalidatesDeletedCF = true
+        var removalObservationSamples = 0
+        var deletionRetiredPeers: [AXUIElement] = []
+        var deletionRetiredReadFailures = 0
         var optionPresses = 0
         var menuFault: MenuFault?
         var menuField: MenuField = .semantic
@@ -814,6 +817,10 @@ struct Issue967OwnedAuxLifecycleTests {
                     }
                 }
             }
+            if removed, deletionRetiredPeers.contains(where: { CFEqual($0, element) }) {
+                deletionRetiredReadFailures += 1
+                return .failure(.init(raw: AXError.invalidUIElement.rawValue))
+            }
             if CFEqual(element, created), removed, removalDelay == 0, invalidatesDeletedCF {
                 return .failure(.init(raw: AXError.invalidUIElement.rawValue))
             }
@@ -1438,6 +1445,38 @@ struct Issue967OwnedAuxLifecycleTests {
             let expected: OwnedAuxLifecycle.Status = fault == "preserved" ? .removed : .residual
             #expect(await context.remove(inverse).status == expected)
             #expect(await context.remove(inverse).status == expected)
+            #expect(f.createPresses == 1 && f.deletePresses == 1)
+        }
+    }
+
+    @Test(arguments: ["healthy", "changed_peer", "foreign_document", "cancelled"])
+    func settlingWholePeerRedrawUsesItsRemainingReadOnlySamples(fault: String) async throws {
+        let f = Fixture(); f.modelWholePeerRetirement()
+        try await owned(f) {
+            let slider = f.b.element(967_811)
+            let context = try f.context(nativeControls: true, waitForNextSample: {
+                guard f.removed else { return }
+                f.removalObservationSamples += 1
+                if f.removalObservationSamples == 2 {
+                    f.invalidatesDeletedCF = true
+                    if fault == "changed_peer" { f.b.setAttribute(slider, kAXValueAttribute, 0.5) }
+                    if fault == "foreign_document" { f.b.setAttribute(f.window, kAXDocumentAttribute, "file:///tmp/Foreign.logicx") }
+                    if fault == "cancelled" { f.cancelled = true }
+                }
+            })
+            let inverse = try #require(await context.create().inverse)
+            f.b.setRole(slider, kAXSliderRole as String); f.b.setAttribute(slider, kAXValueAttribute, 0.75)
+            f.b.setChildren(slider, [])
+            let peers = [f.b.element(967_812), f.b.element(967_813)]
+            for peer in peers { f.b.setRole(peer, kAXLayoutItemRole as String) }
+            f.b.setChildren(peers[0], [slider]); f.b.setChildren(peers[1], [])
+            f.retiredDeletionPeers = peers
+            f.deletionRetiredPeers = try #require(f.retiredPeerCopies)
+            f.invalidatesDeletedCF = false
+            let result = await context.remove(inverse)
+            #expect(f.deletionRetiredReadFailures > 0, "The first sample must actually lose the retired peer objects")
+            #expect(f.removalObservationSamples >= 2 && f.removalObservationSamples <= 3)
+            #expect(result.status == (fault == "healthy" ? .removed : .residual))
             #expect(f.createPresses == 1 && f.deletePresses == 1)
         }
     }

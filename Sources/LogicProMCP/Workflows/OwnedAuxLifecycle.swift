@@ -1468,7 +1468,17 @@ enum OwnedAuxLifecycle {
                 do { try await waitForNextSample() } catch { return receipt(.residual, strip: strip) }
                 guard let current = census() else { return receipt(.residual, strip: strip) }
                 if removedAfterWholePeerRedraw(current, strip: strip) { return receipt(.removed, strip: strip) }
-                guard preserved() else { return receipt(.residual, strip: strip) }
+                if !preserved() {
+                    // A whole peer redraw can retire the original observations
+                    // before the deleted object's invalidation settles. Spend
+                    // only the remaining read-only samples; the full terminal
+                    // preservation/invalidation proof above is unchanged.
+                    guard current.count == preservationPeers.count,
+                          !current.contains(where: { CFEqual($0, strip) }),
+                          preservationPeers.allSatisfy({ peer in !current.contains { CFEqual($0, peer) } })
+                    else { return receipt(.residual, strip: strip) }
+                    continue
+                }
                 if same(current, preservationPeers),
                    let bookend = census(), same(current, bookend), preserved() {
                     // A transient full AX census can equal the original baseline.
