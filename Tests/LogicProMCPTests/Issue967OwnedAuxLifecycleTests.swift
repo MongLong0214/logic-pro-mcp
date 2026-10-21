@@ -164,6 +164,11 @@ struct Issue967OwnedAuxLifecycleTests {
         var retiredPeerCopies: [AXUIElement]?
         var selectCreatedOnCreation = false
         var focusOnCreation: AXUIElement?
+        var createdFocusFault: String?
+        var createdFocusSets = 0
+        var createdFocusCapabilityReads = 0
+        var createdFocusPostCapabilityReads = 0
+        var createdFocusDecidingFaultInjected = false
         var retiredDeletionPeers: [AXUIElement]?
         var selectionAfterCreation: [AXUIElement]?
         var selectionSets = 0
@@ -553,6 +558,16 @@ struct Issue967OwnedAuxLifecycleTests {
                    return currentChildren(element).map { .success($0) }
                },
                setAttributeHandler: { [self] element, attribute, value in
+                   if createdFocusFault != nil, CFEqual(element, created), attribute == kAXFocusedAttribute {
+                       guard let focused = value as? Bool, focused else {
+                           Issue.record("Only exact created-object focus is allowed"); return false
+                       }
+                       createdFocusSets += 1
+                       if !["ack_only", "late_effect", "replacement_after_attempt"].contains(createdFocusFault) {
+                           b.setAttribute(app, kAXFocusedUIElementAttribute, created)
+                       }
+                       return createdFocusFault != "unacked_effect"
+                   }
                    guard CFEqual(element, mixer), attribute == kAXSelectedChildrenAttribute,
                          let values = value as? [AXUIElement] else {
                        Issue.record("Unexpected lifecycle setter"); return false
@@ -639,6 +654,14 @@ struct Issue967OwnedAuxLifecycleTests {
             let ax = AXHelpers.Runtime(axApp: base.ax.axApp, attributeValue: base.ax.attributeValue,
                 attributeIsSettable: { [self] element, attribute in
                     let result = base.ax.attributeIsSettable(element, attribute)
+                    if let fault = createdFocusFault, CFEqual(element, created), attribute == kAXFocusedAttribute {
+                        createdFocusCapabilityReads += 1
+                        if fault == "late_document" { b.setAttribute(window, kAXDocumentAttribute, "file:///tmp/Foreign.logicx") }
+                        if fault == "late_focus" { b.setAttribute(app, kAXFocusedUIElementAttribute, original[1]) }
+                        if fault == "late_selection" { selected = [retiredPeerCopies![0]] }
+                        if fault == "late_census" { replacementCreated = b.element(967_804) }
+                        if fault == "late_peer" { b.setAttribute(b.element(967_801), kAXValueAttribute, 0.5) }
+                    }
                     if result == true, CFEqual(element, mixer), attribute == kAXSelectedChildrenAttribute {
                         selectionSettableObserved = true
                     }
@@ -677,6 +700,32 @@ struct Issue967OwnedAuxLifecycleTests {
 
         private func attributeResult(_ element: AXUIElement, _ attribute: String) -> Result<AnyObject?, AXHelpers.AXStatusError>? {
             noteRead()
+            if let fault = createdFocusFault, fault.hasPrefix("deciding_"), createdFocusCapabilityReads > 0,
+               CFEqual(element, app), attribute == kAXFocusedUIElementAttribute {
+                createdFocusPostCapabilityReads += 1
+                if createdFocusPostCapabilityReads == 2, !createdFocusDecidingFaultInjected {
+                    createdFocusDecidingFaultInjected = true
+                    if fault == "deciding_window" {
+                        let foreign = b.element(967_805)
+                        b.setRole(foreign, kAXWindowRole as String); b.setChildren(foreign, [])
+                        b.setAttribute(foreign, kAXDocumentAttribute, "file:///tmp/967-owned.logicx")
+                        b.setAttribute(app, kAXWindowsAttribute, [foreign])
+                        b.setAttribute(app, kAXMainWindowAttribute, foreign)
+                        b.setAttribute(app, kAXFocusedWindowAttribute, foreign)
+                    }
+                    if fault == "deciding_candidate" {
+                        let replacement = b.element(967_804)
+                        b.setRole(replacement, kAXLayoutItemRole as String); b.setChildren(replacement, [])
+                        replacementCreated = replacement
+                    }
+                    if fault == "deciding_peer" { b.setAttribute(b.element(967_801), kAXValueAttribute, 0.5) }
+                    if fault == "deciding_selection" { selected = [retiredPeerCopies![0]] }
+                    if fault == "deciding_focus" { b.setAttribute(app, kAXFocusedUIElementAttribute, original[1]) }
+                    // Return the still-valid deciding sample while changing its
+                    // bookend; the retained original document stays unchanged.
+                    return .success(original[0])
+                }
+            }
             if CFEqual(element, mixer), attribute == kAXSelectedChildrenAttribute {
                 selectionReads += 1
                 if selectionReads == scopeLossAtSelectionRead, !scopeLossInjected {
@@ -1269,6 +1318,58 @@ struct Issue967OwnedAuxLifecycleTests {
         }
     }
 
+    @Test func wholePeerRedrawCanFocusOnlyItsUniquelyProvedCreation() async throws {
+        try await assertCreatedFocusAfterWholeRedraw(fault: "healthy")
+    }
+
+    @Test(arguments: ["ack_only", "unacked_effect", "late_effect", "foreign_focus", "wrong_selected", "not_settable",
+                      "late_document", "late_focus", "late_selection", "late_census", "late_peer",
+                      "replacement_after_attempt", "changed_peer", "partial_retirement",
+                      "deciding_window", "deciding_candidate", "deciding_peer", "deciding_selection", "deciding_focus"])
+    func createdFocusAcquisitionPreservesTheOriginalTargetAndOneAttempt(fault: String) async throws {
+        try await assertCreatedFocusAfterWholeRedraw(fault: fault)
+    }
+
+    private func assertCreatedFocusAfterWholeRedraw(fault: String) async throws {
+        try await owned {
+            let f = Fixture(); f.modelWholePeerRetirement()
+            f.createdFocusFault = fault
+            f.focusOnCreation = f.original[fault == "foreign_focus" ? 1 : 0]
+            f.b.setAttributeSettable(f.created, kAXFocusedAttribute, fault != "not_settable")
+            if fault == "wrong_selected" { f.selectionAfterCreation = [f.retiredPeerCopies![0]] }
+            if fault == "changed_peer" { f.b.setAttribute(f.b.element(967_801), kAXValueAttribute, 0.5) }
+            if fault == "partial_retirement" { f.retiredPeerCopies = [f.original[0], f.b.element(967_803)] }
+            let context = try f.context(nativeControls: true)
+            var result = await context.create()
+            if fault == "late_effect" {
+                #expect(result.status == .pending && result.inverse == nil)
+                #expect(f.createdFocusSets == 1)
+                f.b.setAttribute(f.app, kAXFocusedUIElementAttribute, f.created)
+                result = await context.create()
+            } else if fault == "replacement_after_attempt" {
+                #expect(f.createdFocusSets == 1)
+                let replacement = f.b.element(967_804)
+                f.b.setRole(replacement, kAXLayoutItemRole as String); f.b.setChildren(replacement, [])
+                f.replacementCreated = replacement
+                result = await context.create()
+            }
+            let success = ["healthy", "unacked_effect", "late_effect"].contains(fault)
+            if success {
+                #expect(result.status == .created)
+                if let created = result.created { #expect(CFEqual(created, f.created)) }
+                else { Issue.record("The uniquely proved created object must be retained") }
+                #expect(result.inverse != nil)
+            } else { #expect(result.status != .created && result.inverse == nil) }
+            let attempted = success || ["ack_only", "replacement_after_attempt"].contains(fault)
+            #expect(f.createdFocusSets == (attempted ? 1 : 0))
+            if fault.hasPrefix("late_") && fault != "late_effect" { #expect(f.createdFocusCapabilityReads > 0) }
+            if fault.hasPrefix("deciding_") { #expect(f.createdFocusDecidingFaultInjected) }
+            _ = await context.create()
+            #expect(f.createdFocusSets == (attempted ? 1 : 0), "Reconciliation cannot retry focus or adopt a replacement")
+            #expect(f.createPresses == 1 && f.deletePresses == 0)
+        }
+    }
+
     @Test(arguments: ["success", "unacked_effect", "late_project", "stale_focus", "no_hide_effect", "show_ignored", "cancel_after_hide"])
     func oneOwnedDisplayRefreshExposesAndSelectsTheLatentCreation(fault: String) async throws {
         let f = Fixture(); f.modelLatentCreationUntilOwnedRefresh()
@@ -1763,6 +1864,55 @@ struct Issue967OwnedAuxLifecycleTests {
             #expect(receipt.inverse == nil)
             #expect(f.createPresses == 1)
             #expect(f.deletePresses == 0)
+        }
+    }
+
+    @Test(arguments: ["single_empty", "two_empty", "missing", "three_empty", "occupied", "malformed", "changed_default"])
+    func defaultSendPresentationRequiresCompleteEmptyObservation(profile: String) async throws {
+        try await owned {
+            let f = Fixture()
+            let send = f.b.element(967_131)
+            let existing = f.b.makeAXRuntime().children(f.created)
+            var children = existing.filter { !CFEqual($0, f.b.element(967_132)) }
+            if profile == "two_empty" { children = existing }
+            if profile == "missing" { children.removeAll { CFEqual($0, send) } }
+            if profile == "three_empty" {
+                let extra = f.b.element(967_133)
+                f.b.setRole(extra, kAXButtonRole as String); f.b.setChildren(extra, [])
+                f.b.setAttribute(extra, kAXHelpAttribute, AXLocalePolicy.sendSlotHelpKeyword.canonical)
+                children = existing + [extra]
+            }
+            if profile == "occupied" {
+                let knob = f.b.element(967_133)
+                f.b.setRole(knob, kAXSliderRole as String); f.b.setChildren(knob, [])
+                f.b.setAttribute(knob, kAXHelpAttribute, AXLocalePolicy.sendLevelKnobHelpKeyword.canonical)
+                f.b.setAttribute(knob, kAXValueAttribute, 0)
+                children.append(knob)
+            }
+            if profile == "malformed" { f.b.setAttribute(send, kAXHelpAttribute, NSNumber(value: 7)) }
+            if profile == "changed_default" {
+                f.b.setAttribute(f.controls[.input]!, kAXDescriptionAttribute, "Bus 7")
+            }
+            f.b.setChildren(f.created, children)
+            let healthy = profile == "single_empty" || profile == "two_empty"
+            let slots = AXLogicProElements.sendSlotObservations(in: f.created, runtime: f.runtime.ax)
+            if healthy { #expect(slots?.count == (profile == "single_empty" ? 1 : 2)) }
+            if profile == "occupied" { #expect(slots?.contains { $0.state != .observedEmpty } == true) }
+            let context = try f.context(nativeControls: true)
+            let receipt = await context.create()
+            #expect(receipt.status == (healthy ? .created : .configurationPartial))
+            let created = try #require(receipt.created)
+            #expect(CFEqual(created, f.created))
+            #expect(f.createPresses == 1 && f.deletePresses == 0)
+            if healthy {
+                #expect(receipt.defaults == Fixture.defaults)
+                if let proof = receipt.inverse {
+                    f.selected = [f.created]
+                    f.b.setAttribute(f.app, kAXFocusedUIElementAttribute, f.created)
+                    #expect(await context.remove(proof).status == .removed)
+                    #expect(f.deletePresses == 1)
+                } else { Issue.record("Observed empty native presentation did not retain an owned inverse") }
+            } else { #expect(receipt.inverse == nil) }
         }
     }
 
