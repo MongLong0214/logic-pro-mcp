@@ -378,6 +378,7 @@ extension OperationRegistry {
                 "bar": index(9), "notes": .enforced(.string, .string("60:0:480")), "tempo": .enforced(.number, .int(120)),
                 "instrument": .unconstrained("read and reported back as ignored; it never selects an instrument"),
                 "instrument_path": .unconstrained("read and reported back as ignored; it never selects an instrument"),
+                "target_track": index(0), "target_expected_name": expectedName,
             ], required: [["notes"]]),
             "tracks.sort_verified": .init(params: [
                 "criterion": .enforced(.scalar, .string("midi_channel"), allowed: TrackSortCriterion.allCases.map(\.rawValue)),

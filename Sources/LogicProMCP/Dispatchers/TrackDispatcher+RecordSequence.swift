@@ -77,6 +77,29 @@ extension TrackDispatcher {
         } else {
             requestedTempo = nil
         }
+        // Opt-in GM Device relocation: Logic 12.4 imports every SMF onto a new GM Device /
+        // External MIDI lane regardless of program changes or the selected track. When the
+        // caller names an existing Software Instrument track, the imported region is copied
+        // onto it (never cut, so a failed paste cannot lose the take). The index is
+        // corroborated by name, like delete/duplicate/set_instrument.
+        let relocationTarget: (index: Int, expectedName: String)?
+        if params["target_track"] != nil || params["target_expected_name"] != nil {
+            guard let index = intParamOrNil(params, "target_track"), index >= 0 else {
+                return toolInvalidParamsResult(
+                    "record_sequence 'target_track' must be a non-negative integer track index"
+                )
+            }
+            guard let expectedName = params["target_expected_name"]?.stringValue,
+                  !expectedName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                return toolInvalidParamsResult(
+                    "record_sequence 'target_track' requires 'target_expected_name' (the track name you expect at that index)"
+                )
+            }
+            relocationTarget = (index, expectedName)
+        } else {
+            relocationTarget = nil
+        }
+
         guard await cache.getHasDocument() else {
             return toolTextResult("record_sequence: No project open", isError: true)
         }
@@ -214,6 +237,35 @@ extension TrackDispatcher {
         // here to discover the new track index and then verify the imported
         // region on that specific track.
         let tracksBefore = trackHeaderCount()
+        if let relocationTarget {
+            // Refuse before importing, so a bad target never leaves a stray GM lane behind.
+            let observedName = trackNameAt(relocationTarget.index)
+            var refusal: [String: Any] = [
+                "success": false,
+                "verified": false,
+                "write_attempted": false,
+                "failure_stage": "relocation_preflight",
+                "target_track": relocationTarget.index,
+                "target_expected_name": relocationTarget.expectedName,
+                "track_count_before": tracksBefore,
+            ]
+            if let observedName { refusal["observed_target_name"] = observedName }
+            if relocationTarget.index >= tracksBefore || observedName == nil {
+                refusal["error"] = "target_track_not_found"
+                return jsonToolTextResult(refusal, isError: true)
+            }
+            if observedName != relocationTarget.expectedName {
+                refusal["error"] = "target_name_mismatch"
+                return jsonToolTextResult(refusal, isError: true)
+            }
+            if !AccessibilityChannel.gmDeviceLanesAmongNewTracks(
+                names: [relocationTarget.expectedName], beforeCount: 0
+            ).isEmpty {
+                refusal["error"] = "target_is_gm_device"
+                refusal["hint"] = "target_track must be a Software Instrument track, not a GM Device / External MIDI lane"
+                return jsonToolTextResult(refusal, isError: true)
+            }
+        }
         let importResult = await router.route(
             operation: "midi.import_file",
             params: ["path": path]
@@ -256,6 +308,22 @@ extension TrackDispatcher {
            (inner["verified"] as? Bool) == false {
             let reason = (inner["reason"] as? String) ?? "import_unverified"
             let audibilityDowngrade = reason == HonestContract.UncertainReason.importedAsGMDevice.rawValue
+            if audibilityDowngrade, let relocationTarget {
+                return await relocateGMDeviceImport(
+                    importDetail: inner,
+                    target: relocationTarget,
+                    tracksBefore: tracksBefore,
+                    requestedBar: bar,
+                    events: events,
+                    router: router,
+                    cache: cache,
+                    traceID: traceID,
+                    trackHeaderCount: trackHeaderCount,
+                    trackNameAt: trackNameAt,
+                    readRegions: readRegions,
+                    settleReadback: settleReadback
+                )
+            }
             var failure: [String: Any] = [
                 "success": false,
                 "verified": false,
@@ -370,6 +438,191 @@ extension TrackDispatcher {
             readRegions: readRegions,
             settleReadback: settleReadback
         )
+    }
+
+    /// Copies a single-lane GM Device import onto a caller-named Software Instrument track.
+    ///
+    /// Measured on Logic 12.4 (build 6707): File > Import > MIDI File always creates a new GM Device
+    /// lane, even with a GM program change in the file and a Software Instrument track selected.
+    /// Selecting a track selects its regions, so select source > copy > select target > playhead at
+    /// bar 1 > paste puts the region on the target at the same bars (the bar offset is inside the
+    /// region, as for the import itself). Copy, not cut: until the paste is read back, the take
+    /// stays on the GM lane, so no failure below can lose it. The GM lane is never deleted here;
+    /// the result names it so the caller can remove it with a corroborated `tracks.delete`.
+    private static func relocateGMDeviceImport(
+        importDetail: [String: Any],
+        target: (index: Int, expectedName: String),
+        tracksBefore: Int,
+        requestedBar: Int,
+        events: [SMFWriter.NoteEvent],
+        router: ChannelRouter,
+        cache: StateCache,
+        traceID: TraceID?,
+        trackHeaderCount: @escaping @Sendable () -> Int,
+        trackNameAt: @escaping @Sendable (Int) -> String?,
+        readRegions: @escaping @Sendable () -> RecordSequenceRegionReadback,
+        settleReadback: @escaping @Sendable () async -> Void
+    ) async -> CallTool.Result {
+        let expectedEndBar = recordSequenceExpectedEndBar(for: events, requestedBar: requestedBar)
+        let gmLanes = (importDetail["gm_device_lanes"] as? [String]) ?? []
+        let tracksAfter = trackHeaderCount()
+        let gmLane = tracksAfter - 1
+        let gmLaneName = trackNameAt(gmLane) ?? ""
+        let base: [String: Any] = [
+            "bar": requestedBar,
+            "note_count": events.count,
+            "method": "smf_import",
+            "relocation": "gm_device_to_instrument_copy",
+            "gm_device_lane_index": gmLane,
+            "gm_device_lane_name": gmLaneName,
+            "target_track_index": target.index,
+            "target_track_name": target.expectedName,
+            "expected_start_bar": 1,
+            "expected_end_bar": expectedEndBar,
+            "track_count_before": tracksBefore,
+            "track_count_after": tracksAfter,
+        ]
+        func failure(_ error: String, stage: String, hint: String, extras: [String: Any] = [:]) -> CallTool.Result {
+            var payload = base.merging(extras) { _, new in new }
+            payload["success"] = false
+            payload["verified"] = false
+            payload["error"] = error
+            payload["failure_stage"] = stage
+            payload["hint"] = hint + " The imported take is still on GM Device lane \(gmLane) ('\(gmLaneName)')."
+            return jsonToolTextResult(payload, isError: true)
+        }
+
+        // Only the shape that was measured is supported: one new lane, recognisably GM Device,
+        // appended after the existing tracks, with the target still where the preflight saw it.
+        guard gmLanes.count == 1,
+              tracksAfter == tracksBefore + 1,
+              !AccessibilityChannel.gmDeviceLanesAmongNewTracks(names: [gmLaneName], beforeCount: 0).isEmpty else {
+            return failure(
+                "relocation_unsupported", stage: "relocation_preflight",
+                hint: "Relocation supports exactly one new GM Device lane (single MIDI channel); observed lanes \(gmLanes) and \(tracksAfter - tracksBefore) new track(s).",
+                extras: ["gm_device_lanes": gmLanes]
+            )
+        }
+        guard trackNameAt(target.index) == target.expectedName else {
+            return failure(
+                "target_name_mismatch", stage: "relocation_preflight",
+                hint: "Track \(target.index) no longer reads '\(target.expectedName)' after the import."
+            )
+        }
+
+        guard let sourceRegion = await pollRegionReadback(
+            readRegions: readRegions, settleReadback: settleReadback,
+            match: { preferredRecordSequenceRegion(from: $0.filter { $0.trackIndex == gmLane }) }
+        ) else {
+            return failure(
+                "unreadable_readback", stage: "relocation_source",
+                hint: "No MIDI region could be read on the GM Device lane, so nothing was copied."
+            )
+        }
+        let targetKeysBefore: Set<String>
+        if case .success(let regions) = readRegions() {
+            targetKeysBefore = Set(regions.filter { $0.trackIndex == target.index }.map(recordSequenceRegionKey))
+        } else {
+            return failure(
+                "unreadable_readback", stage: "relocation_source",
+                hint: "The target track's existing regions could not be read, so a paste could not be told apart from them."
+            )
+        }
+
+        let selectSource = await withWriteBoundaryArmed(traceID) {
+            await router.route(operation: "track.select", params: ["index": String(gmLane)])
+        }
+        guard selectSource.isSuccess else {
+            return failure("select_failed", stage: "relocation_select_source",
+                           hint: "Could not select the GM Device lane: \(selectSource.message).")
+        }
+        let copy = await withWriteBoundaryArmed(traceID) {
+            await router.route(operation: "edit.copy")
+        }
+        guard copy.isSuccess else {
+            return failure("copy_failed", stage: "relocation_copy", hint: "Copy was not delivered: \(copy.message).")
+        }
+        let selectTarget = await withWriteBoundaryArmed(traceID) {
+            await router.route(operation: "track.select", params: ["index": String(target.index)])
+        }
+        guard selectTarget.isSuccess else {
+            return failure("select_failed", stage: "relocation_select_target",
+                           hint: "Could not select target track \(target.index): \(selectTarget.message). Nothing was pasted.")
+        }
+
+        // The import already left the playhead at bar 1; confirm it rather than assume it.
+        let beforePosition = await TransportDispatcher.liveTransportState(router: router, cache: cache)
+        if TransportDispatcher.gotoPositionUnchangedResult(
+            requestedPosition: "1.1.1.1", beforeTransport: beforePosition
+        ) == nil {
+            let routedGoto = await withWriteBoundaryArmed(traceID) {
+                await router.route(operation: "transport.goto_position", params: ["bar": "1"])
+            }
+            let gotoResult = await TransportDispatcher.finalizeGotoPositionResult(
+                routedGoto, requestedPosition: "1.1.1.1", beforeTransport: beforePosition,
+                router: router, cache: cache
+            )
+            guard !(gotoResult.isError ?? false) else {
+                return failure("playhead_unverified", stage: "relocation_playhead",
+                               hint: "The playhead could not be verified at bar 1, so nothing was pasted.")
+            }
+        }
+
+        let paste = await withWriteBoundaryArmed(traceID) {
+            await router.route(operation: "edit.paste")
+        }
+        guard paste.isSuccess else {
+            return failure("paste_failed", stage: "relocation_paste", hint: "Paste was not delivered: \(paste.message).")
+        }
+
+        guard let pasted = await pollRegionReadback(
+            readRegions: readRegions, settleReadback: settleReadback,
+            match: { regions in
+                preferredRecordSequenceRegion(from: regions.filter {
+                    $0.trackIndex == target.index && !targetKeysBefore.contains(recordSequenceRegionKey($0))
+                })
+            }
+        ) else {
+            return failure("paste_unverified", stage: "relocation_verify",
+                           hint: "No new region appeared on target track \(target.index) after paste; check the track before retrying.")
+        }
+        guard pasted.startBar == sourceRegion.startBar, pasted.endBar == sourceRegion.endBar,
+              pasted.startBar == 1, pasted.endBar == expectedEndBar else {
+            var observed = recordSequenceRegionFields(pasted, prefix: "observed_")
+            observed["observed_track_index"] = pasted.trackIndex
+            return failure("timing_mismatch", stage: "relocation_verify",
+                           hint: "A region was pasted on track \(target.index) but its bars do not match the import.",
+                           extras: observed)
+        }
+
+        var payload = base.merging(recordSequenceRegionFields(pasted)) { _, new in new }
+        payload["success"] = true
+        payload["verified"] = true
+        payload["verify_source"] = "ax_region_delta"
+        payload["recorded_to_track"] = target.index
+        payload["instrument"] = "existing_target_track"
+        payload["gm_device_lane_retained"] = true
+        payload["cleanup_hint"] = "The original take is still on GM Device lane \(gmLane). Remove it with logic_tracks delete { index: \(gmLane), expected_name: \"\(gmLaneName)\" } once satisfied."
+        return jsonToolTextResult(payload)
+    }
+
+    /// Reads regions until `match` finds something, giving Logic's AX tree the same settle budget
+    /// as the import verification.
+    private static func pollRegionReadback(
+        attempts: Int = 10,
+        readRegions: @Sendable () -> RecordSequenceRegionReadback,
+        settleReadback: @Sendable () async -> Void,
+        match: ([RegionInfo]) -> RegionInfo?
+    ) async -> RegionInfo? {
+        for attempt in 0..<attempts {
+            if case .success(let regions) = readRegions(), let found = match(regions) {
+                return found
+            }
+            if attempt < attempts - 1 {
+                await settleReadback()
+            }
+        }
+        return nil
     }
 
     private enum RecordSequenceReadbackStatus {
