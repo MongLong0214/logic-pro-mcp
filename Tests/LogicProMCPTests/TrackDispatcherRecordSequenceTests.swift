@@ -155,6 +155,7 @@ func testRecordSequenceVerifiesPositionBeforeImport(_ mode: String) async throws
     let object = recordSequenceJSONObject(result)
     #expect(try #require(object["verified"] as? Bool))
     #expect(object["target_track_index"] as? Int == 1)
+    #expect(object["playhead_verified_components"] as? [String] == ["bar", "beat", "subdivision", "tick"])
     #expect(await channel.importCalls == 1)
     if mode == "already_at_target" {
         #expect(await channel.operations == ["transport.get_state", "midi.import_file"])
@@ -168,8 +169,8 @@ func testRecordSequenceVerifiesPositionBeforeImport(_ mode: String) async throws
     #expect(builder.actionCalls.isEmpty)
 }
 
-@Test(arguments: ["wrong_position", "partial_after", "display_default", "missing_before", "missing_after",
-                  "input_issued", "state_a_unsafe", "state_a_mismatch"])
+@Test(arguments: ["wrong_position", "partial_wrong", "partial_input_issued", "display_default", "missing_before",
+                  "missing_after", "input_issued", "state_a_unsafe", "state_a_mismatch"])
 func testRecordSequenceWithholdsImportWithoutVerifiedPosition(_ mode: String) async throws {
     let builder = FakeAXRuntimeBuilder()
     let runtime = AXLogicProElements.Runtime(
@@ -181,7 +182,8 @@ func testRecordSequenceWithholdsImportWithoutVerifiedPosition(_ mode: String) as
     let after: ChannelResult
     switch mode {
     case "wrong_position", "state_a_mismatch": after = try recordSequencePosition("3.1.1.1")
-    case "partial_after": after = try recordSequencePosition("1.1", components: [.bar, .beat])
+    case "partial_wrong": after = try recordSequencePosition("2.1", components: [.bar, .beat])
+    case "partial_input_issued": after = try recordSequencePosition("1.1", components: [.bar, .beat])
     case "display_default": after = try recordSequencePosition(nil)
     case "missing_after": after = .error("injected unread post-position")
     default: after = try recordSequencePosition("1.1.1.1")
@@ -189,7 +191,7 @@ func testRecordSequenceWithholdsImportWithoutVerifiedPosition(_ mode: String) as
     let channel = RecordingMockChannel(
         id: .accessibility, importResult: .error("bounded unexpected import"),
         gotoRuntime: runtime,
-        dialogOutput: mode == "input_issued"
+        dialogOutput: mode == "input_issued" || mode == "partial_input_issued"
             ? #"{"result":"DIALOG_INPUT_ISSUED: POSITION_INPUT_ARMED: position text may have been sent (AX error)"}"#
             : #"{"result":"OK"}"#,
         gotoResult: mode.hasPrefix("state_a") ? .success(HonestContract.encodeStateA(
@@ -214,7 +216,7 @@ func testRecordSequenceWithholdsImportWithoutVerifiedPosition(_ mode: String) as
     let diagnostic = try #require(sharedJSONObject(String(text.dropFirst(prefix.count))))
     #expect(diagnostic["state"] as? String == "B")
     #expect(!(try #require(diagnostic["verified"] as? Bool)))
-    if mode == "input_issued" {
+    if mode == "input_issued" || mode == "partial_input_issued" {
         #expect(diagnostic["verification_withheld"] as? String == "dialog_input_target")
         #expect(diagnostic["dialog_input_boundary"] as? String == "POSITION_INPUT_ARMED")
         #expect(try #require(diagnostic["fallback_unsafe"] as? Bool))
@@ -223,6 +225,65 @@ func testRecordSequenceWithholdsImportWithoutVerifiedPosition(_ mode: String) as
     }
     #expect(builder.setCalls.isEmpty)
     #expect(builder.actionCalls.isEmpty)
+}
+
+// #1420 — Logic's default control-bar display mode ("Beats & Project") exposes only bar and beat.
+// A seek to 1.1.1.1 whose readback shows a matching bar and beat, with nothing withheld,
+// satisfies record_sequence's precondition, and the response reports the verified scope.
+@Test(arguments: ["full_before", "partial_before"])
+func testRecordSequenceAcceptsAMatchingPartialPlayheadReadback(_ mode: String) async throws {
+    let builder = FakeAXRuntimeBuilder()
+    let runtime = AXLogicProElements.Runtime(
+        logicProPID: { 4242 }, ax: builder.makeAXRuntime(),
+        executeAppleScript: { _ in Issue.record("native script prohibited"); return .error("inert") },
+        onScreenWindowList: { nil }, postPopupMenuEscape: { Issue.record("native escape prohibited") })
+    let before = mode == "full_before"
+        ? try recordSequencePosition("2.1.1.1") : try recordSequencePosition("2.1", components: [.bar, .beat])
+    let channel = RecordingMockChannel(
+        id: .accessibility, importResult: .success("imported"),
+        gotoRuntime: runtime, dialogOutput: #"{"result":"OK"}"#,
+        transportReadbacks: [before, try recordSequencePosition("1.1", components: [.bar, .beat])])
+    let router = ChannelRouter()
+    await router.register(channel)
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let counts = SequentialIntBox([1, 2])
+    let regions = SequentialRegionReadBox([
+        .success([]), .success([makeRegion(trackIndex: 1, startBar: 1, endBar: 2)])])
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: ["notes": minimalNoteSpec()], router: router, cache: cache,
+        trackHeaderCount: { counts.next() }, trackNameAt: { $0 == 1 ? "Imported Piano" : nil },
+        readRegions: { regions.next() }, settleReadback: {})
+    #expect(!(try #require(result.isError)))
+    let object = recordSequenceJSONObject(result)
+    #expect(try #require(object["verified"] as? Bool))
+    #expect(object["playhead_verified_components"] as? [String] == ["bar", "beat"])
+    #expect(await channel.operations == ["transport.get_state", "transport.goto_position", "transport.get_state", "midi.import_file"])
+    #expect(await channel.importCalls == 1)
+    #expect(builder.setCalls.isEmpty)
+    #expect(builder.actionCalls.isEmpty)
+}
+
+@Test func testRecordSequencePartialPlayheadAcceptsOnlyAMatchingPrefix() {
+    func seek(_ extras: [String: Any]) -> CallTool.Result {
+        var all: [String: Any] = ["requested": "1.1.1.1"]
+        all.merge(extras) { $1 }
+        return toolTextResult(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: all), isError: true)
+    }
+    #expect(TrackDispatcher.recordSequencePartialPlayhead(seek(
+        ["observed": "1.1", "observed_position_components": ["bar", "beat"]])) == ["bar", "beat"])
+    #expect(TrackDispatcher.recordSequencePartialPlayhead(seek(
+        ["observed": "1.1.1", "observed_position_components": ["bar", "beat", "subdivision"]])) == ["bar", "beat", "subdivision"])
+    #expect(TrackDispatcher.recordSequencePartialPlayhead(seek(
+        ["observed": "1.2", "observed_position_components": ["bar", "beat"]])) == nil)
+    #expect(TrackDispatcher.recordSequencePartialPlayhead(seek(
+        ["observed": "1", "observed_position_components": ["bar"]])) == nil)
+    #expect(TrackDispatcher.recordSequencePartialPlayhead(seek(
+        ["observed": "1.1", "observed_position_components": ["bar", "beat"], "verification_withheld": "fallback_unsafe"])) == nil)
+    #expect(TrackDispatcher.recordSequencePartialPlayhead(toolTextResult(
+        HonestContract.encodeStateB(reason: .readbackMismatch, extras: [
+            "requested": "1.1.1.1", "observed": "1.1", "observed_position_components": ["bar", "beat"]]),
+        isError: true)) == nil)
 }
 
 private func minimalNoteSpec() -> Value {

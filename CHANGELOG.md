@@ -33,6 +33,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   censuses grow to 117 operations; the op joins the `legacy_index_allowed` census.
 
 ### Fixed
+- **`record_sequence` works in Logic's default control-bar display mode (#1420).** In "Beats & Project"
+  the Playhead Position group exposes only bar and beat, so the seek to `1.1.1.1` could never reach
+  State A and every `record_sequence` refused with "failed to reset playhead to bar 1". As
+  `QualificationTransport` already does for the same readback, a partial reading whose observed
+  components all match the target, with no verification withheld, now satisfies the precondition.
+  Responses report `playhead_verified_components`. The seek's own State A contract is unchanged.
 - **`export_track_midi` / `read_track_notes` accept several conductor chunks.** Logic 12.4 can start
   its "All MIDI Tracks as MIDI File" export with more than one unnamed chunk holding only tempo,
   meter, key and SMPTE metadata (5 and 8 were observed in two projects). Only the first was

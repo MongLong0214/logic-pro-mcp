@@ -177,7 +177,13 @@ extension TrackDispatcher {
                 router: router, cache: cache
             )
         }
-        guard !(gotoResult.isError ?? false) else {
+        // #1420 — how many position components the readback exposes is the control bar's display
+        // mode: Logic's default "Beats & Project" shows bar and beat only, so the seek cannot reach
+        // State A there. As QualificationTransport does for the same readback, accept what the
+        // display shows: a partial reading whose bar and beat match the target, with nothing
+        // withheld, satisfies this precondition. The verified scope is reported, not implied.
+        let partialPlayhead = (gotoResult.isError ?? false) ? recordSequencePartialPlayhead(gotoResult) : nil
+        guard !(gotoResult.isError ?? false) || partialPlayhead != nil else {
             let positionDetail: String
             if case .text(let text, _, _) = gotoResult.content.first {
                 positionDetail = text
@@ -368,8 +374,35 @@ extension TrackDispatcher {
             events: events,
             preImportRegions: preImportRegions,
             readRegions: readRegions,
-            settleReadback: settleReadback
+            settleReadback: settleReadback,
+            playheadVerifiedComponents: partialPlayhead
+                ?? TransportPositionComponent.allCases.map(\.rawValue)
         )
+    }
+
+    /// The observed components of a State B seek to `1.1.1.1` whose only shortfall is a partial
+    /// readback: at least bar and beat observed, all of them matching the target, and no
+    /// verification withheld (dialog input target, unsafe fallback, indeterminate write). Any other
+    /// result, including a mismatch on an observed component, returns nil.
+    static func recordSequencePartialPlayhead(_ result: CallTool.Result) -> [String]? {
+        guard case .text(let text, _, _) = result.content.first,
+              let object = importMessageJSON(text),
+              object["state"] as? String == "B",
+              object["reason"] as? String == HonestContract.UncertainReason.readbackUnavailable.rawValue,
+              object["verification_withheld"] == nil,
+              object["requested"] as? String == "1.1.1.1",
+              let observed = object["observed"] as? String,
+              let components = object["observed_position_components"] as? [String] else {
+            return nil
+        }
+        let all = TransportPositionComponent.allCases.map(\.rawValue)
+        guard components.count >= 2, components.count < all.count,
+              Array(all.prefix(components.count)) == components,
+              observed.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
+                == Array(repeating: "1", count: components.count) else {
+            return nil
+        }
+        return components
     }
 
     private enum RecordSequenceReadbackStatus {
@@ -408,7 +441,8 @@ extension TrackDispatcher {
         events: [SMFWriter.NoteEvent],
         preImportRegions: [RegionInfo]?,
         readRegions: @escaping @Sendable () -> RecordSequenceRegionReadback,
-        settleReadback: @escaping @Sendable () async -> Void
+        settleReadback: @escaping @Sendable () async -> Void,
+        playheadVerifiedComponents: [String]
     ) async -> CallTool.Result {
         let expectedStartBar = 1
         let expectedEndBar = recordSequenceExpectedEndBar(for: events, requestedBar: requestedBar)
@@ -423,6 +457,7 @@ extension TrackDispatcher {
             "instrument": instrumentStatus,
             "expected_start_bar": expectedStartBar,
             "expected_end_bar": expectedEndBar,
+            "playhead_verified_components": playheadVerifiedComponents,
         ]
         let preRegionKeys = Set((preImportRegions ?? []).map(recordSequenceRegionKey))
         let hasPreImportSnapshot = preImportRegions != nil
