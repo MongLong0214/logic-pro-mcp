@@ -819,10 +819,10 @@ enum AXValueExtractors {
         from header: AXUIElement, runtime: AXHelpers.Runtime
     ) -> Result<String?, AXHelpers.AXStatusError> {
         let failures = AXPluginInstanceIdentity.FailedReads()
-        let ax = AXPluginInstanceIdentity.noting(failures, over: runtime)
+        let ax = AXPluginInstanceIdentity.noting(failures, over: runtime, forwardingNonHelpBatches: true)
         let fields: AXHelpers.Census
         switch AXHelpers.censusDescendantResult(of: header, role: kAXTextFieldRole as String,
-                                               maxDepth: 3, runtime: ax) {
+                                               maxDepth: 3, runtime: ax, batchingRoleAndChildren: true) {
         case .success(let census): fields = census
         case .failure(let error): return .failure(error)
         }
@@ -835,7 +835,7 @@ enum AXValueExtractors {
 
         let texts: AXHelpers.Census
         switch AXHelpers.censusDescendantResult(of: header, role: kAXStaticTextRole as String,
-                                               maxDepth: 3, runtime: ax) {
+                                               maxDepth: 3, runtime: ax, batchingRoleAndChildren: true) {
         case .success(let census): texts = census
         case .failure(let error): return .failure(error)
         }

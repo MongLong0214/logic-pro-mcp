@@ -35,17 +35,19 @@ extension AccessibilityChannel {
             }
         }
 
-        /// Continue this actual effect through its owned prerequisite read, not
-        /// a fresh request or a replacement found by label/ordinal. The caller
-        /// must retain this current capsule before starting that read.
-        func continuing(after renewal: OriginalHeaderSourceRenewal, reading: CheckedOutputReading,
+        /// Continue only the already-verified effect through its owned Input
+        /// read. Checked destination/mode remain historical expectations, not
+        /// a fresh observation: the deciding inverse popup must corroborate
+        /// both before any leaf action. The caller retains this current capsule
+        /// before the Input read; labels, ordinals and read custody cannot create it.
+        func continuingForDecidingInverse(after renewal: OriginalHeaderSourceRenewal,
+                        control current: AXLogicProElements.AssignedSendMenuControl,
                         slots: [SendSlotObservation], runtime: AXLogicProElements.Runtime) -> Self? {
             guard case .bus = checkedBefore,
                   AccessibilityChannel.supportsOccupiedSendChange(before: checkedBefore, after: checkedAfter),
                   renewal.original.matches(source.pair.strip), renewal.originalTrack.matches(source.pair.track),
                   renewal.observation.effects.restoration == "restored", renewal.permits(runtime: runtime),
-                  reading.assignment == checkedAfter, reading.sendNonRoutingChecks == nonRoutingChecks,
-                  let current = reading.sendControl, current.ordinal == control.ordinal,
+                  current.ordinal == control.ordinal,
                   slots.count == 2, slots.filter({ $0.state == .occupiedUnknownDestination }).count == 1,
                   slots.filter({ $0.state == .observedEmpty }).count == 1,
                   Self.protectedSlots(slots, ordinal: control.ordinal)
@@ -65,10 +67,17 @@ extension AccessibilityChannel {
                     source.observation.permitsOwnedPopupRead($0)
                 } ?? source.observation.permitsRead())
             })) {
+                var controls: [AXLogicProElements.AssignedSendMenuControl] = []
                 guard source.permits(runtime: runtime, ownedPopup: ownedPopup),
-                      let current = AXLogicProElements.assignedSendMenuControl(in: source.pair.strip.strip,
-                        ordinal: control.ordinal, runtime: runtime.ax), control.matches(current),
-                      let slots = AXLogicProElements.sendSlotObservations(in: source.pair.strip.strip, runtime: runtime.ax),
+                      // One complete current walk supplies both the physical
+                      // control and its protected values; neither is an old receipt.
+                      let slots = AXLogicProElements.sendSlotObservations(in: source.pair.strip.strip,
+                        runtime: runtime.ax, observingAssignedGroup: { controls.append($0) }),
+                      slots.indices.contains(control.ordinal), slots[control.ordinal].ordinal == control.ordinal,
+                      slots[control.ordinal].state == .occupiedUnknownDestination,
+                      controls.filter({ $0.ordinal == control.ordinal }).count == 1,
+                      let current = controls.first(where: { $0.ordinal == control.ordinal }),
+                      controls.filter({ CFEqual($0.list, current.list) }).count == 1, control.matches(current),
                       Self.protectedSlots(slots, ordinal: control.ordinal)
                         == Self.protectedSlots(footprint, ordinal: control.ordinal),
                       let census = removalCensus(source.pair.strip, runtime: runtime), census.count == population.count,

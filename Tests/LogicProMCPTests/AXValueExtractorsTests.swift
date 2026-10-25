@@ -2,6 +2,160 @@
 import Testing
 @testable import LogicProMCP
 
+private final class NativeNameCensusRequests: @unchecked Sendable {
+    var metadataBatches = 0
+    var roleSingles = 0
+    var helpReads = 0
+    var clippedChildrenReads = 0
+    var nativeError: AnyObject?
+}
+
+@Test("Current track names use fresh non-Help metadata batches without changing the depth boundary", arguments: [false, true])
+func trackNameResultBatchesItsActualNativeCensus(clipped: Bool) throws {
+    let b = FakeAXRuntimeBuilder(), reads = NativeNameCensusRequests()
+    let header = b.element(1_971_800), group = b.element(1_971_801)
+    let field = b.element(1_971_802), carrier = b.element(1_971_803)
+    let boundary = b.element(1_971_804), beyond = b.element(1_971_805)
+    for node in [header, group, carrier] { b.setRole(node, kAXGroupRole as String) }
+    b.setRole(field, kAXTextFieldRole as String)
+    b.setAttribute(field, kAXDescriptionAttribute as String, "Audio 2")
+    b.setAttribute(field, kAXValueAttribute as String, NSNumber(value: 0))
+    b.setRole(boundary, kAXButtonRole as String)
+    b.setRole(beyond, kAXTextFieldRole as String)
+    b.setAttribute(beyond, kAXDescriptionAttribute as String, "Outside the declared read depth")
+    b.setChildren(header, [group]); b.setChildren(group, [field, carrier])
+    b.setChildren(field, []); b.setChildren(carrier, clipped ? [boundary] : [])
+    b.setChildren(boundary, [beyond]); b.setChildren(beyond, [])
+    let base = b.makeAXRuntime()
+    let runtime = AXHelpers.Runtime(axApp: base.axApp,
+        attributeValue: { element, attribute in
+            if attribute == kAXHelpAttribute as String { reads.helpReads += 1 }
+            if attribute == kAXRoleAttribute as String { reads.roleSingles += 1 }
+            return base.attributeValue(element, attribute)
+        }, attributeIsSettable: base.attributeIsSettable,
+        setAttributeValue: { _, _, _ in Issue.record("Name observation must not write"); return false },
+        children: base.children,
+        performAction: { _, _ in Issue.record("Name observation must not act"); return false },
+        childCount: base.childCount, actionNames: base.actionNames,
+        childrenResult: { element in
+            if CFEqual(element, boundary) { reads.clippedChildrenReads += 1 }
+            return AXHelpers.childrenResult(element, runtime: base)
+        }, attributeValueResult: { element, attribute in
+            if attribute == kAXHelpAttribute as String { reads.helpReads += 1 }
+            if attribute == kAXRoleAttribute as String { reads.roleSingles += 1 }
+            return AXHelpers.getAttributeResult(element, attribute, runtime: base)
+        }, attributeValuesResult: { element, attributes in
+            reads.metadataBatches += 1
+            if attributes.contains(kAXHelpAttribute as String) {
+                reads.helpReads += 1; Issue.record("A metadata batch must not contain Help")
+            }
+            let values: [AnyObject] = attributes.map { attribute in
+                if attribute == kAXChildrenAttribute as String {
+                    if CFEqual(element, boundary) { reads.clippedChildrenReads += 1 }
+                    return base.children(element) as CFArray
+                }
+                return base.attributeValue(element, attribute) ?? NSNull()
+            }
+            return .success(values)
+        })
+    let result = AXHelpers.HelpReadGuard.$current.withValue(.init(allowHelpReads: false, stop: { false })) {
+        AXValueExtractors.extractTrackNameResult(from: header, runtime: runtime)
+    }
+    #expect(try result.get() == "Audio 2")
+    #expect(reads.metadataBatches > 0, "Exercise the actual native batch seam through the name reader")
+    #expect(reads.roleSingles == 0, "Role and required children must not make separate native round trips")
+    #expect(reads.helpReads == 0)
+    #expect(reads.clippedChildrenReads == 0, "Keep the existing depth-three boundary instead of reading an unrequested subtree")
+}
+
+@Test("Name metadata batching preserves refusal, absence, ambiguity and individual status fallback",
+      arguments: ["role_error", "children_error", "short_batch", "batch_failure", "malformed_children",
+                  "definitive_role_absence", "contradictory_fields", "null_role_unreadable"])
+func trackNameMetadataBatchesDoNotHideUnreadOrContradictoryData(fault: String) throws {
+    let b = FakeAXRuntimeBuilder(), reads = NativeNameCensusRequests()
+    let header = b.element(1_971_820), field = b.element(1_971_821), other = b.element(1_971_822)
+    b.setRole(header, kAXGroupRole as String)
+    b.setAttribute(header, kAXTitleAttribute as String, "Fallback Header")
+    for node in [field, other] { b.setRole(node, kAXTextFieldRole as String); b.setChildren(node, []) }
+    b.setAttribute(field, kAXDescriptionAttribute as String, "Audio 2")
+    b.setAttribute(other, kAXDescriptionAttribute as String, "Different Name")
+    b.setChildren(header, fault == "contradictory_fields" ? [field, other] : [field])
+    let base = b.makeAXRuntime()
+    var nativeError: AXError = fault == "definitive_role_absence" ? .noValue
+        : fault == "role_error" ? .invalidUIElement : .cannotComplete
+    reads.nativeError = try #require(AXValueCreate(.axError, &nativeError))
+    let expectedError = AXHelpers.AXStatusError(raw: nativeError.rawValue)
+    let runtime = AXHelpers.Runtime(axApp: base.axApp, attributeValue: base.attributeValue,
+        setAttributeValue: { _, _, _ in Issue.record("Name observation must not write"); return false },
+        children: base.children, performAction: { _, _ in Issue.record("Name observation must not act"); return false },
+        childCount: base.childCount,
+        childrenResult: { element in
+            if CFEqual(element, field), fault == "children_error" { return .failure(expectedError) }
+            if CFEqual(element, field), fault == "malformed_children" { return .failure(.malformedChildren) }
+            return AXHelpers.childrenResult(element, runtime: base)
+        }, attributeValueResult: { element, attribute in
+            if attribute == kAXHelpAttribute as String { reads.helpReads += 1 }
+            if attribute == kAXRoleAttribute as String {
+                reads.roleSingles += 1
+                if CFEqual(element, field), ["role_error", "definitive_role_absence", "batch_failure",
+                    "short_batch", "null_role_unreadable"].contains(fault) { return .failure(expectedError) }
+            }
+            return AXHelpers.getAttributeResult(element, attribute, runtime: base)
+        }, attributeValuesResult: { element, attributes in
+            reads.metadataBatches += 1
+            if attributes.contains(kAXHelpAttribute as String) { reads.helpReads += 1; Issue.record("No Help in a metadata batch") }
+            if CFEqual(element, field), fault == "batch_failure" { return .failure(expectedError) }
+            if CFEqual(element, field), fault == "short_batch" { return .success([]) }
+            return .success(attributes.map { attribute in
+                if CFEqual(element, field) {
+                    if attribute == kAXRoleAttribute as String, ["role_error", "definitive_role_absence"].contains(fault) { return reads.nativeError! }
+                    if attribute == kAXRoleAttribute as String, fault == "null_role_unreadable" { return NSNull() }
+                    if attribute == kAXChildrenAttribute as String, fault == "children_error" { return reads.nativeError! }
+                    if attribute == kAXChildrenAttribute as String, fault == "malformed_children" { return NSNumber(value: 7) }
+                }
+                if attribute == kAXChildrenAttribute as String { return base.children(element) as CFArray }
+                return base.attributeValue(element, attribute) ?? NSNull()
+            })
+        })
+    let result = AXValueExtractors.extractTrackNameResult(from: header, runtime: runtime)
+    if fault == "contradictory_fields" { #expect(try result.get() == nil) }
+    else if fault == "definitive_role_absence" { #expect(try result.get() == "Fallback Header") }
+    else if case .failure(let error) = result {
+        if fault == "malformed_children" { #expect(error == .malformedChildren) }
+        else { #expect(error == expectedError) }
+    } else { Issue.record("Unread metadata must not produce a fallback or echoed name") }
+    #expect(reads.metadataBatches > 0)
+    #expect(reads.roleSingles == (fault == "null_role_unreadable" ? 1 : 0), "Do not retry a failed native batch through scalar roles")
+    #expect(reads.helpReads == 0)
+}
+
+@Test("The opt-in noting facade preserves per-attribute failures and refuses raw Help batches",
+      arguments: ["attribute_error", "definitive_absence", "short_batch", "help"])
+func notedNameMetadataBatchPreservesFailureCustody(fault: String) throws {
+    let b = FakeAXRuntimeBuilder(), reads = NativeNameCensusRequests()
+    let field = b.element(1_971_830), base = b.makeAXRuntime()
+    var error: AXError = fault == "definitive_absence" ? .noValue : .cannotComplete
+    reads.nativeError = try #require(AXValueCreate(.axError, &error))
+    let runtime = AXHelpers.Runtime(axApp: base.axApp, attributeValue: base.attributeValue,
+        setAttributeValue: { _, _, _ in Issue.record("No writes"); return false }, children: base.children,
+        performAction: { _, _ in Issue.record("No actions"); return false }, childCount: base.childCount,
+        childrenResult: base.childrenResult, attributeValueResult: base.attributeValueResult,
+        attributeValuesResult: { _, _ in
+            reads.metadataBatches += 1
+            return .success(fault == "short_batch" ? [] : [reads.nativeError!])
+        })
+    let failures = AXPluginInstanceIdentity.FailedReads()
+    let noted = AXPluginInstanceIdentity.noting(failures, over: runtime, forwardingNonHelpBatches: true)
+    let read = try #require(noted.attributeValuesResult)
+    let result = read(field, [fault == "help" ? kAXHelpAttribute as String : kAXValueAttribute as String])
+    if fault == "definitive_absence" { #expect(!failures.any) }
+    else { #expect(failures.any) }
+    if fault == "short_batch" || fault == "help" {
+        if case .failure = result {} else { Issue.record("Invalid batches must refuse") }
+    }
+    #expect(reads.metadataBatches == (fault == "help" ? 0 : 1))
+}
+
 @Test func testCheckboxStateResultPreservesAXValueReadFailure() {
     let builder = FakeAXRuntimeBuilder()
     let checkbox = builder.element(9_901)

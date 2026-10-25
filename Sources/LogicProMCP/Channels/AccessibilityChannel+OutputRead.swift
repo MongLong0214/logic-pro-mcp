@@ -98,6 +98,9 @@ extension AccessibilityChannel {
         var inputAssignment: InputAssignment? = nil
         var inputRenewal: OriginalHeaderSourceRenewal? = nil
         var inputSlot: AXMixerInputSlotBinding? = nil
+        /// Actual original-header navigation, including a failed selection inverse.
+        /// An earlier popup focus receipt cannot replace this restoration duty.
+        var renewalEffects: SessionPopulationObservation.UIEffects? = nil
         /// Raw checked non-routing root entries: preservation witness only,
         /// never a typed mode, destination or endpoint identity.
         var sendNonRoutingChecks: [String]? = nil
@@ -555,35 +558,44 @@ extension AccessibilityChannel {
             (inputBusOnly ? "mixer.get_input_bus_verified" : (sendOrdinal == nil ? "mixer.get_output_verified" : "mixer.get_send_destination_verified"))
         var extras: [String: Any] = ["operation": operation, "write_attempted": false,
                                    "navigation_attempted": false, "popup_menu_state": "not_opened"]
+        var renewalEffects: SessionPopulationObservation.UIEffects?
         func refuse(_ error: HonestContract.FailureError, _ hint: String) -> CheckedOutputReading {
-            .init(result: .error(HonestContract.encodeStateC(error: error, hint: hint, extras: extras)), assignment: nil)
+            .init(result: .error(HonestContract.encodeStateC(error: error, hint: hint, extras: extras)),
+                assignment: nil, renewalEffects: renewalEffects)
         }
         guard params.isEmpty, sendOrdinal.map({ $0 >= 0 }) != false, let physical = AXMixerStripBinding.current else {
             return refuse(.invalidParams, "A current physical Mixer target_ref is required; no write inputs or indices are accepted.")
         }
-        guard physical.currentIndex(runtime: runtime) != nil else {
-            return refuse(.staleTargetReference, "The original physical source is no longer in its bound project/window.")
+        if let readingOriginalScope {
+            guard physical.currentIndex(in: readingOriginalScope) != nil else {
+                return refuse(.staleTargetReference, "The original read scope no longer contains this physical source.")
+            }
+        } else {
+            guard physical.currentIndex(runtime: runtime) != nil else {
+                return refuse(.staleTargetReference, "The original physical source is no longer in its bound project/window.")
+            }
         }
         @Sendable func currentPhysicalMembership(ownedPopup: AXUIElement? = nil)
             -> (index: Int?, checkedInHeldScope: Bool) {
             if let readingOriginalScope {
                 if inputBusOnly {
-                    // Borrow identity only inside an ordinary, reciprocal Mixer
-                    // popup. Native Input windows retain their existing reader;
-                    // the held association's neutral-Output exception is not an
-                    // Input-popup capability, including AXFocusedWindow NoValue.
-                    guard let ownedPopup,
-                          let menus = checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax),
-                          menus.count == 1, CFEqual(menus[0], ownedPopup) else {
+                    // The original scope qualifies a popup-free main window or
+                    // one reciprocal ordinary Mixer popup. Native Input windows
+                    // retain their existing reader; neutral Output custody is
+                    // never an Input-popup capability (including NoValue focus).
+                    let menus = checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax)
+                    if let ownedPopup, let menus, menus.count == 1, CFEqual(menus[0], ownedPopup) {
+                        return (physical.currentIndex(in: readingOriginalScope, ownedPopup: ownedPopup), true)
+                    }
+                    guard menus?.isEmpty == true, let pid = runtime.logicProPID(),
+                          runtime.onScreenWindowList().map({ LogicOnScreenWindows.popupMenuCount($0, logicPID: pid) == 0 }) == true else {
                         return (physical.currentIndex(runtime: runtime), false)
                     }
+                    return (physical.currentIndex(in: readingOriginalScope), true)
                 }
                 return (physical.currentIndex(in: readingOriginalScope, ownedPopup: ownedPopup), true)
             }
             return (physical.currentIndex(runtime: runtime), false)
-        }
-        guard readingOriginalScope.map({ physical.currentIndex(in: $0) != nil }) ?? true else {
-            return refuse(.staleTargetReference, "The original read scope no longer contains this physical source.")
         }
         if refreshingOriginalSourceAfterCleanup {
             guard inputBusOnly, let pair = AXMixerStripBinding.outputAssociation,
@@ -600,9 +612,19 @@ extension AccessibilityChannel {
             : OwnedTrackStackObservationNavigation.ReadFocusScope.PassiveMixerReadFocus(
                 window: physical.window, logic: runtime, acquisitionPermitted: { !Task.isCancelled })
         @Sendable func focusAllowsAcquisition() -> Bool {
-            if let passiveFocus { return passiveFocus.permits(runtime: runtime) }
-            if let passiveMixerFocus { return passiveMixerFocus.permits() }
-            return readLogicKeyboardFocus(runtime: runtime) == .notTextEditing
+            if let passiveFocus {
+                let permitted = passiveFocus.permits(runtime: runtime)
+                if !permitted, sendReplacement != nil { Log.info("Routing focus refused: retained routing focus", subsystem: "ax") }
+                return permitted
+            }
+            if let passiveMixerFocus {
+                let permitted = passiveMixerFocus.permits()
+                if !permitted, sendReplacement != nil { Log.info("Routing focus refused: retained Mixer focus", subsystem: "ax") }
+                return permitted
+            }
+            let permitted = readLogicKeyboardFocus(runtime: runtime) == .notTextEditing
+            if !permitted, sendReplacement != nil { Log.info("Routing focus refused: keyboard observation", subsystem: "ax") }
+            return permitted
         }
         guard focusAllowsAcquisition(),
               !AXLogicProElements.dialogPresenceReason(runtime: runtime).isBlocked else {
@@ -645,8 +667,11 @@ extension AccessibilityChannel {
             }
             if inputBusOnly {
                 let read = AXLogicProElements.inputSlotRead(in: physical.strip, runtime: runtime.ax)
-                guard case .source = read.reading else { return nil }
-                return read.control
+                guard case .source = read.reading, let control = read.control else {
+                    Log.info("Routing input control unavailable: reading=\(read.reading), help_guard_stopped=\(AXHelpers.HelpReadGuard.current?.stopped == true)", subsystem: "ax")
+                    return nil
+                }
+                return control
             }
             if let assigned {
                 guard let current = assignedControl(), assigned.matches(current),
@@ -657,12 +682,28 @@ extension AccessibilityChannel {
             }
             return AXLogicProElements.outputSlotButton(in: physical.strip, runtime: runtime.ax)
         }
-        guard let pid = runtime.logicProPID(), let windows = runtime.onScreenWindowList(),
-              LogicOnScreenWindows.popupMenuCount(windows, logicPID: pid) == 0,
-              let beforeMenus = checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax), beforeMenus.isEmpty,
-              let slot = selectedControl(),
-              case .success(.some(let originalLabel)) = AXHelpers.getAttributeResult(slot, kAXDescriptionAttribute as String, runtime: runtime.ax) as Result<String?, AXHelpers.AXStatusError> else {
+        func acquisitionRefusal(_ checkpoint: String) -> CheckedOutputReading {
+            if inputBusOnly {
+                extras["acquisition_checkpoint"] = checkpoint
+                extras["help_read_guard_stopped"] = AXHelpers.HelpReadGuard.current?.stopped == true
+                do {
+                    try SessionPopulationObservation.requireOwnedAcquisition()
+                    extras["acquisition_at_refusal"] = "current"
+                } catch { extras["acquisition_at_refusal"] = String(describing: error) }
+            }
             return refuse(.readbackUnavailable, "A unique output slot and absence of existing popups must be observed; nothing was pressed.")
+        }
+        // Preserve the original short-circuit read order. Checkpoints inspect
+        // only an already refused read; they add no native call or permission.
+        guard let pid = runtime.logicProPID() else { return acquisitionRefusal("logic_pid") }
+        guard let windows = runtime.onScreenWindowList() else { return acquisitionRefusal("on_screen_windows") }
+        guard LogicOnScreenWindows.popupMenuCount(windows, logicPID: pid) == 0 else { return acquisitionRefusal("native_popup_absence") }
+        guard let beforeMenus = checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax) else { return acquisitionRefusal("mixer_popup_read") }
+        guard beforeMenus.isEmpty else { return acquisitionRefusal("mixer_popup_absence") }
+        guard let slot = selectedControl() else { return acquisitionRefusal("original_slot") }
+        guard case .success(.some(let originalLabel)) = AXHelpers.getAttributeResult(slot,
+            kAXDescriptionAttribute as String, runtime: runtime.ax) as Result<String?, AXHelpers.AXStatusError> else {
+            return acquisitionRefusal("original_slot_label")
         }
         guard requiringOriginalInputControl.map({ $0.matches(.init(owner: physical, control: slot, source: originalLabel)) }) ?? true else {
             return refuse(.staleTargetReference, "The previewed input control is no longer current; nothing was pressed.")
@@ -688,13 +729,24 @@ extension AccessibilityChannel {
             return true
         }
         @Sendable func sourceFactsCurrent(preservingOriginalLabel: Bool = true) -> Bool {
-            guard !Task.isCancelled, runtime.logicProPID() == pid,
-                  let current = selectedControl(),
-                  CFEqual(current, slot),
-                  case .success(.some(let label)) = AXHelpers.getAttributeResult(slot, kAXDescriptionAttribute as String, runtime: runtime.ax) as Result<String?, AXHelpers.AXStatusError>,
-                  (!preservingOriginalLabel || label.utf8.elementsEqual(originalLabel.utf8)),
-                  transportStillStopped(),
-                  !AXLogicProElements.dialogPresenceReason(runtime: runtime).isBlocked else { return false }
+            guard !Task.isCancelled, runtime.logicProPID() == pid else { return false }
+            guard let current = selectedControl(), CFEqual(current, slot) else {
+                if sendReplacement != nil { Log.info("Routing source facts refused: original control", subsystem: "ax") }
+                return false
+            }
+            guard case .success(.some(let label)) = AXHelpers.getAttributeResult(slot, kAXDescriptionAttribute as String, runtime: runtime.ax) as Result<String?, AXHelpers.AXStatusError>,
+                  (!preservingOriginalLabel || label.utf8.elementsEqual(originalLabel.utf8)) else {
+                if sendReplacement != nil { Log.info("Routing source facts refused: original label", subsystem: "ax") }
+                return false
+            }
+            guard transportStillStopped() else {
+                if sendReplacement != nil { Log.info("Routing source facts refused: stopped transport", subsystem: "ax") }
+                return false
+            }
+            guard !AXLogicProElements.dialogPresenceReason(runtime: runtime).isBlocked else {
+                if sendReplacement != nil { Log.info("Routing source facts refused: modal state", subsystem: "ax") }
+                return false
+            }
             return true
         }
         func sourceOwned(ownedPopup: AXUIElement? = nil) -> Bool {
@@ -761,8 +813,17 @@ extension AccessibilityChannel {
             // and this geometry supplies no source or Send-control identity.
             sendMixerGeometry = proof.observedMixerViewportGeometry()
         } else { sendMixerGeometry = nil }
-        guard focusAllowsAcquisition(), sourceFactsCurrent(), focusAllowsAcquisition(), sourceOwned() else {
-            return refuse(.readbackUnavailable, "Focus or source custody changed before the routing-popup press; nothing was pressed.")
+        guard focusAllowsAcquisition() else {
+            return refuse(.readbackUnavailable, "Focus or source custody changed before the routing-popup press; nothing was pressed. Checkpoint: focus before source facts.")
+        }
+        guard sourceFactsCurrent() else {
+            return refuse(.readbackUnavailable, "Focus or source custody changed before the routing-popup press; nothing was pressed. Checkpoint: source facts.")
+        }
+        guard focusAllowsAcquisition() else {
+            return refuse(.readbackUnavailable, "Focus or source custody changed before the routing-popup press; nothing was pressed. Checkpoint: focus after source facts.")
+        }
+        guard sourceOwned() else {
+            return refuse(.readbackUnavailable, "Focus or source custody changed before the routing-popup press; nothing was pressed. Checkpoint: original source custody.")
         }
         // The deciding AX reads can outlive the request. Renew its existing
         // cancellation, deadline and acquired gate at the actual press boundary;
@@ -1436,10 +1497,15 @@ extension AccessibilityChannel {
                     && physical.currentIndex(runtime: runtime) != nil) else {
                     return uncertain("The original mode source is not uniquely current; no replacement control is adopted.")
                 }
+                // A deciding occupied inverse needs the restored source's own
+                // changed-strip return, not additional optional peer pairs.
+                // The same complete census, viewport inverse and final source
+                // custody still decide whether that return can be published.
                 let renewal = await renewSourceThroughOriginalHeader(originalPair, original: physical,
                     runtime: runtime, selectedHeaderRequired: false,
                     sourceDisposition: originalCount == 0 ? .retiredOriginal : .survivingOriginal,
-                    restoringMixerGeometry: sendMixerGeometry)
+                    restoringMixerGeometry: sendMixerGeometry,
+                    observingPeerHeaders: request.occupiedInverse != nil ? [] : nil)
                 extras["ui_effects"] = ["navigation_performed": renewal.effects.navigationPerformed,
                     "attempted": renewal.effects.attempted, "changed": renewal.effects.changed,
                     "restoration": renewal.effects.restoration, "reason": renewal.effects.reason as Any? ?? NSNull()]
@@ -1634,15 +1700,19 @@ extension AccessibilityChannel {
         // A fresh input observation must not scan the old owner's Help between
         // Cancel and its actual original-header re-observation. Popup absence
         // is a cleanup receipt, never replacement-source authority.
-        let closed = !refreshingOriginalSourceAfterCleanup
+        let popupClosed = !refreshingOriginalSourceAfterCleanup
             && originalSourcePresent() && originalInputFocusCurrent && sourceOwned()
             && checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax)?.isEmpty == true
             && runtime.onScreenWindowList().map { LogicOnScreenWindows.popupMenuCount($0, logicPID: pid) == 0 } == true
-        extras["popup_menu_state"] = closed ? "closed" : "not_restored"
         extras["popup_cancel_succeeded"] = cancelSucceeded
         extras["focus_restoration"] = restoredFocusReceipt ? "restored" : "not_restored"
         var sourceAfter = !refreshingOriginalSourceAfterCleanup
             && originalSourcePresent() && originalInputFocusCurrent && sourceOwned()
+        // The window-server census above may be the last read that observes
+        // a project change. Reuse the existing subsequent source proof before
+        // reporting closure in the original scope; no additional read is needed.
+        let closed = popupClosed && sourceAfter
+        extras["popup_menu_state"] = closed ? "closed" : "not_restored"
         var inputRenewal: OriginalHeaderSourceRenewal?
         var inputSlot: AXMixerInputSlotBinding?
         if inputBusOnly, !sourceAfter, dataOwned,
@@ -1673,6 +1743,7 @@ extension AccessibilityChannel {
                     sourceDisposition: refreshingOriginalSourceAfterCleanup ? .readObservation : .retiredOriginal,
                     restoringMixerGeometry: restoringMixerGeometry, observingReadFocus: observingRenewedFocus,
                     observingPeerHeaders: observingPeerHeaders)
+                renewalEffects = observed.effects
                 extras["ui_effects"] = ["navigation_performed": observed.effects.navigationPerformed,
                     "attempted": observed.effects.attempted, "changed": observed.effects.changed,
                     "restoration": observed.effects.restoration, "reason": observed.effects.reason as Any? ?? NSNull()]
@@ -1760,7 +1831,7 @@ extension AccessibilityChannel {
                     let unsupported = refuse(.unsupportedState,
                         "The checked non-Bus input is outside the bus-only wire result; its internal observation grants no write authority.")
                     return .init(result: unsupported.result, assignment: nil, inputAssignment: firstInput,
-                        inputRenewal: inputRenewal, inputSlot: inputSlot)
+                        inputRenewal: inputRenewal, inputSlot: inputSlot, renewalEffects: renewalEffects)
                 }
             }
         }
@@ -1797,6 +1868,7 @@ extension AccessibilityChannel {
         }
         return .init(result: .success(HonestContract.encodeStateA(extras: extras)), assignment: first,
             inputAssignment: checkedInputFact, inputRenewal: inputRenewal, inputSlot: inputSlot,
+            renewalEffects: renewalEffects,
             sendNonRoutingChecks: sendChecks, sendMode: modeEvidence, observedBusNumbers: observedBusNumbers,
             sendControl: sendOrdinal != nil && closed && sourceAfter ? assigned : nil)
     }

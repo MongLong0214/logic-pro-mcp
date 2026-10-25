@@ -205,9 +205,9 @@ jobs:
   test:
     name: test
     runs-on: macos-15
-    # Cold coverage builds reached 32m57s; the last complete serial suite took
-    # 28m54s. Leave time for both and coverage/upload without omitting any tests.
-    timeout-minutes: 75
+    # The current cold run built for 31m27s and was still testing at 75m.
+    # Keep the full suite, coverage and uploads within a bounded 120m job.
+    timeout-minutes: 120
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:

@@ -319,8 +319,33 @@ extension AccessibilityChannel {
             }
             func stripCustodyMatches() -> Bool {
                 if checkingAssociation || originalRailFocus != nil {
-                    guard let current = AXLogicProElements.mixerChannelStripsIfCompletelyRead(in: mixer, runtime: logic.ax) else { return false }
-                    return Self.same(strips, current.strips)
+                    // Inspect the same census used by the complete-read helper;
+                    // diagnostics must not obtain a second, different sample.
+                    guard let current = AXLogicProElements.stripEnumeration(in: mixer, runtime: logic.ax) else {
+                        Log.info("Held Mixer census refused: children_unreadable", subsystem: "ax")
+                        return false
+                    }
+                    guard current.unreadableChildren == 0 else {
+                        Log.info("Held Mixer census refused: unreadable_roles=\(current.unreadableChildren), expected_count=\(strips.count), observed_count=\(current.strips.count)", subsystem: "ax")
+                        return false
+                    }
+                    guard Self.same(strips, current.strips) else {
+                        let missing = strips.indices.filter { index in
+                            !current.strips.contains { CFEqual(strips[index], $0) }
+                        }
+                        let unexpected = current.strips.indices.filter { index in
+                            !strips.contains { CFEqual(current.strips[index], $0) }
+                        }
+                        let reordered = strips.indices.filter { index in
+                            index < current.strips.count && !CFEqual(strips[index], current.strips[index])
+                        }
+                        let original = originalSelectedChild ?? originalFocus
+                        let originalCount = current.strips.filter { CFEqual($0, original) }.count
+                        let expectedCount = current.strips.filter { CFEqual($0, expectedSelectedChild ?? expectedFocus) }.count
+                        Log.info("Held Mixer census refused: population_mismatch, expected_count=\(strips.count), observed_count=\(current.strips.count), missing_indices=\(missing), unexpected_indices=\(unexpected), changed_positions=\(reordered), original_member_count=\(originalCount), expected_member_count=\(expectedCount)", subsystem: "ax")
+                        return false
+                    }
+                    return true
                 }
                 // A focus-moving read is not a rail-selection capability.
                 // Renew this exact focus's reciprocal Mixer membership only;
@@ -340,7 +365,8 @@ extension AccessibilityChannel {
                 [kAXFrontmostAttribute, kAXWindowsAttribute, kAXMainWindowAttribute, kAXFocusedWindowAttribute] as [String],
                 runtime: logic.ax, permittingRead: { (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil })
             guard case .success(.some(let frontmost)) = application[0], frontmost as? Bool == true,
-                  case .success(.some(let windowValues)) = application[1], CFGetTypeID(windowValues) == CFArrayGetTypeID(),
+                  case .success(.some(let windowValues)) = application[1],
+                  case .success(let windows) = AXHelpers.projectChildrenStatus(.success, windowValues),
                   case .success(.some(let mainValue)) = application[2], CFGetTypeID(mainValue) == AXUIElementGetTypeID() else {
                 let states = application.map { reading -> String in
                     switch reading {
@@ -352,7 +378,6 @@ extension AccessibilityChannel {
                 Log.info("Held association ownership refused: application window attributes [\(states)]", subsystem: "ax")
                 lost = true; return false
             }
-            let windows = AXHelpers.decodeChildrenArray(windowValues)
             let main = unsafeBitCast(mainValue, to: AXUIElement.self)
             let focusedWindowMatches: Bool
             if AccessibilityChannel.routingFocusedWindowMatches(application[3],
@@ -369,8 +394,7 @@ extension AccessibilityChannel {
             }
             guard
                   windows.filter({ CFEqual($0, window) }).count == 1,
-                  CFEqual(main, window), focusedWindowMatches,
-                  currentWindowScopeMatches(), !AXLogicProElements.dialogPresent(runtime: logic) else {
+                  CFEqual(main, window), focusedWindowMatches else {
                 let focusedReading: String
                 switch application[3] {
                 case .failure(let error): focusedReading = "AX:\(error.raw)"
@@ -380,6 +404,21 @@ extension AccessibilityChannel {
                 Log.info("Held association ownership refused: window/dialog (main=\(CFEqual(main, window)), focused=\(focusedWindowMatches), reading=\(focusedReading))", subsystem: "ax")
                 lost = true; return false
             }
+            func refuseWindowScope(_ checkpoint: String) -> Bool {
+                let acquisition: String
+                do {
+                    try SessionPopulationObservation.requireOwnedAcquisition()
+                    acquisition = "current"
+                } catch { acquisition = String(describing: error) }
+                Log.info("Held association ownership refused: checkpoint=\(checkpoint), acquisition=\(acquisition)", subsystem: "ax")
+                lost = true
+                return false
+            }
+            guard currentWindowScopeMatches() else { return refuseWindowScope("window_scope") }
+            // dialogPresent delegates to this same read. Preserve its existing
+            // position after window scope, and retain the actual refusal reason.
+            let dialogReason = AXLogicProElements.dialogPresenceReason(runtime: logic)
+            guard !dialogReason.isBlocked else { return refuseWindowScope("dialog_" + dialogReason.rawValue) }
             guard railMatches() else {
                 Log.info("Held association ownership refused: original rail census", subsystem: "ax")
                 lost = true; return false
@@ -410,19 +449,96 @@ extension AccessibilityChannel {
             activity: AXLogicProElements.ObservedTransportActivity, window: AXUIElement,
             logic: AXLogicProElements.Runtime) -> Bool {
             guard paths.count == 2, !CFEqual(activity.play, activity.record),
-                  paths.allSatisfy({ !$0.isEmpty && CFEqual($0[$0.count - 1], window)
+                  paths.allSatisfy({ (2...32).contains($0.count) && CFEqual($0[$0.count - 1], window)
                       && $0.contains(where: { CFEqual($0, activity.controlBar) }) }),
-                  CFEqual(paths[0][0], activity.play), CFEqual(paths[1][0], activity.record),
-                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
-            return paths.allSatisfy({ held in
-                      guard let control = held.first, let current = Self.path(control, to: window, ax: logic.ax),
-                            Self.same(held, current) else { return false }
-                      let attributes = AXHelpers.getNonHelpAttributes(control, [kAXRoleAttribute, kAXValueAttribute] as [String],
-                          runtime: logic.ax, permittingRead: { (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil })
-                      guard case .success(.some(let role)) = attributes[0], role as? String == kAXCheckBoxRole as String,
-                            case .success(.some(let rawValue)) = attributes[1], let value = rawValue as? NSNumber else { return false }
-                      return value == 0
-                  })
+                  CFEqual(paths[0][0], activity.play), CFEqual(paths[1][0], activity.record) else { return false }
+            do { try SessionPopulationObservation.requireOwnedAcquisition() }
+            catch {
+                Log.info("Routing transport acquisition refused: \(error)", subsystem: "ax")
+                return false
+            }
+            var edges: [(child: AXUIElement, parent: AXUIElement)] = []
+            var parents: [AXUIElement] = []
+            for path in paths {
+                for index in path.indices {
+                    guard !path[..<index].contains(where: { CFEqual($0, path[index]) }) else { return false }
+                    guard index + 1 < path.count else { continue }
+                    let child = path[index], parent = path[index + 1]
+                    if let prior = edges.first(where: { CFEqual($0.child, child) }) {
+                        guard CFEqual(prior.parent, parent) else { return false }
+                    } else { edges.append((child, parent)) }
+                    if !parents.contains(where: { CFEqual($0, parent) }) { parents.append(parent) }
+                }
+            }
+            func distanceToWindow(_ parent: AXUIElement) -> Int {
+                paths.compactMap { path in
+                    path.firstIndex(where: { CFEqual($0, parent) }).map { path.count - $0 }
+                }.max() ?? 0
+            }
+            // Read each separate branch before its shared ancestors. Otherwise
+            // a later branch read could invalidate an already sampled parent.
+            parents.sort { distanceToWindow($0) > distanceToWindow($1) }
+            func acquired() -> Bool { (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil }
+            func controlsCurrent() -> Bool {
+                for held in paths {
+                    let attributes = AXHelpers.getNonHelpAttributes(held[0],
+                        [kAXRoleAttribute, kAXValueAttribute, kAXParentAttribute] as [String],
+                        runtime: logic.ax, permittingRead: acquired)
+                    guard case .success(.some(let role)) = attributes[0], role as? String == kAXCheckBoxRole as String,
+                          case .success(.some(let rawValue)) = attributes[1], let value = rawValue as? NSNumber,
+                          value == 0,
+                          case .success(.some(let rawParent)) = attributes[2],
+                          CFGetTypeID(rawParent) == AXUIElementGetTypeID(),
+                          CFEqual(unsafeBitCast(rawParent, to: AXUIElement.self), held[1]) else { return false }
+                }
+                return acquired()
+            }
+            guard controlsCurrent() else { return false }
+            // One fresh reciprocal census per shared ancestor, confined to this
+            // decision. Neither a stored path nor a repeated Play/Record caption
+            // grants membership. Every original edge must still agree, including
+            // when reading the second control changed the first one's custody.
+            for parent in parents {
+                let children: [AXUIElement]
+                let next: AXUIElement?
+                if logic.ax.attributeValuesResult != nil {
+                    let attributes = CFEqual(parent, window) ? [kAXChildrenAttribute as String]
+                        : [kAXChildrenAttribute as String, kAXParentAttribute as String]
+                    let reads = AXHelpers.getNonHelpAttributes(parent, attributes, runtime: logic.ax,
+                        permittingRead: acquired)
+                    guard case .success(.some(let rawChildren)) = reads[0],
+                          case .success(let observed) = AXHelpers.projectChildrenStatus(.success, rawChildren)
+                    else { return false }
+                    children = observed
+                    if CFEqual(parent, window) { next = nil }
+                    else {
+                        guard case .success(.some(let rawParent)) = reads[1],
+                              CFGetTypeID(rawParent) == AXUIElementGetTypeID() else { return false }
+                        next = unsafeBitCast(rawParent, to: AXUIElement.self)
+                    }
+                } else {
+                    // Older injected runtimes retain their status-bearing
+                    // childrenResult seam; do not bridge an unread to absence.
+                    guard acquired(), case .success(let observed) = AXHelpers.childrenResult(parent, runtime: logic.ax) else { return false }
+                    children = observed
+                    if CFEqual(parent, window) { next = nil }
+                    else {
+                        guard acquired(), let observed: AXUIElement = AXHelpers.getAttribute(parent,
+                            kAXParentAttribute as String, runtime: logic.ax) else { return false }
+                        next = observed
+                    }
+                }
+                guard edges.filter({ CFEqual($0.parent, parent) }).allSatisfy({ edge in
+                    children.filter({ CFEqual($0, edge.child) }).count == 1
+                }) else { return false }
+                if !CFEqual(parent, window) {
+                    guard let expected = edges.first(where: { CFEqual($0.child, parent) }),
+                          let next, CFEqual(next, expected.parent) else { return false }
+                }
+            }
+            // Parent/children reads may themselves change a leaf or its stopped
+            // value. Corroborate both original controls after the deciding census.
+            return controlsCurrent()
         }
 
         /// The coupled writer already owns its editor. Renew this proof's
@@ -477,6 +593,17 @@ extension AccessibilityChannel {
                 && headers.filter({ CFEqual($0, binding.header) }).count == 1
         }
 
+        /// Role metadata only; current membership still requires the original
+        /// header's native bookends and the final passive permission check.
+        func originalMixerRoleStillHeld() -> Bool {
+            guard !lost, (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+            guard AXLogicProElements.isMixerContainerRole(AXHelpers.getRole(mixer, runtime: logic.ax)) else {
+                lost = true
+                return false
+            }
+            return true
+        }
+
         /// Fresh identity metadata for this already-admitted native Mixer only.
         /// It grants no Help, popup, selection, inverse or reference permission.
         func readOriginalMixerIndex(for binding: AXMixerStripBinding.Binding,
@@ -505,8 +632,9 @@ extension AccessibilityChannel {
         /// Identity-only sampling of this already-observed native rail. It grants
         /// no Help, selection, popup, inverse or publication permission.
         func readOriginalHeaderPopulation(for binding: AXTrackBinding.Binding,
+            requiringPassiveRead: Bool = false, ownedPopup: AXUIElement? = nil,
             observingPopulation: ([AXUIElement]) -> Void) -> [AXUIElement]? {
-            guard retainsOriginalHeaderCarrier(binding),
+            guard !requiringPassiveRead || ownedPopup == nil, retainsOriginalHeaderCarrier(binding),
                   (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return nil }
             guard let role = AXHelpers.getRole(rail, runtime: logic.ax),
                   [kAXGroupRole, kAXListRole, kAXScrollAreaRole, kAXOutlineRole, kAXTableRole]
@@ -519,7 +647,12 @@ extension AccessibilityChannel {
             observingPopulation(current)
             binding.exposure?.observeHeaders(current)
             retainedTrackBindings?.forEach { $0.exposure?.observeHeaders(current) }
-            guard Self.same(headers, current), owned(),
+            guard Self.same(headers, current),
+                  // Only the final original-header identity bookend also
+                  // requests passive permission. Close its binding window and
+                  // document before the final full ownership/focus checks.
+                  !requiringPassiveRead || (binding.currentWindowAndDocumentMatch() && passiveReadBegins()),
+                  owned(ownedPopup: ownedPopup), !requiringPassiveRead || passiveReadEnds(),
                   binding.exposure?.isCurrent ?? true,
                   (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else {
                 lost = true; binding.exposure?.end(); return nil
@@ -535,10 +668,18 @@ extension AccessibilityChannel {
             // after their bookend, rather than repeating the same population census
             // twice for every caller's guarded AX read. Selection writes also
             // require the final scoped action boundary in select().
+            passiveReadBegins() && owned() && passiveReadEnds()
+        }
+
+        private func passiveReadBegins() -> Bool {
             guard !lost, (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
                   Self.exclusiveIndex(headers, ax: logic.ax) == expectedIndex,
                   passiveFocusMatches() else { lost = true; return false }
-            guard owned(), Self.exclusiveIndex(headers, ax: logic.ax) == expectedIndex,
+            return true
+        }
+
+        private func passiveReadEnds() -> Bool {
+            guard Self.exclusiveIndex(headers, ax: logic.ax) == expectedIndex,
                   let final: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
                   CFEqual(final, expectedFocus), selectedChildCustodyMatches() else { lost = true; return false }
             return true
@@ -810,7 +951,11 @@ extension AccessibilityChannel {
                   case .success(.some(let focusedWindow)) = windows[1], CFGetTypeID(focusedWindow) == AXUIElementGetTypeID(),
                   CFEqual(main, window), CFEqual(focusedWindow, window), currentWindowScopeMatches(),
                   logic.logicProPID() == pid, logic.focusedApplicationPID() == pid,
-                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else {
+                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                  // Window/document reads can themselves move focus. The rail's
+                  // retained child is not permission for a later foreign focus.
+                  let afterWindow: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String,
+                    runtime: logic.ax), CFEqual(afterWindow, expectedFocus) else {
                 lost = true; return false
             }
             return true
@@ -1345,6 +1490,20 @@ extension AccessibilityChannel {
                 do { try await Task.sleep(for: .milliseconds(25)) } catch { return false }
             }
             return false
+        }
+
+        /// Match the original strip focus or the original passive rail's exact
+        /// selected child. These retained facts do not replace permitsRead().
+        func hasOriginalSourceFocus(_ source: AXMixerStripBinding.Binding) -> Bool {
+            guard !lost, expectedIndex == originalIndex, CFEqual(expectedFocus, originalFocus),
+                  CFEqual(source.window, window), CFEqual(source.mixer, mixer),
+                  source.document.utf8.elementsEqual(document.utf8),
+                  strips.filter({ CFEqual($0, source.strip) }).count == 1 else { return false }
+            if CFEqual(originalFocus, source.strip) { return true }
+            guard let originalRailFocus, CFEqual(originalRailFocus, originalFocus),
+                  originalSelectedChild.map({ CFEqual($0, source.strip) }) == true,
+                  expectedSelectedChild.map({ CFEqual($0, source.strip) }) == true else { return false }
+            return true
         }
 
         /// Used only by the post-verified owned-name continuation. The new

@@ -86,6 +86,7 @@ struct Issue291AssignedSendMenuTests {
         var menuOpens = 0
         var cancels = 0
         var closeWindowReads = 0
+        var cancelProjectInjected = false
         var foregroundLost = false
         var busLookupFaultReached = false
         var fault: String?
@@ -227,7 +228,11 @@ struct Issue291AssignedSendMenuTests {
                         closeWindowReads += 1
                         if fault == "cancel_cg_unreadable" { return nil }
                         visible = fault == "cancel_cg_persistent" || closeWindowReads == 1
-                        if fault == "cancel_cg_project", closeWindowReads == 2 {
+                        let projectBoundary = fault == "cancel_cg_deciding_project" ? 1 : 2
+                        if fault == "cancel_cg_deciding_project" { visible = false }
+                        if fault == "cancel_cg_project" || fault == "cancel_cg_deciding_project",
+                           closeWindowReads == projectBoundary {
+                            cancelProjectInjected = true
                             f.b.setAttribute(f.window, kAXDocumentAttribute as String, "file:///wrong.logicx")
                         }
                     }
@@ -257,7 +262,7 @@ struct Issue291AssignedSendMenuTests {
         }
     }
     @Test("A checked Send reader observes Cancel settlement before reporting restored evidence",
-          arguments: ["cancel_cg_delayed", "cancel_cg_persistent", "cancel_cg_unreadable", "cancel_cg_project"])
+          arguments: ["cancel_cg_delayed", "cancel_cg_persistent", "cancel_cg_unreadable", "cancel_cg_project", "cancel_cg_deciding_project"])
     func occupiedSendReaderWaitsForPopupClosure(fault: String) async throws {
         let p = try prepare(), probe = SendWriterProbe(p), f = p.f
         probe.fault = fault
@@ -269,13 +274,15 @@ struct Issue291AssignedSendMenuTests {
             await AXMixerStripBinding.$current.withValue(.init(window: f.window, mixer: f.mixer,
                 strip: f.strips[0], document: f.bundle.absoluteString)) {
                 await AccessibilityChannel.getAssignedSendVerified(ordinal: 1, runtime: probe.runtime,
-                    timing: .init(popupOpenTimeoutMs: 0, popupCloseTimeoutMs: 30, readbackTimeoutMs: 0, pollIntervalMs: 1))
+                    timing: .init(popupOpenTimeoutMs: 0,
+                        popupCloseTimeoutMs: fault == "cancel_cg_deciding_project" ? 0 : 30,
+                        readbackTimeoutMs: 0, pollIntervalMs: 1))
             }
         }
         let body = try #require(sharedJSONObject(result.message))
         // This reader may report a checked observation with an explicit UI residual.
         // Restoration is not assignment authority; a changed project still withholds it.
-        #expect(body["state"] as? String == (fault == "cancel_cg_project" ? "C" : "A"), "\(body)")
+        #expect(body["state"] as? String == (fault.hasSuffix("project") ? "C" : "A"), "\(body)")
         let writeAttempted = try #require(body["write_attempted"] as? Bool)
         #expect(!writeAttempted)
         #expect(probe.menuOpens == 1 && probe.cancels == 1)
@@ -286,7 +293,10 @@ struct Issue291AssignedSendMenuTests {
             #expect(body["focus_restoration"] as? String == "restored")
         } else {
             #expect(body["popup_menu_state"] as? String != "closed")
-            if fault == "cancel_cg_project" { #expect(body["current_destination"] == nil) }
+            if fault.hasSuffix("project") {
+                #expect(probe.cancelProjectInjected)
+                #expect(body["current_destination"] == nil)
+            }
         }
     }
     @Test("A matching send waits for observed asynchronous popup closure without another action",

@@ -318,10 +318,16 @@ final class SendRemovalSagaAdapter: @unchecked Sendable {
             } else {
                 guard !self.attempted, let reference = step.targetRef,
                       let binding = await registry.resolve(reference), binding.kind == .mixerStrip,
-                      let physical = binding.physicalMixerStrip,
-                      let held = await cache.retainedMixerAssociation(reference: reference, source: physical,
-                        snapshot: await registry.currentSnapshot),
-                      self.pair.map({ $0.strip.matches(held.strip) && $0.track.matches(held.track) }) ?? true,
+                      let physical = binding.physicalMixerStrip else { return nil }
+                let held: AccessibilityChannel.HeldSelectionAssociation.Pair
+                if let captured = await cache.retainedMixerAssociation(reference: reference, source: physical,
+                    snapshot: await registry.currentSnapshot) {
+                    held = captured
+                } else if let owned = await self.approved?.sendReadPairAfterOwnedName(reference: reference, source: physical) {
+                    held = owned
+                    Log.info("Send before-read continued through its owned source-name effect", subsystem: "saga")
+                } else { return nil }
+                guard self.pair.map({ $0.strip.matches(held.strip) && $0.track.matches(held.track) }) ?? true,
                       let ordinal = self.forward.params["ordinal"]?.intValue else { return nil }
                 let runtime = held.track.runtime
                 if Self.isCreation(self.forward) {
@@ -384,7 +390,7 @@ final class SendRemovalSagaAdapter: @unchecked Sendable {
                 self.creationRemoval = result.removedSend
                 response = toolTextResult(result.result)
             } else if var changed = self.change {
-                guard !self.inverseConsumed, changed.permits(runtime: held.track.runtime) else {
+                guard !self.inverseConsumed else {
                     return .init(state: .stateC, writeBoundaryCrossed: false, detail: "Owned changed send is no longer current")
                 }
                 if let approved = self.approved {
@@ -400,9 +406,10 @@ final class SendRemovalSagaAdapter: @unchecked Sendable {
                         changed = continued; self.change = continued; self.pair = custody.pair
                     }
                 }
-                guard changed.permits(runtime: held.track.runtime) else {
-                    return .init(state: .stateC, writeBoundaryCrossed: false, detail: "Owned changed send is no longer current")
-                }
+                // Prerequisite input reads validate this actual effect on entry.
+                // The restoration function checks its complete current custody
+                // again before any inverse popup or action; repeating that same
+                // scan here adds no intervening observation or action boundary.
                 self.inverseConsumed = true
                 let restored = await AccessibilityChannel.restoreChangedSendObservation(changed, runtime: held.track.runtime)
                 self.restored = restored
@@ -434,19 +441,29 @@ final class SendRemovalSagaAdapter: @unchecked Sendable {
                     // existing popup instead of opening and cancelling a second one.
                     requiredBefore = .init(footprint: footprint, nonRoutingChecks: checks)
                 }
-                if let approved = self.approved, approved.hasMatchingNameGoals,
-                   await approved.nameGoalEvidence(afterExecution: true) == nil {
-                    return .init(state: .stateC, writeBoundaryCrossed: false, detail: "Approved name changed before Send")
+                let nameUsesInputFootprint = self.approved?.sendNameUsesInputFootprint == true
+                if let approved = self.approved, approved.hasMatchingNameGoals {
+                    let current = nameUsesInputFootprint
+                        ? await approved.sendNameSourceCurrent(at: held)
+                        : await approved.nameGoalEvidence(afterExecution: true) != nil
+                    guard current else {
+                        return .init(state: .stateC, writeBoundaryCrossed: false, detail: "Approved name changed before Send")
+                    }
                 }
                 var readRenewal: AccessibilityChannel.OriginalHeaderSourceRenewal?
                 var requiredControl = self.capturedControl
                 if let approved = self.approved, let control = requiredControl,
                    let expected = Self.expectedBefore(self.forward) {
-                    guard let custody = await approved.sendBusInputsCurrent(at: held, control: control, expected: expected) else {
+                    guard let custody = await approved.sendBusInputsCurrent(at: held, control: control, expected: expected,
+                        corroboratingBeforeInWriter: nameUsesInputFootprint ? requiredBefore : nil) else {
                         return .init(state: .stateC, writeBoundaryCrossed: false, detail: "Checked Bus input prerequisites changed before Send")
                     }
                     held = custody.pair; self.pair = held
                     requiredControl = custody.control; readRenewal = custody.renewal
+                }
+                if nameUsesInputFootprint, readRenewal == nil,
+                   let approved = self.approved, await approved.nameGoalEvidence(afterExecution: true) == nil {
+                    return .init(state: .stateC, writeBoundaryCrossed: false, detail: "Approved name footprint unavailable before Send")
                 }
                 self.attempted = true
                 let nameCheck: (@Sendable (AXMixerStripBinding.Binding) -> Bool)?
@@ -501,8 +518,13 @@ final class SendRemovalSagaAdapter: @unchecked Sendable {
             }
             let mapped = ProductionSagaStepExecutor.mapResponse(response, operationID: step.operationID)
             if case .text(let text, _, _) = response.content.first,
-               let body = decodedJSONObject(text), let attempted = body["write_attempted"] as? Bool {
-                return .init(state: mapped.state, writeBoundaryCrossed: attempted, detail: mapped.detail)
+               let body = decodedJSONObject(text) {
+                if self.approved != nil, mapped.state == .stateC, let hint = body["hint"] as? String {
+                    Log.info("Canonical Send dispatch refused: \(hint)", subsystem: "saga")
+                }
+                if let attempted = body["write_attempted"] as? Bool {
+                    return .init(state: mapped.state, writeBoundaryCrossed: attempted, detail: mapped.detail)
+                }
             }
             return mapped
         }

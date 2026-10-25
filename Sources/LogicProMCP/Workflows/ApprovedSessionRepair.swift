@@ -495,13 +495,17 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         let desired = intent.localOutput ?? intent.bus.map(OutputAssignment.bus)
         guard rows.count == 1, let row = rows.first, let mixerRef = source.mixerReference(at: row),
               checked.count == 1, let reading = checked.first else { return nil }
-        let capturedBusChange = names.isEmpty && policy.inputs.isEmpty
+        let namedBusReplacement: Bool
+        if case .bus(let before) = reading.assignment, case .bus(let after)? = desired {
+            namedBusReplacement = names.count == 1 && before != after
+        } else { namedBusReplacement = false }
+        let capturedBusChange = (names.isEmpty || namedBusReplacement) && policy.inputs.isEmpty
             && capturedExistingSendBusChange(before: reading.assignment, desired: desired,
                 source: source, sourceIndex: row)
         guard
-              // A captured Bus change remains one Send-only task, with positive
-              // existing receiver prerequisites for every involved Bus destination.
-              intent.bus == nil || (names.isEmpty && policy.inputs.isEmpty
+              // Each involved Bus retains its positive existing receiver proof.
+              // A source name also needs its exact coupled footprint below.
+              intent.bus == nil || ((names.isEmpty || namedBusReplacement) && policy.inputs.isEmpty
                 && (reading.assignment == desired || capturedBusChange)),
               desired.map({ reading.assignment == $0 || supportsCapturedSendDirection(before: reading.assignment, after: $0)
                 || capturedBusChange })
@@ -513,7 +517,8 @@ final class ApprovedSessionRepair: @unchecked Sendable {
               let occupied = slots.first(where: { $0.state == .occupiedUnknownDestination }),
               occupied.ordinal == ordinal, occupied.levelRaw == 0, occupied.bypassed == false else { return nil }
         if let name = names.first {
-            guard name.target == target.handle, let desired = intent.localOutput,
+            guard name.target == target.handle, let desired,
+                  intent.localOutput != nil || namedBusReplacement,
                   desired != reading.assignment,
                   let row = source.tracks.first(where: { $0.physicalBinding?.matches(pair.track) == true }),
                   !row.name.utf8.elementsEqual(name.name.utf8),
@@ -1229,7 +1234,8 @@ final class ApprovedSessionRepair: @unchecked Sendable {
     func sendBusInputsCurrent(at originalPair: AccessibilityChannel.HeldSelectionAssociation.Pair,
         control: AXLogicProElements.AssignedSendMenuControl,
         expected: OutputAssignment,
-        ownedChange: AccessibilityChannel.ChangedSendObservation? = nil) async -> SendReadCustody? {
+        ownedChange: AccessibilityChannel.ChangedSendObservation? = nil,
+        corroboratingBeforeInWriter: SendRemovalSagaAdapter.RequiredBeforeState? = nil) async -> SendReadCustody? {
         guard let task = sendTask, case .bus(let before) = task.before else {
             return .init(pair: originalPair, control: control, renewal: nil)
         }
@@ -1273,8 +1279,10 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         let runtime = originalPair.track.runtime
         func accept(_ observed: AccessibilityChannel.OriginalHeaderSourceRenewal,
                     from prior: AccessibilityChannel.HeldSelectionAssociation.Pair) -> Bool {
+            // The handoff itself checks this exact renewal before and after
+            // its current native header/strip reads. No native observation or
+            // action separates that entry check from these pure CF matches.
             guard observed.original.matches(prior.strip), observed.originalTrack.matches(prior.track),
-                  observed.permits(runtime: runtime),
                   let primary = observed.sourceForOriginalHeader(originalPair, runtime: runtime) else { return false }
             pair = primary.pair; renewal = primary; roster = primary
             return true
@@ -1455,6 +1463,11 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             let finalControl: AXLogicProElements.AssignedSendMenuControl
             var continuedChange: AccessibilityChannel.ChangedSendObservation?
             if let renewal {
+                // Input cleanup may propagate the name already written by this
+                // plan. Continue that actual owned effect before comparing the
+                // footprint or asking the deciding Send leaf to corroborate it.
+                stage = "renewed_owned_name"
+                if hasMatchingNameGoals, !(await renewNameAfterSend(renewal)) { return nil }
                 stage = "renewed_footprint"
                 // The actual whole-census renewal authenticates new physical owners;
                 // frozen complete values still decide their preservation.
@@ -1470,27 +1483,45 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                       slots == (ownedChange?.footprint ?? task.footprint),
                       slots.count == 2, slots.filter({ $0.state == .occupiedUnknownDestination }).count == 1,
                       slots.filter({ $0.state == .observedEmpty }).count == 1 else { return nil }
-                let read = await AXMixerStripBinding.$current.withValue(pair.strip) {
-                    await AXMixerStripBinding.$outputAssociation.withValue(pair) {
-                        await AccessibilityChannel.getOutputObservation(runtime: runtime, sendOrdinal: task.ordinal,
-                            requiringOriginalSendControl: current,
-                            readingOriginalScope: renewal.observation,
-                            observingPopupFocus: { inputFocus.retainRoutingPopupFocus($0) })
-                    }
-                }
-                stage = "renewed_checked_send"
-                guard read.assignment == expected, read.sendControl?.matches(current) == true,
-                      read.sendNonRoutingChecks == ["Post Fader"] || read.sendNonRoutingChecks == ["포스트 페이더"],
-                      let final = AXLogicProElements.assignedSendMenuControl(in: pair.strip.strip,
-                        ordinal: task.ordinal, runtime: runtime.ax), current.matches(final),
-                      AXLogicProElements.sendSlotObservations(in: pair.strip.strip, runtime: runtime.ax) == slots,
-                      sourceCurrent() else { return nil }
-                finalControl = final
                 if let ownedChange {
+                    // The verified forward effect, complete protected footprint
+                    // and actual original-header Input renewal retain only its
+                    // native custody. The deciding inverse already checks the
+                    // expected destination and mode at this exact control before
+                    // every leaf boundary; do not first open/Cancel another reader.
                     stage = "continued_native_effect"
-                    guard let continued = ownedChange.continuing(after: renewal, reading: read,
-                        slots: slots, runtime: runtime) else { return nil }
+                    guard let continued = ownedChange.continuingForDecidingInverse(after: renewal,
+                        control: current, slots: slots, runtime: runtime) else { return nil }
                     continuedChange = continued
+                    finalControl = current
+                    Log.info("Canonical Send inverse retained its owned effect for the deciding popup", subsystem: "saga")
+                } else if let before = corroboratingBeforeInWriter,
+                   sendNameUsesInputFootprint, expected == task.before {
+                    // These are the actual independent Saga read's expectations,
+                    // not write authority. The deciding writer checks them again
+                    // in its own popup at this exact renewed native control.
+                    stage = "deciding_send_before_state"
+                    guard before.footprint == slots,
+                          before.nonRoutingChecks == ["Post Fader"] || before.nonRoutingChecks == ["포스트 페이더"],
+                          sourceCurrent() else { return nil }
+                    finalControl = current
+                } else {
+                    let read = await AXMixerStripBinding.$current.withValue(pair.strip) {
+                        await AXMixerStripBinding.$outputAssociation.withValue(pair) {
+                            await AccessibilityChannel.getOutputObservation(runtime: runtime, sendOrdinal: task.ordinal,
+                                requiringOriginalSendControl: current,
+                                readingOriginalScope: renewal.observation,
+                                observingPopupFocus: { inputFocus.retainRoutingPopupFocus($0) })
+                        }
+                    }
+                    stage = "renewed_checked_send"
+                    guard read.assignment == expected, read.sendControl?.matches(current) == true,
+                          read.sendNonRoutingChecks == ["Post Fader"] || read.sendNonRoutingChecks == ["포스트 페이더"],
+                          let final = AXLogicProElements.assignedSendMenuControl(in: pair.strip.strip,
+                            ordinal: task.ordinal, runtime: runtime.ax), current.matches(final),
+                          AXLogicProElements.sendSlotObservations(in: pair.strip.strip, runtime: runtime.ax) == slots,
+                          sourceCurrent() else { return nil }
+                    finalControl = final
                 }
             } else { finalControl = control }
             stage = "final_custody"
@@ -1501,8 +1532,8 @@ final class ApprovedSessionRepair: @unchecked Sendable {
     }
 
 
-    /// Carry only this plan's independently observed Send effect through the
-    /// earlier owned name. The registry's original strip is never rebound.
+    /// Continue this plan's already-owned name through its original-header
+    /// Send custody. The registry's original strip is never rebound.
     func renewNameAfterSend(_ source: AccessibilityChannel.OriginalHeaderSourceRenewal) async -> Bool {
         guard let task = sendTask else { return false }
         return await renewNameAfterRouting(source, reference: task.reference, pair: task.pair)
@@ -1564,15 +1595,64 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         return source.track.currentIndex() != nil && source.strip.currentIndex(runtime: source.track.runtime) != nil
     }
 
+    /// Historical inspection expiry does not erase an actual coupled name effect.
+    /// This supplies only the original read pair; Send state and receivers still
+    /// need their independent reads and deciding checks.
+    func sendReadPairAfterOwnedName(reference: TargetReference, source: AXMixerStripBinding.Binding) async
+        -> AccessibilityChannel.HeldSelectionAssociation.Pair? {
+        guard let task = sendTask, reference == task.mixerRef,
+              case .bus(let before) = task.before, case .bus(let after)? = task.desired, before != after,
+              changedNameGoals.count == 1, let goal = changedNameGoals.first, goal.reference == task.reference,
+              let owned = nameExecutions[goal.reference]?.inverse,
+              ExactTrackNameAdapter.recordedNameEffect(owned)?.matches(task.pair) == true,
+              await cache.retainedInspection(id: task.capture.captureID) == nil,
+              task.capture.targetSnapshot == (await registry.currentSnapshot),
+              let track = await registry.resolve(task.reference), track.kind == .track,
+              track.physicalTrack?.matches(task.pair.track) == true,
+              await projectIsCurrent(allowPendingCancellation: true), sendNameHeld(at: source) else { return nil }
+        return task.pair
+    }
+
+    var sendNameUsesInputFootprint: Bool {
+        guard nameGoals.count == 1, changedNameGoals.count == 1,
+              let goal = changedNameGoals.first, let task = sendTask,
+              goal.reference == task.reference, goal.binding.matches(task.pair.track),
+              case .bus(let before) = task.before, case .bus(let after)? = task.desired else { return false }
+        return before != after
+    }
+
+    /// Check this plan's actual name effect before read-only Input acquisition.
+    /// Its complete protected footprint is checked in the resulting native
+    /// renewal; without that renewal the caller must keep the full name read.
+    func sendNameSourceCurrent(at pair: AccessibilityChannel.HeldSelectionAssociation.Pair) async -> Bool {
+        guard sendNameUsesInputFootprint, FeatureFlags.adr004MutationSaga,
+              let task = sendTask, let goal = changedNameGoals.first,
+              pair.track.matches(task.pair.track),
+              await projectIsCurrent(), await registry.resolveCurrentProject(projectRef) != nil,
+              let target = await registry.resolve(goal.reference), target.kind == .track,
+              target.physicalTrack?.matches(goal.binding) == true,
+              target.descriptor.trackName.utf8.elementsEqual(goal.name.utf8),
+              originalSelectionHeld(), sendNameHeld(at: pair.strip),
+              let effect = nameExecutions[goal.reference]?.inverse.flatMap(ExactTrackNameAdapter.recordedNameEffect),
+              goal.mixerRef == nil || effect.stripName.utf8.elementsEqual(goal.name.utf8),
+              let after = await registry.resolve(goal.reference),
+              after.physicalTrack?.matches(goal.binding) == true,
+              after.descriptor.trackName.utf8.elementsEqual(goal.name.utf8),
+              await projectIsCurrent(), originalSelectionHeld() else { return false }
+        return true
+    }
+
     /// Corroborate the owned name at the actual Send leaf, not just before
     /// dispatch. The caller still proves the original source/control and gate.
     func sendNameHeld(at source: AXMixerStripBinding.Binding) -> Bool {
         guard hasMatchingNameGoals else { return true }
         guard let task = sendTask, changedNameGoals.count == 1,
               let goal = changedNameGoals.first, goal.reference == task.reference,
-              source.matches(task.pair.strip),
               let effect = nameExecutions[goal.reference]?.inverse.flatMap(ExactTrackNameAdapter.recordedNameEffect),
-              effect.matches(task.pair), effect.trackName.utf8.elementsEqual(goal.name.utf8),
+              // An actual Input renewal can retire the captured strip. Match
+              // the owned effect at this exact source and the original header.
+              effect.matches(.init(track: task.pair.track, strip: source)),
+              effect.trackName.utf8.elementsEqual(goal.name.utf8),
               task.pair.track.currentIndex() != nil,
               case .success(let name?) = AXValueExtractors.extractTrackNameResult(
                 from: task.pair.track.header, runtime: task.pair.track.runtime.ax),
@@ -1898,7 +1978,8 @@ final class ApprovedSessionRepair: @unchecked Sendable {
     }
 
     /// Preserve every captured field and peer owner. Only this task's independently checked
-    /// output may differ; neither a fresh row nor a displayed label becomes a new baseline.
+    /// output may differ. Unrequested unknown routing displays need two fresh agreeing
+    /// observations; no already-known field or native source may become a new baseline.
     private func outputFootprintHeld(pair: AccessibilityChannel.HeldSelectionAssociation.Pair,
                                      assignment: OutputAssignment, popup: AXUIElement? = nil,
                                      ownedNamePreview: [String]? = nil, ownedNameEditor: AXUIElement? = nil,
@@ -1942,15 +2023,18 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         let metadataStopped: @Sendable () -> Bool = {
             (try? SessionPopulationObservation.requireOwnedAcquisition()) == nil
         }
-        let fields = AXHelpers.HelpReadGuard.$current.withValue(.init(allowHelpReads: true, stop: { !permitted() })) {
-            let tracks = AccessibilityChannel.readTrackStates(from: proof.headers, in: pair.track.window,
-                runtime: runtime, readingTypeHelp: false, stoppingWhen: metadataStopped).states
-            let strips = AXLogicProElements.mixerChannelStripsIfCompletelyRead(in: pair.strip.mixer, runtime: runtime.ax)
-                .flatMap { AccessibilityChannel.readChannelStrips(from: $0.strips, runtime: runtime,
-                    window: pair.strip.window, mixer: pair.strip.mixer, readingScalarHelp: false,
-                    stoppingWhen: metadataStopped) }
-            return (tracks, strips)
+        func sampleFields() -> ([TrackState]?, [ChannelStripState]?) {
+            return AXHelpers.HelpReadGuard.$current.withValue(.init(allowHelpReads: true, stop: { !permitted() })) {
+                let tracks = AccessibilityChannel.readTrackStates(from: proof.headers, in: pair.track.window,
+                    runtime: runtime, readingTypeHelp: false, stoppingWhen: metadataStopped).states
+                let strips = AXLogicProElements.mixerChannelStripsIfCompletelyRead(in: pair.strip.mixer, runtime: runtime.ax)
+                    .flatMap { AccessibilityChannel.readChannelStrips(from: $0.strips, runtime: runtime,
+                        window: pair.strip.window, mixer: pair.strip.mixer, readingScalarHelp: false,
+                        stoppingWhen: metadataStopped) }
+                return (tracks, strips)
+            }
         }
+        let fields = sampleFields()
         stage = "sampled_owners_counts_output"
         guard let tracks = fields.0, let strips = fields.1, permitted(),
               tracks.count == task.capture.tracks.count,
@@ -2067,7 +2151,51 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         guard let expectedTracks = try? encoder.encode(expectedTrackRows),
               let currentTracks = try? encoder.encode(tracks),
               let expectedStrips = try? encoder.encode(expected), let currentStrips = try? encoder.encode(strips) else { return false }
-        if expectedTracks != currentTracks || expectedStrips != currentStrips {
+        var valuesAgree = expectedTracks == currentTracks && expectedStrips == currentStrips
+        if !valuesAgree, expectedTracks == currentTracks, taskOverride != nil, let sendTask,
+           case .bus = sendTask.before, case .bus? = sendTask.desired,
+           changedNameGoals.count == 1, outputRenewal != nil {
+            // This bounded named Send owns only its source. Protect every captured
+            // selected/checked row through the already-validated ordered renewal;
+            // a newly readable peer supplies no receiver or write authority.
+            var protected = [task.pair.strip, pair.strip]
+            if let population = task.capture.freshPopulation {
+                protected += population.selectionAssociations.map(\.strip)
+                protected += population.checkedOutputs.map(\.source)
+                protected += population.checkedInputs.map(\.receiver)
+            }
+            for row in expected.indices {
+                if let owner = expected[row].physicalBinding,
+                   protected.contains(where: { $0.matches(owner) }), let current = strips[row].physicalBinding {
+                    protected.append(current)
+                }
+            }
+            if AccessibilityChannel.onlyPeerDisplaysBecameReadable(before: expected, after: strips, protecting: protected) {
+                stage = "corroborating_peer_displays"
+                let corroborated = sampleFields()
+                guard let nextTracks = corroborated.0, let nextStrips = corroborated.1, permitted(),
+                      nextTracks.count == tracks.count, nextStrips.count == strips.count,
+                      (try? encoder.encode(nextTracks)) == currentTracks,
+                      (try? encoder.encode(nextStrips)) == currentStrips,
+                      zip(tracks, nextTracks).allSatisfy({ old, new in
+                          guard let a = old.physicalBinding, let b = new.physicalBinding,
+                                a.exposure?.isCurrent ?? true, b.exposure?.isCurrent ?? true else { return false }
+                          return a.matches(b)
+                      }),
+                      zip(strips, nextStrips).allSatisfy({ old, new in
+                          guard let owner = old.physicalBinding, new.physicalBinding?.matches(owner) == true,
+                                old.volumeReadback == new.volumeReadback, old.panReadback == new.panReadback,
+                                new.pluginsFullyObserved == true else { return false }
+                          switch (old.inputSlotBinding, new.inputSlotBinding) {
+                          case (nil, nil): return true
+                          case (.some(let a), .some(let b)): return a.matches(b)
+                          default: return false
+                          }
+                      }) else { return false }
+                valuesAgree = true
+            }
+        }
+        if !valuesAgree {
             // Compare already-sampled schema fields only; no extra host reads
             // or value/name disclosure, and no acceptance change.
             var changed: [String] = []
@@ -2717,7 +2845,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                 liveTrackNames: { AXLogicProElements.trackNames(runtime: runtime) },
                 capturedRead: execution?.capturedRead,
                 ownedPeerEffects: ownedNameEffects, selectionOrigin: selectionOrigin, preservingFootprint: preserving,
-                afterVerifiedWrite: afterVerifiedWrite)
+                afterVerifiedWrite: afterVerifiedWrite, restoringMixerFocus: sendNameUsesInputFootprint)
             nameExecutions[goal.reference, default: .init()].inverse = receipt.inverse
         }
         return receipt.result

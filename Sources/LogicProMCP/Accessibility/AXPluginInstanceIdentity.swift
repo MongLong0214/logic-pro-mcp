@@ -387,13 +387,38 @@ public enum AXPluginInstanceIdentity {
     /// the census call that read partial without changing what the classifier
     /// returns to anyone else. In production the status-preserving read is the
     /// same AX call the lossy one makes, so the classifier sees the same answers.
-    static func noting(_ failures: FailedReads, over base: AXHelpers.Runtime) -> AXHelpers.Runtime {
+    static func noting(_ failures: FailedReads, over base: AXHelpers.Runtime,
+        forwardingNonHelpBatches: Bool = false) -> AXHelpers.Runtime {
         let attribute: @Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError> = { element, name in
             failures.note(AXHelpers.getAttributeResult(element, name, runtime: base))
         }
         let children: @Sendable (AXUIElement) -> Result<[AXUIElement], AXHelpers.AXStatusError> = { element in
             failures.note(AXHelpers.childrenResult(element, runtime: base))
         }
+        let batch: (@Sendable (AXUIElement, [String]) -> Result<[AnyObject], AXHelpers.AXStatusError>)?
+        if forwardingNonHelpBatches, let read = base.attributeValuesResult {
+            // Name metadata opts in without bypassing status observation or
+            // making the raw batch seam another way to read Help.
+            batch = { element, attributes in
+                guard !attributes.contains(kAXHelpAttribute as String) else {
+                    return failures.note(.failure(.init(raw: AXError.illegalArgument.rawValue)))
+                }
+                let result = failures.note(read(element, attributes))
+                if case .success(let values) = result {
+                    guard values.count == attributes.count else {
+                        return failures.note(.failure(.init(raw: AXError.cannotComplete.rawValue)))
+                    }
+                    for value in values where CFGetTypeID(value) == AXValueGetTypeID() {
+                        let wrapped = unsafeBitCast(value, to: AXValue.self)
+                        guard AXValueGetType(wrapped) == .axError else { continue }
+                        var error = AXError.success
+                        if !AXValueGetValue(wrapped, .axError, &error) || error == .success { error = .cannotComplete }
+                        _ = failures.note(Result<Bool, AXHelpers.AXStatusError>.failure(.init(raw: error.rawValue)))
+                    }
+                }
+                return result
+            }
+        } else { batch = nil }
         return AXHelpers.Runtime(
             axApp: base.axApp,
             attributeValue: { element, name in
@@ -413,6 +438,7 @@ public enum AXPluginInstanceIdentity {
             childrenResult: children,
             attributeValueResult: attribute,
             performActionResult: base.performActionResult,
+            attributeValuesResult: batch,
             helpReadsAreGuarded: true
         )
     }

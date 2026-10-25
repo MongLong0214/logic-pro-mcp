@@ -28,6 +28,12 @@ private final class ExactNameFixture: @unchecked Sendable {
     var onUnwrittenNameRead: (@Sendable () -> Void)?
     var nameReadsAfterWrite = 0
     var permitsSelection = false
+    var useBulkReads = false
+    var globalMixerDiscoveries = 0
+    var countedMixer: AXUIElement?
+    var mixerPopulationReads = 0
+    var mixerPopulationReadsAtLastPeer = 0
+    var mixerCensusesWithinNameGroups: [Int] = []
     var exposeFieldWhenSelected = false
     var renameMenuItem: AXUIElement?
     var selectionWrites: [AXUIElement] = []
@@ -65,7 +71,9 @@ private final class ExactNameFixture: @unchecked Sendable {
     var boundaryCancellation = false
     var adapterPermissionReads = 0
     var passiveHeaderNameLabel = false
+    var passiveRailFocus = false
     var passiveMixerStripFocus: AXUIElement?
+    var additionalPassiveMixerStrips: [AXUIElement] = []
     var unreadPassiveMixerMetadata = false
     var passiveMixerHasValue = false
     var menuEditorValueWrites: [String] = []
@@ -79,7 +87,9 @@ private final class ExactNameFixture: @unchecked Sendable {
     var peerNameReadsAfterWrite = 0
     var peerNameReadsAtLastMirror = 0
     var mostPeerReadsBeforeMirror = 0
+    var popupFocusedWindowIsNoValue = false
     var physicalOwnerDocumentReads = 0
+    var onPhysicalOwnerDocumentRead: (@Sendable (Int) -> Void)?
     var onPeerNameReadAfterWrite: (@Sendable (Int) -> Void)?
     var rawHelpReads = 0
     var countRawHelpReads = false
@@ -118,6 +128,7 @@ private final class ExactNameFixture: @unchecked Sendable {
                 attributeValueHandler: { [self] element, attribute in
                     if CFEqual(element, window), attribute == kAXDocumentAttribute as String {
                         physicalOwnerDocumentReads += 1
+                        onPhysicalOwnerDocumentRead?(physicalOwnerDocumentReads)
                     }
                     if menuEditorValueWrites.count > menuEditorValueReadGeneration, let menuFocusedEditor,
                        CFEqual(element, menuFocusedEditor), attribute == kAXValueAttribute as String {
@@ -151,7 +162,16 @@ private final class ExactNameFixture: @unchecked Sendable {
                     return nil
                 },
                 attributeValueResultHandler: { [self] element, attribute in
-                    if let passiveMixerStripFocus, CFEqual(element, passiveMixerStripFocus) {
+                    if popupFocusedWindowIsNoValue, CFEqual(element, app), attribute == kAXFocusedWindowAttribute as String {
+                        return .failure(.init(raw: AXError.noValue.rawValue))
+                    }
+                    if passiveRailFocus, CFEqual(element, rail),
+                       [kAXValueAttribute, kAXSelectedTextAttribute, kAXNumberOfCharactersAttribute,
+                        kAXInsertionPointLineNumberAttribute].contains(where: { attribute == $0 as String }) {
+                        return .failure(.init(raw: AXError.noValue.rawValue))
+                    }
+                    if passiveMixerStripFocus.map({ CFEqual(element, $0) }) == true
+                        || additionalPassiveMixerStrips.contains(where: { CFEqual(element, $0) }) {
                         if [kAXValueAttribute as String, kAXSelectedTextAttribute as String].contains(attribute) {
                             if passiveMixerHasValue, attribute == kAXValueAttribute as String { return .success("editing" as AnyObject) }
                             return .failure(.init(raw: AXError.noValue.rawValue))
@@ -243,6 +263,53 @@ private final class ExactNameFixture: @unchecked Sendable {
             postPopupMenuEscape: { Issue.record("Unexpected Escape") },
             focusedApplicationPID: { [self] in observedFocusedPID }
         )
+        if useBulkReads {
+            let ax = source.ax
+            let bulk = AXHelpers.Runtime(axApp: ax.axApp, attributeValue: ax.attributeValue,
+                attributeIsSettable: ax.attributeIsSettable, setAttributeValue: ax.setAttributeValue,
+                children: ax.children, performAction: ax.performAction, childCount: ax.childCount,
+                actionNames: ax.actionNames, actionNamesResult: ax.actionNamesResult,
+                childrenResult: { [self] element in
+                    if countedMixer.map({ CFEqual($0, element) }) == true { mixerPopulationReads += 1 }
+                    return AXHelpers.childrenResult(element, runtime: ax)
+                }, attributeValueResult: ax.attributeValueResult,
+                performActionResult: ax.performActionResult, elementAtPosition: ax.elementAtPosition,
+                attributeValuesResult: { [self] element, attributes in
+                    if CFEqual(element, window), attributes == [kAXRoleAttribute, kAXIdentifierAttribute,
+                        kAXDescriptionAttribute, kAXTitleAttribute, kAXChildrenAttribute] as [String] {
+                        globalMixerDiscoveries += 1
+                    }
+                    var values: [AnyObject] = []
+                    for attribute in attributes {
+                        let reading: Result<AnyObject?, AXHelpers.AXStatusError>
+                        if attribute == kAXChildrenAttribute as String {
+                            if countedMixer.map({ CFEqual($0, element) }) == true { mixerPopulationReads += 1 }
+                            reading = AXHelpers.childrenResult(element, runtime: ax).map { $0 as CFArray }
+                        } else {
+                            reading = AXHelpers.getAttributeResult(element, attribute, runtime: ax)
+                        }
+                        switch reading {
+                        case .success(let value): values.append(value ?? NSNull())
+                        case .failure(let error):
+                            if popupFocusedWindowIsNoValue, attribute == kAXFocusedWindowAttribute as String,
+                               error.raw == AXError.noValue.rawValue {
+                                // The native batch preserves each attribute's error;
+                                // NoValue for the focused window does not erase its
+                                // readable main-window and membership attributes.
+                                var status = AXError.noValue
+                                guard let wrapped = AXValueCreate(.axError, &status) else { return .failure(error) }
+                                values.append(wrapped)
+                            } else { return .failure(error) }
+                        }
+                    }
+                    return .success(values)
+                })
+            return AXLogicProElements.Runtime(logicProPID: source.logicProPID, ax: bulk,
+                executeAppleScript: source.executeAppleScript,
+                executeAppleScriptWithTimeout: source.executeAppleScriptWithTimeout,
+                onScreenWindowList: source.onScreenWindowList, postPopupMenuEscape: source.postPopupMenuEscape,
+                focusedApplicationPID: source.focusedApplicationPID, observeFrontmost: source.observeFrontmost)
+        }
         guard legacyHeaderRoleFailureRead != nil || legacyHeaderRoleObservedRead != nil else { return source }
         let ax = source.ax
         return AXLogicProElements.Runtime(logicProPID: source.logicProPID,
@@ -2029,6 +2096,263 @@ struct Issue968ExactTrackNameAdapterTests {
             f.builder.setAttribute(f.window, kAXDocumentAttribute as String, document)
             #expect((await f.inverse(proof)).status == .rejectedBeforeWrite)
             #expect(f.writes == ["C"], "Reappearing handles cannot revive an ended exposure or permit another writer")
+        }
+    }
+
+    private static var originalSourceScopeProfiles: [String] {
+        var profiles: [String] = []
+        for scope in ["unrenewed", "renewed"] {
+            for fault in ["healthy", "primary", "mirror", "peer", "document", "gate"] {
+                profiles.append("\(scope)/\(fault)")
+            }
+        }
+        for fault in ["document", "selection", "transport", "population", "gate"] {
+            profiles.append("renewed/late_\(fault)")
+        }
+        for fault in ["healthy", "primary", "mirror", "peer", "document", "gate", "late_population"] {
+            profiles.append("renewed_retired/\(fault)")
+        }
+        profiles += ["renewed_rail/healthy", "renewed_retired_rail/healthy", "renewed/late_mixer_role", "renewed/late_rail_role",
+            "renewed_retired/late_mixer_role", "renewed_retired/late_rail_role", "renewed_rail/late_population",
+            "renewed_retired_rail/late_population", "renewed/focus_during_window_bookend",
+            "renewed_retired/focus_during_window_bookend", "renewed_rail/focus_during_window_bookend",
+            "renewed_retired_rail/focus_during_window_bookend"]
+        for scope in ["renewed", "renewed_retired", "renewed_rail", "renewed_retired_rail"] {
+            for fault in ["popup_healthy", "popup_focus", "popup_population",
+                          "popup_search_healthy", "popup_search_focus", "popup_search_population"] {
+                profiles.append("\(scope)/\(fault)")
+            }
+        }
+        return profiles
+    }
+
+    @Test(arguments: Self.originalSourceScopeProfiles)
+    func anOwnedNameReadUsesOnlyItsActualRenewedSourceScope(profile: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let renewed = profile.hasPrefix("renewed")
+            let retired = profile.hasPrefix("renewed_retired")
+            let railEntry = profile.contains("_rail/")
+            let fault = String(try #require(profile.split(separator: "/").last))
+            let f = ExactNameFixture()
+            f.useBulkReads = true
+            f.permitsSelection = true
+            let (peerHeader, _) = f.appendTrack(name: "Peer", selected: false)
+            let (capture, project, target, strip, mirror) = try await f.coupledCapture(
+                peerStripName: "Peer", includePeerAssociation: true, passiveMixerFocus: true)
+            f.builder.setAttributeSettable(f.rail, kAXSelectedChildrenAttribute as String, true)
+            f.builder.setAttribute(f.rail, kAXSelectedChildrenAttribute as String, [f.header])
+            let mixer = f.builder.element(968_170), peerStrip = f.builder.element(968_173)
+            let originalMixerRole = try #require(AXHelpers.getRole(mixer, runtime: f.builder.makeAXRuntime()))
+            let originalRailRole = try #require(AXHelpers.getRole(f.rail, runtime: f.builder.makeAXRuntime()))
+            f.additionalPassiveMixerStrips = [peerStrip]
+            f.builder.setAttribute(peerStrip, kAXNumberOfCharactersAttribute as String, NSNumber(value: 0))
+            f.builder.setAttribute(peerStrip, kAXInsertionPointLineNumberAttribute as String, NSNumber(value: 0))
+            f.builder.setAttribute(mixer, kAXSelectedChildrenAttribute as String, [strip])
+            f.onSelection = {
+                let selected = f.selectionWrites.last.map { CFEqual($0, peerHeader) } == true ? peerStrip : strip
+                f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, selected)
+                f.builder.setAttribute(mixer, kAXSelectedChildrenAttribute as String, [selected])
+            }
+            let bar = f.builder.element(3_971_968), play = f.builder.element(3_971_969)
+            let record = f.builder.element(3_971_970)
+            f.builder.setRole(bar, kAXGroupRole as String)
+            f.builder.setAttribute(bar, kAXDescriptionAttribute as String, "Control Bar")
+            for (control, title) in [(play, "Play"), (record, "Record")] {
+                f.builder.setRole(control, kAXCheckBoxRole as String)
+                f.builder.setAttribute(control, kAXTitleAttribute as String, title)
+                f.builder.setAttribute(control, kAXValueAttribute as String, 0)
+                f.builder.setChildren(control, [])
+            }
+            f.builder.setChildren(bar, [play, record])
+            f.builder.setChildren(f.window, AXHelpers.getChildren(f.window, runtime: f.builder.makeAXRuntime()) + [bar])
+            let gate = LogicMutationGate()
+            let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+            defer { gate.release(claim) }
+            let context = OperationTraceContext(mutationGateAcquired: true,
+                ownsGate: { gate.stillOwns(claim) && f.boundaryOwnership })
+            try await OperationTraceContext.$current.withValue(context) {
+                let written = await f.applyCoupled(capture, project: project, target: target)
+                try #require(written.status == .applied)
+                var proof = try #require(written.inverse)
+                if renewed {
+                    let pair = try #require(capture.freshPopulation?.selectionAssociations.first)
+                    let currentStrip: AXUIElement
+                    if retired {
+                        let replacement = f.builder.element(3_971_971)
+                        f.builder.setRole(replacement, kAXLayoutItemRole as String)
+                        f.builder.setChildren(replacement, AXHelpers.getChildren(strip, runtime: f.builder.makeAXRuntime()))
+                        f.builder.setChildren(mixer, [replacement, peerStrip])
+                        f.builder.setAttribute(replacement, kAXNumberOfCharactersAttribute as String, NSNumber(value: 0))
+                        f.builder.setAttribute(replacement, kAXInsertionPointLineNumberAttribute as String, NSNumber(value: 0))
+                        f.passiveMixerStripFocus = replacement
+                        currentStrip = replacement
+                    } else { currentStrip = strip }
+                    if railEntry {
+                        f.passiveRailFocus = true
+                        f.builder.setAttributeSettable(f.rail, kAXValueAttribute as String, false)
+                    }
+                    f.onSelection = {
+                        let peerSelected = f.selectionWrites.last.map { CFEqual($0, peerHeader) } == true
+                        let selected = peerSelected ? peerStrip : currentStrip
+                        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String,
+                            railEntry && !peerSelected ? f.rail : selected)
+                        f.builder.setAttribute(mixer, kAXSelectedChildrenAttribute as String, [selected])
+                    }
+                    f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, railEntry ? f.rail : currentStrip)
+                    f.builder.setAttribute(mixer, kAXSelectedChildrenAttribute as String, [currentStrip])
+                    let acquired = await AccessibilityChannel.renewSourceThroughOriginalHeader(pair, original: pair.strip,
+                        runtime: f.runtime, sourceDisposition: retired ? .retiredOriginal : .readObservation)
+                    let source = try #require(acquired.source, "Use the actual original-header producer and its verified selection inverse")
+                    #expect(acquired.effects.restoration == "restored")
+                    #expect(source.observedPairs.count == 2, "The actual producer must observe both native associations")
+                    #expect(source.pair.strip.matches(pair.strip) == !retired)
+                    if fault.hasPrefix("popup_") {
+                        let popup = f.builder.element(3_971_974)
+                        f.builder.setRole(popup, kAXMenuRole as String)
+                        f.builder.setChildren(popup, [])
+                        let mixerChildren = AXHelpers.getChildren(mixer, runtime: f.builder.makeAXRuntime())
+                        f.builder.setChildren(mixer, mixerChildren + [popup])
+                        let popupFault = fault.replacingOccurrences(of: "popup_search_", with: "popup_")
+                        let popupFocus: AXUIElement
+                        if fault.hasPrefix("popup_search_") {
+                            let search = f.builder.element(3_971_976)
+                            f.builder.setRole(search, kAXTextFieldRole as String)
+                            f.builder.setChildren(search, [])
+                            f.builder.setChildren(popup, [search])
+                            f.popupFocusedWindowIsNoValue = true
+                            f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, search)
+                            popupFocus = search
+                        } else { popupFocus = railEntry ? f.rail : currentStrip }
+                        #expect(source.observation.permitsOwnedPopupRead(popup), "The actual source must own this reciprocal popup")
+                        f.physicalOwnerDocumentReads = 0
+                        #expect(source.permits(runtime: f.runtime, ownedPopup: popup), "Prove current popup admission before measuring or injecting a fault")
+                        let decidingDocumentRead = f.physicalOwnerDocumentReads
+                        #expect(decidingDocumentRead > 0, "Calibrate the actual last native document read")
+                        if popupFault == "popup_healthy" {
+                            f.globalMixerDiscoveries = 0
+                            #expect(source.permits(runtime: f.runtime, ownedPopup: popup))
+                            #expect(f.globalMixerDiscoveries == 0,
+                                "The actual original-header popup scope must retain current native bookends without global Mixer rediscovery")
+                        } else if popupFault == "popup_focus" {
+                            f.physicalOwnerDocumentReads = 0
+                            let foreignFocus = f.builder.element(3_971_975)
+                            f.onPhysicalOwnerDocumentRead = { read in
+                                if read == decidingDocumentRead {
+                                    f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, foreignFocus)
+                                }
+                            }
+                            #expect(!source.permits(runtime: f.runtime, ownedPopup: popup),
+                                "The final reciprocal popup check must refuse native-read focus drift")
+                            #expect(f.physicalOwnerDocumentReads >= decidingDocumentRead, "Actually reach the last native document-read focus fault")
+                            f.onPhysicalOwnerDocumentRead = nil
+                            f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, popupFocus)
+                            #expect(!source.permits(runtime: f.runtime, ownedPopup: popup), "Restored focus cannot revive lost popup custody")
+                        } else {
+                            let originalHeaders = AXHelpers.getChildren(f.rail, runtime: f.builder.makeAXRuntime())
+                            f.builder.setChildren(f.rail, [f.header])
+                            #expect(!source.permits(runtime: f.runtime, ownedPopup: popup))
+                            f.builder.setChildren(f.rail, originalHeaders)
+                            #expect(!source.permits(runtime: f.runtime, ownedPopup: popup), "A restored population cannot revive observed original-header loss")
+                        }
+                        #expect(f.writes == ["C"], "Identity and popup permission reads cannot add a writer")
+                        return
+                    }
+                    if fault == "focus_during_window_bookend" {
+                        f.physicalOwnerDocumentReads = 0
+                        #expect(source.permits(runtime: f.runtime), "First prove this actual source is admitted")
+                        let decidingDocumentRead = f.physicalOwnerDocumentReads
+                        #expect(decidingDocumentRead > 0)
+                        f.physicalOwnerDocumentReads = 0
+                        let foreignFocus = f.builder.element(3_971_973)
+                        f.onPhysicalOwnerDocumentRead = { read in
+                            if read == decidingDocumentRead {
+                                f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, foreignFocus)
+                            }
+                        }
+                        #expect(!source.permits(runtime: f.runtime),
+                            "Focus drift during later native document reads must be followed by final passive custody")
+                        #expect(f.physicalOwnerDocumentReads >= decidingDocumentRead, "The actual last native document-read fault must fire")
+                        f.onPhysicalOwnerDocumentRead = nil
+                        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, railEntry ? f.rail : currentStrip)
+                        #expect(!source.permits(runtime: f.runtime), "Observed focus loss cannot revive after restoration")
+                        #expect(f.writes == ["C"], "Permission reads must not add writers")
+                        return
+                    }
+                    if fault == "healthy" {
+                        let native = source.pair.strip
+                        let foreign = f.builder.element(3_971_972)
+                        for mutation in ["index", "window", "mixer", "document"] {
+                            let binding = AXMixerStripBinding.Binding(
+                                window: mutation == "window" ? foreign : native.window,
+                                mixer: mutation == "mixer" ? foreign : native.mixer, strip: native.strip,
+                                document: mutation == "document" ? "file:///tmp/Foreign.logicx" : native.document)
+                            let unowned = AccessibilityChannel.OriginalHeaderSourceRenewal(
+                                pair: .init(track: source.pair.track, strip: binding),
+                                index: source.index + (mutation == "index" ? 1 : 0), original: source.original,
+                                originalTrack: source.originalTrack, observation: source.observation,
+                                observedPairs: source.observedPairs)
+                            #expect(!unowned.permits(runtime: f.runtime), "Foreign \(mutation) cannot borrow the actual source scope")
+                        }
+                        f.countedMixer = mixer
+                        f.mixerPopulationReads = 0
+                        #expect(source.permits(runtime: f.runtime))
+                        #expect(f.mixerPopulationReads == (railEntry ? 4 : 3),
+                            "The final original-header bookend must include passive custody without repeating the complete Mixer census; retain both header bookends and rail-selected-child custody")
+                    }
+                    f.globalMixerDiscoveries = 0
+                    proof = try #require(await ExactTrackNameAdapter.renewingOwnedCoupledName(proof, through: source))
+                    if fault == "healthy" {
+                        #expect(f.globalMixerDiscoveries == 0,
+                            "Actual surviving/retired source membership is already authenticated by the complete renewed native census")
+                    }
+                }
+                if fault == "primary" { f.builder.setAttribute(f.field, kAXDescriptionAttribute as String, "External") }
+                if fault == "mirror" { f.builder.setAttribute(mirror, kAXValueAttribute as String, "External") }
+                if fault == "peer", let peer = f.coupledPeerNameField {
+                    f.builder.setAttribute(peer, kAXValueAttribute as String, "External")
+                }
+                if fault == "document" { f.builder.setAttribute(f.window, kAXDocumentAttribute as String, "file:///tmp/Foreign.logicx") }
+                if fault == "gate" { f.boundaryOwnership = false }
+                f.countedMixer = mixer
+                f.mixerPopulationReads = 0
+                f.onPeerNameReadAfterWrite = { _ in f.mixerPopulationReadsAtLastPeer = f.mixerPopulationReads }
+                f.onMirrorReadAfterWrite = {
+                    f.mixerCensusesWithinNameGroups.append(f.mixerPopulationReads - f.mixerPopulationReadsAtLastPeer)
+                    if fault == "late_document" {
+                        f.builder.setAttribute(f.window, kAXDocumentAttribute as String, "file:///tmp/Foreign.logicx")
+                    }
+                    if fault == "late_selection" {
+                        f.builder.setAttribute(f.header, kAXSelectedAttribute as String, false)
+                        f.builder.setAttribute(peerHeader, kAXSelectedAttribute as String, true)
+                    }
+                    if fault == "late_transport" { f.builder.setAttribute(play, kAXValueAttribute as String, 1) }
+                    if fault == "late_population" { f.builder.setChildren(mixer, [strip]) }
+                    if fault == "late_mixer_role" { f.builder.setRole(mixer, kAXButtonRole as String) }
+                    if fault == "late_rail_role" { f.builder.setRole(f.rail, kAXButtonRole as String) }
+                    if fault == "late_gate" { f.boundaryOwnership = false }
+                }
+                f.globalMixerDiscoveries = 0
+                #expect(await ExactTrackNameAdapter.readOwnedCoupledName(proof) == (fault == "healthy" ? "C" : nil))
+                if fault == "late_mixer_role" || fault == "late_rail_role" {
+                    f.onMirrorReadAfterWrite = nil
+                    f.builder.setRole(mixer, originalMixerRole)
+                    f.builder.setRole(f.rail, originalRailRole)
+                    #expect(await ExactTrackNameAdapter.readOwnedCoupledName(proof) == nil,
+                        "Observed invalid native roles irreversibly end this scope even if their old values return")
+                }
+                if fault == "healthy" {
+                    if renewed {
+                        #expect(f.globalMixerDiscoveries == 0,
+                            "The actual renewed scope checks complete current membership without global Mixer rediscovery")
+                        #expect(f.mixerCensusesWithinNameGroups == [0, 0],
+                            "Both peer/name groups retain their full bookends without nesting another census between their values")
+                        #expect(f.mixerPopulationReads > 0, "Fresh native census bookends must actually execute")
+                    } else {
+                        #expect(f.globalMixerDiscoveries > 0, "The original unrenewed name read retains its global discovery")
+                    }
+                }
+                #expect(f.writes == ["C"], "Independent name reads cannot perform another rename or inverse")
+            }
         }
     }
 

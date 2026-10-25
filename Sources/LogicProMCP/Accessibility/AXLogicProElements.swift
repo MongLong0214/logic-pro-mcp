@@ -338,11 +338,30 @@ enum AXLogicProElements {
         let reason: DialogPresenceReason
         var axError: Int32?
         if let app = appRoot(runtime: runtime) {
+            func rereadWindows(failureReason: DialogPresenceReason,
+                               previousWindowsError: Int32? = nil) -> (DialogPresenceReason, Int32?) {
+                usleep(200_000)
+                switch AXHelpers.getAXUIElementArrayRead(app, kAXWindowsAttribute as String, runtime: runtime.ax) {
+                case .success(.elements(let windows)):
+                    return (summarise(windows.map { blockingModalFinding($0, runtime: runtime.ax) }), nil)
+                case .success(.absent): return (.windowsAttributeAbsent, previousWindowsError)
+                case .success(.malformed): return (.windowsAttributeMalformed, previousWindowsError)
+                case .failure(let error): return (failureReason, error.raw)
+                }
+            }
             switch AXHelpers.getAXUIElementArrayRead(
                 app, kAXWindowsAttribute as String, runtime: runtime.ax
             ) {
             case .success(.elements(let windows)):
-                reason = summarise(windows.map { blockingModalFinding($0, runtime: runtime.ax) })
+                let findings = windows.map { blockingModalFinding($0, runtime: runtime.ax) }
+                // Only an incomplete CannotComplete census gets the one reread.
+                // A seen modal or any other failure keeps its original refusal.
+                // Start from fresh AXWindows so a newly appeared modal is not
+                // hidden behind the original window's successful second read.
+                if findings.contains(where: { $0.isRetryableReadFailure }),
+                   findings.allSatisfy({ !$0.isBlocking || $0.isRetryableReadFailure }) {
+                    (reason, axError) = rereadWindows(failureReason: .windowsReadFailed)
+                } else { reason = summarise(findings) }
             case .success(.absent):
                 reason = .windowsAttributeAbsent
             case .success(.malformed):
@@ -359,21 +378,8 @@ enum AXLogicProElements {
                 // it says. Once, and only for this status.
                 axError = error.raw
                 if error.raw == AXError.cannotComplete.rawValue {
-                    usleep(200_000)
-                    switch AXHelpers.getAXUIElementArrayRead(
-                        app, kAXWindowsAttribute as String, runtime: runtime.ax
-                    ) {
-                    case .success(.elements(let windows)):
-                        reason = summarise(windows.map { blockingModalFinding($0, runtime: runtime.ax) })
-                        axError = nil
-                    case .success(.absent):
-                        reason = .windowsAttributeAbsent
-                    case .success(.malformed):
-                        reason = .windowsAttributeMalformed
-                    case .failure(let retryError):
-                        reason = .appNotYetAddressable
-                        axError = retryError.raw
-                    }
+                    (reason, axError) = rereadWindows(failureReason: .appNotYetAddressable,
+                        previousWindowsError: error.raw)
                 } else {
                     reason = .windowsReadFailed
                 }
@@ -399,10 +405,14 @@ enum AXLogicProElements {
     enum BlockingModalFinding {
         case none
         case sawModal
-        case readFailed
+        case readFailed(AXHelpers.AXStatusError)
 
-        var isBlocking: Bool { self != .none }
-        var isAnActualModal: Bool { self == .sawModal }
+        var isBlocking: Bool { if case .none = self { return false }; return true }
+        var isAnActualModal: Bool { if case .sawModal = self { return true }; return false }
+        var isRetryableReadFailure: Bool {
+            if case .readFailed(let error) = self { return error.raw == AXError.cannotComplete.rawValue }
+            return false
+        }
     }
 
     private static func windowHostsBlockingModal(
@@ -422,8 +432,9 @@ enum AXLogicProElements {
             where error.raw == AXError.attributeUnsupported.rawValue
                 || error.raw == AXError.noValue.rawValue:
             return .none
-        case .failure:
-            return .readFailed
+        case .failure(let error):
+            Log.info("Blocking-modal census failed: stage=window_children, ax_status=\(error.raw)", subsystem: "ax")
+            return .readFailed(error)
         case .success(let children):
             for child in children {
                 switch AXHelpers.getAttributeResult(
@@ -435,8 +446,9 @@ enum AXLogicProElements {
                     where error.raw == AXError.attributeUnsupported.rawValue
                         || error.raw == AXError.noValue.rawValue:
                     continue
-                case .failure:
-                    return .readFailed
+                case .failure(let error):
+                    Log.info("Blocking-modal census failed: stage=child_role, ax_status=\(error.raw)", subsystem: "ax")
+                    return .readFailed(error)
                 case .success:
                     continue
                 }

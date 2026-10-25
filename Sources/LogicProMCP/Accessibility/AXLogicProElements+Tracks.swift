@@ -186,31 +186,37 @@ enum AXTrackBinding {
                 && shape.matchesPopulation(other.shape.headers)
         }
 
-        func currentIndex(in observation: AccessibilityChannel.HeldSelectionAssociation) -> Int? {
-            guard observation.retainsOriginalHeaderCarrier(self) else { return nil }
-            return currentIndex(using: observation)
+        func currentIndex(in observation: AccessibilityChannel.HeldSelectionAssociation,
+                          requiringPassiveRead: Bool = false, ownedPopup: AXUIElement? = nil) -> Int? {
+            guard !requiringPassiveRead || ownedPopup == nil,
+                  observation.retainsOriginalHeaderCarrier(self) else { return nil }
+            return currentIndex(using: observation, requiringPassiveRead: requiringPassiveRead, ownedPopup: ownedPopup)
         }
 
         func currentIndex() -> Int? {
             currentIndex(using: nil)
         }
 
-        private func currentIndex(using observation: AccessibilityChannel.HeldSelectionAssociation?) -> Int? {
-            guard let index = currentScopeIndex(using: observation), ExactTrackNameAdapter.operationPermitted(),
+        private func currentIndex(using observation: AccessibilityChannel.HeldSelectionAssociation?,
+                                  requiringPassiveRead: Bool = false, ownedPopup: AXUIElement? = nil) -> Int? {
+            guard let index = currentScopeIndex(using: observation, ownedPopup: ownedPopup), ExactTrackNameAdapter.operationPermitted(),
                   shape.observe(AXValueExtractors.extractTrackStackState(
                     from: header, runtime: runtime.ax).isStackHeader),
                   // The deciding child-role reads may outlive the first scope
                   // proof. Renew the same window/document/unique membership.
-                  currentScopeIndex(using: observation) == index else { return nil }
+                  currentScopeIndex(using: observation, requiringPassiveRead: requiringPassiveRead, ownedPopup: ownedPopup) == index else { return nil }
             return index
         }
 
-        private func currentScopeIndex(using observation: AccessibilityChannel.HeldSelectionAssociation?) -> Int? {
+        private func currentScopeIndex(using observation: AccessibilityChannel.HeldSelectionAssociation?,
+                                       requiringPassiveRead: Bool = false, ownedPopup: AXUIElement? = nil) -> Int? {
+            let scopeClosesInsideObservation = observation != nil && requiringPassiveRead
             guard ExactTrackNameAdapter.operationPermitted(), shape.isCurrent, exposure?.isCurrent ?? true,
                   projectPath != nil, currentWindowAndDocumentMatch() else { exposure?.end(); return nil }
             let observed: [AXUIElement]?
             if let observation {
-                observed = observation.readOriginalHeaderPopulation(for: self, observingPopulation: {
+                observed = observation.readOriginalHeaderPopulation(for: self,
+                    requiringPassiveRead: scopeClosesInsideObservation, ownedPopup: ownedPopup, observingPopulation: {
                     _ = shape.observePopulation($0)
                 })
             } else if case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(in: window, runtime: runtime) {
@@ -219,14 +225,16 @@ enum AXTrackBinding {
             guard let headers = observed, ExactTrackNameAdapter.operationPermitted(),
                   shape.observePopulation(headers),
                   exposure?.isCurrent ?? true,
-                  // The census can itself outlive the preceding scope proof.
-                  currentWindowAndDocumentMatch(),
+                  // Passive custody must follow the closing native window read.
+                  // The scoped sampler performs that read before its final
+                  // ownership and passive-focus checks; other paths retain it here.
+                  scopeClosesInsideObservation || currentWindowAndDocumentMatch(),
                   ExactTrackNameAdapter.operationPermitted() else { exposure?.end(); return nil }
             let matches = headers.indices.filter { CFEqual(headers[$0], header) }
             return matches.count == 1 ? matches[0] : nil
         }
 
-        private func currentWindowAndDocumentMatch() -> Bool {
+        func currentWindowAndDocumentMatch() -> Bool {
             guard ExactTrackNameAdapter.operationPermitted(),
                   case .found(let currentWindow) = AXLogicProElements.arrangeWindowRead(runtime: runtime),
                   CFEqual(window, currentWindow),
