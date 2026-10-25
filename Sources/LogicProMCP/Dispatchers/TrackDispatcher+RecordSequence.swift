@@ -29,7 +29,13 @@ extension TrackDispatcher {
                 return .failure(error.message)
             }
         },
-        settleReadback: @escaping @Sendable () async -> Void = { try? await Task.sleep(nanoseconds: 150_000_000) }
+        settleReadback: @escaping @Sendable () async -> Void = { try? await Task.sleep(nanoseconds: 150_000_000) },
+        selectFullPositionDisplay: @escaping @Sendable () -> ControlBarDisplayMode.Switch = {
+            ControlBarDisplayMode.selectBeats()
+        },
+        restorePositionDisplay: @escaping @Sendable (ControlBarDisplayMode.Lease) -> ControlBarDisplayMode.Restore = {
+            ControlBarDisplayMode.restore($0)
+        }
     ) async -> CallTool.Result {
         // T5 — record_sequence does not support `port` (no keycmd alternative
         // for SMF-import + AX menu navigation). Reject up-front rather than
@@ -162,7 +168,37 @@ extension TrackDispatcher {
         // Use the public seek's fresh pre/readback contract, not a raw channel acknowledgement.
         // Ordinary dialog OK is State B until its observed transition verifies; an indeterminate
         // global-input target must stay unverified even if the playhead happens to match.
-        let beforePosition = await TransportDispatcher.liveTransportState(router: router, cache: cache)
+        var beforePosition = await TransportDispatcher.liveTransportState(router: router, cache: cache)
+        // #1420 — the seek can only reach State A when the control bar shows all four position
+        // components, and Logic's default display mode ("Beats & Project") shows bar and beat. A
+        // bar-and-beat reading cannot see a sub-beat offset, and the region check after the import
+        // compares bars only, so it is no substitute: switch to Beats for the seek, read the
+        // position again in that mode, and put the original mode back once the seek is verified or
+        // refused. The display mode moves no position, so restoring it keeps the verified anchor;
+        // the import waits until the restore is confirmed.
+        var displayModeFields: [String: Any] = [:]
+        var displayModeLease: ControlBarDisplayMode.Lease?
+        if let observed = beforePosition?.positionReadback?.observedComponents,
+           !observed.isEmpty, observed.count < TransportPositionComponent.allCases.count {
+            // Selecting a menu item is this operation's first write, and it bypasses ChannelRouter.
+            await recordWriteBoundary(traceID)
+            switch selectFullPositionDisplay() {
+            case .switched(let lease):
+                displayModeLease = lease
+                displayModeFields["display_mode_switched_from"] = lease.original
+                // The Playhead Position group gains its division and tick sliders a moment after
+                // the popup reads Beats (measured 2026-10-26 on Logic 12.4: an immediate reread
+                // still exposed bar and beat), so reread until all four are there, about 2 s at most.
+                for attempt in 0..<20 {
+                    beforePosition = await TransportDispatcher.liveTransportState(router: router, cache: cache)
+                    if beforePosition?.positionReadback?.observedComponents.count
+                        == TransportPositionComponent.allCases.count || attempt == 19 { break }
+                    try? await Task.sleep(nanoseconds: 100_000_000)
+                }
+            case .unavailable(let reason):
+                displayModeFields["display_mode_switch_unavailable"] = reason
+            }
+        }
         let gotoResult: CallTool.Result
         if let unchanged = TransportDispatcher.gotoPositionUnchangedResult(
             requestedPosition: "1.1.1.1", beforeTransport: beforePosition
@@ -177,16 +213,27 @@ extension TrackDispatcher {
                 router: router, cache: cache
             )
         }
-        // #1420 — how many position components the readback exposes is the control bar's display
-        // mode: Logic's default "Beats & Project" shows bar and beat only, so the seek cannot reach
-        // State A there. As QualificationTransport does for the same readback, accept what the
-        // display shows: a partial reading whose bar and beat match the target, with nothing
-        // withheld, satisfies this precondition. The verified scope is reported, not implied.
-        let partialPlayhead = (gotoResult.isError ?? false) ? recordSequencePartialPlayhead(gotoResult) : nil
-        guard !(gotoResult.isError ?? false) || partialPlayhead != nil else {
-            let positionDetail: String
+        if let lease = displayModeLease {
+            switch restorePositionDisplay(lease) {
+            case .restored:
+                displayModeFields["display_mode_restored"] = true
+            case .refused(let reason):
+                displayModeFields["display_mode_restored"] = false
+                displayModeFields["display_mode_restore_refused"] = reason
+            }
+        }
+        guard !(gotoResult.isError ?? false) else {
+            var positionDetail: String
             if case .text(let text, _, _) = gotoResult.content.first {
                 positionDetail = text
+                if !displayModeFields.isEmpty, var detail = importMessageJSON(text) {
+                    detail.merge(displayModeFields) { current, _ in current }
+                    if JSONSerialization.isValidJSONObject(detail),
+                       let data = try? JSONSerialization.data(withJSONObject: detail, options: [.sortedKeys]),
+                       let merged = String(data: data, encoding: .utf8) {
+                        positionDetail = merged
+                    }
+                }
             } else {
                 positionDetail = "position verification unavailable"
             }
@@ -194,6 +241,21 @@ extension TrackDispatcher {
                 "record_sequence failed to reset playhead to bar 1 (required for accurate import): \(positionDetail)",
                 isError: true
             )
+        }
+
+        if displayModeFields["display_mode_restored"] as? Bool == false {
+            var failure: [String: Any] = [
+                "success": false,
+                "verified": false,
+                "error": "display_mode_restore_unverified",
+                "failure_stage": "display_mode_restore",
+                "bar": bar,
+                "note_count": events.count,
+                "method": "smf_import",
+                "hint": "record_sequence verified the playhead at 1.1.1.1 in the Beats display mode but could not confirm restoring the control bar's original display mode, so it did not import.",
+            ]
+            failure.merge(displayModeFields) { current, _ in current }
+            return jsonToolTextResult(failure, isError: true)
         }
 
         let preImportRegions: [RegionInfo]?
@@ -255,6 +317,7 @@ extension TrackDispatcher {
                     }
                 }
             }
+            failure.merge(displayModeFields) { current, _ in current }
             return jsonToolTextResult(failure, isError: true)
         }
 
@@ -288,6 +351,7 @@ extension TrackDispatcher {
             ] {
                 if let value = inner[key] { failure[key] = value }
             }
+            failure.merge(displayModeFields) { current, _ in current }
             return jsonToolTextResult(failure, isError: true)
         }
 
@@ -375,34 +439,8 @@ extension TrackDispatcher {
             preImportRegions: preImportRegions,
             readRegions: readRegions,
             settleReadback: settleReadback,
-            playheadVerifiedComponents: partialPlayhead
-                ?? TransportPositionComponent.allCases.map(\.rawValue)
+            displayModeFields: displayModeFields
         )
-    }
-
-    /// The observed components of a State B seek to `1.1.1.1` whose only shortfall is a partial
-    /// readback: at least bar and beat observed, all of them matching the target, and no
-    /// verification withheld (dialog input target, unsafe fallback, indeterminate write). Any other
-    /// result, including a mismatch on an observed component, returns nil.
-    static func recordSequencePartialPlayhead(_ result: CallTool.Result) -> [String]? {
-        guard case .text(let text, _, _) = result.content.first,
-              let object = importMessageJSON(text),
-              object["state"] as? String == "B",
-              object["reason"] as? String == HonestContract.UncertainReason.readbackUnavailable.rawValue,
-              object["verification_withheld"] == nil,
-              object["requested"] as? String == "1.1.1.1",
-              let observed = object["observed"] as? String,
-              let components = object["observed_position_components"] as? [String] else {
-            return nil
-        }
-        let all = TransportPositionComponent.allCases.map(\.rawValue)
-        guard components.count >= 2, components.count < all.count,
-              Array(all.prefix(components.count)) == components,
-              observed.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
-                == Array(repeating: "1", count: components.count) else {
-            return nil
-        }
-        return components
     }
 
     private enum RecordSequenceReadbackStatus {
@@ -442,11 +480,11 @@ extension TrackDispatcher {
         preImportRegions: [RegionInfo]?,
         readRegions: @escaping @Sendable () -> RecordSequenceRegionReadback,
         settleReadback: @escaping @Sendable () async -> Void,
-        playheadVerifiedComponents: [String]
+        displayModeFields: [String: Any] = [:]
     ) async -> CallTool.Result {
         let expectedStartBar = 1
         let expectedEndBar = recordSequenceExpectedEndBar(for: events, requestedBar: requestedBar)
-        let base: [String: Any] = [
+        var base: [String: Any] = [
             "bar": requestedBar,
             "created_track": createdTrack,
             "recorded_to_track": createdTrack,
@@ -457,8 +495,8 @@ extension TrackDispatcher {
             "instrument": instrumentStatus,
             "expected_start_bar": expectedStartBar,
             "expected_end_bar": expectedEndBar,
-            "playhead_verified_components": playheadVerifiedComponents,
         ]
+        base.merge(displayModeFields) { current, _ in current }
         let preRegionKeys = Set((preImportRegions ?? []).map(recordSequenceRegionKey))
         let hasPreImportSnapshot = preImportRegions != nil
         let verifySource = hasPreImportSnapshot ? "ax_region_delta" : "ax_region_readback"

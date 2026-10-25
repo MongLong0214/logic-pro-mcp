@@ -35,10 +35,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ### Fixed
 - **`record_sequence` works in Logic's default control-bar display mode (#1420).** In "Beats & Project"
   the Playhead Position group exposes only bar and beat, so the seek to `1.1.1.1` could never reach
-  State A and every `record_sequence` refused with "failed to reset playhead to bar 1". As
-  `QualificationTransport` already does for the same readback, a partial reading whose observed
-  components all match the target, with no verification withheld, now satisfies the precondition.
-  Responses report `playhead_verified_components`. The seek's own State A contract is unchanged.
+  State A and every `record_sequence` refused with "failed to reset playhead to bar 1". A bar-and-beat
+  reading cannot see a sub-beat offset, and the region check after the import compares bars only, so
+  a partial reading is not accepted. Instead, when the readback before the seek is partial,
+  `record_sequence` switches the display mode to Beats (the existing `displayModePopupLabel` and
+  `beatsDisplayModeItem` labels), reads the position again, requires the seek's full State A as
+  before, and restores the original mode whether the seek was verified or refused. The restore acts
+  only while the same window, project and popup still show Beats, so a mode the user chose in between
+  is left alone, and the import waits until the restore is confirmed: an unconfirmed restore fails
+  with `display_mode_restore_unverified` and `display_mode_restore_refused` naming why. Responses
+  report `display_mode_switched_from` and `display_mode_restored`, or
+  `display_mode_switch_unavailable` when the switch could not be made (the seek then refuses as
+  before).
 - **`export_track_midi` / `read_track_notes` accept several conductor chunks.** Logic 12.4 can start
   its "All MIDI Tracks as MIDI File" export with more than one unnamed chunk holding only tempo,
   meter, key and SMPTE metadata (5 and 8 were observed in two projects). Only the first was
