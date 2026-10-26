@@ -186,15 +186,22 @@ extension TrackDispatcher {
             case .switched(let lease):
                 displayModeLease = lease
                 displayModeFields["display_mode_switched_from"] = lease.original
-                // The Playhead Position group gains its division and tick sliders a moment after
-                // the popup reads Beats (measured 2026-10-26 on Logic 12.4: an immediate reread
-                // still exposed bar and beat), so reread until all four are there, about 2 s at most.
-                for attempt in 0..<20 {
+                // The Playhead Position group gains its division and tick sliders after the popup
+                // reads Beats (see `ControlBarDisplayMode.positionComponentsTimeout`), so reread
+                // until all four are exposed; past the deadline, one fresh reading decides.
+                let deadline = Date().addingTimeInterval(ControlBarDisplayMode.positionComponentsTimeout)
+                repeat {
                     beforePosition = await TransportDispatcher.liveTransportState(router: router, cache: cache)
                     if beforePosition?.positionReadback?.observedComponents.count
-                        == TransportPositionComponent.allCases.count || attempt == 19 { break }
-                    try? await Task.sleep(nanoseconds: 100_000_000)
-                }
+                        == TransportPositionComponent.allCases.count { break }
+                    let remaining = deadline.timeIntervalSinceNow
+                    if remaining <= 0 {
+                        beforePosition = await TransportDispatcher.liveTransportState(router: router, cache: cache)
+                        break
+                    }
+                    try? await Task.sleep(nanoseconds: UInt64(
+                        min(ControlBarDisplayMode.positionComponentsPollInterval, remaining) * 1_000_000_000))
+                } while true
             case .unavailable(let reason):
                 displayModeFields["display_mode_switch_unavailable"] = reason
             }

@@ -37,6 +37,23 @@ enum ControlBarDisplayMode {
         case refused(String)
     }
 
+    /// Measured on Logic 12.4 (6707), en-US, on 2026-10-26 with a 25 ms poll across ten switches
+    /// each way between "Beats & Project" and "Beats": AXShowMenu → the popup's AXMenu child was
+    /// 27–31 ms. The timeout and poll are ControlsViewBooleanParameterWriter's measured View-menu
+    /// values (28–46 ms there).
+    static let menuAppearanceTimeout: TimeInterval = 2.0
+    static let menuAppearancePollInterval: TimeInterval = 0.05
+    /// Same measurement: AXPress on a mode item → the popup's AXValue reading that mode was
+    /// 171–180 ms; an immediate read still shows the previous mode. 0.75 s is about a 4× margin
+    /// over the 180 ms maximum.
+    static let modeConfirmationTimeout: TimeInterval = 0.75
+    static let modeConfirmationPollInterval: TimeInterval = 0.05
+    /// Same measurement: AXPress on Beats → the Playhead Position group exposing bar, beat,
+    /// division and tick was 371–392 ms (and back to two sliders 371–459 ms). 2 s is about a 4×
+    /// margin over the 459 ms maximum. Used by callers that reread the transport after a switch.
+    static let positionComponentsTimeout: TimeInterval = 2.0
+    static let positionComponentsPollInterval: TimeInterval = 0.05
+
     /// Selects the Beats display mode in the main window's control bar.
     static func selectBeats(runtime: AXLogicProElements.Runtime = .production) -> Switch {
         guard let window = AXLogicProElements.mainWindow(runtime: runtime),
@@ -68,7 +85,7 @@ enum ControlBarDisplayMode {
         }) else {
             return .unavailable("display_mode_beats_item_not_pressed")
         }
-        guard let now = settledTitle(of: popup, runtime: runtime, until: isBeats), isBeats(now) else {
+        guard let now = waitForMode(of: popup, runtime: runtime, until: isBeats), isBeats(now) else {
             // The press was issued but the popup does not read Beats. If it reads anything other
             // than what it showed, put that back; a popup that never left `original` needs nothing.
             if title(of: popup, runtime: runtime) != original {
@@ -99,7 +116,7 @@ enum ControlBarDisplayMode {
         // Only the mode this switch set is ours to undo; a later choice is the user's.
         guard isBeats(now) else { return .refused("display_mode_changed_since_switch") }
         guard pressTitle(lease.original, in: popup, runtime: runtime),
-              settledTitle(of: popup, runtime: runtime, until: { $0 == lease.original }) == lease.original else {
+              waitForMode(of: popup, runtime: runtime, until: { $0 == lease.original }) == lease.original else {
             return .refused("display_mode_not_restored")
         }
         return .restored
@@ -126,21 +143,36 @@ enum ControlBarDisplayMode {
         AXHelpers.getValue(popup, runtime: runtime) as? String
     }
 
-    /// The popup's title once it satisfies `done`, or its last reading after about two seconds.
-    /// Logic updates the popup's AXValue after the menu press returns (measured 2026-10-26 on
-    /// Logic 12.4: an immediate read still showed the previous mode while the switch went through),
-    /// so a single read right after the press would report a switch that happened as one that did
-    /// not, and leave the mode changed.
-    private static func settledTitle(
+    /// The popup's mode once it satisfies `done`, or a fresh reading taken after the deadline
+    /// (not the last poll reported as an end-of-wait fact). See `modeConfirmationTimeout`.
+    private static func waitForMode(
         of popup: AXUIElement, runtime: AXHelpers.Runtime, until done: (String) -> Bool
     ) -> String? {
-        var reading = title(of: popup, runtime: runtime)
-        for _ in 0..<40 {
-            if let reading, done(reading) { break }
-            usleep(50_000)
-            reading = title(of: popup, runtime: runtime)
-        }
-        return reading
+        let deadline = Date().addingTimeInterval(modeConfirmationTimeout)
+        repeat {
+            if let reading = title(of: popup, runtime: runtime), done(reading) { return reading }
+            let remaining = deadline.timeIntervalSinceNow
+            guard remaining > 0 else { break }
+            Thread.sleep(forTimeInterval: min(modeConfirmationPollInterval, remaining))
+        } while Date() < deadline
+        return title(of: popup, runtime: runtime)
+    }
+
+    /// The popup's AXMenu child, which appears after AXShowMenu returns, or nil at the deadline.
+    /// See `menuAppearanceTimeout`.
+    private static func waitForMenu(under popup: AXUIElement, runtime: AXHelpers.Runtime) -> AXUIElement? {
+        let deadline = Date().addingTimeInterval(menuAppearanceTimeout)
+        repeat {
+            if let menu = AXHelpers.getChildren(popup, runtime: runtime).first(where: {
+                AXHelpers.getRole($0, runtime: runtime) == (kAXMenuRole as String)
+            }) {
+                return menu
+            }
+            let remaining = deadline.timeIntervalSinceNow
+            guard remaining > 0 else { break }
+            Thread.sleep(forTimeInterval: min(menuAppearancePollInterval, remaining))
+        } while Date() < deadline
+        return nil
     }
 
     /// `.exact` compares the whole trimmed title, so `Beats & Project` is not Beats.
@@ -156,16 +188,7 @@ enum ControlBarDisplayMode {
         guard AXHelpers.performAction(popup, kAXShowMenuAction as String, runtime: runtime) else {
             return false
         }
-        // The menu can materialise after AXShowMenu returns; wait for it briefly.
-        var menu: AXUIElement?
-        for attempt in 0..<20 {
-            menu = AXHelpers.getChildren(popup, runtime: runtime).first {
-                AXHelpers.getRole($0, runtime: runtime) == (kAXMenuRole as String)
-            }
-            if menu != nil { break }
-            if attempt < 19 { usleep(50_000) }
-        }
-        guard let menu else { return false }
+        guard let menu = waitForMenu(under: popup, runtime: runtime) else { return false }
         let census = item(menu)
         guard census.candidates == 1, let item = census.element else {
             _ = AXHelpers.performAction(menu, kAXCancelAction as String, runtime: runtime)
