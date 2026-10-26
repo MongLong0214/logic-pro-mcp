@@ -1189,6 +1189,22 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         guard let proof = AccessibilityChannel.HeldSelectionAssociation(window: original.track.window,
             logic: runtime, expectedProject: nil, requiresProjectReference: false,
             allowsSelectedChildRailEntry: true, retainedMixerSource: original.strip), proof.permitsRead() else { return true }
+        var receiverCandidates: [AXMixerStripBinding.Binding] = []
+        var candidateBuses = Set<Int>()
+        for row in task.capture.channelStrips {
+            guard let slot = row.inputSlotBinding, !slot.owner.matches(task.pair.strip),
+                  CFEqual(slot.owner.window, proof.window), CFEqual(slot.owner.mixer, proof.mixer),
+                  slot.owner.document.utf8.elementsEqual(proof.document.utf8),
+                  proof.strips.filter({ CFEqual($0, slot.owner.strip) }).count == 1,
+                  RoutingGraphPublication.classifyOutputLabel(slot.source).0 == .bus,
+                  let bus = RoutingGraphPublication.classifyOutputLabel(slot.source).1,
+                  buses.contains(bus) else { continue }
+            receiverCandidates.append(slot.owner)
+            candidateBuses.insert(bus)
+        }
+        // These captured owners only bound optional relationship discovery.
+        // Current checked Bus inputs and the deciding writer remain mandatory.
+        let requestedReceivers = buses.allSatisfy({ candidateBuses.contains($0) }) ? receiverCandidates : nil
         let focus = AccessibilityChannel.OwnedTrackStackObservationNavigation.ReadFocusScope()
         focus.retainAssociation(proof)
         let observed = await AXHelpers.HelpReadGuard.$current.withValue(.init(allowHelpReads: true, stop: {
@@ -1196,7 +1212,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         })) {
             await AccessibilityChannel.renewSourceThroughOriginalHeader(original, original: original.strip,
                 runtime: runtime, sourceDisposition: .readObservation,
-                observingReadFocus: { focus.retainAssociation($0) })
+                observingReadFocus: { focus.retainAssociation($0) }, observingPeerStrips: requestedReceivers)
         }
         guard observed.effects.restoration == "restored", let renewed = observed.source,
               renewed.pair.strip.matches(original.strip), renewed.pair.track.matches(original.track),
@@ -1228,6 +1244,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         let pair: AccessibilityChannel.HeldSelectionAssociation.Pair
         let control: AXLogicProElements.AssignedSendMenuControl
         let renewal: AccessibilityChannel.OriginalHeaderSourceRenewal?
+        var checkedPeerHeaders: [AXTrackBinding.Binding]? = nil
         var continuedChange: AccessibilityChannel.ChangedSendObservation? = nil
     }
 
@@ -1369,6 +1386,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                 stage = "source_input_bookend"
                 guard sourceCurrent() else { return nil }
             }
+            var checkedPeerHeaders: [AXTrackBinding.Binding] = []
             for bus in buses {
                 stage = "receiver_\(bus)"
                 var checked = false
@@ -1454,6 +1472,9 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                     }
                     stage = "receiver_\(bus)_source_bookend"
                     guard sourceCurrent() else { return nil }
+                    if let currentPair, !checkedPeerHeaders.contains(where: { $0.matches(currentPair.track) }) {
+                        checkedPeerHeaders.append(currentPair.track)
+                    }
                     checked = true
                     break
                 }
@@ -1527,7 +1548,9 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             stage = "final_custody"
             guard await projectIsCurrent(allowPendingCancellation: true), sourceCurrent() else { return nil }
             accepted = true
-            return .init(pair: pair, control: finalControl, renewal: renewal, continuedChange: continuedChange)
+            return .init(pair: pair, control: finalControl, renewal: renewal,
+                checkedPeerHeaders: checkedPeerHeaders.isEmpty ? nil : checkedPeerHeaders,
+                continuedChange: continuedChange)
         })
     }
 

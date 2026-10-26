@@ -33,7 +33,8 @@ def event_for(value, action="opened"):
 
 class PRPolicyInputs(unittest.TestCase):
     def run_helper(self, metadata, pages, *, event=None, checkout="merge-sha",
-                   parents="base-sha head-sha", runs=None, gh_exit=0):
+                   parents="base-sha head-sha", tree="tree-sha", runs=None,
+                   commits=None, jobs=None, logs="", gh_exit=0):
         with tempfile.TemporaryDirectory() as directory:
             metadata = list(metadata)
             event = event or event_for(metadata[0])
@@ -41,7 +42,9 @@ class PRPolicyInputs(unittest.TestCase):
             Path(event_path).write_text(json.dumps(event), encoding="utf-8")
             state_path = os.path.join(directory, "state.json")
             Path(state_path).write_text(json.dumps({"metadata": metadata, "pages": pages,
-                                                    "runs": runs or [], "exit": gh_exit}),
+                                                    "runs": runs or [], "commits": commits or {},
+                                                    "jobs": jobs or [], "logs": logs,
+                                                    "exit": gh_exit}),
                                         encoding="utf-8")
             gh_path = os.path.join(directory, "gh")
             Path(gh_path).write_text("""#!/usr/bin/env python3
@@ -53,6 +56,12 @@ if state['exit']:
 endpoint = sys.argv[-1]
 if '/actions/workflows/ci.yml/runs' in endpoint:
     print(json.dumps({'workflow_runs': state['runs']}))
+elif '/git/commits/' in endpoint:
+    print(json.dumps(state['commits'].get(endpoint.rsplit('/', 1)[-1], {})))
+elif endpoint.endswith('/logs'):
+    print(state['logs'])
+elif '/jobs' in endpoint:
+    print(json.dumps({'jobs': state['jobs']}))
 elif '/files' in endpoint:
     print(json.dumps(state['pages']))
 else:
@@ -63,7 +72,9 @@ else:
             os.chmod(gh_path, stat.S_IRWXU)
             git_path = os.path.join(directory, "git")
             Path(git_path).write_text("""#!/bin/sh
-if printf '%s\\n' "$@" | grep -qx -- '--format=%P'; then
+if printf '%s\\n' "$@" | grep -qx -- 'HEAD^{tree}'; then
+  printf '%s\\n' "$FAKE_TREE"
+elif printf '%s\\n' "$@" | grep -qx -- '--format=%P'; then
   printf '%s\\n' "$FAKE_PARENTS"
 else
   printf '%s\\n' "$FAKE_CHECKOUT"
@@ -75,7 +86,7 @@ fi
             environment = dict(os.environ, GITHUB_EVENT_PATH=event_path,
                                GITHUB_REPOSITORY="owner/repo", GITHUB_SHA="merge-sha",
                                FAKE_GH_STATE=state_path, FAKE_CHECKOUT=checkout,
-                               FAKE_PARENTS=parents)
+                               FAKE_PARENTS=parents, FAKE_TREE=tree)
             result = subprocess.run([sys.executable, HELPER, "--gh", gh_path, "--git", git_path,
                                      "--body", body_path, "--files", files_path], env=environment,
                                     capture_output=True, text=True)
@@ -117,6 +128,75 @@ fi
         result, body, files = self.run_helper([snapshot, snapshot],
             [[{"filename": "a"}], [{"filename": "b"}]])
         self.assert_refused(result, body, files, "checkout")
+
+    def test_regenerated_api_merge_requires_identical_parents_and_tree(self):
+        snapshot = pr(merge="regenerated-merge")
+        good = {"sha": "regenerated-merge", "parents": [{"sha": "base-sha", "url": "https://api.github.com/base"},
+                                                      {"sha": "head-sha", "html_url": "https://github.com/head"}],
+                "tree": {"sha": "tree-sha"}}
+        cases = [(good, True), (dict(good, tree={"sha": "other-tree"}), False),
+                 (dict(good, parents=[{"sha": "head-sha"}, {"sha": "base-sha"}]), False),
+                 (dict(good, sha="other-merge"), False)]
+        for commit, accepted in cases:
+            with self.subTest(commit=commit):
+                result, body, files = self.run_helper([snapshot, snapshot],
+                    [[{"filename": "a"}], [{"filename": "b"}]],
+                    commits={"regenerated-merge": commit})
+                if accepted:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                else:
+                    self.assert_refused(result, body, files, "checkout")
+
+    def test_equivalent_merge_regeneration_during_pagination_is_not_source_drift(self):
+        before, after = pr(), pr(merge="regenerated-merge")
+        commit = {"sha": "regenerated-merge", "parents": [{"sha": "base-sha"}, {"sha": "head-sha"}],
+                  "tree": {"sha": "tree-sha"}}
+        result, body, files = self.run_helper([before, after],
+            [[{"filename": "a"}], [{"filename": "b"}]], commits={"regenerated-merge": commit})
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(files, b"a\nb\n")
+
+    def test_empty_fork_run_association_requires_actual_compile_checkout_binding(self):
+        snapshot = pr()
+        revision = "c" * 40
+        run = {"id": 17, "run_attempt": 1, "event": "pull_request", "status": "completed",
+               "conclusion": "success", "head_sha": "head-sha", "head_branch": "feature",
+               "repository": {"full_name": "owner/repo"},
+               "head_repository": {"full_name": "fork/repo"}, "pull_requests": []}
+        job = {"id": 23, "name": "compile", "conclusion": "success", "run_id": 17, "run_attempt": 1}
+        commit = {"sha": revision, "parents": [{"sha": "base-sha"}, {"sha": "head-sha"}],
+                  "tree": {"sha": "tree-sha"}}
+        logs = ("2026-10-25T17:04:03Z ##[group]Run actions/checkout@" + "a" * 40 + "\n"
+                "2026-10-25T17:04:04Z ##[endgroup]\n"
+                "2026-10-25T17:04:12Z [command]/opt/homebrew/bin/git checkout --progress --force refs/remotes/pull/42/merge\n"
+                "2026-10-25T17:04:13Z [command]/opt/homebrew/bin/git log -1 --format=%H\n"
+                "2026-10-25T17:04:14Z " + revision + "\n"
+                "2026-10-25T17:04:15Z ##[group]Run swift build -c release\n")
+        cases = [(run, job, commit, logs, True),
+                 (dict(run, conclusion="failure"), job, commit, logs, False),
+                 (dict(run, status="in_progress"), job, commit, logs, False),
+                 (dict(run, run_attempt=True), job, commit, logs, False),
+                 (dict(run, head_repository={"full_name": "other/repo"}), job, commit, logs, False),
+                 (dict(run, head_branch="other"), job, commit, logs, False),
+                 (run, dict(job, conclusion="failure"), commit, logs, False),
+                 (run, dict(job, run_id=99), commit, logs, False),
+                 (run, dict(job, run_attempt=2), commit, logs, False),
+                 (run, job, dict(commit, sha="d" * 40), logs, False),
+                 (run, job, dict(commit, tree={"sha": "other-tree"}), logs, False),
+                 (run, job, dict(commit, parents=[{"sha": "other-base"}, {"sha": "head-sha"}]), logs, False),
+                 (run, job, commit, logs.replace('/pull/42/', '/pull/99/'), False),
+                 (run, job, commit, logs.replace(revision, "unreadable"), False),
+                 (run, job, commit, "", False),
+                 (run, job, commit, "2026-10-25T17:04:01Z ##[group]Run swift build\n" + logs, False)]
+        for current_run, current_job, current_commit, current_logs, accepted in cases:
+            with self.subTest(run=current_run, job=current_job, commit=current_commit, logs=current_logs):
+                result, body, files = self.run_helper([snapshot, snapshot],
+                    [[{"filename": "a"}], [{"filename": "b"}]], event=event_for(snapshot, "edited"),
+                    runs=[current_run], jobs=[current_job], commits={revision: current_commit}, logs=current_logs)
+                if accepted:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                else:
+                    self.assert_refused(result, body, files, "code validation")
 
     def test_null_body_is_valid_empty_body(self):
         snapshot = pr(None)

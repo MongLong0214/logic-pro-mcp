@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -73,15 +74,21 @@ def event_snapshot(path):
     return event.get("action"), data[:7]
 
 
-def command_json(command):
+def command_output(command):
     try:
         completed = subprocess.run(command, capture_output=True, timeout=30)
     except (OSError, subprocess.TimeoutExpired):
         fail("GitHub API lookup failed")
     if completed.returncode:
         fail("GitHub API lookup failed")
+    if len(completed.stdout) > 16 * 1024 * 1024:
+        fail("GitHub API response is too large")
+    return completed.stdout
+
+
+def command_json(command):
     try:
-        return json.loads(completed.stdout)
+        return json.loads(command_output(command))
     except (UnicodeDecodeError, ValueError):
         fail("GitHub API returned invalid JSON")
 
@@ -125,17 +132,77 @@ def checkout_identity(git):
         revision = subprocess.run([git, "rev-parse", "HEAD"], capture_output=True, text=True, timeout=15)
         parents = subprocess.run([git, "show", "-s", "--format=%P", "HEAD"], capture_output=True,
                                  text=True, timeout=15)
+        tree = subprocess.run([git, "rev-parse", "HEAD^{tree}"], capture_output=True,
+                              text=True, timeout=15)
     except (OSError, subprocess.TimeoutExpired):
         fail("cannot identify checked out revision")
-    if revision.returncode or parents.returncode:
+    if revision.returncode or parents.returncode or tree.returncode or not tree.stdout.strip():
         fail("cannot identify checked out revision")
     result, parent_list = revision.stdout.strip(), parents.stdout.split()
     if not result or len(parent_list) != 2:
         fail("checkout is not a pull request merge commit")
-    return result, tuple(parent_list)
+    return result, tuple(parent_list), tree.stdout.strip()
 
 
-def has_validated_current_merge(gh, repository, identity):
+def merge_matches(gh, repository, revision, parents, tree):
+    commit = command_json([gh, "api", "--method", "GET",
+                           f"repos/{repository}/git/commits/{revision}"])
+    actual_parents = commit.get("parents") if isinstance(commit, dict) else None
+    return (isinstance(commit, dict) and commit.get("sha") == revision
+            and isinstance(actual_parents, list) and all(isinstance(parent, dict) for parent in actual_parents)
+            and tuple(parent.get("sha") for parent in actual_parents) == tuple(parents)
+            and isinstance(commit.get("tree"), dict) and commit["tree"].get("sha") == tree)
+
+
+def checkout_log_revision(log, number):
+    """Read this repository's first pinned checkout step, never later build output."""
+    lines = log.splitlines()
+    starts = [i for i, line in enumerate(lines) if "##[group]Run " in line]
+    if not starts or not re.fullmatch(r"\S+ ##\[group\]Run actions/checkout@[0-9a-f]{40}", lines[starts[0]]):
+        return None
+    block = lines[starts[0]:starts[1] if len(starts) > 1 else len(lines)]
+    checkout = rf"\S+ \[command\]\S+/git checkout --progress --force refs/remotes/pull/{number}/merge"
+    if not any(re.fullmatch(checkout, line) for line in block):
+        return None
+    for i, line in enumerate(block[:-1]):
+        if re.fullmatch(r"\S+ \[command\]\S+/git log -1 --format=%H", line):
+            match = re.fullmatch(r"\S+ ([0-9a-f]{40})", block[i + 1])
+            return match[1] if match else None
+    return None
+
+
+def fork_checkout_validated(gh, repository, run, identity, tree):
+    number, head, head_ref, head_repo, base, _base_ref, _base_repo, _merge = identity
+    if (run.get("head_branch") != head_ref
+            or not isinstance(run.get("head_repository"), dict)
+            or run["head_repository"].get("full_name") != head_repo):
+        return False
+    run_id, attempt = run.get("id"), run.get("run_attempt")
+    if any(type(value) is not int or value <= 0 for value in (run_id, attempt)):
+        return False
+    response = command_json([gh, "api", "--method", "GET",
+        f"repos/{repository}/actions/runs/{run_id}/attempts/{attempt}/jobs?per_page=100"])
+    jobs = response.get("jobs") if isinstance(response, dict) else None
+    if not isinstance(jobs, list):
+        return False
+    compile_jobs = [job for job in jobs if isinstance(job, dict) and job.get("name") == "compile"]
+    if len(compile_jobs) != 1:
+        return False
+    job = compile_jobs[0]
+    job_id = job.get("id")
+    if (job.get("conclusion") != "success" or job.get("run_id") != run_id
+            or job.get("run_attempt") != attempt or type(job_id) is not int or job_id <= 0):
+        return False
+    try:
+        log = command_output([gh, "api", "--method", "GET",
+                              f"repos/{repository}/actions/jobs/{job_id}/logs"]).decode("utf-8-sig")
+    except UnicodeDecodeError:
+        fail("GitHub checkout log is not UTF-8")
+    revision = checkout_log_revision(log, number)
+    return revision is not None and merge_matches(gh, repository, revision, (base, head), tree)
+
+
+def has_validated_current_merge(gh, repository, identity, tree):
     """Accept a completed CI run for exactly this source head and PR base."""
     number, head, _head_ref, _head_repo, base, base_ref, _base_repo, _merge = identity
     response = command_json([gh, "api", "--method", "GET",
@@ -156,6 +223,10 @@ def has_validated_current_merge(gh, repository, identity):
         pull_requests = run.get("pull_requests")
         if not isinstance(pull_requests, list):
             continue
+        # GitHub may omit fork PR associations. Its existing successful compile
+        # checkout supplies the missing PR/base binding; source SHA alone does not.
+        if not pull_requests and fork_checkout_validated(gh, repository, run, identity, tree):
+            return True
         for run_pr in pull_requests:
             if not isinstance(run_pr, dict) or run_pr.get("number") != number:
                 continue
@@ -193,19 +264,24 @@ def main(argv=None):
     before = metadata(arguments.gh, endpoint)
     if before[:7] != event or before[6] != repository:
         fail("event and API pull request identity differ")
-    revision, parents = checkout_identity(arguments.git)
+    revision, parents, tree = checkout_identity(arguments.git)
     if (revision != expected_checkout
-            or (before[7] is not None and expected_checkout != before[7])
             or parents != (before[4], before[1])):
         fail("checkout identity does not match the pull request merge")
-    if action == "edited" and not has_validated_current_merge(arguments.gh, repository, before[:8]):
+    if (before[7] is not None and before[7] != revision
+            and not merge_matches(arguments.gh, repository, before[7], parents, tree)):
+        fail("checkout identity does not match the pull request merge")
+    if action == "edited" and not has_validated_current_merge(arguments.gh, repository, before[:8], tree):
         fail("no completed code validation matches this edited pull request merge")
 
     records, names = files(arguments.gh, endpoint)
     if records != before[8]:
         fail("incomplete changed-file pagination")
     after = metadata(arguments.gh, endpoint)
-    if after != before:
+    if after[:7] != before[:7] or after[8:] != before[8:]:
+        fail("pull request inputs drifted while files were read")
+    if (after[7] is not None and after[7] != before[7] and after[7] != revision
+            and not merge_matches(arguments.gh, repository, after[7], parents, tree)):
         fail("pull request inputs drifted while files were read")
     write_atomic(arguments.body, before[9].encode("utf-8"))
     write_atomic(arguments.files, "".join(f"{name}\n" for name in names).encode("utf-8"))

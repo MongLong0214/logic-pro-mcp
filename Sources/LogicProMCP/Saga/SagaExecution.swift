@@ -186,6 +186,9 @@ final class SendRemovalSagaAdapter: @unchecked Sendable {
     // operation's gate. Inspection-cache eviction cannot erase that tether.
     @TaskLocal static var checkedSourcePair: AccessibilityChannel.HeldSelectionAssociation.Pair?
     @TaskLocal static var checkedReadRenewal: AccessibilityChannel.OriginalHeaderSourceRenewal?
+    // Receivers with actual checked inputs in this invocation supply only
+    // discovery hints; post-write source custody is observed again.
+    @TaskLocal static var checkedReadPeerHeaders: [AXTrackBinding.Binding]?
     let forward: SagaStep
     private let capturedControl: AXLogicProElements.AssignedSendMenuControl?
     private let approved: ApprovedSessionRepair?
@@ -451,6 +454,7 @@ final class SendRemovalSagaAdapter: @unchecked Sendable {
                     }
                 }
                 var readRenewal: AccessibilityChannel.OriginalHeaderSourceRenewal?
+                var checkedPeerHeaders: [AXTrackBinding.Binding]?
                 var requiredControl = self.capturedControl
                 if let approved = self.approved, let control = requiredControl,
                    let expected = Self.expectedBefore(self.forward) {
@@ -460,6 +464,7 @@ final class SendRemovalSagaAdapter: @unchecked Sendable {
                     }
                     held = custody.pair; self.pair = held
                     requiredControl = custody.control; readRenewal = custody.renewal
+                    checkedPeerHeaders = custody.checkedPeerHeaders
                 }
                 if nameUsesInputFootprint, readRenewal == nil,
                    let approved = self.approved, await approved.nameGoalEvidence(afterExecution: true) == nil {
@@ -499,9 +504,11 @@ final class SendRemovalSagaAdapter: @unchecked Sendable {
                                 await Self.$requiredNameCheck.withValue(nameCheck) {
                                     await Self.$checkedSourcePair.withValue(held) {
                                         await Self.$checkedReadRenewal.withValue(readRenewal) {
-                                            await Self.$requiredBeforeState.withValue(requiredBefore) {
-                                                await MixerDispatcher.handle(command: "set_send_output_verified", params: params,
-                                                    router: router, cache: cache, targetRegistry: registry)
+                                            await Self.$checkedReadPeerHeaders.withValue(checkedPeerHeaders) {
+                                                await Self.$requiredBeforeState.withValue(requiredBefore) {
+                                                    await MixerDispatcher.handle(command: "set_send_output_verified", params: params,
+                                                        router: router, cache: cache, targetRegistry: registry)
+                                                }
                                             }
                                         }
                                     }

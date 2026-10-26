@@ -299,6 +299,7 @@ extension AccessibilityChannel {
         return await getCheckedRoutingDestination(params: [:], sendOrdinal: ordinal,
             runtime: runtime, timing: timing, sendReplacement: .init(expected: expected,
                 destination: params["destination"].flatMap(OutputAssignment.init(token:)), creation: creation),
+            observingPeerHeaders: SendRemovalSagaAdapter.checkedReadPeerHeaders,
             readingOriginalScope: SendRemovalSagaAdapter.checkedReadRenewal?.observation).result
     }
 
@@ -1497,15 +1498,15 @@ extension AccessibilityChannel {
                     && physical.currentIndex(runtime: runtime) != nil) else {
                     return uncertain("The original mode source is not uniquely current; no replacement control is adopted.")
                 }
-                // A deciding occupied inverse needs the restored source's own
-                // changed-strip return, not additional optional peer pairs.
-                // The same complete census, viewport inverse and final source
-                // custody still decide whether that return can be published.
+                // An inverse needs its source's changed-strip return. A forward
+                // may use its actual checked receiver headers as discovery hints.
+                // Complete census, viewport inverse and final source custody
+                // still decide whether that return can be published.
                 let renewal = await renewSourceThroughOriginalHeader(originalPair, original: physical,
                     runtime: runtime, selectedHeaderRequired: false,
                     sourceDisposition: originalCount == 0 ? .retiredOriginal : .survivingOriginal,
                     restoringMixerGeometry: sendMixerGeometry,
-                    observingPeerHeaders: request.occupiedInverse != nil ? [] : nil)
+                    observingPeerHeaders: request.occupiedInverse != nil ? [] : observingPeerHeaders)
                 extras["ui_effects"] = ["navigation_performed": renewal.effects.navigationPerformed,
                     "attempted": renewal.effects.attempted, "changed": renewal.effects.changed,
                     "restoration": renewal.effects.restoration, "reason": renewal.effects.reason as Any? ?? NSNull()]

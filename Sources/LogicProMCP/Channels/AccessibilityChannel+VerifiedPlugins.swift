@@ -2644,6 +2644,12 @@ extension AccessibilityChannel {
             return .error(invalidParamsStateC(operation,
                 "this read returns '\(rawUnit)' AXValue and the host's verbatim display, not a raw-to-engineering conversion"))
         }
+        let modal = AXLogicProElements.dialogPresenceReason(runtime: runtime)
+        guard !modal.isBlocked else {
+            return .error(HonestContract.encodeV2StateC(error: .readbackUnavailable,
+                extras: ["operation": operation, "dialog_presence_reason": modal.rawValue,
+                         "refusal_names_an_actual_dialog": modal.namesAnActualDialog, "write_attempted": false]))
+        }
         guard case .found(let projectWindow) = AXLogicProElements.arrangeWindowVerifiedRead(runtime: runtime),
               case .success(.some(let document)) = AXLogicProElements.projectPickerDocumentRead(projectWindow, runtime: runtime),
               let documentURL = URL(string: document), documentURL.isFileURL,
@@ -2653,7 +2659,7 @@ extension AccessibilityChannel {
         }
         let contextIsCurrent: () -> Bool = {
             if PluginsDispatcher.sagaLease != nil, !pluginRollbackOperationIsCurrent() { return false }
-            guard !Task.isCancelled,
+            guard !Task.isCancelled, !AXLogicProElements.dialogPresent(runtime: runtime),
                   case .found(let currentWindow) = AXLogicProElements.arrangeWindowVerifiedRead(runtime: runtime),
                   CFEqual(currentWindow, projectWindow),
                   case .success(.some(let currentDocument)) = AXLogicProElements.projectPickerDocumentRead(currentWindow, runtime: runtime),

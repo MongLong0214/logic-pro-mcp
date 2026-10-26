@@ -51,8 +51,13 @@ struct SMFWriter {
         // so Logic preserves the full tick timeline. The region will span
         // from bar 1 through the last note, with the caller's notes landing
         // precisely at their encoded tick positions inside the region.
+        // The padding goes on the earliest note's channel: Logic's import splits
+        // a file by channel, so a channel-1 padding under notes on another
+        // channel became a second, note-less track of its own.
         if barOffsetTicks > 0 {
-            track.append(contentsOf: [0x00, 0xB0, 0x6E, 0x00])
+            let first = events.min { ($0.offsetTicks, $0.channel) < ($1.offsetTicks, $1.channel) }
+            let channel = (first?.channel ?? 0) & 0x0F
+            track.append(contentsOf: [0x00, 0xB0 | channel, 0x6E, 0x00])
         }
 
         let midiEvents = buildMIDIEvents(events: events, barOffset: barOffsetTicks)

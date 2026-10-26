@@ -66,12 +66,14 @@ enum VerifiedPluginCatalog {
             "sidechain_filter_mode": "sidechain_filter_mode",
         ],
         "logic.stock.effect.sample_delay": [
+            "delay": "delay",
             "left_delay": "left_delay",
             "right_delay": "right_delay",
         ],
         "logic.stock.effect.gain": [
             "gain": "gain",
             "gain_db": "gain",
+            "phase_invert": "phase_invert",
             "phase_invert_left": "phase_invert_left",
             "phase_invert_right": "phase_invert_right",
             "swap_lr": "swap_lr",

@@ -4275,7 +4275,7 @@ private func parameterReadParams(_ param: String = "threshold") -> [String: Stri
 // buttons. These reads must not borrow the writer's single-control authority.
 private func gainReadFixture(_ param: String = "gain", controls: Bool = false,
                              windowPresent: Bool = true, openOnPress: Bool = false) -> LiveFixture {
-    let labels = ["gain": "Gain:", "phase_invert_left": "Phase Left:",
+    let labels = ["gain": "Gain:", "phase_invert": "Phase Invert:", "phase_invert_left": "Phase Left:",
         "phase_invert_right": "Phase Right:", "swap_lr": "Swap L/R:", "mono": "Make Mono:"]
     let fixture = LiveFixture(pluginSlotName: "Gain", pluginWindowPresent: windowPresent,
         openWindowOnSlotPress: openOnPress, controlsViewRowLabel: labels[param],
@@ -4452,14 +4452,16 @@ func testIssue1396NoiseGateReadDoesNotGrantAWriter(_ param: String) async throws
 }
 
 private func sampleDelayReadFixture(_ param: String = "left_delay", samples: Bool = true,
-                                    controls: Bool = false) -> LiveFixture {
+                                    controls: Bool = false, windowPresent: Bool = true,
+                                    openOnPress: Bool = false) -> LiveFixture {
     let fixture = LiveFixture(pluginSlotName: "SmpleDly",
+        pluginWindowPresent: windowPresent, openWindowOnSlotPress: openOnPress,
         pluginWindowStaticTextValues: ["보기:", "Sample Delay", trackName],
-        controlsViewRowLabel: param == "left_delay" ? "Left Delay:" : "Right Delay:",
+        controlsViewRowLabel: param == "delay" ? "Delay:" : param == "left_delay" ? "Left Delay:" : "Right Delay:",
         controlsViewInitiallySelected: controls, viewSettleDelay: 0)
     let b = fixture.builder
     b.setAttribute(b.element(1001), kAXDocumentAttribute as String, URL(fileURLWithPath: expectedPath).absoluteString)
-    let raw = samples && param == "left_delay" ? 1.0 : 0.0
+    let raw = samples ? (param == "delay" ? 35.0 : param == "left_delay" ? 1.0 : 0.0) : 0.0
     for (id, role) in [(139_621, "AXSlider"), (139_622, "AXSlider"), (139_623, "AXValueIndicator")] {
         b.setRole(b.element(id), role)
         b.setAttribute(b.element(id), kAXValueAttribute as String, raw)
@@ -4579,6 +4581,144 @@ private func gainReadParams(_ param: String = "gain") -> [String: String] {
     params["plugin"] = "Gain"
     params["expected_plugin_identity"] = "logic.stock.effect.gain"
     return params
+}
+
+@Test(arguments: [false, true])
+func testIssue1417MonoGainReadsPolarityAndClosesItsNewEditor(_ controls: Bool) async throws {
+    let fixture = gainReadFixture("phase_invert", controls: controls, windowPresent: false, openOnPress: true)
+    let result = await AccessibilityChannel.defaultGetParamVerified(params: gainReadParams("phase_invert"), runtime: parameterReadRuntime(fixture))
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "A", "\(object)")
+    let inverted = try #require(object["observed_raw"] as? Bool)
+    #expect(inverted)
+    #expect(object["observed_display"] as? String == "Inv")
+    #expect(object["raw_unit"] as? String == "boolean")
+    let closed = try #require(object["editor_close_observed"] as? Bool)
+    let restored = try #require(object["plugin_view_restore_observed"] as? Bool)
+    #expect(closed)
+    #expect(restored)
+    #expect(fixture.pluginCloseControlPressCount.value == 1)
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(!fixture.axActions.value.contains { (139_601...139_604).contains($0.element) })
+}
+
+@Test(arguments: [false, true])
+func testIssue1417MonoDelayReadsNonzeroSamplesAndClosesItsNewEditor(_ controls: Bool) async throws {
+    let fixture = sampleDelayReadFixture("delay", controls: controls, windowPresent: false, openOnPress: true)
+    let result = await AccessibilityChannel.defaultGetParamVerified(params: sampleDelayReadParams("delay"), runtime: parameterReadRuntime(fixture))
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "A", "\(object)")
+    #expect(object["observed_raw"] as? Double == 35)
+    #expect(object["observed_display"] as? String == "35 samples")
+    #expect(object["raw_unit"] as? String == "samples")
+    let closed = try #require(object["editor_close_observed"] as? Bool)
+    let restored = try #require(object["plugin_view_restore_observed"] as? Bool)
+    #expect(closed)
+    #expect(restored)
+    #expect(fixture.pluginCloseControlPressCount.value == 1)
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(!fixture.axActions.value.contains { (139_621...139_628).contains($0.element) })
+}
+
+@Test(arguments: [false, true])
+func testIssue1417MonoDelayMillisecondsRemainUnknownWithoutChangingUnits(_ controls: Bool) async throws {
+    let fixture = sampleDelayReadFixture("delay", samples: false, controls: controls)
+    let result = await AccessibilityChannel.defaultGetParamVerified(params: sampleDelayReadParams("delay"), runtime: parameterReadRuntime(fixture))
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "B", "\(object)")
+    #expect(object["parameter_read_status"] as? String == "samples_unit_not_selected")
+    #expect(object["observed_raw"] == nil)
+    #expect(object["observed_display"] == nil)
+    #expect(fixture.currentPluginViewTitle == (controls ? "컨트롤" : "편집기"))
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(!fixture.axActions.value.contains { (139_621...139_628).contains($0.element) })
+}
+
+@Test(arguments: ["mono_gain", "stereo_gain", "mono_delay", "stereo_delay"])
+func testIssue1417ParameterKeysNeverFallBackAcrossPluginFormats(_ kind: String) async throws {
+    let gain = kind.hasSuffix("gain")
+    let mono = kind.hasPrefix("mono")
+    let actualKey = gain ? (mono ? "phase_invert" : "phase_invert_left") : (mono ? "delay" : "left_delay")
+    let requestedKey = gain ? (mono ? "phase_invert_left" : "phase_invert") : (mono ? "left_delay" : "delay")
+    let fixture = gain ? gainReadFixture(actualKey) : sampleDelayReadFixture(actualKey)
+    let params = gain ? gainReadParams(requestedKey) : sampleDelayReadParams(requestedKey)
+    let result = await AccessibilityChannel.defaultGetParamVerified(params: params, runtime: parameterReadRuntime(fixture))
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "B", "\(kind): \(object)")
+    #expect(object["parameter_read_status"] as? String == "rowLabelNotFound")
+    #expect(object["observed_raw"] == nil)
+    #expect(object["observed_display"] == nil)
+    #expect(fixture.sliderWriteCount.value == 0)
+}
+
+@Test(arguments: ["phase_invert", "delay"])
+func testIssue1417MonoReadMetadataDoesNotAuthorizeWrites(_ key: String) async throws {
+    let fixture = key == "delay" ? sampleDelayReadFixture(key) : gainReadFixture(key)
+    var params = key == "delay" ? sampleDelayReadParams(key) : gainReadParams(key)
+    params.merge(["mode": "duplicate_applyback", "value": "1", "unit": key == "delay" ? "samples" : "boolean"]) { _, new in new }
+    let result = await AccessibilityChannel.defaultSetParamVerified(params: params, runtime: parameterReadRuntime(fixture), frontDocumentPath: { expectedPath })
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "C")
+    #expect(fixture.axActions.value.isEmpty)
+}
+
+private func issue1417BlockingWindow(_ fixture: LiveFixture) -> AXUIElement {
+    let b = fixture.builder
+    let dialog = b.element(141_701)
+    b.setRole(dialog, kAXWindowRole as String)
+    b.setAttribute(dialog, kAXSubroleAttribute as String, kAXSystemDialogSubrole as String)
+    b.setAttribute(dialog, kAXModalAttribute as String, true)
+    b.setAttribute(dialog, kAXTitleAttribute as String, "Blocking fixture")
+    b.setChildren(dialog, [])
+    return dialog
+}
+
+@Test(arguments: ["dialog", "windows_unreadable"])
+func testIssue1417ScalarReadRefusesBlockedOrUnreadableModalStateBeforeAcquisition(_ kind: String) async throws {
+    let fixture = gainReadFixture()
+    let b = fixture.builder
+    if kind == "dialog" {
+        let windows = try #require(b.attributeValue(fixture.app, kAXWindowsAttribute as String) as? [AXUIElement])
+        b.setAttribute(fixture.app, kAXWindowsAttribute as String, windows + [issue1417BlockingWindow(fixture)])
+    }
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        if kind == "windows_unreadable", CFEqual(element, fixture.app), attribute == kAXWindowsAttribute as String {
+            return .failure(AXHelpers.AXStatusError(raw: AXError.apiDisabled.rawValue))
+        }
+        return nil
+    })
+    let result = await AccessibilityChannel.defaultGetParamVerified(params: gainReadParams(), runtime: runtime)
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "C", "\(object)")
+    #expect(object["dialog_presence_reason"] as? String == (kind == "dialog" ? "blocking_window_found" : "windows_read_failed"))
+    let actualDialog = try #require(object["refusal_names_an_actual_dialog"] as? Bool)
+    if kind == "dialog" { #expect(actualDialog) } else { #expect(!actualDialog) }
+    #expect(object["observed_raw"] == nil)
+    #expect(fixture.axActions.value.isEmpty)
+    #expect(fixture.sliderWriteCount.value == 0)
+}
+
+@Test func testIssue1417ScalarReadDiscardsValueWhenModalAppearsDuringCollection() async throws {
+    let fixture = gainReadFixture(controls: true)
+    let b = fixture.builder
+    let dialog = issue1417BlockingWindow(fixture)
+    let arrived = MutableBox(false)
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        if !arrived.value, CFEqual(element, b.element(139_601)), attribute == kAXValueAttribute as String {
+            arrived.value = true
+            let windows = b.attributeValue(fixture.app, kAXWindowsAttribute as String) as? [AXUIElement] ?? []
+            b.setAttribute(fixture.app, kAXWindowsAttribute as String, windows + [dialog])
+        }
+        return nil
+    })
+    let result = await AccessibilityChannel.defaultGetParamVerified(params: gainReadParams(), runtime: runtime)
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(arrived.value)
+    #expect(object["state"] as? String == "C", "\(object)")
+    #expect(object["observed_raw"] == nil)
+    #expect(object["observed_display"] == nil)
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.axActions.value.isEmpty)
 }
 
 @Test(arguments: [false, true])

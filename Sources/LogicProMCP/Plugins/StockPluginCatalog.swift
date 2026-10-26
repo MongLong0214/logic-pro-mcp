@@ -1243,7 +1243,19 @@ enum StockPluginCatalog {
                     "Unit: Samples/ms named one-hot radio pair",
                     "ms mode changes AXValue representation; sample reads require Samples mode without actuating the selector",
                     "read-only metadata; no parameter write qualification"]))
-    }
+    } + [
+        StockPluginParameterMetadata(id: "delay", displayName: "Delay", unit: "samples",
+            valueRange: nil, writeMethod: nil, readbackMethod: "ax_controls_view_sample_count",
+            controlsViewRowLabel: "Delay:", controlsViewControlRole: "AXSlider",
+            availabilityState: .observed,
+            provenance: .observed(method: "controls_view_read_only_observation",
+                observedAt: "2026-10-25T20:39:03.412Z", logicVersion: "12.3", locale: "ko-KR",
+                evidence: ["explicit mono Sample Delay instance: Delay: raw=35, display=35 samples",
+                    "one display-bearing slider, one raw-only slider and its value indicator",
+                    "Unit: Samples=1, ms=0; sample reads require stable Samples selection without switching units",
+                    "instance format is established by the observed row, not the track channel mode",
+                    "read-only metadata; no parameter write qualification"]))
+    ]
 
     private static let gainParameters = [
         StockPluginParameterMetadata(
@@ -1274,7 +1286,19 @@ enum StockPluginCatalog {
             controlsViewRowLabel: row, controlsViewControlRole: "AXRadioButton",
             availabilityState: .observed,
             provenance: gainReadObservation(["\(row) radio pair: \(off), \(on); AXValue 0/1"]))
-    }
+    } + [
+        StockPluginParameterMetadata(id: "phase_invert", displayName: "Phase Invert", unit: "boolean",
+            valueRange: nil, writeMethod: nil, readbackMethod: "ax_controls_view_radio_pair",
+            readbackOffTitle: "Norm", readbackOnTitle: "Inv",
+            controlsViewRowLabel: "Phase Invert:", controlsViewControlRole: "AXRadioButton",
+            availabilityState: .observed,
+            provenance: .observed(method: "controls_view_read_only_observation",
+                observedAt: "2026-10-25T20:25:55.279Z", logicVersion: "12.3", locale: "ko-KR",
+                evidence: ["explicit mono Gain instance: Phase Invert: Norm=0, Inv=1",
+                    "Controls view exposes the named one-hot radio pair; the native editor checkbox is not used",
+                    "instance format is established by the observed row, not the track channel mode",
+                    "read-only metadata; no parameter write qualification"]))
+    ]
 
     private static func gainReadObservation(_ evidence: [String]) -> StockPluginProvenance {
         .observed(method: "controls_view_read_only_observation",

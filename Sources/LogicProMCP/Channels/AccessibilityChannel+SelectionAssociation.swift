@@ -31,6 +31,7 @@ extension AccessibilityChannel {
         let viewport: [ViewportControl]
         let viewportPaths: [[AXUIElement]]
         private var expectedViewport: [ViewportControl]
+        private var expectedMixerViewport: MixerViewportGeometry?
         private var expectedIndex: Int
         private var expectedFocus: AXUIElement
         private var originalSelectedChild: AXUIElement?
@@ -968,11 +969,16 @@ extension AccessibilityChannel {
             let headers: [AXUIElement]
             let document: String
             let frames: [CGRect]
-            let horizontal: HorizontalViewportPosition?
+            let horizontal: MixerViewportPosition?
+            let vertical: MixerViewportPosition?
 
             func hasSameViewportPosition(as other: Self) -> Bool {
-                guard frames == other.frames else { return false }
-                switch (horizontal, other.horizontal) {
+                frames == other.frames && Self.samePosition(horizontal, other.horizontal)
+                    && Self.samePosition(vertical, other.vertical)
+            }
+
+            static func samePosition(_ lhs: MixerViewportPosition?, _ rhs: MixerViewportPosition?) -> Bool {
+                switch (lhs, rhs) {
                 case (.none, .none): return true
                 case (.some(let lhs), .some(let rhs)):
                     return lhs.sameControlAndLayout(as: rhs) && lhs.value == rhs.value
@@ -981,7 +987,7 @@ extension AccessibilityChannel {
             }
         }
 
-        struct HorizontalViewportPosition: @unchecked Sendable {
+        struct MixerViewportPosition: @unchecked Sendable {
             let control: AXUIElement
             let owner: AXUIElement
             let value: Double
@@ -997,8 +1003,14 @@ extension AccessibilityChannel {
             }
         }
 
-        private func horizontalViewportPosition() -> HorizontalViewportPosition? {
-            guard let hitTest = logic.ax.elementAtPosition, permitsRead() else { return nil }
+        private func mixerViewportPosition(horizontal: Bool) -> MixerViewportPosition? {
+            // Owned geometry capture and its availability probe use this
+            // non-Help sampler. Complete ownership checks bracket axis/value reads and
+            // every strip frame as one decision; no observation survives a lost
+            // scope. Repeating that full census inside each axis exhausted the
+            // native acquisition deadline before the restored report could land.
+            guard !lost, (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                  let hitTest = logic.ax.elementAtPosition else { return nil }
             func frame(_ element: AXUIElement) -> CGRect? {
                 guard let point = AXHelpers.getPosition(element, runtime: logic.ax),
                       let size = AXHelpers.getSize(element, runtime: logic.ax),
@@ -1012,10 +1024,13 @@ extension AccessibilityChannel {
                   AXHelpers.getRole(owner, runtime: logic.ax) == kAXGroupRole as String,
                   let ownerFrame = frame(owner) else { return nil }
             let visible = windowFrame.intersection(mixerFrame)
-            guard !visible.isNull, visible.width > 0, visible.height > 17 else { return nil }
+            guard !visible.isNull, visible.width > (horizontal ? 0 : 17),
+                  visible.height > (horizontal ? 17 : 0) else { return nil }
             // This point discovers a native object; its coordinates grant no
             // action authority. Logic omits this bar from its owner's children.
-            let point = CGPoint(x: visible.midX, y: visible.maxY - 7)
+            let point = horizontal ? CGPoint(x: visible.midX, y: visible.maxY - 7)
+                : CGPoint(x: visible.maxX - 7, y: visible.midY)
+            let orientation = horizontal ? kAXHorizontalOrientationValue as String : kAXVerticalOrientationValue as String
             guard case .success(let hit?) = hitTest(app, point), let hitFrame = frame(hit), hitFrame.contains(point),
                   let hitWindow: AXUIElement = AXHelpers.getAttribute(hit, kAXWindowAttribute as String, runtime: logic.ax),
                   CFEqual(hitWindow, window) else { return nil }
@@ -1029,7 +1044,7 @@ extension AccessibilityChannel {
                 control = parent
             }
             guard AXHelpers.getRole(control, runtime: logic.ax) == kAXScrollBarRole as String,
-                  AXHelpers.getAttribute(control, kAXOrientationAttribute as String, runtime: logic.ax) as String? == kAXHorizontalOrientationValue as String,
+                  AXHelpers.getAttribute(control, kAXOrientationAttribute as String, runtime: logic.ax) as String? == orientation,
                   let parent: AXUIElement = AXHelpers.getAttribute(control, kAXParentAttribute as String, runtime: logic.ax),
                   CFEqual(parent, owner),
                   let controlWindow: AXUIElement = AXHelpers.getAttribute(control, kAXWindowAttribute as String, runtime: logic.ax),
@@ -1045,16 +1060,18 @@ extension AccessibilityChannel {
                   frame(window) == windowFrame, frame(mixer) == mixerFrame, frame(owner) == ownerFrame,
                   frame(control) == controlFrame,
                   AXHelpers.getRole(control, runtime: logic.ax) == kAXScrollBarRole as String,
-                  AXHelpers.getAttribute(control, kAXOrientationAttribute as String, runtime: logic.ax) as String? == kAXHorizontalOrientationValue as String,
+                  AXHelpers.getAttribute(control, kAXOrientationAttribute as String, runtime: logic.ax) as String? == orientation,
                   let decidingParent: AXUIElement = AXHelpers.getAttribute(control, kAXParentAttribute as String, runtime: logic.ax),
-                  CFEqual(decidingParent, owner), permitsRead() else { return nil }
+                  CFEqual(decidingParent, owner), !lost,
+                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return nil }
             return .init(control: control, owner: owner, value: value.doubleValue,
                 windowFrame: windowFrame, mixerFrame: mixerFrame, ownerFrame: ownerFrame, controlFrame: controlFrame)
         }
 
         func observedMixerViewportGeometry() -> MixerViewportGeometry? {
             guard permitsRead() else { return nil }
-            let horizontalBefore = horizontalViewportPosition()
+            let horizontalBefore = mixerViewportPosition(horizontal: true)
+            let verticalBefore = mixerViewportPosition(horizontal: false)
             var frames: [CGRect] = []
             for strip in strips {
                 guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
@@ -1064,16 +1081,61 @@ extension AccessibilityChannel {
                       size.width > 0, size.height > 0 else { return nil }
                 frames.append(CGRect(origin: point, size: size))
             }
-            let horizontalAfter = horizontalViewportPosition()
-            switch (horizontalBefore, horizontalAfter) {
-            case (.none, .none): break
-            case (.some(let before), .some(let after)):
-                guard before.sameControlAndLayout(as: after), before.value == after.value else { return nil }
-            default: return nil
-            }
+            let horizontalAfter = mixerViewportPosition(horizontal: true)
+            let verticalAfter = mixerViewportPosition(horizontal: false)
+            guard MixerViewportGeometry.samePosition(horizontalBefore, horizontalAfter),
+                  MixerViewportGeometry.samePosition(verticalBefore, verticalAfter) else { return nil }
             guard permitsRead() else { return nil }
             return .init(window: window, mixer: mixer, headers: headers, document: document,
-                frames: frames, horizontal: horizontalAfter)
+                frames: frames, horizontal: horizontalAfter, vertical: verticalAfter)
+        }
+
+        private func mixerViewportIsExpected() -> Bool {
+            guard let expectedMixerViewport else { return true }
+            guard let current = observedMixerViewportGeometry(),
+                  current.hasSameViewportPosition(as: expectedMixerViewport) else {
+                lost = true
+                return false
+            }
+            return true
+        }
+
+        private func retainMixerViewportAfterOwnedAction() -> Bool {
+            guard expectedMixerViewport != nil else { return true }
+            guard let current = observedMixerViewportGeometry() else { lost = true; return false }
+            expectedMixerViewport = current
+            return true
+        }
+
+        private func retainMixerViewportAfterOwnedRestore(of control: AXUIElement, value: Double) -> Bool {
+            guard let expected = expectedMixerViewport else { return true }
+            guard let current = observedMixerViewportGeometry() else { lost = true; return false }
+            let horizontal = expected.horizontal.map { CFEqual($0.control, control) } ?? false
+            let vertical = expected.vertical.map { CFEqual($0.control, control) } ?? false
+            func positionMatches(_ before: MixerViewportPosition?, _ after: MixerViewportPosition?) -> Bool {
+                guard let before, let after else {
+                    return MixerViewportGeometry.samePosition(before, after)
+                }
+                if CFEqual(before.control, control) {
+                    return before.sameControlAndLayout(as: after) && after.value == value
+                }
+                return MixerViewportGeometry.samePosition(before, after)
+            }
+            guard positionMatches(expected.horizontal, current.horizontal),
+                  positionMatches(expected.vertical, current.vertical),
+                  let before = expected.frames.first, let after = current.frames.first else {
+                lost = true; return false
+            }
+            let dx = after.minX - before.minX, dy = after.minY - before.minY
+            guard dx.isFinite, dy.isFinite, (horizontal || dx == 0), (vertical || dy == 0),
+                  zip(expected.frames, current.frames).allSatisfy({ old, new in
+                      old.size == new.size && new.minX - old.minX == dx && new.minY - old.minY == dy
+                  }) else { lost = true; return false }
+            // An exposed control can also be found by the native sampler. Only
+            // this verified ordinary inverse may advance its native receipt;
+            // the other axis and all unrelated positions remain unchanged.
+            expectedMixerViewport = current
+            return true
         }
 
         /// The installed Scroll To menu exposes existing physical rows without
@@ -1243,26 +1305,47 @@ extension AccessibilityChannel {
             }
             recoveryStage = "final_geometry_read"
             guard var final = observedMixerViewportGeometry() else { return false }
-            if let before = original.horizontal, let after = final.horizontal,
-               before.sameControlAndLayout(as: after), before.value != after.value,
-               let first = original.frames.first, let currentFirst = final.frames.first {
-                recoveryStage = "horizontal_viewport_inverse"
-                let delta = currentFirst.minX - first.minX
-                guard delta.isFinite, zip(original.frames, final.frames).allSatisfy({ a, b in
-                    a.size == b.size && a.minY == b.minY && b.minX - a.minX == delta
+            // Scroll To may also reset the omitted native vertical bar. Restore
+            // only sampled original controls; coordinates never drive an action.
+            // Restore Y first so an owned two-axis displacement can then restore X.
+            for horizontal in [false, true] {
+                let beforePosition = horizontal ? original.horizontal : original.vertical
+                let afterPosition = horizontal ? final.horizontal : final.vertical
+                guard let before = beforePosition, let after = afterPosition,
+                      before.value != after.value else { continue }
+                recoveryStage = horizontal ? "horizontal_viewport_inverse" : "vertical_viewport_inverse"
+                guard before.sameControlAndLayout(as: after),
+                      let first = original.frames.first, let currentFirst = final.frames.first else { return false }
+                let deltaX = currentFirst.minX - first.minX, deltaY = currentFirst.minY - first.minY
+                if !horizontal, deltaX != 0 {
+                    guard let originalHorizontal = original.horizontal, let currentHorizontal = final.horizontal,
+                          originalHorizontal.sameControlAndLayout(as: currentHorizontal),
+                          originalHorizontal.value != currentHorizontal.value else { return false }
+                }
+                guard deltaX.isFinite, deltaY.isFinite, (!horizontal || deltaY == 0),
+                      zip(original.frames, final.frames).allSatisfy({ a, b in
+                    a.size == b.size && b.minX - a.minX == deltaX && b.minY - a.minY == deltaY
                 }), await referenceIsCurrent(),
-                      let deciding = observedMixerViewportGeometry(), deciding.frames == final.frames,
-                      let current = deciding.horizontal, current.sameControlAndLayout(as: after), current.value == after.value,
+                      let deciding = observedMixerViewportGeometry(), deciding.hasSameViewportPosition(as: final),
                       childMenus(view)?.isEmpty == true, scopeHeld(),
                       !stop(),
                       (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
-                effects.attempted.append("mixer_horizontal_viewport")
+                let effect = horizontal ? "mixer_horizontal_viewport" : "mixer_vertical_viewport"
+                effects.attempted.append(effect)
                 let accepted = AXHelpers.setAttribute(before.control, kAXValueAttribute as String,
                     NSNumber(value: before.value), runtime: logic.ax)
-                guard let restored = observedMixerViewportGeometry(), let position = restored.horizontal,
+                guard let restored = observedMixerViewportGeometry(),
+                      let position = horizontal ? restored.horizontal : restored.vertical,
                       accepted, position.sameControlAndLayout(as: before), position.value == before.value,
-                      restored.frames == original.frames, scopeHeld() else { return false }
-                effects.changed.append("mixer_horizontal_viewport")
+                      MixerViewportGeometry.samePosition(horizontal ? restored.vertical : restored.horizontal,
+                          horizontal ? final.vertical : final.horizontal),
+                      zip(zip(original.frames, final.frames), restored.frames).allSatisfy({ prior, current in
+                          let (baseline, previous) = prior
+                          return current.size == previous.size && (horizontal
+                              ? current.minX == baseline.minX && current.minY == previous.minY
+                              : current.minY == baseline.minY && current.minX == previous.minX)
+                      }), scopeHeld() else { return false }
+                effects.changed.append(effect)
                 final = restored
             }
             recoveryStage = "final_strip_frames"
@@ -1307,6 +1390,12 @@ extension AccessibilityChannel {
                 guard await referenceIsCurrent(),
                       (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
             }
+            // A stop callback may itself read or move focus. Run it before the
+            // final native proof, never after the selected-child proof alone.
+            if expectedMixerViewport != nil {
+                guard !stop(), await referenceIsCurrent(), mixerViewportIsExpected() else { return false }
+            }
+            guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
             // R965-ASSOC-C001: the deciding focus/selection reads in permitsRead
             // can themselves coincide with a document/window switch. Revalidate
             // scoped ownership AFTER them, with no further AX read before write.
@@ -1386,6 +1475,7 @@ extension AccessibilityChannel {
                     expectedIndex = index; expectedFocus = settledFocus
                     expectedSelectedChild = selectedChild
                     expectedViewport = afterViewport
+                    guard retainMixerViewportAfterOwnedAction() else { return false }
                     return permitsRead() && !stop() && accepted
                 }
                 if attempt < 3 {
@@ -1424,6 +1514,10 @@ extension AccessibilityChannel {
                 // R965-VIEW-C001: the deciding AX reads can retire the request's
                 // reference without changing physical custody. Renew it last,
                 // then require pure acquisition/cancellation authority before writing.
+                if expectedMixerViewport != nil {
+                    guard !stop(), await referenceIsCurrent(), mixerViewportIsExpected(),
+                          (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+                }
                 if !effects.attempted.contains("viewport") { effects.attempted.append("viewport") }
                 let accepted = AXHelpers.setAttribute(control, kAXValueAttribute as String,
                     NSNumber(value: original), runtime: logic.ax)
@@ -1434,6 +1528,7 @@ extension AccessibilityChannel {
                           entry.0 == index || entry.1.1 == expectedViewport[entry.0].1
                       }), permitsRead(), owned(), !stop() else { return false }
                 expectedViewport = after
+                guard retainMixerViewportAfterOwnedRestore(of: control, value: original) else { return false }
             }
             return Self.sameViewport(expectedViewport, viewport)
         }
@@ -1463,6 +1558,10 @@ extension AccessibilityChannel {
                   logic.logicProPID() == pid, logic.focusedApplicationPID() == pid,
                   await referenceIsCurrent(), !stop(),
                   (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+            if expectedMixerViewport != nil {
+                guard !stop(), await referenceIsCurrent(), mixerViewportIsExpected() else { return false }
+            }
+            guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
             if !effects.attempted.contains("keyboard_focus_restoration") {
                 effects.attempted.append("keyboard_focus_restoration")
             }
@@ -1480,6 +1579,7 @@ extension AccessibilityChannel {
                 if CFEqual(focus, originalFocus) {
                     guard let afterViewport = currentViewport() else { return false }
                     expectedFocus = originalFocus; expectedViewport = afterViewport
+                    guard retainMixerViewportAfterOwnedAction() else { return false }
                     guard permitsRead(), !stop(), await referenceIsCurrent() else { return false }
                     if !effects.changed.contains("keyboard_focus_restoration") {
                         effects.changed.append("keyboard_focus_restoration")
@@ -1559,6 +1659,7 @@ extension AccessibilityChannel {
                      narrowChallengeHeaders: [AXTrackBinding.Binding] = [],
                      prioritizingHeader: AXTrackBinding.Binding? = nil,
                      observingPeerHeaders: [AXTrackBinding.Binding]? = nil,
+                     observingPeerStrips: [AXMixerStripBinding.Binding]? = nil,
                      populationReadDuration: Duration = .zero,
                      collectionNow: @Sendable () -> ContinuousClock.Instant = { .now }) async -> [Pair] {
             var preferredIndex: Int?
@@ -1579,6 +1680,17 @@ extension AccessibilityChannel {
                         && binding.exposure?.hasEnded != true
                 }.count == 1
             }
+            if let observingPeerHeaders {
+                let requested = Set(headers.indices.filter { index in
+                    observingPeerHeaders.contains { peer in
+                        CFEqual(peer.window, window) && peer.document.utf8.elementsEqual(document.utf8)
+                            && peer.exposure?.hasEnded != true && CFEqual(peer.header, headers[index])
+                            && headers.filter({ CFEqual($0, peer.header) }).count == 1
+                    }
+                })
+                eligibleChallenges = eligibleChallenges.filter { requested.contains($0) }
+                    + eligibleChallenges.filter { !requested.contains($0) }
+            }
             if let preferredIndex, preferredIndex != originalIndex {
                 eligibleChallenges.removeAll { $0 == preferredIndex }
                 eligibleChallenges.insert(preferredIndex, at: 0)
@@ -1587,7 +1699,26 @@ extension AccessibilityChannel {
             guard let firstChallenge else {
                 effects.reason = "association_selection_unverified"; return []
             }
-            guard await referenceIsCurrent(), permitsRead(), !stop() else { return [] }
+            guard await referenceIsCurrent(), permitsRead(), !stop(), mixerViewportIsExpected() else { return [] }
+            // The ordinary viewport census already owns exposed scrollbars.
+            // Add the omitted native Mixer axes only when positively discovered;
+            // their presence requires a complete, stable geometry baseline.
+            let horizontal = mixerViewportPosition(horizontal: true)
+            let vertical = mixerViewportPosition(horizontal: false)
+            let originalMixerViewport: MixerViewportGeometry?
+            if horizontal != nil || vertical != nil {
+                guard let geometry = observedMixerViewportGeometry(),
+                      MixerViewportGeometry.samePosition(horizontal, geometry.horizontal),
+                      MixerViewportGeometry.samePosition(vertical, geometry.vertical) else {
+                    effects.reason = "association_restoration_unverified"
+                    return []
+                }
+                originalMixerViewport = geometry
+                expectedMixerViewport = geometry
+            } else {
+                guard expectedMixerViewport == nil, permitsRead() else { lost = true; return [] }
+                originalMixerViewport = nil
+            }
             switch selectedChildRead() {
             case .observed(let child):
                 originalSelectedChild = child; expectedSelectedChild = child
@@ -1621,10 +1752,11 @@ extension AccessibilityChannel {
             } else { collectionEnd = nil }
             var observed: [(Int, AXUIElement)] = []
             func requestedPeersWereObserved() -> Bool {
-                guard allHeldHeaders, let observingPeerHeaders, !observed.isEmpty else { return false }
+                guard allHeldHeaders, !observed.isEmpty,
+                      observingPeerHeaders != nil || observingPeerStrips != nil else { return false }
                 if let preferredIndex, preferredIndex != originalIndex,
                    !observed.contains(where: { $0.0 == preferredIndex }) { return false }
-                return observingPeerHeaders.allSatisfy { peer in
+                let headersObserved = observingPeerHeaders?.allSatisfy { peer in
                     guard CFEqual(peer.window, window),
                           peer.document.utf8.elementsEqual(document.utf8), peer.exposure?.hasEnded != true,
                           headers.filter({ CFEqual($0, peer.header) }).count == 1,
@@ -1633,7 +1765,18 @@ extension AccessibilityChannel {
                     // strip return below. This only ends optional discovery;
                     // no pair survives a failed full-custody inverse or viewport.
                     return index == originalIndex || observed.contains(where: { $0.0 == index })
-                }
+                } ?? true
+                guard headersObserved else { return false }
+                return observingPeerStrips?.allSatisfy { peer in
+                    guard CFEqual(peer.window, window), CFEqual(peer.mixer, mixer),
+                          peer.document.utf8.elementsEqual(document.utf8),
+                          strips.filter({ CFEqual($0, peer.strip) }).count == 1 else { return false }
+                    // Captured physical receivers are expected candidates only.
+                    // Their actual singleton header relationships must have
+                    // been observed; the original still needs its inverse below.
+                    return CFEqual(peer.strip, originalAssociationStrip)
+                        || observed.filter({ CFEqual($0.1, peer.strip) }).count == 1
+                } ?? true
             }
             var restored = true
             var selectionsVerified = true
@@ -1739,7 +1882,23 @@ extension AccessibilityChannel {
             guard restored, viewRestored, await referenceIsCurrent(), permitsRead(), !stop() else {
                 effects.reason = "association_restoration_unverified"; return []
             }
-            effects.restoration = "restored"
+            if let originalMixerViewport {
+                let mixerRestored: Bool
+                if mixerViewportIsExpected(), let currentMixerViewport = expectedMixerViewport {
+                    if currentMixerViewport.hasSameViewportPosition(as: originalMixerViewport) { mixerRestored = true }
+                    else {
+                        mixerRestored = await recoverMixerReadability(restoring: originalMixerViewport,
+                            referenceIsCurrent: referenceIsCurrent, stoppingWhen: stop)
+                    }
+                } else { mixerRestored = false }
+                guard mixerRestored else {
+                    effects.restoration = "not_restored"
+                    effects.reason = "association_mixer_viewport_restoration_unverified"
+                    return []
+                }
+                expectedMixerViewport = originalMixerViewport
+            }
+            effects.restoration = expectedMixerViewport == nil ? "restored" : "not_restored"
             guard selectionsVerified, !observed.isEmpty else {
                 effects.reason = "association_selection_unverified"; return []
             }
@@ -1771,6 +1930,17 @@ extension AccessibilityChannel {
                   await referenceIsCurrent(), !stop() else {
                 effects.reason = "association_selection_unverified"; return []
             }
+            // Reference/stop callbacks and binding construction above can read
+            // or move the omitted native axes. Prove the original presentation
+            // after those final reads, without adopting a newer position.
+            if expectedMixerViewport != nil {
+                guard mixerViewportIsExpected(),
+                      (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else {
+                    effects.reason = "association_mixer_viewport_restoration_unverified"
+                    return []
+                }
+            }
+            effects.restoration = "restored"
             return pairs
         }
     }

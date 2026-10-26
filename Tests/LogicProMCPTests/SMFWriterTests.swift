@@ -83,6 +83,21 @@ import Foundation
     #expect(foundPadding, "Expected padding CC#110 at tick 0 when bar > 1")
 }
 
+@Test func testSMFWriterPaddingUsesTheEarliestNotesChannel() throws {
+    // Logic's MIDI import splits a file by channel. Padding on channel 1 under
+    // notes on channel 3 produced two tracks: one holding only the padding CC.
+    let events = [
+        SMFWriter.NoteEvent(pitch: 62, offsetTicks: 480, durationTicks: 240, velocity: 90, channel: 5),
+        SMFWriter.NoteEvent(pitch: 60, offsetTicks: 0, durationTicks: 480, velocity: 100, channel: 2),
+    ]
+    let bytes = [UInt8](try SMFWriter.generate(events: events, bar: 3, tempo: 120, timeSignature: (4, 4)))
+    func contains(_ pattern: [UInt8]) -> Bool {
+        (0...(bytes.count - pattern.count)).contains { Array(bytes[$0..<($0 + pattern.count)]) == pattern }
+    }
+    #expect(contains([0x00, 0xB2, 0x6E, 0x00]), "Padding CC#110 should be on channel 3, the earliest note's")
+    #expect(!contains([0xB0, 0x6E, 0x00]), "No padding left on channel 1")
+}
+
 @Test func testSMFWriterNoPaddingWhenBarIsOne() throws {
     // Bar 1 means no offset — no padding needed, avoid region size inflation.
     let events = [SMFWriter.NoteEvent(pitch: 60, offsetTicks: 0, durationTicks: 480, velocity: 100, channel: 0)]

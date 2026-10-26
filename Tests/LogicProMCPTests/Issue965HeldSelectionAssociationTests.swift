@@ -728,6 +728,7 @@ struct Issue965HeldSelectionAssociationTests {
         var routingInputReadRenewed = false
         var routingInverseRenewedSendMenuOpens = 0
         var routingSelectionsAtInverseLeaf: Int?
+        var routingForwardSelections: [Int] = []
 
         func expectMinimumInverseSourceChallenges() throws {
             let start = try #require(routingSelectionsAtInverseLeaf, "Reach the actual inverse leaf")
@@ -1643,7 +1644,7 @@ struct Issue965HeldSelectionAssociationTests {
                     headers: profile == "foreign_geometry_headers" ? Array(sampledGeometry.headers.reversed()) : sampledGeometry.headers,
                     document: profile == "foreign_geometry_document" ? "file:///foreign.logicx" : sampledGeometry.document,
                     frames: profile == "foreign_geometry_count" ? Array(sampledGeometry.frames.dropLast()) : sampledGeometry.frames,
-                    horizontal: sampledGeometry.horizontal) : nil
+                    horizontal: sampledGeometry.horizontal, vertical: sampledGeometry.vertical) : nil
             b.setRole(replacement, kAXLayoutItemRole as String)
             b.setAttribute(replacement, kAXNumberOfCharactersAttribute as String, 0)
             b.setAttribute(replacement, kAXInsertionPointLineNumberAttribute as String, 0)
@@ -1735,10 +1736,394 @@ struct Issue965HeldSelectionAssociationTests {
             #expect(recovered)
             #expect(held.effects.restoration == "restored")
             #expect(Array(held.effects.changed.prefix(2)) == ["mixer_scroll_to_output", "mixer_scroll_to_audio"])
-            #expect(held.effects.changed.count == 2 || held.effects.changed == [
-                "mixer_scroll_to_output", "mixer_scroll_to_audio", "mixer_horizontal_viewport"])
+            #expect(held.effects.changed.dropFirst(2).allSatisfy({
+                ["mixer_horizontal_viewport", "mixer_vertical_viewport"].contains($0)
+            }))
             #expect(held.observedMixerViewportGeometry()?.frames == geometry.frames)
             #expect(held.permitsRead())
+        }
+    }
+
+    private final class MixerViewportRecoveryProbe: @unchecked Sendable {
+        var viewParentReads = 0
+        var viewChildrenReads = 0
+        var firstOpenParentRead: Int?
+        var firstLeafChildrenRead: Int?
+        var injected = false
+        var foreignActions = 0
+        var cancels = 0
+        var leafPresses = 0
+        var viewportWrites = 0
+        var initialSelectionMoved = false
+        var initialReferenceCalls = 0
+        var initialStopCalls = 0
+        var initialStopsAtWrite: Int?
+        var referenceCurrent = true
+        var referencesAfterInverse = 0
+        var stopsAfterInverse = 0
+        var rootAvailableAt: ContinuousClock.Instant?
+    }
+
+    private typealias MixerViewportRecoveryNodes = (
+        view: AXUIElement,
+        root: AXUIElement,
+        output: AXUIElement,
+        audio: AXUIElement,
+        controls: AXUIElement,
+        toolbar: AXUIElement,
+        foreignControls: AXUIElement,
+        competingRoot: AXUIElement,
+        horizontal: AXUIElement,
+        thumb: AXUIElement,
+        otherAxis: AXUIElement
+    )
+
+    private static func runMixerViewportRecovery(_ fault: String, parentFault: Int? = nil, childrenFault: Int? = nil, failedOpen: Bool = false,
+             stopFault: Int? = nil, publicationReferenceFault: Int? = nil,
+             publicationStopFault: Int? = nil) async throws -> MixerViewportRecoveryProbe {
+        let f = try Fixture(), gate = LogicMutationGate(), probe = MixerViewportRecoveryProbe()
+        defer { try? FileManager.default.removeItem(at: f.bundle) }
+        for (index, strip) in f.strips.enumerated() {
+            f.builder.setFrame(strip, x: CGFloat(index) * 100, y: 100, width: 100, height: 300)
+        }
+        let view = f.builder.element(1_975_500), root = f.builder.element(1_975_501)
+        let scroll = f.builder.element(1_975_502), submenu = f.builder.element(1_975_503)
+        let output = f.builder.element(1_975_504), audio = f.builder.element(1_975_505)
+        let controls = f.builder.element(1_975_506), toolbar = f.builder.element(1_975_507)
+        let foreignControls = f.builder.element(1_975_508), competingRoot = f.builder.element(1_975_509)
+        f.builder.setRole(controls, kAXGroupRole as String); f.builder.setRole(toolbar, kAXGroupRole as String)
+        f.builder.setRole(foreignControls, kAXGroupRole as String); f.builder.setChildren(foreignControls, [])
+        f.builder.setRole(competingRoot, kAXMenuRole as String); f.builder.setChildren(competingRoot, [])
+        for (element, role, title) in [
+            (view, kAXMenuButtonRole, AXLocalePolicy.viewMenuBar.canonical),
+            (root, kAXMenuRole, ""),
+            (scroll, kAXMenuItemRole, AXLocalePolicy.mixerScrollToMenuItem.canonical),
+            (submenu, kAXMenuRole, ""),
+            (output, kAXMenuItemRole, fault == "native_english_outputs" ? "Outputs"
+                : fault == "native_korean_outputs" ? "출력"
+                : fault == "native_japanese_outputs" ? "出力"
+                : fault == "singular_filter_output" ? "Output" : AXLocalePolicy.mixerScrollToOutputsMenuItem.canonical),
+            (audio, kAXMenuItemRole, AXLocalePolicy.mixerTypeFilterAudio.canonical)
+        ] {
+            f.builder.setRole(element, role as String)
+            f.builder.setAttribute(element, kAXTitleAttribute as String, title)
+            f.builder.setAttribute(element, kAXEnabledAttribute as String, true)
+            f.builder.setAttribute(element, kAXWindowAttribute as String, f.window)
+            f.builder.setActionNames(element, [kAXPressAction as String, kAXCancelAction as String])
+        }
+        f.builder.setChildren(output, []); f.builder.setChildren(audio, [])
+        f.builder.setChildren(submenu, [output, audio]); f.builder.setChildren(scroll, [submenu])
+        f.builder.setChildren(root, [scroll]); f.builder.setChildren(view, [])
+        f.builder.setChildren(toolbar, [view]); f.builder.setChildren(controls, [toolbar])
+        f.builder.setChildren(f.window, f.builder.makeAXRuntime().children(f.window) + [controls, foreignControls])
+        let nativeHorizontal = fault.hasPrefix("native_hidden_horizontal")
+        let nativeVertical = fault.hasPrefix("native_hidden_vertical")
+        let nativeViewport = nativeHorizontal || nativeVertical
+        let horizontal = f.builder.element(1_975_510), thumb = f.builder.element(1_975_511)
+        let mixedViewport = fault.contains("_mixed")
+        let otherAxis = f.builder.element(1_975_513), otherThumb = f.builder.element(1_975_514)
+        if nativeViewport {
+            let owner = f.builder.element(1_975_512)
+            f.builder.setRole(owner, kAXGroupRole as String)
+            f.builder.setFrame(f.window, x: 0, y: 30, width: 1000, height: 800)
+            f.builder.setFrame(owner, x: 0, y: 300, width: 1000, height: 530)
+            f.builder.setFrame(f.mixer, x: 0, y: 300, width: 2000, height: 600)
+            f.builder.setChildren(owner, [f.mixer, controls])
+            f.builder.setChildren(f.window, [f.rail, owner, f.builder.element(1_965_720)])
+            f.builder.setRole(horizontal, kAXScrollBarRole as String)
+            f.builder.setAttribute(horizontal, kAXOrientationAttribute as String,
+                nativeVertical || fault.hasSuffix("_vertical")
+                    ? kAXVerticalOrientationValue as String : kAXHorizontalOrientationValue as String)
+            f.builder.setAttribute(horizontal, kAXWindowAttribute as String, f.window)
+            f.builder.setAttribute(horizontal, kAXParentAttribute as String, fault.hasSuffix("_foreign") ? foreignControls : owner)
+            f.builder.setAttribute(horizontal, kAXValueAttribute as String, NSNumber(value: 0.25))
+            f.builder.setAttributeSettable(horizontal, kAXValueAttribute as String, true)
+            f.builder.setFrame(horizontal, x: nativeVertical ? 983 : 0, y: nativeVertical ? 300 : 813,
+                width: nativeVertical ? 17 : 1000, height: nativeVertical ? 530 : 17)
+            f.builder.setRole(thumb, kAXValueIndicatorRole as String)
+            f.builder.setAttribute(thumb, kAXWindowAttribute as String, f.window)
+            f.builder.setFrame(thumb, x: nativeVertical ? 984 : 75, y: nativeVertical ? 350 : 814,
+                width: nativeVertical ? 15 : 700, height: nativeVertical ? 400 : 15)
+            f.builder.setChildren(horizontal, [thumb]); f.builder.setChildren(thumb, [])
+            // Like the observed native bar, its owner omits it from AXChildren.
+            if fault.contains("_exposed") {
+                f.builder.setChildren(owner, [f.mixer, controls, horizontal])
+            }
+            if mixedViewport {
+                f.builder.setRole(otherAxis, kAXScrollBarRole as String)
+                f.builder.setAttribute(otherAxis, kAXOrientationAttribute as String, kAXVerticalOrientationValue as String)
+                f.builder.setAttribute(otherAxis, kAXWindowAttribute as String, f.window)
+                f.builder.setAttribute(otherAxis, kAXParentAttribute as String, owner)
+                f.builder.setAttribute(otherAxis, kAXValueAttribute as String, NSNumber(value: 0.25))
+                f.builder.setAttributeSettable(otherAxis, kAXValueAttribute as String, true)
+                f.builder.setFrame(otherAxis, x: 983, y: 300, width: 17, height: 530)
+                f.builder.setRole(otherThumb, kAXValueIndicatorRole as String)
+                f.builder.setAttribute(otherThumb, kAXWindowAttribute as String, f.window)
+                f.builder.setFrame(otherThumb, x: 984, y: 350, width: 15, height: 400)
+                f.builder.setChildren(otherAxis, [otherThumb]); f.builder.setChildren(otherThumb, [])
+            }
+            f.routingFocusHit = { _, point in .success(mixedViewport && point.y < 800 ? otherThumb : thumb) }
+            for (index, strip) in f.strips.enumerated() {
+                f.builder.setFrame(strip, x: CGFloat(index) * 100 - (nativeVertical ? 0 : 55),
+                    y: nativeVertical || mixedViewport ? 337 : 350, width: 100, height: 300)
+            }
+            f.routingSetter = { element, attribute, value in
+                guard (CFEqual(element, horizontal) || mixedViewport && CFEqual(element, otherAxis)),
+                      attribute == kAXValueAttribute as String,
+                      let number = value as? NSNumber else { return nil }
+                probe.viewportWrites += 1
+                if f.builder.attributeValue(f.window, kAXDocumentAttribute as String) as? String == "file:///tmp/Foreign.logicx" {
+                    probe.foreignActions += 1
+                }
+                if fault.hasSuffix("_ack_only") { return true }
+                f.builder.setAttribute(element, attribute, number)
+                if fault.hasSuffix("_mixed_late_peer"), probe.viewportWrites == 1 {
+                    probe.injected = true
+                    f.builder.setAttribute(otherAxis, kAXValueAttribute as String, NSNumber(value: 0.5))
+                }
+                f.builder.setFrame(thumb, x: nativeVertical ? 984 : 75, y: nativeVertical ? 350 : 814,
+                    width: nativeVertical ? 15 : 700, height: nativeVertical ? 400 : 15)
+                for (index, strip) in f.strips.enumerated() {
+                    let x = mixedViewport
+                        ? ((f.builder.attributeValue(horizontal, kAXValueAttribute as String) as? NSNumber)?.doubleValue == 0.25 ? 55 : 0)
+                        : (nativeVertical ? 0 : 55)
+                    let otherValue = (f.builder.attributeValue(otherAxis, kAXValueAttribute as String) as? NSNumber)?.doubleValue
+                    let y = mixedViewport ? (otherValue == 0.25 ? 337 : otherValue == 0.5 ? 324 : 350)
+                        : (nativeVertical ? 337 : 350)
+                    f.builder.setFrame(strip, x: CGFloat(index) * 100 - CGFloat(x),
+                        y: CGFloat(y), width: 100, height: 300)
+                }
+                return true
+            }
+        }
+        let claim = try #require(gate.tryAcquire(operation: "scroll-to-readback"))
+        defer { gate.release(claim) }
+        let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: { gate.stillOwns(claim) })
+        try await OperationTraceContext.$current.withValue(context) { @Sendable in
+            try await Self.exerciseMixerViewportRecovery(fault, fixture: f, probe: probe,
+                nodes: (view, root, output, audio, controls, toolbar, foreignControls,
+                    competingRoot, horizontal, thumb, otherAxis),
+                nativeViewport: nativeViewport, nativeVertical: nativeVertical, mixedViewport: mixedViewport,
+                parentFault: parentFault, childrenFault: childrenFault, failedOpen: failedOpen,
+                stopFault: stopFault, publicationReferenceFault: publicationReferenceFault,
+                publicationStopFault: publicationStopFault)
+        }
+        return probe
+    }
+
+    private static func exerciseMixerViewportRecovery(
+        _ fault: String, fixture f: Fixture, probe: MixerViewportRecoveryProbe,
+        nodes: MixerViewportRecoveryNodes, nativeViewport: Bool, nativeVertical: Bool, mixedViewport: Bool,
+        parentFault: Int?, childrenFault: Int?, failedOpen: Bool, stopFault: Int?,
+        publicationReferenceFault: Int?, publicationStopFault: Int?
+    ) async throws {
+        let (view, root, output, audio, controls, toolbar, foreignControls,
+            competingRoot, horizontal, thumb, otherAxis) = nodes
+        let held = try #require(AccessibilityChannel.HeldSelectionAssociation(window: f.window,
+            logic: f.logic(), expectedProject: nil, requiresProjectReference: false))
+        let geometry = try #require(held.observedMixerViewportGeometry())
+        f.routingReadResult = { element, attribute in
+            if nativeViewport, (CFEqual(element, horizontal) || mixedViewport && CFEqual(element, otherAxis)),
+               attribute == kAXValueAttribute as String {
+                if probe.leafPresses == 2, fault.hasSuffix("_late_document") {
+                    f.builder.setAttribute(f.window, kAXDocumentAttribute as String, "file:///tmp/Foreign.logicx")
+                    probe.injected = true
+                }
+                if probe.leafPresses == 2, fault.hasSuffix("_boolean") { return .success(NSNumber(value: false)) }
+                // Preserve native numeric zero; the generic fixture's
+                // convenience bridge otherwise coerces NSNumber(0) to Bool.
+                return .success(f.builder.attributeValue(element, attribute) as? NSNumber)
+            }
+            if fault == "unread_parent", CFEqual(element, root), attribute == kAXParentAttribute as String {
+                return .failure(.init(raw: AXError.cannotComplete.rawValue))
+            }
+            return nil
+        }
+        f.routingRead = { element, attribute in
+            if CFEqual(element, view), attribute == kAXParentAttribute as String {
+                probe.viewParentReads += 1
+                if probe.viewParentReads == parentFault {
+                    probe.injected = true
+                    f.builder.setAttribute(f.window, kAXDocumentAttribute as String, "file:///tmp/Foreign.logicx")
+                }
+            }
+        }
+        f.routingChildrenRead = { element in
+            if CFEqual(element, view) {
+                if let ready = probe.rootAvailableAt, ContinuousClock.now >= ready {
+                    probe.rootAvailableAt = nil
+                    f.builder.setChildren(view, [root])
+                }
+                probe.viewChildrenReads += 1
+                if probe.viewChildrenReads == childrenFault {
+                    probe.injected = true
+                    if fault == "late_competing_root" {
+                        f.builder.setChildren(view, [root, competingRoot])
+                    } else {
+                        f.builder.setAttribute(f.window, kAXDocumentAttribute as String, "file:///tmp/Foreign.logicx")
+                    }
+                }
+            }
+        }
+        f.routingAction = { element, action in
+            if f.builder.attributeValue(f.window, kAXDocumentAttribute as String) as? String == "file:///tmp/Foreign.logicx" {
+                probe.foreignActions += 1
+            }
+            if CFEqual(element, view), action == kAXPressAction as String {
+                if probe.firstOpenParentRead == nil { probe.firstOpenParentRead = probe.viewParentReads }
+                if fault == "delayed_root" {
+                    probe.rootAvailableAt = ContinuousClock.now.advanced(by: .milliseconds(160))
+                    f.builder.setChildren(view, []); return true
+                }
+                f.builder.setChildren(view, [root])
+                if fault == "native_container_parent" { f.builder.setAttribute(root, kAXParentAttribute as String, controls) }
+                if fault == "foreign_container_parent" { f.builder.setAttribute(root, kAXParentAttribute as String, foreignControls) }
+                if fault == "wrong_depth_parent" { f.builder.setAttribute(root, kAXParentAttribute as String, toolbar) }
+                if fault == "missing_parent" { f.builder.removeAttribute(root, kAXParentAttribute as String) }
+                return !failedOpen
+            }
+            if CFEqual(element, root), action == kAXCancelAction as String {
+                probe.cancels += 1; f.builder.setChildren(view, []); return true
+            }
+            if CFEqual(element, output) || CFEqual(element, audio), action == kAXPressAction as String {
+                probe.leafPresses += 1
+                if probe.firstLeafChildrenRead == nil { probe.firstLeafChildrenRead = probe.viewChildrenReads }
+                if nativeViewport, CFEqual(element, audio) {
+                    f.builder.setAttribute(horizontal, kAXValueAttribute as String, NSNumber(value: 0))
+                    if mixedViewport { f.builder.setAttribute(otherAxis, kAXValueAttribute as String, NSNumber(value: 0)) }
+                    f.builder.setFrame(thumb, x: nativeVertical ? 984 : 0, y: nativeVertical ? 300 : 814,
+                        width: nativeVertical ? 15 : 700, height: nativeVertical ? 400 : 15)
+                    for (index, strip) in f.strips.enumerated() {
+                        f.builder.setFrame(strip, x: CGFloat(index) * 100, y: 350, width: 100, height: 300)
+                    }
+                }
+                f.builder.setChildren(view, []); return true
+            }
+            return false
+        }
+        let referenceIsCurrent: @Sendable () async -> Bool = {
+            if probe.viewportWrites > 0 {
+                probe.referencesAfterInverse += 1
+                if probe.referencesAfterInverse == publicationReferenceFault {
+                    probe.injected = true
+                    f.builder.setAttribute(horizontal, kAXValueAttribute as String, NSNumber(value: 0.5))
+                    for (index, strip) in f.strips.enumerated() {
+                        f.builder.setFrame(strip, x: CGFloat(index) * 100 - 110, y: 350, width: 100, height: 300)
+                    }
+                }
+            }
+            if fault.hasSuffix("_before_selection"), f.selections.isEmpty {
+                probe.initialReferenceCalls += 1
+                if probe.initialReferenceCalls == 2 {
+                    probe.injected = true
+                    f.builder.setAttribute(horizontal, kAXValueAttribute as String, NSNumber(value: 0.5))
+                    for (index, strip) in f.strips.enumerated() {
+                        f.builder.setFrame(strip, x: CGFloat(index) * 100 - 110, y: 350, width: 100, height: 300)
+                    }
+                }
+            }
+            if probe.leafPresses == 2, fault.contains("_late_reference_"), !probe.injected {
+                probe.injected = true
+                if fault.hasSuffix("_project") {
+                    f.builder.setAttribute(f.window, kAXDocumentAttribute as String, "file:///tmp/Foreign.logicx")
+                } else if fault.hasSuffix("_control") {
+                    f.builder.setAttribute(horizontal, kAXParentAttribute as String, foreignControls)
+                } else {
+                    f.builder.setAttribute(horizontal, kAXValueAttribute as String, NSNumber(value: 0.5))
+                }
+            }
+            return probe.referenceCurrent
+        }
+        let recovered: Bool
+        if fault.contains("_initial_observation") {
+            // Native selection can move an omitted Mixer scrollbar
+            // before any later original-header renewal takes a sample.
+            f.routingSelection = { _ in
+                if probe.initialStopsAtWrite == nil { probe.initialStopsAtWrite = probe.initialStopCalls }
+                guard !probe.initialSelectionMoved else { return }
+                probe.initialSelectionMoved = true
+                f.builder.setAttribute(horizontal, kAXValueAttribute as String, NSNumber(value: 0))
+                if mixedViewport { f.builder.setAttribute(otherAxis, kAXValueAttribute as String, NSNumber(value: 0)) }
+                for (index, strip) in f.strips.enumerated() {
+                    f.builder.setFrame(strip, x: CGFloat(index) * 100, y: 350, width: 100, height: 300)
+                }
+            }
+            let pairs = await held.observe(referenceIsCurrent: referenceIsCurrent,
+                stoppingWhen: {
+                    probe.initialStopCalls += 1
+                    if probe.viewportWrites > 0 {
+                        probe.stopsAfterInverse += 1
+                        if probe.stopsAfterInverse == publicationStopFault {
+                            probe.injected = true
+                            f.builder.setAttribute(horizontal, kAXValueAttribute as String, NSNumber(value: 0.5))
+                            for (index, strip) in f.strips.enumerated() {
+                                f.builder.setFrame(strip, x: CGFloat(index) * 100 - 110, y: 350, width: 100, height: 300)
+                            }
+                        }
+                    }
+                    if f.selections.isEmpty, probe.initialStopCalls == stopFault {
+                        probe.injected = true
+                        probe.referenceCurrent = false
+                    }
+                    return false
+                }, allHeldHeaders: true)
+            if fault.hasSuffix("_mixed_late_peer") {
+                #expect(probe.injected && pairs.isEmpty && probe.viewportWrites == 1 && probe.leafPresses == 0)
+                #expect((f.builder.attributeValue(otherAxis, kAXValueAttribute as String) as? NSNumber)?.doubleValue == 0.5)
+            } else if publicationReferenceFault != nil || publicationStopFault != nil {
+                #expect(probe.injected && probe.initialSelectionMoved && f.selections == [1, 0])
+                #expect(pairs.isEmpty && probe.viewportWrites == 1 && probe.leafPresses == 2)
+                #expect((f.builder.attributeValue(horizontal, kAXValueAttribute as String) as? NSNumber)?.doubleValue == 0.5)
+            } else if stopFault != nil {
+                #expect(probe.injected && !probe.initialSelectionMoved && f.selections.isEmpty)
+                #expect(pairs.isEmpty && probe.viewportWrites == 0 && probe.leafPresses == 0)
+            } else if fault.hasSuffix("_before_selection") {
+                #expect(probe.injected && !probe.initialSelectionMoved && f.selections.isEmpty)
+                #expect(pairs.isEmpty && probe.viewportWrites == 0 && probe.leafPresses == 0)
+                #expect((f.builder.attributeValue(horizontal, kAXValueAttribute as String) as? NSNumber)?.doubleValue == 0.5)
+            } else {
+                #expect(probe.initialSelectionMoved && f.selections == [1, 0])
+                #expect(pairs.count == (fault.contains("_late_reference_") ? 0 : 2))
+            }
+            recovered = held.effects.restoration == "restored"
+        } else {
+            recovered = await held.recoverMixerReadability(restoring: geometry,
+                referenceIsCurrent: referenceIsCurrent, stoppingWhen: { false })
+        }
+        if parentFault != nil || childrenFault != nil {
+            #expect(probe.injected, "Reach the actual last deciding native path/menu read")
+            #expect(probe.foreignActions == 0, "No opening, leaf or cleanup action in a foreign document")
+            #expect(!recovered)
+            if fault == "late_competing_root" { #expect(probe.leafPresses == 0) }
+        } else if ["foreign_container_parent", "wrong_depth_parent", "missing_parent", "unread_parent", "singular_filter_output"].contains(fault) {
+            #expect(!recovered)
+            #expect(probe.leafPresses == 0)
+        } else if failedOpen {
+            #expect(!recovered)
+            #expect(probe.cancels == 1)
+            #expect(f.builder.makeAXRuntime().children(view).isEmpty)
+        } else if publicationReferenceFault != nil || publicationStopFault != nil || fault.hasSuffix("_mixed_late_peer") {
+            #expect(!recovered)
+            #expect(probe.foreignActions == 0)
+        } else if nativeViewport && !["native_hidden_horizontal", "native_hidden_vertical",
+            "native_hidden_horizontal_initial_observation", "native_hidden_vertical_initial_observation",
+            "native_hidden_horizontal_initial_observation_stop_reference",
+            "native_hidden_horizontal_initial_observation_exposed", "native_hidden_vertical_initial_observation_exposed",
+            "native_hidden_horizontal_initial_observation_exposed_mixed",
+            "native_hidden_horizontal_initial_observation_publication_reference",
+            "native_hidden_horizontal_initial_observation_publication_stop"].contains(fault) || stopFault != nil {
+            #expect(!recovered)
+            #expect(probe.viewportWrites == (fault.hasSuffix("_ack_only") ? 1 : 0))
+            #expect(probe.foreignActions == 0)
+            if fault.hasSuffix("_late_document") || fault.contains("_late_reference_") { #expect(probe.injected) }
+        } else {
+            #expect(recovered)
+            if nativeViewport {
+                #expect(probe.leafPresses == (fault.hasSuffix("_exposed") ? 0 : 2))
+                #expect(probe.viewportWrites == (mixedViewport ? 3 : 1))
+                #expect((f.builder.attributeValue(horizontal, kAXValueAttribute as String) as? NSNumber)?.doubleValue == 0.25)
+                #expect(held.observedMixerViewportGeometry()?.frames == geometry.frames)
+            }
         }
     }
 
@@ -1749,229 +2134,38 @@ struct Issue965HeldSelectionAssociationTests {
                       "native_hidden_horizontal", "native_hidden_horizontal_vertical", "native_hidden_horizontal_foreign",
                       "native_hidden_horizontal_boolean", "native_hidden_horizontal_ack_only", "native_hidden_horizontal_late_document",
                       "native_hidden_horizontal_late_reference_project", "native_hidden_horizontal_late_reference_control",
-                      "native_hidden_horizontal_late_reference_value"])
+                      "native_hidden_horizontal_late_reference_value",
+                      "native_hidden_vertical", "native_hidden_vertical_ack_only", "native_hidden_vertical_foreign",
+                      "native_hidden_vertical_boolean", "native_hidden_vertical_late_document",
+                      "native_hidden_vertical_late_reference_project", "native_hidden_vertical_late_reference_control",
+                      "native_hidden_vertical_late_reference_value",
+                      "native_hidden_horizontal_initial_observation", "native_hidden_vertical_initial_observation",
+                      "native_hidden_horizontal_initial_observation_late_reference_value",
+                      "native_hidden_horizontal_initial_observation_before_selection",
+                      "native_hidden_horizontal_initial_observation_stop_reference",
+                      "native_hidden_horizontal_initial_observation_exposed",
+                      "native_hidden_vertical_initial_observation_exposed",
+                      "native_hidden_horizontal_initial_observation_exposed_mixed",
+                      "native_hidden_horizontal_initial_observation_exposed_mixed_late_peer",
+                      "native_hidden_horizontal_initial_observation_publication_reference",
+                      "native_hidden_horizontal_initial_observation_publication_stop"])
     func mixerScrollToRecoveryOwnsItsLastActionBoundary(_ fault: String) async throws {
-        final class Probe: @unchecked Sendable {
-            var viewParentReads = 0
-            var viewChildrenReads = 0
-            var firstOpenParentRead: Int?
-            var firstLeafChildrenRead: Int?
-            var injected = false
-            var foreignActions = 0
-            var cancels = 0
-            var leafPresses = 0
-            var viewportWrites = 0
-            var rootAvailableAt: ContinuousClock.Instant?
+        let calibration = try await Self.runMixerViewportRecovery(fault)
+        if fault == "late_open" { _ = try await Self.runMixerViewportRecovery(fault, parentFault: try #require(calibration.firstOpenParentRead)) }
+        if fault == "late_leaf" { _ = try await Self.runMixerViewportRecovery(fault, childrenFault: try #require(calibration.firstLeafChildrenRead)) }
+        if fault == "late_competing_root" { _ = try await Self.runMixerViewportRecovery(fault, childrenFault: try #require(calibration.firstLeafChildrenRead)) }
+        if fault == "failed_open" { _ = try await Self.runMixerViewportRecovery(fault, failedOpen: true) }
+        if fault.hasSuffix("_stop_reference") {
+            _ = try await Self.runMixerViewportRecovery(fault, stopFault: try #require(calibration.initialStopsAtWrite))
         }
-        func run(parentFault: Int? = nil, childrenFault: Int? = nil, failedOpen: Bool = false) async throws -> Probe {
-            let f = try Fixture(), gate = LogicMutationGate(), probe = Probe()
-            defer { try? FileManager.default.removeItem(at: f.bundle) }
-            for (index, strip) in f.strips.enumerated() {
-                f.builder.setFrame(strip, x: CGFloat(index) * 100, y: 100, width: 100, height: 300)
-            }
-            let view = f.builder.element(1_975_500), root = f.builder.element(1_975_501)
-            let scroll = f.builder.element(1_975_502), submenu = f.builder.element(1_975_503)
-            let output = f.builder.element(1_975_504), audio = f.builder.element(1_975_505)
-            let controls = f.builder.element(1_975_506), toolbar = f.builder.element(1_975_507)
-            let foreignControls = f.builder.element(1_975_508), competingRoot = f.builder.element(1_975_509)
-            f.builder.setRole(controls, kAXGroupRole as String); f.builder.setRole(toolbar, kAXGroupRole as String)
-            f.builder.setRole(foreignControls, kAXGroupRole as String); f.builder.setChildren(foreignControls, [])
-            f.builder.setRole(competingRoot, kAXMenuRole as String); f.builder.setChildren(competingRoot, [])
-            for (element, role, title) in [
-                (view, kAXMenuButtonRole, AXLocalePolicy.viewMenuBar.canonical),
-                (root, kAXMenuRole, ""),
-                (scroll, kAXMenuItemRole, AXLocalePolicy.mixerScrollToMenuItem.canonical),
-                (submenu, kAXMenuRole, ""),
-                (output, kAXMenuItemRole, fault == "native_english_outputs" ? "Outputs"
-                    : fault == "native_korean_outputs" ? "출력"
-                    : fault == "native_japanese_outputs" ? "出力"
-                    : fault == "singular_filter_output" ? "Output" : AXLocalePolicy.mixerScrollToOutputsMenuItem.canonical),
-                (audio, kAXMenuItemRole, AXLocalePolicy.mixerTypeFilterAudio.canonical)
-            ] {
-                f.builder.setRole(element, role as String)
-                f.builder.setAttribute(element, kAXTitleAttribute as String, title)
-                f.builder.setAttribute(element, kAXEnabledAttribute as String, true)
-                f.builder.setAttribute(element, kAXWindowAttribute as String, f.window)
-                f.builder.setActionNames(element, [kAXPressAction as String, kAXCancelAction as String])
-            }
-            f.builder.setChildren(output, []); f.builder.setChildren(audio, [])
-            f.builder.setChildren(submenu, [output, audio]); f.builder.setChildren(scroll, [submenu])
-            f.builder.setChildren(root, [scroll]); f.builder.setChildren(view, [])
-            f.builder.setChildren(toolbar, [view]); f.builder.setChildren(controls, [toolbar])
-            f.builder.setChildren(f.window, f.builder.makeAXRuntime().children(f.window) + [controls, foreignControls])
-            let nativeHorizontal = fault.hasPrefix("native_hidden_horizontal")
-            let horizontal = f.builder.element(1_975_510), thumb = f.builder.element(1_975_511)
-            if nativeHorizontal {
-                let owner = f.builder.element(1_975_512)
-                f.builder.setRole(owner, kAXGroupRole as String)
-                f.builder.setFrame(f.window, x: 0, y: 30, width: 1000, height: 800)
-                f.builder.setFrame(owner, x: 0, y: 300, width: 1000, height: 530)
-                f.builder.setFrame(f.mixer, x: 0, y: 300, width: 2000, height: 600)
-                f.builder.setChildren(owner, [f.mixer, controls])
-                f.builder.setChildren(f.window, [f.rail, owner, f.builder.element(1_965_720)])
-                f.builder.setRole(horizontal, kAXScrollBarRole as String)
-                f.builder.setAttribute(horizontal, kAXOrientationAttribute as String,
-                    fault.hasSuffix("_vertical") ? kAXVerticalOrientationValue as String : kAXHorizontalOrientationValue as String)
-                f.builder.setAttribute(horizontal, kAXWindowAttribute as String, f.window)
-                f.builder.setAttribute(horizontal, kAXParentAttribute as String, fault.hasSuffix("_foreign") ? foreignControls : owner)
-                f.builder.setAttribute(horizontal, kAXValueAttribute as String, NSNumber(value: 0.25))
-                f.builder.setAttributeSettable(horizontal, kAXValueAttribute as String, true)
-                f.builder.setFrame(horizontal, x: 0, y: 813, width: 1000, height: 17)
-                f.builder.setRole(thumb, kAXValueIndicatorRole as String)
-                f.builder.setAttribute(thumb, kAXWindowAttribute as String, f.window)
-                f.builder.setFrame(thumb, x: 75, y: 814, width: 700, height: 15)
-                f.builder.setChildren(horizontal, [thumb]); f.builder.setChildren(thumb, [])
-                // Like the observed native bar, its owner omits it from AXChildren.
-                f.routingFocusHit = { _, _ in .success(thumb) }
-                for (index, strip) in f.strips.enumerated() {
-                    f.builder.setFrame(strip, x: CGFloat(index) * 100 - 55, y: 350, width: 100, height: 300)
-                }
-                f.routingSetter = { element, attribute, value in
-                    guard CFEqual(element, horizontal), attribute == kAXValueAttribute as String,
-                          let number = value as? NSNumber else { return nil }
-                    probe.viewportWrites += 1
-                    if f.builder.attributeValue(f.window, kAXDocumentAttribute as String) as? String == "file:///tmp/Foreign.logicx" {
-                        probe.foreignActions += 1
-                    }
-                    if fault.hasSuffix("_ack_only") { return true }
-                    f.builder.setAttribute(horizontal, attribute, number)
-                    f.builder.setFrame(thumb, x: 75, y: 814, width: 700, height: 15)
-                    for (index, strip) in f.strips.enumerated() {
-                        f.builder.setFrame(strip, x: CGFloat(index) * 100 - 55, y: 350, width: 100, height: 300)
-                    }
-                    return true
-                }
-            }
-            let claim = try #require(gate.tryAcquire(operation: "scroll-to-readback"))
-            defer { gate.release(claim) }
-            let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: { gate.stillOwns(claim) })
-            try await OperationTraceContext.$current.withValue(context) {
-                let held = try #require(AccessibilityChannel.HeldSelectionAssociation(window: f.window,
-                    logic: f.logic(), expectedProject: nil, requiresProjectReference: false))
-                let geometry = try #require(held.observedMixerViewportGeometry())
-                f.routingReadResult = { element, attribute in
-                    if nativeHorizontal, CFEqual(element, horizontal), attribute == kAXValueAttribute as String {
-                        if probe.leafPresses == 2, fault.hasSuffix("_late_document") {
-                            f.builder.setAttribute(f.window, kAXDocumentAttribute as String, "file:///tmp/Foreign.logicx")
-                            probe.injected = true
-                        }
-                        if probe.leafPresses == 2, fault.hasSuffix("_boolean") { return .success(NSNumber(value: false)) }
-                        // Preserve native numeric zero; the generic fixture's
-                        // convenience bridge otherwise coerces NSNumber(0) to Bool.
-                        return .success(f.builder.attributeValue(horizontal, attribute) as? NSNumber)
-                    }
-                    if fault == "unread_parent", CFEqual(element, root), attribute == kAXParentAttribute as String {
-                        return .failure(.init(raw: AXError.cannotComplete.rawValue))
-                    }
-                    return nil
-                }
-                f.routingRead = { element, attribute in
-                    if CFEqual(element, view), attribute == kAXParentAttribute as String {
-                        probe.viewParentReads += 1
-                        if probe.viewParentReads == parentFault {
-                            probe.injected = true
-                            f.builder.setAttribute(f.window, kAXDocumentAttribute as String, "file:///tmp/Foreign.logicx")
-                        }
-                    }
-                }
-                f.routingChildrenRead = { element in
-                    if CFEqual(element, view) {
-                        if let ready = probe.rootAvailableAt, ContinuousClock.now >= ready {
-                            probe.rootAvailableAt = nil
-                            f.builder.setChildren(view, [root])
-                        }
-                        probe.viewChildrenReads += 1
-                        if probe.viewChildrenReads == childrenFault {
-                            probe.injected = true
-                            if fault == "late_competing_root" {
-                                f.builder.setChildren(view, [root, competingRoot])
-                            } else {
-                                f.builder.setAttribute(f.window, kAXDocumentAttribute as String, "file:///tmp/Foreign.logicx")
-                            }
-                        }
-                    }
-                }
-                f.routingAction = { element, action in
-                    if f.builder.attributeValue(f.window, kAXDocumentAttribute as String) as? String == "file:///tmp/Foreign.logicx" {
-                        probe.foreignActions += 1
-                    }
-                    if CFEqual(element, view), action == kAXPressAction as String {
-                        if probe.firstOpenParentRead == nil { probe.firstOpenParentRead = probe.viewParentReads }
-                        if fault == "delayed_root" {
-                            probe.rootAvailableAt = ContinuousClock.now.advanced(by: .milliseconds(160))
-                            f.builder.setChildren(view, []); return true
-                        }
-                        f.builder.setChildren(view, [root])
-                        if fault == "native_container_parent" { f.builder.setAttribute(root, kAXParentAttribute as String, controls) }
-                        if fault == "foreign_container_parent" { f.builder.setAttribute(root, kAXParentAttribute as String, foreignControls) }
-                        if fault == "wrong_depth_parent" { f.builder.setAttribute(root, kAXParentAttribute as String, toolbar) }
-                        if fault == "missing_parent" { f.builder.removeAttribute(root, kAXParentAttribute as String) }
-                        return !failedOpen
-                    }
-                    if CFEqual(element, root), action == kAXCancelAction as String {
-                        probe.cancels += 1; f.builder.setChildren(view, []); return true
-                    }
-                    if CFEqual(element, output) || CFEqual(element, audio), action == kAXPressAction as String {
-                        probe.leafPresses += 1
-                        if probe.firstLeafChildrenRead == nil { probe.firstLeafChildrenRead = probe.viewChildrenReads }
-                        if nativeHorizontal, CFEqual(element, audio) {
-                            f.builder.setAttribute(horizontal, kAXValueAttribute as String, NSNumber(value: 0))
-                            f.builder.setFrame(thumb, x: 0, y: 814, width: 700, height: 15)
-                            for (index, strip) in f.strips.enumerated() {
-                                f.builder.setFrame(strip, x: CGFloat(index) * 100, y: 350, width: 100, height: 300)
-                            }
-                        }
-                        f.builder.setChildren(view, []); return true
-                    }
-                    return false
-                }
-                let recovered = await held.recoverMixerReadability(restoring: geometry,
-                    referenceIsCurrent: {
-                        if probe.leafPresses == 2, fault.contains("_late_reference_"), !probe.injected {
-                            probe.injected = true
-                            if fault.hasSuffix("_project") {
-                                f.builder.setAttribute(f.window, kAXDocumentAttribute as String, "file:///tmp/Foreign.logicx")
-                            } else if fault.hasSuffix("_control") {
-                                f.builder.setAttribute(horizontal, kAXParentAttribute as String, foreignControls)
-                            } else {
-                                f.builder.setAttribute(horizontal, kAXValueAttribute as String, NSNumber(value: 0.5))
-                            }
-                        }
-                        return true
-                    }, stoppingWhen: { false })
-                if parentFault != nil || childrenFault != nil {
-                    #expect(probe.injected, "Reach the actual last deciding native path/menu read")
-                    #expect(probe.foreignActions == 0, "No opening, leaf or cleanup action in a foreign document")
-                    #expect(!recovered)
-                    if fault == "late_competing_root" { #expect(probe.leafPresses == 0) }
-                } else if ["foreign_container_parent", "wrong_depth_parent", "missing_parent", "unread_parent", "singular_filter_output"].contains(fault) {
-                    #expect(!recovered)
-                    #expect(probe.leafPresses == 0)
-                } else if failedOpen {
-                    #expect(!recovered)
-                    #expect(probe.cancels == 1)
-                    #expect(f.builder.makeAXRuntime().children(view).isEmpty)
-                } else if nativeHorizontal && fault != "native_hidden_horizontal" {
-                    #expect(!recovered)
-                    #expect(probe.viewportWrites == (fault.hasSuffix("_ack_only") ? 1 : 0))
-                    #expect(probe.foreignActions == 0)
-                    if fault.hasSuffix("_late_document") || fault.contains("_late_reference_") { #expect(probe.injected) }
-                } else {
-                    #expect(recovered)
-                    if nativeHorizontal {
-                        #expect(probe.leafPresses == 2 && probe.viewportWrites == 1)
-                        #expect((f.builder.attributeValue(horizontal, kAXValueAttribute as String) as? NSNumber)?.doubleValue == 0.25)
-                        #expect(held.observedMixerViewportGeometry()?.frames == geometry.frames)
-                    }
-                }
-            }
-            return probe
+        if fault.hasSuffix("_publication_reference") {
+            #expect(calibration.referencesAfterInverse > 1)
+            _ = try await Self.runMixerViewportRecovery(fault, publicationReferenceFault: calibration.referencesAfterInverse)
         }
-        let calibration = try await run()
-        if fault == "late_open" { _ = try await run(parentFault: try #require(calibration.firstOpenParentRead)) }
-        if fault == "late_leaf" { _ = try await run(childrenFault: try #require(calibration.firstLeafChildrenRead)) }
-        if fault == "late_competing_root" { _ = try await run(childrenFault: try #require(calibration.firstLeafChildrenRead)) }
-        if fault == "failed_open" { _ = try await run(failedOpen: true) }
+        if fault.hasSuffix("_publication_stop") {
+            #expect(calibration.stopsAfterInverse > 1)
+            _ = try await Self.runMixerViewportRecovery(fault, publicationStopFault: calibration.stopsAfterInverse)
+        }
     }
 
     @Test("An existing Bus output goal uses the current checked receiver and owns only its conditional inverse",
@@ -5114,6 +5308,15 @@ struct Issue965HeldSelectionAssociationTests {
         }
     }
 
+    @Test("An occupied Send forward uses its actual checked peer headers for source verification")
+    func occupiedSendForwardUsesItsCheckedPeerHeaders() async throws {
+        try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+            try await assertOccupiedSingleSendRenewal(existingBus: true, restoring: true, emptyModeMenu: true,
+                noOpDestination: .bus(1), canonicalSend: "forward", canonicalBus: true, canonicalBusChange: true,
+                canonicalBusReceiverFault: "physical_source_read_renewal", measureForwardAssociations: true)
+        }
+    }
+
     @Test(arguments: ["forward", "cancel"])
     func canonicalBusStereoDepartureUsesCapturedInputsAndOwnEffect(mode: String) async throws {
         try await FeatureFlags.withAdr004MutationSagaForTests(true) {
@@ -5611,16 +5814,23 @@ struct Issue965HeldSelectionAssociationTests {
                                                measureChangedPermissionCensus: Bool = false,
                                                singleInverseWriterPopup: Bool = false,
                                                measureInverseAssociations: Bool = false,
+                                               measureForwardAssociations: Bool = false,
                                                forwardNameMovesFocus: Bool = false,
                                                initialNameRailFocus: Bool = false,
                                                peerDisplayHydration: Bool = false,
                                                peerDisplaySecondSampleFault: String? = nil,
                                                restoredNameCaption: RestoredNameCaptionScenario? = nil) async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
-            let f = try Fixture(fourTracks: measureInverseAssociations), b = f.builder
+            let f = try Fixture(fourTracks: measureInverseAssociations || measureForwardAssociations), b = f.builder
             let hydrationPeer = peerDisplayHydration ? b.element(1_971_800) : nil
             let hydrationInput = b.element(1_971_801), hydrationOutput = b.element(1_971_802)
             defer {
+                if measureForwardAssociations {
+                    #expect(f.routingBusLeafPresses == [2] && f.routingDestinationPresses == 1,
+                        "The real occupied Send Bus leaf must execute exactly once")
+                    #expect(f.routingForwardSelections == [1, 0],
+                        "Verify the actual source and checked receiver without unrelated post-write headers")
+                }
                 if measureChangedPermissionCensus {
                     #expect(f.routingChangedSendPublished, "Every measured case must reach the actual native effect publisher")
                 }
@@ -6584,7 +6794,8 @@ struct Issue965HeldSelectionAssociationTests {
                             b.setAttribute(peer, kAXInsertionPointLineNumberAttribute as String, 0)
                             b.setChildren(peer, b.makeAXRuntime().children(f.strips[0]))
                             f.routingOtherReplacement = peer
-                            b.setChildren(f.mixer, [peer, readSource, receiver] + (hydrationPeer.map { [$0] } ?? []))
+                            b.setChildren(f.mixer, [peer, readSource] + Array(f.strips.dropFirst(2))
+                                + [receiver] + (hydrationPeer.map { [$0] } ?? []))
                             if hydrationPeer != nil {
                                 #expect(f.routingNameWrites == ["Selected Canonical"],
                                     "The peer must become readable only after the actual owned name and Input renewal")
@@ -6749,6 +6960,13 @@ struct Issue965HeldSelectionAssociationTests {
                 f.selectionKeepsPassiveRailFocus = true
                 b.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[1]])
                 b.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.rail)
+            }
+            if measureForwardAssociations {
+                let selection = f.routingSelection
+                f.routingSelection = { index in
+                    selection?(index)
+                    if f.routingDestinationPresses == 1 { f.routingForwardSelections.append(index) }
+                }
             }
             let before = try await inspect(f, cache: cache, registry: registry,
                 domains: inspectSendWitness == nil && canonicalSend == nil ? ["associations"] : ["tracks", "strips", "associations", "routing"],
@@ -11545,7 +11763,7 @@ struct Issue965HeldSelectionAssociationTests {
     }
 
     @Test("Optional peer discovery ends only after the requested native strips were actually associated",
-          arguments: ["owned", "missing_peer", "foreign_document", "unrequested_census_change"])
+          arguments: ["owned", "late_peer", "missing_peer", "foreign_document", "unrequested_census_change"])
     func requestedNativePeersEndOnlyOptionalDiscovery(fault: String) async throws {
         let f = try Fixture(withViewport: true, fourTracks: true)
         let gate = LogicMutationGate()
@@ -11557,13 +11775,25 @@ struct Issue965HeldSelectionAssociationTests {
                 logic: f.logic(), expectedProject: nil, requiresProjectReference: false))
             let originalPairs = await initial.observe(referenceIsCurrent: { true }, stoppingWhen: { false }, allHeldHeaders: true)
             let first = try #require(originalPairs.first { CFEqual($0.track.header, f.headers[1]) })
-            let second = try #require(originalPairs.first { CFEqual($0.track.header, f.headers[2]) })
+            let second = try #require(originalPairs.first { CFEqual($0.track.header, f.headers[fault == "late_peer" ? 3 : 2]) })
             let absent = AXTrackBinding.Binding(window: f.window,
                 header: f.builder.element(965_992_001), document: initial.document, runtime: f.logic())
             let foreign = AXTrackBinding.Binding(window: f.window,
                 header: second.track.header, document: "file:///Foreign.logicx", runtime: f.logic())
             let targets = [first.track, fault == "missing_peer" ? absent : fault == "foreign_document" ? foreign : second.track]
             let count = f.selections.count
+            if fault == "late_peer" {
+                f.routingSelection = { index in
+                    guard index == 2 else { return }
+                    f.routingLateScopeInjected = true
+                    let replacement = f.builder.element(965_992_210)
+                    f.builder.setRole(replacement, kAXLayoutItemRole as String)
+                    f.builder.setAttribute(replacement, kAXNumberOfCharactersAttribute as String, 0)
+                    f.builder.setAttribute(replacement, kAXInsertionPointLineNumberAttribute as String, 0)
+                    f.builder.setChildren(replacement, f.builder.makeAXRuntime().children(f.strips[3]))
+                    f.builder.setChildren(f.mixer, [f.strips[0], f.strips[1], f.strips[2], replacement])
+                }
+            }
             if fault == "unrequested_census_change" {
                 f.routingSelection = { index in
                     if index == 2 {
@@ -11577,9 +11807,11 @@ struct Issue965HeldSelectionAssociationTests {
             let pairs = await observation.observe(referenceIsCurrent: { true }, stoppingWhen: { false },
                 allHeldHeaders: true, observingPeerHeaders: targets)
             let selected = Array(f.selections.dropFirst(count))
-            if fault == "owned" {
-                #expect(selected == [1, 2, 0], "Do not navigate to unrelated header3 after both actual native peers were observed")
-                #expect(pairs.count == 3 && !pairs.contains { CFEqual($0.track.header, f.headers[3]) })
+            if fault == "owned" || fault == "late_peer" {
+                #expect(selected == (fault == "late_peer" ? [1, 3, 0] : [1, 2, 0]),
+                    "Observe requested native peers before unrelated headers")
+                #expect(!f.routingLateScopeInjected)
+                #expect(pairs.count == 3 && !pairs.contains { CFEqual($0.track.header, f.headers[fault == "late_peer" ? 2 : 3]) })
                 #expect(observation.headers.count == 4 && observation.strips.count == 4)
                 #expect(observation.effects.restoration == "restored")
             } else if fault == "unrequested_census_change" {
@@ -11588,6 +11820,82 @@ struct Issue965HeldSelectionAssociationTests {
                 #expect(selected == [1, 2, 3, 0], "Unobserved or foreign native peers must not terminate collection early")
                 #expect(pairs.count == 4)
                 #expect(!pairs.contains { $0.track.matches(fault == "missing_peer" ? absent : foreign) })
+            }
+        }
+    }
+
+    @Test("Captured physical receivers end discovery only after actual original-header relationships",
+          arguments: ["owned", "foreign_document", "foreign_window", "foreign_mixer",
+                      "same_label_foreign_strip", "required_retired", "unrelated_retired"])
+    func capturedNativeReceiversAvoidUnrelatedSelectionRetirement(fault: String) async throws {
+        let f = try Fixture(withViewport: true, fourTracks: true)
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: { gate.stillOwns(claim) })
+        try await OperationTraceContext.$current.withValue(context) {
+            let initial = try #require(AccessibilityChannel.HeldSelectionAssociation(window: f.window,
+                logic: f.logic(), expectedProject: nil, requiresProjectReference: false))
+            let pairs = await initial.observe(referenceIsCurrent: { true }, stoppingWhen: { false },
+                allHeldHeaders: true, observingPeerHeaders: [])
+            let source = try #require(pairs.first { CFEqual($0.track.header, f.headers[0]) })
+            let peer = AXMixerStripBinding.Binding(window: f.window, mixer: f.mixer,
+                strip: f.strips[0], document: initial.document)
+            let foreign = f.builder.element(965_992_100)
+            f.builder.setRole(foreign, kAXLayoutItemRole as String)
+            let capturedName = try #require(f.builder.attributeValue(f.builder.element(1_965_713),
+                kAXValueAttribute as String) as? String)
+            let foreignName = f.builder.element(965_992_102)
+            f.builder.setRole(foreignName, kAXTextFieldRole as String)
+            f.builder.setAttribute(foreignName, kAXDescriptionAttribute as String, "Name")
+            f.builder.setAttribute(foreignName, kAXValueAttribute as String, capturedName)
+            f.builder.setChildren(foreign, [foreignName])
+            let foreignWindow = f.builder.element(965_992_103), foreignMixer = f.builder.element(965_992_104)
+            f.builder.setRole(foreignWindow, kAXWindowRole as String)
+            f.builder.setRole(foreignMixer, kAXGroupRole as String)
+            f.builder.setChildren(foreignWindow, [foreignMixer]); f.builder.setChildren(foreignMixer, [])
+            let second = AXMixerStripBinding.Binding(window: fault == "foreign_window" ? foreignWindow : f.window,
+                mixer: fault == "foreign_mixer" ? foreignMixer : f.mixer,
+                strip: fault == "same_label_foreign_strip" ? foreign : f.strips[3],
+                document: fault == "foreign_document" ? "file:///Foreign.logicx" : initial.document)
+            let count = f.selections.count
+            f.routingSetter = { element, attribute, value in
+                let challenge = fault == "required_retired" || fault == "unrelated_retired" ? 2 : 3
+                guard !f.routingLateScopeInjected, CFEqual(element, f.rail),
+                      attribute == kAXSelectedChildrenAttribute as String,
+                      let chosen = value as? [AXUIElement], chosen.count == 1,
+                      CFEqual(chosen[0], f.headers[challenge]) else { return nil }
+                f.routingLateScopeInjected = true
+                f.selections.append(challenge)
+                let changed = fault == "required_retired" ? 3 : 2
+                let replacement = f.builder.element(965_992_101)
+                for name in [kAXRoleAttribute, kAXTitleAttribute, kAXDescriptionAttribute,
+                             kAXNumberOfCharactersAttribute, kAXInsertionPointLineNumberAttribute] as [String] {
+                    if let current = f.builder.attributeValue(f.strips[changed], name) {
+                        f.builder.setAttribute(replacement, name, current)
+                    }
+                }
+                f.builder.setChildren(replacement, f.builder.makeAXRuntime().children(f.strips[changed]))
+                f.builder.setChildren(f.mixer, f.strips.enumerated().map { $0.offset == changed ? replacement : $0.element })
+                for (index, header) in f.headers.enumerated() {
+                    f.builder.setAttribute(header, kAXSelectedAttribute as String, index == challenge)
+                }
+                f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String,
+                    fault == "unrelated_retired" ? f.strips[3] : replacement)
+                return true
+            }
+            let renewed = await AccessibilityChannel.renewSourceThroughOriginalHeader(source, original: source.strip,
+                runtime: f.logic(), sourceDisposition: .readObservation, observingPeerStrips: [peer, second])
+            if fault == "owned" {
+                let actual = try #require(renewed.source)
+                #expect(Array(f.selections.dropFirst(count)) == [1, 2, 0])
+                #expect(!f.routingLateScopeInjected, "Do not select the unrelated header whose native strip retires")
+                #expect(actual.pair.track.matches(source.track) && actual.pair.strip.matches(source.strip))
+                #expect(actual.observedPairs.count == 3 && actual.observation.strips.count == 4)
+                #expect(renewed.effects.restoration == "restored")
+            } else {
+                #expect(f.routingLateScopeInjected, "Reach the actual native retirement instead of trusting invalid candidates")
+                #expect(renewed.source == nil)
             }
         }
     }

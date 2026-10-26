@@ -47,6 +47,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   report `display_mode_switched_from` and `display_mode_restored`, or
   `display_mode_switch_unavailable` when the switch could not be made (the seek then refuses as
   before).
+- **`record_sequence` no longer splits into two tracks for notes off channel 1.** The tick-0 padding
+  CC#110 that keeps Logic from dropping the bar offset was always written on channel 1. Logic's MIDI import
+  splits a file by channel, so notes on any other channel arrived as two tracks, one holding only the
+  padding, and the region readback could then check the wrong one (`timing_mismatch`). The padding now
+  uses the earliest note's channel.
 - **`export_track_midi` / `read_track_notes` accept several conductor chunks.** Logic 12.4 can start
   its "All MIDI Tracks as MIDI File" export with more than one unnamed chunk holding only tempo,
   meter, key and SMPTE metadata (5 and 8 were observed in two projects). Only the first was
