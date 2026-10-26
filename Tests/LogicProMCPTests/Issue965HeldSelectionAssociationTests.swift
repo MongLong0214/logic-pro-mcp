@@ -2224,6 +2224,37 @@ struct Issue965HeldSelectionAssociationTests {
                 "Keep the captured baseline, Saga before/after and inverse-ownership reads, and each checked scalar writer; duplicate adapter reads consume the same bounded native lifecycle")
     }
 
+    @Test("Canonical output exposes the actual forward and inverse child results without replacing its parent trace",
+          arguments: ["forward", "cancel", "ack_only"])
+    func canonicalOutputChildTracesReflectActualResults(mode: String) async throws {
+        try await FeatureFlags.withAdr005OperationTraceForTests(true) {
+            let f = try Fixture(), context = OperationTraceContext(), store = OperationTraceStore()
+            try await OperationTraceStore.$shared.withValue(store) {
+                try await OperationTraceContext.$current.withValue(context) {
+                    try await assertCanonicalPhysicalOutput(mode: mode, fixture: f)
+                }
+            }
+            let parentID = try #require(context.traceID)
+            let parent = try #require(await store.trace(parentID))
+            #expect(parent.operationID == "system.saga_execute")
+            let children = await store.recent(limit: 128).filter { trace in
+                trace.operationID == "mixer.set_output_verified" && trace.events.contains {
+                    $0.phase == .requestReceived && $0.attributes["parent_trace_id"] == parentID.rawValue
+                }
+            }
+            #expect(children.count == (mode == "cancel" ? 2 : 1), "Each actual output writer needs its own observable child")
+            for child in children {
+                #expect(child.traceID != parentID)
+                #expect(child.events.filter { $0.phase == .writeBoundaryCrossed }.count == 1)
+                #expect(child.events.contains {
+                    $0.phase == .verificationCompleted && $0.attributes["readback_state"] == (mode == "ack_only" ? "B" : "A")
+                }, "An ineffective acknowledged setter must never publish a verified A event")
+                #expect(child.events.contains { $0.phase == .resultEmitted })
+            }
+            #expect(f.routingDestinationPresses == (mode == "cancel" ? 2 : 1))
+        }
+    }
+
     @Test("An unavailable input goal cannot authorize only the supported output subset")
     func mixedInputCannotExecuteOnlyItsSupportedOutput() async throws {
         try await assertCanonicalPhysicalOutput(mode: "mixed_input")
@@ -4012,13 +4043,67 @@ struct Issue965HeldSelectionAssociationTests {
     }
 
     @Test("A No Output after-read renews a surviving source's stale label only through its original header",
-          arguments: ["refreshed", "mismatch", "missing_pair", "lost_inverse", "late_document", "changed_header", "late_population"])
+          arguments: ["refreshed", "mismatch", "missing_pair", "lost_inverse", "late_document", "changed_header", "late_population",
+                      "popup_vertical", "popup_horizontal", "popup_ack_only", "popup_foreign_bar"])
     func noOutputAfterReadRenewsSurvivingOriginalSource(fault: String) async throws {
         let f = try Fixture(), b = f.builder
         defer { try? FileManager.default.removeItem(at: f.bundle) }
         let output = b.element(1_325_001), root = b.element(1_325_002), echo = b.element(1_325_003)
         let leaf = b.element(1_325_004), parent = b.element(1_325_005)
         let submenu = b.element(1_325_006), stereo = b.element(1_325_007)
+        let nativeViewport = fault.hasPrefix("popup_")
+        let vertical = fault != "popup_horizontal"
+        let owner = b.element(1_325_020), controls = b.element(1_325_021), toolbar = b.element(1_325_022)
+        let view = b.element(1_325_023), viewRoot = b.element(1_325_024), scrollTo = b.element(1_325_025)
+        let viewSubmenu = b.element(1_325_026), viewOutput = b.element(1_325_027), viewAudio = b.element(1_325_028)
+        let axis = b.element(1_325_029), thumb = b.element(1_325_030)
+        if nativeViewport {
+            for node in [owner, controls, toolbar] { b.setRole(node, kAXGroupRole as String) }
+            b.setFrame(f.window, x: 0, y: 30, width: 1000, height: 800)
+            b.setFrame(owner, x: 0, y: 300, width: 1000, height: 530)
+            b.setFrame(f.mixer, x: 0, y: 300, width: 2000, height: 600)
+            b.setChildren(toolbar, [view]); b.setChildren(controls, [toolbar]); b.setChildren(owner, [f.mixer, controls])
+            b.setChildren(f.window, [f.rail, owner, b.element(1_965_720)])
+            for (node, role, title) in [(view, kAXMenuButtonRole, AXLocalePolicy.viewMenuBar.canonical),
+                (viewRoot, kAXMenuRole, ""), (scrollTo, kAXMenuItemRole, AXLocalePolicy.mixerScrollToMenuItem.canonical),
+                (viewSubmenu, kAXMenuRole, ""), (viewOutput, kAXMenuItemRole, AXLocalePolicy.mixerScrollToOutputsMenuItem.canonical),
+                (viewAudio, kAXMenuItemRole, AXLocalePolicy.mixerTypeFilterAudio.canonical)] {
+                b.setRole(node, role as String); b.setAttribute(node, kAXTitleAttribute as String, title)
+                b.setAttribute(node, kAXEnabledAttribute as String, true); b.setAttribute(node, kAXWindowAttribute as String, f.window)
+                b.setActionNames(node, [kAXPressAction as String, kAXCancelAction as String])
+            }
+            b.setChildren(viewOutput, []); b.setChildren(viewAudio, []); b.setChildren(viewSubmenu, [viewOutput, viewAudio])
+            b.setChildren(scrollTo, [viewSubmenu]); b.setChildren(viewRoot, [scrollTo]); b.setChildren(view, [])
+            b.setRole(axis, kAXScrollBarRole as String)
+            b.setAttribute(axis, kAXOrientationAttribute as String,
+                vertical ? kAXVerticalOrientationValue as String : kAXHorizontalOrientationValue as String)
+            b.setAttribute(axis, kAXWindowAttribute as String, f.window); b.setAttribute(axis, kAXParentAttribute as String, owner)
+            b.setAttribute(axis, kAXValueAttribute as String, NSNumber(value: 0.25))
+            b.setAttributeSettable(axis, kAXValueAttribute as String, true)
+            b.setFrame(axis, x: vertical ? 983 : 0, y: vertical ? 300 : 813,
+                width: vertical ? 17 : 1000, height: vertical ? 530 : 17)
+            b.setRole(thumb, kAXValueIndicatorRole as String); b.setAttribute(thumb, kAXWindowAttribute as String, f.window)
+            b.setFrame(thumb, x: vertical ? 984 : 75, y: vertical ? 350 : 814,
+                width: vertical ? 15 : 700, height: vertical ? 400 : 15)
+            b.setChildren(axis, [thumb]); b.setChildren(thumb, [])
+            f.routingFocusHit = { _, _ in .success(thumb) }
+            f.routingReadResult = { element, attribute in
+                if CFEqual(element, axis), attribute == kAXValueAttribute as String {
+                    return .success(b.attributeValue(axis, attribute) as? NSNumber)
+                }
+                return nil
+            }
+            for (index, strip) in f.strips.enumerated() { b.setFrame(strip, x: CGFloat(index) * 100, y: 350, width: 100, height: 300) }
+            f.routingSetter = { element, attribute, value in
+                guard CFEqual(element, axis), attribute == kAXValueAttribute as String, let number = value as? NSNumber else { return nil }
+                f.scrollWrites.append(number.doubleValue)
+                if fault != "popup_ack_only" {
+                    b.setAttribute(axis, attribute, number)
+                    for (index, strip) in f.strips.enumerated() { b.setFrame(strip, x: CGFloat(index) * 100, y: 350, width: 100, height: 300) }
+                }
+                return true
+            }
+        }
         b.setButton(output, description: "Stereo Output", help: "Output slot. Choose the channel strip output.",
                     x: 0, y: 0, width: 60, height: 20)
         b.setChildren(output, []); b.setActionNames(output, [kAXPressAction as String])
@@ -4032,12 +4117,31 @@ struct Issue965HeldSelectionAssociationTests {
         for item in [echo, stereo] { b.setAttribute(item, "AXMenuItemMarkChar", "✓") }
         b.setChildren(submenu, [stereo]); b.setChildren(parent, [submenu]); b.setChildren(root, [echo, leaf, parent])
         f.routingAction = { element, action in
+            if nativeViewport {
+                if CFEqual(element, view), action == kAXPressAction as String { b.setChildren(view, [viewRoot]); return true }
+                if CFEqual(element, viewRoot), action == kAXCancelAction as String { b.setChildren(view, []); return true }
+                if (CFEqual(element, viewOutput) || CFEqual(element, viewAudio)), action == kAXPressAction as String {
+                    b.setChildren(view, [])
+                    b.setAttribute(axis, kAXValueAttribute as String, NSNumber(value: CFEqual(element, viewAudio) ? 0 : 1))
+                    for (index, strip) in f.strips.enumerated() {
+                        b.setFrame(strip, x: CGFloat(index) * 100 - (vertical ? 0 : 150), y: vertical ? 200 : 350, width: 100, height: 300)
+                    }
+                    return true
+                }
+            }
             guard action == kAXPressAction as String else { Issue.record("No cleanup fallback is authorized"); return false }
             if CFEqual(element, output) { b.setChildren(f.mixer, f.strips + [root]); return true }
             guard CFEqual(element, leaf) else { Issue.record("Only the original output and unique destination may be pressed"); return false }
             f.routingDestinationPresses += 1
             b.setChildren(f.mixer, f.strips)
             b.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.strips[1])
+            if nativeViewport {
+                b.setAttribute(axis, kAXValueAttribute as String, NSNumber(value: 0.75))
+                for (index, strip) in f.strips.enumerated() {
+                    b.setFrame(strip, x: CGFloat(index) * 100 - (vertical ? 0 : 150), y: vertical ? 200 : 350, width: 100, height: 300)
+                }
+                if fault == "popup_foreign_bar" { b.setAttribute(axis, kAXParentAttribute as String, controls) }
+            }
             // The host committed the change, but this exact surviving slot
             // continues to report its old label until original-header acquisition.
             if fault == "changed_header" {
@@ -4077,7 +4181,13 @@ struct Issue965HeldSelectionAssociationTests {
             let pairs = await observation.observe(referenceIsCurrent: { true }, stoppingWhen: { false }, allHeldHeaders: true)
             guard let pair = pairs.first(where: { CFEqual($0.track.header, f.headers[0]) }), observation.effects.restoration == "restored"
             else { Issue.record("Original source requires its actual restored header association"); return toolTextResult(.error("fixture")) }
-            b.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.window)
+            if nativeViewport {
+                guard let geometry = observation.observedMixerViewportGeometry(),
+                      (vertical ? geometry.vertical : geometry.horizontal)?.value == 0.25 else {
+                    Issue.record("Reach the actual observed original native axis before the popup"); return toolTextResult(.error("fixture"))
+                }
+            }
+            b.setAttribute(f.app, kAXFocusedUIElementAttribute as String, nativeViewport ? f.strips[1] : f.window)
             return await AXMixerStripBinding.$current.withValue(pair.strip) {
                 await AXMixerStripBinding.$outputAssociation.withValue(fault == "missing_pair" ? nil : pair) {
                     toolTextResult(await AccessibilityChannel.setOutputVerified(params: ["index": "1", "destination": "no_output", "expected_current": "stereo_output"],
@@ -4086,13 +4196,27 @@ struct Issue965HeldSelectionAssociationTests {
             }
         }
         let body = try #require(sharedJSONObject(sharedToolText(result)))
-        #expect(body["state"] as? String == (fault == "refreshed" ? "A" : "B"), "Actual writer receipt: \(body)")
+        let succeeds = ["refreshed", "popup_vertical", "popup_horizontal"].contains(fault)
+        #expect(body["state"] as? String == (succeeds ? "A" : "B"), "Actual writer receipt: \(body)")
         let attempted = try #require(body["write_attempted"] as? Bool); #expect(attempted)
         #expect(f.routingDestinationPresses == 1, "After-read acquisition must never retry the setter")
-        if fault == "refreshed" {
+        if succeeds {
             #expect(body["after"] as? [String: String] == ["kind": "no_output"])
             #expect(f.selections == [1, 0, 1, 0])
             let reread = try #require(body["reference_reread_required"] as? Bool); #expect(reread)
+        }
+        if nativeViewport {
+            let effects = try #require(body["ui_effects"] as? [String: Any])
+            #expect(effects["restoration"] as? String == (succeeds ? "restored" : "not_restored"))
+            if succeeds {
+                #expect((b.attributeValue(axis, kAXValueAttribute as String) as? NSNumber)?.doubleValue == 0.25)
+                #expect(f.strips.enumerated().allSatisfy { index, strip in
+                    AXHelpers.getPosition(strip, runtime: b.makeAXRuntime()) == CGPoint(x: CGFloat(index) * 100, y: 350)
+                })
+                #expect(f.scrollWrites == [0.25], "Reach the actual native inverse, not an acknowledged position echo")
+            }
+            if fault == "popup_foreign_bar" { #expect(f.scrollWrites.isEmpty, "Lost native control custody prohibits cleanup") }
+            if fault == "popup_ack_only" { #expect(f.scrollWrites == [0.25], "Reach the acknowledged but ineffective inverse") }
         }
         if ["lost_inverse", "late_document", "changed_header", "late_population"].contains(fault) { #expect(f.routingLateScopeInjected) }
     }

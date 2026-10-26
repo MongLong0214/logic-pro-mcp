@@ -676,8 +676,8 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
         // carrying the parent saga trace ID — without it a child's trace
         // start would clobber the parent's registration in the shared box,
         // and child traces would be uncorrelated orphans.
-        let parentTraceID = OperationTraceContext.current?.traceID
         let parent = OperationTraceContext.current
+        let parentTraceID = parent?.traceID ?? parent?.parentTraceID
         let child: OperationTraceContext
         if approvedSessionRepair == nil && sendRemoval == nil && sendMode == nil && sendLevel == nil && inputBus == nil && step.operationID != .pluginsSetParamVerified && step.operationID != .pluginsSetEQBandVerified {
             child = OperationTraceContext(parentTraceID: parentTraceID)
@@ -785,7 +785,9 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
         case .tracksSortVerified where approvedSessionRepair?.supports(step) == true:
             response = await approvedSessionRepair!.performSort(step, router: router)
         case .mixerSetOutputVerified where approvedSessionRepair?.supports(step) == true:
-            response = await approvedSessionRepair!.performOutput(step, router: router)
+            let traceID = await MixerDispatcher.startTraceIfEnabled(command: "set_output_verified")
+            let output = await approvedSessionRepair!.performOutput(step, router: router)
+            response = await MixerDispatcher.finalizeTrace(output, traceID: traceID)
         case .tracksRename:
             response = await TrackDispatcher.handle(
                 command: "rename",
