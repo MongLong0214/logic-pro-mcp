@@ -549,6 +549,40 @@ struct SemanticOracleCensusTests {
         )
     }
 
+    /// #291 — retained native evidence includes a Bus 1 -> Stereo Output State-A
+    /// write whose same-strip output readback equals the destination and whose
+    /// Mixer population stayed at 38. The handler also has an honest no-write
+    /// State-A branch when that destination is already present; pin both shapes.
+    @Test func mixerSetOutputVerifiedStateAContractIsPinnedPostClosure() throws {
+        #expect(SemanticOracleTable.postClosureMutatingOperationIDs.contains(.mixerSetOutputVerified))
+        #expect(SemanticOracleTable.structurallyUnverifiedMutatingOperationIDs[.mixerSetOutputVerified] == nil)
+
+        let oracle = try #require(SemanticOracleTable.byOperationID[.mixerSetOutputVerified])
+        let liveWrite = #"{"success":true,"verified":true,"state":"A","operation":"mixer.set_output_verified","mixer_strip_index":12,"destination":{"kind":"stereo_output"},"before":{"kind":"bus","number":1},"after":{"kind":"stereo_output"},"changed":true,"write_attempted":true,"strip_count_before":38,"strip_count_after":38,"menu_path":["출력","Stereo Output"],"popup_menu_state":"closed","verify_source":"ax_output_slot"}"#
+        let liveAccepted = try #require(oracle.evaluate(
+            responseData: Data(liveWrite.utf8), readbackData: Data("{}".utf8)
+        ))
+        #expect(liveAccepted)
+
+        let noWrite = #"{"success":true,"verified":true,"state":"A","operation":"mixer.set_output_verified","track":0,"destination":{"kind":"bus","number":1},"before":{"kind":"bus","number":1},"after":{"kind":"bus","number":1},"changed":false,"write_attempted":false,"strip_count_before":3,"verify_source":"ax_output_slot"}"#
+        let noWriteAccepted = try #require(oracle.evaluate(
+            responseData: Data(noWrite.utf8), readbackData: Data("{}".utf8)
+        ))
+        #expect(noWriteAccepted)
+
+        for forged in [
+            liveWrite.replacingOccurrences(of: "ax_output_slot", with: "menu_item_pressed"),
+            liveWrite.replacingOccurrences(of: "\"strip_count_after\":38", with: "\"strip_count_after\":39"),
+            liveWrite.replacingOccurrences(of: "\"after\":{\"kind\":\"stereo_output\"}", with: "\"after\":{\"kind\":\"bus\",\"number\":1}"),
+            liveWrite.replacingOccurrences(of: "\"before\":{\"kind\":\"bus\",\"number\":1}", with: "\"before\":{\"kind\":\"stereo_output\"}"),
+        ] {
+            let accepted = try #require(oracle.evaluate(
+                responseData: Data(forged.utf8), readbackData: Data("{}".utf8)
+            ))
+            #expect(!accepted)
+        }
+    }
+
     /// Soundness of the increment: every id in B1..B4 is a REAL `.mutating`,
     /// non-`.unsupported` registry spec — a read-only id or a typo cannot
     /// masquerade as mutating coverage.
