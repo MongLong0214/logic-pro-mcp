@@ -69,6 +69,9 @@ enum OracleConstraint: Sendable {
     case valueEquals(key: String, expected: JSONPrimitive)
     /// Environment-dependent number confined to a semantically legal domain.
     case numericRange(key: String, min: Double, max: Double)
+    /// Environment-dependent number with a real lower bound and no invented
+    /// upper bound. Booleans, missing values and non-numbers fail closed.
+    case numericMinimum(key: String, min: Double)
     /// Field must be one of a closed set of legal tokens.
     case enumMember(key: String, allowed: [String])
     /// Field must be an array with at least one element.
@@ -107,6 +110,10 @@ enum OracleConstraint: Sendable {
     /// value is present. Bool-vs-number safe: a requested `true` is not
     /// satisfied by an observed `1`.
     case fieldsEqual(keyA: String, keyB: String)
+    /// Two key paths WITHIN THE SAME payload must resolve to different leaf
+    /// values. Used when the independent before/after witness is meaningful only
+    /// if it changed, such as a freshly redrawn MCU bank window.
+    case fieldsDiffer(keyA: String, keyB: String)
     /// Two actual strings agree byte-for-byte, for domains where canonical Unicode equivalence
     /// is not identity. Missing/nonstring values refuse; generic `fieldsEqual` remains unchanged.
     case utf8StringsEqual(keyA: String, keyB: String)
@@ -166,6 +173,7 @@ enum OracleConstraint: Sendable {
         switch self {
         case .valueEquals(let key, _),
              .numericRange(let key, _, _),
+             .numericMinimum(let key, _),
              .enumMember(let key, _),
              .nonEmptyArray(let key),
              .typedField(let key, _),
@@ -174,6 +182,7 @@ enum OracleConstraint: Sendable {
              .lengthPrefixedIdentityAtIndexEquals(let key, _, _, _),
              .readbackArrayExcludesResponseIdentity(let key, _, _),
              .fieldsEqual(let key, _),
+             .fieldsDiffer(let key, _),
              .utf8StringsEqual(let key, _),
              .crossCheck(let key, _),
              .numericNear(let key, _, _),
@@ -196,10 +205,10 @@ enum OracleConstraint: Sendable {
     /// oracle carrying one is never a checkbox oracle.
     var isValueConstraint: Bool {
         switch self {
-        case .valueEquals, .numericRange, .enumMember, .lengthPrefixedEntryCountEquals,
+        case .valueEquals, .numericRange, .numericMinimum, .enumMember, .lengthPrefixedEntryCountEquals,
              .lengthPrefixedEntriesExclude, .lengthPrefixedIdentityAtIndexEquals,
              .readbackArrayExcludesResponseIdentity, .fieldsEqual, .utf8StringsEqual, .crossCheck, .numericNear,
-             .booleanFlipped, .numericEqualsOffset:
+             .fieldsDiffer, .booleanFlipped, .numericEqualsOffset:
             return true
         case let .anyOf(alternatives):
             return alternatives.allSatisfy { branch in
@@ -224,6 +233,10 @@ enum OracleConstraint: Sendable {
             guard let value = JSONPath.resolve(root, keyPath: key),
                   let number = JSONInspector.number(of: value) else { return false }
             return number >= min && number <= max
+        case .numericMinimum(let key, let min):
+            guard let value = JSONPath.resolve(root, keyPath: key),
+                  let number = JSONInspector.number(of: value) else { return false }
+            return number >= min
         case .enumMember(let key, let allowed):
             guard let value = JSONPath.resolve(root, keyPath: key),
                   let token = JSONInspector.enumToken(of: value) else { return false }
@@ -297,6 +310,10 @@ enum OracleConstraint: Sendable {
             guard let a = JSONPath.resolve(root, keyPath: keyA),
                   let b = JSONPath.resolve(root, keyPath: keyB) else { return false }
             return JSONInspector.leavesEqual(a, b)
+        case .fieldsDiffer(let keyA, let keyB):
+            guard let a = JSONPath.resolve(root, keyPath: keyA),
+                  let b = JSONPath.resolve(root, keyPath: keyB) else { return false }
+            return !JSONInspector.leavesEqual(a, b)
         case .utf8StringsEqual(let keyA, let keyB):
             guard let a = JSONPath.resolve(root, keyPath: keyA) as? String,
                   let b = JSONPath.resolve(root, keyPath: keyB) as? String else { return false }
