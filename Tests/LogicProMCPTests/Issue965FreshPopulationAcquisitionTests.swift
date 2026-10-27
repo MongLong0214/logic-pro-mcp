@@ -5225,8 +5225,10 @@ struct Issue965FreshPopulationAcquisitionTests {
         encoder.outputFormatting = [.sortedKeys]
         #expect(try encoder.encode(normalizedCapture) == encoder.encode(normalizedLater),
             "the same active Solo makes only non-true Mute/Solo animation frames unread")
-        #expect(normalizedCapture[1].isSoloed == true)
-        #expect(normalizedCapture[2].isMuted == true,
+        let retainedSolo = try #require(normalizedCapture[1].isSoloed as Bool?)
+        #expect(retainedSolo)
+        let retainedMute = try #require(normalizedCapture[2].isMuted as Bool?)
+        #expect(retainedMute,
             "explicit on readings remain protected")
 
         var movedSolo = later
@@ -5239,7 +5241,9 @@ struct Issue965FreshPopulationAcquisitionTests {
         var noSolo = captured
         noSolo[1].isSoloed = false
         let exactNoSolo = try #require(AccessibilityChannel.soloPresentationSafeTrackStates(noSolo))
-        #expect(exactNoSolo[0].isMuted == false && exactNoSolo[0].isSoloed == false,
+        let exactMute = try #require(exactNoSolo[0].isMuted as Bool?)
+        let exactSolo = try #require(exactNoSolo[0].isSoloed as Bool?)
+        #expect(!exactMute && !exactSolo,
             "without an active Solo the ordinary exact toggle readings remain intact")
     }
 
@@ -5290,7 +5294,8 @@ struct Issue965FreshPopulationAcquisitionTests {
             #expect(muteReads.count == 2, "the first exact physical bookend should stabilize")
             let track = try #require(population.tracks?.first)
             #expect(track.isMuted == nil, "a Solo-contaminated non-true Mute is not published as off")
-            #expect(track.isSoloed == true)
+            let soloed = try #require(track.isSoloed as Bool?)
+            #expect(soloed)
         } else {
             #expect(!population.stable,
                 "without corroborated Solo, or when true Mute changes, the strict bookend must still refuse")
@@ -5346,7 +5351,10 @@ struct Issue965FreshPopulationAcquisitionTests {
             #expect(population.stable)
             #expect(soloReads.count == 2)
             let tracks = try #require(population.tracks)
-            #expect(tracks.count == 2 && tracks[0].isSoloed == true)
+            #expect(tracks.count == 2)
+            let first = try #require(tracks.first)
+            let soloed = try #require(first.isSoloed as Bool?)
+            #expect(soloed)
             #expect(tracks[1].isSoloed == nil,
                 "an inactive Solo animation frame is unread, never a published false")
         } else {

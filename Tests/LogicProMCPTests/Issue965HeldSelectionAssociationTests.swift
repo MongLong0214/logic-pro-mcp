@@ -3782,11 +3782,12 @@ struct Issue965HeldSelectionAssociationTests {
                                 params: ["destination": before.value], expectedInverse: step.expectedInverse)
                             let retained = try #require(await approval.readState(inverse),
                                 "Owned viewport recovery must make the retained inverse readable again")
-                            #expect(retained.value == after.value)
+                            #expect(retained.value == after.value) // test-integrity:live
                             let restored = try #require(sharedJSONObject(sharedToolText(
                                 await approval.performOutput(inverse, router: router))))
                             #expect(restored["state"] as? String == "A")
-                            #expect(restored["write_attempted"] as? Bool == true)
+                            let restorationAttempted = try #require(restored["write_attempted"] as? Bool)
+                            #expect(restorationAttempted)
                             return
                         }
 
@@ -3808,7 +3809,8 @@ struct Issue965HeldSelectionAssociationTests {
                                 : "A changed checked Output must revoke inverse ownership even when its slot caption is unchanged")
                         let restored = try #require(sharedJSONObject(sharedToolText(
                             await approval.performOutput(inverse, router: router))))
-                        #expect(restored["write_attempted"] as? Bool == false,
+                        let restorationAttempted = try #require(restored["write_attempted"] as? Bool)
+                        #expect(!restorationAttempted,
                             lateCheckedReceiverInputChange
                                 ? "The Bus output inverse must not write after its checked receiver changed"
                                 : "The output inverse must not write after its checked Output changed")
@@ -13184,7 +13186,8 @@ struct Issue965HeldSelectionAssociationTests {
             kAXFocusedUIElementAttribute as String, runtime: f.builder.makeAXRuntime()))
         #expect(CFEqual(focus, f.rail))
         let presentation = try #require(population.presentationBinding)
-        #expect(presentation.focus.map { CFEqual($0, f.rail) } == true,
+        let presentationFocus = try #require(presentation.focus)
+        #expect(CFEqual(presentationFocus, f.rail),
             "The returned presentation must hold the restored original rail focus")
     }
 
