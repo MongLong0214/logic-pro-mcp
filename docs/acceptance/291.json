@@ -1,0 +1,95 @@
+{
+ "format": "lpm-acceptance/1",
+ "issue": 291,
+ "surface": "mixer.routing",
+ "sources": [
+  {
+   "doc": "issue:291",
+   "sha": null,
+   "quote": "Endpoint/edge data and coverage are truthful; occupancy/checkmarks/receiver-only data cannot impersonate source-edge proof."
+  },
+  {
+   "doc": "issue:291",
+   "sha": null,
+   "quote": "Physical and existing-bus output, send/input/removal are reachable and independently verified for their stated scope."
+  }
+ ],
+ "fixture": {
+  "id": "lpm-locale-campaign-mixer",
+  "note": "The 19-track lpm-locale-campaign project with its 21-strip Mixer shown, every Send empty, strip 1 reading Input 1, and the 19 track strips reading Stereo Output. The lifecycle verifies that state before each row and resets from the saved fixture after any miss."
+ },
+ "locales": "all",
+ "rows": [
+  {
+   "id": "physical-output-effect-and-undo",
+   "criterion": 1,
+   "steps": [
+    {"as": "as_found", "probe": {"name": "routing_slots", "args": {}}},
+    {"as": "baseline_reply", "call": {"tool": "logic_mixer", "command": "set_output_verified", "params": {"track": 1, "destination": {"kind": "stereo_output"}, "expected_current": {"kind": "stereo_output"}}}},
+    {"as": "pre", "probe": {"name": "routing_slots", "args": {}}},
+    {"as": "reply", "call": {"tool": "logic_mixer", "command": "set_output_verified", "params": {"track": 1, "destination": {"kind": "physical", "ports": [3, 4]}, "expected_current": {"kind": "stereo_output"}}}},
+    {"as": "post", "probe": {"name": "routing_slots", "args": {}}}
+   ],
+   "operation": "reply",
+   "expect": [
+    {"path": "pre.outputs[1].kind", "op": "eq", "value": "stereo_output", "invariant": true},
+    {"path": "reply.write_attempted", "op": "eq", "value": true},
+    {"path": "reply.changed", "op": "eq", "value": true},
+    {"path": "reply.after.kind", "op": "eq", "value": "physical"},
+    {"path": "reply.after.ports", "op": "eq", "value": [3, 4]},
+    {"path": "post.outputs[1].kind", "op": "eq", "value": "physical"},
+    {"path": "post.outputs[1].ports", "op": "eq", "value": [3, 4]}
+   ],
+   "counterexample": [
+    {"observation": "baseline_reply", "replaces": "reply", "must_fail": [1, 2, 3, 4]},
+    {"observation": "pre", "replaces": "post", "must_fail": [5, 6]}
+   ],
+   "restore": [
+    {"as": "undo", "call": {"tool": "logic_edit", "command": "undo", "params": {}}},
+    {"as": "restored", "wait": {"probe": {"name": "routing_slots", "args": {}}, "until": {"path": "outputs[1].kind", "op": "eq", "value": "stereo_output"}, "timeout_ms": 60000, "interval_ms": 500}}
+   ],
+   "restore_expect": [
+    {"path": "restored.strip_count", "op": "eq", "ref": {"obs": "pre.strip_count"}},
+    {"path": "restored.occupied_strips", "op": "eq", "ref": {"obs": "pre.occupied_strips"}},
+    {"path": "restored.outputs", "op": "eq", "ref": {"obs": "pre.outputs"}}
+   ],
+   "independence": ["as_found", "pre", "post"]
+  },
+  {
+   "id": "send-occupancy-is-not-an-edge",
+   "criterion": 0,
+   "steps": [
+    {"as": "baseline_reply", "call": {"tool": "logic_project", "command": "inspect_session", "params": {"scope": "whole_project", "domains": ["strips", "routing"]}}},
+    {"as": "as_found", "probe": {"name": "routing_slots", "args": {}}},
+    {"as": "mutate", "probe": {"name": "routing_send_assign", "args": {"strip": 1}}},
+    {"as": "pre", "wait": {"probe": {"name": "routing_slots", "args": {}}, "until": {"path": "occupied_strips", "op": "eq", "value": [1]}, "timeout_ms": 60000, "interval_ms": 500}},
+    {"as": "reply", "call": {"tool": "logic_project", "command": "inspect_session", "params": {"scope": "whole_project", "domains": ["strips", "routing"]}}},
+    {"as": "post", "probe": {"name": "routing_slots", "args": {}}}
+   ],
+   "operation": "reply",
+   "expect": [
+    {"path": "pre.occupied_strips", "op": "eq", "value": [1], "invariant": true},
+    {"path": "reply.strips.witnesses.count", "op": "eq", "value": 22},
+    {"path": "reply.strips.rows[strip_index=1].send_slots[ordinal=1].state", "op": "eq", "value": "occupied_unknown_destination"},
+    {"path": "reply.routing.coverage", "op": "eq", "value": "partial"},
+    {"path": "reply.routing.graph.sends.state", "op": "eq", "value": "partial"},
+    {"path": "post.occupied_strips", "op": "eq", "value": [1]},
+    {"path": "post.strip_count", "op": "eq", "value": 22}
+   ],
+   "counterexample": [
+    {"observation": "baseline_reply", "replaces": "reply", "must_fail": [1]},
+    {"observation": "as_found", "replaces": "post", "must_fail": [5, 6]}
+   ],
+   "restore": [
+    {"as": "undo", "call": {"tool": "logic_edit", "command": "undo", "params": {}}},
+    {"as": "restored", "wait": {"probe": {"name": "routing_slots", "args": {}}, "until": {"path": "strip_count", "op": "eq", "value": 21}, "timeout_ms": 60000, "interval_ms": 500}}
+   ],
+   "restore_expect": [
+    {"path": "restored.strip_count", "op": "eq", "ref": {"obs": "as_found.strip_count"}},
+    {"path": "restored.occupied_strips", "op": "eq", "ref": {"obs": "as_found.occupied_strips"}},
+    {"path": "restored.outputs", "op": "eq", "ref": {"obs": "as_found.outputs"}}
+   ],
+   "independence": ["as_found", "mutate", "pre", "post"]
+  }
+ ]
+}

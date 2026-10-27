@@ -9,6 +9,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ## [Unreleased]
 
 ### Added
+- **The fixed verifier can now express the two bounded #291 routing pilots.**
+  `docs/acceptance/291.json` covers a verified physical-output change and restore, plus the
+  requirement that an occupied Send remain partial routing evidence rather than an invented
+  source edge. The live lifecycle gates the declared Mixer strip count; independent probes read
+  output classifications and Send occupancy and keep their raw walks as sidecars. These rows are
+  admitted and mutation-tested offline; they are not a live ten-locale PASS and do not close
+  #291 or #1028 by themselves.
 - **`logic_mixer set_output_verified`: one strip's output to one exact destination, read back
   from the same strip (#291 R2).** `destination` is `{kind:"bus", number}`, `{kind:"physical",
   ports:[a,b]}` or `{kind:"stereo_output"}`; the strip is `track` or `target_ref`;

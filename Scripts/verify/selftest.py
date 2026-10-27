@@ -1664,8 +1664,7 @@ def probes_fixture_path() -> str:
 
 
 def check_probes_implemented(case: dict, where: dict):
-    """Every declared probe has an implementation in live/spec_probes.py taking the runner's ctx
-    and exactly the declared args, and the #1020 spec uses none that lacks one."""
+    """Every declared probe is implemented, and every committed acceptance spec uses only those."""
     import inspect
     import probes
     from live import spec_probes
@@ -1676,9 +1675,16 @@ def check_probes_implemented(case: dict, where: dict):
         params = list(inspect.signature(fn).parameters)
         if params != ["ctx"] + list(declared["args"]):
             return f"probe {name!r} takes {params}, not ctx and its declared args {list(declared['args'])}"
-    with open(os.path.join(ROOT, "docs", "acceptance", "1020.json"), encoding="utf-8") as handle:
-        missing = probes.unimplemented(json.load(handle))
-    return f"docs/acceptance/1020.json: {missing}" if missing else None
+    acceptance = os.path.join(ROOT, "docs", "acceptance")
+    for name in sorted(os.listdir(acceptance)):
+        if not name.endswith(".json"):
+            continue
+        path = os.path.join(acceptance, name)
+        with open(path, encoding="utf-8") as handle:
+            missing = probes.unimplemented(json.load(handle))
+        if missing:
+            return f"docs/acceptance/{name}: {missing}"
+    return None
 
 
 def check_live_fixtures(case: dict, where: dict):

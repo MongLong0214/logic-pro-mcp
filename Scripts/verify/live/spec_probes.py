@@ -20,10 +20,12 @@ unreadable, never read as the tracks it happens to show.
 """
 
 import json
+import re
 
 import evidence_doc as E
 
-from . import fixture
+from . import controls, fixture
+from . import locale as live_locale
 from . import probes as live_probes
 
 MCU_STATE = "logic://mcu/state"
@@ -137,3 +139,103 @@ def mcu_upper_row(ctx: dict) -> str:
     except Exception as exc:  # noqa: BLE001 - any failed read is this probe's unreadable
         raise Unreadable(f"mcu_upper_row: {exc}") from exc
     return _text(mcu_upper_row_of(text))
+
+
+# ---------------------------------------------------------------------------------------------
+# #291 routing pilot
+# ---------------------------------------------------------------------------------------------
+
+ROUTING_ROWS = {
+    "stereo_output": ("Stereo Output", "strings:Logic"),
+    "no_output": ("No Output", "strings:MAMixer"),
+    "bus": ("Bus", "strings:Logic"),
+    # The runtime physical pair is built from the Mixer's Output row. In German this is
+    # `Ausgang`; Logic.framework's historical Output#mix row is `Output` and is not substituted.
+    "physical_output": ("Output", "strings:MAMixer"),
+}
+
+
+def _routing_rows(lproj: str) -> dict:
+    rows = {name: live_locale.apple_row(lproj, key, source=source)
+            for name, (key, source) in ROUTING_ROWS.items()}
+    unread = [name for name, row in rows.items() if not row.get("readable")]
+    if unread:
+        raise Unreadable(f"routing_slots: Apple's rows did not read: {', '.join(unread)}")
+    return {name: row["value"] for name, row in rows.items()}
+
+
+def _assignment(label: str, rows: dict) -> dict:
+    if label == rows["stereo_output"]:
+        return {"kind": "stereo_output"}
+    if label == rows["no_output"]:
+        return {"kind": "no_output"}
+    bus = re.fullmatch(re.escape(rows["bus"]) + r"\s*([0-9]+)", label, re.IGNORECASE)
+    if bus and int(bus.group(1)) > 0:
+        return {"kind": "bus", "number": int(bus.group(1))}
+    physical = re.fullmatch(
+        re.escape(rows["physical_output"]) + r"\s*([0-9]+)\s*-\s*([0-9]+)",
+        label, re.IGNORECASE)
+    if physical:
+        first, last = int(physical.group(1)), int(physical.group(2))
+        if first > 0 and last > first:
+            return {"kind": "physical", "ports": [first, last]}
+    return {"kind": "unknown", "label": label}
+
+
+def routing_slots_of(run: dict, rows: dict) -> dict:
+    """The compact independent value acceptance rows consume from one routing_slots_ax walk."""
+    observation = (run or {}).get("observation") or {}
+    if not observation.get("readable") or not observation.get("mixer_found"):
+        raise Unreadable("routing_slots: the Mixer was not read")
+    failures = observation.get("read_failures")
+    if failures != 0:
+        raise Unreadable(f"routing_slots: the Mixer walk has {failures!r} read failure(s)")
+    strips = observation.get("strips")
+    if not isinstance(strips, list) or not strips:
+        raise Unreadable("routing_slots: the Mixer walk has no strip list")
+    outputs, send_counts, occupied = [], [], []
+    for index, strip in enumerate(strips):
+        if not isinstance(strip, dict):
+            raise Unreadable(f"routing_slots: strip {index} is not an object")
+        slots = strip.get("sends")
+        if not isinstance(slots, list) or any(not isinstance(slot, dict)
+                                               or not isinstance(slot.get("occupied"), bool)
+                                               for slot in slots):
+            raise Unreadable(f"routing_slots: strip {index}'s Send occupancy did not read")
+        send_counts.append(len(slots))
+        if any(slot["occupied"] for slot in slots):
+            occupied.append(index)
+        found = strip.get("outputs")
+        if not isinstance(found, list) or len(found) > 1:
+            raise Unreadable(f"routing_slots: strip {index} has no exact output-slot cardinality")
+        if not found:
+            outputs.append(None)
+            continue
+        label = found[0].get("description") if isinstance(found[0], dict) else None
+        if not isinstance(label, str) or not label:
+            raise Unreadable(f"routing_slots: strip {index}'s output description did not read")
+        outputs.append(_assignment(label, rows))
+    return {"strip_count": len(strips), "occupied_strips": occupied,
+            "send_counts": send_counts, "outputs": outputs}
+
+
+def routing_slots(ctx: dict) -> str:
+    run = live_probes.run("routing_slots_ax", {"lproj": ctx["lproj"]})
+    data = json.dumps(run, ensure_ascii=False, sort_keys=True, default=repr).encode("utf-8")
+    return _text({**routing_slots_of(run, _routing_rows(ctx["lproj"])),
+                  "walk_sha256": ctx["life"].sidecar(data)})
+
+
+def routing_send_assign(ctx: dict, strip: int) -> str:
+    fx = fixture.FIXTURES[ctx["decl"]["live"]]
+    if strip != fx.get("input_strip"):
+        raise Unreadable(f"routing_send_assign: strip {strip} is not the fixture's declared input strip")
+    record = controls.select_send_bus(ctx["lproj"], strip)
+    selected = record.get("selected")
+    # AXPress may answer kAXErrorCannotComplete even though the menu/effect appears. The raw
+    # statuses stay in the sidecar; the next independent routing_slots wait is effect authority.
+    if not isinstance(selected, str) or not selected or record.get("cause") is not None:
+        raise Unreadable(f"routing_send_assign: the Send was not selected: {record.get('cause') or record!r}")
+    data = json.dumps(record, ensure_ascii=False, sort_keys=True, default=repr).encode("utf-8")
+    return _text({"strip": strip, "selected": selected,
+                  "record_sha256": ctx["life"].sidecar(data)})

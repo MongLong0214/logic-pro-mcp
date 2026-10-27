@@ -47,6 +47,12 @@ SETUPS = {
         "ready": "mcu",
         "gate": ["fingerprint", "mcu_upper_row_is_baseline"],
     },
+    "lpm-locale-campaign-mixer": {
+        "live": "locale_campaign_mixer",
+        "server_env": {},
+        "ready": None,
+        "gate": ["fingerprint"],
+    },
     # The self-test's spec fixtures (fixtures/spec-*.json). Only FakeLifecycle drives them.
     "selftest-two-tracks": {
         "live": None,
@@ -86,6 +92,10 @@ def _fingerprint_problems(reading: dict) -> list:
     if fingerprint["track_count"] != declared.get("track_count"):
         return [f"{fingerprint['track_count']} tracks, declared {declared.get('track_count')}"]
     out = []
+    if (declared.get("mixer_strips") is not None
+            and fingerprint.get("mixer_strips") != declared["mixer_strips"]):
+        out.append(f"{fingerprint.get('mixer_strips')} Mixer strips, declared "
+                   f"{declared['mixer_strips']}")
     for i, (name, wanted) in enumerate(zip(fingerprint.get("names") or [], declared.get("names") or [])):
         if name != wanted:
             out.append(f"track {i} is named {name!r}, declared {wanted!r}")

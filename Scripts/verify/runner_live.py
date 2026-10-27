@@ -152,12 +152,17 @@ class McpSession(runner.Session):
 # the gate's reading
 # ---------------------------------------------------------------------------------------------
 
-def gate_reading_of(fx: dict, flags: dict, upper_row) -> dict:
+def gate_reading_of(fx: dict, flags: dict, upper_row, mixer=None) -> dict:
     """The reading setups.gate_problems judges, from one track_flags_ax probe output, the
     live/fixture.py declaration `fx` it is compared with, and an upper-row reading (or None)."""
     observation = flags.get("observation") or {}
-    reading = {"declared": {"track_count": fx["track_count"], "names": list(fx["names"])},
-               "fingerprint": fixture.fingerprint_of(observation), "upper_row": upper_row}
+    fingerprint = fixture.fingerprint_of(observation)
+    mixer_observation = (mixer or {}).get("observation") or {}
+    if mixer_observation.get("readable") and mixer_observation.get("mixer_found"):
+        fingerprint["mixer_strips"] = len(mixer_observation.get("strips") or [])
+    reading = {"declared": {"track_count": fx["track_count"], "names": list(fx["names"]),
+                            "mixer_strips": fx["mixer_strips"]},
+               "fingerprint": fingerprint, "upper_row": upper_row}
     if not observation.get("readable"):
         reading["cause"] = observation.get("cause") or flags.get("cause") or "track_flags_ax did not read"
     return reading
@@ -241,9 +246,6 @@ class LiveLifecycle(runner.Lifecycle):
         if os.path.realpath(fx["path"]) != os.path.realpath(live_locale.FIXTURE):
             out.append(f"fixture {decl['id']!r} is {fx['path']}, but every locale switch reopens "
                        f"{live_locale.FIXTURE}")
-        if fx["mixer_strips"] is not None:
-            out.append(f"fixture {decl['id']!r} needs the Mixer shown, which neither a switch nor "
-                       f"the gate does")
         if decl.get("ready") not in (None, "mcu"):
             out.append(f"fixture {decl['id']!r} waits on {decl.get('ready')!r}; this lifecycle "
                        f"knows \"mcu\" and none")
@@ -253,7 +255,8 @@ class LiveLifecycle(runner.Lifecycle):
         decl = ctx["decl"]
         record = fixture.read(decl["live"], ctx["lproj"])
         upper_row = self._upper_row(ctx) if "mcu_upper_row_is_baseline" in decl["gate"] else None
-        reading = gate_reading_of(fixture.FIXTURES[decl["live"]], record["track_flags"], upper_row)
+        reading = gate_reading_of(fixture.FIXTURES[decl["live"]], record["track_flags"], upper_row,
+                                  record.get("mixer"))
         if upper_row is not None:
             reading["passing_message"] = self._passing_message(ctx["lproj"])
         data = json.dumps(record["track_flags"], ensure_ascii=False, sort_keys=True, default=repr)
