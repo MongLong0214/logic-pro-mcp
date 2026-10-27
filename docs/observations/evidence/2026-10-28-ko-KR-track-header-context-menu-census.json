@@ -1,0 +1,106 @@
+{
+  "schema": "logic_pro_mcp_ax_menu_census.v1",
+  "date": "2026-10-28",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "project": {
+    "window": "965-flat-native-20261013 - 트랙",
+    "url": "file:///Users/isaac/lpm-evidence/965-flat-native-20261013.logicx/",
+    "selected_track": "Audio 13"
+  },
+  "method": {
+    "opener": "right-click the already-selected Arrange track-header AXGroup",
+    "enumeration": "complete AX tree beneath the resulting owned AXMenu, including every exposed submenu",
+    "dismissal": "the root owned menu's exposed Cancel accessibility action",
+    "leaf_actions_pressed": 0,
+    "keyboard_events_sent": 0,
+    "drag_events_sent": 0
+  },
+  "census": {
+    "menu_containers": 11,
+    "menu_items": 102,
+    "disabled_items": 10,
+    "top_level_items": 24,
+    "top_level_titles": [
+      "트랙 다시 할당",
+      "새로운 오디오 트랙",
+      "새로운 소프트웨어 악기 트랙",
+      "새로운 Session Player SI 트랙…",
+      "새로운 외부 MIDI 트랙",
+      "설정을 복제한 새로운 트랙",
+      "설정 및 콘텐츠를 복제한 새로운 트랙",
+      "트랙 이름 변경",
+      "트랙 삭제",
+      "사용하지 않는 트랙 삭제",
+      "Track Stack 생성…",
+      "스택 평탄화",
+      "폴더 스택을 서밍 스택으로 변환",
+      "선택한 트랙 가리기",
+      "선택 해제된 트랙 가리기",
+      "트랙 가리기 모두 해제",
+      "보기 가리기 토글",
+      "트랙 색상 할당…",
+      "트랙 아이콘 할당…",
+      "트랙 헤더 구성요소",
+      "트랙 헤더 구성…",
+      "사용자 기본값으로 저장",
+      "사용자 기본값 적용",
+      "기본값으로 복귀"
+    ],
+    "submenu_summaries": [
+      {
+        "parent": "트랙 다시 할당",
+        "meaning": "assign the selected track header to an existing Click/Ports, Mixer, Audio, Aux, MIDI Click, unassigned, or folder object",
+        "leaf_count": 42
+      },
+      {
+        "parent": "트랙 헤더 구성요소",
+        "meaning": "toggle visible header controls and choose the pan/send knob or additional-name-column mode",
+        "leaf_count": 36
+      }
+    ],
+    "anchor_relative_reorder": {
+      "searched_meanings": [
+        "move selected track before a named anchor",
+        "move selected track after a named anchor",
+        "move selected track up or down",
+        "reorder selected track to an exact position"
+      ],
+      "matching_items": []
+    }
+  },
+  "before_after": {
+    "header_count_before": 32,
+    "header_count_after": 32,
+    "header_order_before": [
+      "Audio 1", "Audio 2", "Aux 1", "Audio 3", "Audio 4", "Audio 5", "Audio 6", "Audio 7",
+      "Audio 8", "Audio 9", "Audio 10", "Audio 11", "Audio 12", "Audio 13", "Audio 14", "Audio 15",
+      "Audio 16", "Audio 17", "Audio 18", "Audio 19", "Audio 20", "Audio 21", "Audio 22", "Audio 23",
+      "Audio 24", "Audio 25", "Audio 26", "Audio 27", "Audio 28", "Audio 29", "Audio 30", "Audio 31"
+    ],
+    "header_order_after": [
+      "Audio 1", "Audio 2", "Aux 1", "Audio 3", "Audio 4", "Audio 5", "Audio 6", "Audio 7",
+      "Audio 8", "Audio 9", "Audio 10", "Audio 11", "Audio 12", "Audio 13", "Audio 14", "Audio 15",
+      "Audio 16", "Audio 17", "Audio 18", "Audio 19", "Audio 20", "Audio 21", "Audio 22", "Audio 23",
+      "Audio 24", "Audio 25", "Audio 26", "Audio 27", "Audio 28", "Audio 29", "Audio 30", "Audio 31"
+    ],
+    "selected_track_before": "Audio 13",
+    "selected_track_after": "Audio 13",
+    "selected_track_output_before": "Stereo Output",
+    "selected_track_output_after": "Stereo Output",
+    "transport_play_before": 0,
+    "transport_play_after": 0,
+    "transport_record_before": 0,
+    "transport_record_after": 0,
+    "focused_ui_before": "Arrange tracks container",
+    "focused_ui_after": "Arrange tracks container",
+    "open_menu_count_before": 0,
+    "open_menu_count_after": 0,
+    "order_unchanged": true
+  }
+}

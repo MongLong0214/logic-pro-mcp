@@ -1,0 +1,71 @@
+{
+  "schema": 3,
+  "id": "2026-10-28-the-track-header-context-menu-has-no-anchor-reorder",
+  "date": "2026-10-28",
+  "subject": "the selected Arrange track header's context menu as a coordinate-free exact-reorder provider",
+  "question": "Does the selected track header expose a semantic command that moves that exact track before or after another retained track?",
+  "verdict": "wall",
+  "surface": "arrange.menus",
+  "issues": [969],
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "With a disposable flat project stopped, retain the selected Arrange header and full physical order; right-click only that already-selected header, recursively census the resulting owned menu without pressing a leaf, invoke Cancel on that exact menu object, then reread order, selection, routing, focus and transport.",
+    "expected": "The complete menu contains reassignment, creation, naming, deletion, stack, visibility, color, icon and header-configuration commands but no before/after, up/down or exact-position track move; exact-menu cancellation leaves the retained state unchanged.",
+    "cost": "needs Logic 12.3 with a disposable flat project open; read-only menu census; about one minute"
+  },
+  "depends": [],
+  "method": "The protected flat fixture was first read with no menu open: 32 headers, one retained header selected, transport stopped and not recording, and the selected strip routed to its retained physical output. The already-selected header was opened by its context-click surface. Every AXMenu and descendant item already exposed under that owned root was read; no item was pressed. The exact root menu's exposed cancellation accessibility action dismissed it. A fresh full AX read then compared order, selection, routing, focus, transport and menu absence. No global keyboard input, drag, save or project mutation was used.",
+  "observations": [
+    {
+      "what": "complete context-menu census",
+      "menu_containers": 11,
+      "menu_items": 102,
+      "disabled_items": 10,
+      "top_level_items": 24,
+      "anchor_relative_reorder_items": 0
+    },
+    {
+      "what": "representative semantic branches present in the menu",
+      "rows": [
+        {"role": "AXMenuItem", "meaning": "reassign the selected track to an existing object"},
+        {"role": "AXMenuItem", "meaning": "create a new stack"},
+        {"role": "AXMenuItem", "meaning": "rename the selected track"},
+        {"role": "AXMenuItem", "meaning": "assign a color"}
+      ]
+    },
+    {
+      "what": "state after cancelling the exact owned menu",
+      "header_count_before": 32,
+      "header_count_after": 32,
+      "order_unchanged": true,
+      "selected_track_unchanged": true,
+      "selected_track_output_unchanged": true,
+      "focus_unchanged": true,
+      "transport_stopped_before_and_after": true,
+      "recording_off_before_and_after": true,
+      "open_menus_after": 0
+    }
+  ],
+  "evidence": [
+    "evidence/2026-10-28-ko-KR-track-header-context-menu-census.json"
+  ],
+  "canon_not_applicable": {
+    "reason": "The conclusion is about runtime AX structure, complete menu membership and before/after state, not the wording of any menu title. Exact observed titles are retained only in the attached raw census."
+  },
+  "conclusion": "The selected header's complete context menu contains 102 items across 11 menu containers, but zero item provides an anchor-relative, up/down or exact-position track move. Reassignment targets existing objects and stack creation changes hierarchy; neither is an exact retained-track reorder primitive. Together with the existing key-command census and the retained header's lack of a reorder action or writable position, this closes the last measured coordinate-free provider candidate on this host. Exact L2 arbitrary reordering is platform-limited here and must refuse rather than simulate a drag.",
+  "limits": [
+    "One Logic build, one locale, one flat 32-header fixture and one already-selected audio track.",
+    "This proves absence from the recursively exposed selected-header context menu on this host; it does not prove that no future Logic build or private protocol can expose an exact reorder provider.",
+    "The Mixer strip context menu was not opened. It is lower-value because Mixer reordering can create or move Arrange tracks and still lacks a retained before/after anchor contract.",
+    "No menu leaf was pressed, so this record does not qualify reassignment, stack creation, coloring, naming or any other listed command.",
+    "This settles the bounded L2 provider investigation only. It does not complete #969's grouping, view-layout or broader live-integration acceptance."
+  ],
+  "supersedes": null
+}
