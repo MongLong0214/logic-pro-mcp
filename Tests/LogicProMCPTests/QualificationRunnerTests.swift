@@ -85,7 +85,7 @@ struct QualificationRunnerTests {
            "stage_cache_read", "stage_stale_read", "stage_project_loss", "refused_forward",
            "stage_unknown_step", "stage_step_no_effect", "stage_foreign_position",
            "stage_cleanup_project_loss", "stage_cleanup_position_loss", "stage_refused_restore",
-           "stage_attempted_restore_failure", "unsafe_restore"])
+           "stage_attempted_restore_failure", "stage_noop_race", "unsafe_restore"])
     func stagedStepKeepsCleanupConditionalOnActualOwnedEvidence(operation: OperationID, shape: String) throws {
         let fixture = try SlowHandshakeFixture(playheadStep: operation, playheadFault: shape)
         defer { fixture.remove() }
@@ -103,6 +103,8 @@ struct QualificationRunnerTests {
             ["stage_refused", "stage_unverified", "stage_no_effect", "stage_missing_read",
              "stage_cache_read", "stage_stale_read", "stage_project_loss"].contains(shape)
             ? ["phase_b.stage"]
+            : shape == "stage_noop_race"
+                ? ["phase_b.stage"]
             : shape == "stage_refused_restore"
                 ? ["phase_b.stage", "phase_b.mutation", "phase_b.restore", "phase_b.cleanup"]
                 : shape == "stage_attempted_restore_failure"
@@ -132,7 +134,10 @@ struct QualificationRunnerTests {
         #expect(String(decoding: try encoder.encode(record), as: UTF8.self) == raw)
     }
 
-    @Test func playheadStepRecordCannotCreditAnUnverifiedGotoRestore() throws {
+    @Test(arguments: [#"{"state":"A","verified":false}"#,
+                      #"{"state":"A","verified":true,"write_attempted":false}"#,
+                      #"{"state":"A","verified":true,"unchanged":true}"#])
+    func playheadStepRecordCannotCreditAnUnverifiedOrNoWriteGotoRestore(restore: String) throws {
         func reading(_ position: String) throws -> String {
             let object: [String: Any] = ["source": "ax_live", "cache_age_sec": 0,
                 "data": ["state": ["isPlaying": false, "isRecording": false, "observedCycleEnabled": false,
@@ -142,13 +147,14 @@ struct QualificationRunnerTests {
         }
         let record = QualificationMutationRestoreRecord(operationID: OperationID.transportFastForward.rawValue,
             preState: try reading("9.1.1.1"), mutation: #"{"state":"B","success":true}"#,
-            readback: try reading("10.1.1.1"), restore: #"{"state":"A","verified":false}"#,
+            readback: try reading("10.1.1.1"), restore: restore,
             restoreReadback: try reading("9.1.1.1"))
         #expect(!record.verifiedCycleShape)
     }
 
-    @Test(arguments: ["missing_write", "missing_read", "unverified_stage", "cache_stage",
-                      "stale_stage", "partial_stage", "wrong_boundary", "unchanged_stage", "unsafe_restore"])
+    @Test(arguments: ["missing_write", "missing_read", "unverified_stage", "no_write_stage_reply",
+                      "unchanged_stage_reply", "cache_stage", "stale_stage", "partial_stage",
+                      "wrong_boundary", "unchanged_stage", "unsafe_restore"])
     func stagedRecordCannotCreditMissingOrUnobservedPreconditions(shape: String) throws {
         func reading(_ position: String, components: [String] = ["bar", "beat", "subdivision", "tick"],
                      source: String = "ax_live", age: Int = 0) throws -> String {
@@ -157,7 +163,7 @@ struct QualificationRunnerTests {
                     "positionReadback": ["value": position, "observedComponents": components]]]]
             return String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self)
         }
-        let verified = #"{"state":"A","verified":true}"#
+        let verified = #"{"state":"A","verified":true,"write_attempted":true}"#
         var record = QualificationMutationRestoreRecord(operationID: OperationID.transportFastForward.rawValue,
             preState: try reading("9.3.2.120"), mutation: #"{"state":"B","success":true}"#,
             readback: try reading("10.1.1.1"), restore: verified, restoreReadback: try reading("9.3.2.120"),
@@ -167,6 +173,10 @@ struct QualificationRunnerTests {
         case "missing_write": record.stagingMutation = nil
         case "missing_read": record.stagingReadback = nil
         case "unverified_stage": record.stagingMutation = #"{"state":"B","success":true,"verified":false}"#
+        case "no_write_stage_reply":
+            record.stagingMutation = #"{"state":"A","verified":true,"write_attempted":false}"#
+        case "unchanged_stage_reply":
+            record.stagingMutation = #"{"state":"A","verified":true,"unchanged":true}"#
         case "cache_stage": record.stagingReadback = try reading("9.1.1.1", source: "cache")
         case "stale_stage": record.stagingReadback = try reading("9.1.1.1", age: 1000)
         case "partial_stage": record.stagingReadback = try reading("9.1", components: ["bar", "beat"])
@@ -178,6 +188,37 @@ struct QualificationRunnerTests {
                 restoreReadback: record.restoreReadback, stagingMutation: record.stagingMutation,
                 stagingReadback: record.stagingReadback)
         }
+        #expect(!record.verifiedCycleShape)
+    }
+
+    @Test(arguments: ["cache_pre", "stale_pre", "cache_after", "stale_after",
+                      "cache_restore", "stale_restore"])
+    func playheadStepRecordRequiresFreshEveryPositionReading(shape: String) throws {
+        func reading(_ position: String, source: String = "ax_live", age: Int = 0) throws -> String {
+            let object: [String: Any] = ["source": source, "cache_age_sec": age,
+                "data": ["state": ["isPlaying": false, "isRecording": false,
+                    "observedCycleEnabled": false,
+                    "positionReadback": ["value": position,
+                        "observedComponents": ["bar", "beat", "subdivision", "tick"]]]]]
+            return String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self)
+        }
+        var pre = try reading("9.3.2.120")
+        var after = try reading("10.1.1.1")
+        var restored = try reading("9.3.2.120")
+        switch shape {
+        case "cache_pre": pre = try reading("9.3.2.120", source: "cache")
+        case "stale_pre": pre = try reading("9.3.2.120", age: 1000)
+        case "cache_after": after = try reading("10.1.1.1", source: "cache")
+        case "stale_after": after = try reading("10.1.1.1", age: 1000)
+        case "cache_restore": restored = try reading("9.3.2.120", source: "cache")
+        default: restored = try reading("9.3.2.120", age: 1000)
+        }
+        let verified = #"{"state":"A","verified":true,"write_attempted":true}"#
+        let record = QualificationMutationRestoreRecord(
+            operationID: OperationID.transportFastForward.rawValue,
+            preState: pre, mutation: #"{"state":"B","success":true}"#,
+            readback: after, restore: verified, restoreReadback: restored,
+            stagingMutation: verified, stagingReadback: try reading("9.1.1.1"))
         #expect(!record.verifiedCycleShape)
     }
 
@@ -234,9 +275,16 @@ struct QualificationRunnerTests {
         let effects = result.wireFrames.filter { $0.direction == .request &&
             ["phase_b.mutation", "phase_b.restore", "phase_b.cleanup"].contains($0.operationID) }
         let expectedAttempts = shape.hasSuffix("_pre") ? 0
-            : (["refused_restore", "missing_restore", "mismatch_restore", "unverified_restore", "unsafe_restore"].contains(shape) ? 2 : 1)
+            : shape == "refused_restore" ? 3
+            : (["missing_restore", "mismatch_restore", "unverified_restore", "unsafe_restore"].contains(shape) ? 2 : 1)
         #expect(effects.count == expectedAttempts, "unknown source or position cannot authorize a dependent inverse")
-        #expect(!effects.contains { $0.operationID == "phase_b.cleanup" })
+        if shape == "refused_restore" {
+            #expect(effects.contains { $0.operationID == "phase_b.cleanup" })
+            #expect(try String(contentsOf: fixture.directory.appendingPathComponent("step-position"), encoding: .utf8)
+                .trimmingCharacters(in: .whitespacesAndNewlines) == "9.1.1.1")
+        } else {
+            #expect(!effects.contains { $0.operationID == "phase_b.cleanup" })
+        }
     }
 
     @Test func registeredAutopunchToggleRecordsAnObservedWriteAndRestoreCycle() throws {
@@ -7449,7 +7497,8 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                         printf '%s\n' "$step_position" > step-position
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"B\\",\\"success\\":true,\\"verified\\":false,\\"reason\\":\\"readback_unavailable\\"}"}]}}\n' "$id" ;;
                       *'"command":"goto_position"'*)
-                        if [ "$step_fault" = refused_restore ] && [ "$step_position" != "$step_origin" ]; then
+                        if [ "$step_fault" = refused_restore ] && [ "$step_position" != "$step_origin" ] && [ "$step_restore_attempts" = 0 ]; then
+                            step_restore_attempts=$((step_restore_attempts + 1))
                             touch step-fault-consumed
                             printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"write_attempted\\":false}"}]}}\n' "$id"
                             continue
@@ -7462,9 +7511,14 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                                     touch step-fault-consumed
                                     printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"write_attempted\\":false}"}]}}\n' "$id"
                                     continue ;;
+                                  stage_noop_race)
+                                    touch step-fault-consumed; step_position=9.1.1.1; step_boundary=true
+                                    printf '%s\n' "$step_position" > step-position
+                                    printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true,\\"write_attempted\\":false,\\"unchanged\\":true}"}]}}\n' "$id"
+                                    continue ;;
                                   stage_no_effect)
                                     touch step-fault-consumed
-                                    printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true}"}]}}\n' "$id"
+                                    printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true,\\"write_attempted\\":true}"}]}}\n' "$id"
                                     continue ;;
                                 esac
                                 step_position=9.1.1.1; step_boundary=true
@@ -7474,7 +7528,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                                     printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"B\\",\\"success\\":true,\\"verified\\":false}"}]}}\n' "$id"
                                     continue
                                 fi
-                                printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true}"}]}}\n' "$id"
+                                printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true,\\"write_attempted\\":true}"}]}}\n' "$id"
                                 continue
                             fi
                             step_restore_attempts=$((step_restore_attempts + 1))
@@ -7501,7 +7555,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                                 printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":false}"}]}}\n' "$id"
                                 continue
                             fi
-                            printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true}"}]}}\n' "$id" ;;
+                            printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true,\\"write_attempted\\":true}"}]}}\n' "$id" ;;
                           *) printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"write_attempted\\":false}"}]}}\n' "$id" ;;
                         esac ;;
                       *'"command":"toggle_count_in"'*)

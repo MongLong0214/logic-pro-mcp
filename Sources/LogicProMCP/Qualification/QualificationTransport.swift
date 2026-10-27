@@ -152,20 +152,18 @@ struct QualificationMutationRestoreRecord: Codable, Equatable, Sendable {
         if let direction = QualificationTransport.playheadStepDirections[operation] {
             guard !QualificationTransport.playheadStepWriteWasIndeterminate(mutation),
                   QualificationTransport.verifiedPlayheadGotoReply(restore),
-                  let old = QualificationTransport.recordedExactStepPosition(before),
-                  let observed = QualificationTransport.recordedExactStepPosition(after) else { return false }
+                  let old = QualificationTransport.freshRecordedExactStepPosition(preState),
+                  let observed = QualificationTransport.freshRecordedExactStepPosition(readback),
+                  QualificationTransport.freshRecordedExactStepPosition(restoreReadback) == old
+            else { return false }
             let stepOrigin: String
             switch (stagingMutation, stagingReadback) {
             case (nil, nil): stepOrigin = old
             case let (write?, reading?):
                 guard QualificationTransport.verifiedPlayheadGotoReply(write),
                       QualificationTransport.verifiedPlayheadGotoReply(restore),
-                      let stage = Self.envelope(reading),
-                      let position = QualificationTransport.recordedExactStepPosition(stage),
-                      position == QualificationTransport.barBoundary(from: old), position != old,
-                      let bytes = reading.data(using: .utf8),
-                      QualificationReadbackFreshness.verdict(for: bytes, uri: "logic://transport/state",
-                        verification: .readbackRequired, deadline: .short).isAdmissible
+                      let position = QualificationTransport.freshRecordedExactStepPosition(reading),
+                      position == QualificationTransport.barBoundary(from: old), position != old
                 else { return false }
                 stepOrigin = position
             default: return false
@@ -3046,6 +3044,17 @@ struct QualificationTransport: Sendable {
         return complete.value
     }
 
+    static func freshRecordedExactStepPosition(_ raw: String) -> String? {
+        guard let bytes = raw.data(using: .utf8),
+              QualificationReadbackFreshness.verdict(
+                for: bytes, uri: "logic://transport/state",
+                verification: .readbackRequired, deadline: .short
+              ).isAdmissible,
+              let envelope = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any]
+        else { return nil }
+        return recordedExactStepPosition(envelope)
+    }
+
     static func stepPosition(from position: String, direction: Int) -> String? {
         var components = position.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
         // Off-boundary keyboard stepping snaps differently; its exact formula is not qualified.
@@ -3064,6 +3073,8 @@ struct QualificationTransport: Sendable {
         guard let bytes = raw.data(using: .utf8),
               let fields = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any] else { return false }
         return fields["state"] as? String == "A" && fields["verified"] as? Bool == true
+            && fields["write_attempted"] as? Bool == true
+            && fields["unchanged"] as? Bool != true
             && !playheadStepWriteWasIndeterminate(raw)
     }
 
@@ -3164,7 +3175,9 @@ struct QualificationTransport: Sendable {
                 throw QualificationTransportError.protocolViolation("phase_b.mutation: step refused")
             }
             let after = try read("phase_b.readback", expectedProject: pre.project)
-            if stageWrite != nil, after.position == boundary || after.position == target {
+            if after.position == target {
+                ownedStagedPosition = target
+            } else if stageWrite != nil, after.position == boundary {
                 ownedStagedPosition = after.position
             }
             guard after.position == target else {
