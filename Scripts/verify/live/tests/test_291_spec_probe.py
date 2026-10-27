@@ -5,6 +5,7 @@ import json
 import os
 import sys
 import unittest
+from unittest import mock
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 VERIFY = os.path.dirname(os.path.dirname(HERE))
@@ -126,7 +127,22 @@ class MixerSession:
                            "strips": strips, "routing_graph": {"edges": self.edges}})
 
 
-class RoutingSpecProbeTests(unittest.TestCase):
+class PinnedRoutingRowsTestCase(unittest.TestCase):
+    """Keep downstream contract tests independent of an installed Logic app.
+
+    Production still resolves these labels from Apple's locale tables. These
+    tests exercise the routing normalization, refresh and fixture contracts
+    with the exact values they declare, including on non-Logic CI hosts.
+    """
+
+    def setUp(self):
+        super().setUp()
+        patcher = mock.patch.object(spec_probes, "_routing_rows", return_value=APPLE_ROWS)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
+
+class RoutingSpecProbeTests(PinnedRoutingRowsTestCase):
 
     @staticmethod
     def fully_observed_run():
@@ -333,7 +349,7 @@ class RoutingSpecProbeTests(unittest.TestCase):
         self.assertEqual(len(sidecars.kept), 1)
 
 
-class MixerFixtureGateTests(unittest.TestCase):
+class MixerFixtureGateTests(PinnedRoutingRowsTestCase):
 
     def test_mixer_fixture_is_live_and_its_strip_count_is_gated(self):
         decl = setups.declaration("lpm-locale-campaign-mixer")
