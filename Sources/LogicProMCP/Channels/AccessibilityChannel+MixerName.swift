@@ -27,6 +27,21 @@ extension AccessibilityChannel {
                                            runtime: AXLogicProElements.Runtime,
                                            transport: ExactTrackNameAdapter.NameFocusTransport,
                                            permittingClick: @Sendable () -> Bool) -> Bool {
+        clickOriginalMixerNamePlate(source: source, expectedName: expectedName,
+            expectedFocus: expectedFocus, runtime: runtime, transport: transport,
+            sourceIsCurrent: { source.currentIndex(runtime: runtime) != nil },
+            permittingClick: permittingClick)
+    }
+
+    /// The held-selection observer already owns a stricter, request-local
+    /// complete Mixer census. Let it renew that exact source without starting
+    /// the ordinary whole-window lookup used by standalone name operations.
+    static func clickOriginalMixerNamePlate(source: AXMixerStripBinding.Binding,
+                                           expectedName: String, expectedFocus: AXUIElement,
+                                           runtime: AXLogicProElements.Runtime,
+                                           transport: ExactTrackNameAdapter.NameFocusTransport,
+                                           sourceIsCurrent: @Sendable () -> Bool,
+                                           permittingClick: @Sendable () -> Bool) -> Bool {
         guard permittingClick(), let pid = runtime.logicProPID(),
               let app = AXLogicProElements.appRoot(runtime: runtime),
               let plate = physicalMixerNamePlate(source: source, runtime: runtime),
@@ -36,7 +51,7 @@ extension AccessibilityChannel {
               size.width > 0, size.height > 0, let hitTest = runtime.ax.elementAtPosition else { return false }
         let point = CGPoint(x: position.x + size.width / 2, y: position.y + size.height / 2)
         func held() -> Bool {
-            guard permittingClick(), source.currentIndex(runtime: runtime) != nil,
+            guard permittingClick(), sourceIsCurrent(),
                   physicalMixerNamePlate(source: source, runtime: runtime).map({ CFEqual($0, plate) }) == true,
                   let parent: AXUIElement = AXHelpers.getAttribute(plate, kAXParentAttribute as String, runtime: runtime.ax),
                   CFEqual(parent, source.strip),

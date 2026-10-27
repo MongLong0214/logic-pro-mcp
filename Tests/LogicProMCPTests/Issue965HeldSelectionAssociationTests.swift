@@ -652,6 +652,7 @@ struct Issue965HeldSelectionAssociationTests {
         var cleanupTransportReadsAtWrite = 0
         var cleanupScopeInjected = false
         var focusRestorationAckOnly = false
+        var selectedFocusAckOnly = false
         var wholeHeaderSelectionReads = 0
         var ownedPopupObservationStarted = false
         var scrollWrites: [Double] = []
@@ -712,6 +713,7 @@ struct Issue965HeldSelectionAssociationTests {
         var routingDocumentReadsAtFirstNameWrite: Int?
         var routingDocumentReadsAtFirstNameConfirm: Int?
         var routingDestinationPresses = 0
+        var canonicalOutputCaptureSelectionCount = 0
         var routingBeforeSendMenuOpens = 0
         var routingDecidingSendFaultInjected = false
         var routingDecidingLeafActionsRead = false
@@ -902,6 +904,7 @@ struct Issue965HeldSelectionAssociationTests {
         var inputInverseScopeOrderedAtWrite = false
         var inputPreviousReadWasDescription = false
         var presentationCensusReads = 0
+        var unstablePopulationNameReads = 0
         var passivePermissionSelectionReads = 0
         var passivePermissionFocusReads = 0
         var passivePermissionArmed = false
@@ -1196,9 +1199,13 @@ struct Issue965HeldSelectionAssociationTests {
                 },
                 setAttributeHandler: { [self] element, attribute, value in
                     if let handled = routingSetter?(element, attribute, value) { return handled }
-                    if strips.contains(where: { CFEqual($0, element) }), attribute == kAXFocusedAttribute as String {
+                    if strips.contains(where: { CFEqual($0, element) }) || CFEqual(element, rail),
+                       attribute == kAXFocusedAttribute as String {
                         cleanupTransportReadsAtWrite = cleanupTransportReads
                         focusRestorationWrites.append(element)
+                        if selectedFocusAckOnly, strips.contains(where: { CFEqual($0, element) }) {
+                            return true
+                        }
                         if focusRestorationAckOnly { return true }
                         builder.setAttribute(app, kAXFocusedUIElementAttribute as String, element)
                         return true
@@ -2174,6 +2181,32 @@ struct Issue965HeldSelectionAssociationTests {
         try await assertCanonicalPhysicalOutput(mode: "bus_departure_execute_arrival_" + outcome)
     }
 
+    @Test("Existing Bus output discovery preserves its verified inverse without selecting unrelated headers")
+    func canonicalBusOutputDiscoveryVisitsOnlyNeededReceivers() async throws {
+        let f = try Fixture(fourTracks: true)
+        try await assertCanonicalPhysicalOutput(mode: "bus_departure_execute_arrival_physical_cancel", fixture: f)
+        #expect(f.routingDestinationPresses == 2, "Reach both the actual forward and verified owned inverse")
+        #expect(f.inputMenuPresses > 0, "Receiver menus remain independently checked")
+        let executionSelections = Array(f.selections.dropFirst(f.canonicalOutputCaptureSelectionCount))
+        #expect(!executionSelections.isEmpty)
+        #expect(executionSelections.allSatisfy { $0 == 0 || $0 == 1 },
+                "Original-source and positive receiver discovery must not visit unrelated headers")
+    }
+
+    @Test("A retired Bus-output source resolves captured receivers before unrelated headers")
+    func canonicalBusOutputRetiredSourceVisitsOnlyNeededReceivers() async throws {
+        let f = try Fixture(fourTracks: true)
+        try await assertCanonicalPhysicalOutput(
+            mode: "bus_departure_execute_arrival_popup_source_retired",
+            fixture: f
+        )
+        #expect(f.routingReplacement != nil, "Reach actual post-popup source retirement")
+        let executionSelections = Array(f.selections.dropFirst(f.canonicalOutputCaptureSelectionCount))
+        #expect(!executionSelections.isEmpty)
+        #expect(executionSelections.allSatisfy { $0 == 0 || $0 == 1 },
+                "Source renewal must not visit unrelated headers")
+    }
+
     @Test("Bus departure reuses the exact source, protected footprint and conditional Bus inverse",
           arguments: ["forward", "stereo", "cancel", "late_peer", "late_project", "post_write_loss", "ack_only", "newer", "retired", "physical_input", "physical_cancel", "changed_source_input", "changed_receiver_input", "misleading_receiver", "popup_source", "popup_receiver", "popup_source_retired", "popup_both_retired", "external_peer"])
     func canonicalBusDepartureExecutesOnlyItsCapturedOutput(outcome: String) async throws {
@@ -2220,8 +2253,18 @@ struct Issue965HeldSelectionAssociationTests {
         let f = try Fixture()
         try await assertCanonicalPhysicalOutput(mode: "cancel", fixture: f)
         #expect(f.routingDestinationPresses == 2)
-        #expect(f.inputMenuPresses <= 8,
-                "Keep the captured baseline, Saga before/after and inverse-ownership reads, and each checked scalar writer; duplicate adapter reads consume the same bounded native lifecycle")
+        #expect(f.inputMenuPresses <= 7,
+                "Keep the captured baseline and one post-write prerequisite check; the immediate compensation ownership read must reuse that exact typed effect without reopening either Input popup")
+    }
+
+    @Test("Canonical output cancellation reuses the exact Bus receipt after its source is renewed")
+    func canonicalOutputCancellationReusesRenewedBusPrerequisiteReceipt() async throws {
+        let f = try Fixture()
+        try await assertCanonicalPhysicalOutput(mode: "bus_departure_execute_cancel_popup_source_retired", fixture: f)
+        #expect(f.routingReplacement != nil, "Reach the actual post-popup source renewal")
+        #expect(f.routingDestinationPresses == 2)
+        #expect(f.inputMenuPresses <= 14,
+                "The renewed source/proof from the post-write Bus check must carry the immediate cancellation read without reopening either Input popup")
     }
 
     @Test("Canonical output exposes the actual forward and inverse child results without replacing its parent trace",
@@ -2486,9 +2529,12 @@ struct Issue965HeldSelectionAssociationTests {
         let nativeAbsentWindow = profile.hasSuffix("_absent_window_app_focus")
         let nativeForeignWindow = profile.hasSuffix("_foreign_window_app_focus")
         let nativeRefusingWindow = nativeUnreadWindow || nativeAbsentWindow || nativeForeignWindow
-        let outputMode = executingBusDeparture ? (replacementScenario ?? busScenario!)
+        let requestedOutputMode = executingBusDeparture ? (replacementScenario ?? busScenario!)
             : !noOutput ? profile : profile == "canonical_no_output" ? "forward"
             : String(profile.dropFirst("canonical_no_output_".count))
+        let popupCancellation = executingBusDeparture && requestedOutputMode.hasPrefix("cancel_popup_")
+        let outputMode = popupCancellation
+            ? String(requestedOutputMode.dropFirst("cancel_".count)) : requestedOutputMode
         let prerequisiteFault = executingBusDeparture && outputMode.hasPrefix("prereq_")
         let inputPopupFocus = executingBusDeparture && outputMode.hasPrefix("popup_")
         let sourceInputPopup = executingBusDeparture && (outputMode.hasPrefix("popup_source") || outputMode == "popup_both_retired")
@@ -2499,7 +2545,8 @@ struct Issue965HeldSelectionAssociationTests {
         let misleadingBeforeReceiver = busReplacement && executingBusDeparture && outputMode == "misleading_before"
         let misleadingReceiver = misleadingBeforeReceiver || (executingBusDeparture && (outputMode == "misleading_receiver"
             || (busReplacement && outputMode == "misleading_after")))
-        let mode = inputPopupFocus ? "forward" : physicalBusInput || changedBusInput ? (outputMode == "physical_input" ? "forward" : "cancel")
+        let mode = popupCancellation ? "cancel"
+            : inputPopupFocus ? "forward" : physicalBusInput || changedBusInput ? (outputMode == "physical_input" ? "forward" : "cancel")
             : outputMode.hasPrefix("return_late_") ? String(outputMode.dropFirst("return_".count)) : outputMode
         let destinationLeafLabel = noOutput ? "No Output" : "Output 3-4"
                 let f = try fixture ?? Fixture(fourTracks: busReplacement), cache = StateCache(), registry = TargetRegistry()
@@ -3200,6 +3247,7 @@ struct Issue965HeldSelectionAssociationTests {
                 let id = try #require(inspected["snapshot_id"] as? String)
                 let retained = try #require(await cache.retainedInspection(id: id))
                 let capture = retained.capture
+                f.canonicalOutputCaptureSelectionCount = f.selections.count
                 if mode == "offscreen_peer_intermediate_viewport" { f.scrollToViewportDriftEnabled = true }
                 let stable = try #require(capture.freshPopulation?.stable)
                 #expect(stable)
@@ -12165,6 +12213,59 @@ struct Issue965HeldSelectionAssociationTests {
         }
     }
 
+    @Test("A retired source renewal keeps its guard live by reusing the held Mixer at rail focus")
+    func retiredSourceRenewalReusesHeldMixerBeforeGuardedHelp() async throws {
+        let f = try Fixture(withViewport: true)
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: { gate.stillOwns(claim) })
+        try await OperationTraceContext.$current.withValue(context) {
+            let runtime = f.logic()
+            let held = try #require(AccessibilityChannel.HeldSelectionAssociation(window: f.window,
+                logic: runtime, expectedProject: nil, requiresProjectReference: false))
+            let pairs = await held.observe(referenceIsCurrent: { true }, stoppingWhen: { false },
+                allHeldHeaders: true)
+            let source = try #require(pairs.first { CFEqual($0.track.header, f.headers[0]) })
+
+            let replacement = f.builder.element(1_965_998)
+            f.builder.setRole(replacement, kAXLayoutItemRole as String)
+            f.builder.setAttribute(replacement, kAXNumberOfCharactersAttribute as String, 0)
+            f.builder.setAttribute(replacement, kAXInsertionPointLineNumberAttribute as String, 0)
+            f.builder.setChildren(replacement, f.builder.makeAXRuntime().children(f.strips[1]))
+            f.routingReplacement = replacement
+            f.builder.setChildren(f.mixer, [f.strips[0], replacement])
+            f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.rail)
+            f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [replacement])
+            f.builder.setAttributeSettable(f.rail, kAXValueAttribute as String, false)
+            f.selectionKeepsPassiveRailFocus = true
+            f.routingReadResult = { element, attribute in
+                if CFEqual(element, f.rail), [kAXValueAttribute, kAXSelectedTextAttribute,
+                    kAXNumberOfCharactersAttribute, kAXInsertionPointLineNumberAttribute]
+                    .map({ $0 as String }).contains(attribute) {
+                    return .failure(.init(raw: AXError.noValue.rawValue))
+                }
+                return nil
+            }
+
+            let focus = AccessibilityChannel.OwnedTrackStackObservationNavigation.ReadFocusScope()
+            focus.retainAssociation(held)
+            let guardian = AXHelpers.HelpReadGuard(allowHelpReads: true, stop: { !focus.permits() })
+            let observed = await AXHelpers.HelpReadGuard.$current.withValue(guardian) {
+                await AccessibilityChannel.renewSourceThroughOriginalHeader(source, original: source.strip,
+                    runtime: runtime, sourceDisposition: .retiredOriginal,
+                    observingReadFocus: { focus.retainAssociation($0) })
+            }
+            let renewed = try #require(observed.source)
+            #expect(!guardian.stopped,
+                "The retired strip census must not latch Help before the current held Mixer is observed")
+            #expect(renewed.pair.track.matches(source.track))
+            #expect(CFEqual(renewed.pair.strip.strip, replacement))
+            #expect(renewed.permits(runtime: runtime))
+            #expect(observed.effects.restoration == "restored")
+        }
+    }
+
     @Test("Association publication uses fresh original census rows and refuses late native scope loss",
           arguments: ["owned", "late_peer", "late_rail_role"])
     func associationPublicationKeepsItsActualNativeCensus(fault: String) async throws {
@@ -12745,6 +12846,190 @@ struct Issue965HeldSelectionAssociationTests {
         }
         #expect(f.selections == (whole ? [1, 2, 3, 0] : [1, 0]))
         #expect(f.focusRestorationWrites.isEmpty)
+    }
+
+    @Test("Selection capture focuses only its exact selected child before population and restores the original rail")
+    func selectionCapturePreparesItsSelectedChildFocusAndRestoresTheRail() async throws {
+        let f = try Fixture(withViewport: true)
+        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.rail)
+        f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[1]])
+        f.builder.setAttributeSettable(f.rail, kAXFocusedAttribute as String, true)
+        f.builder.setAttributeSettable(f.strips[1], kAXFocusedAttribute as String, true)
+        f.routingRead = { element, attribute in
+            if CFEqual(element, f.mixer), attribute == kAXSelectedChildrenAttribute as String {
+                f.builder.setAttribute(f.mixer, attribute,
+                    [f.selections.last == 1 ? f.strips[0] : f.strips[1]])
+            }
+        }
+        f.routingReadResult = { element, attribute in
+            if CFEqual(element, f.builder.element(1_965_710)), attribute == kAXValueAttribute as String,
+               let focus = f.builder.attributeValue(f.app, kAXFocusedUIElementAttribute as String),
+               CFEqual(focus as AnyObject, f.rail) {
+                f.unstablePopulationNameReads += 1
+                return .success("moving-\(f.unstablePopulationNameReads)" as NSString)
+            }
+            if CFEqual(element, f.rail), [kAXValueAttribute, kAXSelectedTextAttribute,
+                kAXNumberOfCharactersAttribute, kAXInsertionPointLineNumberAttribute]
+                .map({ $0 as String }).contains(attribute) {
+                return .failure(.init(raw: AXError.noValue.rawValue))
+            }
+            return nil
+        }
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: { gate.stillOwns(claim) })
+        let population = try await OperationTraceContext.$current.withValue(context) {
+            try await f.channel().readFreshSessionPopulation(
+                request: .init(scope: .selection, domains: [.tracks, .strips, .associations],
+                    allowUINavigation: true),
+                fileReader: .unavailable, stoppingWhen: { false })
+        }
+        #expect(population.stable)
+        #expect(population.selectionAssociations.count == 1)
+        #expect(f.selections == [1, 0])
+        #expect(f.focusRestorationWrites.count == 2)
+        if f.focusRestorationWrites.count == 2 {
+            #expect(CFEqual(f.focusRestorationWrites[0], f.strips[1]))
+            #expect(CFEqual(f.focusRestorationWrites[1], f.rail))
+        }
+        #expect(population.uiEffects.changed.contains("keyboard_focus"))
+        #expect(population.uiEffects.changed.contains("keyboard_focus_restoration"))
+        #expect(population.uiEffects.restoration == "restored")
+        let focus: AXUIElement = try #require(AXHelpers.getAttribute(f.app,
+            kAXFocusedUIElementAttribute as String, runtime: f.builder.makeAXRuntime()))
+        #expect(CFEqual(focus, f.rail))
+    }
+
+    @Test("Selection capture uses its exact held Name plate when Logic acknowledges AXFocused without moving focus")
+    func selectionCaptureFallsBackToItsExactSelectedNamePlate() async throws {
+        let f = try Fixture(withViewport: true)
+        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.rail)
+        f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[1]])
+        f.builder.setAttributeSettable(f.rail, kAXFocusedAttribute as String, true)
+        f.builder.setAttributeSettable(f.strips[1], kAXFocusedAttribute as String, true)
+        try f.configureOriginalPlateClick()
+        f.focusRestorationAckOnly = false
+        f.selectedFocusAckOnly = true
+        f.routingLevelMouse = try #require(f.routingFocusMouse)
+        f.routingRead = { element, attribute in
+            if CFEqual(element, f.mixer), attribute == kAXSelectedChildrenAttribute as String {
+                f.builder.setAttribute(f.mixer, attribute,
+                    [f.selections.last == 1 ? f.strips[0] : f.strips[1]])
+            }
+        }
+        f.routingReadResult = { element, attribute in
+            if CFEqual(element, f.builder.element(1_965_710)), attribute == kAXValueAttribute as String,
+               let focus = f.builder.attributeValue(f.app, kAXFocusedUIElementAttribute as String),
+               CFEqual(focus as AnyObject, f.rail) {
+                f.unstablePopulationNameReads += 1
+                return .success("moving-\(f.unstablePopulationNameReads)" as NSString)
+            }
+            if CFEqual(element, f.rail), [kAXValueAttribute, kAXSelectedTextAttribute,
+                kAXNumberOfCharactersAttribute, kAXInsertionPointLineNumberAttribute]
+                .map({ $0 as String }).contains(attribute) {
+                return .failure(.init(raw: AXError.noValue.rawValue))
+            }
+            return nil
+        }
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: { gate.stillOwns(claim) })
+        let population = try await OperationTraceContext.$current.withValue(context) {
+            try await f.channel().readFreshSessionPopulation(
+                request: .init(scope: .selection, domains: [.tracks, .strips, .associations],
+                    allowUINavigation: true),
+                fileReader: .unavailable, stoppingWhen: { false })
+        }
+        #expect(population.stable)
+        #expect(population.selectionAssociations.count == 1)
+        #expect(f.routingFocusClickEvents == [.leftMouseDown, .leftMouseUp])
+        #expect(f.focusRestorationWrites.count == 2)
+        if f.focusRestorationWrites.count == 2 {
+            #expect(CFEqual(f.focusRestorationWrites[0], f.strips[1]))
+            #expect(CFEqual(f.focusRestorationWrites[1], f.rail))
+        }
+        #expect(population.uiEffects.changed.contains("keyboard_focus"))
+        #expect(population.uiEffects.changed.contains("keyboard_focus_restoration"))
+        #expect(population.uiEffects.restoration == "restored")
+        let focus: AXUIElement = try #require(AXHelpers.getAttribute(f.app,
+            kAXFocusedUIElementAttribute as String, runtime: f.builder.makeAXRuntime()))
+        #expect(CFEqual(focus, f.rail))
+    }
+
+    @Test("An unstable initial population still restores its prepared selected-child focus to the rail")
+    func unstableSelectionPopulationRestoresItsPreparedRailFocus() async throws {
+        let f = try Fixture(withViewport: true)
+        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.rail)
+        f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[1]])
+        f.builder.setAttributeSettable(f.rail, kAXFocusedAttribute as String, true)
+        f.builder.setAttributeSettable(f.strips[1], kAXFocusedAttribute as String, true)
+        f.routingReadResult = { element, attribute in
+            if CFEqual(element, f.builder.element(1_965_710)), attribute == kAXValueAttribute as String {
+                f.unstablePopulationNameReads += 1
+                return .success("moving-\(f.unstablePopulationNameReads)" as NSString)
+            }
+            if CFEqual(element, f.rail), [kAXValueAttribute, kAXSelectedTextAttribute,
+                kAXNumberOfCharactersAttribute, kAXInsertionPointLineNumberAttribute]
+                .map({ $0 as String }).contains(attribute) {
+                return .failure(.init(raw: AXError.noValue.rawValue))
+            }
+            return nil
+        }
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: { gate.stillOwns(claim) })
+        let population = try await OperationTraceContext.$current.withValue(context) {
+            try await f.channel().readFreshSessionPopulation(
+                request: .init(scope: .selection, domains: [.tracks, .strips, .associations],
+                    allowUINavigation: true),
+                fileReader: .unavailable, stoppingWhen: { false })
+        }
+        #expect(!population.stable)
+        #expect(population.selectionAssociations.isEmpty)
+        #expect(f.selections.isEmpty, "An unstable baseline must not begin an association challenge")
+        #expect(f.focusRestorationWrites.count == 2)
+        if f.focusRestorationWrites.count == 2 {
+            #expect(CFEqual(f.focusRestorationWrites[0], f.strips[1]))
+            #expect(CFEqual(f.focusRestorationWrites[1], f.rail))
+        }
+        #expect(population.uiEffects.restoration == "restored")
+        let focus: AXUIElement = try #require(AXHelpers.getAttribute(f.app,
+            kAXFocusedUIElementAttribute as String, runtime: f.builder.makeAXRuntime()))
+        #expect(CFEqual(focus, f.rail))
+    }
+
+    @Test("Selection population focus preparation requires both exact endpoints to be settable",
+          arguments: ["rail", "selected_child"])
+    func selectionPopulationFocusPreparationRequiresBothSettableEndpoints(missing: String) async throws {
+        let f = try Fixture(withViewport: true)
+        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.rail)
+        f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[1]])
+        f.builder.setAttributeSettable(f.rail, kAXFocusedAttribute as String, missing != "rail")
+        f.builder.setAttributeSettable(f.strips[1], kAXFocusedAttribute as String, missing != "selected_child")
+        f.routingReadResult = { element, attribute in
+            if CFEqual(element, f.rail), [kAXValueAttribute, kAXSelectedTextAttribute,
+                kAXNumberOfCharactersAttribute, kAXInsertionPointLineNumberAttribute]
+                .map({ $0 as String }).contains(attribute) {
+                return .failure(.init(raw: AXError.noValue.rawValue))
+            }
+            return nil
+        }
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: { gate.stillOwns(claim) })
+        let population = try await OperationTraceContext.$current.withValue(context) {
+            try await f.channel().readFreshSessionPopulation(
+                request: .init(scope: .selection, domains: [.tracks, .strips, .associations],
+                    allowUINavigation: true),
+                fileReader: .unavailable, stoppingWhen: { false })
+        }
+        #expect(!population.uiEffects.attempted.contains("mixer_focus_acquisition"))
+        #expect(f.focusRestorationWrites.allSatisfy { !CFEqual($0, f.strips[1]) },
+                "A later association inverse may restore the rail, but preparation must not focus the child")
     }
 
     @Test("Passive rail entry refuses editing, unknown metadata and lost exact custody before navigation",

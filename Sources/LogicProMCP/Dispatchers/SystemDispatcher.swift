@@ -1062,7 +1062,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                 }
                 let lifecycleBudgetSeconds = OperationRegistry.spec(
                     tool: ToolID.logicSystem.rawValue, command: "saga_execute"
-                )?.deadline.seconds ?? DeadlineClass.long.seconds
+                )?.deadline.seconds ?? DeadlineClass.saga.seconds
                 let lifecycleDeadline = sagaLifecycleDeadline
                     ?? ContinuousClock.now.advanced(by: .seconds(lifecycleBudgetSeconds))
                 let inherited = OperationTraceContext.current
@@ -1076,6 +1076,14 @@ struct SystemDispatcher: OperationTraceDispatching {
                         }, deadline: lifecycleDeadline,
                         cancellationRequested: { Task.isCancelled || inherited?.cancellationRequested() == true
                             || (pluginPlan && compressorCancellation.value) }) : nil
+                let refreshAfterWrite: @Sendable () async -> Void
+                if let sagaRefreshAfterWrite {
+                    refreshAfterWrite = sagaRefreshAfterWrite
+                } else if let poller {
+                    refreshAfterWrite = { await poller.refreshNow() }
+                } else {
+                    refreshAfterWrite = {}
+                }
                 // ADR-004 / issue #287 — qualification-only fault seam. #399 (CEO
                 // audit P0): the seam and its wiring are compiled solely in debug
                 // via `FAULT_TEST_SEAM`. The release executor is
@@ -1094,7 +1102,8 @@ struct SystemDispatcher: OperationTraceDispatching {
                         environment: ProcessInfo.processInfo.environment,
                         stepCount: plan.steps.count
                     ), approvedSessionRepair: approvedSessionRepair, confirmedCompressorPlan: compressorPlan,
-                    confirmedSelectedEQPlan: selectedEQPlan, sendRemoval: sendRemoval, sendMode: sendMode, sendLevel: sendLevel, inputBus: inputBus
+                    confirmedSelectedEQPlan: selectedEQPlan, sendRemoval: sendRemoval, sendMode: sendMode, sendLevel: sendLevel,
+                    inputBus: inputBus, approvedOutputRefreshAfterWrite: refreshAfterWrite
                 )
                 #else
                 let executor = ProductionSagaStepExecutor(
@@ -1105,7 +1114,9 @@ struct SystemDispatcher: OperationTraceDispatching {
                     liveReadback: sagaLiveReadback ?? .unavailable,
                     liveTrackName: liveTrackName,
                     liveTrackNames: liveTrackNames, approvedSessionRepair: approvedSessionRepair,
-                    confirmedCompressorPlan: compressorPlan, confirmedSelectedEQPlan: selectedEQPlan, sendRemoval: sendRemoval, sendMode: sendMode, sendLevel: sendLevel, inputBus: inputBus
+                    confirmedCompressorPlan: compressorPlan, confirmedSelectedEQPlan: selectedEQPlan, sendRemoval: sendRemoval,
+                    sendMode: sendMode, sendLevel: sendLevel, inputBus: inputBus,
+                    approvedOutputRefreshAfterWrite: refreshAfterWrite
                 )
                 #endif
                 let saga = MutationSaga(
@@ -1113,17 +1124,12 @@ struct SystemDispatcher: OperationTraceDispatching {
                     approvedSessionRepair: approvedSessionRepair,
                     routeAvailable: Self.sagaRouteProbe(router: router)
                 )
-                let refreshAfterWrite: @Sendable () async -> Void
-                if let sagaRefreshAfterWrite {
-                    refreshAfterWrite = sagaRefreshAfterWrite
-                } else if let poller {
-                    refreshAfterWrite = { await poller.refreshNow() }
-                } else {
-                    refreshAfterWrite = {}
-                }
                 let surfaceExecutor = SagaSurfaceStepExecutor(
                     base: executor,
-                    refreshAfterWrite: refreshAfterWrite
+                    refreshAfterWrite: refreshAfterWrite,
+                    refreshAlreadyPerformed: { step in
+                        approvedSessionRepair?.consumeOutputRefresh(step) == true
+                    }
                 )
                 let parentBoundary = SagaFirstWriteBoundary()
                 let onWriteBoundary: @Sendable () async -> Void = {

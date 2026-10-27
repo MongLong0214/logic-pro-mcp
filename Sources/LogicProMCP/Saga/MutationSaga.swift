@@ -460,7 +460,7 @@ actor MutationSaga {
         let budgetSeconds = OperationRegistry.spec(
             tool: ToolID.logicSystem.rawValue,
             command: "saga_execute"
-        )?.deadline.seconds ?? DeadlineClass.long.seconds
+        )?.deadline.seconds ?? DeadlineClass.saga.seconds
         let modeledSeconds = worstCaseSeconds * 2
         if modeledSeconds >= budgetSeconds {
             issues.append(.deadlineBudgetExceeded(

@@ -40,6 +40,7 @@ extension AccessibilityChannel {
         private let originalHeaderFocus: OwnedTrackStackObservationNavigation.ReadFocusScope.PassiveHeaderReadFocus?
         private let retainedTrackBindings: [AXTrackBinding.Binding]?
         private var lost = false
+        private var preparedPopulationFocusIsActive = false
         private(set) var effects = SessionPopulationObservation.UIEffects()
 
         init?(window: AXUIElement, logic: AXLogicProElements.Runtime,
@@ -962,6 +963,133 @@ extension AccessibilityChannel {
             return true
         }
 
+        /// A selection capture that starts on the exact passive Track rail may
+        /// need its Mixer's already-held selected child focused before the two
+        /// population bookends. This is not discovery: both endpoints, the
+        /// reciprocal selected-child relationship and the complete populations
+        /// were retained by this association. Refuse unless the original rail
+        /// focus is itself exactly restorable.
+        func prepareSelectedChildFocusForPopulation(
+            mouse: AXMouseHelper.Runtime?,
+            canPostEvents: @escaping @Sendable () -> Bool,
+            referenceIsCurrent: @Sendable () async -> Bool,
+            stoppingWhen stop: @Sendable () -> Bool
+        ) async -> Bool? {
+            guard let originalRailFocus, CFEqual(originalRailFocus, originalFocus),
+                  CFEqual(expectedFocus, originalFocus), expectedIndex == originalIndex,
+                  let selected = expectedSelectedChild,
+                  AXHelpers.isAttributeSettable(originalRailFocus, kAXFocusedAttribute as String,
+                    runtime: logic.ax) == true,
+                  AXHelpers.isAttributeSettable(selected, kAXFocusedAttribute as String,
+                    runtime: logic.ax) == true,
+                  passiveStripMatches(selected),
+                  let selectedPath = Self.path(selected, to: window, ax: logic.ax),
+                  Self.same(selectedPath, [selected] + path),
+                  let beforeViewport = currentViewport(), Self.sameViewport(beforeViewport, expectedViewport)
+            else { return nil }
+            guard !stop(), permitsRead(), selectedChildCustodyMatches(),
+                  let decidingViewport = currentViewport(), Self.sameViewport(decidingViewport, expectedViewport),
+                  await referenceIsCurrent(),
+                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return nil }
+
+            effects.navigationPerformed = true
+            effects.restoration = "not_restored"
+            effects.attempted.append("mixer_focus_acquisition")
+            _ = AXHelpers.setAttribute(selected, kAXFocusedAttribute as String,
+                NSNumber(value: true), runtime: logic.ax)
+
+            func acceptSelectedFocus() async -> Bool {
+                guard let afterViewport = currentViewport() else {
+                    effects.reason = "mixer_focus_acquisition_unverified"
+                    return false
+                }
+                expectedFocus = selected
+                expectedViewport = afterViewport
+                preparedPopulationFocusIsActive = true
+                if !effects.changed.contains("keyboard_focus") { effects.changed.append("keyboard_focus") }
+                guard retainMixerViewportAfterOwnedAction(), permitsRead(), !stop(),
+                      await referenceIsCurrent() else {
+                    effects.reason = "mixer_focus_acquisition_unverified"
+                    _ = await restorePreparedPopulationFocus(
+                        referenceIsCurrent: referenceIsCurrent, stoppingWhen: stop)
+                    return false
+                }
+                return true
+            }
+            for attempt in 0..<3 {
+                guard owned(), let focus: AXUIElement = AXHelpers.getAttribute(app,
+                    kAXFocusedUIElementAttribute as String, runtime: logic.ax) else {
+                    effects.reason = "mixer_focus_acquisition_unverified"
+                    return false
+                }
+                if CFEqual(focus, selected) {
+                    return await acceptSelectedFocus()
+                }
+                guard CFEqual(focus, originalFocus) else {
+                    lost = true
+                    effects.reason = "mixer_focus_acquisition_unverified"
+                    return false
+                }
+                guard attempt < 2 else { break }
+                do { try await Task.sleep(for: .milliseconds(25)) } catch {
+                    effects.reason = "mixer_focus_acquisition_unverified"
+                    effects.restoration = "restored"
+                    return false
+                }
+            }
+
+            // Logic 12.3 advertises AXFocused as settable on a channel strip
+            // and returns success while leaving the Track rail focused. The
+            // existing exact Name-plate click is the only measured native
+            // transition to that already-held strip. It remains a single
+            // click with two hit tests, immutable frame/name checks and this
+            // association's request-local complete-census renewal.
+            guard let mouse, canPostEvents(),
+                  case .success(.some(let expectedName)) = AXPluginInstanceIdentity.stripNameResult(
+                    selected, runtime: logic.ax),
+                  !stop(), await referenceIsCurrent(), permitsRead(),
+                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else {
+                effects.reason = "mixer_focus_acquisition_unverified"
+                effects.restoration = "restored"
+                return false
+            }
+            let source = AXMixerStripBinding.Binding(window: window, mixer: mixer,
+                strip: selected, document: document)
+            let clicked = AccessibilityChannel.clickOriginalMixerNamePlate(
+                source: source, expectedName: expectedName, expectedFocus: originalFocus,
+                runtime: logic, transport: .init(mouse: mouse, canPostEvents: canPostEvents),
+                sourceIsCurrent: { [self] in readOriginalMixerIndex(for: source) != nil },
+                permittingClick: {
+                    !stop() && (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil
+                })
+            for attempt in 0..<3 {
+                guard owned(), let focus: AXUIElement = AXHelpers.getAttribute(app,
+                    kAXFocusedUIElementAttribute as String, runtime: logic.ax) else {
+                    effects.reason = "mixer_focus_acquisition_unverified"
+                    return false
+                }
+                if CFEqual(focus, selected) { return await acceptSelectedFocus() }
+                guard CFEqual(focus, originalFocus) else {
+                    lost = true
+                    effects.reason = "mixer_focus_acquisition_unverified"
+                    return false
+                }
+                guard clicked, attempt < 2 else {
+                    effects.reason = "mixer_focus_acquisition_unverified"
+                    effects.restoration = "restored"
+                    return false
+                }
+                do { try await Task.sleep(for: .milliseconds(25)) } catch {
+                    effects.reason = "mixer_focus_acquisition_unverified"
+                    effects.restoration = "restored"
+                    return false
+                }
+            }
+            effects.reason = "mixer_focus_acquisition_unverified"
+            effects.restoration = "restored"
+            return false
+        }
+
         /// Layout is a restoration duty, never a replacement peer identity.
         struct MixerViewportGeometry: @unchecked Sendable {
             let window: AXUIElement
@@ -1539,9 +1667,17 @@ extension AccessibilityChannel {
         private func restoreOriginalFocus(referenceIsCurrent: @Sendable () async -> Bool,
                                           stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
             guard expectedIndex == originalIndex, !CFEqual(expectedFocus, originalFocus),
-                  !stop(), await referenceIsCurrent(), passiveStripMatches(originalFocus),
-                  let originalPath = Self.path(originalFocus, to: window, ax: logic.ax),
-                  Self.same(originalPath, [originalFocus] + path),
+                  !stop(), await referenceIsCurrent() else { return false }
+            let originalFocusMatches: Bool
+            if let originalRailFocus, CFEqual(originalRailFocus, originalFocus) {
+                originalFocusMatches = passiveAssociationFocusMatches(originalFocus)
+                    && railPath.contains(where: { CFEqual($0, originalFocus) })
+            } else {
+                originalFocusMatches = passiveStripMatches(originalFocus)
+                    && Self.path(originalFocus, to: window, ax: logic.ax)
+                        .map({ Self.same($0, [originalFocus] + path) }) == true
+            }
+            guard originalFocusMatches,
                   AXHelpers.isAttributeSettable(originalFocus, kAXFocusedAttribute as String, runtime: logic.ax) == true,
                   let beforeViewport = currentViewport(), Self.sameViewport(beforeViewport, expectedViewport),
                   permitsRead(), !stop(), owned(),
@@ -1590,6 +1726,52 @@ extension AccessibilityChannel {
                 do { try await Task.sleep(for: .milliseconds(25)) } catch { return false }
             }
             return false
+        }
+
+        /// Idempotent cleanup for the pre-population selected-child focus. It
+        /// runs on both stable and interrupted reads and never adopts a newer
+        /// focus, selection or viewport as its restoration baseline.
+        func restorePreparedPopulationFocus(
+            referenceIsCurrent: @Sendable () async -> Bool,
+            stoppingWhen stop: @Sendable () -> Bool
+        ) async -> Bool {
+            guard effects.attempted.contains("mixer_focus_acquisition") else { return true }
+            guard !stop(), await referenceIsCurrent() else {
+                effects.restoration = "not_restored"
+                effects.reason = effects.reason ?? "association_restoration_unverified"
+                return false
+            }
+            let focusRestored: Bool
+            if expectedIndex == originalIndex, CFEqual(expectedFocus, originalFocus) {
+                focusRestored = permitsRead()
+            } else if expectedIndex == originalIndex {
+                focusRestored = await restoreOriginalFocus(
+                    referenceIsCurrent: referenceIsCurrent, stoppingWhen: stop)
+            } else { focusRestored = false }
+            let viewportRestored: Bool
+            if focusRestored {
+                viewportRestored = await restoreViewport(
+                    referenceIsCurrent: referenceIsCurrent, stoppingWhen: stop)
+            } else { viewportRestored = false }
+            guard viewportRestored, CFEqual(expectedFocus, originalFocus),
+                  permitsRead(), !stop(), await referenceIsCurrent() else {
+                effects.restoration = "not_restored"
+                effects.reason = effects.reason ?? "association_restoration_unverified"
+                return false
+            }
+            effects.restoration = "restored"
+            preparedPopulationFocusIsActive = false
+            return true
+        }
+
+        /// During a prepared population read, the exact selected child is the
+        /// association challenge's temporary inverse. The original rail remains
+        /// the request's final restoration duty after the population bookend.
+        private func observationFocusIsRestored() -> Bool {
+            if preparedPopulationFocusIsActive, let originalSelectedChild {
+                return CFEqual(expectedFocus, originalSelectedChild)
+            }
+            return CFEqual(expectedFocus, originalFocus)
         }
 
         /// Match the original strip focus or the original passive rail's exact
@@ -1831,10 +2013,10 @@ extension AccessibilityChannel {
                     continue
                 }
                 if expectedIndex == originalIndex {
-                    restored = permitsRead() && CFEqual(expectedFocus, originalFocus) && selectedChildRestored()
+                    restored = permitsRead() && observationFocusIsRestored() && selectedChildRestored()
                 } else if await referenceIsCurrent() {
                     restored = await select(originalIndex, referenceIsCurrent: referenceIsCurrent, stoppingWhen: stop)
-                        && CFEqual(expectedFocus, originalFocus) && selectedChildRestored()
+                        && observationFocusIsRestored() && selectedChildRestored()
                 } else { restored = false }
                 if !restored, !lost, expectedIndex == originalIndex, selectedChildRestored() {
                     // As in whole-held collection, restore only our original
@@ -1858,13 +2040,13 @@ extension AccessibilityChannel {
             }
             if allHeldHeaders {
                 if expectedIndex == originalIndex {
-                    restored = permitsRead() && CFEqual(expectedFocus, originalFocus) && selectedChildRestored()
+                    restored = permitsRead() && observationFocusIsRestored() && selectedChildRestored()
                 } else if await referenceIsCurrent() {
                     let precedingStrip = associationStrip
                     let returned = await select(originalIndex, referenceIsCurrent: referenceIsCurrent, stoppingWhen: stop)
                     if returned, CFEqual(associationStrip, originalAssociationStrip),
                        !CFEqual(precedingStrip, originalAssociationStrip) { originalPairVerified = true }
-                    restored = returned && CFEqual(expectedFocus, originalFocus) && selectedChildRestored()
+                    restored = returned && observationFocusIsRestored() && selectedChildRestored()
                 } else { restored = false }
                 if !restored, !lost, expectedIndex == originalIndex {
                     if originalSelectedChild == nil { originalPairVerified = false }
@@ -1898,7 +2080,8 @@ extension AccessibilityChannel {
                 }
                 expectedMixerViewport = originalMixerViewport
             }
-            effects.restoration = expectedMixerViewport == nil ? "restored" : "not_restored"
+            effects.restoration = preparedPopulationFocusIsActive || expectedMixerViewport != nil
+                ? "not_restored" : "restored"
             guard selectionsVerified, !observed.isEmpty else {
                 effects.reason = "association_selection_unverified"; return []
             }
@@ -1940,7 +2123,7 @@ extension AccessibilityChannel {
                     return []
                 }
             }
-            effects.restoration = "restored"
+            effects.restoration = preparedPopulationFocusIsActive ? "not_restored" : "restored"
             return pairs
         }
     }
