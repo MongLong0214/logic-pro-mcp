@@ -2954,22 +2954,25 @@ enum SemanticOracleTable {
         ]
     )
 
-    // MCUChannel.executeBank. #862's ten 2026-09-27 locale records drive the
-    // real State-A shape: every requested bank step was witnessed (`banks_moved
-    // == banks_requested`) by a fresh MCU LCD upper-row redraw. The before/after
-    // inequality rejects a sent-button receipt or unchanged edge redraw; the
-    // two arrays retain the per-step and final strip evidence. Bookkeeping is
-    // intentionally shape-only because it is local state, not Logic readback.
+    // MCUChannel.executeBank. #862's ten 2026-09-27 locale records drive this
+    // bounded State-A profile: one requested bank step, one witnessed move and
+    // at least one fresh MCU LCD upper-row write. `step_windows` also contains
+    // ambiguity-probe windows, so the current envelope cannot prove an ordered
+    // multi-step walk; count > 1 deliberately remains unqualified. A one-step
+    // right move can use two probe presses in addition to its requested press,
+    // hence the 1...3 press domain. The before/after inequality rejects a sent-
+    // button receipt or unchanged edge redraw. Bookkeeping stays shape-only
+    // because it is local state, not Logic readback.
     static let mixerBank = SafeMutationOracle.oracle(
         .mixerBank,
         semantics: [
             .valueEquals(key: "operation", expected: .string("mixer.bank")),
             .valueEquals(key: "channel", expected: .string("MCU")),
             .enumMember(key: "direction", allowed: ["left", "right"]),
-            .numericRange(key: "banks_requested", min: 1, max: 31),
-            .fieldsEqual(keyA: "banks_moved", keyB: "banks_requested"),
-            .numericRange(key: "bank_presses_sent", min: 1, max: 93),
-            .typedField(key: "upper_row_writes_observed", type: .number),
+            .valueEquals(key: "banks_requested", expected: .number(1)),
+            .valueEquals(key: "banks_moved", expected: .number(1)),
+            .numericRange(key: "bank_presses_sent", min: 1, max: 3),
+            .numericRange(key: "upper_row_writes_observed", min: 1, max: Double(Int.max)),
             .typedField(key: "bank_bookkeeping_before", type: .number),
             .typedField(key: "bank_bookkeeping_after", type: .number),
             .typedField(key: "window_before", type: .string),

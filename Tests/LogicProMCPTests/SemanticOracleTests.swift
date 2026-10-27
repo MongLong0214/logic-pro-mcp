@@ -557,10 +557,10 @@ struct SemanticOracleCensusTests {
         )
     }
 
-    /// #862 — the ten-locale 2026-09-27 native records include a real State-A
-    /// `mixer.bank` response whose independent witness is the freshly redrawn MCU
-    /// LCD upper row. Keep the post-B4 operation on the covered side, and prove
-    /// the oracle rejects both a forged witness and a partial bank walk.
+    /// #862 — the ten-locale 2026-09-27 native records include a real one-step
+    /// State-A `mixer.bank` response whose independent witness is the freshly
+    /// redrawn MCU LCD upper row. Keep that bounded profile on the covered side,
+    /// and reject forged, partial, multi-step and no-fresh-write receipts.
     @Test func mixerBankLiveStateAContractIsPinnedPostClosure() throws {
         #expect(SemanticOracleTable.postClosureMutatingOperationIDs.contains(.mixerBank))
         #expect(SemanticOracleTable.structurallyUnverifiedMutatingOperationIDs[.mixerBank] == nil)
