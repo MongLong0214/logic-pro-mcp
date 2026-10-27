@@ -600,6 +600,30 @@ struct SemanticOracleCensusTests {
             readbackData: Data("{}".utf8)
         ))
         #expect(!unchangedAccepted)
+
+        // The current envelope interleaves requested-step and ambiguity-probe
+        // windows in `step_windows`, so it cannot prove an ordered multi-step
+        // walk. Keep this promotion to the independently witnessed one-step
+        // profile instead of accepting a net before/after change as two moves.
+        let unprovableMultiStep = liveStateA
+            .replacingOccurrences(of: "\"bank_presses_sent\":1", with: "\"bank_presses_sent\":2")
+            .replacingOccurrences(of: "\"banks_moved\":1", with: "\"banks_moved\":2")
+            .replacingOccurrences(of: "\"banks_requested\":1", with: "\"banks_requested\":2")
+            .replacingOccurrences(of: "\"upper_row_writes_observed\":2", with: "\"upper_row_writes_observed\":4")
+        let multiStepAccepted = try #require(oracle.evaluate(
+            responseData: Data(unprovableMultiStep.utf8),
+            readbackData: Data("{}".utf8)
+        ))
+        #expect(!multiStepAccepted)
+
+        let noFreshUpperRowWrite = liveStateA.replacingOccurrences(
+            of: "\"upper_row_writes_observed\":2", with: "\"upper_row_writes_observed\":0"
+        )
+        let noFreshWriteAccepted = try #require(oracle.evaluate(
+            responseData: Data(noFreshUpperRowWrite.utf8),
+            readbackData: Data("{}".utf8)
+        ))
+        #expect(!noFreshWriteAccepted)
     }
 
     /// Soundness of the increment: every id in B1..B4 is a REAL `.mutating`,
