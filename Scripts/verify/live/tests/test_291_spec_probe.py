@@ -65,7 +65,8 @@ class MixerSession:
     def __init__(self, edges, data_source="ax_poll", cache_age=0.01, refreshed=True,
                  product_run=None, before_fetched="2026-10-27T00:00:00Z",
                  after_fetched="2026-10-27T00:00:01Z", changed_sections=None,
-                 input_states=None, omitted_input_observations=None):
+                 input_states=None, omitted_input_observations=None,
+                 output_states=None, omitted_output_observations=None):
         self.edges = edges
         self.data_source = data_source
         self.cache_age = cache_age
@@ -77,6 +78,8 @@ class MixerSession:
                                  if changed_sections is None else changed_sections)
         self.input_states = input_states or {}
         self.omitted_input_observations = omitted_input_observations or set()
+        self.output_states = output_states or {}
+        self.omitted_output_observations = omitted_output_observations or set()
         self.calls = []
         self.reads = 0
 
@@ -109,6 +112,14 @@ class MixerSession:
                 row["input_observation"] = observation
             if strip["outputs"]:
                 row["output"] = strip["outputs"][0]["description"]
+                output_observation = {
+                    "state": "observed_destination", "destination": row["output"]}
+            else:
+                output_observation = {"state": "no_slot", "destination": None}
+            if index in self.output_states:
+                output_observation = {"state": self.output_states[index], "destination": None}
+            if index not in self.omitted_output_observations:
+                row["output_observation"] = output_observation
             strips.append(row)
         return json.dumps({"data_source": self.data_source, "cache_age_sec": self.cache_age,
                            "fetched_at": self.before_fetched if self.reads == 1 else self.after_fetched,
@@ -251,9 +262,26 @@ class RoutingSpecProbeTests(unittest.TestCase):
                 spec_probes.routing_slots(
                     {"life": sidecars, "lproj": "en",
                      "decl": setups.declaration("lpm-locale-campaign-mixer"),
-                     "session": MixerSession([], product_run=incomplete)})
+                     "session": MixerSession([], product_run=incomplete,
+                                             output_states={0: "unreadable"})})
         finally:
             spec_probes.live_probes.run = saved
+
+    def test_live_probe_accepts_explicit_no_output_slot_without_inventing_a_route(self):
+        sidecars = Sidecars()
+        saved = spec_probes.live_probes.run
+        # The committed 21-strip fixture has two terminal strips with no output
+        # control. That is a positive no-slot observation, not output:nil alone.
+        fixture = routing_run(outputs={index: "Stereo Output" for index in range(19)})
+        spec_probes.live_probes.run = lambda name, args: fixture
+        try:
+            got = json.loads(spec_probes.routing_slots(
+                {"life": sidecars, "lproj": "en",
+                 "decl": setups.declaration("lpm-locale-campaign-mixer"),
+                 "session": MixerSession([], product_run=fixture)}))
+        finally:
+            spec_probes.live_probes.run = saved
+        self.assertEqual(got["outputs"][19:], [None, None])
 
     def test_live_probe_rejects_a_fresh_product_topology_that_differs_from_the_ax_walk(self):
         sidecars = Sidecars()

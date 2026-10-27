@@ -314,13 +314,20 @@ def _product_routing(body: dict, rows: dict) -> dict:
             raise Unreadable(
                 f"routing_slots: logic://mixer strip {index}'s input observation is unreadable or inconsistent")
         output_label = strip.get("output")
-        if isinstance(output_label, str) and output_label:
-            outputs.append(_assignment(output_label, rows))
-        else:
-            # ChannelStripState.output == nil means "not identified", never a
-            # positively observed absence. It cannot corroborate the direct walk.
+        output_observation = strip.get("output_observation")
+        if not isinstance(output_observation, dict):
             raise Unreadable(
-                f"routing_slots: logic://mixer strip {index}'s output is unreadable")
+                f"routing_slots: logic://mixer strip {index} has no output observation")
+        output_state = output_observation.get("state")
+        output_destination = output_observation.get("destination")
+        if (output_state == "observed_destination" and isinstance(output_label, str)
+                and output_label and output_destination == output_label):
+            outputs.append(_assignment(output_label, rows))
+        elif output_state == "no_slot" and output_label is None and output_destination is None:
+            outputs.append(None)
+        else:
+            raise Unreadable(
+                f"routing_slots: logic://mixer strip {index}'s output observation is unreadable or inconsistent")
     return {"strip_count": len(strips), "occupied_strips": occupied,
             "send_counts": send_counts, "inputs": inputs, "outputs": outputs}
 

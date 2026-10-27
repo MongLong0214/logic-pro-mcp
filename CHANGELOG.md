@@ -16,8 +16,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   and occupancy, not only its strip count. Independent probes keep their raw walks as sidecars,
   require the requested refresh cycle's structured receipt to name `mixer` in `changed_sections`,
   allow an explicitly uninitialized `fetched_at:null` only before that first refresh, and otherwise
-  require the Mixer timestamp to advance. They also require typed product input observations and
-  nonempty observed output labels, so missing or unreadable routing cannot impersonate absence.
+  require the Mixer timestamp to advance. They also require typed product input and output
+  observations, so missing or unreadable routing cannot impersonate absence while a positively
+  completed output-control walk can report `no_slot` for the fixture's terminal strips.
   The refreshed product topology must equal the independent AX walk; its full edge list is compared
   with `inspect_session`, and a Send source edge is refused when the independent Mixer surface has
   no destination witness.
