@@ -40,6 +40,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   censuses grow to 117 operations; the op joins the `legacy_index_allowed` census.
 
 ### Fixed
+- **`record_sequence` works in Logic's default control-bar display mode (#1420).** In "Beats & Project"
+  the Playhead Position group exposes only bar and beat, so the seek to `1.1.1.1` could never reach
+  State A and every `record_sequence` refused with "failed to reset playhead to bar 1". A bar-and-beat
+  reading cannot see a sub-beat offset, and the region check after the import compares bars only, so
+  a partial reading is not accepted. Instead, when the readback before the seek is partial,
+  `record_sequence` switches the display mode to Beats (the existing `displayModePopupLabel` and
+  `beatsDisplayModeItem` labels), reads the position again, requires the seek's full State A as
+  before, and restores the original mode whether the seek was verified or refused. The restore acts
+  only while the same window, project and popup still show Beats, so a mode the user chose in between
+  is left alone, and the import waits until the restore is confirmed. After a verified seek, an
+  unconfirmed restore fails with `display_mode_restore_unverified`; if the seek also refused, its
+  failure remains primary and `display_mode_restore_refused` still names the cleanup failure. Responses
+  report `display_mode_switched_from` and `display_mode_restored`, or
+  `display_mode_switch_unavailable` when the switch could not be made (the seek then refuses as
+  before).
 - **`record_sequence` no longer splits into two tracks for notes off channel 1.** The tick-0 padding
   CC#110 that keeps Logic from dropping the bar offset was always written on channel 1. Logic's MIDI import
   splits a file by channel, so notes on any other channel arrived as two tracks, one holding only the
