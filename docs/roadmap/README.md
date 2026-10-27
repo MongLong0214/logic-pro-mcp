@@ -40,10 +40,10 @@ still list the issue rather than delete its row.
 It does not check the prose. The "waiting on" column, the order, and the state block below are still
 claims dated by the "measured" line, and only issue numbers and open/closed are mechanised.
 
-## State — measured 2026-09-07 at `a70df168`
+## State — measured 2026-10-28 at `e3f0238f`
 
 ```
-v3.15.0 published, 207 commits since · ADR-019 landed · de-DE joined the locale campaign (#876) · 14 open issues · 6 of 7 LPMCP-PRD-001 debts open, now tracked by #815/#816/#373 rather than asserted by CI and written down nowhere
+26 open issues and 3 open pull requests after a paginated GitHub API read · issue bodies and owner comments remain the acceptance authority · active delivery: #1422 via #1429 and #1420 via #1431
 ```
 
 | ADR | issue | state | what it is waiting on |
@@ -219,6 +219,11 @@ Also open, outside the ADR set:
 | #1118 | closed | Feature request: observe markers without requiring an already-open Marker List; current unreadable/cache behavior is documented. Candidate ruler or last-saved project sources must retain provenance; owned opt-in navigation/restoration is an alternative. No implementation or fresh native qualification claimed. |
 
 | #1287 | closed | Closed by the pull request carrying this row. Reference-bound native whole-project MIDI export retains every target-owned raw chunk, including separated offscreen regions, and shares its managed file path with structured tick-based note reads. Cycle and region-selection preference controls, native transpose/quantization projection, wrong-reference and existing-file refusals accompany focused tests. Project/import equivalence and general loop/alias playback semantics remain explicitly unproven; #302 is not closed by this artifact-scoped provider. |
+| #1403 | OPEN | The issue body's fourteen acceptance checks are the contract. Reconcile its 2026-10-23 baseline with current `main`, then close only concrete gaps in the existing autonomous review/evidence/merge path; zero human-dependent transitions and requests must hold on successful and unsuccessful tested paths without weakening required checks or creating a duplicate workflow engine. |
+| #1417 | OPEN | Mono Gain/Sample Delay reads and the scalar reader's modal refusal shipped in #1424. Remaining acceptance is the intermittent Logic 12.4 editor-cleanup failure: obtain the failed response plus exact editor `AXSubrole`, `AXCloseButton` status and immediate `AXWindows` membership, reproduce against a disposable fixture, and prove owned close/settlement without global input. Logic 12.3 success does not close the 12.4 report. |
+| #1420 | OPEN | Owner acceptance keeps the four-component State A seek, restores the originally checked display mode under renewed project/window/control ownership on every exit, and blocks import until restoration is verified. Clean-history owner PR #1431 carries the current candidate; focused tests, guards, public-surface preflight and release build pass locally, while exact-head CI and independent challenge remain required before merge/closure. |
+| #1422 | OPEN | Owner selected explicit `allow_temporary_track_rename` with nonmutating collision diagnostics by default. The candidate must retain physical-target continuity, managed no-overwrite publication and owned restoration across success/failure/cancellation without overwriting a later user rename. PR #1429 is the current candidate; exact-head CI/policy and final merge/closure remain. |
+| #1430 | OPEN | Add read-only `get_param_verified` coverage for ChromaVerb, Space Designer, Tape Delay, Stereo Delay and Overdrive in the issue's priority order. An explicit occupied `plugin_insert_ref`, verbatim display value, truthful partial coverage and verified editor cleanup are required. Exact AX row/control evidence for these plug-ins has not yet been captured, so no parameter metadata is inferred from UI names alone. |
 
 ### Three reopen reasons, checked rather than inferred
 
