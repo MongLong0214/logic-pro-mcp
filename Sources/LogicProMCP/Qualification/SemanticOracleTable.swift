@@ -2996,12 +2996,16 @@ enum SemanticOracleTable {
             .outputAssignment(key: "after"),
             .fieldsEqual(keyA: "after", keyB: "destination"),
             .anyOf([
+                [.integerMinimum(key: "mixer_strip_index", min: 0)],
+                [.integerMinimum(key: "track", min: 0)],
+            ]),
+            .anyOf([
                 [
                     .valueEquals(key: "changed", expected: .bool(false)),
                     .valueEquals(key: "write_attempted", expected: .bool(false)),
                     .fieldsEqual(keyA: "before", keyB: "after"),
                     .enumMember(key: "after.kind", allowed: ["bus", "physical", "stereo_output"]),
-                    .typedField(key: "strip_count_before", type: .number),
+                    .integerMinimum(key: "strip_count_before", min: 0),
                 ],
                 [
                     .valueEquals(key: "changed", expected: .bool(true)),
@@ -3021,6 +3025,8 @@ enum SemanticOracleTable {
                             .valueEquals(key: "after.kind", expected: .string("no_output")),
                         ],
                     ]),
+                    .integerMinimum(key: "strip_count_before", min: 0),
+                    .integerMinimum(key: "strip_count_after", min: 0),
                     .fieldsEqual(keyA: "strip_count_before", keyB: "strip_count_after"),
                     .valueEquals(key: "popup_menu_state", expected: .string("closed")),
                     .nonEmptyArray(key: "menu_path"),

@@ -121,6 +121,16 @@ struct SemanticOracleEngineTests {
         #expect(!OracleConstraint.numericMinimum(key: "missing", min: 1).isSatisfied(by: object))
     }
 
+    @Test func integerMinimumRejectsFractionalBooleanAndOutOfRangeValues() {
+        let minimum = OracleConstraint.integerMinimum(key: "value", min: 0)
+        #expect(minimum.isSatisfied(by: root(#"{"value":0}"#)))
+        #expect(minimum.isSatisfied(by: root(#"{"value":9223372036854775807}"#)))
+        #expect(!minimum.isSatisfied(by: root(#"{"value":-1}"#)))
+        #expect(!minimum.isSatisfied(by: root(#"{"value":0.5}"#)))
+        #expect(!minimum.isSatisfied(by: root(#"{"value":true}"#)))
+        #expect(!minimum.isSatisfied(by: root(#"{"value":9223372036854775808}"#)))
+    }
+
     @Test func enumMemberAcceptsLegalTokensAndRejectsOutsiders() {
         let object = root(#"{"status":"ok","flag":false,"n":1}"#)
         #expect(OracleConstraint.enumMember(key: "status", allowed: ["ok", "bad"]).isSatisfied(by: object))
@@ -167,6 +177,7 @@ struct SemanticOracleEngineTests {
             #"{"route":{"kind":"bus"}}"#,
             #"{"route":{"kind":"bus","number":0}}"#,
             #"{"route":{"kind":"bus","number":1.5}}"#,
+            #"{"route":{"kind":"physical","ports":[9223372036854775808,9223372036854775809]}}"#,
             #"{"route":{"kind":"bus","number":1,"ports":[1,2]}}"#,
             #"{"route":{"kind":"physical"}}"#,
             #"{"route":{"kind":"physical","ports":[3,3]}}"#,
@@ -188,6 +199,7 @@ struct SemanticOracleEngineTests {
         #expect(!entryCount.isSatisfied(by: root(#"{"positions":"7:1.1.1.18:12.1.1.1","marker_count":3}"#)))
         #expect(!entryCount.isSatisfied(by: root(#"{"positions":"8:5.1.1.1","marker_count":1}"#)))
         #expect(!entryCount.isSatisfied(by: root(#"{"positions":"7:1.1.1.1","marker_count":1.5}"#)))
+        #expect(!entryCount.isSatisfied(by: root(#"{"positions":"","marker_count":9223372036854775808}"#)))
 
         let survivors = OracleConstraint.lengthPrefixedEntryCountEquals(
             key: "positions", countKey: "marker_count_before", offset: -1
@@ -281,6 +293,7 @@ struct SemanticOracleEngineTests {
         // rejection: two PRESENT equal leaves agree — including null==null.
         #expect(eq.isSatisfied(by: root(#"{"a":null,"b":null}"#)))
         #expect(eq.isSatisfied(by: root(#"{"a":"","b":""}"#)))
+        #expect(!eq.isSatisfied(by: root(#"{"a":9007199254740992,"b":9007199254740993}"#)))
     }
 
     // MARK: - numericNear / emptyArray (Phase B1)
@@ -642,11 +655,57 @@ struct SemanticOracleCensusTests {
             #expect(!accepted, "malformed OutputAssignment passed: \(malformed)")
         }
 
+        // Route equality is integer-exact. NSNumber.doubleValue rounds these
+        // adjacent JSON integers to the same Double, but they name different
+        // physical ports and therefore cannot verify the requested route.
+        let roundedPortMismatch = liveWrite
+            .replacingOccurrences(
+                of: "\"destination\":{\"kind\":\"stereo_output\"}",
+                with: "\"destination\":{\"kind\":\"physical\",\"ports\":[9007199254740992,9007199254740994]}"
+            )
+            .replacingOccurrences(
+                of: "\"after\":{\"kind\":\"stereo_output\"}",
+                with: "\"after\":{\"kind\":\"physical\",\"ports\":[9007199254740993,9007199254740994]}"
+            )
+        let roundedPortAccepted = try #require(oracle.evaluate(
+            responseData: Data(roundedPortMismatch.utf8), readbackData: Data("{}".utf8)
+        ))
+        #expect(!roundedPortAccepted)
+
+        // State A must identify the exact target and carry real nonnegative
+        // integer population counts. Equal malformed values are not evidence
+        // that the Mixer population stayed fixed.
+        for malformed in [
+            liveWrite.replacingOccurrences(of: "\"mixer_strip_index\":12,", with: ""),
+            noWrite.replacingOccurrences(of: "\"track\":0,", with: ""),
+            liveWrite.replacingOccurrences(of: "\"mixer_strip_index\":12", with: "\"mixer_strip_index\":-1"),
+            liveWrite.replacingOccurrences(of: "\"mixer_strip_index\":12", with: "\"mixer_strip_index\":12.5"),
+            liveWrite
+                .replacingOccurrences(of: "\"strip_count_before\":38", with: "\"strip_count_before\":\"38\"")
+                .replacingOccurrences(of: "\"strip_count_after\":38", with: "\"strip_count_after\":\"38\""),
+            liveWrite
+                .replacingOccurrences(of: "\"strip_count_before\":38", with: "\"strip_count_before\":true")
+                .replacingOccurrences(of: "\"strip_count_after\":38", with: "\"strip_count_after\":true"),
+            liveWrite
+                .replacingOccurrences(of: "\"strip_count_before\":38", with: "\"strip_count_before\":38.5")
+                .replacingOccurrences(of: "\"strip_count_after\":38", with: "\"strip_count_after\":38.5"),
+            liveWrite
+                .replacingOccurrences(of: "\"strip_count_before\":38", with: "\"strip_count_before\":-1")
+                .replacingOccurrences(of: "\"strip_count_after\":38", with: "\"strip_count_after\":-1"),
+        ] {
+            let accepted = try #require(oracle.evaluate(
+                responseData: Data(malformed.utf8), readbackData: Data("{}".utf8)
+            ))
+            #expect(!accepted, "malformed target/count passed: \(malformed)")
+        }
+
         // The generic mutant harness must exercise the verified no-write
         // alternative independently of the committed write-shaped fixture.
         let noWriteRoot = try #require(JSONInspector.parse(Data(noWrite.utf8)))
         let branchConstraint = try #require(oracle.constraints.first { constraint in
-            if case .anyOf = constraint { return true }
+            if case .anyOf(let alternatives) = constraint {
+                return alternatives.flatMap { $0 }.contains { $0.key == "changed" }
+            }
             return false
         })
         let noWriteMutants = JSONMutator.mutants(for: branchConstraint, in: noWriteRoot)
@@ -1831,6 +1890,13 @@ enum JSONMutator {
             mutants.append(contentsOf: replacements(root, key, [
                 ("below min", min - 1),
                 ("not a number", "not-a-number"),
+            ]))
+        case .integerMinimum(_, let min):
+            mutants.append(contentsOf: replacements(root, key, [
+                ("below min", min - 1),
+                ("fractional", Double(min) + 0.5),
+                ("not a number", "not-a-number"),
+                ("boolean", true),
             ]))
         case .enumMember:
             mutants.append(contentsOf: replacements(root, key, [
