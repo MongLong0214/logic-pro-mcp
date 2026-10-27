@@ -1538,28 +1538,30 @@ enum StockPluginCatalog {
                 ]
             )
         ),
-        // Ratio has the same observed Controls-view AXSlider non-actuation.
-        // It is intentionally catalogued as a refusal target, not as a
-        // verified parameter, so callers receive the established measurement
-        // rather than the generic "not in the verified allowlist" response.
+        // Ratio's Controls row has a display-bearing slider that can be sampled
+        // twice without actuating it. Its write surface remains the separately
+        // measured non-actuating AXSlider, so readability must not imply a
+        // write method.
         StockPluginParameterMetadata(
             id: "ratio",
             displayName: "Ratio",
             unit: "raw_ax_value",
             valueRange: nil,
             writeMethod: nil,
-            readbackMethod: "ax_value_observed",
+            readbackMethod: "ax_controls_view_slider_display",
             controlsViewRowLabel: "Ratio",
             controlsViewControlRole: "AXSlider",
             controlsViewActuationState: .measuredNotActuable,
             availabilityState: .observed,
             provenance: .observed(
-                method: "controls_view_axslider_nonactuation_measurement",
+                method: "controls_view_axslider_read_and_nonactuation_measurement",
                 observedAt: "2026-09-02T11:30:17+09:00",
                 logicVersion: nil,
                 locale: "ko-KR",
                 evidence: [
+                    "parameter_readback",
                     "controls-view-write-20260902-113017",
+                    "Ratio Controls row exposes a stable raw value and verbatim ratio display",
                     "Ratio AXSlider direct AXValue set and AXIncrement were observed non-actuating",
                 ]
             )
