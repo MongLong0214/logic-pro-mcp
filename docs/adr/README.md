@@ -36,7 +36,7 @@ Two parts of that paragraph no longer hold. ADR-004's in-memory `MutationSaga` i
 | ADR | Name | Category | Status | GitHub issue |
 | --- | --- | --- | --- | --- |
 | ADR-008 | Verified Mixer Routing Graph | C | `In Implementation` | [#291](https://github.com/MongLong0214/logic-pro-mcp/issues/291) |
-| ADR-009 | Verified Plugin Apply-back Expansion | C | `In Implementation` | [#292](https://github.com/MongLong0214/logic-pro-mcp/issues/292) |
+| ADR-009 | Verified Plugin Apply-back Expansion | C | `Closed` | [#292](https://github.com/MongLong0214/logic-pro-mcp/issues/292) |
 | ADR-010 | MIDI Note-level Independent Readback Research | C | `Superseded` | [#293](https://github.com/MongLong0214/logic-pro-mcp/issues/293) closed 2026-09-21 with a non-completion disposition; the implementation queue is [#302](https://github.com/MongLong0214/logic-pro-mcp/issues/302) |
 
 ## Category D — Capability ADRs
@@ -58,10 +58,10 @@ Filed 2026-09-22 and selected in #308 §3 as incremental extensions over #28/#95
 
 | ADR | Name | Category | Status | GitHub issue |
 | --- | --- | --- | --- | --- |
-| ADR-020 | Whole-session Observation | E | `Accepted` | [#965](https://github.com/MongLong0214/logic-pro-mcp/issues/965) |
-| ADR-021 | Intent-aware Session Audit and Repair Planning | E | `Accepted` | [#966](https://github.com/MongLong0214/logic-pro-mcp/issues/966) |
+| ADR-020 | Whole-session Observation | E | `Closed` | [#965](https://github.com/MongLong0214/logic-pro-mcp/issues/965) |
+| ADR-021 | Intent-aware Session Audit and Repair Planning | E | `Closed` | [#966](https://github.com/MongLong0214/logic-pro-mcp/issues/966) |
 | ADR-022 | Verified Bus/Aux Lifecycle | E | `Accepted` | [#967](https://github.com/MongLong0214/logic-pro-mcp/issues/967) |
-| ADR-023 | Non-destructive Session Cleanup (exact naming) | E | `Accepted` | [#968](https://github.com/MongLong0214/logic-pro-mcp/issues/968) |
+| ADR-023 | Non-destructive Session Cleanup (exact naming) | E | `Closed` | [#968](https://github.com/MongLong0214/logic-pro-mcp/issues/968) |
 | ADR-024 | Stack-safe Track Organization | E | `Accepted` | [#969](https://github.com/MongLong0214/logic-pro-mcp/issues/969) |
 | ADR-025 | Verified Track/Strip Colors | E | `Accepted` | [#970](https://github.com/MongLong0214/logic-pro-mcp/issues/970) |
 | ADR-026 | End-to-end Session Repair | E | `Accepted` | [#971](https://github.com/MongLong0214/logic-pro-mcp/issues/971) |
