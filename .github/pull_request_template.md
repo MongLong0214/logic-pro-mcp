@@ -38,7 +38,9 @@ If this change states nothing about Logic, do not paste anything above: write th
 docs/canon/README.md gives, in your own visible prose below, with the reason. It is deliberately
 not typed here -- a sentence the template writes for you is a sentence nobody meant, and the first
 version of this file shipped it pre-filled, so every untouched template passed. The opt-out is
-refused outright for a change that edits a Logic-facing path, whatever the description says.
+allowed for a protocol-only change even on a Logic-facing path; directory membership scopes source
+bindings but is not native evidence. It cannot excuse a quoted Apple value or replace behavioral
+evidence for a native claim.
 -->
 
 ## Risks and limitations

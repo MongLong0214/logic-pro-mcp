@@ -63,8 +63,10 @@ is not there, say so in the pull request and a maintainer will pin it — do not
 quoting a value the index cannot check.
 
 **If your change states nothing about Logic**, write the sentence `docs/canon/README.md` gives
-under *The opt-out*, with the reason. It is refused for a change that edits a Logic-facing path,
-because what a change touches decides that, not what it says about itself.
+under *The opt-out*, with the reason. A protocol-only change may say this truthfully even when it
+edits a path classified as Logic-facing: directory membership scopes source/evidence bindings but
+is not itself a native observation. Quoted Apple values still require citations, and the declaration
+does not replace the live evidence required to accept a native behavior change.
 
 **If your change rests on what Logic does rather than a string it ships**, name the
 `canon_not_applicable` record it adds under `docs/observations/`; the conditions are in
