@@ -69,6 +69,9 @@ enum OracleConstraint: Sendable {
     case valueEquals(key: String, expected: JSONPrimitive)
     /// Environment-dependent number confined to a semantically legal domain.
     case numericRange(key: String, min: Double, max: Double)
+    /// Environment-dependent number with a real lower bound and no invented
+    /// upper bound. Booleans, missing values and non-numbers fail closed.
+    case numericMinimum(key: String, min: Double)
     /// Field must be one of a closed set of legal tokens.
     case enumMember(key: String, allowed: [String])
     /// Field must be an array with at least one element.
@@ -170,6 +173,7 @@ enum OracleConstraint: Sendable {
         switch self {
         case .valueEquals(let key, _),
              .numericRange(let key, _, _),
+             .numericMinimum(let key, _),
              .enumMember(let key, _),
              .nonEmptyArray(let key),
              .typedField(let key, _),
@@ -201,7 +205,7 @@ enum OracleConstraint: Sendable {
     /// oracle carrying one is never a checkbox oracle.
     var isValueConstraint: Bool {
         switch self {
-        case .valueEquals, .numericRange, .enumMember, .lengthPrefixedEntryCountEquals,
+        case .valueEquals, .numericRange, .numericMinimum, .enumMember, .lengthPrefixedEntryCountEquals,
              .lengthPrefixedEntriesExclude, .lengthPrefixedIdentityAtIndexEquals,
              .readbackArrayExcludesResponseIdentity, .fieldsEqual, .utf8StringsEqual, .crossCheck, .numericNear,
              .fieldsDiffer, .booleanFlipped, .numericEqualsOffset:
@@ -229,6 +233,10 @@ enum OracleConstraint: Sendable {
             guard let value = JSONPath.resolve(root, keyPath: key),
                   let number = JSONInspector.number(of: value) else { return false }
             return number >= min && number <= max
+        case .numericMinimum(let key, let min):
+            guard let value = JSONPath.resolve(root, keyPath: key),
+                  let number = JSONInspector.number(of: value) else { return false }
+            return number >= min
         case .enumMember(let key, let allowed):
             guard let value = JSONPath.resolve(root, keyPath: key),
                   let token = JSONInspector.enumToken(of: value) else { return false }

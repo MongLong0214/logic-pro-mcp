@@ -111,6 +111,16 @@ struct SemanticOracleEngineTests {
         #expect(!OracleConstraint.numericRange(key: "missing", min: 0, max: 10).isSatisfied(by: object))
     }
 
+    @Test func numericMinimumIsInclusiveWithoutInventingAnUpperBound() {
+        let object = root(#"{"low":1,"high":1000000000000,"zero":0,"text":"1","flag":true}"#)
+        #expect(OracleConstraint.numericMinimum(key: "low", min: 1).isSatisfied(by: object))
+        #expect(OracleConstraint.numericMinimum(key: "high", min: 1).isSatisfied(by: object))
+        #expect(!OracleConstraint.numericMinimum(key: "zero", min: 1).isSatisfied(by: object))
+        #expect(!OracleConstraint.numericMinimum(key: "text", min: 1).isSatisfied(by: object))
+        #expect(!OracleConstraint.numericMinimum(key: "flag", min: 1).isSatisfied(by: object))
+        #expect(!OracleConstraint.numericMinimum(key: "missing", min: 1).isSatisfied(by: object))
+    }
+
     @Test func enumMemberAcceptsLegalTokensAndRejectsOutsiders() {
         let object = root(#"{"status":"ok","flag":false,"n":1}"#)
         #expect(OracleConstraint.enumMember(key: "status", allowed: ["ok", "bad"]).isSatisfied(by: object))
@@ -1709,6 +1719,11 @@ enum JSONMutator {
         case .numericRange(_, let min, let max):
             mutants.append(contentsOf: replacements(root, key, [
                 ("above max", max + 1),
+                ("below min", min - 1),
+                ("not a number", "not-a-number"),
+            ]))
+        case .numericMinimum(_, let min):
+            mutants.append(contentsOf: replacements(root, key, [
                 ("below min", min - 1),
                 ("not a number", "not-a-number"),
             ]))

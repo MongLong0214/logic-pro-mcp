@@ -2972,7 +2972,7 @@ enum SemanticOracleTable {
             .valueEquals(key: "banks_requested", expected: .number(1)),
             .valueEquals(key: "banks_moved", expected: .number(1)),
             .numericRange(key: "bank_presses_sent", min: 1, max: 3),
-            .numericRange(key: "upper_row_writes_observed", min: 1, max: Double(Int.max)),
+            .numericMinimum(key: "upper_row_writes_observed", min: 1),
             .typedField(key: "bank_bookkeeping_before", type: .number),
             .typedField(key: "bank_bookkeeping_after", type: .number),
             .typedField(key: "window_before", type: .string),
