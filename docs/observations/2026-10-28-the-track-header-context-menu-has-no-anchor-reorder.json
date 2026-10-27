@@ -59,13 +59,13 @@
   "canon_not_applicable": {
     "reason": "The conclusion is about runtime AX structure, complete menu membership and before/after state, not the wording of any menu title. Exact observed titles are retained only in the attached raw census."
   },
-  "conclusion": "The selected header's complete context menu contains 102 items across 11 menu containers, but zero item provides an anchor-relative, up/down or exact-position track move. Reassignment targets existing objects and stack creation changes hierarchy; neither is an exact retained-track reorder primitive. Together with the existing key-command census and the retained header's lack of a reorder action or writable position, this closes the last measured coordinate-free provider candidate on this host. Exact L2 arbitrary reordering is platform-limited here and must refuse rather than simulate a drag.",
+  "conclusion": "The selected header's complete context menu contains 102 items across 11 menu containers, but zero item provides an anchor-relative, up/down or exact-position track move. This measured menu surface therefore does not provide a coordinate-free exact-reorder primitive on this host; this record makes no claim about providers outside that menu.",
   "limits": [
     "One Logic build, one locale, one flat 32-header fixture and one already-selected audio track.",
     "This proves absence from the recursively exposed selected-header context menu on this host; it does not prove that no future Logic build or private protocol can expose an exact reorder provider.",
     "The Mixer strip context menu was not opened. It is lower-value because Mixer reordering can create or move Arrange tracks and still lacks a retained before/after anchor contract.",
     "No menu leaf was pressed, so this record does not qualify reassignment, stack creation, coloring, naming or any other listed command.",
-    "This settles the bounded L2 provider investigation only. It does not complete #969's grouping, view-layout or broader live-integration acceptance."
+    "This settles only the selected-header context-menu branch of the bounded L2 provider investigation. It does not complete #969's grouping, view-layout or broader live-integration acceptance."
   ],
   "supersedes": null
 }
