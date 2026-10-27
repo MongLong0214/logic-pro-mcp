@@ -2621,7 +2621,10 @@ struct Issue968ExactTrackNameAdapterTests {
 
             let f = ExactNameFixture()
             let (project, target) = try await f.prepare(typedProducer: true)
-            let deadline = loss == "deadline" ? ContinuousClock.now.advanced(by: .seconds(1)) : nil
+            // The suite runs many native-identity fixtures concurrently. Leave
+            // enough runway to reach the injected deciding read under that load;
+            // the callback below still expires the actual absolute deadline.
+            let deadline = loss == "deadline" ? ContinuousClock.now.advanced(by: .seconds(15)) : nil
             f.onNameReadAfterWrite = {
                 guard f.nameReadsAfterWrite == finalNameRead else { return }
                 if loss == "ownership" { f.boundaryOwnership = false }
