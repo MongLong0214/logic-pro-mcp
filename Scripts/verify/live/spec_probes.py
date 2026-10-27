@@ -31,6 +31,10 @@ from . import probes as live_probes
 
 MCU_STATE = "logic://mcu/state"
 MIXER_STATE = "logic://mixer"
+# The refresh receipt uses the resource path component as its section token.
+# Derive it from the protocol URI so a protocol comparison cannot be mistaken
+# for a localized Logic UI label by the live-harness literal guard.
+MIXER_SECTION = MIXER_STATE.partition("://")[2]
 # RoutingGraph's repository-owned wire enum, not a localized Logic UI label.
 PRODUCT_SEND_EDGE_KIND = "send"
 MAX_MIXER_CACHE_AGE_S = 1.0
@@ -256,8 +260,12 @@ def _mixer_body(text: str) -> dict:
     return body
 
 
-def _fetched_at(body: dict, phase: str) -> datetime:
-    value = body.get("fetched_at")
+def _fetched_at(body: dict, phase: str, allow_uninitialized: bool = False):
+    if "fetched_at" not in body:
+        raise Unreadable(f"routing_slots: {phase} logic://mixer has no fetched_at field")
+    value = body["fetched_at"]
+    if value is None and allow_uninitialized:
+        return None
     if not isinstance(value, str):
         raise Unreadable(f"routing_slots: {phase} logic://mixer has no fetched_at timestamp")
     try:
@@ -291,19 +299,28 @@ def _product_routing(body: dict, rows: dict) -> dict:
         if any(state in occupied_states for state in states):
             occupied.append(index)
         input_label = strip.get("input")
-        if input_label is None:
+        input_observation = strip.get("input_observation")
+        if not isinstance(input_observation, dict):
+            raise Unreadable(
+                f"routing_slots: logic://mixer strip {index} has no input observation")
+        input_state = input_observation.get("state")
+        input_source = input_observation.get("source")
+        if input_state == "no_slot" and input_label is None and input_source is None:
             inputs.append(None)
-        elif isinstance(input_label, str) and input_label:
+        elif (input_state == "observed_source" and isinstance(input_label, str)
+              and input_label and input_source == input_label):
             inputs.append(_input_assignment(input_label, rows))
         else:
-            raise Unreadable(f"routing_slots: logic://mixer strip {index}'s input is malformed")
+            raise Unreadable(
+                f"routing_slots: logic://mixer strip {index}'s input observation is unreadable or inconsistent")
         output_label = strip.get("output")
-        if output_label is None:
-            outputs.append(None)
-        elif isinstance(output_label, str) and output_label:
+        if isinstance(output_label, str) and output_label:
             outputs.append(_assignment(output_label, rows))
         else:
-            raise Unreadable(f"routing_slots: logic://mixer strip {index}'s output is malformed")
+            # ChannelStripState.output == nil means "not identified", never a
+            # positively observed absence. It cannot corroborate the direct walk.
+            raise Unreadable(
+                f"routing_slots: logic://mixer strip {index}'s output is unreadable")
     return {"strip_count": len(strips), "occupied_strips": occupied,
             "send_counts": send_counts, "inputs": inputs, "outputs": outputs}
 
@@ -341,6 +358,13 @@ def routing_slots(ctx: dict) -> str:
                 and refresh.get("source") == "ax_fallback_poller"):
             raise Unreadable(f"routing_slots: refresh_cache did not complete a fresh AX poll: "
                              f"{refresh!r}")
+        changed_sections = refresh.get("changed_sections")
+        if (not isinstance(changed_sections, list)
+                or any(not isinstance(section, str) for section in changed_sections)
+                or MIXER_SECTION not in changed_sections):
+            raise Unreadable(
+                "routing_slots: refresh_cache's requested cycle did not write the Mixer section: "
+                f"{refresh!r}")
         mixer_text = session.read(MIXER_STATE, READ_S)
     except Unreadable:
         raise
@@ -349,7 +373,9 @@ def routing_slots(ctx: dict) -> str:
     before_sha = ctx["life"].sidecar(before_text.encode("utf-8"))
     mixer_sha = ctx["life"].sidecar(mixer_text.encode("utf-8"))
     product_body, product_routing, product_edges, send_edges = _product_state(mixer_text, rows)
-    if _fetched_at(product_body, "after") <= _fetched_at(before_body, "before"):
+    after_fetched = _fetched_at(product_body, "after")
+    before_fetched = _fetched_at(before_body, "before", allow_uninitialized=True)
+    if before_fetched is not None and after_fetched <= before_fetched:
         raise Unreadable("routing_slots: refresh_cache did not advance the Mixer fetched_at timestamp "
                          f"(before sha256 {before_sha}, after sha256 {mixer_sha})")
     if product_routing != independent:

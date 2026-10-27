@@ -64,7 +64,8 @@ class Sidecars:
 class MixerSession:
     def __init__(self, edges, data_source="ax_poll", cache_age=0.01, refreshed=True,
                  product_run=None, before_fetched="2026-10-27T00:00:00Z",
-                 after_fetched="2026-10-27T00:00:01Z"):
+                 after_fetched="2026-10-27T00:00:01Z", changed_sections=None,
+                 input_states=None, omitted_input_observations=None):
         self.edges = edges
         self.data_source = data_source
         self.cache_age = cache_age
@@ -72,6 +73,10 @@ class MixerSession:
         self.product_run = product_run or routing_run()
         self.before_fetched = before_fetched
         self.after_fetched = after_fetched
+        self.changed_sections = (["project", "tracks", "transport", "mixer"]
+                                 if changed_sections is None else changed_sections)
+        self.input_states = input_states or {}
+        self.omitted_input_observations = omitted_input_observations or set()
         self.calls = []
         self.reads = 0
 
@@ -79,6 +84,7 @@ class MixerSession:
         self.calls.append((tool, command, params))
         return {"operation": "system.refresh_cache", "refreshed": self.refreshed,
                 "source": "ax_fallback_poller",
+                "changed_sections": self.changed_sections,
                 "message": "State refresh completed via AX fallback poller."}
 
     def read(self, uri, _timeout):
@@ -94,6 +100,13 @@ class MixerSession:
             ]}
             if strip["inputs"]:
                 row["input"] = strip["inputs"][0]["description"]
+                observation = {"state": "observed_source", "source": row["input"]}
+            else:
+                observation = {"state": "no_slot", "source": None}
+            if index in self.input_states:
+                observation = {"state": self.input_states[index], "source": None}
+            if index not in self.omitted_input_observations:
+                row["input_observation"] = observation
             if strip["outputs"]:
                 row["output"] = strip["outputs"][0]["description"]
             strips.append(row)
@@ -103,6 +116,10 @@ class MixerSession:
 
 
 class RoutingSpecProbeTests(unittest.TestCase):
+
+    @staticmethod
+    def fully_observed_run():
+        return routing_run(outputs={index: "Stereo Output" for index in range(21)})
 
     def test_probe_normalizes_outputs_and_send_occupancy(self):
         run = routing_run(outputs={**{index: "Stereo Output" for index in range(19)},
@@ -123,8 +140,9 @@ class RoutingSpecProbeTests(unittest.TestCase):
     def test_live_probe_keeps_the_raw_walk_as_a_sidecar(self):
         sidecars = Sidecars()
         saved = spec_probes.live_probes.run
-        spec_probes.live_probes.run = lambda name, args: routing_run()
-        session = MixerSession([])
+        complete = self.fully_observed_run()
+        spec_probes.live_probes.run = lambda name, args: complete
+        session = MixerSession([], product_run=complete)
         try:
             text = spec_probes.routing_slots(
                 {"life": sidecars, "lproj": "en",
@@ -145,6 +163,7 @@ class RoutingSpecProbeTests(unittest.TestCase):
             "content": [{"type": "text", "text": "State refresh completed via AX fallback poller."}],
             "structuredContent": {"operation": "system.refresh_cache", "refreshed": True,
                                   "source": "ax_fallback_poller",
+                                  "changed_sections": ["mixer"],
                                   "message": "State refresh completed via AX fallback poller."},
         }}}
         with self.assertRaisesRegex(runner_live.runner.StepUnreadable, "not the same JSON"):
@@ -154,13 +173,15 @@ class RoutingSpecProbeTests(unittest.TestCase):
     def test_live_probe_rejects_stale_or_non_ax_product_routing(self):
         sidecars = Sidecars()
         saved = spec_probes.live_probes.run
-        spec_probes.live_probes.run = lambda name, args: routing_run()
+        complete = self.fully_observed_run()
+        spec_probes.live_probes.run = lambda name, args: complete
         try:
             for session, reason in (
-                (MixerSession([], data_source="mcu"), "data_source"),
-                (MixerSession([], cache_age=9), "cache_age_sec"),
-                (MixerSession([], refreshed=False), "refresh_cache"),
-                (MixerSession([], after_fetched="2026-10-27T00:00:00Z"), "fetched_at"),
+                (MixerSession([], data_source="mcu", product_run=complete), "data_source"),
+                (MixerSession([], cache_age=9, product_run=complete), "cache_age_sec"),
+                (MixerSession([], refreshed=False, product_run=complete), "refresh_cache"),
+                (MixerSession([], after_fetched="2026-10-27T00:00:00Z",
+                              product_run=complete), "fetched_at"),
             ):
                 with self.subTest(reason=reason), self.assertRaisesRegex(
                         spec_probes.Unreadable, reason):
@@ -171,24 +192,91 @@ class RoutingSpecProbeTests(unittest.TestCase):
         finally:
             spec_probes.live_probes.run = saved
 
+    def test_live_probe_requires_the_requested_cycle_to_write_mixer(self):
+        sidecars = Sidecars()
+        saved = spec_probes.live_probes.run
+        complete = self.fully_observed_run()
+        spec_probes.live_probes.run = lambda name, args: complete
+        try:
+            with self.assertRaisesRegex(spec_probes.Unreadable, "Mixer section"):
+                spec_probes.routing_slots(
+                    {"life": sidecars, "lproj": "en",
+                     "decl": setups.declaration("lpm-locale-campaign-mixer"),
+                     "session": MixerSession([], product_run=complete,
+                                             changed_sections=["project", "tracks"])})
+        finally:
+            spec_probes.live_probes.run = saved
+
+    def test_live_probe_accepts_a_cold_cache_before_timestamp(self):
+        sidecars = Sidecars()
+        saved = spec_probes.live_probes.run
+        complete = self.fully_observed_run()
+        spec_probes.live_probes.run = lambda name, args: complete
+        try:
+            got = json.loads(spec_probes.routing_slots(
+                {"life": sidecars, "lproj": "en",
+                 "decl": setups.declaration("lpm-locale-campaign-mixer"),
+                 "session": MixerSession([], product_run=complete, before_fetched=None)}))
+        finally:
+            spec_probes.live_probes.run = saved
+        self.assertEqual(got["strip_count"], 21)
+
+    def test_live_probe_rejects_missing_or_unreadable_product_input_status(self):
+        sidecars = Sidecars()
+        saved = spec_probes.live_probes.run
+        complete = self.fully_observed_run()
+        spec_probes.live_probes.run = lambda name, args: complete
+        try:
+            cases = (
+                MixerSession([], product_run=complete, omitted_input_observations={0}),
+                MixerSession([], product_run=complete, input_states={0: "unreadable"}),
+            )
+            for session in cases:
+                with self.subTest(session=session), self.assertRaisesRegex(
+                        spec_probes.Unreadable, "input observation"):
+                    spec_probes.routing_slots(
+                        {"life": sidecars, "lproj": "en",
+                         "decl": setups.declaration("lpm-locale-campaign-mixer"),
+                         "session": session})
+        finally:
+            spec_probes.live_probes.run = saved
+
+    def test_live_probe_rejects_product_output_nil_as_unknown_not_absent(self):
+        sidecars = Sidecars()
+        saved = spec_probes.live_probes.run
+        incomplete = routing_run()
+        spec_probes.live_probes.run = lambda name, args: incomplete
+        try:
+            with self.assertRaisesRegex(spec_probes.Unreadable, "output"):
+                spec_probes.routing_slots(
+                    {"life": sidecars, "lproj": "en",
+                     "decl": setups.declaration("lpm-locale-campaign-mixer"),
+                     "session": MixerSession([], product_run=incomplete)})
+        finally:
+            spec_probes.live_probes.run = saved
+
     def test_live_probe_rejects_a_fresh_product_topology_that_differs_from_the_ax_walk(self):
         sidecars = Sidecars()
         saved = spec_probes.live_probes.run
-        spec_probes.live_probes.run = lambda name, args: routing_run(occupied={1}, count=22,
-            outputs={index: "Stereo Output" for index in range(19)})
+        independent = routing_run(occupied={1}, count=22,
+            outputs={index: "Stereo Output" for index in range(22)})
+        product = self.fully_observed_run()
+        spec_probes.live_probes.run = lambda name, args: independent
         try:
             with self.assertRaisesRegex(spec_probes.Unreadable, "topology differs"):
                 spec_probes.routing_slots(
                     {"life": sidecars, "lproj": "en",
                      "decl": setups.declaration("lpm-locale-campaign-mixer"),
-                     "session": MixerSession([], product_run=routing_run())})
+                     "session": MixerSession([], product_run=product)})
         finally:
             spec_probes.live_probes.run = saved
 
     def test_live_probe_rejects_a_product_send_edge_without_destination_witness(self):
         sidecars = Sidecars()
         saved = spec_probes.live_probes.run
-        spec_probes.live_probes.run = lambda name, args: routing_run(occupied={1})
+        complete = routing_run(occupied={1},
+            outputs={index: "Stereo Output" for index in range(21)})
+        spec_probes.live_probes.run = lambda name, args: complete
         try:
             with self.assertRaisesRegex(spec_probes.Unreadable, "source-edge"):
                 spec_probes.routing_slots(
@@ -196,7 +284,7 @@ class RoutingSpecProbeTests(unittest.TestCase):
                      "decl": setups.declaration("lpm-locale-campaign-mixer"),
                      "session": MixerSession(
                          [{"kind": "send", "source": "mix_1", "destination": "bus_1"}],
-                         product_run=routing_run(occupied={1}))})
+                         product_run=complete)})
         finally:
             spec_probes.live_probes.run = saved
 
