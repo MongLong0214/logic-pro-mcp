@@ -2419,10 +2419,11 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         for bus in task.prerequisiteBuses {
             // A checked input excursion can retire the full native census. Each
             // distinct Bus uses the latest actual original-header observation.
-            guard let roster = outputRenewal, roster.permits(runtime: runtime) else { return false }
+            guard var roster = outputRenewal, roster.permits(runtime: runtime) else { return false }
             var receiverVerified = false
-            for receiver in roster.observedPairs {
-                let owner = receiver.strip
+            for initialReceiver in roster.observedPairs {
+                var receiver = initialReceiver
+                var owner = receiver.strip
                 guard !receiver.track.matches(task.pair.track),
                       roster.observedPairs.filter({ $0.strip.matches(owner) }).count == 1 else { continue }
                 stage = "receiver_owner"
@@ -2431,8 +2432,13 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                 guard case .source(let label) = current.reading, let control = current.control,
                       RoutingGraphPublication.classifyOutputLabel(label).0 == .bus,
                       RoutingGraphPublication.classifyOutputLabel(label).1 == bus else { continue }
-                let slot = AXMixerInputSlotBinding(owner: owner, control: control, source: label)
-                let read = await AXMixerStripBinding.$current.withValue(owner) {
+                var slot = AXMixerInputSlotBinding(owner: owner, control: control, source: label)
+                // Capture the exact focused selected-header pair before this
+                // Input popup. If Logic later replaces every strip while leaving
+                // that AX focus retired, this immutable relationship is the only
+                // permitted one-shot focus handoff; it grants no source identity.
+                let focusBaseline = roster.focusedOriginalHeaderBaseline(runtime: runtime)
+                var read = await AXMixerStripBinding.$current.withValue(owner) {
                     await AXMixerStripBinding.$outputAssociation.withValue(receiver) {
                         await AccessibilityChannel.getInputBusObservation(runtime: runtime, requiringOriginalInputControl: slot,
                             restoringMixerGeometry: outputOriginalMixerGeometry,
@@ -2442,21 +2448,119 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                     }
                 }
                 stage = "receiver_checked_read"
-                guard read.assignment == .bus(bus) else {
-                    Log.info("Canonical Bus receiver read: assignment_present=\(read.assignment != nil),slot_present=\(read.inputSlot != nil),renewed=\(read.inputRenewal != nil)", subsystem: "saga")
-                    return false
+                func finishReceiverRead() async -> Bool {
+                    guard read.assignment == .bus(bus) else {
+                        Log.info("Canonical Bus receiver read: assignment_present=\(read.assignment != nil),slot_present=\(read.inputSlot != nil),renewed=\(read.inputRenewal != nil)", subsystem: "saga")
+                        return false
+                    }
+                    if let renewal = read.inputRenewal {
+                        stage = "receiver_original_header_renewal"
+                        guard renewal.original.matches(owner), renewal.originalTrack.matches(receiver.track),
+                              read.inputSlot?.owner.matches(renewal.pair.strip) == true,
+                              let primary = renewal.sourceForOriginalHeader(task.pair, runtime: runtime) else {
+                            return false
+                        }
+                        outputPair = primary.pair; outputRenewal = primary; outputProof = primary.observation
+                    } else {
+                        guard read.inputSlot?.matches(slot) == true,
+                              owner.currentIndex(runtime: runtime) != nil else { return false }
+                    }
+                    stage = "final_project"
+                    return await projectIsCurrent(allowPendingCancellation: true)
                 }
-                if let renewal = read.inputRenewal {
-                    stage = "receiver_original_header_renewal"
-                    guard renewal.original.matches(owner), renewal.originalTrack.matches(receiver.track),
-                          read.inputSlot?.owner.matches(renewal.pair.strip) == true,
-                          let primary = renewal.sourceForOriginalHeader(task.pair, runtime: runtime) else { return false }
-                    outputPair = primary.pair; outputRenewal = primary; outputProof = primary.observation
-                } else {
-                    guard read.inputSlot?.matches(slot) == true, owner.currentIndex(runtime: runtime) != nil else { return false }
+                if read.assignment != .bus(bus) {
+                    // Logic can publish the receiver popup's delayed full-census redraw while the
+                    // reader is renewing through its original header. Retry only when that exact
+                    // read retired a held source or receiver; an intact unreadable or changed
+                    // receiver remains a hard refusal. The retry obtains a new complete source and
+                    // peer roster, then re-proves every output/input fact from their native controls.
+                    let priorSource = outputPair ?? task.pair
+                    // The surrounding checked-input Help guard has correctly
+                    // latched because its held census retired. This one bounded
+                    // retry gets a fresh guard tied only to the unchanged owned
+                    // operation gate; its handoff and every following native
+                    // source/receiver read independently re-prove UI custody.
+                    let recoveryHelp = AXHelpers.HelpReadGuard(allowHelpReads: true, stop: {
+                        (try? SessionPopulationObservation.requireOwnedAcquisition()) == nil
+                    })
+                    let recovered = await AXHelpers.HelpReadGuard.$current.withValue(recoveryHelp) {
+                        let sourceRetired = priorSource.strip.currentIndex(runtime: runtime) == nil
+                        let receiverRetired = owner.currentIndex(runtime: runtime) == nil
+                        guard sourceRetired || receiverRetired else {
+                            Log.info("Canonical Bus receiver read: assignment_present=\(read.assignment != nil),slot_present=\(read.inputSlot != nil),renewed=\(read.inputRenewal != nil)", subsystem: "saga")
+                            return false
+                        }
+                        stage = "receiver_census_project"
+                        guard await projectIsCurrent(allowPendingCancellation: true) else { return false }
+                        let disposition: AccessibilityChannel.OriginalHeaderSourceDisposition = sourceRetired
+                            ? .retiredOriginal : .survivingOriginal
+                        let observed = await AccessibilityChannel.renewSourceThroughOriginalHeader(
+                            priorSource, original: priorSource.strip, runtime: runtime,
+                            selectedHeaderRequired: false,
+                            sourceDisposition: disposition,
+                            restoringMixerGeometry: outputOriginalMixerGeometry,
+                            observingReadFocus: { inputFocus.retainAssociation($0) },
+                            observingPeerHeaders: roster.observedPairs.map(\.track),
+                            recoveringRetiredFocusFrom: sourceRetired ? focusBaseline : nil)
+                        stage = "receiver_census_source_renewal"
+                        guard let renewedSource = observed.source,
+                              renewedSource.permits(runtime: runtime) else {
+                            Log.info("Canonical Bus receiver census renewal: source_present=\(observed.source != nil),restoration=\(observed.effects.restoration),source_retired=\(sourceRetired),receiver_retired=\(receiverRetired)", subsystem: "saga")
+                            return false
+                        }
+                        stage = "receiver_census_output_readback"
+                        guard let renewedLabel = AXLogicProElements.outputSlotDestination(
+                            in: renewedSource.pair.strip.strip, runtime: runtime.ax),
+                              OutputAssignment.observed(slotLabel: renewedLabel) == assignment else {
+                            return false
+                        }
+                        stage = "receiver_census_final_project"
+                        guard await projectIsCurrent(allowPendingCancellation: true) else { return false }
+                        outputPair = renewedSource.pair
+                        outputRenewal = renewedSource
+                        outputProof = renewedSource.observation
+                        stage = "receiver_census_footprint"
+                        guard outputFootprintHeld(pair: renewedSource.pair, assignment: assignment) else {
+                            return false
+                        }
+
+                        stage = "receiver_census_peer"
+                        let renewedReceivers = renewedSource.observedPairs.filter {
+                            $0.track.matches(receiver.track)
+                        }
+                        guard renewedReceivers.count == 1, let renewedReceiver = renewedReceivers.first,
+                              renewedSource.observedPairs.filter({ $0.strip.matches(renewedReceiver.strip) }).count == 1,
+                              renewedReceiver.strip.currentIndex(runtime: runtime) != nil else { return false }
+                        receiver = renewedReceiver
+                        owner = renewedReceiver.strip
+                        stage = "receiver_census_input_slot"
+                        let renewedInput = AXLogicProElements.inputSlotRead(in: owner.strip, runtime: runtime.ax)
+                        guard case .source(let renewedInputLabel) = renewedInput.reading,
+                              let renewedInputControl = renewedInput.control,
+                              RoutingGraphPublication.classifyOutputLabel(renewedInputLabel) == (.bus, bus) else {
+                            return false
+                        }
+                        slot = AXMixerInputSlotBinding(
+                            owner: owner, control: renewedInputControl, source: renewedInputLabel)
+                        roster = renewedSource
+                        stage = "receiver_census_retry_checked_read"
+                        read = await AXMixerStripBinding.$current.withValue(owner) {
+                            await AXMixerStripBinding.$outputAssociation.withValue(receiver) {
+                                await AccessibilityChannel.getInputBusObservation(
+                                    runtime: runtime, requiringOriginalInputControl: slot,
+                                    restoringMixerGeometry: outputOriginalMixerGeometry,
+                                    observingPopupFocus: { inputFocus.retainRoutingPopupFocus($0) },
+                                    observingRenewedFocus: { inputFocus.retainAssociation($0) },
+                                    observingPeerHeaders: roster.observedPairs.map(\.track))
+                            }
+                        }
+                        return await finishReceiverRead()
+                    }
+                    guard recovered else { return false }
+                    receiverVerified = true
+                    break
                 }
-                stage = "final_project"
-                guard await projectIsCurrent(allowPendingCancellation: true) else { return false }
+                guard await finishReceiverRead() else { return false }
                 receiverVerified = true
                 break
             }

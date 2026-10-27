@@ -693,6 +693,12 @@ struct Issue965HeldSelectionAssociationTests {
         var routingReplacement: AXUIElement?
         var inputReadReplacementPeer: AXUIElement?
         var routingOtherReplacement: AXUIElement?
+        var routingDelayedReceiverRedrawArmed = false
+        var routingDelayedReceiverRenewalTriggered = false
+        var routingDelayedReceiverCensusReads = 0
+        var routingDelayedReceiverRedrawInjected = false
+        var routingDelayedReceiverFocusFault: String?
+        var routingDelayedReceiverFocusWrites: [AXUIElement] = []
         var routingAction: (@Sendable (AXUIElement, String) -> Bool)?
         var peerHydrationSamples: [AXHelpers.StripHelpSamples] = []
         var peerHydrationFaultInjected = false
@@ -1199,10 +1205,27 @@ struct Issue965HeldSelectionAssociationTests {
                 },
                 setAttributeHandler: { [self] element, attribute, value in
                     if let handled = routingSetter?(element, attribute, value) { return handled }
-                    if strips.contains(where: { CFEqual($0, element) }) || CFEqual(element, rail),
+                    let isRoutingReplacement = routingReplacement.map { CFEqual($0, element) } == true
+                        || routingOtherReplacement.map { CFEqual($0, element) } == true
+                    if strips.contains(where: { CFEqual($0, element) }) || isRoutingReplacement
+                        || CFEqual(element, rail),
                        attribute == kAXFocusedAttribute as String {
                         cleanupTransportReadsAtWrite = cleanupTransportReads
                         focusRestorationWrites.append(element)
+                        if isRoutingReplacement, routingDelayedReceiverFocusFault != nil {
+                            routingDelayedReceiverFocusWrites.append(element)
+                            if routingDelayedReceiverFocusFault == "ack_only" { return true }
+                            if routingDelayedReceiverFocusFault == "foreign_focus" {
+                                let foreign = builder.element(1_973_146)
+                                builder.setRole(foreign, kAXGroupRole as String)
+                                builder.setAttribute(foreign, kAXWindowAttribute as String, window)
+                                builder.setChildren(foreign, [])
+                                builder.setAttribute(app, kAXFocusedUIElementAttribute as String, foreign)
+                                return true
+                            }
+                        } else if isRoutingReplacement {
+                            routingDelayedReceiverFocusWrites.append(element)
+                        }
                         if selectedFocusAckOnly, strips.contains(where: { CFEqual($0, element) }) {
                             return true
                         }
@@ -2215,6 +2238,40 @@ struct Issue965HeldSelectionAssociationTests {
                 "Source renewal must not visit unrelated headers")
     }
 
+    @Test("A delayed receiver-popup census redraw reacquires its exact checked Bus owner")
+    func canonicalBusOutputReacquiresDelayedReceiverCensus() async throws {
+        let f = try Fixture()
+        try await assertCanonicalPhysicalOutput(
+            mode: "bus_departure_execute_arrival_popup_both_delayed_census",
+            fixture: f
+        )
+        #expect(f.routingDelayedReceiverRedrawInjected,
+            "Reach the post-Cancel original-header proof before retiring its full Mixer census; armed=\(f.routingDelayedReceiverRedrawArmed), renewal_triggered=\(f.routingDelayedReceiverRenewalTriggered), census_reads=\(f.routingDelayedReceiverCensusReads), input_presses=\(f.inputMenuPresses), input_cancels=\(f.inputMenuCancels), destination_presses=\(f.routingDestinationPresses), replacements=\(f.routingReplacement != nil)/\(f.routingOtherReplacement != nil), selections=\(f.selections)")
+        #expect(f.routingDelayedReceiverFocusWrites.count == 1,
+            "The retired native focus needs exactly one bounded successor handoff")
+        let focus: AXUIElement = try #require(AXHelpers.getAttribute(
+            f.app, kAXFocusedUIElementAttribute as String, runtime: f.logic().ax))
+        let selected = try #require(f.builder.attributeValue(
+            f.mixer, kAXSelectedChildrenAttribute as String) as? [AXUIElement])
+        #expect(selected.count == 1 && CFEqual(focus, selected[0]),
+            "The original-header inverse must finish on the exact current selected child")
+    }
+
+    @Test("A delayed receiver-popup redraw refuses an unlanded or foreign focus handoff",
+          arguments: ["ack_only", "foreign_focus"])
+    func canonicalBusOutputRefusesUnrestoredDelayedReceiverFocus(fault: String) async throws {
+        let f = try Fixture()
+        try await assertCanonicalPhysicalOutput(
+            mode: "bus_departure_execute_arrival_popup_both_delayed_census_\(fault)",
+            fixture: f
+        )
+        #expect(f.routingDelayedReceiverRedrawInjected)
+        #expect(f.routingDelayedReceiverFocusWrites.count == 1,
+            "A refused handoff is bounded; it must not retry focus or source selection")
+        #expect(f.routingDestinationPresses == 1,
+            "Focus acknowledgement or foreign landing cannot authorize a guessed inverse")
+    }
+
     @Test("Bus departure reuses the exact source, protected footprint and conditional Bus inverse",
           arguments: ["forward", "stereo", "cancel", "late_peer", "late_project", "post_write_loss", "ack_only", "newer", "retired", "physical_input", "physical_cancel", "changed_source_input", "changed_receiver_input", "misleading_receiver", "popup_source", "popup_receiver", "popup_source_retired", "popup_both_retired", "external_peer"])
     func canonicalBusDepartureExecutesOnlyItsCapturedOutput(outcome: String) async throws {
@@ -2576,9 +2633,13 @@ struct Issue965HeldSelectionAssociationTests {
         let popupCancellation = executingBusDeparture && requestedOutputMode.hasPrefix("cancel_popup_")
         let outputMode = popupCancellation
             ? String(requestedOutputMode.dropFirst("cancel_".count)) : requestedOutputMode
+        let delayedReceiverCensus = outputMode.hasPrefix("popup_both_delayed_census")
+        let delayedReceiverFocusFault = delayedReceiverCensus
+            ? ["ack_only", "foreign_focus"].first(where: { outputMode.hasSuffix($0) }) : nil
         let prerequisiteFault = executingBusDeparture && outputMode.hasPrefix("prereq_")
         let inputPopupFocus = executingBusDeparture && outputMode.hasPrefix("popup_")
-        let sourceInputPopup = executingBusDeparture && (outputMode.hasPrefix("popup_source") || outputMode == "popup_both_retired")
+        let sourceInputPopup = executingBusDeparture
+            && (outputMode.hasPrefix("popup_source") || outputMode.hasPrefix("popup_both_"))
         let physicalBusInput = busScenario == "physical_input" || (executingBusDeparture
             && (["physical_input", "physical_cancel", "changed_source_input"].contains(outputMode)
                 || outputMode == "prereq_physical_editor" || sourceInputPopup))
@@ -2594,6 +2655,66 @@ struct Issue965HeldSelectionAssociationTests {
                 @Sendable func mixerRows() -> [AXUIElement] {
                     [f.routingOtherReplacement ?? f.strips[0], f.routingReplacement ?? f.strips[1]]
                         + Array(f.strips.dropFirst(2))
+                }
+                @Sendable func replaceCurrentMixerRows(sourceKey: Int, peerKey: Int) {
+                    let priorSource = f.routingReplacement ?? f.strips[1]
+                    let priorPeer = f.routingOtherReplacement ?? f.strips[0]
+                    guard let selected = f.builder.attributeValue(
+                        f.mixer, kAXSelectedChildrenAttribute as String) as? [AXUIElement],
+                          selected.count == 1 else {
+                        Issue.record("A delayed redraw needs one exact prior native selected child")
+                        return
+                    }
+                    let source = f.builder.element(sourceKey)
+                    let peer = f.builder.element(peerKey)
+                    for (replacement, prior) in [(source, priorSource), (peer, priorPeer)] {
+                        f.builder.setRole(replacement, kAXLayoutItemRole as String)
+                        f.builder.setAttribute(replacement, kAXNumberOfCharactersAttribute as String, 0)
+                        f.builder.setAttribute(replacement, kAXInsertionPointLineNumberAttribute as String, 0)
+                        f.builder.setAttributeSettable(replacement, kAXFocusedAttribute as String, true)
+                        f.builder.setChildren(replacement, f.builder.makeAXRuntime().children(prior))
+                    }
+                    let selectedReplacement: AXUIElement
+                    if CFEqual(selected[0], priorSource) { selectedReplacement = source }
+                    else if CFEqual(selected[0], priorPeer) { selectedReplacement = peer }
+                    else {
+                        Issue.record("The delayed redraw must replace its exact prior selected source or peer")
+                        return
+                    }
+                    f.routingReplacement = source
+                    f.routingOtherReplacement = peer
+                    f.builder.setChildren(f.mixer, mixerRows())
+                    // Preserve Logic's native selected-child successor while its
+                    // application focus deliberately remains on the retired owner.
+                    f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [selectedReplacement])
+                }
+                if delayedReceiverCensus {
+                    f.routingDelayedReceiverFocusFault = delayedReceiverFocusFault
+                    f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[1]])
+                    f.routingSelection = { index in
+                        let selected = index == 0 ? f.routingReplacement ?? f.strips[1]
+                            : index == 1 ? f.routingOtherReplacement ?? f.strips[0]
+                                : f.strips[index == 2 ? 3 : 2]
+                        f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [selected])
+                    }
+                    let previous = f.routingChildrenRead
+                    f.routingChildrenRead = { element in
+                        previous?(element)
+                        guard f.routingDelayedReceiverRedrawArmed,
+                              !f.routingDelayedReceiverRedrawInjected,
+                              CFEqual(element, f.mixer),
+                              Thread.callStackSymbols.contains(where: { $0.contains("renewSourceThroughOriginalHeader") })
+                        else { return }
+                        f.routingDelayedReceiverCensusReads += 1
+                        guard f.routingDelayedReceiverCensusReads == 2 else { return }
+                        // Native counterexample from rerun28: the receiver popup
+                        // has closed and its original-header observation exists,
+                        // then Logic publishes a delayed all-strip redraw before
+                        // the guarded Input readback. Retire both current strip
+                        // owners without changing their routing values.
+                        replaceCurrentMixerRows(sourceKey: 1_973_144, peerKey: 1_973_145)
+                        f.routingDelayedReceiverRedrawInjected = true
+                    }
                 }
                 let composed = mode.hasPrefix("coupled")
                 let censusMode = mode.hasPrefix("coupled_menu_overlay_")
@@ -2807,6 +2928,16 @@ struct Issue965HeldSelectionAssociationTests {
                 f.builder.setAttribute(echo, "AXMenuItemMarkChar", "✓")
                 f.builder.setChildren(echo, [])
                 f.routingRead = { element, attribute in
+                    if delayedReceiverCensus,
+                       f.routingDelayedReceiverRedrawArmed,
+                       !f.routingDelayedReceiverRenewalTriggered {
+                        // The receiver Cancel settles before Logic publishes its
+                        // new Mixer owners. Make the first following native read
+                        // observe that retirement, forcing the ordinary exact
+                        // original-header renewal before the second delayed redraw.
+                        replaceCurrentMixerRows(sourceKey: 1_973_142, peerKey: 1_973_143)
+                        f.routingDelayedReceiverRenewalTriggered = true
+                    }
                     if mode == "coupled_menu_overlay_late_editor", f.routingMenuNameOpens > 0,
                        CFEqual(element, menuEditor), attribute == kAXParentAttribute as String, !f.routingLateScopeInjected {
                         let foreign = f.builder.element(1_971_401)
@@ -3091,7 +3222,7 @@ struct Issue965HeldSelectionAssociationTests {
                         f.builder.setAttribute(busTwo, "AXMenuItemMarkChar", wrongBus ? "" : "✓")
                         f.builder.setAttribute(f.builder.element(1_973_318), "AXMenuItemMarkChar", wrongBus ? "✓" : "")
                         f.builder.setChildren(root, [echo, busParent])
-                        if outputMode == "popup_receiver" || outputMode == "popup_both_retired" {
+                        if outputMode == "popup_receiver" || outputMode.hasPrefix("popup_both_") {
                             f.builder.setChildren(root, [inputSearch, echo, busParent])
                             f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, inputSearch)
                         }
@@ -3202,14 +3333,19 @@ struct Issue965HeldSelectionAssociationTests {
                             f.routingLateScopeInjected = true
                             f.builder.setAttribute(outputs[3], kAXDescriptionAttribute as String, "Output")
                         }
-                        if ["popup_source_retired", "popup_both_retired"].contains(outputMode), f.inputMenuPresses > 2, f.routingReplacement == nil {
-                            let replacement = f.builder.element(1_973_140)
-                            f.builder.setRole(replacement, kAXLayoutItemRole as String)
-                            f.builder.setAttribute(replacement, kAXNumberOfCharactersAttribute as String, 0)
-                            f.builder.setAttribute(replacement, kAXInsertionPointLineNumberAttribute as String, 0)
-                            f.builder.setChildren(replacement, f.builder.makeAXRuntime().children(f.strips[1]))
-                            f.routingReplacement = replacement
-                            if outputMode == "popup_both_retired" {
+                        if outputMode == "popup_source_retired" || outputMode.hasPrefix("popup_both_"),
+                           f.inputMenuPresses > 2, f.routingReplacement == nil {
+                            if delayedReceiverCensus {
+                                replaceCurrentMixerRows(sourceKey: 1_973_140, peerKey: 1_973_141)
+                            } else {
+                                let replacement = f.builder.element(1_973_140)
+                                f.builder.setRole(replacement, kAXLayoutItemRole as String)
+                                f.builder.setAttribute(replacement, kAXNumberOfCharactersAttribute as String, 0)
+                                f.builder.setAttribute(replacement, kAXInsertionPointLineNumberAttribute as String, 0)
+                                f.builder.setChildren(replacement, f.builder.makeAXRuntime().children(f.strips[1]))
+                                f.routingReplacement = replacement
+                            }
+                            if outputMode.hasPrefix("popup_both_"), !delayedReceiverCensus {
                                 let peer = f.builder.element(1_973_141)
                                 f.builder.setRole(peer, kAXLayoutItemRole as String)
                                 f.builder.setAttribute(peer, kAXNumberOfCharactersAttribute as String, 0)
@@ -3230,6 +3366,15 @@ struct Issue965HeldSelectionAssociationTests {
                                 f.builder.setChildren(replacement, f.builder.makeAXRuntime().children(prior))
                             }
                             f.routingReplacement = source; f.routingOtherReplacement = peer
+                        }
+                        if delayedReceiverCensus, f.routingDestinationPresses == 1,
+                           f.routingOtherReplacement != nil,
+                           f.builder.attributeValue(echo, kAXTitleAttribute as String) as? String == "Bus 2",
+                           f.routingOpenedOutputIndex == nil, !f.routingDelayedReceiverRedrawInjected {
+                            // Arm only after the exact receiver popup's Cancel;
+                            // the next original-header Help proof observes the
+                            // delayed native redraw, not the action itself.
+                            f.routingDelayedReceiverRedrawArmed = true
                         }
                         if inputPopupFocus {
                             f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.routingReplacement ?? f.strips[1])
@@ -3671,6 +3816,16 @@ struct Issue965HeldSelectionAssociationTests {
                     return
                 }
                 let result = try #require(sharedJSONObject(sharedToolText(await run())))
+                if delayedReceiverCensus, delayedReceiverFocusFault != nil {
+                    #expect(f.routingDelayedReceiverRedrawInjected,
+                        "Reach both exact all-strip redraws before refusing the handoff")
+                    #expect(result["saga_state"] as? String != "completed")
+                    let verified = try #require(result["verified"] as? Bool)
+                    #expect(!verified)
+                    #expect(f.routingDestinationPresses == 1,
+                        "The refused handoff cannot add an inverse to the already verified forward write")
+                    return
+                }
                 if executingBusDeparture, outputMode == "external_peer" {
                     #expect(f.routingOtherReplacement != nil && pair.strip.currentIndex(runtime: f.logic()) != nil)
                     #expect(f.routingDestinationPresses == 0 && f.inputMenuPresses == busPreExecutionReads,

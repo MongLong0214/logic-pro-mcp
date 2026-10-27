@@ -11,6 +11,56 @@ extension AccessibilityChannel {
             let strip: AXMixerStripBinding.Binding
             var source = "held_exclusive_selection_focus"
         }
+
+        /// Immutable before-image for one bounded focus handoff after Logic
+        /// replaces every Mixer strip while retaining the selected Track header.
+        /// The header/selected-child relationship is the identity witness; row
+        /// position, names and routing captions are deliberately absent.
+        struct OriginalHeaderFocusBaseline: @unchecked Sendable {
+            let app: AXUIElement
+            let pid: pid_t
+            let window: AXUIElement
+            let title: String
+            let document: String
+            let rail: AXUIElement
+            let railPath: [AXUIElement]
+            let headers: [AXUIElement]
+            let mixer: AXUIElement
+            let mixerPath: [AXUIElement]
+            let strips: [AXUIElement]
+            let focus: AXUIElement
+            let selectedHeader: AXUIElement
+            let transport: AXLogicProElements.ObservedTransportActivity
+            let transportPaths: [[AXUIElement]]
+            let viewport: [ViewportControl]
+            let viewportPaths: [[AXUIElement]]
+        }
+
+        struct OriginalHeaderFocusHandoff: @unchecked Sendable {
+            let baseline: OriginalHeaderFocusBaseline
+            let replacementFocus: AXUIElement
+            let strips: [AXUIElement]
+
+            func isRestored(by renewal: AccessibilityChannel.OriginalHeaderSourceRenewal,
+                            runtime: AXLogicProElements.Runtime) -> Bool {
+                let matches = renewal.observedPairs.filter {
+                    CFEqual($0.track.window, baseline.window)
+                        && CFEqual($0.track.header, baseline.selectedHeader)
+                        && $0.track.document.utf8.elementsEqual(baseline.document.utf8)
+                        && CFEqual($0.strip.strip, replacementFocus)
+                }
+                guard matches.count == 1,
+                      renewal.observedPairs.filter({ CFEqual($0.strip.strip, replacementFocus) }).count == 1,
+                      CFEqual(renewal.observation.originalFocus, replacementFocus),
+                      CFEqual(renewal.observation.headers[renewal.observation.originalIndex],
+                        baseline.selectedHeader),
+                      renewal.observation.strips.count == strips.count,
+                      zip(renewal.observation.strips, strips).allSatisfy({ CFEqual($0, $1) }),
+                      renewal.observation.effects.restoration == "restored",
+                      renewal.permits(runtime: runtime) else { return false }
+                return true
+            }
+        }
         typealias ViewportControl = (element: AXUIElement, value: Double, zoomDescription: String?)
         let logic: AXLogicProElements.Runtime
         let app: AXUIElement
@@ -930,6 +980,244 @@ extension AccessibilityChannel {
                 return .observed(child)
             default: return .unverified
             }
+        }
+
+        /// Capture only while the old complete census and its actual reciprocal
+        /// selected child are current. The returned value never consults mutable
+        /// association state after a redraw.
+        func originalHeaderFocusBaseline(observedPairs: [Pair]) -> OriginalHeaderFocusBaseline? {
+            guard expectedIndex == originalIndex, CFEqual(expectedFocus, originalFocus) else { return nil }
+            guard let originalSelectedChild, let expectedSelectedChild,
+                  CFEqual(originalSelectedChild, originalFocus),
+                  CFEqual(expectedSelectedChild, originalFocus) else { return nil }
+            guard case .observed(let child) = selectedChildRead(), CFEqual(child, originalFocus) else { return nil }
+            guard permitsRead() else { return nil }
+            guard let currentViewport = currentViewport(),
+                  Self.sameViewport(currentViewport, expectedViewport) else { return nil }
+            guard observedPairs.filter({ CFEqual($0.strip.strip, originalFocus) }).count == 1,
+                  let pair = observedPairs.first(where: {
+                      CFEqual($0.strip.strip, originalFocus)
+                          && CFEqual($0.track.header, headers[originalIndex])
+                  }) else { return nil }
+            guard pair.track.currentIndex(in: self) == originalIndex,
+                  pair.strip.currentIndex(in: self) != nil else { return nil }
+            return .init(app: app, pid: pid, window: window, title: title,
+                document: document, rail: rail, railPath: railPath, headers: headers,
+                mixer: mixer, mixerPath: path, strips: strips, focus: originalFocus,
+                selectedHeader: headers[originalIndex], transport: transport,
+                transportPaths: transportPaths, viewport: currentViewport,
+                viewportPaths: viewportPaths)
+        }
+
+        /// Move keyboard focus once to Logic's exact current selected-child
+        /// successor. This is not source discovery: the ordinary retained-header
+        /// observation below must still establish every current pair and inverse.
+        static func reacquireRetiredOriginalHeaderFocus(
+            _ baseline: OriginalHeaderFocusBaseline,
+            runtime: AXLogicProElements.Runtime,
+            restoringMixerGeometry geometry: MixerViewportGeometry?
+        ) async -> (handoff: OriginalHeaderFocusHandoff?, effects: SessionPopulationObservation.UIEffects) {
+            var effects = SessionPopulationObservation.UIEffects()
+            guard AXHelpers.HelpReadGuard.current?.stopped != true else {
+                Log.info("Retired original-header focus handoff refused at Help guard", subsystem: "ax")
+                return (nil, effects)
+            }
+            guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                  runtime.logicProPID() == baseline.pid,
+                  runtime.focusedApplicationPID() == baseline.pid,
+                  let app = AXLogicProElements.appRoot(runtime: runtime), CFEqual(app, baseline.app) else {
+                Log.info("Retired original-header focus handoff refused at entry custody", subsystem: "ax")
+                return (nil, effects)
+            }
+
+            func currentSelectedChild(in strips: [AXUIElement]) -> AXUIElement? {
+                let read = AXHelpers.getNonHelpAttributes(baseline.mixer,
+                    [kAXSelectedChildrenAttribute as String], runtime: runtime.ax,
+                    permittingRead: { (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil })[0]
+                guard case .success(.some(let raw)) = read,
+                      CFGetTypeID(raw) == CFArrayGetTypeID() else { return nil }
+                let array = unsafeDowncast(raw, to: CFArray.self)
+                guard CFArrayGetCount(array) == 1 else { return nil }
+                let value = unsafeBitCast(CFArrayGetValueAtIndex(array, 0), to: CFTypeRef.self)
+                guard CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+                let child = unsafeBitCast(value, to: AXUIElement.self)
+                guard strips.filter({ CFEqual($0, child) }).count == 1,
+                      let parent: AXUIElement = AXHelpers.getAttribute(child,
+                        kAXParentAttribute as String, runtime: runtime.ax),
+                      CFEqual(parent, baseline.mixer) else { return nil }
+                return child
+            }
+
+            func passiveStripMatches(_ focus: AXUIElement, strips: [AXUIElement]) -> Bool {
+                guard strips.filter({ CFEqual($0, focus) }).count == 1,
+                      AXHelpers.getRole(focus, runtime: runtime.ax) == kAXLayoutItemRole as String,
+                      AXHelpers.isAttributeSettable(focus, kAXValueAttribute as String,
+                        runtime: runtime.ax) == false else { return false }
+                let attributes = [kAXValueAttribute, kAXSelectedTextAttribute,
+                                  kAXNumberOfCharactersAttribute, kAXInsertionPointLineNumberAttribute] as [String]
+                let readings = AXHelpers.getNonHelpAttributes(focus, attributes, runtime: runtime.ax,
+                    permittingRead: { (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil })
+                for (attribute, reading) in zip(attributes, readings) {
+                    switch reading {
+                    case .failure(let error) where error.isDefinitiveAbsence: continue
+                    case .success(.some(let value)):
+                        guard attribute == kAXNumberOfCharactersAttribute as String
+                                || attribute == kAXInsertionPointLineNumberAttribute as String,
+                              CFGetTypeID(value) == CFNumberGetTypeID(),
+                              let number = value as? NSNumber, number.doubleValue == 0 else { return false }
+                    default: return false
+                    }
+                }
+                return true
+            }
+
+            var scopeStage = "gate"
+            func scope() -> (strips: [AXUIElement], child: AXUIElement)? {
+                scopeStage = "gate"
+                guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                      runtime.logicProPID() == baseline.pid,
+                      runtime.focusedApplicationPID() == baseline.pid else { return nil }
+                scopeStage = "window"
+                guard
+                      AXHelpers.getAttribute(baseline.app, kAXFrontmostAttribute as String,
+                        runtime: runtime.ax) as Bool? == true,
+                      let main: AXUIElement = AXHelpers.getAttribute(baseline.app,
+                        kAXMainWindowAttribute as String, runtime: runtime.ax),
+                      let focusedWindow: AXUIElement = AXHelpers.getAttribute(baseline.app,
+                        kAXFocusedWindowAttribute as String, runtime: runtime.ax),
+                      CFEqual(main, baseline.window), CFEqual(focusedWindow, baseline.window),
+                      AXHelpers.getTitle(baseline.window, runtime: runtime.ax)?
+                        .utf8.elementsEqual(baseline.title.utf8) == true,
+                      case .success(.some(let document)) = AXLogicProElements.projectPickerDocumentRead(
+                        baseline.window, runtime: runtime),
+                      document.utf8.elementsEqual(baseline.document.utf8),
+                      !AXLogicProElements.dialogPresenceReason(runtime: runtime).isBlocked else { return nil }
+                scopeStage = "rail"
+                guard
+                      let rail = AXLogicProElements.uniqueTrackHeaderRail(in: baseline.window, runtime: runtime),
+                      CFEqual(rail, baseline.rail),
+                      let railPath = Self.path(rail, to: baseline.window, ax: runtime.ax),
+                      Self.same(railPath, baseline.railPath),
+                      case .read(let headers) = AXLogicProElements.allTrackHeadersVerifiedRead(
+                        in: baseline.window, runtime: runtime),
+                      Self.same(headers, baseline.headers),
+                      let selected = Self.exclusiveIndex(headers, ax: runtime.ax),
+                      CFEqual(headers[selected], baseline.selectedHeader) else { return nil }
+                scopeStage = "mixer"
+                guard
+                      let mixerPath = Self.path(baseline.mixer, to: baseline.window, ax: runtime.ax),
+                      Self.same(mixerPath, baseline.mixerPath),
+                      AXLogicProElements.isMixerContainerRole(AXHelpers.getRole(
+                        baseline.mixer, runtime: runtime.ax)) else { return nil }
+                scopeStage = "census"
+                guard
+                      let census = AXLogicProElements.mixerChannelStripsIfCompletelyRead(
+                        in: baseline.mixer, runtime: runtime.ax),
+                      census.strips.count == baseline.strips.count,
+                      baseline.strips.allSatisfy({ old in
+                          !census.strips.contains(where: { CFEqual($0, old) })
+                      }) else { return nil }
+                scopeStage = "selected_child"
+                guard
+                      let child = currentSelectedChild(in: census.strips),
+                      passiveStripMatches(child, strips: census.strips),
+                      !CFEqual(child, baseline.focus) else { return nil }
+                scopeStage = "popup"
+                guard
+                      AccessibilityChannel.checkedOutputPopupMenus(
+                        in: baseline.mixer, runtime: runtime.ax)?.isEmpty == true,
+                      runtime.onScreenWindowList().map({
+                        LogicOnScreenWindows.popupMenuCount($0, logicPID: baseline.pid) == 0
+                      }) == true else { return nil }
+                scopeStage = "transport"
+                guard
+                      Self.stoppedTransportPathsMatch(baseline.transportPaths,
+                        activity: baseline.transport, window: baseline.window, logic: runtime) else { return nil }
+                scopeStage = "viewport"
+                guard
+                      let currentViewport = Self.viewport(baseline.window, ax: runtime.ax,
+                        held: baseline.viewport),
+                      Self.sameViewport(currentViewport, baseline.viewport),
+                      let viewportPaths = Self.viewportPaths(currentViewport,
+                        window: baseline.window, ax: runtime.ax),
+                      viewportPaths.count == baseline.viewportPaths.count,
+                      zip(viewportPaths, baseline.viewportPaths).allSatisfy({ Self.same($0, $1) })
+                else { return nil }
+                if let geometry {
+                    scopeStage = "mixer_geometry"
+                    guard CFEqual(geometry.window, baseline.window),
+                          CFEqual(geometry.mixer, baseline.mixer),
+                          geometry.document.utf8.elementsEqual(baseline.document.utf8),
+                          geometry.headers.count == headers.count,
+                          zip(geometry.headers, headers).allSatisfy({ CFEqual($0, $1) }),
+                          geometry.frames.count == census.strips.count else { return nil }
+                    var frames: [CGRect] = []
+                    for strip in census.strips {
+                        guard let point = AXHelpers.getPosition(strip, runtime: runtime.ax),
+                              let size = AXHelpers.getSize(strip, runtime: runtime.ax),
+                              point.x.isFinite, point.y.isFinite,
+                              size.width.isFinite, size.height.isFinite,
+                              size.width > 0, size.height > 0 else { return nil }
+                        frames.append(CGRect(origin: point, size: size))
+                    }
+                    guard frames == geometry.frames else { return nil }
+                }
+                scopeStage = "accepted"
+                return (census.strips, child)
+            }
+
+            guard let before = scope() else {
+                Log.info("Retired original-header focus handoff refused at \(scopeStage)", subsystem: "ax")
+                return (nil, effects)
+            }
+            guard
+                  let focus: AXUIElement = AXHelpers.getAttribute(baseline.app,
+                    kAXFocusedUIElementAttribute as String, runtime: runtime.ax),
+                  CFEqual(focus, baseline.focus),
+                  AXHelpers.isAttributeSettable(before.child, kAXFocusedAttribute as String,
+                    runtime: runtime.ax) == true,
+                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else {
+                Log.info("Retired original-header focus handoff refused at action boundary", subsystem: "ax")
+                return (nil, effects)
+            }
+            effects.navigationPerformed = true
+            effects.restoration = "not_restored"
+            effects.attempted.append("mixer_focus_reacquisition")
+            _ = AXHelpers.setAttribute(before.child, kAXFocusedAttribute as String,
+                NSNumber(value: true), runtime: runtime.ax)
+            for attempt in 0..<3 {
+                guard let current: AXUIElement = AXHelpers.getAttribute(baseline.app,
+                    kAXFocusedUIElementAttribute as String, runtime: runtime.ax) else {
+                    effects.reason = "mixer_focus_reacquisition_unverified"
+                    return (nil, effects)
+                }
+                if CFEqual(current, before.child) {
+                    guard let final = scope(), CFEqual(final.child, before.child),
+                          final.strips.count == before.strips.count,
+                          zip(final.strips, before.strips).allSatisfy({ CFEqual($0, $1) }),
+                          let finalFocus: AXUIElement = AXHelpers.getAttribute(baseline.app,
+                            kAXFocusedUIElementAttribute as String, runtime: runtime.ax),
+                          CFEqual(finalFocus, before.child),
+                          (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else {
+                        effects.reason = "mixer_focus_reacquisition_unverified"
+                        return (nil, effects)
+                    }
+                    effects.changed.append("keyboard_focus_replacement")
+                    effects.restoration = "restored"
+                    return (.init(baseline: baseline, replacementFocus: before.child,
+                        strips: before.strips), effects)
+                }
+                guard CFEqual(current, baseline.focus), attempt < 2 else {
+                    effects.reason = "mixer_focus_reacquisition_unverified"
+                    return (nil, effects)
+                }
+                do { try await Task.sleep(for: .milliseconds(25)) } catch {
+                    effects.reason = "mixer_focus_reacquisition_unverified"
+                    return (nil, effects)
+                }
+            }
+            effects.reason = "mixer_focus_reacquisition_unverified"
+            return (nil, effects)
         }
 
         private var associationStrip: AXUIElement { expectedSelectedChild ?? expectedFocus }
