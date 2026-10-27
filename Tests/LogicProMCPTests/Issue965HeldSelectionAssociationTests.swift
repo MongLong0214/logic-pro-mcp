@@ -1575,6 +1575,14 @@ struct Issue965HeldSelectionAssociationTests {
         try await assertCanonicalPhysicalOutput(mode: "bus_departure_execute_arrival_replacement_offscreen_peer")
     }
 
+    @Test("A retained Bus output inverse recovers a peer hidden by its preceding prerequisite read")
+    func canonicalBusReplacementRechecksAnOffscreenPeerBeforeItsInverse() async throws {
+        try await assertCanonicalPhysicalOutput(
+            mode: "bus_departure_execute_arrival_replacement_offscreen_peer",
+            lateUnreadablePeerRouting: true
+        )
+    }
+
     @Test("Scroll To recovery cannot reuse a checked output sampled before its navigation")
     func canonicalBusRecoveryRenewsTheCheckedOutput() async throws {
         try await assertCanonicalPhysicalOutput(mode: "bus_departure_execute_arrival_replacement_offscreen_peer_checked_change")
@@ -2522,14 +2530,16 @@ struct Issue965HeldSelectionAssociationTests {
                                                foreignFocusAtDocumentRead: Int? = nil,
                                                refusingSampledTrackOwnership: Bool = false,
                                                lateCheckedReceiverInputChange: Bool = false,
-                                               lateCheckedOutputChange: Bool = false) async throws {
+                                               lateCheckedOutputChange: Bool = false,
+                                               lateUnreadablePeerRouting: Bool = false) async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             try await FeatureFlags.withAdr004MutationSagaForTests(true) {
                 try await runCanonicalPhysicalOutput(mode: requestedMode, fixture: fixture,
                     foreignFocusAtDocumentRead: foreignFocusAtDocumentRead,
                     refusingSampledTrackOwnership: refusingSampledTrackOwnership,
                     lateCheckedReceiverInputChange: lateCheckedReceiverInputChange,
-                    lateCheckedOutputChange: lateCheckedOutputChange)
+                    lateCheckedOutputChange: lateCheckedOutputChange,
+                    lateUnreadablePeerRouting: lateUnreadablePeerRouting)
             }
         }
     }
@@ -2538,7 +2548,8 @@ struct Issue965HeldSelectionAssociationTests {
                                             foreignFocusAtDocumentRead: Int?,
                                             refusingSampledTrackOwnership: Bool,
                                             lateCheckedReceiverInputChange: Bool,
-                                            lateCheckedOutputChange: Bool) async throws {
+                                            lateCheckedOutputChange: Bool,
+                                            lateUnreadablePeerRouting: Bool) async throws {
         let survivingSource = requestedMode.hasPrefix("surviving_")
         let profile = survivingSource ? String(requestedMode.dropFirst("surviving_".count)) : requestedMode
         let busDeparture = profile.hasPrefix("bus_departure_")
@@ -3598,7 +3609,7 @@ struct Issue965HeldSelectionAssociationTests {
                             if ["cancel", "newer", "ack_only"].contains(mode) { _ = await journal.cancel(idempotencyKey: key) }
                         }, sagaLiveReadback: .unavailable, approvedSessionRepair: approval)
                 }
-                if lateCheckedReceiverInputChange || lateCheckedOutputChange {
+                if lateCheckedReceiverInputChange || lateCheckedOutputChange || lateUnreadablePeerRouting {
                     let gate = LogicMutationGate()
                     let claim = try #require(gate.tryAcquire(operation: "logic_system.saga_execute"))
                     defer { gate.release(claim) }
@@ -3613,6 +3624,26 @@ struct Issue965HeldSelectionAssociationTests {
                         #expect(forward["state"] as? String == "A")
                         let after = try #require(await approval.readState(step))
                         #expect(after.value == step.params["destination"])
+
+                        if lateUnreadablePeerRouting {
+                            // Preserve every captured scalar, owner and route.
+                            // Model the native entry state where a preceding
+                            // popup left only an unrelated peer's unchanged
+                            // output caption offscreen before the next recheck.
+                            f.builder.setAttribute(outputs[3], kAXDescriptionAttribute as String, "Output")
+                            f.routingLateScopeInjected = true
+                            _ = await journal.cancel(idempotencyKey: key)
+                            let inverse = SagaStep(operationID: step.operationID, targetRef: step.targetRef,
+                                params: ["destination": before.value], expectedInverse: step.expectedInverse)
+                            let retained = try #require(await approval.readState(inverse),
+                                "Owned viewport recovery must make the retained inverse readable again")
+                            #expect(retained.value == after.value)
+                            let restored = try #require(sharedJSONObject(sharedToolText(
+                                await approval.performOutput(inverse, router: router))))
+                            #expect(restored["state"] as? String == "A")
+                            #expect(restored["write_attempted"] as? Bool == true)
+                            return
+                        }
 
                         if lateCheckedReceiverInputChange {
                             f.routingLateScopeInjected = true
