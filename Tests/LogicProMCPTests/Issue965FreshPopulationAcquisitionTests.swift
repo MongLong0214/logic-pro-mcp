@@ -5204,6 +5204,158 @@ struct Issue965FreshPopulationAcquisitionTests {
         }
     }
 
+    @Test func soloPresentationNormalizationIsReusableByLaterFootprintReads() throws {
+        let captured = [
+            TrackState(id: 0, name: "Peer", type: .audio,
+                isMuted: false, isSoloed: false, isArmed: false),
+            TrackState(id: 1, name: "Solo", type: .audio,
+                isMuted: false, isSoloed: true, isArmed: false),
+            TrackState(id: 2, name: "Muted", type: .audio,
+                isMuted: true, isSoloed: false, isArmed: false),
+        ]
+        var later = captured
+        later[0].isMuted = nil
+        later[0].isSoloed = nil
+        later[1].isMuted = nil
+        later[2].isSoloed = nil
+
+        let normalizedCapture = try #require(AccessibilityChannel.soloPresentationSafeTrackStates(captured))
+        let normalizedLater = try #require(AccessibilityChannel.soloPresentationSafeTrackStates(later))
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        #expect(try encoder.encode(normalizedCapture) == encoder.encode(normalizedLater),
+            "the same active Solo makes only non-true Mute/Solo animation frames unread")
+        #expect(normalizedCapture[1].isSoloed == true)
+        #expect(normalizedCapture[2].isMuted == true,
+            "explicit on readings remain protected")
+
+        var movedSolo = later
+        movedSolo[1].isSoloed = nil
+        movedSolo[0].isSoloed = true
+        let normalizedMoved = try #require(AccessibilityChannel.soloPresentationSafeTrackStates(movedSolo))
+        #expect(try encoder.encode(normalizedCapture) != encoder.encode(normalizedMoved),
+            "a changed active Solo owner is still a changed footprint")
+
+        var noSolo = captured
+        noSolo[1].isSoloed = false
+        let exactNoSolo = try #require(AccessibilityChannel.soloPresentationSafeTrackStates(noSolo))
+        #expect(exactNoSolo[0].isMuted == false && exactNoSolo[0].isSoloed == false,
+            "without an active Solo the ordinary exact toggle readings remain intact")
+    }
+
+    @Test(arguments: ["solo_blink", "no_solo_blink", "solo_true_to_false"])
+    func soloMuteAnimationDoesNotMoveFreshPopulation(_ mode: String) async throws {
+        let fixture = Fixture()
+        let mute = fixture.builder.element(965_980)
+        let solo = fixture.builder.element(965_981)
+        let arm = fixture.builder.element(965_982)
+        for control in [mute, solo, arm] {
+            fixture.builder.setRole(control, kAXCheckBoxRole as String)
+            fixture.builder.setChildren(control, [])
+        }
+        fixture.builder.setAttribute(mute, kAXDescriptionAttribute as String,
+            AXLocalePolicy.trackMuteButton.canonical)
+        fixture.builder.setAttribute(solo, kAXDescriptionAttribute as String,
+            AXLocalePolicy.trackSoloButton.canonical)
+        fixture.builder.setAttribute(arm, kAXDescriptionAttribute as String,
+            AXLocalePolicy.trackRecordEnableCheckbox.canonical)
+        fixture.builder.setAttribute(solo, kAXValueAttribute as String,
+            mode == "no_solo_blink" ? 0 : 1)
+        fixture.builder.setAttribute(arm, kAXValueAttribute as String, 0)
+        fixture.builder.setChildren(fixture.header, [mute, solo, arm])
+
+        let muteReads = Reads()
+        let channel = fixture.channel(readingAttribute: { element, attribute in
+            guard CFEqual(element, mute), attribute == kAXValueAttribute as String else { return nil }
+            muteReads.record(attribute)
+            if mode == "solo_true_to_false" {
+                return .success(NSNumber(value: muteReads.count.isMultiple(of: 2) ? 0 : 1))
+            }
+            // Logic reports an unmuted track silenced by Solo as alternating
+            // -1 and 0 frames. Neither frame is an explicit Mute change.
+            return .success(NSNumber(value: muteReads.count.isMultiple(of: 2) ? 0 : -1))
+        })
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: { gate.stillOwns(claim) })
+        let population = try await OperationTraceContext.$current.withValue(context) {
+            try await channel.readFreshSessionPopulation(
+                request: .init(domains: [.tracks]), fileReader: .unavailable, stoppingWhen: { false }
+            )
+        }
+
+        if mode == "solo_blink" {
+            #expect(population.stable)
+            #expect(muteReads.count == 2, "the first exact physical bookend should stabilize")
+            let track = try #require(population.tracks?.first)
+            #expect(track.isMuted == nil, "a Solo-contaminated non-true Mute is not published as off")
+            #expect(track.isSoloed == true)
+        } else {
+            #expect(!population.stable,
+                "without corroborated Solo, or when true Mute changes, the strict bookend must still refuse")
+            #expect(muteReads.count == 6, "all three strict retries must observe the disagreement")
+        }
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+    }
+
+    @Test(arguments: ["blink", "true_to_false"])
+    func inactiveSoloAnimationDoesNotHideARealSoloChange(_ mode: String) async throws {
+        let fixture = Fixture()
+        func toggle(_ id: Int, _ description: String, _ value: Int) -> AXUIElement {
+            let control = fixture.builder.element(id)
+            fixture.builder.setRole(control, kAXCheckBoxRole as String)
+            fixture.builder.setAttribute(control, kAXDescriptionAttribute as String, description)
+            fixture.builder.setAttribute(control, kAXValueAttribute as String, value)
+            fixture.builder.setChildren(control, [])
+            return control
+        }
+        let activeMute = toggle(965_983, AXLocalePolicy.trackMuteButton.canonical, 0)
+        let activeSolo = toggle(965_984, AXLocalePolicy.trackSoloButton.canonical, 1)
+        let activeArm = toggle(965_985, AXLocalePolicy.trackRecordEnableCheckbox.canonical, 0)
+        fixture.builder.setChildren(fixture.header, [activeMute, activeSolo, activeArm])
+
+        let peer = fixture.builder.element(965_986)
+        fixture.builder.setRole(peer, kAXLayoutItemRole as String)
+        fixture.builder.setAttribute(peer, kAXTitleAttribute as String, "Peer")
+        fixture.builder.setAttribute(peer, kAXSelectedAttribute as String, false)
+        let peerMute = toggle(965_987, AXLocalePolicy.trackMuteButton.canonical, 0)
+        let peerSolo = toggle(965_988, AXLocalePolicy.trackSoloButton.canonical, 0)
+        let peerArm = toggle(965_989, AXLocalePolicy.trackRecordEnableCheckbox.canonical, 0)
+        fixture.builder.setChildren(peer, [peerMute, peerSolo, peerArm])
+        fixture.builder.setChildren(fixture.rail, [fixture.header, peer])
+
+        let soloReads = Reads()
+        let channel = fixture.channel(readingAttribute: { element, attribute in
+            guard CFEqual(element, peerSolo), attribute == kAXValueAttribute as String else { return nil }
+            soloReads.record(attribute)
+            let odd = !soloReads.count.isMultiple(of: 2)
+            return .success(NSNumber(value: mode == "true_to_false" && odd ? 1 : odd ? -1 : 0))
+        })
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: { gate.stillOwns(claim) })
+        let population = try await OperationTraceContext.$current.withValue(context) {
+            try await channel.readFreshSessionPopulation(
+                request: .init(domains: [.tracks]), fileReader: .unavailable, stoppingWhen: { false }
+            )
+        }
+
+        if mode == "blink" {
+            #expect(population.stable)
+            #expect(soloReads.count == 2)
+            let tracks = try #require(population.tracks)
+            #expect(tracks.count == 2 && tracks[0].isSoloed == true)
+            #expect(tracks[1].isSoloed == nil,
+                "an inactive Solo animation frame is unread, never a published false")
+        } else {
+            #expect(!population.stable, "an explicit Solo-on reading disappearing must remain unstable")
+            #expect(soloReads.count == 6)
+        }
+        #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+    }
+
     @Test func disappearingSelectionReadIsNotAStablePopulation() async throws {
         let fixture = Fixture()
         let selectionReads = Reads()

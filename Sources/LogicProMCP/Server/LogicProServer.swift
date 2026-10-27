@@ -655,7 +655,7 @@ actor LogicProServer {
                         OperationRegistry.spec(
                             tool: name,
                             command: command
-                        )?.deadline.seconds ?? DeadlineClass.long.seconds
+                        )?.deadline.seconds ?? DeadlineClass.saga.seconds
                     ))
                     : nil
                 let dispatchDependencies = sagaLifecycleDeadline
