@@ -611,6 +611,12 @@ extension AccessibilityChannel {
         /// Empty in older/manual witnesses; never inferred from labels or rows.
         var observedPairs: [HeldSelectionAssociation.Pair] = []
 
+        func focusedOriginalHeaderBaseline(runtime: AXLogicProElements.Runtime)
+            -> HeldSelectionAssociation.OriginalHeaderFocusBaseline? {
+            guard permits(runtime: runtime) else { return nil }
+            return observation.originalHeaderFocusBaseline(observedPairs: observedPairs)
+        }
+
         func sourceForOriginalHeader(_ prior: HeldSelectionAssociation.Pair,
             runtime: AXLogicProElements.Runtime) -> Self? {
             guard permits(runtime: runtime), observation.effects.restoration == "restored",
@@ -711,8 +717,41 @@ extension AccessibilityChannel {
         restoringMixerGeometry: HeldSelectionAssociation.MixerViewportGeometry? = nil,
         observingReadFocus: @Sendable (HeldSelectionAssociation) -> Void = { _ in },
         observingPeerHeaders: [AXTrackBinding.Binding]? = nil,
-        observingPeerStrips: [AXMixerStripBinding.Binding]? = nil
+        observingPeerStrips: [AXMixerStripBinding.Binding]? = nil,
+        recoveringRetiredFocusFrom focusBaseline: HeldSelectionAssociation.OriginalHeaderFocusBaseline? = nil
     ) async -> (source: OriginalHeaderSourceRenewal?, effects: SessionPopulationObservation.UIEffects) {
+        if let focusBaseline {
+            // The caller captured this immutable before-image immediately before
+            // its checked Input. One focus write may hand off a retired native
+            // selected child; the ordinary original-header observation below is
+            // still the only source and inverse authority.
+            let prepared = await HeldSelectionAssociation.reacquireRetiredOriginalHeaderFocus(
+                focusBaseline, runtime: runtime, restoringMixerGeometry: restoringMixerGeometry)
+            guard let handoff = prepared.handoff else { return (nil, prepared.effects) }
+            let observed = await renewSourceThroughOriginalHeader(
+                originalPair, original: original, runtime: runtime,
+                selectedHeaderRequired: selectedHeaderRequired,
+                sourceDisposition: sourceDisposition,
+                restoringMixerGeometry: restoringMixerGeometry,
+                observingReadFocus: observingReadFocus,
+                observingPeerHeaders: observingPeerHeaders,
+                observingPeerStrips: observingPeerStrips,
+                recoveringRetiredFocusFrom: nil)
+            var effects = observed.effects
+            effects.navigationPerformed = effects.navigationPerformed || prepared.effects.navigationPerformed
+            effects.attempted = prepared.effects.attempted
+                + effects.attempted.filter { !prepared.effects.attempted.contains($0) }
+            effects.changed = prepared.effects.changed
+                + effects.changed.filter { !prepared.effects.changed.contains($0) }
+            if !observed.effects.navigationPerformed {
+                effects.restoration = prepared.effects.restoration
+            }
+            guard let source = observed.source, handoff.isRestored(by: source, runtime: runtime) else {
+                effects.reason = effects.reason ?? "retired_mixer_focus_handoff_unverified"
+                return (nil, effects)
+            }
+            return (source, effects)
+        }
         guard originalPair.strip.matches(original), originalPair.track.currentIndex() != nil,
               let observation = HeldSelectionAssociation(window: original.window, logic: runtime,
                   expectedProject: nil, requiresProjectReference: false, allowsSelectedChildRailEntry: true,
