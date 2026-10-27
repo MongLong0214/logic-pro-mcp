@@ -225,6 +225,253 @@ func testRecordSequenceWithholdsImportWithoutVerifiedPosition(_ mode: String) as
     #expect(builder.actionCalls.isEmpty)
 }
 
+// #1420 — Logic's default control-bar display mode ("Beats & Project") shows only bar and beat, so
+// the seek's readback cannot reach State A there. record_sequence switches to Beats for the seek,
+// reads the position again in that mode, and restores the original mode before importing; the
+// import waits for that restore to be confirmed.
+private final class DisplayModeLog: @unchecked Sendable {
+    var switches = 0
+    var events: [String] = []
+}
+
+private func recordSequenceRuntime(_ builder: FakeAXRuntimeBuilder) -> AXLogicProElements.Runtime {
+    AXLogicProElements.Runtime(
+        logicProPID: { 4242 }, ax: builder.makeAXRuntime(),
+        executeAppleScript: { _ in Issue.record("native script prohibited"); return .error("inert") },
+        onScreenWindowList: { nil }, postPopupMenuEscape: { Issue.record("native escape prohibited") })
+}
+
+private func displayModeLease() -> ControlBarDisplayMode.Lease {
+    ControlBarDisplayMode.Lease(
+        original: "Beats & Project", window: AXUIElementCreateApplication(142_100),
+        windowTitle: "Untitled - Tracks", document: "file:///tmp/RecordSequence.logicx",
+        popup: AXUIElementCreateApplication(142_101))
+}
+
+// "lagging_readback": live on Logic 12.4 the Playhead Position group still exposed bar and beat on
+// the first reread after the switch; the seek's before-reading must wait for all four.
+@Test(arguments: ["restored", "restore_refused", "lagging_readback"])
+func testRecordSequenceSeeksInAFullPositionDisplayAndRestoresItBeforeImport(_ mode: String) async throws {
+    let builder = FakeAXRuntimeBuilder()
+    let partial = try recordSequencePosition("2.1", components: [.bar, .beat])
+    let channel = RecordingMockChannel(
+        id: .accessibility, importResult: .success("imported"),
+        gotoRuntime: recordSequenceRuntime(builder), dialogOutput: #"{"result":"OK"}"#,
+        transportReadbacks: (mode == "lagging_readback" ? [partial, partial, partial] : [partial])
+            + [try recordSequencePosition("2.1.1.1"), try recordSequencePosition("1.1.1.1")])
+    let router = ChannelRouter()
+    await router.register(channel)
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let counts = SequentialIntBox([1, 2])
+    let regions = SequentialRegionReadBox([
+        .success([]), .success([makeRegion(trackIndex: 1, startBar: 1, endBar: 2)])])
+    let log = DisplayModeLog()
+    let lease = displayModeLease()
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: ["notes": minimalNoteSpec()], router: router, cache: cache,
+        trackHeaderCount: { log.events.append("import_tracks"); return counts.next() },
+        trackNameAt: { $0 == 1 ? "Imported Piano" : nil },
+        readRegions: { regions.next() }, settleReadback: {},
+        selectFullPositionDisplay: { log.switches += 1; return .switched(lease) },
+        restorePositionDisplay: {
+            #expect($0 == lease)
+            log.events.append("restore")
+            return mode == "restore_refused" ? .refused("display_mode_changed_since_switch") : .restored
+        })
+    #expect(log.switches == 1)
+    let object = recordSequenceJSONObject(result)
+    #expect(object["display_mode_switched_from"] as? String == "Beats & Project")
+    if mode != "restore_refused" {
+        #expect(!(try #require(result.isError)))
+        #expect(try #require(object["verified"] as? Bool))
+        let displayModeRestored = try #require(object["display_mode_restored"] as? Bool)
+        #expect(displayModeRestored)
+        #expect(log.events.first == "restore")
+        #expect(log.events.dropFirst().allSatisfy { $0 == "import_tracks" })
+        let rereads = Array(repeating: "transport.get_state", count: mode == "lagging_readback" ? 3 : 1)
+        #expect(await channel.operations == ["transport.get_state"] + rereads
+            + ["transport.goto_position", "transport.get_state", "midi.import_file"])
+        #expect(await channel.importCalls == 1)
+    } else {
+        #expect(try #require(result.isError))
+        #expect(object["error"] as? String == "display_mode_restore_unverified")
+        let displayModeRestored = try #require(object["display_mode_restored"] as? Bool)
+        #expect(!displayModeRestored)
+        #expect(object["display_mode_restore_refused"] as? String == "display_mode_changed_since_switch")
+        #expect(log.events == ["restore"])
+        #expect(await channel.importCalls == 0)
+        #expect(!(await channel.operations).contains("midi.import_file"))
+    }
+    #expect(builder.setCalls.isEmpty)
+    #expect(builder.actionCalls.isEmpty)
+}
+
+// The reviewer's counterexample: a playhead one sixteenth after 1.1.1.1 reads "1.1" in the default
+// mode, and a region imported there keeps the same bar envelope, so a bar-level check would pass
+// it. Read in the full display it is 1.1.2.1, and the import is withheld. A cancelled seek is
+// refused the same way, and both still restore the display mode. Without a full display the
+// partial reading is refused as before.
+@Test(arguments: ["sub_beat_offset", "seek_cancelled", "switch_unavailable"])
+func testRecordSequenceWithholdsImportWhenTheAnchorIsNotTickExact(_ mode: String) async throws {
+    let builder = FakeAXRuntimeBuilder()
+    let partialBefore = try recordSequencePosition("2.1", components: [.bar, .beat])
+    let readbacks: [ChannelResult]
+    switch mode {
+    case "sub_beat_offset":
+        readbacks = [partialBefore, try recordSequencePosition("2.1.1.1"), try recordSequencePosition("1.1.2.1")]
+    case "seek_cancelled":
+        readbacks = [partialBefore, try recordSequencePosition("2.1.1.1"), try recordSequencePosition("2.1.1.1")]
+    default:
+        readbacks = [partialBefore, try recordSequencePosition("1.1", components: [.bar, .beat])]
+    }
+    let channel = RecordingMockChannel(
+        id: .accessibility, importResult: .error("bounded unexpected import"),
+        gotoRuntime: recordSequenceRuntime(builder), dialogOutput: #"{"result":"OK"}"#,
+        gotoResult: mode == "seek_cancelled" ? .error("Go to Position dialog was cancelled") : nil,
+        transportReadbacks: readbacks)
+    let router = ChannelRouter()
+    await router.register(channel)
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let log = DisplayModeLog()
+    let lease = displayModeLease()
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: ["notes": minimalNoteSpec()], router: router, cache: cache,
+        trackHeaderCount: { Issue.record("unverified position must not discover tracks"); return 0 },
+        trackNameAt: { _ in Issue.record("unverified position must not read names"); return nil },
+        readRegions: { Issue.record("unverified position must not read regions"); return .success([]) },
+        settleReadback: { Issue.record("unverified position must not settle import") },
+        selectFullPositionDisplay: {
+            log.switches += 1
+            return mode == "switch_unavailable" ? .unavailable("display_mode_popup_not_found") : .switched(lease)
+        },
+        restorePositionDisplay: { _ in log.events.append("restore"); return .restored })
+    #expect(try #require(result.isError))
+    #expect(await channel.importCalls == 0)
+    #expect(!(await channel.operations).contains("midi.import_file"))
+    #expect(log.switches == 1)
+    let prefix = "record_sequence failed to reset playhead to bar 1 (required for accurate import): "
+    let text = sharedToolText(result)
+    #expect(text.hasPrefix(prefix))
+    if mode == "switch_unavailable" {
+        let diagnostic = try #require(sharedJSONObject(String(text.dropFirst(prefix.count))))
+        #expect(diagnostic["state"] as? String == "B")
+        #expect(diagnostic["display_mode_switch_unavailable"] as? String == "display_mode_popup_not_found")
+        #expect(log.events.isEmpty)
+    } else {
+        #expect(log.events == ["restore"])
+        if mode == "sub_beat_offset" {
+            let diagnostic = try #require(sharedJSONObject(String(text.dropFirst(prefix.count))))
+            #expect(diagnostic["state"] as? String == "B")
+            #expect(!(try #require(diagnostic["verified"] as? Bool)))
+            #expect(diagnostic["observed"] as? String == "1.1.2.1")
+            #expect(diagnostic["display_mode_switched_from"] as? String == "Beats & Project")
+            let displayModeRestored = try #require(diagnostic["display_mode_restored"] as? Bool)
+            #expect(displayModeRestored)
+        }
+    }
+    #expect(builder.setCalls.isEmpty)
+    #expect(builder.actionCalls.isEmpty)
+}
+
+@Test func testRecordSequenceLeavesAFullPositionDisplayAlone() async throws {
+    let builder = FakeAXRuntimeBuilder()
+    let channel = RecordingMockChannel(
+        id: .accessibility, importResult: .success("imported"),
+        gotoRuntime: recordSequenceRuntime(builder), dialogOutput: #"{"result":"OK"}"#,
+        transportReadbacks: [try recordSequencePosition("2.1.1.1"), try recordSequencePosition("1.1.1.1")])
+    let router = ChannelRouter()
+    await router.register(channel)
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let counts = SequentialIntBox([1, 2])
+    let regions = SequentialRegionReadBox([
+        .success([]), .success([makeRegion(trackIndex: 1, startBar: 1, endBar: 2)])])
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: ["notes": minimalNoteSpec()], router: router, cache: cache,
+        trackHeaderCount: { counts.next() }, trackNameAt: { $0 == 1 ? "Imported Piano" : nil },
+        readRegions: { regions.next() }, settleReadback: {},
+        selectFullPositionDisplay: { Issue.record("a full display must not be switched"); return .unavailable("inert") },
+        restorePositionDisplay: { _ in Issue.record("nothing was switched to restore"); return .refused("inert") })
+    #expect(!(try #require(result.isError)))
+    let object = recordSequenceJSONObject(result)
+    #expect(try #require(object["verified"] as? Bool))
+    #expect(object["display_mode_switched_from"] == nil)
+    #expect(object["display_mode_restored"] == nil)
+}
+
+@Test func testRecordSequenceStopsBeforeSeekAfterAnUnsettledDisplaySwitch() async throws {
+    let builder = FakeAXRuntimeBuilder()
+    let partial = try recordSequencePosition("2.1", components: [.bar, .beat])
+    let channel = RecordingMockChannel(
+        id: .accessibility, importResult: .error("unsettled display must not import"),
+        gotoRuntime: recordSequenceRuntime(builder), dialogOutput: #"{"result":"OK"}"#,
+        transportReadbacks: [partial])
+    let router = ChannelRouter()
+    await router.register(channel)
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let lease = displayModeLease()
+    let log = DisplayModeLog()
+
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: ["notes": minimalNoteSpec()], router: router, cache: cache,
+        trackHeaderCount: { Issue.record("unsettled display must not discover tracks"); return 0 },
+        trackNameAt: { _ in Issue.record("unsettled display must not read names"); return nil },
+        readRegions: { Issue.record("unsettled display must not read regions"); return .success([]) },
+        settleReadback: { Issue.record("unsettled display must not settle import") },
+        selectFullPositionDisplay: {
+            .unsettled(lease, "display_mode_window_changed")
+        },
+        restorePositionDisplay: {
+            #expect($0 == lease)
+            log.events.append("restore")
+            return .refused("display_mode_window_changed")
+        })
+
+    #expect(try #require(result.isError))
+    let object = recordSequenceJSONObject(result)
+    #expect(object["error"] as? String == "display_mode_switch_unsettled")
+    #expect(object["failure_stage"] as? String == "display_mode_switch")
+    #expect(object["display_mode_switch_unsettled"] as? String == "display_mode_window_changed")
+    #expect(object["display_mode_restore_refused"] as? String == "display_mode_window_changed")
+    #expect(log.events == ["restore"])
+    #expect(await channel.operations == ["transport.get_state"])
+    #expect(await channel.importCalls == 0)
+    #expect(builder.setCalls.isEmpty)
+    #expect(builder.actionCalls.isEmpty)
+}
+
+@Test func testRecordSequenceTrackCreationFailureRetainsDisplayModeDiagnostics() async throws {
+    let builder = FakeAXRuntimeBuilder()
+    let partial = try recordSequencePosition("2.1", components: [.bar, .beat])
+    let channel = RecordingMockChannel(
+        id: .accessibility, importResult: .success("imported"),
+        gotoRuntime: recordSequenceRuntime(builder), dialogOutput: #"{"result":"OK"}"#,
+        transportReadbacks: [
+            partial, try recordSequencePosition("2.1.1.1"), try recordSequencePosition("1.1.1.1"),
+        ])
+    let router = ChannelRouter()
+    await router.register(channel)
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let counts = SequentialIntBox([1, 1, 1, 1, 1, 1, 1])
+    let lease = displayModeLease()
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: ["notes": minimalNoteSpec()], router: router, cache: cache,
+        trackHeaderCount: { counts.next() }, trackNameAt: { _ in nil },
+        readRegions: { .success([]) }, settleReadback: {},
+        selectFullPositionDisplay: { .switched(lease) },
+        restorePositionDisplay: { _ in .restored })
+    #expect(try #require(result.isError))
+    let object = recordSequenceJSONObject(result)
+    #expect(object["failure_stage"] as? String == "track_creation")
+    #expect(object["display_mode_switched_from"] as? String == "Beats & Project")
+    let restored = try #require(object["display_mode_restored"] as? Bool)
+    #expect(restored)
+}
+
 private func minimalNoteSpec() -> Value {
     .string("60,0,500,100,1")
 }
