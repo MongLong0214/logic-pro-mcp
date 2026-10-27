@@ -549,6 +549,38 @@ struct SemanticOracleCensusTests {
         )
     }
 
+    /// #862 — the ten-locale 2026-09-27 native records include a real State-A
+    /// `mixer.bank` response whose independent witness is the freshly redrawn MCU
+    /// LCD upper row. Keep the post-B4 operation on the covered side, and prove
+    /// the oracle rejects both a forged witness and a partial bank walk.
+    @Test func mixerBankLiveStateAContractIsPinnedPostClosure() throws {
+        #expect(SemanticOracleTable.postClosureMutatingOperationIDs.contains(.mixerBank))
+        #expect(SemanticOracleTable.structurallyUnverifiedMutatingOperationIDs[.mixerBank] == nil)
+
+        let oracle = try #require(SemanticOracleTable.byOperationID[.mixerBank])
+        let liveStateA = #"{"success":true,"verified":true,"state":"A","operation":"mixer.bank","channel":"MCU","direction":"right","bank_bookkeeping_before":0,"bank_bookkeeping_after":1,"bank_presses_sent":1,"banks_moved":1,"banks_requested":1,"step_windows":["DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn "],"upper_row_writes_observed":2,"window_before":"AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ","window_after":"DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ","strips":["DelCls","DelCls","DelCls","StdGrn","StdGrn","StdGrn","StdGrn","StdGrn"],"verify_source":"mcu_lcd_upper_row"}"#
+        #expect(oracle.evaluate(
+            responseData: Data(liveStateA.utf8),
+            readbackData: Data("{}".utf8)
+        ) == true)
+
+        let forgedWitness = liveStateA.replacingOccurrences(
+            of: "mcu_lcd_upper_row", with: "button_press_sent"
+        )
+        #expect(oracle.evaluate(
+            responseData: Data(forgedWitness.utf8),
+            readbackData: Data("{}".utf8)
+        ) == false)
+
+        let partialWalk = liveStateA.replacingOccurrences(
+            of: "\"banks_moved\":1", with: "\"banks_moved\":0"
+        )
+        #expect(oracle.evaluate(
+            responseData: Data(partialWalk.utf8),
+            readbackData: Data("{}".utf8)
+        ) == false)
+    }
+
     /// Soundness of the increment: every id in B1..B4 is a REAL `.mutating`,
     /// non-`.unsupported` registry spec — a read-only id or a typo cannot
     /// masquerade as mutating coverage.
