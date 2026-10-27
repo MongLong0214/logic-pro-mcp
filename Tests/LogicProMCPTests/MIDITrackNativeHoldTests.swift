@@ -12,7 +12,10 @@ private struct MIDIHoldFixture {
     let headers: [AXUIElement]
     let runtime: AXLogicProElements.Runtime
     let observation = MIDITrackFileExport.Observation(projectReference: "prj_current", projectPath: "/fixture.logicx",
-        coverage: .complete, tracks: [.init(reference: "trk_target", name: "Target"), .init(reference: "trk_peer", name: "Peer")])
+        coverage: .complete, tracks: [
+            .init(index: 0, reference: "trk_target", name: "Target"),
+            .init(index: 1, reference: "trk_peer", name: "Peer"),
+        ])
 
     var bindings: [AXTrackBinding.Binding] {
         headers.map { .init(window: window, header: $0, document: "file:///fixture.logicx/", runtime: runtime) }
@@ -154,4 +157,29 @@ func midiExportProviderRefusesUnqualifiedCapturesWithoutUIActions(fault: String)
     do { _ = try await runtime.observe(); Issue.record("Unowned acquisition was admitted") } catch { }
     #expect(!acquired)
     #expect(fixture.builder.actionCalls.isEmpty && fixture.builder.setCalls.isEmpty)
+}
+
+@MainActor @Test func midiTemporaryNameRestorationNarrowlySurvivesCancellation() async {
+    let admitted = await Task { @MainActor in
+        withUnsafeCurrentTask { $0?.cancel() }
+        let context = OperationTraceContext(
+            mutationGateAcquired: true, cancellationRequested: { true })
+        return await OperationTraceContext.$current.withValue(context) {
+            #expect(!ExactTrackNameAdapter.operationPermitted())
+            do {
+                try SessionPopulationObservation.requireOwnedAcquisition()
+                Issue.record("Ordinary cancelled acquisition was admitted")
+            } catch { }
+            return await ExactTrackNameAdapter.withOwnedTemporaryNameRestoration {
+                guard ExactTrackNameAdapter.operationPermitted() else { return false }
+                do {
+                    try SessionPopulationObservation.requireOwnedAcquisition()
+                    return true
+                } catch {
+                    return false
+                }
+            }
+        }
+    }.value
+    #expect(admitted)
 }

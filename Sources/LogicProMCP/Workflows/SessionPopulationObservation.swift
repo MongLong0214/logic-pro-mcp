@@ -231,7 +231,8 @@ enum SessionPopulationObservation {
         let context = OperationTraceContext.current
         if (Task.isCancelled || context?.cancellationRequested() == true)
             && !AccessibilityChannel.OwnedTrackStackObservationNavigation.restoringInterruptedAcquisition
-            && !AccessibilityChannel.restoringInterruptedOutputPopup {
+            && !AccessibilityChannel.restoringInterruptedOutputPopup
+            && !ExactTrackNameAdapter.restoringOwnedTemporaryName {
             throw AcquisitionError.cancelled
         }
         guard let context,
