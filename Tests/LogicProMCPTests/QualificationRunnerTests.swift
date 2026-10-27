@@ -60,6 +60,46 @@ struct QualificationRunnerTests {
             .trimmingCharacters(in: .whitespacesAndNewlines) == "9.1.1.1")
     }
 
+    @Test func explicitNoWriteStepCannotClaimOrRestoreACoincidentForeignLanding() throws {
+        let fixture = try SlowHandshakeFixture(
+            playheadStep: .transportFastForward,
+            playheadFault: "step_noop_race"
+        )
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .transportFastForward })
+        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+        #expect(FileManager.default.fileExists(
+            atPath: fixture.directory.appendingPathComponent("step-fault-consumed").path))
+        #expect(result.operationResults[spec.id.rawValue]?.status == .notQualified)
+        #expect(result.mutationRestoreRecords.isEmpty)
+        let effects = result.wireFrames.filter { $0.direction == .request &&
+            ["phase_b.stage", "phase_b.mutation", "phase_b.restore", "phase_b.cleanup"].contains($0.operationID) }
+        #expect(effects.map(\.operationID) == ["phase_b.stage", "phase_b.mutation"])
+        #expect(try String(contentsOf: fixture.directory.appendingPathComponent("step-position"), encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines) == "10.1.1.1")
+    }
+
+    @Test func cgEventGotoProofWithoutWriteAttemptedCanStageAndRestore() throws {
+        let fixture = try SlowHandshakeFixture(
+            playheadStep: .transportFastForward,
+            playheadFault: "cgevent_goto_reply"
+        )
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .transportFastForward })
+        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+        #expect(result.operationResults[spec.id.rawValue]?.status == .passed)
+        #expect(try #require(result.mutationRestoreRecords.first).verifiedCycleShape)
+        let effects = result.wireFrames.filter { $0.direction == .request &&
+            ["phase_b.stage", "phase_b.mutation", "phase_b.restore", "phase_b.cleanup"].contains($0.operationID) }
+        #expect(effects.map(\.operationID) == ["phase_b.stage", "phase_b.mutation", "phase_b.restore"])
+        #expect(try String(contentsOf: fixture.directory.appendingPathComponent("step-position"), encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines) == "9.3.2.120")
+    }
+
     @Test(arguments: [OperationID.transportFastForward, .transportRewind])
     func playheadStepRefusesAnObservedNonBoundaryPositionBeforeAnyWrite(operation: OperationID) throws {
         // Staging now supports ordinary off-boundary positions, but never invents an adjacent
@@ -146,9 +186,29 @@ struct QualificationRunnerTests {
             return String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self)
         }
         let record = QualificationMutationRestoreRecord(operationID: OperationID.transportFastForward.rawValue,
-            preState: try reading("9.1.1.1"), mutation: #"{"state":"B","success":true}"#,
+            preState: try reading("9.1.1.1"),
+            mutation: #"{"state":"B","success":true,"method":"cgevent","sent":true}"#,
             readback: try reading("10.1.1.1"), restore: restore,
             restoreReadback: try reading("9.1.1.1"))
+        #expect(!record.verifiedCycleShape)
+    }
+
+    @Test func playheadStepRecordRejectsAnExplicitNoWriteMutation() throws {
+        func reading(_ position: String) throws -> String {
+            let object: [String: Any] = ["source": "ax_live", "cache_age_sec": 0,
+                "data": ["state": ["isPlaying": false, "isRecording": false, "observedCycleEnabled": false,
+                    "positionReadback": ["value": position,
+                        "observedComponents": ["bar", "beat", "subdivision", "tick"]]]]]
+            return String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self)
+        }
+        let record = QualificationMutationRestoreRecord(
+            operationID: OperationID.transportFastForward.rawValue,
+            preState: try reading("9.1.1.1"),
+            mutation: #"{"state":"B","success":true,"write_attempted":false,"unchanged":true}"#,
+            readback: try reading("10.1.1.1"),
+            restore: #"{"state":"A","verified":true,"write_attempted":true}"#,
+            restoreReadback: try reading("9.1.1.1")
+        )
         #expect(!record.verifiedCycleShape)
     }
 
@@ -165,7 +225,8 @@ struct QualificationRunnerTests {
         }
         let verified = #"{"state":"A","verified":true,"write_attempted":true}"#
         var record = QualificationMutationRestoreRecord(operationID: OperationID.transportFastForward.rawValue,
-            preState: try reading("9.3.2.120"), mutation: #"{"state":"B","success":true}"#,
+            preState: try reading("9.3.2.120"),
+            mutation: #"{"state":"B","success":true,"method":"cgevent","sent":true}"#,
             readback: try reading("10.1.1.1"), restore: verified, restoreReadback: try reading("9.3.2.120"),
             stagingMutation: verified, stagingReadback: try reading("9.1.1.1"))
         #expect(record.verifiedCycleShape)
@@ -216,7 +277,8 @@ struct QualificationRunnerTests {
         let verified = #"{"state":"A","verified":true,"write_attempted":true}"#
         let record = QualificationMutationRestoreRecord(
             operationID: OperationID.transportFastForward.rawValue,
-            preState: pre, mutation: #"{"state":"B","success":true}"#,
+            preState: pre,
+            mutation: #"{"state":"B","success":true,"method":"cgevent","sent":true}"#,
             readback: after, restore: verified, restoreReadback: restored,
             stagingMutation: verified, stagingReadback: try reading("9.1.1.1"))
         #expect(!record.verifiedCycleShape)
@@ -7471,17 +7533,26 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                             continue
                         fi
                         case "$step_fault" in
+                          step_noop_race)
+                            touch step-fault-consumed
+                            case "$request" in
+                              *'"command":"fast_forward"'*) step_position=10.1.1.1 ;;
+                              *) step_position=8.1.1.1 ;;
+                            esac
+                            printf '%s\n' "$step_position" > step-position
+                            printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"B\\",\\"success\\":true,\\"verified\\":false,\\"reason\\":\\"readback_unavailable\\",\\"write_attempted\\":false,\\"unchanged\\":true}"}]}}\n' "$id"
+                            continue ;;
                           stage_unknown_step)
                             touch step-fault-consumed
                             printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"B\\",\\"success\\":true,\\"fallback_unsafe\\":true}"}]}}\n' "$id"
                             continue ;;
                           stage_step_no_effect)
                             touch step-fault-consumed
-                            printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"B\\",\\"success\\":true}"}]}}\n' "$id"
+                            printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"B\\",\\"success\\":true,\\"method\\":\\"cgevent\\",\\"sent\\":true}"}]}}\n' "$id"
                             continue ;;
                           stage_foreign_position)
                             touch step-fault-consumed; step_position=7.2.2.99
-                            printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"B\\",\\"success\\":true}"}]}}\n' "$id"
+                            printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"B\\",\\"success\\":true,\\"method\\":\\"cgevent\\",\\"sent\\":true}"}]}}\n' "$id"
                             continue ;;
                         esac
                         if [ "$step_fault" = refused_forward ] || [ "$step_fault" = stage_cleanup_project_loss ] || [ "$step_fault" = stage_cleanup_position_loss ]; then
@@ -7495,7 +7566,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                           *) if [ "$step_boundary" = true ]; then step_position=8.1.1.1; else step_position=8.3.2.120; fi ;;
                         esac
                         printf '%s\n' "$step_position" > step-position
-                        printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"B\\",\\"success\\":true,\\"verified\\":false,\\"reason\\":\\"readback_unavailable\\"}"}]}}\n' "$id" ;;
+                        printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"B\\",\\"success\\":true,\\"verified\\":false,\\"reason\\":\\"readback_unavailable\\",\\"method\\":\\"cgevent\\",\\"sent\\":true}"}]}}\n' "$id" ;;
                       *'"command":"goto_position"'*)
                         if [ "$step_fault" = refused_restore ] && [ "$step_position" != "$step_origin" ] && [ "$step_restore_attempts" = 0 ]; then
                             step_restore_attempts=$((step_restore_attempts + 1))
@@ -7521,11 +7592,16 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                                     printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true,\\"write_attempted\\":true}"}]}}\n' "$id"
                                     continue ;;
                                 esac
+                                step_before=$step_position
                                 step_position=9.1.1.1; step_boundary=true
                                 printf '%s\n' "$step_position" > step-position
                                 if [ "$step_fault" = stage_unverified ]; then
                                     touch step-fault-consumed
                                     printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"B\\",\\"success\\":true,\\"verified\\":false}"}]}}\n' "$id"
+                                    continue
+                                fi
+                                if [ "$step_fault" = cgevent_goto_reply ]; then
+                                    printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true,\\"operation\\":\\"transport.goto_position\\",\\"method\\":\\"cgevent\\",\\"sent\\":true,\\"verification_source\\":\\"transport_state\\",\\"requested\\":\\"%s\\",\\"observed\\":\\"%s\\",\\"observed_before\\":\\"%s\\",\\"observed_before_position_components\\":[\\"bar\\",\\"beat\\",\\"subdivision\\",\\"tick\\"],\\"observed_position_components\\":[\\"bar\\",\\"beat\\",\\"subdivision\\",\\"tick\\"],\\"unobserved_position_components\\":[]}"}]}}\n' "$id" "$step_position" "$step_position" "$step_before"
                                     continue
                                 fi
                                 printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true,\\"write_attempted\\":true}"}]}}\n' "$id"
@@ -7542,6 +7618,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                                 printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"write_attempted\\":true}"}]}}\n' "$id"
                                 continue
                             fi
+                            step_before=$step_position
                             if [ "$step_fault" = mismatch_restore ]; then touch step-fault-consumed
                             else step_position=$step_origin; fi
                             printf '%s\n' "$step_position" > step-position
@@ -7553,6 +7630,10 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                             if [ "$step_fault" = unverified_restore ]; then
                                 touch step-fault-consumed
                                 printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":false}"}]}}\n' "$id"
+                                continue
+                            fi
+                            if [ "$step_fault" = cgevent_goto_reply ]; then
+                                printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true,\\"operation\\":\\"transport.goto_position\\",\\"method\\":\\"cgevent\\",\\"sent\\":true,\\"verification_source\\":\\"transport_state\\",\\"requested\\":\\"%s\\",\\"observed\\":\\"%s\\",\\"observed_before\\":\\"%s\\",\\"observed_before_position_components\\":[\\"bar\\",\\"beat\\",\\"subdivision\\",\\"tick\\"],\\"observed_position_components\\":[\\"bar\\",\\"beat\\",\\"subdivision\\",\\"tick\\"],\\"unobserved_position_components\\":[]}"}]}}\n' "$id" "$step_position" "$step_position" "$step_before"
                                 continue
                             fi
                             printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true,\\"write_attempted\\":true}"}]}}\n' "$id" ;;

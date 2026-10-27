@@ -150,20 +150,20 @@ struct QualificationMutationRestoreRecord: Codable, Equatable, Sendable {
                 == (operation == .transportPause ? .paused : (expected ? .moving : .stopped))
         }
         if let direction = QualificationTransport.playheadStepDirections[operation] {
-            guard !QualificationTransport.playheadStepWriteWasIndeterminate(mutation),
-                  QualificationTransport.verifiedPlayheadGotoReply(restore),
-                  let old = QualificationTransport.freshRecordedExactStepPosition(preState),
+            guard let old = QualificationTransport.freshRecordedExactStepPosition(preState),
                   let observed = QualificationTransport.freshRecordedExactStepPosition(readback),
-                  QualificationTransport.freshRecordedExactStepPosition(restoreReadback) == old
+                  QualificationTransport.freshRecordedExactStepPosition(restoreReadback) == old,
+                  QualificationTransport.playheadStepMutationWasAttempted(mutation),
+                  QualificationTransport.verifiedPlayheadGotoReply(restore, expectedPosition: old)
             else { return false }
             let stepOrigin: String
             switch (stagingMutation, stagingReadback) {
             case (nil, nil): stepOrigin = old
             case let (write?, reading?):
-                guard QualificationTransport.verifiedPlayheadGotoReply(write),
-                      QualificationTransport.verifiedPlayheadGotoReply(restore),
+                let boundary = QualificationTransport.barBoundary(from: old)
+                guard QualificationTransport.verifiedPlayheadGotoReply(write, expectedPosition: boundary),
                       let position = QualificationTransport.freshRecordedExactStepPosition(reading),
-                      position == QualificationTransport.barBoundary(from: old), position != old
+                      position == boundary, position != old
                 else { return false }
                 stepOrigin = position
             default: return false
@@ -3069,13 +3069,42 @@ struct QualificationTransport: Sendable {
         String(position.split(separator: ".")[0]) + ".1.1.1"
     }
 
-    static func verifiedPlayheadGotoReply(_ raw: String) -> Bool {
+    static func verifiedPlayheadGotoReply(_ raw: String, expectedPosition: String) -> Bool {
         guard let bytes = raw.data(using: .utf8),
               let fields = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any] else { return false }
-        return fields["state"] as? String == "A" && fields["verified"] as? Bool == true
-            && fields["write_attempted"] as? Bool == true
-            && fields["unchanged"] as? Bool != true
-            && !playheadStepWriteWasIndeterminate(raw)
+        guard fields["state"] as? String == "A", fields["verified"] as? Bool == true,
+              fields["write_attempted"] as? Bool != false,
+              fields["unchanged"] as? Bool != true,
+              !playheadStepWriteWasIndeterminate(raw)
+        else { return false }
+        if fields["write_attempted"] as? Bool == true { return true }
+
+        let complete = Set(["bar", "beat", "subdivision", "tick"])
+        guard fields["verification_source"] as? String == "transport_state",
+              fields["requested"] as? String == expectedPosition,
+              fields["observed"] as? String == expectedPosition,
+              let observedBefore = fields["observed_before"] as? String,
+              observedBefore != expectedPosition,
+              TransportDispatcher.isValidPositionString(observedBefore),
+              Set(fields["observed_before_position_components"] as? [String] ?? []) == complete,
+              Set(fields["observed_position_components"] as? [String] ?? []) == complete,
+              (fields["unobserved_position_components"] as? [String])?.isEmpty == true
+        else { return false }
+        return true
+    }
+
+    /// A matching post-read may be another actor's movement. Only a receipt that says this call
+    /// attempted/delivered the step can acquire cleanup custody or persisted qualification credit.
+    static func playheadStepMutationWasAttempted(_ raw: String) -> Bool {
+        guard let bytes = raw.data(using: .utf8),
+              let fields = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any],
+              fields["state"] as? String != "C",
+              fields["success"] as? Bool != false,
+              fields["write_attempted"] as? Bool != false,
+              fields["unchanged"] as? Bool != true,
+              !playheadStepWriteWasIndeterminate(raw)
+        else { return false }
+        return fields["write_attempted"] as? Bool == true || fields["sent"] as? Bool == true
     }
 
     /// A coincident landing cannot qualify input whose own target was explicitly unknown.
@@ -3148,7 +3177,7 @@ struct QualificationTransport: Sendable {
             if pre.position != boundary {
                 let stage = try invoke(session, id: step(), tool: "logic_transport", command: "goto_position",
                     params: ["position": boundary], phase: "phase_b.stage", timeout: spec.deadline.seconds + 5)
-                guard !stage.isError, Self.verifiedPlayheadGotoReply(stage.text) else {
+                guard !stage.isError, Self.verifiedPlayheadGotoReply(stage.text, expectedPosition: boundary) else {
                     throw QualificationTransportError.protocolViolation("phase_b.stage: exact boundary staging was not verified A")
                 }
                 let staged = try read("phase_b.stage_readback", expectedProject: pre.project)
@@ -3171,7 +3200,8 @@ struct QualificationTransport: Sendable {
                 let current = try read("phase_b.refused_step_readback", expectedProject: pre.project)
                 if current.position == boundary { ownedStagedPosition = boundary }
             }
-            guard !Self.mutationSaysItFailed(mutation.text), !Self.playheadStepWriteWasIndeterminate(mutation.text) else {
+            guard !Self.mutationSaysItFailed(mutation.text),
+                  Self.playheadStepMutationWasAttempted(mutation.text) else {
                 throw QualificationTransportError.protocolViolation("phase_b.mutation: step refused")
             }
             let after = try read("phase_b.readback", expectedProject: pre.project)
@@ -3195,7 +3225,7 @@ struct QualificationTransport: Sendable {
                 ownedStagedPosition = lastOwned
             }
             guard !restore.isError, !Self.mutationSaysItFailed(restore.text),
-                  Self.verifiedPlayheadGotoReply(restore.text) else {
+                  Self.verifiedPlayheadGotoReply(restore.text, expectedPosition: pre.position) else {
                 throw QualificationTransportError.protocolViolation("phase_b.restore: exact position restore refused or unverified")
             }
             let restored = try read("phase_b.restore_readback", expectedProject: pre.project)
@@ -3215,7 +3245,8 @@ struct QualificationTransport: Sendable {
                 }
                 let cleanup = try invoke(session, id: step(), tool: "logic_transport", command: "goto_position",
                     params: ["position": pre.position], phase: "phase_b.cleanup", timeout: spec.deadline.seconds + 5)
-                guard !cleanup.isError, Self.verifiedPlayheadGotoReply(cleanup.text) else {
+                guard !cleanup.isError,
+                      Self.verifiedPlayheadGotoReply(cleanup.text, expectedPosition: pre.position) else {
                     throw QualificationTransportError.protocolViolation("staged cleanup was not verified A")
                 }
                 let restored = try read("phase_b.cleanup_readback", expectedProject: pre.project)
