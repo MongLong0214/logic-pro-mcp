@@ -85,7 +85,7 @@ struct QualificationRunnerTests {
            "stage_cache_read", "stage_stale_read", "stage_project_loss", "refused_forward",
            "stage_unknown_step", "stage_step_no_effect", "stage_foreign_position",
            "stage_cleanup_project_loss", "stage_cleanup_position_loss", "stage_refused_restore",
-           "unsafe_restore"])
+           "stage_attempted_restore_failure", "unsafe_restore"])
     func stagedStepKeepsCleanupConditionalOnActualOwnedEvidence(operation: OperationID, shape: String) throws {
         let fixture = try SlowHandshakeFixture(playheadStep: operation, playheadFault: shape)
         defer { fixture.remove() }
@@ -105,6 +105,8 @@ struct QualificationRunnerTests {
             ? ["phase_b.stage"]
             : shape == "stage_refused_restore"
                 ? ["phase_b.stage", "phase_b.mutation", "phase_b.restore", "phase_b.cleanup"]
+                : shape == "stage_attempted_restore_failure"
+                    ? ["phase_b.stage", "phase_b.mutation", "phase_b.restore"]
                 : shape == "unsafe_restore"
                     ? ["phase_b.stage", "phase_b.mutation", "phase_b.restore"]
                     : cleanupOwned
@@ -113,7 +115,9 @@ struct QualificationRunnerTests {
         #expect(effects.map(\.operationID) == expectedPhases)
         let residual = try String(contentsOf: fixture.directory.appendingPathComponent("step-position"), encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines)
-        let expectedResidual = cleanupOwned || ["stage_refused", "stage_no_effect", "unsafe_restore"].contains(shape)
+        let attemptedRestoreResidual = operation == .transportFastForward ? "10.1.1.1" : "8.1.1.1"
+        let expectedResidual = shape == "stage_attempted_restore_failure" ? attemptedRestoreResidual
+            : cleanupOwned || ["stage_refused", "stage_no_effect", "unsafe_restore"].contains(shape)
             ? "9.3.2.120"
             : ["stage_foreign_position", "stage_cleanup_position_loss"].contains(shape) ? "7.2.2.99" : "9.1.1.1"
         #expect(residual == expectedResidual)
@@ -7477,6 +7481,11 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                             if [ "$step_fault" = stage_refused_restore ] && [ "$step_restore_attempts" = 1 ]; then
                                 touch step-fault-consumed
                                 printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"write_attempted\\":false}"}]}}\n' "$id"
+                                continue
+                            fi
+                            if [ "$step_fault" = stage_attempted_restore_failure ] && [ "$step_restore_attempts" = 1 ]; then
+                                touch step-fault-consumed
+                                printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"write_attempted\\":true}"}]}}\n' "$id"
                                 continue
                             fi
                             if [ "$step_fault" = mismatch_restore ]; then touch step-fault-consumed

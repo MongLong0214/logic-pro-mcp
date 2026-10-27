@@ -3174,7 +3174,11 @@ struct QualificationTransport: Sendable {
             ownedStagedPosition = nil
             let restore = try invoke(session, id: step(), tool: "logic_transport", command: "goto_position",
                 params: ["position": pre.position], phase: "phase_b.restore", timeout: spec.deadline.seconds + 5)
-            if Self.mutationSaysItFailed(restore.text), !Self.playheadStepWriteWasIndeterminate(restore.text) {
+            if Self.mutationSaysItFailed(restore.text),
+               !Self.playheadStepWriteWasIndeterminate(restore.text),
+               let bytes = restore.text.data(using: .utf8),
+               let reply = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any],
+               reply["write_attempted"] as? Bool == false {
                 ownedStagedPosition = lastOwned
             }
             guard !restore.isError, !Self.mutationSaysItFailed(restore.text),
