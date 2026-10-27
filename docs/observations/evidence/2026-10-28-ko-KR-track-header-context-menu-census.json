@@ -56,12 +56,14 @@
       {
         "parent": "트랙 다시 할당",
         "meaning": "assign the selected track header to an existing Click/Ports, Mixer, Audio, Aux, MIDI Click, unassigned, or folder object",
-        "leaf_count": 42
+        "descendant_item_count": 46,
+        "terminal_leaf_count": 40
       },
       {
         "parent": "트랙 헤더 구성요소",
         "meaning": "toggle visible header controls and choose the pan/send knob or additional-name-column mode",
-        "leaf_count": 36
+        "descendant_item_count": 32,
+        "terminal_leaf_count": 30
       }
     ],
     "raw_tree_columns": ["ax_index", "depth", "kind", "disabled", "text"],
