@@ -43,4 +43,25 @@ struct Issue291OutputObservationTests {
         }
         #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
     }
+
+    @Test(arguments: AXLocalePolicy.outputPopupOutputSubmenuTitle.labels)
+    func localizedGenericOutputCaptionCannotEstablishAbsence(caption: String) {
+        let builder = FakeAXRuntimeBuilder()
+        let strip = builder.element(291_760)
+        let output = builder.element(291_761)
+        builder.setRole(strip, kAXLayoutItemRole as String)
+        builder.setButton(
+            output,
+            description: caption,
+            help: "Unmeasured routing control help.",
+            x: 0, y: 0, width: 1, height: 1
+        )
+        builder.setChildren(output, [])
+        builder.setChildren(strip, [output])
+
+        #expect(AXLogicProElements.outputSlotReading(
+            in: strip, runtime: builder.makeAXRuntime()
+        ) == .unreadable)
+        #expect(builder.setCalls.isEmpty && builder.actionCalls.isEmpty)
+    }
 }

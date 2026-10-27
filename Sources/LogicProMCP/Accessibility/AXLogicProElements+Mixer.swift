@@ -1066,7 +1066,7 @@ extension AXLogicProElements {
                     visit.element, kAXTitleAttribute as String, runtime: runtime
                 ) else { return (.unreadable, nil) }
                 if [description, title].compactMap({ $0 }).contains(where: { value in
-                    AXLocalePolicy.mixerTypeFilterOutput.matches(value, mode: .exact)
+                    AXLocalePolicy.outputPopupOutputSubmenuTitle.matches(value, mode: .exact)
                         || RoutingGraphPublication.classifyOutputLabel(value).0 != .unclassified
                 }) { return (.unreadable, nil) }
                 continue
