@@ -12,10 +12,13 @@ sys.path.insert(0, VERIFY)
 
 import runner_live  # noqa: E402
 import setups  # noqa: E402
+import engine  # noqa: E402
+import evidence_doc  # noqa: E402
 from live import fixture, spec_probes  # noqa: E402
 
 
 APPLE_ROWS = {
+    "input": "Input",
     "stereo_output": "Stereo Output",
     "no_output": "No Output",
     "bus": "Bus",
@@ -23,15 +26,20 @@ APPLE_ROWS = {
 }
 
 
-def routing_run(outputs=None, occupied=None, count=21, failures=0):
-    outputs = outputs or {index: "Stereo Output" for index in range(19)}
+def routing_run(outputs=None, inputs=None, occupied=None, count=21, failures=0, send_counts=None):
+    if outputs is None:
+        outputs = {index: "Stereo Output" for index in range(19)}
+    if inputs is None:
+        inputs = {1: "Input 1"}
     occupied = occupied or set()
+    send_counts = send_counts or [1] * count
     strips = []
     for index in range(count):
         strips.append({
             "outputs": ([{"description": outputs[index]}] if index in outputs else []),
-            "inputs": ([{"description": "Input 1"}] if index == 1 else []),
-            "sends": [{"occupied": index in occupied}],
+            "inputs": ([{"description": inputs[index]}] if index in inputs else []),
+            "sends": [{"occupied": index in occupied and slot == 0}
+                      for slot in range(send_counts[index])],
         })
     return {"observation": {"readable": True, "mixer_found": True, "strips": strips,
                             "read_failures": failures}}
@@ -53,6 +61,47 @@ class Sidecars:
         return "kept-sha"
 
 
+class MixerSession:
+    def __init__(self, edges, data_source="ax_poll", cache_age=0.01, refreshed=True,
+                 product_run=None, before_fetched="2026-10-27T00:00:00Z",
+                 after_fetched="2026-10-27T00:00:01Z"):
+        self.edges = edges
+        self.data_source = data_source
+        self.cache_age = cache_age
+        self.refreshed = refreshed
+        self.product_run = product_run or routing_run()
+        self.before_fetched = before_fetched
+        self.after_fetched = after_fetched
+        self.calls = []
+        self.reads = 0
+
+    def call_structured(self, tool, command, params, _timeout):
+        self.calls.append((tool, command, params))
+        return {"operation": "system.refresh_cache", "refreshed": self.refreshed,
+                "source": "ax_fallback_poller",
+                "message": "State refresh completed via AX fallback poller."}
+
+    def read(self, uri, _timeout):
+        assert uri == spec_probes.MIXER_STATE
+        self.reads += 1
+        observed = self.product_run["observation"]
+        strips = []
+        for index, strip in enumerate(observed["strips"]):
+            row = {"trackIndex": index, "send_slots": [
+                {"ordinal": ordinal,
+                 "state": "occupied_unknown_destination" if slot["occupied"] else "observed_empty"}
+                for ordinal, slot in enumerate(strip["sends"])
+            ]}
+            if strip["inputs"]:
+                row["input"] = strip["inputs"][0]["description"]
+            if strip["outputs"]:
+                row["output"] = strip["outputs"][0]["description"]
+            strips.append(row)
+        return json.dumps({"data_source": self.data_source, "cache_age_sec": self.cache_age,
+                           "fetched_at": self.before_fetched if self.reads == 1 else self.after_fetched,
+                           "strips": strips, "routing_graph": {"edges": self.edges}})
+
+
 class RoutingSpecProbeTests(unittest.TestCase):
 
     def test_probe_normalizes_outputs_and_send_occupancy(self):
@@ -65,6 +114,7 @@ class RoutingSpecProbeTests(unittest.TestCase):
         self.assertEqual(got["outputs"][1], {"kind": "physical", "ports": [3, 4]})
         self.assertEqual(got["outputs"][2], {"kind": "bus", "number": 17})
         self.assertEqual(got["outputs"][0], {"kind": "stereo_output"})
+        self.assertEqual(got["inputs"][1], {"kind": "physical", "ports": [1]})
 
     def test_probe_refuses_an_incomplete_mixer_walk(self):
         with self.assertRaisesRegex(spec_probes.Unreadable, "read failure"):
@@ -74,16 +124,81 @@ class RoutingSpecProbeTests(unittest.TestCase):
         sidecars = Sidecars()
         saved = spec_probes.live_probes.run
         spec_probes.live_probes.run = lambda name, args: routing_run()
+        session = MixerSession([])
         try:
             text = spec_probes.routing_slots(
                 {"life": sidecars, "lproj": "en",
-                 "decl": setups.declaration("lpm-locale-campaign-mixer")})
+                 "decl": setups.declaration("lpm-locale-campaign-mixer"),
+                 "session": session})
         finally:
             spec_probes.live_probes.run = saved
         got = json.loads(text)
         self.assertEqual(got["walk_sha256"], "kept-sha")
         self.assertEqual(got["strip_count"], 21)
-        self.assertEqual(len(sidecars.kept), 1)
+        self.assertEqual(got["product_send_edges"], [])
+        self.assertEqual(got["product_edges"], [])
+        self.assertEqual(session.calls, [("logic_system", "refresh_cache", {})])
+        self.assertEqual(len(sidecars.kept), 3)
+
+    def test_refresh_receipt_uses_production_structured_content_without_weakening_text_calls(self):
+        record = {"sent": True, "reply": {"result": {
+            "content": [{"type": "text", "text": "State refresh completed via AX fallback poller."}],
+            "structuredContent": {"operation": "system.refresh_cache", "refreshed": True,
+                                  "source": "ax_fallback_poller",
+                                  "message": "State refresh completed via AX fallback poller."},
+        }}}
+        with self.assertRaisesRegex(runner_live.runner.StepUnreadable, "not the same JSON"):
+            runner_live.text_of(record, "content")
+        self.assertEqual(runner_live.structured_of(record)["refreshed"], True)
+
+    def test_live_probe_rejects_stale_or_non_ax_product_routing(self):
+        sidecars = Sidecars()
+        saved = spec_probes.live_probes.run
+        spec_probes.live_probes.run = lambda name, args: routing_run()
+        try:
+            for session, reason in (
+                (MixerSession([], data_source="mcu"), "data_source"),
+                (MixerSession([], cache_age=9), "cache_age_sec"),
+                (MixerSession([], refreshed=False), "refresh_cache"),
+                (MixerSession([], after_fetched="2026-10-27T00:00:00Z"), "fetched_at"),
+            ):
+                with self.subTest(reason=reason), self.assertRaisesRegex(
+                        spec_probes.Unreadable, reason):
+                    spec_probes.routing_slots(
+                        {"life": sidecars, "lproj": "en",
+                         "decl": setups.declaration("lpm-locale-campaign-mixer"),
+                         "session": session})
+        finally:
+            spec_probes.live_probes.run = saved
+
+    def test_live_probe_rejects_a_fresh_product_topology_that_differs_from_the_ax_walk(self):
+        sidecars = Sidecars()
+        saved = spec_probes.live_probes.run
+        spec_probes.live_probes.run = lambda name, args: routing_run(occupied={1}, count=22,
+            outputs={index: "Stereo Output" for index in range(19)})
+        try:
+            with self.assertRaisesRegex(spec_probes.Unreadable, "topology differs"):
+                spec_probes.routing_slots(
+                    {"life": sidecars, "lproj": "en",
+                     "decl": setups.declaration("lpm-locale-campaign-mixer"),
+                     "session": MixerSession([], product_run=routing_run())})
+        finally:
+            spec_probes.live_probes.run = saved
+
+    def test_live_probe_rejects_a_product_send_edge_without_destination_witness(self):
+        sidecars = Sidecars()
+        saved = spec_probes.live_probes.run
+        spec_probes.live_probes.run = lambda name, args: routing_run(occupied={1})
+        try:
+            with self.assertRaisesRegex(spec_probes.Unreadable, "source-edge"):
+                spec_probes.routing_slots(
+                    {"life": sidecars, "lproj": "en",
+                     "decl": setups.declaration("lpm-locale-campaign-mixer"),
+                     "session": MixerSession(
+                         [{"kind": "send", "source": "mix_1", "destination": "bus_1"}],
+                         product_run=routing_run(occupied={1}))})
+        finally:
+            spec_probes.live_probes.run = saved
 
     def test_send_actuator_uses_the_declared_strip_and_keeps_its_record(self):
         sidecars = Sidecars()
@@ -109,11 +224,101 @@ class MixerFixtureGateTests(unittest.TestCase):
         life = runner_live.LiveLifecycle()
         self.assertEqual(life.fixture_problems(decl), [])
         reading = runner_live.gate_reading_of(
-            fixture.FIXTURES[decl["live"]], flags_run(), None, routing_run())
+            fixture.FIXTURES[decl["live"]], flags_run(), None, routing_run(), "en")
         self.assertEqual(setups.gate_problems(decl, reading, reading), [])
         reading["fingerprint"]["mixer_strips"] = 20
         self.assertEqual(setups.gate_problems(decl, reading, reading),
                          ["20 Mixer strips, declared 21"])
+
+    def test_mixer_fixture_gate_refuses_partial_or_wrong_routing_state(self):
+        decl = setups.declaration("lpm-locale-campaign-mixer")
+        fx = fixture.FIXTURES[decl["live"]]
+        partial = runner_live.gate_reading_of(fx, flags_run(), None,
+                                              routing_run(failures=9), "en")
+        self.assertTrue(any("routing" in problem.lower() for problem in
+                            setups.gate_problems(decl, partial, partial)))
+
+        wrong = runner_live.gate_reading_of(
+            fx, flags_run(), None,
+            routing_run(outputs={}, inputs={}, occupied={1}, send_counts=[2] * 21), "en")
+        problems = setups.gate_problems(decl, wrong, wrong)
+        for field in ("occupied_strips", "send_counts", "inputs", "outputs"):
+            self.assertTrue(any(problem.startswith(setups.ROUTING_FINGERPRINT_LABELS[field])
+                                for problem in problems), (field, problems))
+
+    def test_reset_fingerprint_requires_the_exact_declared_routing(self):
+        fx = fixture.FIXTURES["locale_campaign_mixer"]
+        exact = runner_live.gate_reading_of(fx, flags_run(), None, routing_run(), "en")
+        self.assertTrue(fixture.fingerprint_matches(fx, exact["fingerprint"]))
+        replacements = {"occupied_strips": [1], "send_counts": [], "inputs": [], "outputs": []}
+        for field, replacement in replacements.items():
+            wrong = json.loads(json.dumps(exact["fingerprint"]))
+            wrong["routing"][field] = replacement
+            self.assertFalse(fixture.fingerprint_matches(fx, wrong), field)
+
+
+class RoutingAcceptanceTests(unittest.TestCase):
+
+    @staticmethod
+    def observation(step, value):
+        return evidence_doc.make_observation(step, json.dumps(value, sort_keys=True))
+
+    def send_row_and_values(self):
+        spec_path = os.path.join(os.path.dirname(os.path.dirname(VERIFY)),
+                                 "docs", "acceptance", "291.json")
+        with open(spec_path, encoding="utf-8") as handle:
+            row = next(row for row in json.load(handle)["rows"]
+                       if row["id"] == "send-occupancy-is-not-an-edge")
+
+        as_found = {"strip_count": 21, "occupied_strips": [],
+                    "send_counts": [1] * 21,
+                    "inputs": [None, {"kind": "physical", "ports": [1]}] + [None] * 19,
+                    "outputs": [{"kind": "stereo_output"}] * 19 + [None, None]}
+        after = {"strip_count": 22, "occupied_strips": [1],
+                 "send_counts": [1, 2] + [1] * 20,
+                 "inputs": [None, {"kind": "physical", "ports": [1]}] + [None] * 20,
+                 "product_edges": [],
+                 "product_send_edges": [],
+                 "outputs": [{"kind": "stereo_output"}] * 19 + [None, None, None]}
+        reply = {"strips": {"witnesses": {"count": 22},
+                              "rows": [{"strip_index": 1,
+                                        "send_slots": [{"ordinal": 1,
+                                                        "state": "occupied_unknown_destination"}]}]},
+                 "routing": {"coverage": "partial", "graph": {"sends": {"state": "partial"}},
+                             "edges": []}}
+        baseline_reply = {"strips": {"witnesses": {"count": 21}, "rows": []},
+                          "routing": {"coverage": "partial",
+                                      "graph": {"sends": {"state": "partial"}}, "edges": []}}
+        values = {"baseline_reply": baseline_reply, "as_found": as_found,
+                  "mutate": {"selected": "Bus 256"}, "pre": after,
+                  "reply": reply, "post": after, "undo": {"state": "A"},
+                  "restored": as_found}
+        return row, values
+
+    def evaluate(self, row, values):
+        run_row = {"observations": {
+            step["as"]: self.observation(step, values[step["as"]])
+            for step in row["steps"] + row["restore"]
+        }}
+        return engine.evaluate_row(row, run_row, "en")
+
+    def test_send_undo_must_restore_the_original_send_topology(self):
+        row, values = self.send_row_and_values()
+        values["restored"] = {**values["restored"], "send_counts": [2] * 21}
+        verdict = self.evaluate(row, values)
+        self.assertEqual(verdict["verdict"], "FAIL", verdict)
+        self.assertTrue(any("send_counts" in reason for reason in verdict["reasons"]), verdict)
+
+    def test_inspect_reply_cannot_invent_a_send_edge_absent_from_product_state(self):
+        row, values = self.send_row_and_values()
+        values["reply"] = json.loads(json.dumps(values["reply"]))
+        values["reply"]["routing"]["edges"] = [
+            {"kind": "send", "source": "mix_1", "destination": "bus_1"}
+        ]
+        verdict = self.evaluate(row, values)
+        self.assertEqual(verdict["verdict"], "FAIL", verdict)
+        self.assertTrue(any("reply.routing.edges" in reason
+                            for reason in verdict["reasons"]), verdict)
 
 
 if __name__ == "__main__":

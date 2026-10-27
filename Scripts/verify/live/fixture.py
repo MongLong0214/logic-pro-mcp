@@ -11,7 +11,9 @@ scratchpad/ev1020new/ko.evidence.json, record `1020/track-census`):
                          soloed.
   locale_campaign_mixer  #291 (scratchpad/live291.sh drives f291r1's live_291 on it). The same
                          project with the Mixer shown: 21 strips (19 tracks, Stereo Out, Master),
-                         measured 2026-09-27 (ko) by probes.routing_slots_ax.
+                         measured 2026-09-27 (ko) by probes.routing_slots_ax. Its exact declared
+                         topology is 19 Stereo outputs, Input 1 only on strip 1, and one empty Send
+                         slot on every strip.
 
 The builder opens the pinned file through LaunchServices (`open -a`, as every harness above does)
 and, for the Mixer fixture, shows the Mixer with the X key (f291r1 live_291:1044-1049: "the same key
@@ -33,6 +35,13 @@ from . import locale as live_locale
 
 CAMPAIGN = os.path.expanduser("~/Music/Logic/lpm-locale-campaign.logicx")
 CAMPAIGN_NAMES = (["Absolute Zero", "Audio 1"] + ["Deluxe Classic"] * 9 + ["Studio Grand"] * 8)
+CAMPAIGN_MIXER_ROUTING = {
+    "strip_count": 21,
+    "occupied_strips": [],
+    "send_counts": [1] * 21,
+    "inputs": [None, {"kind": "physical", "ports": [1]}] + [None] * 19,
+    "outputs": [{"kind": "stereo_output"}] * 19 + [None, None],
+}
 
 FIXTURES = {
     "locale_campaign_19": {
@@ -45,6 +54,7 @@ FIXTURES = {
     "locale_campaign_mixer": {
         "name": "locale_campaign_mixer", "path": CAMPAIGN, "pilot": "#291",
         "track_count": 19, "names": CAMPAIGN_NAMES, "types": None, "mixer_strips": 21,
+        "routing": CAMPAIGN_MIXER_ROUTING,
         # Audio 1's strip: the only one with an input slot, and the one #291 sent to Bus 256
         # (records 291e/<lproj>/target {"strip": 1} and 291e/<lproj>/send-after).
         "input_strip": 1,
@@ -144,6 +154,14 @@ def read(name, lproj, server=None):
         mo = mixer.get("observation") or {}
         if mo.get("readable") and mo.get("mixer_found"):
             fingerprint["mixer_strips"] = len(mo["strips"])
+        if fx.get("routing") is not None:
+            from . import spec_probes
+            try:
+                fingerprint["routing"] = spec_probes.routing_slots_of(
+                    mixer, spec_probes._routing_rows(lproj))
+            except spec_probes.Unreadable as exc:
+                fingerprint["routing"] = None
+                fingerprint["routing_cause"] = str(exc)
     if server is not None:
         product = product_tracks(server)
         record["product"] = product
@@ -165,6 +183,8 @@ def fingerprint_matches(fx, fingerprint):
     if fx["types"] is not None and fingerprint.get("types") != fx["types"]:
         return False
     if fx["mixer_strips"] is not None and fingerprint.get("mixer_strips") != fx["mixer_strips"]:
+        return False
+    if fx.get("routing") is not None and fingerprint.get("routing") != fx["routing"]:
         return False
     return True
 

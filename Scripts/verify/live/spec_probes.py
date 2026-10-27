@@ -21,6 +21,7 @@ unreadable, never read as the tracks it happens to show.
 
 import json
 import re
+from datetime import datetime
 
 import evidence_doc as E
 
@@ -29,6 +30,10 @@ from . import locale as live_locale
 from . import probes as live_probes
 
 MCU_STATE = "logic://mcu/state"
+MIXER_STATE = "logic://mixer"
+# RoutingGraph's repository-owned wire enum, not a localized Logic UI label.
+PRODUCT_SEND_EDGE_KIND = "send"
+MAX_MIXER_CACHE_AGE_S = 1.0
 #: How long mcu_upper_row waits for the resource.
 READ_S = 10.0
 
@@ -146,6 +151,7 @@ def mcu_upper_row(ctx: dict) -> str:
 # ---------------------------------------------------------------------------------------------
 
 ROUTING_ROWS = {
+    "input": ("Input", "strings:MAMixer"),
     "stereo_output": ("Stereo Output", "strings:Logic"),
     "no_output": ("No Output", "strings:MAMixer"),
     "bus": ("Bus", "strings:Logic"),
@@ -182,6 +188,16 @@ def _assignment(label: str, rows: dict) -> dict:
     return {"kind": "unknown", "label": label}
 
 
+def _input_assignment(label: str, rows: dict) -> dict:
+    physical = re.fullmatch(re.escape(rows["input"]) + r"\s*([0-9]+)", label, re.IGNORECASE)
+    if physical and int(physical.group(1)) > 0:
+        return {"kind": "physical", "ports": [int(physical.group(1))]}
+    bus = re.fullmatch(re.escape(rows["bus"]) + r"\s*([0-9]+)", label, re.IGNORECASE)
+    if bus and int(bus.group(1)) > 0:
+        return {"kind": "bus", "number": int(bus.group(1))}
+    return {"kind": "unknown", "label": label}
+
+
 def routing_slots_of(run: dict, rows: dict) -> dict:
     """The compact independent value acceptance rows consume from one routing_slots_ax walk."""
     observation = (run or {}).get("observation") or {}
@@ -193,7 +209,7 @@ def routing_slots_of(run: dict, rows: dict) -> dict:
     strips = observation.get("strips")
     if not isinstance(strips, list) or not strips:
         raise Unreadable("routing_slots: the Mixer walk has no strip list")
-    outputs, send_counts, occupied = [], [], []
+    inputs, outputs, send_counts, occupied = [], [], [], []
     for index, strip in enumerate(strips):
         if not isinstance(strip, dict):
             raise Unreadable(f"routing_slots: strip {index} is not an object")
@@ -205,6 +221,17 @@ def routing_slots_of(run: dict, rows: dict) -> dict:
         send_counts.append(len(slots))
         if any(slot["occupied"] for slot in slots):
             occupied.append(index)
+        found_inputs = strip.get("inputs")
+        if not isinstance(found_inputs, list) or len(found_inputs) > 1:
+            raise Unreadable(f"routing_slots: strip {index} has no exact input-slot cardinality")
+        if not found_inputs:
+            inputs.append(None)
+        else:
+            label = (found_inputs[0].get("description")
+                     if isinstance(found_inputs[0], dict) else None)
+            if not isinstance(label, str) or not label:
+                raise Unreadable(f"routing_slots: strip {index}'s input description did not read")
+            inputs.append(_input_assignment(label, rows))
         found = strip.get("outputs")
         if not isinstance(found, list) or len(found) > 1:
             raise Unreadable(f"routing_slots: strip {index} has no exact output-slot cardinality")
@@ -216,14 +243,126 @@ def routing_slots_of(run: dict, rows: dict) -> dict:
             raise Unreadable(f"routing_slots: strip {index}'s output description did not read")
         outputs.append(_assignment(label, rows))
     return {"strip_count": len(strips), "occupied_strips": occupied,
-            "send_counts": send_counts, "outputs": outputs}
+            "send_counts": send_counts, "inputs": inputs, "outputs": outputs}
+
+
+def _mixer_body(text: str) -> dict:
+    try:
+        body = E.loads(text)
+    except ValueError as exc:
+        raise Unreadable(f"routing_slots: {MIXER_STATE} is not JSON: {exc}") from exc
+    if not isinstance(body, dict):
+        raise Unreadable(f"routing_slots: {MIXER_STATE} is not a JSON object")
+    return body
+
+
+def _fetched_at(body: dict, phase: str) -> datetime:
+    value = body.get("fetched_at")
+    if not isinstance(value, str):
+        raise Unreadable(f"routing_slots: {phase} logic://mixer has no fetched_at timestamp")
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise Unreadable(f"routing_slots: {phase} logic://mixer fetched_at is malformed: {value!r}") from exc
+    if parsed.tzinfo is None or parsed.utcoffset() is None:
+        raise Unreadable(f"routing_slots: {phase} logic://mixer fetched_at has no timezone: {value!r}")
+    return parsed
+
+
+def _product_routing(body: dict, rows: dict) -> dict:
+    strips = body.get("strips")
+    if not isinstance(strips, list) or not strips:
+        raise Unreadable("routing_slots: logic://mixer has no strip array")
+    inputs, outputs, send_counts, occupied = [], [], [], []
+    occupied_states = {"occupied_unknown_destination", "occupied_known_destination"}
+    for index, strip in enumerate(strips):
+        if not isinstance(strip, dict) or strip.get("trackIndex") != index:
+            raise Unreadable(f"routing_slots: logic://mixer strip {index} has no matching trackIndex")
+        slots = strip.get("send_slots")
+        if not isinstance(slots, list):
+            raise Unreadable(f"routing_slots: logic://mixer strip {index} has no send_slots array")
+        states = []
+        for ordinal, slot in enumerate(slots):
+            if (not isinstance(slot, dict) or slot.get("ordinal") != ordinal
+                    or slot.get("state") not in occupied_states | {"observed_empty"}):
+                raise Unreadable(f"routing_slots: logic://mixer strip {index} has an unreadable send slot")
+            states.append(slot["state"])
+        send_counts.append(len(slots))
+        if any(state in occupied_states for state in states):
+            occupied.append(index)
+        input_label = strip.get("input")
+        if input_label is None:
+            inputs.append(None)
+        elif isinstance(input_label, str) and input_label:
+            inputs.append(_input_assignment(input_label, rows))
+        else:
+            raise Unreadable(f"routing_slots: logic://mixer strip {index}'s input is malformed")
+        output_label = strip.get("output")
+        if output_label is None:
+            outputs.append(None)
+        elif isinstance(output_label, str) and output_label:
+            outputs.append(_assignment(output_label, rows))
+        else:
+            raise Unreadable(f"routing_slots: logic://mixer strip {index}'s output is malformed")
+    return {"strip_count": len(strips), "occupied_strips": occupied,
+            "send_counts": send_counts, "inputs": inputs, "outputs": outputs}
+
+
+def _product_state(text: str, rows: dict) -> tuple:
+    body = _mixer_body(text)
+    graph = body.get("routing_graph") if isinstance(body, dict) else None
+    edges = graph.get("edges") if isinstance(graph, dict) else None
+    if not isinstance(edges, list) or any(not isinstance(edge, dict) for edge in edges):
+        raise Unreadable("routing_slots: logic://mixer has no routing_graph.edges array")
+    source, age = body.get("data_source"), body.get("cache_age_sec")
+    if source != "ax_poll":
+        raise Unreadable(f"routing_slots: logic://mixer data_source is {source!r}, not fresh ax_poll")
+    if (not isinstance(age, (int, float)) or isinstance(age, bool)
+            or age < 0 or age > MAX_MIXER_CACHE_AGE_S):
+        raise Unreadable(f"routing_slots: logic://mixer cache_age_sec is not fresh: {age!r}")
+    return (body, _product_routing(body, rows), edges,
+            [edge for edge in edges if edge.get("kind") == PRODUCT_SEND_EDGE_KIND])
 
 
 def routing_slots(ctx: dict) -> str:
     run = live_probes.run("routing_slots_ax", {"lproj": ctx["lproj"]})
+    rows = _routing_rows(ctx["lproj"])
+    independent = routing_slots_of(run, rows)
     data = json.dumps(run, ensure_ascii=False, sort_keys=True, default=repr).encode("utf-8")
-    return _text({**routing_slots_of(run, _routing_rows(ctx["lproj"])),
-                  "walk_sha256": ctx["life"].sidecar(data)})
+    walk_sha = ctx["life"].sidecar(data)
+    session = ctx.get("session")
+    if session is None:
+        raise Unreadable("routing_slots: no server is running to read logic://mixer")
+    try:
+        before_text = session.read(MIXER_STATE, READ_S)
+        before_body = _mixer_body(before_text)
+        refresh = session.call_structured("logic_system", "refresh_cache", {}, READ_S)
+        if not (isinstance(refresh, dict) and refresh.get("refreshed") is True
+                and refresh.get("source") == "ax_fallback_poller"):
+            raise Unreadable(f"routing_slots: refresh_cache did not complete a fresh AX poll: "
+                             f"{refresh!r}")
+        mixer_text = session.read(MIXER_STATE, READ_S)
+    except Unreadable:
+        raise
+    except Exception as exc:  # noqa: BLE001 - any failed read makes the probe unreadable
+        raise Unreadable(f"routing_slots: refresh_cache or logic://mixer did not read: {exc}") from exc
+    before_sha = ctx["life"].sidecar(before_text.encode("utf-8"))
+    mixer_sha = ctx["life"].sidecar(mixer_text.encode("utf-8"))
+    product_body, product_routing, product_edges, send_edges = _product_state(mixer_text, rows)
+    if _fetched_at(product_body, "after") <= _fetched_at(before_body, "before"):
+        raise Unreadable("routing_slots: refresh_cache did not advance the Mixer fetched_at timestamp "
+                         f"(before sha256 {before_sha}, after sha256 {mixer_sha})")
+    if product_routing != independent:
+        raise Unreadable("routing_slots: fresh product Mixer topology differs from the independent "
+                         f"AX walk (logic://mixer sha256 {mixer_sha})")
+    if send_edges:
+        raise Unreadable("routing_slots: the product published a Send source-edge although the "
+                         "independent Mixer walk observed occupancy but no destination witness "
+                         f"(logic://mixer sha256 {mixer_sha})")
+    return _text({**independent,
+                  "product_edges": product_edges, "product_send_edges": send_edges,
+                  "mixer_before_sha256": before_sha, "mixer_sha256": mixer_sha,
+                  "walk_sha256": walk_sha})
 
 
 def routing_send_assign(ctx: dict, strip: int) -> str:

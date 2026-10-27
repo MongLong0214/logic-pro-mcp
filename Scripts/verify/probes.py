@@ -56,11 +56,17 @@ PROBES = {
     "routing_slots": {
         "args": {},
         "returns": '{"strip_count": <int>, "occupied_strips": [<int>, ...], '
-                   '"outputs": [<assignment | null>, ...]}',
+                   '"send_counts": [<int>, ...], "inputs": [<assignment | null>, ...], '
+                   '"outputs": [<assignment | null>, ...], "product_edges": [<edge>, ...], '
+                   '"product_send_edges": []}',
         "reads": "the verifier's own routing_slots_ax walk of the Mixer. Output descriptions are "
                  "classified only with the installed Logic bundle's rows for this locale; unknown "
                  "text remains explicit. Send occupancy comes only from the independently witnessed "
-                 "slot/knob shape, never from the product's send state.",
+                 "slot/knob shape, never from the product's send state. It also reads the product's "
+                 "logic://mixer before and after a completed refresh_cache AX poll, requires the "
+                 "Mixer timestamp to advance with fresh ax_poll provenance and its full routing "
+                 "topology to equal the independent walk, and is UNREADABLE if that graph "
+                 "publishes a Send source edge without an independently witnessed destination.",
     },
     "routing_send_assign": {
         "args": {"strip": "int"},

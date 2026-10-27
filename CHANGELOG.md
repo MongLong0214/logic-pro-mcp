@@ -12,8 +12,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 - **The fixed verifier can now express the two bounded #291 routing pilots.**
   `docs/acceptance/291.json` covers a verified physical-output change and restore, plus the
   requirement that an occupied Send remain partial routing evidence rather than an invented
-  source edge. The live lifecycle gates the declared Mixer strip count; independent probes read
-  output classifications and Send occupancy and keep their raw walks as sidecars. These rows are
+  source edge. The live lifecycle gates the exact declared Mixer inputs, outputs, Send-slot counts
+  and occupancy, not only its strip count. Independent probes keep their raw walks as sidecars,
+  require a Mixer-specific `fetched_at` advance through a structured refresh receipt, require the
+  refreshed product topology to equal the independent AX walk, compare its full edge list with
+  `inspect_session`, and refuse a Send source edge for which the independent Mixer surface has no
+  destination witness.
+  Reset confirmation and Undo must restore that full bounded topology. These rows are
   admitted and mutation-tested offline; they are not a live ten-locale PASS and do not close
   #291 or #1028 by themselves.
 - **`logic_mixer set_output_verified`: one strip's output to one exact destination, read back

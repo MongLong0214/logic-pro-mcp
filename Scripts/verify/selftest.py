@@ -574,8 +574,14 @@ MUTANTS = [
      "old": '    return first["text"]',
      "new": '    return json.dumps(json.loads(first["text"]))'},
     {"id": "timeout-as-empty-object", "file": "runner_live.py",
-     "old": """        raise runner.StepUnreadable(f"no reply within {call.get('elapsed_s') or 0:.1f} s")""",
-     "new": '        return "{}"'},
+     "old": ("def text_of(call: dict, items: str) -> str:\n"
+             "    \"\"\"The text of `result[items][0]` in a live.mcp request record, exactly as the server sent it.\"\"\"\n"
+             "    if call.get(\"timed_out\"):\n"
+             "        raise runner.StepUnreadable(f\"no reply within {call.get('elapsed_s') or 0:.1f} s\")"),
+     "new": ("def text_of(call: dict, items: str) -> str:\n"
+             "    \"\"\"The text of `result[items][0]` in a live.mcp request record, exactly as the server sent it.\"\"\"\n"
+             "    if call.get(\"timed_out\"):\n"
+             "        return \"{}\"")},
     {"id": "structured-preferred", "file": "runner_live.py",
      "old": '    if structured is not None and not _same_json(first["text"], structured):',
      "new": ("    if structured is not None:\n"

@@ -11,7 +11,7 @@
   {
    "doc": "issue:291",
    "sha": null,
-   "quote": "Physical and existing-bus output, send/input/removal are reachable and independently verified for their stated scope."
+   "quote": "A physical output change and restoration were observed"
   }
  ],
  "fixture": {
@@ -51,6 +51,8 @@
    "restore_expect": [
     {"path": "restored.strip_count", "op": "eq", "ref": {"obs": "pre.strip_count"}},
     {"path": "restored.occupied_strips", "op": "eq", "ref": {"obs": "pre.occupied_strips"}},
+    {"path": "restored.send_counts", "op": "eq", "ref": {"obs": "pre.send_counts"}},
+    {"path": "restored.inputs", "op": "eq", "ref": {"obs": "pre.inputs"}},
     {"path": "restored.outputs", "op": "eq", "ref": {"obs": "pre.outputs"}}
    ],
    "independence": ["as_found", "pre", "post"]
@@ -74,7 +76,9 @@
     {"path": "reply.routing.coverage", "op": "eq", "value": "partial"},
     {"path": "reply.routing.graph.sends.state", "op": "eq", "value": "partial"},
     {"path": "post.occupied_strips", "op": "eq", "value": [1]},
-    {"path": "post.strip_count", "op": "eq", "value": 22}
+    {"path": "post.strip_count", "op": "eq", "value": 22},
+    {"path": "pre.product_send_edges", "op": "eq", "value": [], "invariant": true},
+    {"path": "reply.routing.edges", "op": "eq", "ref": {"obs": "pre.product_edges"}}
    ],
    "counterexample": [
     {"observation": "baseline_reply", "replaces": "reply", "must_fail": [1]},
@@ -87,6 +91,8 @@
    "restore_expect": [
     {"path": "restored.strip_count", "op": "eq", "ref": {"obs": "as_found.strip_count"}},
     {"path": "restored.occupied_strips", "op": "eq", "ref": {"obs": "as_found.occupied_strips"}},
+    {"path": "restored.send_counts", "op": "eq", "ref": {"obs": "as_found.send_counts"}},
+    {"path": "restored.inputs", "op": "eq", "ref": {"obs": "as_found.inputs"}},
     {"path": "restored.outputs", "op": "eq", "ref": {"obs": "as_found.outputs"}}
    ],
    "independence": ["as_found", "mutate", "pre", "post"]
