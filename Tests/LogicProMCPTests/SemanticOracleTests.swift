@@ -111,6 +111,16 @@ struct SemanticOracleEngineTests {
         #expect(!OracleConstraint.numericRange(key: "missing", min: 0, max: 10).isSatisfied(by: object))
     }
 
+    @Test func numericMinimumIsInclusiveWithoutInventingAnUpperBound() {
+        let object = root(#"{"low":1,"high":1000000000000,"zero":0,"text":"1","flag":true}"#)
+        #expect(OracleConstraint.numericMinimum(key: "low", min: 1).isSatisfied(by: object))
+        #expect(OracleConstraint.numericMinimum(key: "high", min: 1).isSatisfied(by: object))
+        #expect(!OracleConstraint.numericMinimum(key: "zero", min: 1).isSatisfied(by: object))
+        #expect(!OracleConstraint.numericMinimum(key: "text", min: 1).isSatisfied(by: object))
+        #expect(!OracleConstraint.numericMinimum(key: "flag", min: 1).isSatisfied(by: object))
+        #expect(!OracleConstraint.numericMinimum(key: "missing", min: 1).isSatisfied(by: object))
+    }
+
     @Test func enumMemberAcceptsLegalTokensAndRejectsOutsiders() {
         let object = root(#"{"status":"ok","flag":false,"n":1}"#)
         #expect(OracleConstraint.enumMember(key: "status", allowed: ["ok", "bad"]).isSatisfied(by: object))
@@ -169,6 +179,14 @@ struct SemanticOracleEngineTests {
         // A missing side can never agree — corrupt inputs fail closed, not open.
         #expect(!OracleConstraint.fieldsEqual(keyA: "requested", keyB: "absent").isSatisfied(by: object))
         #expect(!OracleConstraint.fieldsEqual(keyA: "absent", keyB: "observed").isSatisfied(by: object))
+    }
+
+    @Test func fieldsDifferRequiresTwoPresentUnequalValues() {
+        let object = root(#"{"before":"bank 0","after":"bank 1","same":"bank 0"}"#)
+        let differs = OracleConstraint.fieldsDiffer(keyA: "before", keyB: "after")
+        #expect(differs.isSatisfied(by: object))
+        #expect(!OracleConstraint.fieldsDiffer(keyA: "before", keyB: "same").isSatisfied(by: object))
+        #expect(!OracleConstraint.fieldsDiffer(keyA: "before", keyB: "absent").isSatisfied(by: object))
     }
 
     @Test func readbackArrayExcludesResponseIdentityRequiresAReadableIndependentAbsence() {
@@ -549,6 +567,75 @@ struct SemanticOracleCensusTests {
         )
     }
 
+    /// #862 — the ten-locale 2026-09-27 native records include a real one-step
+    /// State-A `mixer.bank` response whose independent witness is the freshly
+    /// redrawn MCU LCD upper row. Keep that bounded profile on the covered side,
+    /// and reject forged, partial, multi-step and no-fresh-write receipts.
+    @Test func mixerBankLiveStateAContractIsPinnedPostClosure() throws {
+        #expect(SemanticOracleTable.postClosureMutatingOperationIDs.contains(.mixerBank))
+        #expect(SemanticOracleTable.structurallyUnverifiedMutatingOperationIDs[.mixerBank] == nil)
+
+        let oracle = try #require(SemanticOracleTable.byOperationID[.mixerBank])
+        let liveStateA = #"{"success":true,"verified":true,"state":"A","operation":"mixer.bank","channel":"MCU","direction":"right","bank_bookkeeping_before":0,"bank_bookkeeping_after":1,"bank_presses_sent":1,"banks_moved":1,"banks_requested":1,"step_windows":["DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn "],"upper_row_writes_observed":2,"window_before":"AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ","window_after":"DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ","strips":["DelCls","DelCls","DelCls","StdGrn","StdGrn","StdGrn","StdGrn","StdGrn"],"verify_source":"mcu_lcd_upper_row"}"#
+        let liveAccepted = try #require(oracle.evaluate(
+            responseData: Data(liveStateA.utf8),
+            readbackData: Data("{}".utf8)
+        ))
+        #expect(liveAccepted)
+
+        let forgedWitness = liveStateA.replacingOccurrences(
+            of: "mcu_lcd_upper_row", with: "button_press_sent"
+        )
+        let forgedAccepted = try #require(oracle.evaluate(
+            responseData: Data(forgedWitness.utf8),
+            readbackData: Data("{}".utf8)
+        ))
+        #expect(!forgedAccepted)
+
+        let partialWalk = liveStateA.replacingOccurrences(
+            of: "\"banks_moved\":1", with: "\"banks_moved\":0"
+        )
+        let partialAccepted = try #require(oracle.evaluate(
+            responseData: Data(partialWalk.utf8),
+            readbackData: Data("{}".utf8)
+        ))
+        #expect(!partialAccepted)
+
+        let unchangedWindow = liveStateA.replacingOccurrences(
+            of: "DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ",
+            with: "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls "
+        )
+        let unchangedAccepted = try #require(oracle.evaluate(
+            responseData: Data(unchangedWindow.utf8),
+            readbackData: Data("{}".utf8)
+        ))
+        #expect(!unchangedAccepted)
+
+        // The current envelope interleaves requested-step and ambiguity-probe
+        // windows in `step_windows`, so it cannot prove an ordered multi-step
+        // walk. Keep this promotion to the independently witnessed one-step
+        // profile instead of accepting a net before/after change as two moves.
+        let unprovableMultiStep = liveStateA
+            .replacingOccurrences(of: "\"bank_presses_sent\":1", with: "\"bank_presses_sent\":2")
+            .replacingOccurrences(of: "\"banks_moved\":1", with: "\"banks_moved\":2")
+            .replacingOccurrences(of: "\"banks_requested\":1", with: "\"banks_requested\":2")
+            .replacingOccurrences(of: "\"upper_row_writes_observed\":2", with: "\"upper_row_writes_observed\":4")
+        let multiStepAccepted = try #require(oracle.evaluate(
+            responseData: Data(unprovableMultiStep.utf8),
+            readbackData: Data("{}".utf8)
+        ))
+        #expect(!multiStepAccepted)
+
+        let noFreshUpperRowWrite = liveStateA.replacingOccurrences(
+            of: "\"upper_row_writes_observed\":2", with: "\"upper_row_writes_observed\":0"
+        )
+        let noFreshWriteAccepted = try #require(oracle.evaluate(
+            responseData: Data(noFreshUpperRowWrite.utf8),
+            readbackData: Data("{}".utf8)
+        ))
+        #expect(!noFreshWriteAccepted)
+    }
+
     /// Soundness of the increment: every id in B1..B4 is a REAL `.mutating`,
     /// non-`.unsupported` registry spec — a read-only id or a typo cannot
     /// masquerade as mutating coverage.
@@ -755,6 +842,7 @@ struct SemanticOracleStrengthTests {
     /// constant onto a mutation oracle whose real check is the agreement.
     @Test func relationalConstraintsAreValueBearingAndSurviveTheStrengthGate() {
         #expect(OracleConstraint.fieldsEqual(keyA: "a", keyB: "b").isValueConstraint)
+        #expect(OracleConstraint.fieldsDiffer(keyA: "a", keyB: "b").isValueConstraint)
         #expect(OracleConstraint.crossCheck(responseKey: "a", readbackKey: "b").isValueConstraint)
 
         let fieldsEqualOnly = OperationOracle(
@@ -1634,6 +1722,11 @@ enum JSONMutator {
                 ("below min", min - 1),
                 ("not a number", "not-a-number"),
             ]))
+        case .numericMinimum(_, let min):
+            mutants.append(contentsOf: replacements(root, key, [
+                ("below min", min - 1),
+                ("not a number", "not-a-number"),
+            ]))
         case .enumMember:
             mutants.append(contentsOf: replacements(root, key, [
                 ("outside enum", "__not_a_member__"),
@@ -1708,6 +1801,15 @@ enum JSONMutator {
             }
             if let currentB = JSONPath.resolve(root, keyPath: keyB) {
                 mutants.append(contentsOf: replacements(root, keyB, [("diverge", divergent(from: currentB))]))
+            }
+        case .fieldsDiffer(let keyA, let keyB):
+            // Collapse either side onto the other; the before/after witness must
+            // remain genuinely different. (`drop keyA` is generic above.)
+            if let currentB = JSONPath.resolve(root, keyPath: keyB) {
+                mutants.append(contentsOf: replacements(root, keyA, [("make equal", currentB)]))
+            }
+            if let currentA = JSONPath.resolve(root, keyPath: keyA) {
+                mutants.append(contentsOf: replacements(root, keyB, [("make equal", currentA)]))
             }
         case .crossCheck(let responseKey, _):
             // The harness holds the readback fixed and mutates the response, so
