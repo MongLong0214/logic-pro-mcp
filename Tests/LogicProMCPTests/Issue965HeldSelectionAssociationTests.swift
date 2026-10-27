@@ -702,6 +702,10 @@ struct Issue965HeldSelectionAssociationTests {
         var routingDelayedReceiverActionBoundaryInjected = false
         var routingDelayedReceiverGeometryFault: String?
         var routingDelayedReceiverGeometryInjected = false
+        var routingDelayedReceiverRecoveryFault: String?
+        var routingDelayedReceiverRecoveryInjected = false
+        var routingDelayedReceiverInputFailures = 0
+        var routingDelayedReceiverCurrentIndexFailures = 0
         var routingDelayedMixerOwner: AXUIElement?
         var routingDelayedMixerHorizontal: AXUIElement?
         var routingDelayedMixerVertical: AXUIElement?
@@ -835,6 +839,7 @@ struct Issue965HeldSelectionAssociationTests {
         var routingLevelTransientSourceLost = false
         var routingLevelTransientGateLost = false
         var routingChildrenRead: (@Sendable (AXUIElement) -> Void)?
+        var routingChildrenResult: (@Sendable (AXUIElement) -> Result<[AXUIElement], AXHelpers.AXStatusError>?)?
         var routingLegacyChildrenRead: (@Sendable (AXUIElement) -> Void)?
         var routingRemovalPublications = 0
         var routingRemovedSend: AccessibilityChannel.RemovedSendObservation?
@@ -1287,6 +1292,7 @@ struct Issue965HeldSelectionAssociationTests {
                     return nil
                 }, childrenResultHandler: { [self] element in
                     routingChildrenRead?(element)
+                    if let result = routingChildrenResult?(element) { return result }
                     if measuringFootprintReads, !routingNameWrites.isEmpty,
                        CFEqual(element, builder.element(1_965_720)),
                        let guardian = AXHelpers.HelpReadGuard.current {
@@ -2403,6 +2409,22 @@ struct Issue965HeldSelectionAssociationTests {
             "The rejected handoff cannot continue to a guessed inverse")
     }
 
+    @Test("A failed receiver read cannot widen delayed-census recovery",
+          arguments: ["receiver_only", "transient_current_index", "selected_header"])
+    func canonicalBusOutputRefusesUnqualifiedDelayedReceiverRecovery(fault: String) async throws {
+        let f = try Fixture()
+        try await assertCanonicalPhysicalOutput(
+            mode: "bus_departure_execute_arrival_popup_both_delayed_census_recovery_\(fault)",
+            fixture: f
+        )
+        #expect(f.routingDelayedReceiverRecoveryInjected,
+            "Reach the exact failed receiver-read recovery boundary")
+        #expect(f.routingDelayedReceiverFocusWrites.isEmpty,
+            "Partial retirement, transient unreadability, or a changed selected header cannot write focus")
+        #expect(f.routingDestinationPresses == 1,
+            "An unqualified recovery cannot add an inverse after the verified forward write")
+    }
+
     @Test("Bus departure reuses the exact source, protected footprint and conditional Bus inverse",
           arguments: ["forward", "stereo", "cancel", "late_peer", "late_project", "post_write_loss", "ack_only", "newer", "retired", "physical_input", "physical_cancel", "changed_source_input", "changed_receiver_input", "misleading_receiver", "popup_source", "popup_receiver", "popup_source_retired", "popup_both_retired", "external_peer"])
     func canonicalBusDepartureExecutesOnlyItsCapturedOutput(outcome: String) async throws {
@@ -2776,6 +2798,10 @@ struct Issue965HeldSelectionAssociationTests {
                "vertical_control", "vertical_value", "vertical_frame", "layout"].first(where: {
                 outputMode.hasSuffix("geometry_\($0)")
             }) : nil
+        let delayedReceiverRecoveryFault = delayedReceiverCensus
+            ? ["receiver_only", "transient_current_index", "selected_header"].first(where: {
+                outputMode.hasSuffix("recovery_\($0)")
+            }) : nil
         let prerequisiteFault = executingBusDeparture && outputMode.hasPrefix("prereq_")
         let inputPopupFocus = executingBusDeparture && outputMode.hasPrefix("popup_")
         let sourceInputPopup = executingBusDeparture
@@ -2832,10 +2858,34 @@ struct Issue965HeldSelectionAssociationTests {
                     // application focus deliberately remains on the retired owner.
                     f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [selectedReplacement])
                 }
+                @Sendable func replaceReceiverOnly(peerKey: Int) {
+                    let source = f.routingReplacement ?? f.strips[1]
+                    let priorPeer = f.routingOtherReplacement ?? f.strips[0]
+                    guard let selected = f.builder.attributeValue(
+                        f.mixer, kAXSelectedChildrenAttribute as String) as? [AXUIElement],
+                          selected.count == 1 else {
+                        Issue.record("A partial receiver redraw needs one exact selected child")
+                        return
+                    }
+                    let peer = f.builder.element(peerKey)
+                    f.builder.setRole(peer, kAXLayoutItemRole as String)
+                    f.builder.setAttribute(peer, kAXNumberOfCharactersAttribute as String, 0)
+                    f.builder.setAttribute(peer, kAXInsertionPointLineNumberAttribute as String, 0)
+                    f.builder.setAttributeSettable(peer, kAXFocusedAttribute as String, true)
+                    f.builder.setChildren(peer, f.builder.makeAXRuntime().children(priorPeer))
+                    if f.routingDelayedMixerOwner != nil {
+                        f.builder.setFrame(peer, x: 0, y: 50, width: 100, height: 300)
+                    }
+                    f.routingOtherReplacement = peer
+                    f.builder.setChildren(f.mixer, mixerRows())
+                    f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String,
+                        [CFEqual(selected[0], priorPeer) ? peer : source])
+                }
                 if delayedReceiverCensus {
                     f.routingDelayedReceiverFocusFault = delayedReceiverFocusFault
                     f.routingDelayedReceiverActionBoundaryFault = delayedReceiverActionBoundaryFault
                     f.routingDelayedReceiverGeometryFault = delayedReceiverGeometryFault
+                    f.routingDelayedReceiverRecoveryFault = delayedReceiverRecoveryFault
                     f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[1]])
                     f.routingSelection = { index in
                         let selected = index == 0 ? f.routingReplacement ?? f.strips[1]
@@ -2848,6 +2898,7 @@ struct Issue965HeldSelectionAssociationTests {
                         previous?(element)
                         guard f.routingDelayedReceiverRedrawArmed,
                               !f.routingDelayedReceiverRedrawInjected,
+                              f.routingDelayedReceiverRecoveryFault == nil,
                               CFEqual(element, f.mixer),
                               Thread.callStackSymbols.contains(where: { $0.contains("renewSourceThroughOriginalHeader") })
                         else { return }
@@ -2860,6 +2911,16 @@ struct Issue965HeldSelectionAssociationTests {
                         // owners without changing their routing values.
                         replaceCurrentMixerRows(sourceKey: 1_973_144, peerKey: 1_973_145)
                         f.routingDelayedReceiverRedrawInjected = true
+                    }
+                    f.routingChildrenResult = { element in
+                        guard f.routingDelayedReceiverRecoveryFault == "transient_current_index",
+                              f.routingDelayedReceiverRecoveryInjected,
+                              f.routingDelayedReceiverCurrentIndexFailures < 2,
+                              CFEqual(element, f.mixer),
+                              Thread.callStackSymbols.contains(where: { $0.contains("currentIndex") })
+                        else { return nil }
+                        f.routingDelayedReceiverCurrentIndexFailures += 1
+                        return .failure(.init(raw: AXError.cannotComplete.rawValue))
                     }
                 }
                 let composed = mode.hasPrefix("coupled")
@@ -3002,6 +3063,20 @@ struct Issue965HeldSelectionAssociationTests {
                     f.configureDelayedReceiverMixerGeometry()
                 }
                 f.routingReadResult = { element, attribute in
+                    if f.routingDelayedReceiverRecoveryFault == "receiver_only",
+                       f.routingDelayedReceiverRecoveryInjected,
+                       f.routingDelayedReceiverInputFailures < 2,
+                       CFEqual(element, f.builder.element(1_973_313)),
+                       attribute == kAXDescriptionAttribute as String {
+                        f.routingDelayedReceiverInputFailures += 1
+                        return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                    }
+                    if f.routingDelayedReceiverRecoveryFault == "transient_current_index",
+                       f.routingDelayedReceiverRecoveryInjected,
+                       CFEqual(element, f.builder.element(1_973_313)),
+                       attribute == kAXDescriptionAttribute as String {
+                        return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                    }
                     if nativeApplicationFocus, f.routingNativePopupFrame != nil,
                        ApprovedSessionRepair.outputLeafPermission != nil,
                        CFEqual(element, f.app), attribute == kAXFocusedWindowAttribute as String {
@@ -3084,7 +3159,20 @@ struct Issue965HeldSelectionAssociationTests {
                         // new Mixer owners. Make the first following native read
                         // observe that retirement, forcing the ordinary exact
                         // original-header renewal before the second delayed redraw.
-                        replaceCurrentMixerRows(sourceKey: 1_973_142, peerKey: 1_973_143)
+                        switch f.routingDelayedReceiverRecoveryFault {
+                        case "receiver_only":
+                            replaceReceiverOnly(peerKey: 1_973_143)
+                            f.routingDelayedReceiverRecoveryInjected = true
+                        case "selected_header":
+                            replaceCurrentMixerRows(sourceKey: 1_973_142, peerKey: 1_973_143)
+                            f.builder.setAttribute(f.headers[0], kAXSelectedAttribute as String, false)
+                            f.builder.setAttribute(f.headers[1], kAXSelectedAttribute as String, true)
+                            f.routingDelayedReceiverRecoveryInjected = true
+                        case "transient_current_index":
+                            f.routingDelayedReceiverRecoveryInjected = true
+                        default:
+                            replaceCurrentMixerRows(sourceKey: 1_973_142, peerKey: 1_973_143)
+                        }
                         f.routingDelayedReceiverRenewalTriggered = true
                     }
                     if let fault = f.routingDelayedReceiverActionBoundaryFault,
@@ -4030,6 +4118,16 @@ struct Issue965HeldSelectionAssociationTests {
                     #expect(!verified)
                     #expect(f.routingDestinationPresses == 1,
                         "Changed Mixer geometry cannot add an inverse after the forward write")
+                    return
+                }
+                if delayedReceiverCensus, delayedReceiverRecoveryFault != nil {
+                    #expect(f.routingDelayedReceiverRecoveryInjected,
+                        "Reach the failed receiver read's recovery decision")
+                    #expect(result["saga_state"] as? String != "completed")
+                    let verified = try #require(result["verified"] as? Bool)
+                    #expect(!verified)
+                    #expect(f.routingDestinationPresses == 1,
+                        "Unqualified recovery cannot add an inverse after the forward write")
                     return
                 }
                 if executingBusDeparture, outputMode == "external_peer" {

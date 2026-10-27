@@ -2471,8 +2471,9 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                 if read.assignment != .bus(bus) {
                     // Logic can publish the receiver popup's delayed full-census redraw while the
                     // reader is renewing through its original header. Retry only when that exact
-                    // read retired a held source or receiver; an intact unreadable or changed
-                    // receiver remains a hard refusal. The retry obtains a new complete source and
+                    // read retired the entire held source/receiver census; partial retirement,
+                    // transient unreadability, or a changed receiver remains a hard refusal. The
+                    // retry obtains a new complete source and
                     // peer roster, then re-proves every output/input fact from their native controls.
                     let priorSource = outputPair ?? task.pair
                     // The surrounding checked-input Help guard has correctly
@@ -2486,22 +2487,20 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                     let recovered = await AXHelpers.HelpReadGuard.$current.withValue(recoveryHelp) {
                         let sourceRetired = priorSource.strip.currentIndex(runtime: runtime) == nil
                         let receiverRetired = owner.currentIndex(runtime: runtime) == nil
-                        guard sourceRetired || receiverRetired else {
+                        guard sourceRetired, receiverRetired, let focusBaseline else {
                             Log.info("Canonical Bus receiver read: assignment_present=\(read.assignment != nil),slot_present=\(read.inputSlot != nil),renewed=\(read.inputRenewal != nil)", subsystem: "saga")
                             return false
                         }
                         stage = "receiver_census_project"
                         guard await projectIsCurrent(allowPendingCancellation: true) else { return false }
-                        let disposition: AccessibilityChannel.OriginalHeaderSourceDisposition = sourceRetired
-                            ? .retiredOriginal : .survivingOriginal
                         let observed = await AccessibilityChannel.renewSourceThroughOriginalHeader(
                             priorSource, original: priorSource.strip, runtime: runtime,
-                            selectedHeaderRequired: false,
-                            sourceDisposition: disposition,
+                            selectedHeaderRequired: true,
+                            sourceDisposition: .retiredOriginal,
                             restoringMixerGeometry: outputOriginalMixerGeometry,
                             observingReadFocus: { inputFocus.retainAssociation($0) },
                             observingPeerHeaders: roster.observedPairs.map(\.track),
-                            recoveringRetiredFocusFrom: sourceRetired ? focusBaseline : nil)
+                            recoveringRetiredFocusFrom: focusBaseline)
                         stage = "receiver_census_source_renewal"
                         guard let renewedSource = observed.source,
                               renewedSource.permits(runtime: runtime) else {
