@@ -735,13 +735,13 @@ extension TrackDispatcher {
                 hint: "No MIDI region could be read on the GM Device lane, so nothing was copied."
             )
         }
-        let targetKeysBefore: Set<String>
+        let regionsBeforePaste: [RegionInfo]
         if case .success(let regions) = readRegions() {
-            targetKeysBefore = Set(regions.filter { $0.trackIndex == target.index }.map(recordSequenceRegionKey))
+            regionsBeforePaste = regions
         } else {
             return failure(
                 "unreadable_readback", stage: "relocation_source",
-                hint: "The target track's existing regions could not be read, so a paste could not be told apart from them."
+                hint: "The complete pre-paste region population could not be read, so a paste could not be told apart from other changes."
             )
         }
 
@@ -752,6 +752,14 @@ extension TrackDispatcher {
             return failure("select_failed", stage: "relocation_select_source",
                            hint: "Could not verify exclusive selection of the GM Device lane: \(selectSource.message).")
         }
+        guard let copyBoundary = relocationTrackInventory(),
+              relocationInventoriesMatch(afterImport, copyBoundary),
+              relocationInventoryConfirmsExclusiveSelection(copyBoundary, selectedIndex: gmLane) else {
+            return failure(
+                "source_changed", stage: "relocation_copy_boundary",
+                hint: "The exact GM Device source was no longer the sole selected track immediately before copy; nothing was copied."
+            )
+        }
         let copy = await withWriteBoundaryArmed(traceID) {
             await router.route(operation: "edit.copy")
         }
@@ -761,9 +769,9 @@ extension TrackDispatcher {
         let selectTarget = await withWriteBoundaryArmed(traceID) {
             await router.route(operation: "track.select", params: ["index": String(target.index)])
         }
-        guard selectTarget.isSuccess else {
+        guard channelResultIsVerified(selectTarget) else {
             return failure("select_failed", stage: "relocation_select_target",
-                           hint: "Could not select target track \(target.index): \(selectTarget.message). Nothing was pasted.")
+                           hint: "Could not verify exclusive selection of target track \(target.index): \(selectTarget.message). Nothing was pasted.")
         }
 
         // The import already left the playhead at bar 1; confirm it rather than assume it.
@@ -797,13 +805,12 @@ extension TrackDispatcher {
                 hint: "The exact selected Software Instrument target changed or could not be renewed immediately before paste. Nothing was pasted."
             )
         }
-        let targetSelectionConfirmed = pasteBoundary[target.index].testIdentity != nil
-            ? pasteBoundary[target.index].selectionReadback != false
-            : pasteBoundary[target.index].selectionReadback == true
-        guard targetSelectionConfirmed else {
+        guard relocationInventoryConfirmsExclusiveSelection(
+            pasteBoundary, selectedIndex: target.index
+        ) else {
             return failure(
                 "target_changed", stage: "relocation_paste_boundary",
-                hint: "The exact selected Software Instrument target changed or could not be renewed immediately before paste. Nothing was pasted."
+                hint: "The exact Software Instrument target was not the sole selected track immediately before paste. Nothing was pasted."
             )
         }
 
@@ -817,13 +824,14 @@ extension TrackDispatcher {
         guard let pasted = await pollRegionReadback(
             readRegions: readRegions, settleReadback: settleReadback,
             match: { regions in
-                preferredRecordSequenceRegion(from: regions.filter {
-                    $0.trackIndex == target.index && !targetKeysBefore.contains(recordSequenceRegionKey($0))
-                })
+                guard let added = exactSingleRegionAddition(
+                    before: regionsBeforePaste, after: regions
+                ), added.trackIndex == target.index else { return nil }
+                return added
             }
         ) else {
             return failure("paste_unverified", stage: "relocation_verify",
-                           hint: "No new region appeared on target track \(target.index) after paste; check the track before retrying.")
+                           hint: "Paste did not produce exactly one new region on target track \(target.index) while preserving every prior region; check all selected tracks before retrying.")
         }
         guard pasted.startBar == sourceRegion.startBar, pasted.endBar == sourceRegion.endBar,
               pasted.startBar == 1, pasted.endBar == expectedEndBar else {
@@ -885,6 +893,41 @@ extension TrackDispatcher {
                 && prior.type == observed.type
                 && prior.hasSamePhysicalIdentity(as: observed)
         }
+    }
+
+    private static func relocationInventoryConfirmsExclusiveSelection(
+        _ inventory: [RecordSequenceRelocationTrackObservation],
+        selectedIndex: Int
+    ) -> Bool {
+        guard inventory.indices.contains(selectedIndex) else { return false }
+        return inventory.enumerated().allSatisfy { index, observation in
+            observation.selectionReadback == (index == selectedIndex)
+        }
+    }
+
+    private static func exactSingleRegionAddition(
+        before: [RegionInfo],
+        after: [RegionInfo]
+    ) -> RegionInfo? {
+        var remaining = Dictionary(
+            before.map { (recordSequenceRegionKey($0), 1) },
+            uniquingKeysWith: +
+        )
+        var added: [RegionInfo] = []
+        for region in after {
+            let key = recordSequenceRegionKey(region)
+            if let count = remaining[key], count > 0 {
+                if count == 1 {
+                    remaining.removeValue(forKey: key)
+                } else {
+                    remaining[key] = count - 1
+                }
+            } else {
+                added.append(region)
+            }
+        }
+        guard remaining.isEmpty, added.count == 1 else { return nil }
+        return added[0]
     }
 
     /// Reads regions until `match` finds something, giving Logic's AX tree the same settle budget
