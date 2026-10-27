@@ -700,6 +700,11 @@ struct Issue965HeldSelectionAssociationTests {
         var routingDelayedReceiverFocusFault: String?
         var routingDelayedReceiverActionBoundaryFault: String?
         var routingDelayedReceiverActionBoundaryInjected = false
+        var routingDelayedReceiverGeometryFault: String?
+        var routingDelayedReceiverGeometryInjected = false
+        var routingDelayedMixerOwner: AXUIElement?
+        var routingDelayedMixerHorizontal: AXUIElement?
+        var routingDelayedMixerVertical: AXUIElement?
         var routingDelayedReceiverFocusWrites: [AXUIElement] = []
         var routingAction: (@Sendable (AXUIElement, String) -> Bool)?
         var peerHydrationSamples: [AXHelpers.StripHelpSamples] = []
@@ -1025,6 +1030,93 @@ struct Issue965HeldSelectionAssociationTests {
         }
 
         deinit { try? FileManager.default.removeItem(at: bundle) }
+
+        func configureDelayedReceiverMixerGeometry() {
+            let owner = builder.element(1_973_090)
+            let horizontal = builder.element(1_973_151), horizontalThumb = builder.element(1_973_152)
+            let vertical = builder.element(1_973_153), verticalThumb = builder.element(1_973_154)
+            let foreignHorizontal = builder.element(1_973_155)
+            let foreignHorizontalThumb = builder.element(1_973_156)
+            let foreignVertical = builder.element(1_973_157)
+            let foreignVerticalThumb = builder.element(1_973_158)
+            builder.setFrame(window, x: 0, y: 0, width: 400, height: 400)
+            builder.setFrame(owner, x: 0, y: 0, width: 400, height: 400)
+            builder.setFrame(mixer, x: 0, y: 0, width: 400, height: 400)
+            func configureAxis(_ control: AXUIElement, thumb: AXUIElement,
+                               orientation: String, frame: CGRect, thumbFrame: CGRect) {
+                builder.setRole(control, kAXScrollBarRole as String)
+                builder.setAttribute(control, kAXOrientationAttribute as String, orientation)
+                builder.setAttribute(control, kAXWindowAttribute as String, window)
+                builder.setAttribute(control, kAXParentAttribute as String, owner)
+                builder.setAttribute(control, kAXValueAttribute as String, NSNumber(value: 0.25))
+                builder.setAttributeSettable(control, kAXValueAttribute as String, true)
+                builder.setFrame(control, x: frame.minX, y: frame.minY,
+                    width: frame.width, height: frame.height)
+                builder.setRole(thumb, kAXValueIndicatorRole as String)
+                builder.setAttribute(thumb, kAXWindowAttribute as String, window)
+                builder.setFrame(thumb, x: thumbFrame.minX, y: thumbFrame.minY,
+                    width: thumbFrame.width, height: thumbFrame.height)
+                builder.setChildren(control, [thumb]); builder.setChildren(thumb, [])
+            }
+            let horizontalFrame = CGRect(x: 0, y: 383, width: 400, height: 17)
+            let horizontalThumbFrame = CGRect(x: 30, y: 384, width: 280, height: 15)
+            let verticalFrame = CGRect(x: 383, y: 0, width: 17, height: 400)
+            let verticalThumbFrame = CGRect(x: 384, y: 30, width: 15, height: 300)
+            configureAxis(horizontal, thumb: horizontalThumb,
+                orientation: kAXHorizontalOrientationValue as String,
+                frame: horizontalFrame, thumbFrame: horizontalThumbFrame)
+            configureAxis(vertical, thumb: verticalThumb,
+                orientation: kAXVerticalOrientationValue as String,
+                frame: verticalFrame, thumbFrame: verticalThumbFrame)
+            configureAxis(foreignHorizontal, thumb: foreignHorizontalThumb,
+                orientation: kAXHorizontalOrientationValue as String,
+                frame: horizontalFrame, thumbFrame: horizontalThumbFrame)
+            configureAxis(foreignVertical, thumb: foreignVerticalThumb,
+                orientation: kAXVerticalOrientationValue as String,
+                frame: verticalFrame, thumbFrame: verticalThumbFrame)
+            for (index, strip) in strips.enumerated() {
+                builder.setFrame(strip, x: CGFloat(index) * 100, y: 50, width: 100, height: 300)
+            }
+            routingDelayedMixerOwner = owner
+            routingDelayedMixerHorizontal = horizontal
+            routingDelayedMixerVertical = vertical
+            routingFocusHit = { [self] _, point in
+                if point.y > 380 {
+                    return .success(routingDelayedReceiverGeometryInjected
+                        && routingDelayedReceiverGeometryFault == "horizontal_control"
+                        ? foreignHorizontalThumb : horizontalThumb)
+                }
+                if point.x > 380 {
+                    return .success(routingDelayedReceiverGeometryInjected
+                        && routingDelayedReceiverGeometryFault == "vertical_control"
+                        ? foreignVerticalThumb : verticalThumb)
+                }
+                return .success(nil)
+            }
+        }
+
+        func injectDelayedReceiverMixerGeometryFault() {
+            guard let fault = routingDelayedReceiverGeometryFault,
+                  fault != "missing", !routingDelayedReceiverGeometryInjected else { return }
+            routingDelayedReceiverGeometryInjected = true
+            switch fault {
+            case "horizontal_control", "vertical_control": break
+            case "horizontal_value":
+                builder.setAttribute(routingDelayedMixerHorizontal!, kAXValueAttribute as String,
+                    NSNumber(value: 0.75))
+            case "vertical_value":
+                builder.setAttribute(routingDelayedMixerVertical!, kAXValueAttribute as String,
+                    NSNumber(value: 0.75))
+            case "horizontal_frame":
+                builder.setFrame(routingDelayedMixerHorizontal!, x: 1, y: 383, width: 399, height: 17)
+            case "vertical_frame":
+                builder.setFrame(routingDelayedMixerVertical!, x: 384, y: 0, width: 16, height: 400)
+            case "layout":
+                builder.setFrame(mixer, x: 5, y: 0, width: 400, height: 400)
+            default:
+                Issue.record("Unknown delayed Mixer geometry fault")
+            }
+        }
 
         func logic() -> AXLogicProElements.Runtime {
             let base = builder.makeLogicRuntime(appElement: app,
@@ -2291,6 +2383,26 @@ struct Issue965HeldSelectionAssociationTests {
             "The rejected handoff cannot continue to a guessed inverse")
     }
 
+    @Test("A delayed receiver handoff requires its exact complete Mixer geometry",
+          arguments: ["missing", "horizontal_control", "horizontal_value", "horizontal_frame",
+                      "vertical_control", "vertical_value", "vertical_frame", "layout"])
+    func canonicalBusOutputRequiresExactDelayedReceiverMixerGeometry(fault: String) async throws {
+        let f = try Fixture()
+        try await assertCanonicalPhysicalOutput(
+            mode: "bus_departure_execute_arrival_popup_both_delayed_census_geometry_\(fault)",
+            fixture: f
+        )
+        #expect(f.routingDelayedReceiverRedrawInjected)
+        if fault != "missing" {
+            #expect(f.routingDelayedReceiverGeometryInjected,
+                "Mutate only the complete native Mixer geometry after its before-image exists")
+        }
+        #expect(f.routingDelayedReceiverFocusWrites.isEmpty,
+            "Missing or changed native Mixer geometry cannot authorize a replacement focus write")
+        #expect(f.routingDestinationPresses == 1,
+            "The rejected handoff cannot continue to a guessed inverse")
+    }
+
     @Test("Bus departure reuses the exact source, protected footprint and conditional Bus inverse",
           arguments: ["forward", "stereo", "cancel", "late_peer", "late_project", "post_write_loss", "ack_only", "newer", "retired", "physical_input", "physical_cancel", "changed_source_input", "changed_receiver_input", "misleading_receiver", "popup_source", "popup_receiver", "popup_source_retired", "popup_both_retired", "external_peer"])
     func canonicalBusDepartureExecutesOnlyItsCapturedOutput(outcome: String) async throws {
@@ -2659,6 +2771,11 @@ struct Issue965HeldSelectionAssociationTests {
             ? ["document", "focused_window", "selected_header"].first(where: {
                 outputMode.hasSuffix("action_\($0)")
             }) : nil
+        let delayedReceiverGeometryFault = delayedReceiverCensus
+            ? ["missing", "horizontal_control", "horizontal_value", "horizontal_frame",
+               "vertical_control", "vertical_value", "vertical_frame", "layout"].first(where: {
+                outputMode.hasSuffix("geometry_\($0)")
+            }) : nil
         let prerequisiteFault = executingBusDeparture && outputMode.hasPrefix("prereq_")
         let inputPopupFocus = executingBusDeparture && outputMode.hasPrefix("popup_")
         let sourceInputPopup = executingBusDeparture
@@ -2697,6 +2814,10 @@ struct Issue965HeldSelectionAssociationTests {
                         f.builder.setAttributeSettable(replacement, kAXFocusedAttribute as String, true)
                         f.builder.setChildren(replacement, f.builder.makeAXRuntime().children(prior))
                     }
+                    if f.routingDelayedMixerOwner != nil {
+                        f.builder.setFrame(source, x: 100, y: 50, width: 100, height: 300)
+                        f.builder.setFrame(peer, x: 0, y: 50, width: 100, height: 300)
+                    }
                     let selectedReplacement: AXUIElement
                     if CFEqual(selected[0], priorSource) { selectedReplacement = source }
                     else if CFEqual(selected[0], priorPeer) { selectedReplacement = peer }
@@ -2714,6 +2835,7 @@ struct Issue965HeldSelectionAssociationTests {
                 if delayedReceiverCensus {
                     f.routingDelayedReceiverFocusFault = delayedReceiverFocusFault
                     f.routingDelayedReceiverActionBoundaryFault = delayedReceiverActionBoundaryFault
+                    f.routingDelayedReceiverGeometryFault = delayedReceiverGeometryFault
                     f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[1]])
                     f.routingSelection = { index in
                         let selected = index == 0 ? f.routingReplacement ?? f.strips[1]
@@ -2876,6 +2998,9 @@ struct Issue965HeldSelectionAssociationTests {
                 f.builder.setAttribute(outer, kAXDescriptionAttribute as String, "Mixer")
                 f.builder.setChildren(outer, [f.mixer])
                 f.builder.setChildren(f.window, [f.rail, outer, f.builder.element(1_965_720)])
+                if delayedReceiverCensus, delayedReceiverGeometryFault != "missing" {
+                    f.configureDelayedReceiverMixerGeometry()
+                }
                 f.routingReadResult = { element, attribute in
                     if nativeApplicationFocus, f.routingNativePopupFrame != nil,
                        ApprovedSessionRepair.outputLeafPermission != nil,
@@ -2984,6 +3109,16 @@ struct Issue965HeldSelectionAssociationTests {
                         default:
                             Issue.record("Unknown delayed focus-boundary fault")
                         }
+                    }
+                    if f.routingDelayedReceiverGeometryFault != nil,
+                       f.routingDelayedReceiverGeometryFault != "missing",
+                       f.routingDelayedReceiverRedrawInjected,
+                       !f.routingDelayedReceiverGeometryInjected,
+                       CFEqual(element, f.app), attribute == kAXFocusedUIElementAttribute as String,
+                       Thread.callStackSymbols.contains(where: {
+                           $0.contains("reacquireRetiredOriginalHeaderFocus")
+                       }) {
+                        f.injectDelayedReceiverMixerGeometryFault()
                     }
                     if mode == "coupled_menu_overlay_late_editor", f.routingMenuNameOpens > 0,
                        CFEqual(element, menuEditor), attribute == kAXParentAttribute as String, !f.routingLateScopeInjected {
@@ -3885,6 +4020,16 @@ struct Issue965HeldSelectionAssociationTests {
                     #expect(!verified)
                     #expect(f.routingDestinationPresses == 1,
                         "Lost scope cannot add an inverse to the already verified forward write")
+                    return
+                }
+                if delayedReceiverCensus, delayedReceiverGeometryFault != nil {
+                    #expect(f.routingDelayedReceiverRedrawInjected,
+                        "Reach both exact all-strip redraws before refusing the handoff")
+                    #expect(result["saga_state"] as? String != "completed")
+                    let verified = try #require(result["verified"] as? Bool)
+                    #expect(!verified)
+                    #expect(f.routingDestinationPresses == 1,
+                        "Changed Mixer geometry cannot add an inverse after the forward write")
                     return
                 }
                 if executingBusDeparture, outputMode == "external_peer" {
