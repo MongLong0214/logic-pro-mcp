@@ -81,6 +81,28 @@ struct QualificationRunnerTests {
             .trimmingCharacters(in: .whitespacesAndNewlines) == "10.1.1.1")
     }
 
+    @Test(arguments: [OperationID.transportFastForward, .transportRewind])
+    func explicitNoWriteStepRestoresItsStillOwnedStagedBoundary(operation: OperationID) throws {
+        let fixture = try SlowHandshakeFixture(
+            playheadStep: operation,
+            playheadFault: "step_noop_boundary"
+        )
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
+        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+        #expect(FileManager.default.fileExists(
+            atPath: fixture.directory.appendingPathComponent("step-fault-consumed").path))
+        #expect(result.operationResults[spec.id.rawValue]?.status == .notQualified)
+        #expect(result.mutationRestoreRecords.isEmpty)
+        let effects = result.wireFrames.filter { $0.direction == .request &&
+            ["phase_b.stage", "phase_b.mutation", "phase_b.restore", "phase_b.cleanup"].contains($0.operationID) }
+        #expect(effects.map(\.operationID) == ["phase_b.stage", "phase_b.mutation", "phase_b.cleanup"])
+        #expect(try String(contentsOf: fixture.directory.appendingPathComponent("step-position"), encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines) == "9.3.2.120")
+    }
+
     @Test func cgEventGotoProofWithoutWriteAttemptedCanStageAndRestore() throws {
         let fixture = try SlowHandshakeFixture(
             playheadStep: .transportFastForward,
@@ -7533,6 +7555,10 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                             continue
                         fi
                         case "$step_fault" in
+                          step_noop_boundary)
+                            touch step-fault-consumed
+                            printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"B\\",\\"success\\":true,\\"verified\\":false,\\"reason\\":\\"readback_unavailable\\",\\"write_attempted\\":false,\\"unchanged\\":true}"}]}}\n' "$id"
+                            continue ;;
                           step_noop_race)
                             touch step-fault-consumed
                             case "$request" in

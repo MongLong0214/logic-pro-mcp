@@ -3192,11 +3192,12 @@ struct QualificationTransport: Sendable {
             ownedStagedPosition = nil
             let mutation = try invoke(session, id: step(), tool: spec.tool.rawValue, command: spec.command,
                 params: [:], phase: "phase_b.mutation", timeout: spec.deadline.seconds + 5)
-            if stageWrite != nil, Self.mutationSaysItFailed(mutation.text),
+            if stageWrite != nil,
                !Self.playheadStepWriteWasIndeterminate(mutation.text),
                let bytes = mutation.text.data(using: .utf8),
                let reply = try? JSONSerialization.jsonObject(with: bytes) as? [String: Any],
-               reply["write_attempted"] as? Bool == false {
+               (reply["write_attempted"] as? Bool == false
+                    || reply["unchanged"] as? Bool == true) {
                 let current = try read("phase_b.refused_step_readback", expectedProject: pre.project)
                 if current.position == boundary { ownedStagedPosition = boundary }
             }
