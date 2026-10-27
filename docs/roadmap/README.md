@@ -40,6 +40,15 @@ still list the issue rather than delete its row.
 It does not check the prose. The "waiting on" column, the order, and the state block below are still
 claims dated by the "measured" line, and only issue numbers and open/closed are mechanised.
 
+## Current GitHub synchronization — measured 2026-10-27 at `e3f0238f`
+
+The paginated GitHub issues endpoint reports **25 open issues and 2 open pull requests**. Issue
+[#308](https://github.com/MongLong0214/logic-pro-mcp/issues/308) remains the execution-order index;
+each open row below links to the owning issue body, whose acceptance checklist wins over this
+summary. The roadmap guard found four newer issues missing from this table (#1403, #1417, #1420
+and #1422); their rows are now included without treating an open PR, a partial native pass or a
+local candidate as issue completion.
+
 ## State — measured 2026-09-07 at `a70df168`
 
 ```
@@ -219,6 +228,10 @@ Also open, outside the ADR set:
 | #1118 | closed | Feature request: observe markers without requiring an already-open Marker List; current unreadable/cache behavior is documented. Candidate ruler or last-saved project sources must retain provenance; owned opt-in navigation/restoration is an alternative. No implementation or fresh native qualification claimed. |
 
 | #1287 | closed | Closed by the pull request carrying this row. Reference-bound native whole-project MIDI export retains every target-owned raw chunk, including separated offscreen regions, and shares its managed file path with structured tick-based note reads. Cycle and region-selection preference controls, native transpose/quantization projection, wrong-reference and existing-file refusals accompany focused tests. Project/import equivalence and general loop/alias playback semantics remain explicitly unproven; #302 is not closed by this artifact-scoped provider. |
+| #1403 | OPEN | Review owner for eliminating human-dependent evidence, recovery and merge transitions. Acceptance remains the issue body's zero-human successful and unsuccessful paths, preserved owner boundaries, exact candidate/policy binding and real automatic merge/qualification evidence. The 2026-10-26 local handoff excluded implementation; the owner's 2026-10-27 all-open-issues directive supersedes that scheduling exclusion without weakening permission, authentication or destructive-action boundaries. |
+| #1417 | OPEN | Mono Gain phase-invert and Sample Delay reads plus scalar modal refusal were implemented in #1424. The remaining report is the intermittent Logic 12.4 first-read editor cleanup: capture the exact getter result, editor subrole/close-button read status and post-response AXWindows membership, then repair and qualify cleanup without borrowing the 12.3 result. |
+| #1420 | OPEN | The default two-component control-bar display blocks `record_sequence`'s four-component seek witness. Draft PR #1421 implements the owner-selected temporary Beats-mode switch and exact owned restoration, but is changes-requested with failing `build` and `guards`; closure requires corrected exact-head CI and verified restoration before import, including failure/cancellation and foreign/changed-popup controls. |
+| #1422 | OPEN | Duplicate track names remain a safe refusal for MIDI export/read. Owner accepted default diagnostic E plus explicit `allow_temporary_track_rename` option B in one PR: reuse verified rename/serialization, retain physical identity and complete namespace, restore only the still-owned temporary name, preserve managed export publication, and cover adjacent duplicates, omitted tracks, failure/cancellation and intervening target/name changes. No implementation or PR is present yet. |
 
 ### Three reopen reasons, checked rather than inferred
 
