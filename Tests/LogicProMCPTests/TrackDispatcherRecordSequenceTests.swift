@@ -285,7 +285,7 @@ func testRecordSequenceSeeksInAFullPositionDisplayAndRestoresItBeforeImport(_ mo
     if mode != "restore_refused" {
         #expect(!(try #require(result.isError)))
         #expect(try #require(object["verified"] as? Bool))
-        #expect(object["display_mode_restored"] as? Bool == true)
+        #expect(try #require(object["display_mode_restored"] as? Bool))
         #expect(log.events.first == "restore")
         #expect(log.events.dropFirst().allSatisfy { $0 == "import_tracks" })
         let rereads = Array(repeating: "transport.get_state", count: mode == "lagging_readback" ? 3 : 1)
@@ -295,7 +295,7 @@ func testRecordSequenceSeeksInAFullPositionDisplayAndRestoresItBeforeImport(_ mo
     } else {
         #expect(try #require(result.isError))
         #expect(object["error"] as? String == "display_mode_restore_unverified")
-        #expect(object["display_mode_restored"] as? Bool == false)
+        #expect(!(try #require(object["display_mode_restored"] as? Bool)))
         #expect(object["display_mode_restore_refused"] as? String == "display_mode_changed_since_switch")
         #expect(log.events == ["restore"])
         #expect(await channel.importCalls == 0)
@@ -366,7 +366,7 @@ func testRecordSequenceWithholdsImportWhenTheAnchorIsNotTickExact(_ mode: String
             #expect(!(try #require(diagnostic["verified"] as? Bool)))
             #expect(diagnostic["observed"] as? String == "1.1.2.1")
             #expect(diagnostic["display_mode_switched_from"] as? String == "Beats & Project")
-            #expect(diagnostic["display_mode_restored"] as? Bool == true)
+            #expect(try #require(diagnostic["display_mode_restored"] as? Bool))
         }
     }
     #expect(builder.setCalls.isEmpty)
