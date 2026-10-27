@@ -140,8 +140,9 @@ final class InputBusSagaAdapter: @unchecked Sendable {
               }) else { return false }
         let stop: @Sendable () -> Bool = { (try? SessionPopulationObservation.requireOwnedAcquisition()) == nil }
         let fields = AXHelpers.HelpReadGuard.$current.withValue(.init(allowHelpReads: true, stop: { !permitted() })) {
-            let tracks = AccessibilityChannel.readTrackStates(from: proof.headers, in: pair.track.window,
-                runtime: runtime, readingTypeHelp: false, stoppingWhen: stop).states
+            let tracks = AccessibilityChannel.soloPresentationSafeTrackStates(
+                AccessibilityChannel.readTrackStates(from: proof.headers, in: pair.track.window,
+                    runtime: runtime, readingTypeHelp: false, stoppingWhen: stop).states)
             let strips = AXLogicProElements.mixerChannelStripsIfCompletelyRead(in: pair.strip.mixer, runtime: runtime.ax)
                 .flatMap { AccessibilityChannel.readChannelStrips(from: $0.strips, runtime: runtime,
                     window: pair.strip.window, mixer: pair.strip.mixer, readingScalarHelp: false, stoppingWhen: stop) }

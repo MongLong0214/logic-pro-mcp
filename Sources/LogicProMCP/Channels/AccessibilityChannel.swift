@@ -889,9 +889,42 @@ actor AccessibilityChannel: Channel {
                 if !restored { population.stable = false }
                 else if population.stable, !population.selectionAssociations.isEmpty,
                         association.effects.reason == nil {
+                    let restoredPresentation = try? readPresentationBaseline(
+                        stoppingWhen: stopBeforeAXRead ?? stop)
+                    let renewedPresentation: SessionPopulationObservation.FreshPopulation? = {
+                        guard population.selectionAssociations.count == 1,
+                              let pair = population.selectionAssociations.first,
+                              let previousObservation = population.presentationObservation,
+                              let currentObservation = restoredPresentation?.presentationObservation,
+                              previousObservation.matchesViewTransport(currentObservation),
+                              let previousBinding = population.presentationBinding,
+                              let currentBinding = restoredPresentation?.presentationBinding,
+                              previousBinding.matches(currentBinding,
+                                restoredPreparedFocusOf: association, source: pair.strip)
+                        else { return nil }
+                        return restoredPresentation
+                    }()
                     let boundary = await associationReadbackBoundary()
                     if association.permitsRead(), await navigationReferenceIsCurrent(), !stop() {
                         population.associationReadbackBoundary = boundary
+                        if let renewedPresentation,
+                           let currentObservation = renewedPresentation.presentationObservation,
+                           let currentBinding = renewedPresentation.presentationBinding,
+                           let previousObservation = population.presentationObservation {
+                            population.presentationObservation = .init(
+                                mixerVisible: previousObservation.mixerVisible,
+                                isPlaying: previousObservation.isPlaying,
+                                isRecording: previousObservation.isRecording,
+                                uiLocale: previousObservation.uiLocale == currentObservation.uiLocale
+                                    ? previousObservation.uiLocale : nil)
+                            population.presentationBinding = currentBinding
+                            originalPresentation = renewedPresentation
+                        } else {
+                            // Never publish the temporary strip focus after its
+                            // verified inverse if fresh presentation custody could
+                            // not be reacquired at the restored rail.
+                            population.presentationBinding = nil
+                        }
                     } else {
                         population.selectionAssociations = []
                         population.stable = false
@@ -1025,9 +1058,9 @@ actor AccessibilityChannel: Channel {
             return population
         } catch {
             Log.info("Population acquisition failed: \(error)", subsystem: "ax")
-            if associationFocusPreparation == true {
-                _ = await association?.restorePreparedPopulationFocus(
-                    referenceIsCurrent: navigationReferenceIsCurrent, stoppingWhen: stop)
+            if association?.hasPreparedPopulationFocusToRestore == true {
+                _ = await association?.restorePreparedPopulationFocusAfterInterruptedRead(
+                    referenceIsCurrent: navigationReferenceIsCurrent)
             }
             let stack = await stackNavigation?.restoreAfterInterruptedRead(stoppingWhen: stop) ?? .init()
             let mixer = await navigation?.restore(stoppingWhen: stop) ?? .init()
