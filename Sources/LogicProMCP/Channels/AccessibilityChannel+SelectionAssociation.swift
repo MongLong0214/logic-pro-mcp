@@ -1002,7 +1002,8 @@ extension AccessibilityChannel {
                   }) else { return nil }
             guard pair.track.currentIndex(in: self) == originalIndex,
                   pair.strip.currentIndex(in: self) != nil else { return nil }
-            guard let mixerGeometry = observedMixerViewportGeometry() else { return nil }
+            guard let mixerGeometry = observedMixerViewportGeometry(),
+                  mixerGeometry.isComplete else { return nil }
             return .init(app: app, pid: pid, window: window, title: title,
                 document: document, rail: rail, railPath: railPath, headers: headers,
                 mixer: mixer, mixerPath: path, strips: strips, focus: originalFocus,
@@ -1029,6 +1030,8 @@ extension AccessibilityChannel {
                   runtime.focusedApplicationPID() == baseline.pid,
                   let app = AXLogicProElements.appRoot(runtime: runtime), CFEqual(app, baseline.app),
                   let geometry,
+                  geometry.isComplete,
+                  baseline.mixerGeometry.isComplete,
                   CFEqual(geometry.window, baseline.window),
                   CFEqual(geometry.mixer, baseline.mixer),
                   geometry.document.utf8.elementsEqual(baseline.document.utf8),
@@ -1081,11 +1084,20 @@ extension AccessibilityChannel {
             }
 
             var scopeStage = "gate"
-            func scope(expectedFocus: AXUIElement) -> (strips: [AXUIElement], child: AXUIElement)? {
+            func scope(
+                expectedFocus: AXUIElement,
+                revalidatingAfterGeometry: Bool = false
+            ) -> (strips: [AXUIElement], child: AXUIElement)? {
                 scopeStage = "gate"
                 guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
                       runtime.logicProPID() == baseline.pid,
                       runtime.focusedApplicationPID() == baseline.pid else { return nil }
+                if revalidatingAfterGeometry {
+                    scopeStage = "focus"
+                    guard let focus: AXUIElement = AXHelpers.getAttribute(baseline.app,
+                            kAXFocusedUIElementAttribute as String, runtime: runtime.ax),
+                          CFEqual(focus, expectedFocus) else { return nil }
+                }
                 scopeStage = "window"
                 guard
                       AXHelpers.getAttribute(baseline.app, kAXFrontmostAttribute as String,
@@ -1152,17 +1164,20 @@ extension AccessibilityChannel {
                       viewportPaths.count == baseline.viewportPaths.count,
                       zip(viewportPaths, baseline.viewportPaths).allSatisfy({ Self.same($0, $1) })
                 else { return nil }
-                scopeStage = "mixer_geometry"
-                guard let currentGeometry = Self.observedMixerViewportGeometry(
-                        app: baseline.app, window: baseline.window, mixer: baseline.mixer,
-                        path: baseline.mixerPath, headers: headers, strips: census.strips,
-                        document: baseline.document, runtime: runtime),
-                      currentGeometry.hasSameViewportPosition(as: baseline.mixerGeometry),
-                      currentGeometry.hasSameViewportPosition(as: geometry) else { return nil }
-                scopeStage = "focus"
-                guard let focus: AXUIElement = AXHelpers.getAttribute(baseline.app,
-                        kAXFocusedUIElementAttribute as String, runtime: runtime.ax),
-                      CFEqual(focus, expectedFocus) else { return nil }
+                if !revalidatingAfterGeometry {
+                    scopeStage = "mixer_geometry"
+                    guard let currentGeometry = Self.observedMixerViewportGeometry(
+                            app: baseline.app, window: baseline.window, mixer: baseline.mixer,
+                            path: baseline.mixerPath, headers: headers, strips: census.strips,
+                            document: baseline.document, runtime: runtime),
+                          currentGeometry.isComplete,
+                          currentGeometry.hasSameViewportPosition(as: baseline.mixerGeometry),
+                          currentGeometry.hasSameViewportPosition(as: geometry) else { return nil }
+                    scopeStage = "focus"
+                    guard let focus: AXUIElement = AXHelpers.getAttribute(baseline.app,
+                            kAXFocusedUIElementAttribute as String, runtime: runtime.ax),
+                          CFEqual(focus, expectedFocus) else { return nil }
+                }
                 scopeStage = "accepted"
                 return (census.strips, child)
             }
@@ -1178,6 +1193,11 @@ extension AccessibilityChannel {
                   CFEqual(deciding.child, before.child),
                   deciding.strips.count == before.strips.count,
                   zip(deciding.strips, before.strips).allSatisfy({ CFEqual($0, $1) }),
+                  let actionBoundary = scope(expectedFocus: baseline.focus,
+                    revalidatingAfterGeometry: true),
+                  CFEqual(actionBoundary.child, deciding.child),
+                  actionBoundary.strips.count == deciding.strips.count,
+                  zip(actionBoundary.strips, deciding.strips).allSatisfy({ CFEqual($0, $1) }),
                   (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else {
                 Log.info("Retired original-header focus handoff refused at action boundary", subsystem: "ax")
                 return (nil, effects)
@@ -1185,7 +1205,7 @@ extension AccessibilityChannel {
             effects.navigationPerformed = true
             effects.restoration = "not_restored"
             effects.attempted.append("mixer_focus_reacquisition")
-            _ = AXHelpers.setAttribute(deciding.child, kAXFocusedAttribute as String,
+            _ = AXHelpers.setAttribute(actionBoundary.child, kAXFocusedAttribute as String,
                 NSNumber(value: true), runtime: runtime.ax)
             for attempt in 0..<3 {
                 guard let current: AXUIElement = AXHelpers.getAttribute(baseline.app,
@@ -1193,19 +1213,19 @@ extension AccessibilityChannel {
                     effects.reason = "mixer_focus_reacquisition_unverified"
                     return (nil, effects)
                 }
-                if CFEqual(current, deciding.child) {
-                    guard let final = scope(expectedFocus: deciding.child),
-                          CFEqual(final.child, deciding.child),
-                          final.strips.count == deciding.strips.count,
-                          zip(final.strips, deciding.strips).allSatisfy({ CFEqual($0, $1) }),
+                if CFEqual(current, actionBoundary.child) {
+                    guard let final = scope(expectedFocus: actionBoundary.child),
+                          CFEqual(final.child, actionBoundary.child),
+                          final.strips.count == actionBoundary.strips.count,
+                          zip(final.strips, actionBoundary.strips).allSatisfy({ CFEqual($0, $1) }),
                           (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else {
                         effects.reason = "mixer_focus_reacquisition_unverified"
                         return (nil, effects)
                     }
                     effects.changed.append("keyboard_focus_replacement")
                     effects.restoration = "restored"
-                    return (.init(baseline: baseline, replacementFocus: deciding.child,
-                        strips: deciding.strips), effects)
+                    return (.init(baseline: baseline, replacementFocus: actionBoundary.child,
+                        strips: actionBoundary.strips), effects)
                 }
                 guard CFEqual(current, baseline.focus), attempt < 2 else {
                     effects.reason = "mixer_focus_reacquisition_unverified"
@@ -1403,6 +1423,8 @@ extension AccessibilityChannel {
             let frames: [CGRect]
             let horizontal: MixerViewportPosition?
             let vertical: MixerViewportPosition?
+
+            var isComplete: Bool { horizontal != nil && vertical != nil }
 
             func hasSameViewportPosition(as other: Self) -> Bool {
                 frames == other.frames && Self.samePosition(horizontal, other.horizontal)

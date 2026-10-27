@@ -700,6 +700,7 @@ struct Issue965HeldSelectionAssociationTests {
         var routingDelayedReceiverFocusFault: String?
         var routingDelayedReceiverActionBoundaryFault: String?
         var routingDelayedReceiverActionBoundaryInjected = false
+        var routingDelayedReceiverFocusReads = 0
         var routingDelayedReceiverGeometryFault: String?
         var routingDelayedReceiverGeometryInjected = false
         var routingDelayedReceiverRecoveryFault: String?
@@ -1087,11 +1088,13 @@ struct Issue965HeldSelectionAssociationTests {
             routingDelayedMixerVertical = vertical
             routingFocusHit = { [self] _, point in
                 if point.y > 380 {
+                    if routingDelayedReceiverGeometryFault == "missing_horizontal" { return .success(nil) }
                     return .success(routingDelayedReceiverGeometryInjected
                         && routingDelayedReceiverGeometryFault == "horizontal_control"
                         ? foreignHorizontalThumb : horizontalThumb)
                 }
                 if point.x > 380 {
+                    if routingDelayedReceiverGeometryFault == "missing_vertical" { return .success(nil) }
                     return .success(routingDelayedReceiverGeometryInjected
                         && routingDelayedReceiverGeometryFault == "vertical_control"
                         ? foreignVerticalThumb : verticalThumb)
@@ -1102,7 +1105,7 @@ struct Issue965HeldSelectionAssociationTests {
 
         func injectDelayedReceiverMixerGeometryFault() {
             guard let fault = routingDelayedReceiverGeometryFault,
-                  fault != "missing", !routingDelayedReceiverGeometryInjected else { return }
+                  !fault.hasPrefix("missing"), !routingDelayedReceiverGeometryInjected else { return }
             routingDelayedReceiverGeometryInjected = true
             switch fault {
             case "horizontal_control", "vertical_control": break
@@ -2373,7 +2376,7 @@ struct Issue965HeldSelectionAssociationTests {
     }
 
     @Test("A delayed receiver redraw re-proves scope after the last focus-boundary reads",
-          arguments: ["document", "focused_window", "selected_header"])
+          arguments: ["document", "focused_window", "selected_header", "deciding_document", "geometry_document"])
     func canonicalBusOutputRefusesDelayedReceiverScopeLossAtFocusActionBoundary(fault: String) async throws {
         let f = try Fixture()
         try await assertCanonicalPhysicalOutput(
@@ -2390,7 +2393,8 @@ struct Issue965HeldSelectionAssociationTests {
     }
 
     @Test("A delayed receiver handoff requires its exact complete Mixer geometry",
-          arguments: ["missing", "horizontal_control", "horizontal_value", "horizontal_frame",
+          arguments: ["missing", "missing_horizontal", "missing_vertical",
+                      "horizontal_control", "horizontal_value", "horizontal_frame",
                       "vertical_control", "vertical_value", "vertical_frame", "layout"])
     func canonicalBusOutputRequiresExactDelayedReceiverMixerGeometry(fault: String) async throws {
         let f = try Fixture()
@@ -2399,7 +2403,7 @@ struct Issue965HeldSelectionAssociationTests {
             fixture: f
         )
         #expect(f.routingDelayedReceiverRedrawInjected)
-        if fault != "missing" {
+        if !fault.hasPrefix("missing") {
             #expect(f.routingDelayedReceiverGeometryInjected,
                 "Mutate only the complete native Mixer geometry after its before-image exists")
         }
@@ -2790,11 +2794,12 @@ struct Issue965HeldSelectionAssociationTests {
         let delayedReceiverFocusFault = delayedReceiverCensus
             ? ["ack_only", "foreign_focus"].first(where: { outputMode.hasSuffix($0) }) : nil
         let delayedReceiverActionBoundaryFault = delayedReceiverCensus
-            ? ["document", "focused_window", "selected_header"].first(where: {
+            ? ["document", "focused_window", "selected_header", "deciding_document", "geometry_document"].first(where: {
                 outputMode.hasSuffix("action_\($0)")
             }) : nil
         let delayedReceiverGeometryFault = delayedReceiverCensus
-            ? ["missing", "horizontal_control", "horizontal_value", "horizontal_frame",
+            ? ["missing", "missing_horizontal", "missing_vertical",
+               "horizontal_control", "horizontal_value", "horizontal_frame",
                "vertical_control", "vertical_value", "vertical_frame", "layout"].first(where: {
                 outputMode.hasSuffix("geometry_\($0)")
             }) : nil
@@ -3177,26 +3182,44 @@ struct Issue965HeldSelectionAssociationTests {
                     }
                     if let fault = f.routingDelayedReceiverActionBoundaryFault,
                        f.routingDelayedReceiverRedrawInjected,
-                       !f.routingDelayedReceiverActionBoundaryInjected,
                        CFEqual(element, f.app), attribute == kAXFocusedUIElementAttribute as String,
                        Thread.callStackSymbols.contains(where: {
                            $0.contains("reacquireRetiredOriginalHeaderFocus")
                        }) {
-                        f.routingDelayedReceiverActionBoundaryInjected = true
-                        switch fault {
-                        case "document":
-                            f.builder.setAttribute(f.window, kAXDocumentAttribute as String,
-                                "file:///tmp/Foreign.logicx")
-                        case "focused_window":
-                            let foreign = f.builder.element(1_973_147)
-                            f.builder.setRole(foreign, kAXWindowRole as String)
-                            f.builder.setAttribute(f.app, kAXFocusedWindowAttribute as String, foreign)
-                        case "selected_header":
-                            f.builder.setAttribute(f.headers[0], kAXSelectedAttribute as String, false)
-                            f.builder.setAttribute(f.headers[1], kAXSelectedAttribute as String, true)
-                        default:
-                            Issue.record("Unknown delayed focus-boundary fault")
+                        f.routingDelayedReceiverFocusReads += 1
+                        let shouldInject = fault == "deciding_document"
+                            ? f.routingDelayedReceiverFocusReads == 2
+                            : fault != "geometry_document" && f.routingDelayedReceiverFocusReads == 1
+                        if shouldInject, !f.routingDelayedReceiverActionBoundaryInjected {
+                            f.routingDelayedReceiverActionBoundaryInjected = true
+                            switch fault {
+                            case "document", "deciding_document":
+                                f.builder.setAttribute(f.window, kAXDocumentAttribute as String,
+                                    "file:///tmp/Foreign.logicx")
+                            case "focused_window":
+                                let foreign = f.builder.element(1_973_147)
+                                f.builder.setRole(foreign, kAXWindowRole as String)
+                                f.builder.setAttribute(f.app, kAXFocusedWindowAttribute as String, foreign)
+                            case "selected_header":
+                                f.builder.setAttribute(f.headers[0], kAXSelectedAttribute as String, false)
+                                f.builder.setAttribute(f.headers[1], kAXSelectedAttribute as String, true)
+                            default:
+                                Issue.record("Unknown delayed focus-boundary fault")
+                            }
                         }
+                    }
+                    if f.routingDelayedReceiverActionBoundaryFault == "geometry_document",
+                       f.routingDelayedReceiverRedrawInjected,
+                       f.routingDelayedReceiverFocusReads == 1,
+                       !f.routingDelayedReceiverActionBoundaryInjected,
+                       f.routingDelayedMixerHorizontal.map({ CFEqual(element, $0) }) == true,
+                       attribute == kAXValueAttribute as String,
+                       Thread.callStackSymbols.contains(where: {
+                           $0.contains("reacquireRetiredOriginalHeaderFocus")
+                       }) {
+                        f.routingDelayedReceiverActionBoundaryInjected = true
+                        f.builder.setAttribute(f.window, kAXDocumentAttribute as String,
+                            "file:///tmp/Foreign.logicx")
                     }
                     if f.routingDelayedReceiverGeometryFault != nil,
                        f.routingDelayedReceiverGeometryFault != "missing",
