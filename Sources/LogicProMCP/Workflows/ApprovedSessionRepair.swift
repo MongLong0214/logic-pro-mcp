@@ -1806,9 +1806,10 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                   headers.filter { CFEqual($0, original.header) }.count == 1
               } == true }),
               AXLogicProElements.hiddenTrackViewRead(headers: headers, in: binding.window, runtime: runtime)?.shown == true,
-              let rows = AccessibilityChannel.readTrackStates(from: headers, in: binding.window,
+              let rawRows = AccessibilityChannel.readTrackStates(from: headers, in: binding.window,
                 runtime: runtime, readingTypeHelp: false,
                 stoppingWhen: { (try? SessionPopulationObservation.requireOwnedAcquisition()) == nil }).states,
+              let rows = AccessibilityChannel.soloPresentationSafeTrackStates(rawRows),
               rows.count == sort.rows.count,
               rows.allSatisfy({ $0.isStackHeader == false && $0.physicalBinding != nil }),
               Set(rows.map(\.name)).count == rows.count,
@@ -2437,6 +2438,49 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         return true
     }
 
+    /// A retained prerequisite receipt identifies the owned native path; it
+    /// does not freeze either Input menu's checked item. Reopen those exact
+    /// menus before every inverse ownership decision and again at the writer
+    /// boundary so a caption-preserving Input change cannot authorize output.
+    private func recheckOutputBusPrerequisites() async -> Bool {
+        checkedOutputPrerequisites = nil
+        let inputFocus = AccessibilityChannel.OwnedTrackStackObservationNavigation.ReadFocusScope()
+        guard await AXHelpers.HelpReadGuard.$current.withValue(.init(allowHelpReads: true, stop: { [self] in
+            !inputFocus.permits() && outputProof?.permitsRead() != true
+        }), operation: { [self] in await busOutputInputsCurrent(inputFocus: inputFocus) }) else { return false }
+
+        // A checked Input popup may close successfully while making an
+        // unrelated peer's routing caption offscreen. Restore the first
+        // captured viewport when necessary, then always reacquire the Output
+        // checkmark after this exact Input check. A matching slot caption is
+        // never permission to reuse the earlier popup evidence.
+        guard let task = outputTask else { return false }
+        let pair = outputPair ?? task.pair
+        let runtime = pair.track.runtime
+        guard let label = AXLogicProElements.outputSlotDestination(in: pair.strip.strip, runtime: runtime.ax),
+              let assignment = OutputAssignment.observed(slotLabel: label),
+              assignment == task.before || (outputAttempted && assignment == task.desired) else { return false }
+        if !outputFootprintHeld(pair: pair, assignment: assignment) {
+            guard outputPeerReadbackUnavailable, changedNameGoals.isEmpty,
+                  let originalMixerGeometry = outputOriginalMixerGeometry,
+                  let currentProof = outputProof,
+                  await currentProof.recoverMixerReadability(restoring: originalMixerGeometry,
+                    referenceIsCurrent: { [self] in
+                        guard await projectIsCurrent(allowPendingCancellation: true),
+                              let target = await registry.resolve(task.reference), target.kind == .track,
+                              target.physicalTrack?.matches(task.pair.track) == true else { return false }
+                        return true
+                    }, stoppingWhen: {
+                        (try? SessionPopulationObservation.requireOwnedAcquisition()) == nil
+                    }) else { return false }
+        }
+        let checked = await AXMixerStripBinding.$current.withValue(pair.strip) {
+            await AccessibilityChannel.getOutputObservation(runtime: runtime)
+        }
+        return checked.assignment == assignment
+            && outputFootprintHeld(pair: pair, assignment: assignment)
+    }
+
     private func outputReading() async -> OutputAssignment? {
         var stage = "initial_context", accepted = false
         defer {
@@ -2536,11 +2580,20 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                       sameOutputRenewal(currentRenewal, receipt.renewal),
                       let currentProof = outputProof, currentProof === receipt.proof,
                       receipt.renewal.permits(runtime: runtime), receipt.proof.permitsRead(),
+                      await recheckOutputBusPrerequisites(),
+                      let checkedPair = outputPair,
+                      let checkedRenewal = outputRenewal,
+                      let checkedProof = outputProof,
+                      sameOutputPair(checkedRenewal.pair, checkedPair),
+                      checkedRenewal.permits(runtime: checkedPair.track.runtime),
+                      checkedProof.permitsRead(),
                       let label = AXLogicProElements.outputSlotDestination(
-                        in: receipt.pair.strip.strip, runtime: runtime.ax),
+                        in: checkedPair.strip.strip, runtime: checkedPair.track.runtime.ax),
                       OutputAssignment.observed(slotLabel: label) == retained.assignment,
-                      outputFootprintHeld(pair: receipt.pair,
+                      outputFootprintHeld(pair: checkedPair,
                         assignment: retained.assignment) else { return nil }
+                checkedOutputPrerequisites = .init(retained: retained, pair: checkedPair,
+                    renewal: checkedRenewal, proof: checkedProof)
                 return retained.assignment
             }
             guard retained.effect.permits(runtime: retained.effect.current.track.runtime),
@@ -2552,10 +2605,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             // The output effect does not itself freeze its Bus-input
             // dependencies. Check every source/receiver menu after the
             // scalar before retaining the one immediate compensation read.
-            let inputFocus = AccessibilityChannel.OwnedTrackStackObservationNavigation.ReadFocusScope()
-            guard await AXHelpers.HelpReadGuard.$current.withValue(.init(allowHelpReads: true, stop: { [self] in
-                !inputFocus.permits() && outputProof?.permitsRead() != true
-            }), operation: { [self] in await busOutputInputsCurrent(inputFocus: inputFocus) }) else { return nil }
+            guard await recheckOutputBusPrerequisites() else { return nil }
             let checkedPair = outputPair ?? task.pair
             guard let label = AXLogicProElements.outputSlotDestination(
                     in: checkedPair.strip.strip, runtime: checkedPair.track.runtime.ax),
@@ -2599,6 +2649,18 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             // plug-in, Send, Input, name, project or population after return.
             guard outputFootprintHeld(pair: retained.effect.current,
                     assignment: retained.assignment) else { return nil }
+            // The slot caption is not the checked destination. Physical and
+            // Stereo outputs need the same fresh popup decision as Bus-backed
+            // outputs before a retained inverse may cross its write boundary.
+            let checked = await AXMixerStripBinding.$current.withValue(retained.effect.current.strip) {
+                await AccessibilityChannel.getOutputObservation(
+                    runtime: retained.effect.current.track.runtime)
+            }
+            guard checked.assignment == retained.assignment,
+                  outputFootprintHeld(pair: retained.effect.current,
+                    assignment: retained.assignment),
+                  proof.permitsRead(),
+                  await projectIsCurrent(allowPendingCancellation: true) else { return nil }
         }
         return retained.assignment
     }
@@ -2741,6 +2803,23 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         guard await projectIsCurrent(allowPendingCancellation: inverse) else {
             Log.info("Canonical output refused: project or operation custody changed before routing", subsystem: "saga")
             return toolStateCResult(.staleTargetReference, extras: ["write_attempted": false])
+        }
+        if inverse {
+            let retainedOwnershipIsCurrent: Bool
+            if !task.prerequisiteBuses.isEmpty {
+                retainedOwnershipIsCurrent = await recheckOutputBusPrerequisites()
+            } else {
+                // A downstream channel can fail after the real verified write,
+                // before this wrapper retains a CheckedOutputEffect. Reacquire
+                // the live checkmark and protected footprint here rather than
+                // requiring a receipt that the failure path cannot publish.
+                retainedOwnershipIsCurrent = await outputReading() == expected
+            }
+            guard retainedOwnershipIsCurrent else {
+                Log.info("Canonical output refused: checked destination or Bus prerequisites changed before inverse routing",
+                    subsystem: "saga")
+                return toolStateCResult(.staleTargetReference, extras: ["write_attempted": false])
+            }
         }
         let pair = outputPair ?? task.pair, runtime = pair.track.runtime
         guard let index = pair.strip.currentIndex(runtime: runtime) else {

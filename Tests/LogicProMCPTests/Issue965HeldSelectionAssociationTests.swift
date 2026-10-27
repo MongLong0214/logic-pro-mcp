@@ -2253,18 +2253,42 @@ struct Issue965HeldSelectionAssociationTests {
         let f = try Fixture()
         try await assertCanonicalPhysicalOutput(mode: "cancel", fixture: f)
         #expect(f.routingDestinationPresses == 2)
-        #expect(f.inputMenuPresses <= 7,
-                "Keep the captured baseline and one post-write prerequisite check; the immediate compensation ownership read must reuse that exact typed effect without reopening either Input popup")
+        #expect(f.inputMenuPresses <= 11,
+                "Keep the captured baseline and bounded independent ownership/writer checkmark reads; no adapter retry may add another popup cycle")
     }
 
-    @Test("Canonical output cancellation reuses the exact Bus receipt after its source is renewed")
-    func canonicalOutputCancellationReusesRenewedBusPrerequisiteReceipt() async throws {
+    @Test("Canonical output cancellation revalidates the exact Bus receipt after its source is renewed")
+    func canonicalOutputCancellationRevalidatesRenewedBusPrerequisiteReceipt() async throws {
         let f = try Fixture()
         try await assertCanonicalPhysicalOutput(mode: "bus_departure_execute_cancel_popup_source_retired", fixture: f)
         #expect(f.routingReplacement != nil, "Reach the actual post-popup source renewal")
         #expect(f.routingDestinationPresses == 2)
-        #expect(f.inputMenuPresses <= 14,
-                "The renewed source/proof from the post-write Bus check must carry the immediate cancellation read without reopening either Input popup")
+        #expect(f.inputMenuPresses <= 25,
+                "The renewed source/proof must bound the exact paths while effect retention, ownership and the inverse writer each revalidate live Input and Output checkmarks")
+    }
+
+    @Test("A changed checked Bus receiver revokes the retained output inverse before its write")
+    func lateReceiverInputChangeRevokesRetainedOutputInverse() async throws {
+        try await assertCanonicalPhysicalOutput(
+            mode: "bus_departure_execute_changed_receiver_input",
+            lateCheckedReceiverInputChange: true
+        )
+    }
+
+    @Test("A changed checked Bus Output revokes the retained inverse even when its caption is unchanged")
+    func lateOutputCheckmarkChangeRevokesRetainedOutputInverse() async throws {
+        try await assertCanonicalPhysicalOutput(
+            mode: "bus_departure_execute_arrival_forward",
+            lateCheckedOutputChange: true
+        )
+    }
+
+    @Test("A changed checked physical Output revokes the retained inverse even when its caption is unchanged")
+    func latePhysicalOutputCheckmarkChangeRevokesRetainedOutputInverse() async throws {
+        try await assertCanonicalPhysicalOutput(
+            mode: "forward",
+            lateCheckedOutputChange: true
+        )
     }
 
     @Test("Canonical output exposes the actual forward and inverse child results without replacing its parent trace",
@@ -2496,19 +2520,25 @@ struct Issue965HeldSelectionAssociationTests {
 
     private func assertCanonicalPhysicalOutput(mode requestedMode: String, fixture: Fixture? = nil,
                                                foreignFocusAtDocumentRead: Int? = nil,
-                                               refusingSampledTrackOwnership: Bool = false) async throws {
+                                               refusingSampledTrackOwnership: Bool = false,
+                                               lateCheckedReceiverInputChange: Bool = false,
+                                               lateCheckedOutputChange: Bool = false) async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             try await FeatureFlags.withAdr004MutationSagaForTests(true) {
                 try await runCanonicalPhysicalOutput(mode: requestedMode, fixture: fixture,
                     foreignFocusAtDocumentRead: foreignFocusAtDocumentRead,
-                    refusingSampledTrackOwnership: refusingSampledTrackOwnership)
+                    refusingSampledTrackOwnership: refusingSampledTrackOwnership,
+                    lateCheckedReceiverInputChange: lateCheckedReceiverInputChange,
+                    lateCheckedOutputChange: lateCheckedOutputChange)
             }
         }
     }
 
     private func runCanonicalPhysicalOutput(mode requestedMode: String, fixture: Fixture?,
                                             foreignFocusAtDocumentRead: Int?,
-                                            refusingSampledTrackOwnership: Bool) async throws {
+                                            refusingSampledTrackOwnership: Bool,
+                                            lateCheckedReceiverInputChange: Bool,
+                                            lateCheckedOutputChange: Bool) async throws {
         let survivingSource = requestedMode.hasPrefix("surviving_")
         let profile = survivingSource ? String(requestedMode.dropFirst("surviving_".count)) : requestedMode
         let busDeparture = profile.hasPrefix("bus_departure_")
@@ -3108,8 +3138,12 @@ struct Issue965HeldSelectionAssociationTests {
                                     mode.hasSuffix("reverted_mirror") ? "Selected Canonical" : "External")
                             }
                         }
-                        f.builder.setAttribute(stereo, "AXMenuItemMarkChar", label == "Stereo Output" ? "✓" : "")
-                        f.builder.setAttribute(physical, "AXMenuItemMarkChar", label == destinationLeafLabel ? "✓" : "")
+                        let changedPhysicalOutput = busDeparture == nil && index == 1
+                            && f.scrollToChangedOutput
+                        f.builder.setAttribute(stereo, "AXMenuItemMarkChar",
+                            changedPhysicalOutput || label == "Stereo Output" ? "✓" : "")
+                        f.builder.setAttribute(physical, "AXMenuItemMarkChar",
+                            !changedPhysicalOutput && label == destinationLeafLabel ? "✓" : "")
                         if busDeparture != nil {
                             let checked = index == 1 && f.scrollToChangedOutput ? "Bus 3" : label
                             f.builder.setAttribute(busTwo, "AXMenuItemMarkChar", checked == "Bus 2" ? "✓" : "")
@@ -3563,6 +3597,47 @@ struct Issue965HeldSelectionAssociationTests {
                             if changedBusInput, f.routingDestinationPresses == 1 { f.routingLateScopeInjected = true }
                             if ["cancel", "newer", "ack_only"].contains(mode) { _ = await journal.cancel(idempotencyKey: key) }
                         }, sagaLiveReadback: .unavailable, approvedSessionRepair: approval)
+                }
+                if lateCheckedReceiverInputChange || lateCheckedOutputChange {
+                    let gate = LogicMutationGate()
+                    let claim = try #require(gate.tryAcquire(operation: "logic_system.saga_execute"))
+                    defer { gate.release(claim) }
+                    let context = OperationTraceContext(mutationGateAcquired: true,
+                        ownsGate: { gate.stillOwns(claim) },
+                        deadline: ContinuousClock.now.advanced(by: .seconds(600)))
+                    try await OperationTraceContext.$current.withValue(context) {
+                        let step = try #require(approval.plan.steps.first)
+                        let before = try #require(await approval.readState(step))
+                        let forward = try #require(sharedJSONObject(sharedToolText(
+                            await approval.performOutput(step, router: router))))
+                        #expect(forward["state"] as? String == "A")
+                        let after = try #require(await approval.readState(step))
+                        #expect(after.value == step.params["destination"])
+
+                        if lateCheckedReceiverInputChange {
+                            f.routingLateScopeInjected = true
+                            f.builder.setAttribute(busTwo, "AXMenuItemMarkChar", "")
+                            f.builder.setAttribute(f.builder.element(1_973_318), "AXMenuItemMarkChar", "✓")
+                        } else {
+                            // Keep the slot caption and every Bus Input intact,
+                            // but make the next Output popup report Bus 3 checked.
+                            f.scrollToChangedOutput = true
+                        }
+                        _ = await journal.cancel(idempotencyKey: key)
+                        let inverse = SagaStep(operationID: step.operationID, targetRef: step.targetRef,
+                            params: ["destination": before.value], expectedInverse: step.expectedInverse)
+                        #expect(await approval.readState(inverse) == nil,
+                            lateCheckedReceiverInputChange
+                                ? "A changed checked receiver Input must revoke inverse ownership even when its caption is unchanged"
+                                : "A changed checked Output must revoke inverse ownership even when its slot caption is unchanged")
+                        let restored = try #require(sharedJSONObject(sharedToolText(
+                            await approval.performOutput(inverse, router: router))))
+                        #expect(restored["write_attempted"] as? Bool == false,
+                            lateCheckedReceiverInputChange
+                                ? "The Bus output inverse must not write after its checked receiver changed"
+                                : "The output inverse must not write after its checked Output changed")
+                    }
+                    return
                 }
                 let result = try #require(sharedJSONObject(sharedToolText(await run())))
                 if executingBusDeparture, outputMode == "external_peer" {
@@ -9907,6 +9982,12 @@ struct Issue965HeldSelectionAssociationTests {
         try await assertRegisteredInputSaga(outcome, canonical: true)
     }
 
+    @Test("Canonical input preserves a production-normalized Solo presentation")
+    func canonicalInputAcceptsNormalizedSoloPresentation() async throws {
+        try await assertRegisteredInputSaga("completed", canonical: true,
+            capturedSoloPresentation: true)
+    }
+
     @Test(arguments: ["matching", "matching_different_display", "matching_renewal", "matching_renewal_rail", "matching_preopen_focus", "matching_checkmark", "matching_control",
                       "matching_project", "matching_focus", "matching_peer", "matching_cleanup", "matching_late_proof_document"])
     func matchingCanonicalInputUsesIndependentReadWithoutSetter(outcome: String) async throws {
@@ -10676,12 +10757,29 @@ struct Issue965HeldSelectionAssociationTests {
         #expect(f.inputSetterDispatches == 0 && f.routingDestinationPresses == 0)
     }
 
-    private func assertRegisteredInputSaga(_ requestedOutcome: String, canonical: Bool = false) async throws {
+    private func assertRegisteredInputSaga(_ requestedOutcome: String, canonical: Bool = false,
+                                           capturedSoloPresentation: Bool = false) async throws {
         let retainedName = requestedOutcome.hasPrefix("retained_name_")
         let outcome = retainedName ? String(requestedOutcome.dropFirst("retained_name_".count)) : requestedOutcome
         let composedNameExecution = outcome.hasPrefix("composed_name_execution") || outcome.hasPrefix("composed_name_matching_input")
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let f = try Fixture(), b = f.builder, cache = StateCache(), registry = TargetRegistry()
+            if capturedSoloPresentation {
+                for (index, header) in f.headers.enumerated() {
+                    let mute = b.element(1_291_500 + index * 2)
+                    let solo = b.element(1_291_501 + index * 2)
+                    for (control, description, value) in [
+                        (mute, AXLocalePolicy.trackMuteButton.canonical, 0),
+                        (solo, AXLocalePolicy.trackSoloButton.canonical, 1),
+                    ] {
+                        b.setRole(control, kAXCheckBoxRole as String)
+                        b.setAttribute(control, kAXDescriptionAttribute as String, description)
+                        b.setAttribute(control, kAXValueAttribute as String, value)
+                        b.setChildren(control, [])
+                    }
+                    b.setChildren(header, b.makeAXRuntime().children(header) + [mute, solo])
+                }
+            }
             f.useBulkReads = outcome.contains("_final_")
             let retiring = outcome.hasPrefix("retired_track_")
             let canonicalRenewal = canonical && outcome.hasPrefix("owned_renewal")
@@ -12899,6 +12997,9 @@ struct Issue965HeldSelectionAssociationTests {
         let focus: AXUIElement = try #require(AXHelpers.getAttribute(f.app,
             kAXFocusedUIElementAttribute as String, runtime: f.builder.makeAXRuntime()))
         #expect(CFEqual(focus, f.rail))
+        let presentation = try #require(population.presentationBinding)
+        #expect(presentation.focus.map { CFEqual($0, f.rail) } == true,
+            "The returned presentation must hold the restored original rail focus")
     }
 
     @Test("Selection capture uses its exact held Name plate when Logic acknowledges AXFocused without moving focus")
@@ -12996,6 +13097,105 @@ struct Issue965HeldSelectionAssociationTests {
             #expect(CFEqual(f.focusRestorationWrites[1], f.rail))
         }
         #expect(population.uiEffects.restoration == "restored")
+        let focus: AXUIElement = try #require(AXHelpers.getAttribute(f.app,
+            kAXFocusedUIElementAttribute as String, runtime: f.builder.makeAXRuntime()))
+        #expect(CFEqual(focus, f.rail))
+    }
+
+    @Test("Cancellation after selected-child preparation still restores the owned rail focus")
+    func cancelledSelectionPopulationRestoresItsPreparedRailFocus() async throws {
+        let f = try Fixture(withViewport: true)
+        let cancelled = SagaAbandonFlag()
+        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.rail)
+        f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[1]])
+        f.builder.setAttributeSettable(f.rail, kAXFocusedAttribute as String, true)
+        f.builder.setAttributeSettable(f.strips[1], kAXFocusedAttribute as String, true)
+        f.routingReadResult = { element, attribute in
+            if CFEqual(element, f.builder.element(1_965_710)),
+               attribute == kAXValueAttribute as String,
+               f.focusRestorationWrites.count == 1 {
+                cancelled.set(true)
+            }
+            if CFEqual(element, f.rail), [kAXValueAttribute, kAXSelectedTextAttribute,
+                kAXNumberOfCharactersAttribute, kAXInsertionPointLineNumberAttribute]
+                .map({ $0 as String }).contains(attribute) {
+                return .failure(.init(raw: AXError.noValue.rawValue))
+            }
+            return nil
+        }
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        let context = OperationTraceContext(mutationGateAcquired: true,
+            ownsGate: { gate.stillOwns(claim) }, cancellationRequested: { cancelled.value })
+        do {
+            _ = try await OperationTraceContext.$current.withValue(context) {
+                try await f.channel().readFreshSessionPopulation(
+                    request: .init(scope: .selection, domains: [.tracks, .strips, .associations],
+                        allowUINavigation: true),
+                    fileReader: .unavailable, stoppingWhen: { cancelled.value })
+            }
+            Issue.record("The injected cancellation must interrupt the population read")
+        } catch let error as SessionPopulationObservation.NavigationAcquisitionError {
+            #expect(error.effects.restoration == "restored")
+        }
+        #expect(cancelled.value)
+        #expect(f.focusRestorationWrites.count == 2)
+        if f.focusRestorationWrites.count == 2 {
+            #expect(CFEqual(f.focusRestorationWrites[0], f.strips[1]))
+            #expect(CFEqual(f.focusRestorationWrites[1], f.rail))
+        }
+        let focus: AXUIElement = try #require(AXHelpers.getAttribute(f.app,
+            kAXFocusedUIElementAttribute as String, runtime: f.builder.makeAXRuntime()))
+        #expect(CFEqual(focus, f.rail))
+    }
+
+    @Test("Cancellation immediately after selected-child AXFocused still restores the owned rail focus")
+    func cancellationDuringSelectedChildFocusPreparationRestoresTheRail() async throws {
+        let f = try Fixture(withViewport: true)
+        let cancelled = SagaAbandonFlag()
+        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.rail)
+        f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[1]])
+        f.builder.setAttributeSettable(f.rail, kAXFocusedAttribute as String, true)
+        f.builder.setAttributeSettable(f.strips[1], kAXFocusedAttribute as String, true)
+        f.routingSetter = { element, attribute, _ in
+            guard CFEqual(element, f.strips[1]),
+                  attribute == kAXFocusedAttribute as String else { return nil }
+            f.focusRestorationWrites.append(element)
+            f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, element)
+            cancelled.set(true)
+            return true
+        }
+        f.routingReadResult = { element, attribute in
+            if CFEqual(element, f.rail), [kAXValueAttribute, kAXSelectedTextAttribute,
+                kAXNumberOfCharactersAttribute, kAXInsertionPointLineNumberAttribute]
+                .map({ $0 as String }).contains(attribute) {
+                return .failure(.init(raw: AXError.noValue.rawValue))
+            }
+            return nil
+        }
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        let context = OperationTraceContext(mutationGateAcquired: true,
+            ownsGate: { gate.stillOwns(claim) }, cancellationRequested: { cancelled.value })
+        do {
+            _ = try await OperationTraceContext.$current.withValue(context) {
+                try await f.channel().readFreshSessionPopulation(
+                    request: .init(scope: .selection, domains: [.tracks, .strips, .associations],
+                        allowUINavigation: true),
+                    fileReader: .unavailable, stoppingWhen: { cancelled.value })
+            }
+            Issue.record("The injected cancellation must interrupt focus preparation")
+        } catch let error as SessionPopulationObservation.NavigationAcquisitionError {
+            #expect(error.effects.restoration == "restored")
+        }
+        #expect(cancelled.value)
+        #expect(f.focusRestorationWrites.count == 2)
+        if f.focusRestorationWrites.count == 2 {
+            #expect(CFEqual(f.focusRestorationWrites[0], f.strips[1]))
+            #expect(CFEqual(f.focusRestorationWrites[1], f.rail))
+        }
         let focus: AXUIElement = try #require(AXHelpers.getAttribute(f.app,
             kAXFocusedUIElementAttribute as String, runtime: f.builder.makeAXRuntime()))
         #expect(CFEqual(focus, f.rail))

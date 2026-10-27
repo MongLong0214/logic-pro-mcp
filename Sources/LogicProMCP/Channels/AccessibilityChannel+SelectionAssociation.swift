@@ -40,8 +40,13 @@ extension AccessibilityChannel {
         private let originalHeaderFocus: OwnedTrackStackObservationNavigation.ReadFocusScope.PassiveHeaderReadFocus?
         private let retainedTrackBindings: [AXTrackBinding.Binding]?
         private var lost = false
+        private var preparedPopulationFocusRestorationPending = false
         private var preparedPopulationFocusIsActive = false
         private(set) var effects = SessionPopulationObservation.UIEffects()
+
+        var hasPreparedPopulationFocusToRestore: Bool {
+            preparedPopulationFocusRestorationPending
+        }
 
         init?(window: AXUIElement, logic: AXLogicProElements.Runtime,
               expectedProject: TargetDescriptor?, requiresProjectReference: Bool,
@@ -995,6 +1000,10 @@ extension AccessibilityChannel {
             effects.navigationPerformed = true
             effects.restoration = "not_restored"
             effects.attempted.append("mixer_focus_acquisition")
+            // AXFocused can change Logic synchronously before a cancellation is
+            // visible to the following ownership read. Record the inverse duty
+            // independently of whether that later read accepts the new focus.
+            preparedPopulationFocusRestorationPending = true
             _ = AXHelpers.setAttribute(selected, kAXFocusedAttribute as String,
                 NSNumber(value: true), runtime: logic.ax)
 
@@ -1017,6 +1026,13 @@ extension AccessibilityChannel {
                 return true
             }
             for attempt in 0..<3 {
+                // Do not turn a post-write cancellation into permanent native
+                // custody loss. The interrupted inverse below still rechecks
+                // every non-cancellation ownership boundary before restoring.
+                guard !stop() else {
+                    effects.reason = "mixer_focus_acquisition_unverified"
+                    return false
+                }
                 guard owned(), let focus: AXUIElement = AXHelpers.getAttribute(app,
                     kAXFocusedUIElementAttribute as String, runtime: logic.ax) else {
                     effects.reason = "mixer_focus_acquisition_unverified"
@@ -1741,6 +1757,41 @@ extension AccessibilityChannel {
                 effects.reason = effects.reason ?? "association_restoration_unverified"
                 return false
             }
+            if preparedPopulationFocusRestorationPending,
+               !preparedPopulationFocusIsActive {
+                guard let focus: AXUIElement = AXHelpers.getAttribute(app,
+                        kAXFocusedUIElementAttribute as String, runtime: logic.ax) else {
+                    effects.restoration = "not_restored"
+                    effects.reason = effects.reason ?? "association_restoration_unverified"
+                    return false
+                }
+                if CFEqual(focus, originalFocus) {
+                    guard let current = currentViewport(),
+                          Self.sameViewport(current, expectedViewport) else {
+                        effects.restoration = "not_restored"
+                        effects.reason = effects.reason ?? "association_restoration_unverified"
+                        return false
+                    }
+                } else if let selected = expectedSelectedChild,
+                          CFEqual(focus, selected),
+                          let current = currentViewport() {
+                    expectedFocus = selected
+                    expectedViewport = current
+                    preparedPopulationFocusIsActive = true
+                    if !effects.changed.contains("keyboard_focus") {
+                        effects.changed.append("keyboard_focus")
+                    }
+                    guard retainMixerViewportAfterOwnedAction(), permitsRead() else {
+                        effects.restoration = "not_restored"
+                        effects.reason = effects.reason ?? "association_restoration_unverified"
+                        return false
+                    }
+                } else {
+                    effects.restoration = "not_restored"
+                    effects.reason = effects.reason ?? "association_restoration_unverified"
+                    return false
+                }
+            }
             let focusRestored: Bool
             if expectedIndex == originalIndex, CFEqual(expectedFocus, originalFocus) {
                 focusRestored = permitsRead()
@@ -1760,8 +1811,23 @@ extension AccessibilityChannel {
                 return false
             }
             effects.restoration = "restored"
+            preparedPopulationFocusRestorationPending = false
             preparedPopulationFocusIsActive = false
             return true
+        }
+
+        /// Cancellation ends publication, not the exact inverse already owned
+        /// by selected-child focus preparation. Ignore that cancellation only
+        /// while restoring; gate, deadline, project and physical custody are
+        /// still enforced by the ordinary restoration implementation.
+        func restorePreparedPopulationFocusAfterInterruptedRead(
+            referenceIsCurrent: @escaping @Sendable () async -> Bool
+        ) async -> Bool {
+            await OwnedTrackStackObservationNavigation.duringInterruptedInverse {
+                await self.restorePreparedPopulationFocus(
+                    referenceIsCurrent: referenceIsCurrent,
+                    stoppingWhen: { false })
+            }
         }
 
         /// During a prepared population read, the exact selected child is the
