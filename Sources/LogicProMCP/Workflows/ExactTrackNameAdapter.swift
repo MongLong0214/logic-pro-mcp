@@ -208,7 +208,8 @@ enum ExactTrackNameAdapter {
         if let context = OperationTraceContext.current {
             guard (!context.cancellationRequested() || restoringOwnedTemporaryName),
                   context.ownsGate() else { return false }
-            if let deadline = context.deadline, ContinuousClock.now >= deadline { return false }
+            if let deadline = context.deadline, ContinuousClock.now >= deadline,
+               !restoringOwnedTemporaryName { return false }
         }
         return true
     }

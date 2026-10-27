@@ -239,7 +239,8 @@ enum SessionPopulationObservation {
               context.mutationGateAcquired, context.ownsGate() else {
             throw AcquisitionError.ownershipLost
         }
-        if let deadline = context.deadline, ContinuousClock.now >= deadline {
+        if let deadline = context.deadline, ContinuousClock.now >= deadline,
+           !ExactTrackNameAdapter.restoringOwnedTemporaryName {
             throw AcquisitionError.deadline
         }
     }

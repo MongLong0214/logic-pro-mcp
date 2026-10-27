@@ -607,14 +607,14 @@ private actor ExactNameChannel: Channel {
 
 @Suite("#968 exact-local track naming adapter")
 struct Issue968ExactTrackNameAdapterTests {
-    @Test(arguments: ["restored", "user_rename"])
+    @Test(arguments: ["restored", "user_rename", "peer_rename", "peer_reorder", "user_rename_after_reorder"])
     func midiExportProviderRetainsTheExactRenameInverseAndNeverOverwritesANewerName(
         outcome: String
     ) async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             try await Task { @MainActor in
                 let f = ExactNameFixture("Repeated")
-                _ = f.appendTrack(name: "Repeated", selected: false)
+                let (peer, peerField) = f.appendTrack(name: "Repeated", selected: false)
                 let (capture, project, target, _, _) = try await f.coupledCapture()
                 var population = SessionPopulationObservation.FreshPopulation(
                     project: capture.project, tracks: capture.tracks, strips: nil,
@@ -652,24 +652,41 @@ struct Issue968ExactTrackNameAdapterTests {
                         return
                     }
                     #expect(AXLogicProElements.trackName(at: 0, runtime: nativeRuntime) == temporaryName)
-                    if outcome == "user_rename" {
+                    if outcome == "user_rename" || outcome == "user_rename_after_reorder" {
                         f.builder.setAttribute(f.field, kAXDescriptionAttribute as String, "User Edit")
                     }
+                    if outcome == "peer_rename" || outcome == "peer_reorder" {
+                        f.builder.setAttribute(peerField, kAXDescriptionAttribute as String, "Peer Edit")
+                    }
+                    if outcome == "peer_reorder" || outcome == "user_rename_after_reorder" {
+                        f.builder.setChildren(f.rail, [peer, f.header])
+                    }
                     let restoration = await lease.restore()
-                    if outcome == "restored" {
+                    if outcome == "restored" || outcome == "peer_rename" || outcome == "peer_reorder" {
                         guard case .restored(let observed) = restoration else {
                             Issue.record("The owned exact-name inverse was not restored")
                             return
                         }
-                        #expect(observed == before)
-                        #expect(AXLogicProElements.trackName(at: 0, runtime: nativeRuntime) == "Repeated")
+                        let restoredTarget = try #require(observed.tracks.first { $0.reference == target.rawValue })
+                        #expect(restoredTarget.name == "Repeated")
+                        #expect(restoredTarget.index == (outcome == "peer_reorder" ? 1 : 0))
+                        #expect(AXLogicProElements.trackName(
+                            at: outcome == "peer_reorder" ? 1 : 0, runtime: nativeRuntime) == "Repeated")
+                        if outcome == "peer_rename" || outcome == "peer_reorder" {
+                            #expect(AXLogicProElements.trackName(
+                                at: outcome == "peer_reorder" ? 0 : 1, runtime: nativeRuntime) == "Peer Edit")
+                        } else {
+                            #expect(observed == before)
+                        }
                     } else {
                         guard case .refused(let residualName, _) = restoration else {
                             Issue.record("A newer user name was overwritten")
                             return
                         }
                         #expect(residualName == "User Edit")
-                        #expect(AXLogicProElements.trackName(at: 0, runtime: nativeRuntime) == "User Edit")
+                        #expect(AXLogicProElements.trackName(
+                            at: outcome == "user_rename_after_reorder" ? 1 : 0,
+                            runtime: nativeRuntime) == "User Edit")
                     }
                 }
             }.value
@@ -3595,7 +3612,10 @@ struct Issue968ExactTrackNameAdapterTests {
             f.permitsSelection = true
             f.legacyHeaderRoleObservedRead = 13
             let (project, target) = try await f.prepare(typedProducer: true)
-            let deadline = loss == "deadline" ? ContinuousClock.now.advanced(by: .seconds(1)) : nil
+            // The full affected gate runs this native-identity suite concurrently.
+            // Leave enough runway to reach the injected deciding role read; the
+            // callback below still expires the real absolute deadline itself.
+            let deadline = loss == "deadline" ? ContinuousClock.now.advanced(by: .seconds(15)) : nil
             f.onLegacyHeaderRoleRead = {
                 if loss == "ownership" { f.boundaryOwnership = false }
                 if loss == "cancel" { f.boundaryCancellation = true }

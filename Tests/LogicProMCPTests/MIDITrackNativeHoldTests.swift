@@ -159,11 +159,14 @@ func midiExportProviderRefusesUnqualifiedCapturesWithoutUIActions(fault: String)
     #expect(fixture.builder.actionCalls.isEmpty && fixture.builder.setCalls.isEmpty)
 }
 
-@MainActor @Test func midiTemporaryNameRestorationNarrowlySurvivesCancellation() async {
+@MainActor @Test(arguments: ["cancellation", "deadline"])
+func midiTemporaryNameRestorationNarrowlySurvivesTermination(reason: String) async {
     let admitted = await Task { @MainActor in
-        withUnsafeCurrentTask { $0?.cancel() }
+        if reason == "cancellation" { withUnsafeCurrentTask { $0?.cancel() } }
         let context = OperationTraceContext(
-            mutationGateAcquired: true, cancellationRequested: { true })
+            mutationGateAcquired: true,
+            deadline: reason == "deadline" ? ContinuousClock.now : nil,
+            cancellationRequested: { reason == "cancellation" })
         return await OperationTraceContext.$current.withValue(context) {
             #expect(!ExactTrackNameAdapter.operationPermitted())
             do {

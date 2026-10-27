@@ -104,6 +104,7 @@ enum MIDITrackExportProvider {
                 return .refusedBeforeWrite(detail: "temporary rename baseline was not current")
             }
             let source = before.tracks[position]
+            let targetBinding = session.bindings[position]
             guard liveTrackName(source.index)?.utf8.elementsEqual(source.name.utf8) == true else {
                 return .refusedBeforeWrite(detail: "temporary rename target was not current")
             }
@@ -117,7 +118,7 @@ enum MIDITrackExportProvider {
             guard receipt.status == .applied, let inverse = receipt.inverse,
                   receipt.before?.utf8.elementsEqual(source.name.utf8) == true,
                   receipt.after?.utf8.elementsEqual(temporaryName.utf8) == true else {
-                let residual = liveTrackName(source.index)
+                let residual = Self.boundTrackName(targetBinding)?.name
                 if receipt.status == .rejectedBeforeWrite {
                     return .refusedBeforeWrite(detail: "verified rename provider refused before write")
                 }
@@ -140,7 +141,7 @@ enum MIDITrackExportProvider {
                 }
                 session.ended = true
                 return .unsettled(
-                    residualName: liveTrackName(source.index),
+                    residualName: Self.boundTrackName(targetBinding)?.name,
                     cleanupStatus: rollback.status == .applied ? .restored : .unconfirmed,
                     detail: rollback.status == .applied
                         ? "temporary rename lost physical target continuity and was rolled back"
@@ -155,17 +156,18 @@ enum MIDITrackExportProvider {
                     await ExactTrackNameAdapter.withOwnedTemporaryNameRestoration {
                         guard !session.ended, session.temporaryRenameActive else {
                             return .refused(
-                                residualName: liveTrackName(source.index),
+                                residualName: Self.boundTrackName(targetBinding)?.name,
                                 detail: "temporary rename lease was already consumed")
                         }
                         // Consume exactly once before any inverse can be dispatched.
                         session.temporaryRenameActive = false
-                        guard session.current == renamed, session.hold?.isCurrent() == true,
-                              liveTrackName(source.index)?.utf8.elementsEqual(temporaryName.utf8) == true,
-                              Self.liveNamespaceMatches(renamed, reader: liveTrackNames) else {
+                        guard session.current == renamed,
+                              Self.boundTrackName(targetBinding)?.name.utf8.elementsEqual(temporaryName.utf8) == true,
+                              let rebound = await registry.resolve(target)?.physicalTrack,
+                              rebound.matches(targetBinding) else {
                             session.ended = true
                             return .refused(
-                                residualName: liveTrackName(source.index),
+                                residualName: Self.boundTrackName(targetBinding)?.name,
                                 detail: "owned temporary target or name changed before restoration")
                         }
                         let restoredReceipt = await ExactTrackNameAdapter.inverse(
@@ -174,20 +176,25 @@ enum MIDITrackExportProvider {
                         guard restoredReceipt.status == .applied,
                               restoredReceipt.before?.utf8.elementsEqual(temporaryName.utf8) == true,
                               restoredReceipt.after?.utf8.elementsEqual(source.name.utf8) == true,
-                              Self.liveNamespaceMatches(before, reader: liveTrackNames),
                               let rebound = await registry.resolve(target)?.physicalTrack,
-                              rebound.matches(session.bindings[position]),
+                              rebound.matches(targetBinding),
+                              let restored = Self.currentObservation(
+                                from: before, bindings: session.bindings),
+                              restored.observation.tracks.first(where: {
+                                $0.reference == targetReference
+                              })?.name.utf8.elementsEqual(source.name.utf8) == true,
                               let restoredHold = MIDITrackNativeHold(
-                                observation: before, bindings: session.bindings,
+                                observation: restored.observation, bindings: restored.bindings,
                                 runtime: nativeRuntime) else {
                             session.ended = true
                             return .refused(
-                                residualName: liveTrackName(source.index),
+                                residualName: Self.boundTrackName(targetBinding)?.name,
                                 detail: "owned temporary name restoration was not verified")
                         }
-                        session.current = before
+                        session.current = restored.observation
+                        session.bindings = restored.bindings
                         session.hold = restoredHold
-                        return .restored(before)
+                        return .restored(restored.observation)
                     }
                 }))
         }
@@ -213,5 +220,32 @@ enum MIDITrackExportProvider {
         return observation.tracks.allSatisfy { row in
             names[row.index]?.utf8.elementsEqual(row.name.utf8) == true
         }
+    }
+
+    private static func boundTrackName(_ binding: AXTrackBinding.Binding) -> (index: Int, name: String)? {
+        guard let index = binding.currentIndex(),
+              case .success(.some(let name)) = AXValueExtractors.extractTrackNameResult(
+                from: binding.header, runtime: binding.runtime.ax),
+              binding.currentIndex() == index else { return nil }
+        return (index, name)
+    }
+
+    private static func currentObservation(
+        from baseline: MIDITrackFileExport.Observation,
+        bindings: [AXTrackBinding.Binding]
+    ) -> (observation: MIDITrackFileExport.Observation, bindings: [AXTrackBinding.Binding])? {
+        guard baseline.tracks.count == bindings.count else { return nil }
+        var current: [(track: MIDITrackFileExport.Track, binding: AXTrackBinding.Binding)] = []
+        current.reserveCapacity(bindings.count)
+        for (row, binding) in zip(baseline.tracks, bindings) {
+            guard let observed = boundTrackName(binding) else { return nil }
+            current.append((.init(index: observed.index, reference: row.reference, name: observed.name), binding))
+        }
+        current.sort { $0.track.index < $1.track.index }
+        guard Set(current.map(\.track.index)).count == current.count else { return nil }
+        let observation = MIDITrackFileExport.Observation(
+            projectReference: baseline.projectReference, projectPath: baseline.projectPath,
+            coverage: baseline.coverage, tracks: current.map(\.track))
+        return (observation, current.map(\.binding))
     }
 }

@@ -196,7 +196,7 @@ enum MIDITrackFileExport {
                 restorationReport = try await verifiedRestoration(
                     restored, lease: lease, expected: before, projectReference: projectReference,
                     targetReference: targetReference, runtime: runtime,
-                    primary: String(describing: error))
+                    primary: error)
                 if case .temporaryRenamePreparationUnconfirmed(
                     let originalName, let temporaryName, _, _, let detail
                 ) = error as? Failure {
@@ -227,22 +227,33 @@ enum MIDITrackFileExport {
     private static func verifiedRestoration(
         _ restoration: TemporaryRenameRestoration, lease: TemporaryRenameLease,
         expected: Observation, projectReference: String, targetReference: String,
-        runtime: Runtime, primary: String?
+        runtime: Runtime, primary: (any Error)?
     ) async throws -> TemporaryRenameReport {
         switch restoration {
         case .refused(let residualName, let detail):
             throw Failure.temporaryRenameRestorationUnconfirmed(
                 originalName: lease.originalName, temporaryName: lease.temporaryName,
-                residualName: residualName, detail: detail, primary: primary)
+                residualName: residualName, detail: detail,
+                primary: primary.map { String(describing: $0) })
         case .restored(let observed):
             let target = try? boundTarget(
                 observed, projectReference: projectReference, targetReference: targetReference)
-            guard observed == expected, target?.track.name == lease.originalName,
+            guard target?.track.name == lease.originalName,
                   await runtime.stillCurrent(observed) else {
                 throw Failure.temporaryRenameRestorationUnconfirmed(
                     originalName: lease.originalName, temporaryName: lease.temporaryName,
-                    residualName: target?.track.name, detail: "restored namespace was not current",
-                    primary: primary)
+                    residualName: target?.track.name, detail: "restored target was not current",
+                    primary: primary.map { String(describing: $0) })
+            }
+            guard observed == expected else {
+                if primary != nil {
+                    return .init(
+                        originalName: lease.originalName, temporaryName: lease.temporaryName,
+                        restoration: "restored")
+                }
+                throw RestoredTemporaryRenameFailure(
+                    originalName: lease.originalName, temporaryName: lease.temporaryName,
+                    residualName: lease.originalName, primary: Failure.staleTarget)
             }
             return .init(
                 originalName: lease.originalName, temporaryName: lease.temporaryName,

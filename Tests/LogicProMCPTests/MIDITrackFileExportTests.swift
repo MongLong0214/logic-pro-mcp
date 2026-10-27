@@ -92,6 +92,9 @@ private final class TemporaryRenameFileExportFixture {
                 return (row.name, pitch)
             }
             try midiTrackExportBytes(tracks).write(to: url, options: .withoutOverwriting)
+            if self.fault == "peer_edit_after_export" {
+                self.rows[1] = .init(index: 5, reference: "trk_peer", name: "Peer Edit")
+            }
             if self.fault == "cancel_after_export" { withUnsafeCurrentTask { $0?.cancel() } }
         }, beginTemporaryRename: { before, targetReference, temporaryName in
             self.renameStarts += 1
@@ -122,6 +125,9 @@ private final class TemporaryRenameFileExportFixture {
                         return .refused(residualName: temporaryName, detail: "inverse refused")
                     }
                     self.rows[0] = .init(index: 4, reference: "trk_target", name: "Repeated")
+                    if self.fault == "peer_edit_during_restore" {
+                        self.rows[1] = .init(index: 5, reference: "trk_peer", name: "Peer Edit")
+                    }
                     return .restored(self.observation)
                 }))
         })
@@ -356,6 +362,33 @@ func midiTrackFileExportRestoresTheOriginalAfterExportFailures(fault: String) as
     }
     #expect(fixture.rows[0].name == "Repeated")
     #expect(fixture.restorations == 1)
+}
+
+@MainActor @Test(arguments: ["peer_edit_after_export", "peer_edit_during_restore"])
+func midiTrackFileExportPreservesPeerEditsAndReportsVerifiedTargetCleanup(fault: String) async throws {
+    let fixture = TemporaryRenameFileExportFixture()
+    fixture.fault = fault
+    let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+    try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
+    defer { try? FileManager.default.removeItem(at: directory) }
+    let output = directory.appendingPathComponent("must-not-publish.mid")
+    do {
+        _ = try await MIDITrackFileExport.run(
+            projectReference: "prj_current", targetReference: "trk_target", destination: output.path,
+            allowTemporaryTrackRename: true, runtime: fixture.runtime)
+        Issue.record("A changed peer namespace reported export success")
+    } catch let failure as MIDITrackFileExport.RestoredTemporaryRenameFailure {
+        #expect(failure.originalName == "Repeated")
+        #expect(failure.temporaryName == fixture.temporaryName)
+        #expect(failure.residualName == "Repeated")
+        #expect(failure.primary as? MIDITrackFileExport.Failure == .staleTarget)
+    } catch {
+        Issue.record("Verified target cleanup metadata was lost: \(error)")
+    }
+    #expect(fixture.rows[0].name == "Repeated")
+    #expect(fixture.rows[1].name == "Peer Edit")
+    #expect(fixture.restorations == 1)
+    #expect(!FileManager.default.fileExists(atPath: output.path))
 }
 
 @MainActor @Test(arguments: ["user_rename_before_restore", "target_replaced_before_restore", "restore_refused"])
