@@ -128,6 +128,21 @@ struct QualificationRunnerTests {
         #expect(String(decoding: try encoder.encode(record), as: UTF8.self) == raw)
     }
 
+    @Test func playheadStepRecordCannotCreditAnUnverifiedGotoRestore() throws {
+        func reading(_ position: String) throws -> String {
+            let object: [String: Any] = ["source": "ax_live", "cache_age_sec": 0,
+                "data": ["state": ["isPlaying": false, "isRecording": false, "observedCycleEnabled": false,
+                    "positionReadback": ["value": position,
+                        "observedComponents": ["bar", "beat", "subdivision", "tick"]]]]]
+            return String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self)
+        }
+        let record = QualificationMutationRestoreRecord(operationID: OperationID.transportFastForward.rawValue,
+            preState: try reading("9.1.1.1"), mutation: #"{"state":"B","success":true}"#,
+            readback: try reading("10.1.1.1"), restore: #"{"state":"A","verified":false}"#,
+            restoreReadback: try reading("9.1.1.1"))
+        #expect(!record.verifiedCycleShape)
+    }
+
     @Test(arguments: ["missing_write", "missing_read", "unverified_stage", "cache_stage",
                       "stale_stage", "partial_stage", "wrong_boundary", "unchanged_stage", "unsafe_restore"])
     func stagedRecordCannotCreditMissingOrUnobservedPreconditions(shape: String) throws {
@@ -201,7 +216,7 @@ struct QualificationRunnerTests {
            "unknown_stop_pre", "missing_cycle_pre", "cycle_pre", "cache_pre", "stale_pre", "unverified_pre",
            "unknown_age_pre", "project_pre", "project_after", "project_during_after", "partial_after",
            "stale_after", "wrong_components_after", "refused_forward", "refused_restore", "missing_restore",
-           "mismatch_restore", "unsafe_restore"])
+           "mismatch_restore", "unverified_restore", "unsafe_restore"])
     func playheadStepWithholdsWritesAndCreditWhenExactObservationIsLost(operation: OperationID, shape: String) throws {
         let fixture = try SlowHandshakeFixture(playheadStep: operation, playheadFault: shape, playheadAtBoundary: true)
         defer { fixture.remove() }
@@ -215,7 +230,7 @@ struct QualificationRunnerTests {
         let effects = result.wireFrames.filter { $0.direction == .request &&
             ["phase_b.mutation", "phase_b.restore", "phase_b.cleanup"].contains($0.operationID) }
         let expectedAttempts = shape.hasSuffix("_pre") ? 0
-            : (["refused_restore", "missing_restore", "mismatch_restore", "unsafe_restore"].contains(shape) ? 2 : 1)
+            : (["refused_restore", "missing_restore", "mismatch_restore", "unverified_restore", "unsafe_restore"].contains(shape) ? 2 : 1)
         #expect(effects.count == expectedAttempts, "unknown source or position cannot authorize a dependent inverse")
         #expect(!effects.contains { $0.operationID == "phase_b.cleanup" })
     }
@@ -7470,6 +7485,11 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                             if [ "$step_fault" = unsafe_restore ]; then
                                 touch step-fault-consumed
                                 printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"B\\",\\"success\\":true,\\"verified\\":false,\\"fallback_unsafe\\":true,\\"verification_withheld\\":\\"fallback_unsafe\\"}"}]}}\n' "$id"
+                                continue
+                            fi
+                            if [ "$step_fault" = unverified_restore ]; then
+                                touch step-fault-consumed
+                                printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":false}"}]}}\n' "$id"
                                 continue
                             fi
                             printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true}"}]}}\n' "$id" ;;

@@ -151,7 +151,7 @@ struct QualificationMutationRestoreRecord: Codable, Equatable, Sendable {
         }
         if let direction = QualificationTransport.playheadStepDirections[operation] {
             guard !QualificationTransport.playheadStepWriteWasIndeterminate(mutation),
-                  !QualificationTransport.playheadStepWriteWasIndeterminate(restore),
+                  QualificationTransport.verifiedPlayheadGotoReply(restore),
                   let old = QualificationTransport.recordedExactStepPosition(before),
                   let observed = QualificationTransport.recordedExactStepPosition(after) else { return false }
             let stepOrigin: String
@@ -3177,8 +3177,8 @@ struct QualificationTransport: Sendable {
             if Self.mutationSaysItFailed(restore.text), !Self.playheadStepWriteWasIndeterminate(restore.text) {
                 ownedStagedPosition = lastOwned
             }
-            guard !Self.mutationSaysItFailed(restore.text), !Self.playheadStepWriteWasIndeterminate(restore.text),
-                  stageWrite == nil || (!restore.isError && Self.verifiedPlayheadGotoReply(restore.text)) else {
+            guard !restore.isError, !Self.mutationSaysItFailed(restore.text),
+                  Self.verifiedPlayheadGotoReply(restore.text) else {
                 throw QualificationTransportError.protocolViolation("phase_b.restore: exact position restore refused or unverified")
             }
             let restored = try read("phase_b.restore_readback", expectedProject: pre.project)
