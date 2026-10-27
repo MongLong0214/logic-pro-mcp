@@ -153,6 +153,32 @@ struct SemanticOracleEngineTests {
         #expect(!OracleConstraint.typedField(key: "missing", type: .string).isSatisfied(by: object))
     }
 
+    @Test func outputAssignmentRequiresTheExactTaggedUnionShape() {
+        for valid in [
+            #"{"route":{"kind":"bus","number":1}}"#,
+            #"{"route":{"kind":"bus","number":256}}"#,
+            #"{"route":{"kind":"physical","ports":[3,4]}}"#,
+            #"{"route":{"kind":"stereo_output"}}"#,
+            #"{"route":{"kind":"no_output"}}"#,
+        ] {
+            #expect(OracleConstraint.outputAssignment(key: "route").isSatisfied(by: root(valid)))
+        }
+        for invalid in [
+            #"{"route":{"kind":"bus"}}"#,
+            #"{"route":{"kind":"bus","number":0}}"#,
+            #"{"route":{"kind":"bus","number":1.5}}"#,
+            #"{"route":{"kind":"bus","number":1,"ports":[1,2]}}"#,
+            #"{"route":{"kind":"physical"}}"#,
+            #"{"route":{"kind":"physical","ports":[3,3]}}"#,
+            #"{"route":{"kind":"physical","ports":[4,3]}}"#,
+            #"{"route":{"kind":"physical","ports":[0,1]}}"#,
+            #"{"route":{"kind":"stereo_output","number":1}}"#,
+            #"{"route":{"kind":"unknown"}}"#,
+        ] {
+            #expect(!OracleConstraint.outputAssignment(key: "route").isSatisfied(by: root(invalid)))
+        }
+    }
+
     @Test func lengthPrefixedEntryCountChecksUTF8BoundariesAndNumericCount() {
         let entryCount = OracleConstraint.lengthPrefixedEntryCountEquals(
             key: "positions", countKey: "marker_count", offset: 0
@@ -567,10 +593,11 @@ struct SemanticOracleCensusTests {
         )
     }
 
-    /// #291 — retained native evidence includes a Bus 1 -> Stereo Output State-A
-    /// write whose same-strip output readback equals the destination and whose
-    /// Mixer population stayed at 38. The handler also has an honest no-write
-    /// State-A branch when that destination is already present; pin both shapes.
+    /// #291 — pin the product's Bus 1 -> Stereo Output State-A envelope, whose
+    /// same-strip output readback equals the destination and whose Mixer
+    /// population stays fixed. The handler also has an honest no-write State-A
+    /// branch when that destination is already present; pin both shapes. This
+    /// is response-contract verification, not native acceptance evidence.
     @Test func mixerSetOutputVerifiedStateAContractIsPinnedPostClosure() throws {
         #expect(SemanticOracleTable.postClosureMutatingOperationIDs.contains(.mixerSetOutputVerified))
         #expect(SemanticOracleTable.structurallyUnverifiedMutatingOperationIDs[.mixerSetOutputVerified] == nil)
@@ -587,6 +614,50 @@ struct SemanticOracleCensusTests {
             responseData: Data(noWrite.utf8), readbackData: Data("{}".utf8)
         ))
         #expect(noWriteAccepted)
+
+        // OutputAssignment's public object is a tagged union, not merely an
+        // object carrying a recognized `kind`. Missing/out-of-domain payloads
+        // cannot become a verified State-A route merely because the malformed
+        // destination and after objects echo one another.
+        for malformed in [
+            liveWrite
+                .replacingOccurrences(of: "\"destination\":{\"kind\":\"stereo_output\"}", with: "\"destination\":{\"kind\":\"bus\"}")
+                .replacingOccurrences(of: "\"after\":{\"kind\":\"stereo_output\"}", with: "\"after\":{\"kind\":\"bus\"}"),
+            liveWrite
+                .replacingOccurrences(of: "\"destination\":{\"kind\":\"stereo_output\"}", with: "\"destination\":{\"kind\":\"bus\",\"number\":0}")
+                .replacingOccurrences(of: "\"after\":{\"kind\":\"stereo_output\"}", with: "\"after\":{\"kind\":\"bus\",\"number\":0}"),
+            liveWrite
+                .replacingOccurrences(of: "\"destination\":{\"kind\":\"stereo_output\"}", with: "\"destination\":{\"kind\":\"physical\"}")
+                .replacingOccurrences(of: "\"after\":{\"kind\":\"stereo_output\"}", with: "\"after\":{\"kind\":\"physical\"}"),
+            liveWrite.replacingOccurrences(
+                of: "\"before\":{\"kind\":\"bus\",\"number\":1}",
+                with: "\"before\":{\"kind\":\"unknown\"}"
+            ),
+            #"{"success":true,"verified":true,"state":"A","operation":"mixer.set_output_verified","destination":{"kind":"no_output"},"before":{"kind":"no_output"},"after":{"kind":"no_output"},"changed":false,"write_attempted":false,"strip_count_before":38,"verify_source":"ax_output_slot"}"#,
+            #"{"success":true,"verified":true,"state":"A","operation":"mixer.set_output_verified","destination":{"kind":"no_output"},"before":{"kind":"bus","number":1},"after":{"kind":"no_output"},"changed":true,"write_attempted":true,"strip_count_before":38,"strip_count_after":38,"popup_menu_state":"closed","menu_path":["x"],"verify_source":"ax_output_slot"}"#,
+        ] {
+            let accepted = try #require(oracle.evaluate(
+                responseData: Data(malformed.utf8), readbackData: Data("{}".utf8)
+            ))
+            #expect(!accepted, "malformed OutputAssignment passed: \(malformed)")
+        }
+
+        // The generic mutant harness must exercise the verified no-write
+        // alternative independently of the committed write-shaped fixture.
+        let noWriteRoot = try #require(JSONInspector.parse(Data(noWrite.utf8)))
+        let branchConstraint = try #require(oracle.constraints.first { constraint in
+            if case .anyOf = constraint { return true }
+            return false
+        })
+        let noWriteMutants = JSONMutator.mutants(for: branchConstraint, in: noWriteRoot)
+        #expect(noWriteMutants.count >= 8, "no-write branch produced only \(noWriteMutants.count) mutants")
+        for mutant in noWriteMutants {
+            let data = try #require(JSONMutator.encode(mutant.json))
+            let survived = oracle.evaluate(
+                responseData: data, readbackData: Data("{}".utf8)
+            ) == true
+            #expect(!survived, "no-write branch survived mutant [\(mutant.label)]")
+        }
 
         for forged in [
             liveWrite.replacingOccurrences(of: "ax_output_slot", with: "menu_item_pressed"),
@@ -1769,6 +1840,14 @@ enum JSONMutator {
             mutants.append(contentsOf: replacements(root, key, [("emptied", [Any]())]))
         case .typedField(_, let type):
             mutants.append(contentsOf: replacements(root, key, [("wrong type", wrongTyped(type))]))
+        case .outputAssignment:
+            mutants.append(contentsOf: replacements(root, key, [
+                ("bus missing number", ["kind": "bus"] as [String: Any]),
+                ("bus number out of range", ["kind": "bus", "number": 0] as [String: Any]),
+                ("physical missing ports", ["kind": "physical"] as [String: Any]),
+                ("physical descending ports", ["kind": "physical", "ports": [4, 3]] as [String: Any]),
+                ("unknown output kind", ["kind": "unknown"] as [String: Any]),
+            ]))
         case .lengthPrefixedEntryCountEquals(let wireKey, let countKey, _):
             // Corrupt the self-describing wire field and independently make its
             // declared numeric cardinality disagree. (`drop wireKey` is generic.)

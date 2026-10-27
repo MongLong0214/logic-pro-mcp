@@ -2977,35 +2977,50 @@ enum SemanticOracleTable {
         ]
     )
 
-    // AccessibilityChannel+OutputAssignment `setOutputVerified`. The retained
-    // #291 Bus 1 -> Stereo Output native response reached State A only after the
-    // same strip's AX output slot read back the requested destination while the
-    // Mixer population stayed fixed. The handler also has a verified no-write
-    // branch when that destination was already present. The alternatives keep
-    // those shapes distinct: a changing write must prove a real before/after
-    // difference plus closed-menu and unchanged-population custody, while a
-    // no-write receipt must prove the before/after/destination identity.
+    // AccessibilityChannel+OutputAssignment `setOutputVerified`. The product
+    // contract grants State A only after the same strip's output reader echoes
+    // the requested destination while the Mixer population stays fixed. The
+    // handler also has a verified no-write branch when that destination was
+    // already present. The alternatives keep those shapes distinct: a changing
+    // write must prove a real before/after difference plus closed-menu and
+    // unchanged-population custody, while a no-write receipt must prove the
+    // before/after/destination identity. Native acceptance remains a separate
+    // #291 evidence decision; this oracle validates only the response envelope.
     static let mixerSetOutputVerified = SafeMutationOracle.oracle(
         .mixerSetOutputVerified,
         semantics: [
             .valueEquals(key: "operation", expected: .string("mixer.set_output_verified")),
             .valueEquals(key: "verify_source", expected: .string("ax_output_slot")),
-            .enumMember(key: "after.kind", allowed: ["bus", "physical", "stereo_output", "no_output"]),
-            .typedField(key: "before", type: .object),
-            .typedField(key: "destination", type: .object),
-            .typedField(key: "after", type: .object),
+            .outputAssignment(key: "before"),
+            .outputAssignment(key: "destination"),
+            .outputAssignment(key: "after"),
             .fieldsEqual(keyA: "after", keyB: "destination"),
             .anyOf([
                 [
                     .valueEquals(key: "changed", expected: .bool(false)),
                     .valueEquals(key: "write_attempted", expected: .bool(false)),
                     .fieldsEqual(keyA: "before", keyB: "after"),
+                    .enumMember(key: "after.kind", allowed: ["bus", "physical", "stereo_output"]),
                     .typedField(key: "strip_count_before", type: .number),
                 ],
                 [
                     .valueEquals(key: "changed", expected: .bool(true)),
                     .valueEquals(key: "write_attempted", expected: .bool(true)),
                     .fieldsDiffer(keyA: "before", keyB: "after"),
+                    .anyOf([
+                        [
+                            .enumMember(key: "before.kind", allowed: ["bus", "physical", "stereo_output"]),
+                            .enumMember(key: "after.kind", allowed: ["bus", "physical", "stereo_output"]),
+                        ],
+                        [
+                            .valueEquals(key: "before.kind", expected: .string("no_output")),
+                            .valueEquals(key: "after.kind", expected: .string("stereo_output")),
+                        ],
+                        [
+                            .valueEquals(key: "before.kind", expected: .string("stereo_output")),
+                            .valueEquals(key: "after.kind", expected: .string("no_output")),
+                        ],
+                    ]),
                     .fieldsEqual(keyA: "strip_count_before", keyB: "strip_count_after"),
                     .valueEquals(key: "popup_menu_state", expected: .string("closed")),
                     .nonEmptyArray(key: "menu_path"),
