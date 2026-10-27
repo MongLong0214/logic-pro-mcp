@@ -200,8 +200,6 @@ enum OwnedAuxLifecycle {
         private var observedCreated: AXUIElement?
         private var createdSelectionPending = false
         private var createdSelectionIssued = false
-        private var capturedCreatorFocus: AXUIElement?
-        private var createdFocusIssued = false
         private var topologyRefreshAttempted = false
         private var trackAppendIssued = false
         private var trackBaseline: TrackBaseline?
@@ -624,17 +622,8 @@ enum OwnedAuxLifecycle {
                     excluding: [bindings[0].mixer, options, edit])) else { return false }
             let candidate = current[index]
             let needsSelection: Bool
-            if selectedOnly(candidate) {
-                if focusedOn(candidate) { needsSelection = false }
-                else {
-                    // The creator can leave AX focus on its exact captured,
-                    // now-retired original strip. This grants no peer rebinding
-                    // or inverse: retain only the unique new CF for one checked
-                    // focus acquisition below, before any completion is issued.
-                    guard creatorFocusIsRetired(in: current) else { return false }
-                    needsSelection = true
-                }
-            } else {
+            if selectedOnly(candidate), focusedOn(candidate) { needsSelection = false }
+            else {
                 guard selectionIsEmpty(), mixerIsFocused() else { return false }
                 needsSelection = true
             }
@@ -650,16 +639,6 @@ enum OwnedAuxLifecycle {
             guard case .success(.elements(let selected)) = AXHelpers.getAXUIElementArrayRead(
                 bindings[0].mixer, kAXSelectedChildrenAttribute, runtime: runtime.ax) else { return false }
             return selected.isEmpty
-        }
-
-        private func creatorFocusIsRetired(in current: [AXUIElement]) -> Bool {
-            guard let capturedCreatorFocus,
-                  bindings.filter({ CFEqual($0.strip, capturedCreatorFocus) }).count == 1,
-                  bindings.allSatisfy({ original in !current.contains { CFEqual($0, original.strip) } }),
-                  let app = AXLogicProElements.appRoot(runtime: runtime),
-                  case .success(let focus?) = AXHelpers.getAttributeResult(app, kAXFocusedUIElementAttribute,
-                    runtime: runtime.ax) as Result<AXUIElement?, AXHelpers.AXStatusError> else { return false }
-            return CFEqual(focus, capturedCreatorFocus)
         }
 
         private func permitsTopologyRefreshActuation() -> Bool {
@@ -694,25 +673,6 @@ enum OwnedAuxLifecycle {
                   current.filter({ CFEqual($0, strip) }).count == 1 else { return false }
             if selectedOnly(strip), focusedOn(strip) {
                 createdSelectionPending = false
-                return true
-            }
-            if selectedOnly(strip) {
-                guard !createdFocusIssued, creatorFocusIsRetired(in: current),
-                      AXHelpers.isAttributeSettable(strip, kAXFocusedAttribute, runtime: runtime.ax) == true,
-                      preserved(), let bookend = census(), same(current, bookend),
-                      selectedOnly(strip), creatorFocusIsRetired(in: bookend), actionContextCurrent(),
-                      selectedOnly(strip), creatorFocusIsRetired(in: bookend), actionContextCurrent(),
-                      preserved(), selectedOnly(strip), creatorFocusIsRetired(in: bookend),
-                      let deciding = census(), same(current, deciding), actionContextCurrent() else { return false }
-                createdFocusIssued = true
-                uiEffects.navigationPerformed = true; uiEffects.restoration = "not_restored"
-                uiEffects.attempted.append("created_aux_focus")
-                _ = AXHelpers.setAttribute(strip, kAXFocusedAttribute, NSNumber(value: true), runtime: runtime.ax)
-                guard focusedOn(strip), selectedOnly(strip),
-                      let after = census(), same(current, after), preserved(), actionContextCurrent(),
-                      focusedOn(strip), selectedOnly(strip) else { return false }
-                createdSelectionPending = false
-                uiEffects.changed.append("created_aux_focus")
                 return true
             }
             guard !createdSelectionIssued, selectionIsEmpty(), mixerIsFocused(),
@@ -1372,7 +1332,6 @@ enum OwnedAuxLifecycle {
                       actionContextCurrent() else { return menuRefusal(.rejectedBeforeWrite) }
                 // Mark BEFORE sending the creator. A failed AX return can still create
                 // later: zero delta never permits reissue (observed delayed host behavior).
-                capturedCreatorFocus = focus
                 issued = true
                 // TEMP: held facts only; no new AX reads or input.
                 Log.info("Owned Aux prepared click: phase=before,leaf_cf_hash=\(CFHash(currentCreator)),menu_cf_hash=\(CFHash(finalMenu[0])),point_x=\(frame.midX),point_y=\(frame.midY),original_count=\(bindings.count),last_census_count=\(finalBefore.count)", subsystem: "ax")
