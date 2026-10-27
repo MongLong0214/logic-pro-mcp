@@ -1072,7 +1072,7 @@ extension AccessibilityChannel {
             }
 
             var scopeStage = "gate"
-            func scope() -> (strips: [AXUIElement], child: AXUIElement)? {
+            func scope(expectedFocus: AXUIElement) -> (strips: [AXUIElement], child: AXUIElement)? {
                 scopeStage = "gate"
                 guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
                       runtime.logicProPID() == baseline.pid,
@@ -1162,20 +1162,25 @@ extension AccessibilityChannel {
                     }
                     guard frames == geometry.frames else { return nil }
                 }
+                scopeStage = "focus"
+                guard let focus: AXUIElement = AXHelpers.getAttribute(baseline.app,
+                        kAXFocusedUIElementAttribute as String, runtime: runtime.ax),
+                      CFEqual(focus, expectedFocus) else { return nil }
                 scopeStage = "accepted"
                 return (census.strips, child)
             }
 
-            guard let before = scope() else {
+            guard let before = scope(expectedFocus: baseline.focus) else {
                 Log.info("Retired original-header focus handoff refused at \(scopeStage)", subsystem: "ax")
                 return (nil, effects)
             }
             guard
-                  let focus: AXUIElement = AXHelpers.getAttribute(baseline.app,
-                    kAXFocusedUIElementAttribute as String, runtime: runtime.ax),
-                  CFEqual(focus, baseline.focus),
                   AXHelpers.isAttributeSettable(before.child, kAXFocusedAttribute as String,
                     runtime: runtime.ax) == true,
+                  let deciding = scope(expectedFocus: baseline.focus),
+                  CFEqual(deciding.child, before.child),
+                  deciding.strips.count == before.strips.count,
+                  zip(deciding.strips, before.strips).allSatisfy({ CFEqual($0, $1) }),
                   (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else {
                 Log.info("Retired original-header focus handoff refused at action boundary", subsystem: "ax")
                 return (nil, effects)
@@ -1183,7 +1188,7 @@ extension AccessibilityChannel {
             effects.navigationPerformed = true
             effects.restoration = "not_restored"
             effects.attempted.append("mixer_focus_reacquisition")
-            _ = AXHelpers.setAttribute(before.child, kAXFocusedAttribute as String,
+            _ = AXHelpers.setAttribute(deciding.child, kAXFocusedAttribute as String,
                 NSNumber(value: true), runtime: runtime.ax)
             for attempt in 0..<3 {
                 guard let current: AXUIElement = AXHelpers.getAttribute(baseline.app,
@@ -1191,21 +1196,19 @@ extension AccessibilityChannel {
                     effects.reason = "mixer_focus_reacquisition_unverified"
                     return (nil, effects)
                 }
-                if CFEqual(current, before.child) {
-                    guard let final = scope(), CFEqual(final.child, before.child),
-                          final.strips.count == before.strips.count,
-                          zip(final.strips, before.strips).allSatisfy({ CFEqual($0, $1) }),
-                          let finalFocus: AXUIElement = AXHelpers.getAttribute(baseline.app,
-                            kAXFocusedUIElementAttribute as String, runtime: runtime.ax),
-                          CFEqual(finalFocus, before.child),
+                if CFEqual(current, deciding.child) {
+                    guard let final = scope(expectedFocus: deciding.child),
+                          CFEqual(final.child, deciding.child),
+                          final.strips.count == deciding.strips.count,
+                          zip(final.strips, deciding.strips).allSatisfy({ CFEqual($0, $1) }),
                           (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else {
                         effects.reason = "mixer_focus_reacquisition_unverified"
                         return (nil, effects)
                     }
                     effects.changed.append("keyboard_focus_replacement")
                     effects.restoration = "restored"
-                    return (.init(baseline: baseline, replacementFocus: before.child,
-                        strips: before.strips), effects)
+                    return (.init(baseline: baseline, replacementFocus: deciding.child,
+                        strips: deciding.strips), effects)
                 }
                 guard CFEqual(current, baseline.focus), attempt < 2 else {
                     effects.reason = "mixer_focus_reacquisition_unverified"

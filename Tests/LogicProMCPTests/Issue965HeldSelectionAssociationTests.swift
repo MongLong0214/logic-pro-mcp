@@ -698,6 +698,8 @@ struct Issue965HeldSelectionAssociationTests {
         var routingDelayedReceiverCensusReads = 0
         var routingDelayedReceiverRedrawInjected = false
         var routingDelayedReceiverFocusFault: String?
+        var routingDelayedReceiverActionBoundaryFault: String?
+        var routingDelayedReceiverActionBoundaryInjected = false
         var routingDelayedReceiverFocusWrites: [AXUIElement] = []
         var routingAction: (@Sendable (AXUIElement, String) -> Bool)?
         var peerHydrationSamples: [AXHelpers.StripHelpSamples] = []
@@ -2272,6 +2274,23 @@ struct Issue965HeldSelectionAssociationTests {
             "Focus acknowledgement or foreign landing cannot authorize a guessed inverse")
     }
 
+    @Test("A delayed receiver redraw re-proves scope after the last focus-boundary reads",
+          arguments: ["document", "focused_window", "selected_header"])
+    func canonicalBusOutputRefusesDelayedReceiverScopeLossAtFocusActionBoundary(fault: String) async throws {
+        let f = try Fixture()
+        try await assertCanonicalPhysicalOutput(
+            mode: "bus_departure_execute_arrival_popup_both_delayed_census_action_\(fault)",
+            fixture: f
+        )
+        #expect(f.routingDelayedReceiverRedrawInjected)
+        #expect(f.routingDelayedReceiverActionBoundaryInjected,
+            "Reach the exact post-scope focus read immediately before the native focus setter")
+        #expect(f.routingDelayedReceiverFocusWrites.isEmpty,
+            "A document, focused-window, or selected-header change cannot authorize a replacement focus write")
+        #expect(f.routingDestinationPresses == 1,
+            "The rejected handoff cannot continue to a guessed inverse")
+    }
+
     @Test("Bus departure reuses the exact source, protected footprint and conditional Bus inverse",
           arguments: ["forward", "stereo", "cancel", "late_peer", "late_project", "post_write_loss", "ack_only", "newer", "retired", "physical_input", "physical_cancel", "changed_source_input", "changed_receiver_input", "misleading_receiver", "popup_source", "popup_receiver", "popup_source_retired", "popup_both_retired", "external_peer"])
     func canonicalBusDepartureExecutesOnlyItsCapturedOutput(outcome: String) async throws {
@@ -2636,6 +2655,10 @@ struct Issue965HeldSelectionAssociationTests {
         let delayedReceiverCensus = outputMode.hasPrefix("popup_both_delayed_census")
         let delayedReceiverFocusFault = delayedReceiverCensus
             ? ["ack_only", "foreign_focus"].first(where: { outputMode.hasSuffix($0) }) : nil
+        let delayedReceiverActionBoundaryFault = delayedReceiverCensus
+            ? ["document", "focused_window", "selected_header"].first(where: {
+                outputMode.hasSuffix("action_\($0)")
+            }) : nil
         let prerequisiteFault = executingBusDeparture && outputMode.hasPrefix("prereq_")
         let inputPopupFocus = executingBusDeparture && outputMode.hasPrefix("popup_")
         let sourceInputPopup = executingBusDeparture
@@ -2690,6 +2713,7 @@ struct Issue965HeldSelectionAssociationTests {
                 }
                 if delayedReceiverCensus {
                     f.routingDelayedReceiverFocusFault = delayedReceiverFocusFault
+                    f.routingDelayedReceiverActionBoundaryFault = delayedReceiverActionBoundaryFault
                     f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[1]])
                     f.routingSelection = { index in
                         let selected = index == 0 ? f.routingReplacement ?? f.strips[1]
@@ -2937,6 +2961,29 @@ struct Issue965HeldSelectionAssociationTests {
                         // original-header renewal before the second delayed redraw.
                         replaceCurrentMixerRows(sourceKey: 1_973_142, peerKey: 1_973_143)
                         f.routingDelayedReceiverRenewalTriggered = true
+                    }
+                    if let fault = f.routingDelayedReceiverActionBoundaryFault,
+                       f.routingDelayedReceiverRedrawInjected,
+                       !f.routingDelayedReceiverActionBoundaryInjected,
+                       CFEqual(element, f.app), attribute == kAXFocusedUIElementAttribute as String,
+                       Thread.callStackSymbols.contains(where: {
+                           $0.contains("reacquireRetiredOriginalHeaderFocus")
+                       }) {
+                        f.routingDelayedReceiverActionBoundaryInjected = true
+                        switch fault {
+                        case "document":
+                            f.builder.setAttribute(f.window, kAXDocumentAttribute as String,
+                                "file:///tmp/Foreign.logicx")
+                        case "focused_window":
+                            let foreign = f.builder.element(1_973_147)
+                            f.builder.setRole(foreign, kAXWindowRole as String)
+                            f.builder.setAttribute(f.app, kAXFocusedWindowAttribute as String, foreign)
+                        case "selected_header":
+                            f.builder.setAttribute(f.headers[0], kAXSelectedAttribute as String, false)
+                            f.builder.setAttribute(f.headers[1], kAXSelectedAttribute as String, true)
+                        default:
+                            Issue.record("Unknown delayed focus-boundary fault")
+                        }
                     }
                     if mode == "coupled_menu_overlay_late_editor", f.routingMenuNameOpens > 0,
                        CFEqual(element, menuEditor), attribute == kAXParentAttribute as String, !f.routingLateScopeInjected {
@@ -3826,6 +3873,18 @@ struct Issue965HeldSelectionAssociationTests {
                     #expect(!verified)
                     #expect(f.routingDestinationPresses == 1,
                         "The refused handoff cannot add an inverse to the already verified forward write")
+                    return
+                }
+                if delayedReceiverCensus, delayedReceiverActionBoundaryFault != nil {
+                    #expect(f.routingDelayedReceiverRedrawInjected,
+                        "Reach both exact all-strip redraws before refusing the handoff")
+                    #expect(f.routingDelayedReceiverActionBoundaryInjected,
+                        "Inject only at the handoff's final focus-boundary read")
+                    #expect(result["saga_state"] as? String != "completed")
+                    let verified = try #require(result["verified"] as? Bool)
+                    #expect(!verified)
+                    #expect(f.routingDestinationPresses == 1,
+                        "Lost scope cannot add an inverse to the already verified forward write")
                     return
                 }
                 if executingBusDeparture, outputMode == "external_peer" {
