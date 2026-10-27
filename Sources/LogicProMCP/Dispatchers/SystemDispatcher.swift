@@ -2304,6 +2304,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                   get_inventory     -> { track: Int } — Read a drift-safe insert chain
                   get_param_verified -> { target_ref: String (occupied ins_ reference), param: String,
                                           unit?: String } — Read one qualified parameter without audio mutation
+                    Compressor ratio is read-only: raw_ax_value plus verbatim observed_display; it grants no write method.
                   set_param_verified -> { track: Int, insert: Int, plugin: String,
                                           param: String, value: Float, unit: String,
                                           mode: "duplicate_applyback",

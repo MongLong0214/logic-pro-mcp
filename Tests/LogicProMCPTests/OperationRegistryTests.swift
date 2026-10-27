@@ -909,6 +909,15 @@ struct OperationRegistryTests {
         #expect(text.contains("get_param_verified"))
         #expect(text.contains("target_ref"))
         #expect(text.contains("param"))
+        #expect(text.contains(
+            "Compressor ratio is read-only: raw_ax_value plus verbatim observed_display; "
+                + "it grants no write method."
+        ))
+        let pluginDescription = PluginsDispatcher.tool.description ?? ""
+        #expect(pluginDescription.contains(
+            "Compressor ratio is read-only: raw_ax_value plus verbatim observed_display; "
+                + "it grants no write method."
+        ))
     }
 
     @Test("tool description command lists match the registry exactly")
