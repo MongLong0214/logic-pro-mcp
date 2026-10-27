@@ -2293,6 +2293,31 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         return true
     }
 
+    /// A prior owned popup can leave only an unchanged peer routing display
+    /// offscreen before the next Bus-prerequisite pass begins. Re-expose that
+    /// captured viewport under the existing project/target custody, then
+    /// require the complete protected footprint again. This never accepts the
+    /// missing display or creates new read/write authority.
+    private func recoverOutputPeerReadability(
+        pair: AccessibilityChannel.HeldSelectionAssociation.Pair,
+        assignment: OutputAssignment
+    ) async -> Bool {
+        guard outputPeerReadbackUnavailable, changedNameGoals.isEmpty,
+              let task = outputTask,
+              let originalMixerGeometry = outputOriginalMixerGeometry,
+              let currentProof = outputProof,
+              await currentProof.recoverMixerReadability(restoring: originalMixerGeometry,
+                referenceIsCurrent: { [self] in
+                    guard await projectIsCurrent(allowPendingCancellation: true),
+                          let target = await registry.resolve(task.reference), target.kind == .track,
+                          target.physicalTrack?.matches(task.pair.track) == true else { return false }
+                    return true
+                }, stoppingWhen: {
+                    (try? SessionPopulationObservation.requireOwnedAcquisition()) == nil
+                }) else { return false }
+        return outputFootprintHeld(pair: pair, assignment: assignment)
+    }
+
     /// Bus output or restoration needs current checked prerequisites, not capture-time
     /// captions. These read-only menus run before forward/inverse ownership is
     /// established; neither an input write nor receiver creation is authorized.
@@ -2308,8 +2333,11 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         stage = "entry_footprint"
         guard let label = AXLogicProElements.outputSlotDestination(in: pair.strip.strip, runtime: runtime.ax),
               let assignment = OutputAssignment.observed(slotLabel: label),
-              assignment == task.before || (outputAttempted && assignment == task.desired),
-              outputFootprintHeld(pair: pair, assignment: assignment) else { return false }
+              assignment == task.before || (outputAttempted && assignment == task.desired) else { return false }
+        if !outputFootprintHeld(pair: pair, assignment: assignment) {
+            stage = "entry_peer_recovery"
+            guard await recoverOutputPeerReadability(pair: pair, assignment: assignment) else { return false }
+        }
         guard let source = task.capture.channelStrips.first(where: {
             $0.physicalBinding?.matches(task.pair.strip) == true
         }), let own = source.inputObservation else { return false }
@@ -2461,18 +2489,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
               let assignment = OutputAssignment.observed(slotLabel: label),
               assignment == task.before || (outputAttempted && assignment == task.desired) else { return false }
         if !outputFootprintHeld(pair: pair, assignment: assignment) {
-            guard outputPeerReadbackUnavailable, changedNameGoals.isEmpty,
-                  let originalMixerGeometry = outputOriginalMixerGeometry,
-                  let currentProof = outputProof,
-                  await currentProof.recoverMixerReadability(restoring: originalMixerGeometry,
-                    referenceIsCurrent: { [self] in
-                        guard await projectIsCurrent(allowPendingCancellation: true),
-                              let target = await registry.resolve(task.reference), target.kind == .track,
-                              target.physicalTrack?.matches(task.pair.track) == true else { return false }
-                        return true
-                    }, stoppingWhen: {
-                        (try? SessionPopulationObservation.requireOwnedAcquisition()) == nil
-                    }) else { return false }
+            guard await recoverOutputPeerReadability(pair: pair, assignment: assignment) else { return false }
         }
         let checked = await AXMixerStripBinding.$current.withValue(pair.strip) {
             await AccessibilityChannel.getOutputObservation(runtime: runtime)
