@@ -35,7 +35,8 @@ extension TrackDispatcher {
         },
         restorePositionDisplay: @escaping @Sendable (ControlBarDisplayMode.Lease) -> ControlBarDisplayMode.Restore = {
             ControlBarDisplayMode.restore($0)
-        }
+        },
+        displayModeTiming: ControlBarDisplayMode.Timing = .live
     ) async -> CallTool.Result {
         // T5 — record_sequence does not support `port` (no keycmd alternative
         // for SMF-import + AX menu navigation). Reject up-front rather than
@@ -187,9 +188,9 @@ extension TrackDispatcher {
                 displayModeLease = lease
                 displayModeFields["display_mode_switched_from"] = lease.original
                 // The Playhead Position group gains its division and tick sliders after the popup
-                // reads Beats (see `ControlBarDisplayMode.positionComponentsTimeout`), so reread
-                // until all four are exposed; past the deadline, one fresh reading decides.
-                let deadline = Date().addingTimeInterval(ControlBarDisplayMode.positionComponentsTimeout)
+                // reads Beats (see `ControlBarDisplayMode.Timing.positionComponentsTimeout`), so
+                // reread until all four are exposed; past the deadline, one fresh reading decides.
+                let deadline = Date().addingTimeInterval(displayModeTiming.positionComponentsTimeout)
                 repeat {
                     beforePosition = await TransportDispatcher.liveTransportState(router: router, cache: cache)
                     if beforePosition?.positionReadback?.observedComponents.count
@@ -199,8 +200,10 @@ extension TrackDispatcher {
                         beforePosition = await TransportDispatcher.liveTransportState(router: router, cache: cache)
                         break
                     }
-                    try? await Task.sleep(nanoseconds: UInt64(
-                        min(ControlBarDisplayMode.positionComponentsPollInterval, remaining) * 1_000_000_000))
+                    if displayModeTiming.pollInterval > 0 {
+                        try? await Task.sleep(nanoseconds: UInt64(
+                            min(displayModeTiming.pollInterval, remaining) * 1_000_000_000))
+                    }
                 } while true
             case .unavailable(let reason):
                 displayModeFields["display_mode_switch_unavailable"] = reason

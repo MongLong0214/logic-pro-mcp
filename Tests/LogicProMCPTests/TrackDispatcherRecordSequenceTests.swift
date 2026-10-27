@@ -277,7 +277,8 @@ func testRecordSequenceSeeksInAFullPositionDisplayAndRestoresItBeforeImport(_ mo
             #expect($0 == lease)
             log.events.append("restore")
             return mode == "restore_refused" ? .refused("display_mode_changed_since_switch") : .restored
-        })
+        },
+        displayModeTiming: mode == "lagging_readback" ? ControlBarDisplayMode.Timing(pollInterval: 0) : .immediate)
     #expect(log.switches == 1)
     let object = recordSequenceJSONObject(result)
     #expect(object["display_mode_switched_from"] as? String == "Beats & Project")
@@ -343,7 +344,8 @@ func testRecordSequenceWithholdsImportWhenTheAnchorIsNotTickExact(_ mode: String
             log.switches += 1
             return mode == "switch_unavailable" ? .unavailable("display_mode_popup_not_found") : .switched(lease)
         },
-        restorePositionDisplay: { _ in log.events.append("restore"); return .restored })
+        restorePositionDisplay: { _ in log.events.append("restore"); return .restored },
+        displayModeTiming: .immediate)
     #expect(try #require(result.isError))
     #expect(await channel.importCalls == 0)
     #expect(!(await channel.operations).contains("midi.import_file"))
@@ -389,7 +391,8 @@ func testRecordSequenceWithholdsImportWhenTheAnchorIsNotTickExact(_ mode: String
         trackHeaderCount: { counts.next() }, trackNameAt: { $0 == 1 ? "Imported Piano" : nil },
         readRegions: { regions.next() }, settleReadback: {},
         selectFullPositionDisplay: { Issue.record("a full display must not be switched"); return .unavailable("inert") },
-        restorePositionDisplay: { _ in Issue.record("nothing was switched to restore"); return .refused("inert") })
+        restorePositionDisplay: { _ in Issue.record("nothing was switched to restore"); return .refused("inert") },
+        displayModeTiming: .immediate)
     #expect(!(try #require(result.isError)))
     let object = recordSequenceJSONObject(result)
     #expect(try #require(object["verified"] as? Bool))
