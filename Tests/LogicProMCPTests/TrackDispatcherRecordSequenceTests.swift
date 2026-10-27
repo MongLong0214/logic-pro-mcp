@@ -24,19 +24,22 @@ private actor RecordingMockChannel: Channel {
     let dialogOutput: String?
     let gotoResult: ChannelResult?
     var transportReadbacks: [ChannelResult]
+    var trackSelectResults: [ChannelResult]
     var operations: [String] = []
     var rawGotoResult: ChannelResult?
 
     init(id: ChannelID, importResult: ChannelResult,
          gotoRuntime: AXLogicProElements.Runtime? = nil, dialogOutput: String? = nil,
          gotoResult: ChannelResult? = nil,
-         transportReadbacks: [ChannelResult] = []) {
+         transportReadbacks: [ChannelResult] = [],
+         trackSelectResults: [ChannelResult] = [.success(HonestContract.encodeStateA())]) {
         self.id = id
         self.importResult = importResult
         self.gotoRuntime = gotoRuntime
         self.dialogOutput = dialogOutput
         self.gotoResult = gotoResult
         self.transportReadbacks = transportReadbacks
+        self.trackSelectResults = trackSelectResults
     }
 
     func start() async throws {}
@@ -59,6 +62,11 @@ private actor RecordingMockChannel: Channel {
                 reconcileAfterDialogExecutionFailure: { false }, createDialogIssuanceLedger: { nil })
             rawGotoResult = result
             return result
+        }
+        if operation == "track.select" {
+            return trackSelectResults.count > 1
+                ? trackSelectResults.removeFirst()
+                : trackSelectResults[0]
         }
         if operation == "midi.import_file" {
             importCalls += 1
@@ -1252,6 +1260,62 @@ func testRecordSequenceRelocationRequiresPositiveSoftwareInstrumentType(_ type: 
     let keyOps = await keys.operations
     #expect(keyOps == ["edit.copy", "edit.paste"])
     #expect(!keyOps.contains("edit.cut"))
+}
+
+@Test func testRecordSequenceRelocationRefusesUnverifiedSourceSelectionBeforeCopy() async throws {
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let ax = RecordingMockChannel(
+        id: .accessibility,
+        importResult: .success(gmDowngradeEnvelope()),
+        transportReadbacks: [try recordSequencePosition("1.1.1.1")],
+        trackSelectResults: [.success(HonestContract.encodeStateB(reason: .retryExhausted))]
+    )
+    let keys = RecordingMockChannel(id: .cgEvent, importResult: .error("keystroke channel never imports"))
+    let router = ChannelRouter()
+    await router.register(ax)
+    await router.register(keys)
+
+    let gmRegion = makeRegion(name: "MIDI Region", trackIndex: 1, startBar: 1, endBar: 2)
+    let trackCounts = SequentialIntBox([1, 2])
+    let inventories = SequentialRelocationInventoryBox([
+        [relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target")],
+        [relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target")],
+        [
+            relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target"),
+            relocationTrack(1, "GM Device 1", .externalMIDI, identity: "gm"),
+        ],
+    ])
+    let regionReads = SequentialRegionReadBox([
+        .success([]),
+        .success([gmRegion]),
+        .success([gmRegion]),
+    ])
+
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: [
+            "notes": minimalNoteSpec(),
+            "target_track": .int(0),
+            "target_expected_name": .string("Deluxe Classic"),
+        ],
+        router: router,
+        cache: cache,
+        trackHeaderCount: { trackCounts.next() },
+        trackNameAt: relocationTrackName,
+        relocationTrackInventory: { inventories.next() },
+        readRegions: { regionReads.next() },
+        settleReadback: {}
+    )
+
+    #expect(try #require(result.isError))
+    let object = recordSequenceJSONObject(result)
+    #expect(object["error"] as? String == "select_failed")
+    #expect(object["failure_stage"] as? String == "relocation_select_source")
+    #expect(!(try #require(object["verified"] as? Bool)))
+    #expect(try #require(object["write_attempted"] as? Bool))
+    #expect(await ax.importCalls == 1)
+    #expect((await ax.operations).filter { $0 == "track.select" }.count == 1)
+    #expect(await keys.operations.isEmpty)
 }
 
 @Test func testRecordSequenceRelocationFailsClosedWhenPasteDoesNotAppear() async throws {

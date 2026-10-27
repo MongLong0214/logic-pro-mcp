@@ -671,6 +671,7 @@ extension TrackDispatcher {
             return jsonToolTextResult([
                 "success": false, "verified": false, "error": "target_inventory_unreadable",
                 "failure_stage": "relocation_postimport",
+                "write_attempted": true,
                 "hint": "The imported take remains in Logic, but the exact post-import track population could not be read; nothing was copied or pasted.",
             ], isError: true)
         }
@@ -690,6 +691,7 @@ extension TrackDispatcher {
             "expected_end_bar": expectedEndBar,
             "track_count_before": tracksBefore,
             "track_count_after": tracksAfter,
+            "write_attempted": true,
         ]
         func failure(_ error: String, stage: String, hint: String, extras: [String: Any] = [:]) -> CallTool.Result {
             var payload = base.merging(extras) { _, new in new }
@@ -746,9 +748,9 @@ extension TrackDispatcher {
         let selectSource = await withWriteBoundaryArmed(traceID) {
             await router.route(operation: "track.select", params: ["index": String(gmLane)])
         }
-        guard selectSource.isSuccess else {
+        guard channelResultIsVerified(selectSource) else {
             return failure("select_failed", stage: "relocation_select_source",
-                           hint: "Could not select the GM Device lane: \(selectSource.message).")
+                           hint: "Could not verify exclusive selection of the GM Device lane: \(selectSource.message).")
         }
         let copy = await withWriteBoundaryArmed(traceID) {
             await router.route(operation: "edit.copy")
