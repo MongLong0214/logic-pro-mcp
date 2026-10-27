@@ -79,7 +79,10 @@ extension TrackDispatcher {
         readRegions: @escaping @Sendable () -> RecordSequenceRegionReadback = {
             switch AccessibilityChannel.enumerateRegionItems() {
             case .success(let result):
-                return .success(result.regions.map { $0.info })
+                return .success(
+                    result.regions.map { $0.info },
+                    complete: result.coversWholeArrangement
+                )
             case .failure(let error):
                 return .failure(error.message)
             }
@@ -441,7 +444,7 @@ extension TrackDispatcher {
 
         let preImportRegions: [RegionInfo]?
         switch readRegions() {
-        case .success(let regions):
+        case .success(let regions, _):
             preImportRegions = regions
         case .failure:
             preImportRegions = nil
@@ -736,12 +739,12 @@ extension TrackDispatcher {
             )
         }
         let regionsBeforePaste: [RegionInfo]
-        if case .success(let regions) = readRegions() {
+        if case .success(let regions, complete: true) = readRegions() {
             regionsBeforePaste = regions
         } else {
             return failure(
                 "unreadable_readback", stage: "relocation_source",
-                hint: "The complete pre-paste region population could not be read, so a paste could not be told apart from other changes."
+                hint: "The pre-paste region census did not cover the whole arrangement, so a paste could not be told apart from other changes."
             )
         }
 
@@ -821,7 +824,7 @@ extension TrackDispatcher {
             return failure("paste_failed", stage: "relocation_paste", hint: "Paste was not delivered: \(paste.message).")
         }
 
-        guard let pasted = await pollRegionReadback(
+        guard let pasted = await pollStableRegionReadback(
             readRegions: readRegions, settleReadback: settleReadback,
             match: { regions in
                 guard let added = exactSingleRegionAddition(
@@ -939,8 +942,39 @@ extension TrackDispatcher {
         match: ([RegionInfo]) -> RegionInfo?
     ) async -> RegionInfo? {
         for attempt in 0..<attempts {
-            if case .success(let regions) = readRegions(), let found = match(regions) {
+            if case .success(let regions, _) = readRegions(), let found = match(regions) {
                 return found
+            }
+            if attempt < attempts - 1 {
+                await settleReadback()
+            }
+        }
+        return nil
+    }
+
+    /// A relocation success is stronger than finding one matching AX snapshot: Logic can expose
+    /// the expected paste before a second selected lane finishes redrawing. Require the same
+    /// complete whole-arrangement population twice with a settle boundary between the reads.
+    private static func pollStableRegionReadback(
+        attempts: Int = 10,
+        readRegions: @Sendable () -> RecordSequenceRegionReadback,
+        settleReadback: @Sendable () async -> Void,
+        match: ([RegionInfo]) -> RegionInfo?
+    ) async -> RegionInfo? {
+        var previousPopulation: [String: Int]?
+        for attempt in 0..<attempts {
+            if case .success(let regions, complete: true) = readRegions(),
+               let found = match(regions) {
+                let population = Dictionary(
+                    regions.map { (recordSequenceRegionKey($0), 1) },
+                    uniquingKeysWith: +
+                )
+                if previousPopulation == population {
+                    return found
+                }
+                previousPopulation = population
+            } else {
+                previousPopulation = nil
             }
             if attempt < attempts - 1 {
                 await settleReadback()
@@ -1016,7 +1050,7 @@ extension TrackDispatcher {
             switch readRegions() {
             case .failure(let error):
                 lastReadbackError = error
-            case .success(let regions):
+            case .success(let regions, _):
                 lastRegionCount = regions.count
                 lastNewRegionCount = hasPreImportSnapshot
                     ? regions.filter { !preRegionKeys.contains(recordSequenceRegionKey($0)) }.count

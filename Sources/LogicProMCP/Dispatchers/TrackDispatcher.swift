@@ -21,7 +21,7 @@ struct TrackDispatcher: OperationTraceDispatching {
     )
 
     enum RecordSequenceRegionReadback {
-        case success([RegionInfo])
+        case success([RegionInfo], complete: Bool = true)
         case failure(String)
     }
 
