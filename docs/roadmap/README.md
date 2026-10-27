@@ -43,7 +43,7 @@ claims dated by the "measured" line, and only issue numbers and open/closed are 
 ## State — measured 2026-10-28 at `e3f0238f`
 
 ```
-26 open issues and 4 open pull requests after a paginated GitHub API read · issue bodies and owner comments remain the acceptance authority · active delivery: #1422 via #1429 and #1420 via #1431
+26 open issues and 7 open pull requests after a paginated GitHub API read · issue bodies and owner comments remain the acceptance authority · active delivery: #1422 via #1429 and #1420 via #1431
 ```
 
 | ADR | issue | state | what it is waiting on |
