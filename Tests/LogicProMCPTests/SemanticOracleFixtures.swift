@@ -1438,5 +1438,12 @@ enum SemanticOracleFixtures {
             response: #"{"success":true,"verified":true,"state":"A","operation":"mixer.bank","channel":"MCU","direction":"right","bank_bookkeeping_before":0,"bank_bookkeeping_after":1,"bank_presses_sent":1,"banks_moved":1,"banks_requested":1,"step_windows":["DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn "],"upper_row_writes_observed":2,"window_before":"AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ","window_after":"DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ","strips":["DelCls","DelCls","DelCls","StdGrn","StdGrn","StdGrn","StdGrn","StdGrn"],"verify_source":"mcu_lcd_upper_row"}"#,
             readback: "{}"
         ),
+        // #291 retained direct State-A response shape from the bounded Bus 1 ->
+        // Stereo Output native write. This contract fixture does not replace the
+        // external candidate/log/hash evidence that established the live result.
+        .mixerSetOutputVerified: SemanticOracleFixture(
+            response: #"{"success":true,"verified":true,"state":"A","operation":"mixer.set_output_verified","mixer_strip_index":12,"destination":{"kind":"stereo_output"},"before":{"kind":"bus","number":1},"after":{"kind":"stereo_output"},"changed":true,"write_attempted":true,"strip_count_before":38,"strip_count_after":38,"menu_path":["출력","Stereo Output"],"popup_menu_state":"closed","verify_source":"ax_output_slot"}"#,
+            readback: "{}"
+        ),
     ]
 }
