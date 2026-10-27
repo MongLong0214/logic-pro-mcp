@@ -13715,6 +13715,131 @@ struct Issue965HeldSelectionAssociationTests {
         #expect(CFEqual(focus, f.rail))
     }
 
+    @Test("An acknowledged selected-child focus that has not landed still fences the original rail")
+    func unobservedSelectedChildFocusAcknowledgementStillFencesTheOriginalRail() async throws {
+        let f = try Fixture(withViewport: true)
+        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.rail)
+        f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[1]])
+        f.builder.setAttributeSettable(f.rail, kAXFocusedAttribute as String, true)
+        f.builder.setAttributeSettable(f.strips[1], kAXFocusedAttribute as String, true)
+        f.selectedFocusAckOnly = true
+        f.routingReadResult = { element, attribute in
+            if CFEqual(element, f.rail), [kAXValueAttribute, kAXSelectedTextAttribute,
+                kAXNumberOfCharactersAttribute, kAXInsertionPointLineNumberAttribute]
+                .map({ $0 as String }).contains(attribute) {
+                return .failure(.init(raw: AXError.noValue.rawValue))
+            }
+            return nil
+        }
+
+        let body = try await inspect(f, scope: "selection")
+
+        let rows = (body["associations"] as? [String: Any])?["rows"] as? [[String: Any]] ?? []
+        #expect(rows.isEmpty)
+        #expect(f.focusRestorationWrites.count == 2,
+            "The acknowledged selected-focus request owns an inverse duty even when its landing was not observed")
+        if f.focusRestorationWrites.count == 2 {
+            #expect(CFEqual(f.focusRestorationWrites[0], f.strips[1]))
+            #expect(CFEqual(f.focusRestorationWrites[1], f.rail))
+        }
+        #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "restored")
+        let focus: AXUIElement = try #require(AXHelpers.getAttribute(f.app,
+            kAXFocusedUIElementAttribute as String, runtime: f.builder.makeAXRuntime()))
+        #expect(CFEqual(focus, f.rail))
+    }
+
+    @Test("A delayed selected-child focus landing after the rail fence is restored again")
+    func delayedSelectedChildFocusAfterTheRailFenceIsRestoredAgain() async throws {
+        let f = try Fixture(withViewport: true)
+        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.rail)
+        f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[1]])
+        f.builder.setAttributeSettable(f.rail, kAXFocusedAttribute as String, true)
+        f.builder.setAttributeSettable(f.strips[1], kAXFocusedAttribute as String, true)
+        f.selectedFocusAckOnly = true
+        let delayedLandingInjected = SagaAbandonFlag()
+        f.routingRead = { element, attribute in
+            if CFEqual(element, f.app), attribute == kAXFocusedUIElementAttribute as String,
+               f.focusRestorationWrites.count == 2, !delayedLandingInjected.value {
+                delayedLandingInjected.set(true)
+                f.builder.setAttribute(f.app, attribute, f.strips[1])
+            }
+        }
+        f.routingReadResult = { element, attribute in
+            if CFEqual(element, f.rail), [kAXValueAttribute, kAXSelectedTextAttribute,
+                kAXNumberOfCharactersAttribute, kAXInsertionPointLineNumberAttribute]
+                .map({ $0 as String }).contains(attribute) {
+                return .failure(.init(raw: AXError.noValue.rawValue))
+            }
+            return nil
+        }
+
+        let body = try await inspect(f, scope: "selection")
+
+        let rows = (body["associations"] as? [String: Any])?["rows"] as? [[String: Any]] ?? []
+        #expect(rows.isEmpty)
+        #expect(delayedLandingInjected.value)
+        #expect(f.focusRestorationWrites.count == 3)
+        if f.focusRestorationWrites.count == 3 {
+            #expect(CFEqual(f.focusRestorationWrites[0], f.strips[1]))
+            #expect(CFEqual(f.focusRestorationWrites[1], f.rail))
+            #expect(CFEqual(f.focusRestorationWrites[2], f.rail))
+        }
+        #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "restored")
+        let focus: AXUIElement = try #require(AXHelpers.getAttribute(f.app,
+            kAXFocusedUIElementAttribute as String, runtime: f.builder.makeAXRuntime()))
+        #expect(CFEqual(focus, f.rail))
+    }
+
+    @Test("A selected-child landing at a retained focus boundary is still restored",
+          arguments: [5, 209])
+    func delayedSelectedChildFocusDuringFencePreflightIsRestored(
+        railMetadataCallback: Int
+    ) async throws {
+        let f = try Fixture(withViewport: true)
+        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.rail)
+        f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[1]])
+        f.builder.setAttributeSettable(f.rail, kAXFocusedAttribute as String, true)
+        f.builder.setAttributeSettable(f.strips[1], kAXFocusedAttribute as String, true)
+        f.selectedFocusAckOnly = true
+        // Callback 5 lands inside the first post-write passive witness.
+        // Callback 209 lands inside cleanup's original-rail preflight after
+        // the selection-scope population's first 208 retained callbacks.
+        let railReadsAfterAcknowledgement = (0..<railMetadataCallback).map { _ in SagaAbandonFlag() }
+        let delayedLandingInjected = SagaAbandonFlag()
+        f.routingReadResult = { element, attribute in
+            if CFEqual(element, f.rail), [kAXValueAttribute, kAXSelectedTextAttribute,
+                kAXNumberOfCharactersAttribute, kAXInsertionPointLineNumberAttribute]
+                .map({ $0 as String }).contains(attribute) {
+                if f.focusRestorationWrites.count == 1,
+                   let next = railReadsAfterAcknowledgement.first(where: { !$0.value }) {
+                    next.set(true)
+                    if railReadsAfterAcknowledgement.allSatisfy(\.value),
+                       !delayedLandingInjected.value {
+                        delayedLandingInjected.set(true)
+                        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.strips[1])
+                    }
+                }
+                return .failure(.init(raw: AXError.noValue.rawValue))
+            }
+            return nil
+        }
+
+        let body = try await inspect(f, scope: "selection")
+
+        let rows = (body["associations"] as? [String: Any])?["rows"] as? [[String: Any]] ?? []
+        #expect(rows.isEmpty)
+        #expect(delayedLandingInjected.value)
+        #expect(f.focusRestorationWrites.count == 2)
+        if f.focusRestorationWrites.count == 2 {
+            #expect(CFEqual(f.focusRestorationWrites[0], f.strips[1]))
+            #expect(CFEqual(f.focusRestorationWrites[1], f.rail))
+        }
+        #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "restored")
+        let focus: AXUIElement = try #require(AXHelpers.getAttribute(f.app,
+            kAXFocusedUIElementAttribute as String, runtime: f.builder.makeAXRuntime()))
+        #expect(CFEqual(focus, f.rail))
+    }
+
     @Test("Selection population focus preparation requires both exact endpoints to be settable",
           arguments: ["rail", "selected_child"])
     func selectionPopulationFocusPreparationRequiresBothSettableEndpoints(missing: String) async throws {

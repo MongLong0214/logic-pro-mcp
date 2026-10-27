@@ -931,10 +931,20 @@ actor AccessibilityChannel: Channel {
                         population.uiEffects.reason = "association_population_moved"
                     }
                 }
-            } else if associationFocusPreparation != nil, let effects = association?.effects {
-                population.uiEffects = mergedEffects(population.uiEffects, effects)
-                if effects.reason != nil
-                    || (effects.navigationPerformed && effects.restoration != "restored") {
+            } else if associationFocusPreparation != nil, let association {
+                // An acknowledged AXFocused write owns an inverse even when
+                // Logic has not exposed its landing yet. A false preparation
+                // result therefore still runs the retained cleanup instead of
+                // treating the currently observed rail focus as final.
+                let restored = await association.restorePreparedPopulationFocus(
+                    referenceIsCurrent: navigationReferenceIsCurrent, stoppingWhen: stop)
+                let populationReason = population.uiEffects.reason
+                population.uiEffects = mergedEffects(population.uiEffects, association.effects)
+                if restored { population.uiEffects.restoration = association.effects.restoration }
+                population.uiEffects.reason = populationReason ?? association.effects.reason
+                if !restored || association.effects.reason != nil
+                    || (association.effects.navigationPerformed
+                        && association.effects.restoration != "restored") {
                     population.stable = false
                 }
             }
