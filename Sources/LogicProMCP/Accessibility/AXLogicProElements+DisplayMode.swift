@@ -339,10 +339,33 @@ enum ControlBarDisplayMode {
     /// Exactly one display-mode popup inside the window's control bar, or nil.
     private static func popup(in window: AXUIElement, runtime: AXHelpers.Runtime) -> AXUIElement? {
         guard let bar = AXLogicProElements.getControlBar(in: window, runtime: runtime) else { return nil }
-        let census = AXLocalePolicy.censusDescendant(
-            of: bar, role: kAXPopUpButtonRole as String, matching: AXLocalePolicy.displayModePopupLabel,
-            mode: .exactStrict, maxDepth: 8, runtime: runtime)
-        return census.candidates == 1 ? census.element : nil
+        let roleCensus: AXHelpers.Census
+        switch AXHelpers.censusDescendantResult(
+            of: bar, role: kAXPopUpButtonRole as String, maxDepth: 8, runtime: runtime,
+            requiresCompleteTraversal: true
+        ) {
+        case .success(let observed):
+            roleCensus = observed
+        case .failure:
+            return nil
+        }
+        var matches: [AXUIElement] = []
+        for candidate in roleCensus.matches {
+            switch AXLocalePolicy.elementMatchesResult(
+                candidate, AXLocalePolicy.displayModePopupLabel, mode: .exactStrict,
+                runtime: runtime
+            ) {
+            case .success(true):
+                matches.append(candidate)
+            case .success(false):
+                continue
+            case .failure:
+                // An unreadable peer may be the same control. It cannot be dropped from a
+                // uniqueness proof that authorizes AXShowMenu or a later leaf press.
+                return nil
+            }
+        }
+        return matches.count == 1 ? matches[0] : nil
     }
 
     /// The popup's AXValue is the selected mode's title (`Beats & Project` in the default).

@@ -93,7 +93,8 @@ private struct DisplayModeFixture {
         projectChangeOnShowMenu: String? = nil,
         projectChangeOnPressTitle: String? = nil,
         mainWindowChangeOnPressTitle: String? = nil,
-        mainWindowChangeOnCancel: Bool = false
+        mainWindowChangeOnCancel: Bool = false,
+        unreadablePopupLabel: AXUIElement? = nil
     ) -> AXHelpers.Runtime {
         let builder = builder, app = app, window = window, foreignWindow = foreignWindow
         let popup = popup, menu = menu, actions = actions, items = items
@@ -107,6 +108,10 @@ private struct DisplayModeFixture {
                 return .some(previous as NSString)
             },
             attributeValueResultHandler: { element, attribute in
+                if let unreadablePopupLabel, CFEqual(element, unreadablePopupLabel),
+                   attribute == kAXDescriptionAttribute as String {
+                    return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                }
                 guard attribute == kAXTitleAttribute as String,
                       let unreadableTitle,
                       let unreadable = items[unreadableTitle], CFEqual(element, unreadable) else { return nil }
@@ -481,6 +486,21 @@ func testDisplayModePublicRestoreRenewsTheCurrentWindowAfterItsAction(_ mode: St
     default:
         Issue.record("A changed display mode must retain its lease when current-window custody is lost")
     }
+}
+
+@Test func testDisplayModePublicSwitchRefusesAnUnreadableCompetingPopupBeforeAnyAction() {
+    let fixture = DisplayModeFixture()
+    let competitor = fixture.builder.element(142_091)
+    fixture.builder.setRole(competitor, kAXPopUpButtonRole as String)
+    fixture.builder.setChildren(competitor, [])
+    let existingChildren = fixture.builder.makeAXRuntime().children(fixture.controlBar)
+    fixture.builder.setChildren(fixture.controlBar, existingChildren + [competitor])
+    let ax = fixture.runtime(unreadablePopupLabel: competitor)
+
+    #expect(ControlBarDisplayMode.selectBeats(runtime: fixture.logicRuntime(ax))
+        == .unavailable("display_mode_popup_not_found"))
+    #expect(fixture.actions.calls.isEmpty)
+    #expect(fixture.value == "Beats & Project")
 }
 
 @Test func testDisplayModeSwitchDoesNotAdoptAPreexistingMenu() {
