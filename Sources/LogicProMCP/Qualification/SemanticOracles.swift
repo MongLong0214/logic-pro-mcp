@@ -107,6 +107,10 @@ enum OracleConstraint: Sendable {
     /// value is present. Bool-vs-number safe: a requested `true` is not
     /// satisfied by an observed `1`.
     case fieldsEqual(keyA: String, keyB: String)
+    /// Two key paths WITHIN THE SAME payload must resolve to different leaf
+    /// values. Used when the independent before/after witness is meaningful only
+    /// if it changed, such as a freshly redrawn MCU bank window.
+    case fieldsDiffer(keyA: String, keyB: String)
     /// Two actual strings agree byte-for-byte, for domains where canonical Unicode equivalence
     /// is not identity. Missing/nonstring values refuse; generic `fieldsEqual` remains unchanged.
     case utf8StringsEqual(keyA: String, keyB: String)
@@ -174,6 +178,7 @@ enum OracleConstraint: Sendable {
              .lengthPrefixedIdentityAtIndexEquals(let key, _, _, _),
              .readbackArrayExcludesResponseIdentity(let key, _, _),
              .fieldsEqual(let key, _),
+             .fieldsDiffer(let key, _),
              .utf8StringsEqual(let key, _),
              .crossCheck(let key, _),
              .numericNear(let key, _, _),
@@ -199,7 +204,7 @@ enum OracleConstraint: Sendable {
         case .valueEquals, .numericRange, .enumMember, .lengthPrefixedEntryCountEquals,
              .lengthPrefixedEntriesExclude, .lengthPrefixedIdentityAtIndexEquals,
              .readbackArrayExcludesResponseIdentity, .fieldsEqual, .utf8StringsEqual, .crossCheck, .numericNear,
-             .booleanFlipped, .numericEqualsOffset:
+             .fieldsDiffer, .booleanFlipped, .numericEqualsOffset:
             return true
         case let .anyOf(alternatives):
             return alternatives.allSatisfy { branch in
@@ -297,6 +302,10 @@ enum OracleConstraint: Sendable {
             guard let a = JSONPath.resolve(root, keyPath: keyA),
                   let b = JSONPath.resolve(root, keyPath: keyB) else { return false }
             return JSONInspector.leavesEqual(a, b)
+        case .fieldsDiffer(let keyA, let keyB):
+            guard let a = JSONPath.resolve(root, keyPath: keyA),
+                  let b = JSONPath.resolve(root, keyPath: keyB) else { return false }
+            return !JSONInspector.leavesEqual(a, b)
         case .utf8StringsEqual(let keyA, let keyB):
             guard let a = JSONPath.resolve(root, keyPath: keyA) as? String,
                   let b = JSONPath.resolve(root, keyPath: keyB) as? String else { return false }

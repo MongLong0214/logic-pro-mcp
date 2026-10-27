@@ -254,6 +254,7 @@ enum SemanticOracleTable {
         .navigateCaptureMarkers,
         .projectApplySessionRepair,
         .midiExportTrackMIDI, .midiReadTrackNotes,
+        .mixerBank,
     ]
 
     /// Every mutating operation the table covers: the B1 verified-write increment
@@ -317,18 +318,6 @@ enum SemanticOracleTable {
             + "bindings live in Logic's preferences and its Setup window, and no logic:// resource "
             + "publishes either, so the only confirmation available is the operation's own MCU "
             + "feedback",
-        .mixerBank:
-            // #862. Post-closure, like setup_control_surface above, and for the same reason NOT
-            // back-dated into a phase set. Its State A is decided by a fresh, changed MCU LCD
-            // upper row (verify_source mcu_lcd_upper_row), which IS an independent readback --
-            // so unlike the entries around it this exclusion is pending, not structural. The live
-            // drive exists: the ten 2026-09-27 a-bank-step-answers-from-the-redrawn-upper-row
-            // records in docs/observations. What remains is the oracle that pins the envelope
-            // those records saw; until it is written this entry keeps mixer.bank out of the
-            // covered set instead of implying a pinned contract.
-            "live State-A contract pending — State A is a fresh, changed MCU LCD upper row; "
-            + "live records from ten Logic languages exist, but no oracle pinning "
-            + "verify_source mcu_lcd_upper_row has been written yet",
         .mixerSetOutputVerified:
             // #291 R2. Post-closure like mixer.bank, and for the same reason NOT back-dated into a
             // phase set. Its State A is the same strip's output slot read back by R1's reader
@@ -628,6 +617,7 @@ enum SemanticOracleTable {
         navigateSetMixerVisibility,
         projectApplySessionRepair,
         midiExportTrackMIDI, midiReadTrackNotes,
+        mixerBank,
     ]
 
     static let byOperationID: [OperationID: OperationOracle] = Dictionary(
@@ -2961,6 +2951,33 @@ enum SemanticOracleTable {
             .fieldsEqual(keyA: "requested", keyB: "playhead_bar"),
             .numericNear(keyA: "post_start_bar", keyB: "playhead_bar", within: .absolute(1)),
             .typedField(key: "via", type: .string),
+        ]
+    )
+
+    // MCUChannel.executeBank. #862's ten 2026-09-27 locale records drive the
+    // real State-A shape: every requested bank step was witnessed (`banks_moved
+    // == banks_requested`) by a fresh MCU LCD upper-row redraw. The before/after
+    // inequality rejects a sent-button receipt or unchanged edge redraw; the
+    // two arrays retain the per-step and final strip evidence. Bookkeeping is
+    // intentionally shape-only because it is local state, not Logic readback.
+    static let mixerBank = SafeMutationOracle.oracle(
+        .mixerBank,
+        semantics: [
+            .valueEquals(key: "operation", expected: .string("mixer.bank")),
+            .valueEquals(key: "channel", expected: .string("MCU")),
+            .enumMember(key: "direction", allowed: ["left", "right"]),
+            .numericRange(key: "banks_requested", min: 1, max: 31),
+            .fieldsEqual(keyA: "banks_moved", keyB: "banks_requested"),
+            .numericRange(key: "bank_presses_sent", min: 1, max: 93),
+            .typedField(key: "upper_row_writes_observed", type: .number),
+            .typedField(key: "bank_bookkeeping_before", type: .number),
+            .typedField(key: "bank_bookkeeping_after", type: .number),
+            .typedField(key: "window_before", type: .string),
+            .typedField(key: "window_after", type: .string),
+            .fieldsDiffer(keyA: "window_before", keyB: "window_after"),
+            .nonEmptyArray(key: "step_windows"),
+            .nonEmptyArray(key: "strips"),
+            .valueEquals(key: "verify_source", expected: .string("mcu_lcd_upper_row")),
         ]
     )
 }

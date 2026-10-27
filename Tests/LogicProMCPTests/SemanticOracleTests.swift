@@ -171,6 +171,14 @@ struct SemanticOracleEngineTests {
         #expect(!OracleConstraint.fieldsEqual(keyA: "absent", keyB: "observed").isSatisfied(by: object))
     }
 
+    @Test func fieldsDifferRequiresTwoPresentUnequalValues() {
+        let object = root(#"{"before":"bank 0","after":"bank 1","same":"bank 0"}"#)
+        let differs = OracleConstraint.fieldsDiffer(keyA: "before", keyB: "after")
+        #expect(differs.isSatisfied(by: object))
+        #expect(!OracleConstraint.fieldsDiffer(keyA: "before", keyB: "same").isSatisfied(by: object))
+        #expect(!OracleConstraint.fieldsDiffer(keyA: "before", keyB: "absent").isSatisfied(by: object))
+    }
+
     @Test func readbackArrayExcludesResponseIdentityRequiresAReadableIndependentAbsence() {
         let constraint = OracleConstraint.readbackArrayExcludesResponseIdentity(
             responsePositionKey: "target_position",
@@ -559,26 +567,39 @@ struct SemanticOracleCensusTests {
 
         let oracle = try #require(SemanticOracleTable.byOperationID[.mixerBank])
         let liveStateA = #"{"success":true,"verified":true,"state":"A","operation":"mixer.bank","channel":"MCU","direction":"right","bank_bookkeeping_before":0,"bank_bookkeeping_after":1,"bank_presses_sent":1,"banks_moved":1,"banks_requested":1,"step_windows":["DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn "],"upper_row_writes_observed":2,"window_before":"AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ","window_after":"DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ","strips":["DelCls","DelCls","DelCls","StdGrn","StdGrn","StdGrn","StdGrn","StdGrn"],"verify_source":"mcu_lcd_upper_row"}"#
-        #expect(oracle.evaluate(
+        let liveAccepted = try #require(oracle.evaluate(
             responseData: Data(liveStateA.utf8),
             readbackData: Data("{}".utf8)
-        ) == true)
+        ))
+        #expect(liveAccepted)
 
         let forgedWitness = liveStateA.replacingOccurrences(
             of: "mcu_lcd_upper_row", with: "button_press_sent"
         )
-        #expect(oracle.evaluate(
+        let forgedAccepted = try #require(oracle.evaluate(
             responseData: Data(forgedWitness.utf8),
             readbackData: Data("{}".utf8)
-        ) == false)
+        ))
+        #expect(!forgedAccepted)
 
         let partialWalk = liveStateA.replacingOccurrences(
             of: "\"banks_moved\":1", with: "\"banks_moved\":0"
         )
-        #expect(oracle.evaluate(
+        let partialAccepted = try #require(oracle.evaluate(
             responseData: Data(partialWalk.utf8),
             readbackData: Data("{}".utf8)
-        ) == false)
+        ))
+        #expect(!partialAccepted)
+
+        let unchangedWindow = liveStateA.replacingOccurrences(
+            of: "DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ",
+            with: "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls "
+        )
+        let unchangedAccepted = try #require(oracle.evaluate(
+            responseData: Data(unchangedWindow.utf8),
+            readbackData: Data("{}".utf8)
+        ))
+        #expect(!unchangedAccepted)
     }
 
     /// Soundness of the increment: every id in B1..B4 is a REAL `.mutating`,
@@ -787,6 +808,7 @@ struct SemanticOracleStrengthTests {
     /// constant onto a mutation oracle whose real check is the agreement.
     @Test func relationalConstraintsAreValueBearingAndSurviveTheStrengthGate() {
         #expect(OracleConstraint.fieldsEqual(keyA: "a", keyB: "b").isValueConstraint)
+        #expect(OracleConstraint.fieldsDiffer(keyA: "a", keyB: "b").isValueConstraint)
         #expect(OracleConstraint.crossCheck(responseKey: "a", readbackKey: "b").isValueConstraint)
 
         let fieldsEqualOnly = OperationOracle(
@@ -1740,6 +1762,15 @@ enum JSONMutator {
             }
             if let currentB = JSONPath.resolve(root, keyPath: keyB) {
                 mutants.append(contentsOf: replacements(root, keyB, [("diverge", divergent(from: currentB))]))
+            }
+        case .fieldsDiffer(let keyA, let keyB):
+            // Collapse either side onto the other; the before/after witness must
+            // remain genuinely different. (`drop keyA` is generic above.)
+            if let currentB = JSONPath.resolve(root, keyPath: keyB) {
+                mutants.append(contentsOf: replacements(root, keyA, [("make equal", currentB)]))
+            }
+            if let currentA = JSONPath.resolve(root, keyPath: keyA) {
+                mutants.append(contentsOf: replacements(root, keyB, [("make equal", currentA)]))
             }
         case .crossCheck(let responseKey, _):
             // The harness holds the readback fixed and mutates the response, so
