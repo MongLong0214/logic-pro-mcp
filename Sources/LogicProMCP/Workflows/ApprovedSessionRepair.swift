@@ -2101,7 +2101,12 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             }
         }
         var expected = task.capture.channelStrips
-        if assignment != task.before { expected[index].output = strips[index].output }
+        // The owned row was freshly read and already proved to encode `assignment` above.
+        // Preserve that paired display/observation even for a no-op assignment: capture-time
+        // rows can predate output observations, and treating corroborating evidence as drift
+        // makes an unchanged physical output fail its own final footprint check.
+        expected[index].output = strips[index].output
+        expected[index].outputObservation = strips[index].outputObservation
         if let ownedSendChange {
             stage = "owned_send_effect"
             guard taskOverride != nil, let sendTask,
@@ -2224,6 +2229,35 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             var changed: [String] = []
             var onlyMissingPeerRouting = expectedTracks == currentTracks
             var missingPeerRouting = false
+            func outputReadbackBecameUnavailable(_ row: Int) -> Bool {
+                guard let oldLabel = expected[row].output,
+                      let oldObservation = expected[row].outputObservation,
+                      oldObservation.state == .observedDestination,
+                      oldObservation.destination == oldLabel,
+                      OutputAssignment.observed(slotLabel: oldLabel) != nil,
+                      let newObservation = strips[row].outputObservation else { return false }
+                switch newObservation.state {
+                case .unreadable:
+                    return strips[row].output == nil && newObservation.destination == nil
+                case .observedDestination:
+                    guard let newLabel = strips[row].output,
+                          newObservation.destination == newLabel else { return false }
+                    return OutputAssignment.observed(slotLabel: newLabel) == nil
+                case .noSlot:
+                    return false
+                }
+            }
+            func inputReadbackBecameUnavailable(_ row: Int) -> Bool {
+                guard let oldSource = expected[row].input,
+                      let oldObservation = expected[row].inputObservation,
+                      oldObservation.state == .observedSource,
+                      oldObservation.source == oldSource,
+                      strips[row].input == nil,
+                      let newObservation = strips[row].inputObservation,
+                      newObservation.state == .unreadable,
+                      newObservation.source == nil else { return false }
+                return true
+            }
             for (domain, oldData, newData) in [("tracks", expectedTracks, currentTracks), ("strips", expectedStrips, currentStrips)] {
                 guard let old = try? JSONSerialization.jsonObject(with: oldData) as? [[String: Any]],
                       let new = try? JSONSerialization.jsonObject(with: newData) as? [[String: Any]] else {
@@ -2239,13 +2273,12 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                         guard domain == "strips", row != index else { onlyMissingPeerRouting = false; continue }
                         for key in keys {
                             switch key {
-                            case "output":
-                                if expected[row].output.flatMap(OutputAssignment.observed(slotLabel:)) == nil
-                                    || strips[row].output.flatMap(OutputAssignment.observed(slotLabel:)) != nil {
+                            case "output", "output_observation":
+                                if !outputReadbackBecameUnavailable(row) {
                                     onlyMissingPeerRouting = false
                                 }
                             case "input", "input_observation":
-                                if expected[row].input == nil || strips[row].input != nil { onlyMissingPeerRouting = false }
+                                if !inputReadbackBecameUnavailable(row) { onlyMissingPeerRouting = false }
                             default: onlyMissingPeerRouting = false
                             }
                         }

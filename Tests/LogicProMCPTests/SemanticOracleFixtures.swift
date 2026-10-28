@@ -1435,7 +1435,14 @@ enum SemanticOracleFixtures {
         // bank step produced a fresh, changed MCU LCD upper row and the final
         // eight strip labels. The other nine locale records carry the same keys.
         .mixerBank: SemanticOracleFixture(
-            response: #"{"success":true,"verified":true,"state":"A","operation":"mixer.bank","channel":"MCU","direction":"right","bank_bookkeeping_before":0,"bank_bookkeeping_after":1,"bank_presses_sent":1,"banks_moved":1,"banks_requested":1,"step_windows":["DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn "],"upper_row_writes_observed":2,"window_before":"AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ","window_after":"DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ","strips":["DelCls","DelCls","DelCls","StdGrn","StdGrn","StdGrn","StdGrn","StdGrn"],"verify_source":"mcu_lcd_upper_row"}"#,
+            response: #"{"success":true,"verified":true,"state":"A","operation":"mixer.bank","channel":"MCU","direction":"right","bank_bookkeeping_before":0,"bank_bookkeeping_after":1,"bank_presses_sent":1,"banks_moved":1,"banks_requested":1,"bank_steps_disambiguated":0,"bank_probe_unresolved":false,"step_windows":["DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn "],"requested_step_windows":["DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn "],"upper_row_writes_observed":2,"window_before":"AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ","window_after":"DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ","strips":["DelCls","DelCls","DelCls","StdGrn","StdGrn","StdGrn","StdGrn","StdGrn"],"verify_source":"mcu_lcd_upper_row"}"#,
+            readback: "{}"
+        ),
+        // #291 repository-contract fixture for the declared Bus 1 -> Stereo
+        // Output State-A envelope. It neither supplies nor replaces native
+        // candidate/log/hash evidence.
+        .mixerSetOutputVerified: SemanticOracleFixture(
+            response: #"{"success":true,"verified":true,"state":"A","operation":"mixer.set_output_verified","mixer_strip_index":12,"destination":{"kind":"stereo_output"},"before":{"kind":"bus","number":1},"after":{"kind":"stereo_output"},"changed":true,"write_attempted":true,"strip_count_before":38,"strip_count_after":38,"menu_path":["출력","Stereo Output"],"popup_menu_state":"closed","verify_source":"ax_output_slot"}"#,
             readback: "{}"
         ),
     ]

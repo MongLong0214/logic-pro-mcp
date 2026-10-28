@@ -183,6 +183,7 @@ final class InputBusSagaAdapter: @unchecked Sendable {
         if matchingOnly, let output = approved?.verifiedMatchingInputOutput(at: pair) {
             guard strips[index].output.flatMap(OutputAssignment.observed(slotLabel:)) == output else { return false }
             expected[index].output = strips[index].output
+            expected[index].outputObservation = strips[index].outputObservation
         }
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let input = AXHelpers.HelpReadGuard.$current.withValue(.init(allowHelpReads: true, stop: { !permitted() })) {
