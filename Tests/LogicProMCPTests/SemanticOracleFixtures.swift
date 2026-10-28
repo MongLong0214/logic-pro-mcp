@@ -201,6 +201,24 @@ enum SemanticOracleFixtures {
             .init(.wellFormedButWrong, response(["parameters": [Any]()])),
             .init(.wellFormedButWrong, response(["row_observations": [readableRow]])),
             .init(.wellFormedButWrong, response(["refused_row_count": 0])),
+            .init(.wellFormedButWrong, response([
+                "target_identity": ["track_index": 0, "insert": 6, "plugin_id": "Other"],
+                "target_fingerprint": "0:4:Bass|insert=6|plugin=Other",
+            ])),
+            .init(.wellFormedButWrong, response([
+                "target_fingerprint": "0:4:Bass|insert=6|plugin=Other",
+            ])),
+            .init(.wellFormedButWrong, response([
+                "canonical_plugin_identifier": "Other",
+                "identity_evidence": [
+                    "plugin_name": "Raum",
+                    "plugin_name_source": "directWindowStaticText",
+                    "window_title": "Raum",
+                    "direct_static_text_values": ["Raum"],
+                    "observed_window_ax_identifier": NSNull(),
+                    "canonical_plugin_identifier": "Other",
+                ],
+            ])),
         ])
     }()
 

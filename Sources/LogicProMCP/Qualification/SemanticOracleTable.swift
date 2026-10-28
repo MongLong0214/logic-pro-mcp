@@ -934,15 +934,35 @@ enum SemanticOracleTable {
             guard let value else { return false }
             return value is NSNull || JSONInspector.isBoolean(value)
         }
-        func nullableStringsMatch(_ lhs: Any?, _ rhs: Any?) -> Bool {
-            if lhs is NSNull, rhs is NSNull { return true }
-            guard let left = nonEmptyString(lhs), let right = nonEmptyString(rhs) else { return false }
-            return left == right
-        }
         func parameterName(from label: String) -> String {
             let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
             let withoutColon = trimmed.hasSuffix(":") ? String(trimmed.dropLast()) : trimmed
             return withoutColon.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        func targetFingerprintMatchesIdentity(
+            _ fingerprint: String,
+            trackIndex: Int,
+            insert: Int,
+            pluginID: String
+        ) -> Bool {
+            let bytes = Array(fingerprint.utf8)
+            let trackPrefix = Array("\(trackIndex):".utf8)
+            guard bytes.starts(with: trackPrefix) else { return false }
+            let lengthStart = trackPrefix.count
+            guard lengthStart < bytes.count,
+                  let lengthEnd = bytes[lengthStart...].firstIndex(of: 58),
+                  lengthStart < lengthEnd,
+                  let nameLength = Int(String(
+                    decoding: bytes[lengthStart..<lengthEnd],
+                    as: UTF8.self
+                  )),
+                  nameLength >= 0 else { return false }
+            let nameStart = lengthEnd + 1
+            guard nameStart <= bytes.count,
+                  nameLength <= bytes.count - nameStart else { return false }
+            let suffixStart = nameStart + nameLength
+            let expectedSuffix = Array("|insert=\(insert)|plugin=\(pluginID)".utf8)
+            return bytes[suffixStart...].elementsEqual(expectedSuffix)
         }
 
         guard let object = JSONInspector.parse(responseData) as? [String: Any],
@@ -959,16 +979,23 @@ enum SemanticOracleTable {
               object["build_fingerprint_source"] as? String == "caller_expected_unverified",
               let targetReference = nonEmptyString(object["target_ref"]),
               targetReference.hasPrefix("ins_"),
-              nonEmptyString(object["target_fingerprint"]) != nil,
+              let targetFingerprint = nonEmptyString(object["target_fingerprint"]),
               let targetIdentity = object["target_identity"] as? [String: Any],
-              exactNonnegativeInt(targetIdentity["track_index"]) != nil,
-              exactNonnegativeInt(targetIdentity["insert"]) != nil,
-              nonEmptyString(targetIdentity["plugin_id"]) != nil,
+              let targetTrackIndex = exactNonnegativeInt(targetIdentity["track_index"]),
+              let targetInsert = exactNonnegativeInt(targetIdentity["insert"]),
+              let targetPluginID = nonEmptyString(targetIdentity["plugin_id"]),
               let pluginName = nonEmptyString(object["plugin_name"]),
+              targetPluginID == (VerifiedPluginCatalog.pluginID(forObservedName: pluginName) ?? pluginName),
+              targetFingerprintMatchesIdentity(
+                targetFingerprint,
+                trackIndex: targetTrackIndex,
+                insert: targetInsert,
+                pluginID: targetPluginID
+              ),
               nonEmptyString(object["build_fingerprint"]) != nil,
               nonEmptyString(object["ui_signature_fingerprint"]) != nil,
               nonEmptyString(object["manifest_fingerprint"]) != nil,
-              let parameters = object["parameters"] as? [[String: Any]], !parameters.isEmpty,
+              let parameters = object["parameters"] as? [[String: Any]],
               let rows = object["row_observations"] as? [[String: Any]], !rows.isEmpty,
               exactNonnegativeInt(object["parameter_count"]) == parameters.count,
               exactNonnegativeInt(object["row_observation_count"]) == rows.count,
@@ -981,12 +1008,8 @@ enum SemanticOracleTable {
               directTexts.contains(pluginName),
               object.keys.contains("canonical_plugin_identifier"),
               identity.keys.contains("canonical_plugin_identifier"),
-              nullableNonEmptyString(object["canonical_plugin_identifier"]),
-              nullableNonEmptyString(identity["canonical_plugin_identifier"]),
-              nullableStringsMatch(
-                  object["canonical_plugin_identifier"],
-                  identity["canonical_plugin_identifier"]
-              ),
+              object["canonical_plugin_identifier"] is NSNull,
+              identity["canonical_plugin_identifier"] is NSNull,
               identity.keys.contains("observed_window_ax_identifier"),
               nullableNonEmptyString(identity["observed_window_ax_identifier"])
         else { return false }
@@ -999,7 +1022,6 @@ enum SemanticOracleTable {
             guard exactNonnegativeInt(row["row_index"]) == position,
                   row.keys.contains("observed_label"), nullableString(row["observed_label"]),
                   let controlRoles = row["control_roles"] as? [String],
-                  Set(controlRoles).count == controlRoles.count,
                   controlRoles.allSatisfy(allowedRoles.contains),
                   row.keys.contains("value_description"), nullableString(row["value_description"]),
                   row.keys.contains("value_is_settable"), nullableBoolean(row["value_is_settable"]),
