@@ -227,6 +227,9 @@ struct ChannelStripState: Sendable, Codable {
     /// not absence. A source is the slot's display bytes, never a bus/port/aux identity.
     var inputObservation: InputSlotObservation?
     var output: String?
+    /// The existing output-slot reader's result. Nil means not read (including legacy/MCU data),
+    /// not absence. A destination is the slot's display bytes, never endpoint identity.
+    var outputObservation: OutputSlotObservation?
     var eqEnabled: Bool = false
     var plugins: [PluginSlotState] = []
     /// Provenance for `plugins`. `"ax"` means the insert chain was inspected
@@ -245,6 +248,7 @@ struct ChannelStripState: Sendable, Codable {
         case nameReadError = "name_read_error"
         case sendSlots = "send_slots"
         case inputObservation = "input_observation"
+        case outputObservation = "output_observation"
         case typeLabelObservation = "observed_type_label"
         case pluginsSource = "plugins_source"
         case pluginsReadError = "plugins_read_error"
@@ -277,6 +281,18 @@ enum InputSlotObservationState: String, Sendable, Codable {
 struct InputSlotObservation: Sendable, Codable, Equatable {
     let state: InputSlotObservationState
     let source: String?
+}
+
+enum OutputSlotObservationState: String, Sendable, Codable {
+    case observedDestination = "observed_destination"
+    case noSlot = "no_slot"
+    case unreadable
+}
+
+/// A local output-slot observation, not a routing endpoint or edge.
+struct OutputSlotObservation: Sendable, Codable, Equatable {
+    let state: OutputSlotObservationState
+    let destination: String?
 }
 
 /// A send on a channel strip.

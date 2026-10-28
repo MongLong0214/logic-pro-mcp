@@ -105,6 +105,28 @@ struct StateModelsCodableTests {
         #expect(!wire.contains("\"pluginsSource\""))
     }
 
+    @Test func channelStripOutputObservationKeepsUnknownSeparateFromNoSlot() throws {
+        var observed = ChannelStripState(trackIndex: 2, output: "Stereo Output")
+        observed.outputObservation = .init(
+            state: .observedDestination, destination: "Stereo Output")
+        try assertRoundTrips(observed, "ChannelStripState (observed output destination)")
+        let observedWire = string(try encoder().encode(observed))
+        #expect(observedWire.contains("\"output_observation\""))
+        #expect(observedWire.contains("\"state\":\"observed_destination\""))
+        #expect(observedWire.contains("\"destination\":\"Stereo Output\""))
+
+        var noSlot = ChannelStripState(trackIndex: 20)
+        noSlot.outputObservation = .init(state: .noSlot, destination: nil)
+        let noSlotWire = string(try encoder().encode(noSlot))
+        #expect(noSlotWire.contains("\"state\":\"no_slot\""))
+        #expect(!noSlotWire.contains("\"destination\""))
+
+        let legacy = #"{"trackIndex":0,"volume":0,"pan":0,"eqEnabled":false,"plugins":[]}"#
+        let decoded = try decoder().decode(ChannelStripState.self, from: Data(legacy.utf8))
+        #expect(decoded.outputObservation == nil,
+                "an old missing field is not positive no-output-slot evidence")
+    }
+
     @Test func sendAndPluginSlotRoundTrip() throws {
         try assertRoundTrips(SendState(index: 1, destination: "Reverb", level: 0.8, isPreFader: true), "SendState")
         try assertRoundTrips(PluginSlotState(index: 2, name: "Channel EQ", isBypassed: true), "PluginSlotState")

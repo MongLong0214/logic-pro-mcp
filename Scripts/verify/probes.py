@@ -23,7 +23,7 @@ declaration (setups.py), the MCP server handle (`session`: tool calls and resour
 lifecycle, which keeps sidecars. `unimplemented` names a declared probe live/spec_probes.py does
 not implement; the runner refuses a spec that uses one.
 
-The declarations below are the ones `docs/acceptance/1020.json` uses. `args` maps an argument
+The declarations below are the ones the pilot acceptance documents use. `args` maps an argument
 name to its JSON type (`int`, `str`, `bool`); `returns` is the JSON shape the engine will read
 paths from, and it is a contract P0b's implementation is tested against.
 """
@@ -52,6 +52,30 @@ PROBES = {
         "reads": "logic://mcu/state, the PRODUCT's reading (nothing else reads the LCD): "
                  "display.upperRow, the Mackie Control LCD upper row as the server last received "
                  "it, with the resource text embedded whole.",
+    },
+    "routing_slots": {
+        "args": {},
+        "returns": '{"strip_count": <int>, "occupied_strips": [<int>, ...], '
+                   '"send_counts": [<int>, ...], "inputs": [<assignment | null>, ...], '
+                   '"outputs": [<assignment | null>, ...], "product_edges": [<edge>, ...], '
+                   '"product_send_edges": []}',
+        "reads": "the verifier's own routing_slots_ax walk of the Mixer. Output descriptions are "
+                 "classified only with the installed Logic bundle's rows for this locale; unknown "
+                 "text remains explicit. Send occupancy comes only from the independently witnessed "
+                 "slot/knob shape, never from the product's send state. It also reads the product's "
+                 "logic://mixer before and after a completed refresh_cache AX poll, requires the "
+                 "Mixer timestamp to advance with fresh ax_poll provenance and its full routing "
+                 "topology to equal the independent walk, and is UNREADABLE if that graph "
+                 "publishes a Send source edge without an independently witnessed destination.",
+    },
+    "routing_send_assign": {
+        "args": {"strip": "int"},
+        "returns": '{"strip": <int>, "selected": <str>, "record_sha256": <str>}',
+        "reads": "the registered #291 positive-control actuator: press the declared fixture "
+                 "strip's sole empty Send and select the highest numbered Bus by its localized "
+                 "Apple-row title. The full actuation/settlement record is kept as a sidecar. "
+                 "The acceptance row restores it through the product's public undo command and "
+                 "independently reads the restored Mixer.",
     },
 }
 
