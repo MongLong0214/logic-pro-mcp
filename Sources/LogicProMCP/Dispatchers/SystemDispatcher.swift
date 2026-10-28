@@ -2285,6 +2285,9 @@ struct SystemDispatcher: OperationTraceDispatching {
             return """
                 logic_plugins commands:
                   get_inventory     -> { track: Int } — Read a drift-safe insert chain
+                  get_host_parameter_manifest -> { target_ref: String (occupied ins_ reference),
+                                                   expected_build_fingerprint: String }
+                                                 — Read an unapproved Controls-view manifest; never write-qualified
                   get_param_verified -> { target_ref: String (occupied ins_ reference), param: String,
                                           unit?: String } — Read one qualified parameter without audio mutation
                     Compressor ratio is read-only: raw_ax_value plus verbatim observed_display; it grants no write method.
@@ -2363,7 +2366,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                   logic_project    — Project lifecycle (open, save, bounce...)
                   logic_audio      — Read-only audio artifact analysis
                   logic_system     — Diagnostics + help
-                  logic_plugins    — Verified plugin reads and apply-back (get_inventory, get_param_verified, set_param_verified, set_eq_band_verified, insert_verified)
+                  logic_plugins    — Verified plugin reads and apply-back (get_inventory, get_host_parameter_manifest, get_param_verified, set_param_verified, set_eq_band_verified, insert_verified)
 
                 Resources (reads — zero tool cost):
                   logic://system/health         — System health
