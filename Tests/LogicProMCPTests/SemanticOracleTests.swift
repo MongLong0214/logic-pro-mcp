@@ -874,6 +874,24 @@ struct SemanticOracleStrengthTests {
 
 @Suite("#373 semantic oracle fixtures and mutation")
 struct SemanticOracleMutationTests {
+    @Test func hostParameterManifestOraclePinsTargetRowsRefusalsAndReadOnlyAuthority() throws {
+        let operationID = OperationID.pluginsGetHostParameterManifest
+        let oracle = try #require(SemanticOracleTable.byOperationID[operationID])
+        let fixture = try #require(SemanticOracleFixtures.byOperationID[operationID])
+        let accepted = try #require(oracle.evaluate(
+            responseData: fixture.responseData,
+            readbackData: fixture.readbackData
+        ))
+        #expect(accepted)
+        for mutant in fixture.customMutants {
+            let rejected = oracle.evaluate(
+                responseData: Data(mutant.response.utf8),
+                readbackData: fixture.readbackData
+            ) == false
+            #expect(rejected, "manifest oracle accepted a \(mutant.kind.rawValue) corruption")
+        }
+    }
+
     @Test("#448 sort State A rejects a response whose actuated criterion differs from the request")
     func trackSortOracleRejectsWrongActuatedCriterion() throws {
         let oracle = try #require(SemanticOracleTable.byOperationID[.tracksSortVerified])
@@ -1465,7 +1483,7 @@ struct SemanticOracleMutationTests {
             .filter { $0.independentReadbackDeferral != nil }.map(\.operationID))
         #expect(marked == Set<OperationID>([.midiListPorts, .mixerGetOutputVerified, .mixerGetSendDestinationVerified,
             .mixerGetInputBusVerified, .mixerGetSendBypassVerified, .pluginsPlanParameterChanges,
-            .pluginsGetParamVerified, .pluginsGetChannelEQStateVerified]))
+            .pluginsGetHostParameterManifest, .pluginsGetParamVerified, .pluginsGetChannelEQStateVerified]))
         let fixture = try #require(SemanticOracleFixtures.byOperationID[operationID])
         let routed = QualificationSemanticReadbackValidator.validate(
             operationID: operationID.rawValue,

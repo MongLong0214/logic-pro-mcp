@@ -132,6 +132,78 @@ enum SemanticOracleFixtures {
         ])
     }()
 
+    private static let hostParameterManifestRead: SemanticOracleFixture = {
+        let refusedRow: [String: Any] = [
+            "row_index": 0,
+            "observed_label": "Compressor",
+            "control_roles": [String](),
+            "value_description": NSNull(),
+            "value_is_settable": NSNull(),
+            "classification": "refused_no_control",
+        ]
+        let readableRow: [String: Any] = [
+            "row_index": 1,
+            "observed_label": "Limiter On",
+            "control_roles": ["AXCheckBox"],
+            "value_description": "1",
+            "value_is_settable": true,
+            "classification": "parameter_readable_AXCheckBox",
+        ]
+        let parameter: [String: Any] = [
+            "parameter_ref": "controls_view_row_1",
+            "name": "Limiter On",
+            "value_kind": "normalizedReadbackOnly",
+            "control_role": "AXCheckBox",
+            "page": 0,
+            "index": 1,
+        ]
+        let extras: [String: Any] = [
+            "operation": "logic_plugins.get_host_parameter_manifest",
+            "target_ref": "ins_00000000-0000-0000-0000-000000000306",
+            "target_fingerprint": "0:4:Bass|insert=6|plugin=Raum",
+            "target_identity": ["track_index": 0, "insert": 6, "plugin_id": "Raum"],
+            "provider": "controls_view_ax",
+            "plugin_name": "Raum",
+            "build_fingerprint": "raum-build-unverified",
+            "build_fingerprint_source": "caller_expected_unverified",
+            "ui_signature_fingerprint": "ui-signature-fixture",
+            "manifest_fingerprint": "manifest-fixture",
+            "approved": false,
+            "write_qualified": false,
+            "complete": true,
+            "parameters": [parameter],
+            "parameter_count": 1,
+            "row_observations": [refusedRow, readableRow],
+            "row_observation_count": 2,
+            "refused_row_count": 1,
+            "identity_evidence": [
+                "plugin_name": "Raum",
+                "plugin_name_source": "directWindowStaticText",
+                "window_title": "Raum",
+                "direct_static_text_values": ["Raum"],
+                "observed_window_ax_identifier": NSNull(),
+                "canonical_plugin_identifier": NSNull(),
+            ],
+            "canonical_plugin_identifier": NSNull(),
+            "write_attempted": false,
+        ]
+        func response(_ changes: [String: Any] = [:]) -> String {
+            HonestContract.encodeV2StateA(extras: extras.merging(changes) { _, new in new })
+        }
+        return SemanticOracleFixture(response: response(), readback: "{}", customMutants: [
+            .init(.malformed, "{}"),
+            .init(.wellFormedButWrong, response(["target_identity": [String: Any]()])),
+            .init(.wellFormedButWrong, response(["target_ref": ""])),
+            .init(.wellFormedButWrong, response(["build_fingerprint_source": "host_verified"])),
+            .init(.wellFormedButWrong, response(["approved": true])),
+            .init(.wellFormedButWrong, response(["write_qualified": true])),
+            .init(.wellFormedButWrong, response(["write_attempted": true])),
+            .init(.wellFormedButWrong, response(["parameters": [Any]()])),
+            .init(.wellFormedButWrong, response(["row_observations": [readableRow]])),
+            .init(.wellFormedButWrong, response(["refused_row_count": 0])),
+        ])
+    }()
+
     // Independently constructed protocol fixture; not native qualification evidence.
     private static let channelEQStateRead: SemanticOracleFixture = {
         func field(_ raw: Any, _ unit: String, _ display: Any = NSNull()) -> [String: Any] {
@@ -182,6 +254,7 @@ enum SemanticOracleFixtures {
     }()
 
     static let byOperationID: [OperationID: SemanticOracleFixture] = [
+        .pluginsGetHostParameterManifest: hostParameterManifestRead,
         .pluginsPlanParameterChanges: SemanticOracleFixture(response: HonestContract.encodeV2StateA(extras: [
             "operation": "logic_plugins.plan_parameter_changes", "complete": true,
             "observation_scope": "requested_supported_subset", "atomic_snapshot": false,

@@ -2904,7 +2904,12 @@ extension AccessibilityChannel {
             "write_qualified": false,
             "complete": true,
             "parameters": parameters,
+            "parameter_count": parameters.count,
             "row_observations": rows,
+            "row_observation_count": rows.count,
+            "refused_row_count": rows.filter {
+                ($0["classification"] as? String)?.hasPrefix("refused_") == true
+            }.count,
             "identity_evidence": identityEnvelope,
             "canonical_plugin_identifier": canonicalPluginIdentifier,
             "write_attempted": false,

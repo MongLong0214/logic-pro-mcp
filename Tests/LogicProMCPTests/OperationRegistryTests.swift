@@ -909,6 +909,8 @@ struct OperationRegistryTests {
             command: "help", params: ["category": .string("plugins")],
             router: ChannelRouter(), cache: StateCache())
         let text = sharedToolText(result)
+        #expect(text.contains("get_host_parameter_manifest"))
+        #expect(text.contains("expected_build_fingerprint"))
         #expect(text.contains("get_param_verified"))
         #expect(text.contains("target_ref"))
         #expect(text.contains("param"))

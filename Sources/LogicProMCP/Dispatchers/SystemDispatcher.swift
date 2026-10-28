@@ -2285,6 +2285,9 @@ struct SystemDispatcher: OperationTraceDispatching {
             return """
                 logic_plugins commands:
                   get_inventory     -> { track: Int } — Read a drift-safe insert chain
+                  get_host_parameter_manifest -> { target_ref: String (occupied ins_ reference),
+                                                   expected_build_fingerprint: String }
+                                                 — Read an unapproved Controls-view manifest; never write-qualified
                   get_param_verified -> { target_ref: String (occupied ins_ reference), param: String,
                                           unit?: String } — Read one qualified parameter without audio mutation
                   set_param_verified -> { track: Int, insert: Int, plugin: String,

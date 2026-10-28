@@ -533,6 +533,7 @@ enum SemanticOracleTable {
         systemSagaPreflight,
         systemSagaStatus,
         pluginsGetInventory,
+        pluginsGetHostParameterManifest,
         pluginsGetParamVerified,
         pluginsPlanParameterChanges,
         pluginsGetChannelEQStateVerified,
@@ -670,6 +671,8 @@ enum SemanticOracleTable {
         .projectGetRegions,
         // Same shape as projectGetRegions: two success branches, and a flat list can only pin one.
         .audioRecommendEQ,
+        // Conditional parameter/refusal rows need a row-to-parameter bijection and exact counts.
+        .pluginsGetHostParameterManifest,
         // The catalog's checkbox/slider distinction and conditional display status require
         // the custom response validator below, not a single numeric field constraint.
         .pluginsGetParamVerified,
@@ -887,6 +890,175 @@ enum SemanticOracleTable {
             .typedField(key: "plugins", type: .array),
         ]
     )
+
+    // AccessibilityChannel `defaultGetHostParameterManifest` returns one target-bound,
+    // unapproved Controls-view census. The rows and parameters are conditional and must be
+    // checked as a bijection: a flat constraint list cannot prove that readable/unreadable
+    // parameter rows retain their physical row indices while every refusal remains counted.
+    // This validates the response contract only. The same AX acquisition emits both the
+    // manifest and its evidence, and Logic exposes no trusted plug-in build identifier, so it
+    // deliberately retains an independent-readback deferral.
+    static let pluginsGetHostParameterManifest = OperationOracle(
+        custom: .pluginsGetHostParameterManifest,
+        reason: "The Controls-view manifest has conditional parameter/refusal rows whose physical indices, roles, classifications and exact counts must agree; the flat constraint model cannot express that row-to-parameter bijection.",
+        independentReadbackDeferral: QualificationDeferral(
+            code: .semanticValidatorUnavailable,
+            detail: "The manifest rows, identity evidence and caller-expected build fingerprint come from one AX acquisition; no independent build or typed parameter readback exists"
+        )
+    ) { responseData, _ in
+        func nonEmptyString(_ value: Any?) -> String? {
+            guard let value = value as? String else { return nil }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        func exactNonnegativeInt(_ value: Any?) -> Int? {
+            guard let value,
+                  let number = JSONInspector.number(of: value),
+                  number.isFinite, number >= 0,
+                  let exact = Int(exactly: number) else { return nil }
+            return exact
+        }
+        func exactBool(_ value: Any?, _ expected: Bool) -> Bool {
+            guard let value, JSONInspector.isBoolean(value), let boolean = value as? Bool else {
+                return false
+            }
+            return boolean == expected
+        }
+        func nullableString(_ value: Any?) -> Bool {
+            value is NSNull || value is String
+        }
+        func nullableNonEmptyString(_ value: Any?) -> Bool {
+            value is NSNull || nonEmptyString(value) != nil
+        }
+        func nullableBoolean(_ value: Any?) -> Bool {
+            guard let value else { return false }
+            return value is NSNull || JSONInspector.isBoolean(value)
+        }
+        func nullableStringsMatch(_ lhs: Any?, _ rhs: Any?) -> Bool {
+            if lhs is NSNull, rhs is NSNull { return true }
+            guard let left = nonEmptyString(lhs), let right = nonEmptyString(rhs) else { return false }
+            return left == right
+        }
+        func parameterName(from label: String) -> String {
+            let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+            let withoutColon = trimmed.hasSuffix(":") ? String(trimmed.dropLast()) : trimmed
+            return withoutColon.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        guard let object = JSONInspector.parse(responseData) as? [String: Any],
+              object["state"] as? String == "A",
+              object["hc_schema"].flatMap(JSONInspector.number) == 2,
+              object["operation"] as? String == "logic_plugins.get_host_parameter_manifest",
+              exactBool(object["success"], true),
+              exactBool(object["verified"], true),
+              exactBool(object["complete"], true),
+              exactBool(object["approved"], false),
+              exactBool(object["write_qualified"], false),
+              exactBool(object["write_attempted"], false),
+              object["provider"] as? String == "controls_view_ax",
+              object["build_fingerprint_source"] as? String == "caller_expected_unverified",
+              let targetReference = nonEmptyString(object["target_ref"]),
+              targetReference.hasPrefix("ins_"),
+              nonEmptyString(object["target_fingerprint"]) != nil,
+              let targetIdentity = object["target_identity"] as? [String: Any],
+              exactNonnegativeInt(targetIdentity["track_index"]) != nil,
+              exactNonnegativeInt(targetIdentity["insert"]) != nil,
+              nonEmptyString(targetIdentity["plugin_id"]) != nil,
+              let pluginName = nonEmptyString(object["plugin_name"]),
+              nonEmptyString(object["build_fingerprint"]) != nil,
+              nonEmptyString(object["ui_signature_fingerprint"]) != nil,
+              nonEmptyString(object["manifest_fingerprint"]) != nil,
+              let parameters = object["parameters"] as? [[String: Any]], !parameters.isEmpty,
+              let rows = object["row_observations"] as? [[String: Any]], !rows.isEmpty,
+              exactNonnegativeInt(object["parameter_count"]) == parameters.count,
+              exactNonnegativeInt(object["row_observation_count"]) == rows.count,
+              let declaredRefusedCount = exactNonnegativeInt(object["refused_row_count"]),
+              let identity = object["identity_evidence"] as? [String: Any],
+              identity["plugin_name"] as? String == pluginName,
+              identity["plugin_name_source"] as? String == "directWindowStaticText",
+              nonEmptyString(identity["window_title"]) != nil,
+              let directTexts = identity["direct_static_text_values"] as? [String],
+              directTexts.contains(pluginName),
+              object.keys.contains("canonical_plugin_identifier"),
+              identity.keys.contains("canonical_plugin_identifier"),
+              nullableNonEmptyString(object["canonical_plugin_identifier"]),
+              nullableNonEmptyString(identity["canonical_plugin_identifier"]),
+              nullableStringsMatch(
+                  object["canonical_plugin_identifier"],
+                  identity["canonical_plugin_identifier"]
+              ),
+              identity.keys.contains("observed_window_ax_identifier"),
+              nullableNonEmptyString(identity["observed_window_ax_identifier"])
+        else { return false }
+
+        let allowedRoles: Set<String> = ["AXSlider", "AXCheckBox", "AXPopUpButton", "AXRadioButton"]
+        var parameterRows: [Int: (role: String, readable: Bool, label: String)] = [:]
+        var refusedCount = 0
+
+        for (position, row) in rows.enumerated() {
+            guard exactNonnegativeInt(row["row_index"]) == position,
+                  row.keys.contains("observed_label"), nullableString(row["observed_label"]),
+                  let controlRoles = row["control_roles"] as? [String],
+                  Set(controlRoles).count == controlRoles.count,
+                  controlRoles.allSatisfy(allowedRoles.contains),
+                  row.keys.contains("value_description"), nullableString(row["value_description"]),
+                  row.keys.contains("value_is_settable"), nullableBoolean(row["value_is_settable"]),
+                  let classification = nonEmptyString(row["classification"])
+            else { return false }
+
+            if classification.hasPrefix("parameter_readable_")
+                || classification.hasPrefix("parameter_unreadable_") {
+                let readable = classification.hasPrefix("parameter_readable_")
+                let prefix = readable ? "parameter_readable_" : "parameter_unreadable_"
+                let role = String(classification.dropFirst(prefix.count))
+                guard allowedRoles.contains(role), controlRoles == [role],
+                      let label = nonEmptyString(row["observed_label"]),
+                      parameterRows[position] == nil else { return false }
+                parameterRows[position] = (role, readable, label)
+                continue
+            }
+
+            guard classification.hasPrefix("refused_") else { return false }
+            refusedCount += 1
+            switch classification {
+            case "refused_no_control":
+                guard controlRoles.isEmpty else { return false }
+            case "refused_unpaired_label_and_control":
+                guard controlRoles.count == 1 else { return false }
+            case "refused_empty_label", "refused_placeholder_label", "refused_ambiguous_label":
+                break
+            default:
+                let prefix = "refused_ambiguous_control_"
+                guard classification.hasPrefix(prefix) else { return false }
+                let roles = String(classification.dropFirst(prefix.count))
+                    .split(separator: ",").map(String.init)
+                guard roles.count > 1, roles == controlRoles,
+                      roles.allSatisfy(allowedRoles.contains) else { return false }
+            }
+        }
+
+        guard refusedCount == declaredRefusedCount,
+              parameterRows.count == parameters.count else { return false }
+        var seenReferences = Set<String>()
+        var seenIndices = Set<Int>()
+        for parameter in parameters {
+            guard let index = exactNonnegativeInt(parameter["index"]),
+                  exactNonnegativeInt(parameter["page"]) == 0,
+                  let reference = nonEmptyString(parameter["parameter_ref"]),
+                  reference == "controls_view_row_\(index)",
+                  seenReferences.insert(reference).inserted,
+                  seenIndices.insert(index).inserted,
+                  let name = nonEmptyString(parameter["name"]),
+                  let role = nonEmptyString(parameter["control_role"]),
+                  allowedRoles.contains(role),
+                  let valueKind = nonEmptyString(parameter["value_kind"]),
+                  let row = parameterRows[index], row.role == role,
+                  parameterName(from: row.label) == name,
+                  valueKind == (row.readable ? "normalizedReadbackOnly" : "unsupported")
+            else { return false }
+        }
+        return seenIndices == Set(parameterRows.keys)
+    }
 
     // The response protocol is conditional on the existing catalog's read method:
     // checkbox raw values are Boolean; native-slider raw values are finite numbers.

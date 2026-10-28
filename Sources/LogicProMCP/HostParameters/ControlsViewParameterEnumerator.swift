@@ -6,11 +6,10 @@ import Foundation
 /// observation-only: it never treats AX settable state as a successful
 /// write/readback round trip.
 ///
-/// No operation calls this producer yet. Wiring must attach to an owner that
-/// already resolves one plug-in editor window, selects and confirms Controls
-/// view, and can decide whether exposing an unapproved, display-name-only
-/// manifest belongs on that operation's public contract. This component does
-/// not make that reachability decision or add a public operation itself.
+/// `logic_plugins.get_host_parameter_manifest` calls this producer only after
+/// resolving one occupied target reference, acquiring its exact plug-in editor,
+/// and confirming Controls view. The producer still makes no reachability,
+/// approval, or write-authority decision of its own.
 enum ControlsViewParameterEnumerator {
     enum PluginNameSource: String, Codable, Equatable, Sendable {
         case directWindowStaticText
