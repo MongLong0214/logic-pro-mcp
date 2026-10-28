@@ -763,7 +763,10 @@ enum OwnedAuxLifecycle {
                   let controls = initialControls?(strip) ?? nativeControls(strip, tree: tree),
                   controls.count == Field.allCases.count,
                   let sends = AXLogicProElements.sendSlotObservations(in: strip, runtime: runtime.ax),
-                  sends.count == 2, sends.allSatisfy({ $0.state == .observedEmpty }),
+                  // The native empty presentation can expose one anchor; the
+                  // existing two-anchor shape remains supported. Neither count
+                  // substitutes for a complete read of every slot's empty state.
+                  (1...2).contains(sends.count), sends.allSatisfy({ $0.state == .observedEmpty }),
                   let plugins = AXLogicProElements.audioPluginInsertSlots(in: strip, runtime: runtime.ax),
                   plugins.count == 1, plugins.allSatisfy(\.isEmpty) else { return nil }
             var observed: [Field: Value] = [:]
@@ -1424,7 +1427,17 @@ enum OwnedAuxLifecycle {
                 do { try await waitForNextSample() } catch { return receipt(.residual, strip: strip) }
                 guard let current = census() else { return receipt(.residual, strip: strip) }
                 if removedAfterWholePeerRedraw(current, strip: strip) { return receipt(.removed, strip: strip) }
-                guard preserved() else { return receipt(.residual, strip: strip) }
+                if !preserved() {
+                    // A whole peer redraw can retire the original observations
+                    // before the deleted object's invalidation settles. Spend
+                    // only the remaining read-only samples; the full terminal
+                    // preservation/invalidation proof above is unchanged.
+                    guard current.count == preservationPeers.count,
+                          !current.contains(where: { CFEqual($0, strip) }),
+                          preservationPeers.allSatisfy({ peer in !current.contains { CFEqual($0, peer) } })
+                    else { return receipt(.residual, strip: strip) }
+                    continue
+                }
                 if same(current, preservationPeers),
                    let bookend = census(), same(current, bookend), preserved() {
                     // A transient full AX census can equal the original baseline.
