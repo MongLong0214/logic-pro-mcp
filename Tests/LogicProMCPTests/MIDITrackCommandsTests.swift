@@ -9,8 +9,10 @@ private let midiCommandSMF = Data([0x4D,0x54,0x68,0x64,0,0,0,6,0,0,0,1,1,0xE0,
     0x4D,0x54,0x72,0x6B,0,0,0,12,0,0x90,60,100,1,0x80,60,0,0,0xFF,0x2F,0])
 
 private actor MIDIExportCallRecorder {
-    var calls: [(String, String, String?)] = []
-    func record(_ project: String, _ track: String, _ path: String?) { calls.append((project, track, path)) }
+    var calls: [(String, String, String?, Bool)] = []
+    func record(_ project: String, _ track: String, _ path: String?, _ allowRename: Bool) {
+        calls.append((project, track, path, allowRename))
+    }
 }
 
 // These commands write the shared trace store. Use the existing serialized
@@ -23,8 +25,8 @@ func midiTrackCommandsWireExactReferencesAndReturnFileTimelineFacts(command: Str
     var params: [String: Value] = ["project_ref": .string(midiCommandProject), "target_ref": .string(midiCommandTrack)]
     if command == "export_track_midi" { params["path"] = .string("/tmp/target.mid") }
     let result = await MIDIDispatcher.handle(command: command, params: params, router: ChannelRouter(), cache: StateCache(),
-        trackFileExport: { project, track, path in
-            await recorder.record(project, track, path)
+        trackFileExport: { project, track, path, allowRename in
+            await recorder.record(project, track, path, allowRename)
             return .init(document: try SMFReader.parseDocument(midiCommandSMF))
         })
     let failed = try #require(result.isError)
@@ -41,6 +43,28 @@ func midiTrackCommandsWireExactReferencesAndReturnFileTimelineFacts(command: Str
     let calls = await recorder.calls
     #expect(calls.count == 1 && calls.first?.0 == midiCommandProject && calls.first?.1 == midiCommandTrack)
     #expect(calls.first?.2 == (command == "export_track_midi" ? "/tmp/target.mid" : nil))
+    let allowedRename = try #require(calls.first?.3 as Bool?)
+    #expect(!allowedRename)
+}
+
+@Test(arguments: ["export_track_midi", "read_track_notes"])
+func midiTrackCommandsForwardExplicitTemporaryRenameConsent(command: String) async throws {
+    let recorder = MIDIExportCallRecorder()
+    var params: [String: Value] = [
+        "project_ref": .string(midiCommandProject), "target_ref": .string(midiCommandTrack),
+        "allow_temporary_track_rename": .bool(true),
+    ]
+    if command == "export_track_midi" { params["path"] = .string("/tmp/target.mid") }
+    let result = await MIDIDispatcher.handle(
+        command: command, params: params, router: ChannelRouter(), cache: StateCache(),
+        trackFileExport: { project, track, path, allowRename in
+            await recorder.record(project, track, path, allowRename)
+            return .init(document: try SMFReader.parseDocument(midiCommandSMF))
+        })
+    let failed = try #require(result.isError)
+    #expect(!failed)
+    let allowedRename = try #require(await recorder.calls.first?.3 as Bool?)
+    #expect(allowedRename)
 }
 
 @Test(arguments: ["missing_project", "wrong_kind", "malformed_track", "read_path", "export_missing_path", "relative_path", "port", "unknown"])
@@ -59,8 +83,8 @@ func midiTrackCommandsRejectMalformedRequestsBeforeTheProvider(fault: String) as
     default: params["caller_selected_regions"] = .bool(true)
     }
     let result = await MIDIDispatcher.handle(command: command, params: params, router: ChannelRouter(), cache: StateCache(),
-        trackFileExport: { project, track, path in
-            await recorder.record(project, track, path)
+        trackFileExport: { project, track, path, allowRename in
+            await recorder.record(project, track, path, allowRename)
             return .init(document: try SMFReader.parseDocument(midiCommandSMF))
         })
     let failed = try #require(result.isError)
@@ -71,7 +95,7 @@ func midiTrackCommandsRejectMalformedRequestsBeforeTheProvider(fault: String) as
 @Test func midiTrackCommandsPreserveProviderRefusalWithoutPublishingSuccess() async throws {
     let result = await MIDIDispatcher.handle(command: "read_track_notes",
         params: ["project_ref": .string(midiCommandProject), "target_ref": .string(midiCommandTrack)],
-        router: ChannelRouter(), cache: StateCache(), trackFileExport: { _, _, _ in
+        router: ChannelRouter(), cache: StateCache(), trackFileExport: { _, _, _, _ in
             throw MIDITrackFileExport.Failure.incompleteTrackPopulation
         })
     let failed = try #require(result.isError)
@@ -81,6 +105,63 @@ func midiTrackCommandsRejectMalformedRequestsBeforeTheProvider(fault: String) as
     #expect(body["state"] as? String == "C")
     let verified = try #require(body["verified"] as? Bool)
     #expect(!verified)
+}
+
+@Test func midiTrackCommandsReportCollidingIndicesAndTheExplicitRecoveryOption() async throws {
+    let result = await MIDIDispatcher.handle(command: "read_track_notes",
+        params: ["project_ref": .string(midiCommandProject), "target_ref": .string(midiCommandTrack)],
+        router: ChannelRouter(), cache: StateCache(), trackFileExport: { _, _, _, _ in
+            throw MIDITrackFileExport.Failure.ambiguousTarget(indices: [4, 5])
+        })
+    let failed = try #require(result.isError)
+    #expect(failed)
+    let body = try #require(sharedJSONObject(sharedToolText(result)))
+    #expect(body["error"] as? String == "ambiguous_target")
+    #expect(body["colliding_track_indices"] as? [Int] == [4, 5])
+    let available = try #require(body["temporary_rename_available"] as? Bool)
+    #expect(available)
+    let effects = try #require(body["ui_effects"] as? [String: Any])
+    #expect(effects["temporary_track_name"] as? String == "not_changed")
+}
+
+@Test func midiTrackCommandsReportUnconfirmedTemporaryRenameCleanup() async throws {
+    let result = await MIDIDispatcher.handle(command: "read_track_notes",
+        params: [
+            "project_ref": .string(midiCommandProject), "target_ref": .string(midiCommandTrack),
+            "allow_temporary_track_rename": .bool(true),
+        ], router: ChannelRouter(), cache: StateCache(), trackFileExport: { _, _, _, _ in
+            throw MIDITrackFileExport.Failure.temporaryRenameRestorationUnconfirmed(
+                originalName: "Repeated", temporaryName: "LPMCP-owned",
+                residualName: "User Edit", detail: "owned temporary name changed", primary: nil)
+        })
+    let failed = try #require(result.isError)
+    #expect(failed)
+    let body = try #require(sharedJSONObject(sharedToolText(result)))
+    #expect(body["error"] as? String == "temporary_rename_restoration_unconfirmed")
+    #expect(body["temporary_original_name"] as? String == "Repeated")
+    #expect(body["temporary_name"] as? String == "LPMCP-owned")
+    #expect(body["observed_residual_name"] as? String == "User Edit")
+    #expect(body["cleanup_status"] as? String == "unconfirmed")
+}
+
+@Test func midiTrackCommandsPreservePrimaryCancellationAfterVerifiedTemporaryRenameCleanup() async throws {
+    let result = await MIDIDispatcher.handle(command: "read_track_notes",
+        params: [
+            "project_ref": .string(midiCommandProject), "target_ref": .string(midiCommandTrack),
+            "allow_temporary_track_rename": .bool(true),
+        ], router: ChannelRouter(), cache: StateCache(), trackFileExport: { _, _, _, _ in
+            throw MIDITrackFileExport.RestoredTemporaryRenameFailure(
+                originalName: "Repeated", temporaryName: "LPMCP-owned",
+                residualName: "Repeated", primary: CancellationError())
+        })
+    let failed = try #require(result.isError)
+    #expect(failed)
+    let body = try #require(sharedJSONObject(sharedToolText(result)))
+    #expect(body["error"] as? String == "cancelled")
+    #expect(body["observed_residual_name"] as? String == "Repeated")
+    #expect(body["cleanup_status"] as? String == "restored")
+    let effects = try #require(body["ui_effects"] as? [String: Any])
+    #expect(effects["temporary_track_name"] as? String == "restored")
 }
 
 @Test func midiTrackCommandsMissingNativeProviderIsATracedRefusal() async throws {
