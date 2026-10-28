@@ -148,6 +148,7 @@ extension ChannelRouter {
         // (HonestContract.terminalErrorCodes), so the router never continues
         // past them.
         "plugin.get_inventory":       [.accessibility],
+        "plugin.get_host_parameter_manifest": [.accessibility],
         "plugin.get_param_verified":  [.accessibility],
         "plugin.get_channel_eq_state_verified": [.accessibility],
         "plugin.set_param_verified":  [.accessibility],

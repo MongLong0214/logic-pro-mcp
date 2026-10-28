@@ -504,6 +504,7 @@ struct OperationRegistryTests {
         ("logic_system", "system.setup_arm_key", "setup_arm_key", .mutating, .long, .readbackRequired),
         ("logic_system", "system.setup_control_surface", "setup_control_surface", .mutating, .long, .readbackRequired),
         ("logic_plugins", "plugins.get_inventory", "get_inventory", .readOnly, .short, .none),
+        ("logic_plugins", "plugins.get_host_parameter_manifest", "get_host_parameter_manifest", .readOnly, .medium, .none),
         ("logic_plugins", "plugins.get_param_verified", "get_param_verified", .readOnly, .medium, .readbackRequired),
         ("logic_plugins", "plugins.get_channel_eq_state_verified", "get_channel_eq_state_verified", .readOnly, .medium, .readbackRequired),
         ("logic_plugins", "plugins.plan_parameter_changes", "plan_parameter_changes", .readOnly, .medium, .readbackRequired),
@@ -548,7 +549,9 @@ struct OperationRegistryTests {
             #expect(spec.mutability == entry.mutability)
             #expect(spec.confirmation == (id == .systemClearTraces ? .l2 : .none))
             #expect(spec.target == (
-                id == .pluginsGetParamVerified || id == .pluginsGetChannelEQStateVerified || id == .pluginsPlanParameterChanges || id == .pluginsSetParamVerified
+                id == .pluginsGetHostParameterManifest || id == .pluginsGetParamVerified
+                    || id == .pluginsGetChannelEQStateVerified || id == .pluginsPlanParameterChanges
+                    || id == .pluginsSetParamVerified
                     || id == .pluginsSetEQBandVerified || id == .pluginsInsertVerified
                     ? .acceptsStableTarget
                     : .none
@@ -906,9 +909,20 @@ struct OperationRegistryTests {
             command: "help", params: ["category": .string("plugins")],
             router: ChannelRouter(), cache: StateCache())
         let text = sharedToolText(result)
+        #expect(text.contains("get_host_parameter_manifest"))
+        #expect(text.contains("expected_build_fingerprint"))
         #expect(text.contains("get_param_verified"))
         #expect(text.contains("target_ref"))
         #expect(text.contains("param"))
+        #expect(text.contains(
+            "Compressor ratio is read-only: raw_ax_value plus verbatim observed_display; "
+                + "it grants no write method."
+        ))
+        let pluginDescription = PluginsDispatcher.tool.description ?? ""
+        #expect(pluginDescription.contains(
+            "Compressor ratio is read-only: raw_ax_value plus verbatim observed_display; "
+                + "it grants no write method."
+        ))
     }
 
     @Test("tool description command lists match the registry exactly")

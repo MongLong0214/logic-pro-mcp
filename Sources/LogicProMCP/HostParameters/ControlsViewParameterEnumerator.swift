@@ -6,11 +6,10 @@ import Foundation
 /// observation-only: it never treats AX settable state as a successful
 /// write/readback round trip.
 ///
-/// No operation calls this producer yet. Wiring must attach to an owner that
-/// already resolves one plug-in editor window, selects and confirms Controls
-/// view, and can decide whether exposing an unapproved, display-name-only
-/// manifest belongs on that operation's public contract. This component does
-/// not make that reachability decision or add a public operation itself.
+/// `logic_plugins.get_host_parameter_manifest` calls this producer only after
+/// resolving one occupied target reference, acquiring its exact plug-in editor,
+/// and confirming Controls view. The producer still makes no reachability,
+/// approval, or write-authority decision of its own.
 enum ControlsViewParameterEnumerator {
     enum PluginNameSource: String, Codable, Equatable, Sendable {
         case directWindowStaticText
@@ -135,11 +134,18 @@ enum ControlsViewParameterEnumerator {
                 classification = .refusedAmbiguousLabel
             } else if let candidate = rowRead.pairedCandidates.only {
                 label = candidate.label
-                parameterControl = candidate.control
-                classification = classify(
-                    for: candidate.label,
-                    control: candidate.control
-                )
+                if rowRead.controls.count == 1 {
+                    parameterControl = candidate.control
+                    classification = classify(
+                        for: candidate.label,
+                        control: candidate.control
+                    )
+                } else {
+                    parameterControl = nil
+                    classification = .refusedAmbiguousControl(
+                        roles: rowRead.controls.map { $0.role.rawValue }.sorted()
+                    )
+                }
             } else if let onlyLabel = rowRead.labels.only {
                 label = onlyLabel
                 parameterControl = nil
@@ -298,26 +304,26 @@ enum ControlsViewParameterEnumerator {
     }
 
     /// The Controls-view state is structurally bound to the observed AX shape:
-    /// each table row has AXCells and each row contains a supported control in
-    /// one of those cells. The live evidence makes this a Controls-view fact;
-    /// it prevents a bare AXTable with arbitrary children from qualifying.
+    /// each table row has AXCells and the table contains a supported control
+    /// in one of those cells. Label-only section rows remain observable as
+    /// explicit refused rows, while a bare labels-only AXTable cannot qualify.
     private static func controlsViewStateIsBound(
         rows: [AXUIElement],
         runtime: AXHelpers.Runtime
     ) -> Bool {
-        rows.allSatisfy { row in
+        var tableHasControl = false
+        for row in rows {
             guard let cells = rowCells(in: row, runtime: runtime), !cells.isEmpty else {
                 return false
             }
-            var hasControl = false
             for cell in cells {
                 guard let contents = cellContents(in: cell, runtime: runtime) else {
                     return false
                 }
-                hasControl = hasControl || !contents.controls.isEmpty
+                tableHasControl = tableHasControl || !contents.controls.isEmpty
             }
-            return hasControl
         }
+        return tableHasControl
     }
 
     private static func readRow(
@@ -565,6 +571,8 @@ enum ControlsViewParameterEnumerator {
                 return nil
             }
             observedWindowAXIdentifier = trimmed(identifier)
+        case .failure(let error) where error.isDefinitiveAbsence:
+            observedWindowAXIdentifier = nil
         case .failure:
             return nil
         }
