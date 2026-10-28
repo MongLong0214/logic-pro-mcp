@@ -134,11 +134,18 @@ enum ControlsViewParameterEnumerator {
                 classification = .refusedAmbiguousLabel
             } else if let candidate = rowRead.pairedCandidates.only {
                 label = candidate.label
-                parameterControl = candidate.control
-                classification = classify(
-                    for: candidate.label,
-                    control: candidate.control
-                )
+                if rowRead.controls.count == 1 {
+                    parameterControl = candidate.control
+                    classification = classify(
+                        for: candidate.label,
+                        control: candidate.control
+                    )
+                } else {
+                    parameterControl = nil
+                    classification = .refusedAmbiguousControl(
+                        roles: rowRead.controls.map { $0.role.rawValue }.sorted()
+                    )
+                }
             } else if let onlyLabel = rowRead.labels.only {
                 label = onlyLabel
                 parameterControl = nil

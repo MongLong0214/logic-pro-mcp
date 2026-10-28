@@ -229,6 +229,26 @@ struct ControlsViewParameterEnumeratorTests {
         #expect(refusedIncompleteControlScan)
     }
 
+    @Test func aSupportedControlInAnotherCellRefusesTheOtherwisePairedRowAsAmbiguous() throws {
+        var rows = measuredRows
+        rows[7].additionalControlRole = .checkBox
+        let fixture = makeControlsFixture(
+            rows: rows,
+            cellBinding: .pairedPrimaryAndSeparateAdditional(rowIndex: 7)
+        )
+        let result = try #require(ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: fixture.runtime
+        ))
+
+        #expect(result.rowObservations[7].controlRoles == ["AXCheckBox", "AXSlider"])
+        #expect(result.rowObservations[7].classification == .refusedAmbiguousControl(
+            roles: ["AXCheckBox", "AXSlider"]
+        ))
+        #expect(!result.manifest.parameters.contains { $0.name == "Mix" })
+    }
+
     @Test func unreadableCellDescendantsRefuseInsteadOfClassifyingAPartialCell() {
         let fixture = makeControlsFixture(unreadableCellChildIndexes: [7])
         let result = ControlsViewParameterEnumerator.enumerate(
@@ -468,6 +488,7 @@ private enum CellBinding {
     case paired
     case absent
     case separateLabelAndControl(rowIndex: Int)
+    case pairedPrimaryAndSeparateAdditional(rowIndex: Int)
 }
 
 private enum PluginTextPlacement {
@@ -556,7 +577,15 @@ private func makeControlsFixture(
             builder.setChildren(labelCell, [label])
             builder.setChildren(controlCell, controls)
             builder.setChildren(row, [labelCell, controlCell])
-        case .separateLabelAndControl:
+        case .pairedPrimaryAndSeparateAdditional(let targetIndex) where targetIndex == rowIndex:
+            let primaryCell = builder.element(base + 4)
+            let additionalCell = builder.element(base + 5)
+            builder.setRole(primaryCell, kAXCellRole as String)
+            builder.setRole(additionalCell, kAXCellRole as String)
+            builder.setChildren(primaryCell, [label] + Array(controls.prefix(1)))
+            builder.setChildren(additionalCell, Array(controls.dropFirst()))
+            builder.setChildren(row, [primaryCell, additionalCell])
+        case .separateLabelAndControl, .pairedPrimaryAndSeparateAdditional:
             let cell = builder.element(base + 4)
             builder.setRole(cell, kAXCellRole as String)
             builder.setChildren(cell, [label] + controls)
