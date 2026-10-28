@@ -14,8 +14,15 @@ struct Issue966ApprovedRoutingDiffTests {
     private let other = TargetReference(rawValue: "trk_unrelated")
     private let complete = RoutingDomainCoverage(state: .complete, reasons: [])
 
-    private func capture() -> Observation.Capture {
+    private func capture(tracks requestedTracks: [TrackState]? = nil,
+                         references requestedReferences: [TargetReference]? = nil) -> Observation.Capture {
         let now = Date(timeIntervalSince1970: 1_700_000_000)
+        let tracks = requestedTracks ?? [
+            TrackState(id: 0, name: "Same", type: .audio),
+            TrackState(id: 1, name: "Same", type: .audio),
+        ]
+        let references = requestedReferences ?? [source, other]
+        precondition(tracks.count == references.count)
         let boundary = StateCache.CaptureBoundary(versions: [
             .tracks: StateCache.SectionVersion(projectEpoch: 3, sectionRevision: 7),
             .mixer: StateCache.SectionVersion(projectEpoch: 3, sectionRevision: 2),
@@ -24,11 +31,13 @@ struct Issue966ApprovedRoutingDiffTests {
         return Observation.Capture(
             before: boundary, after: boundary, projectEpoch: 3,
             project: ProjectInfo(name: "Song", filePath: "/Users/x/Song.logicx"),
-            tracks: [TrackState(id: 0, name: "Same", type: .audio), TrackState(id: 1, name: "Same", type: .audio)],
+            tracks: tracks,
             tracksFetchedAt: now.addingTimeInterval(-1), channelStrips: [], mixerFetchedAt: now.addingTimeInterval(-1),
-            fileTrackCount: 2, projectFileNotBound: false, requestedProjectMatches: nil,
+            fileTrackCount: tracks.count, projectFileNotBound: false, requestedProjectMatches: nil,
             referencesEnabled: true, targetSnapshot: TargetRegistrySnapshot(projectEpoch: 3, topologyGeneration: 0),
-            issued: IssuedTrackReferences(byRow: [source, other], byTrackIndex: [0: source, 1: other], ambiguousTrackIndices: []),
+            issued: IssuedTrackReferences(byRow: references,
+                byTrackIndex: Dictionary(uniqueKeysWithValues: zip(tracks.map(\.id), references)),
+                ambiguousTrackIndices: []),
             projectIssuance: .issued(project), beganAt: now.addingTimeInterval(-0.01), endedAt: now,
             captureID: "proposal_fixture"
         )
@@ -77,6 +86,7 @@ struct Issue966ApprovedRoutingDiffTests {
     private func plan(_ graph: RoutingGraph, bus: Int = 3, noOutput: Bool = false, sends: [Value]? = nil,
                       options: Audit.PlanningOptions = Audit.PlanningOptions(), snapshotCurrent: Bool = true,
                       policyExtras: [String: Value] = [:], names: [Audit.ApprovedName] = [],
+                      captureOverride: Observation.Capture? = nil,
                       request: Observation.Request = Observation.Request(domains: [.tracks, .strips, .routing])) throws -> [String: Value] {
         var raw: [String: Value] = [
             "schema": .string(Audit.intentPolicySchema), "project_ref": .string(project.rawValue),
@@ -95,7 +105,8 @@ struct Issue966ApprovedRoutingDiffTests {
             throw CocoaError(.coderInvalidValue)
         }
         let result = try Audit.buildCanonicalRepairPlan(policy: policy, policyValue: .object(raw), names: names,
-                                                       capture: capture(), request: request, snapshotCurrent: snapshotCurrent, options: options,
+                                                       capture: captureOverride ?? capture(), request: request,
+                                                       snapshotCurrent: snapshotCurrent, options: options,
                                                        graphOverride: graph)
         let wire = try JSONDecoder().decode(Value.self, from: Data(result.json.utf8))
         return try #require(wire.objectValue)
@@ -454,14 +465,17 @@ struct Issue966ApprovedRoutingDiffTests {
         #expect(repeated["steps"] == body["steps"])
     }
 
-    /// The shared #971 F1 fixture is intentionally planning-only. The graph models the
-    /// representable aggregate (32 duplicate-named tracks, Mixer-only Aux receivers, a
-    /// parallel Send, and a protected sink); hidden/stack hierarchy still needs native
-    /// evidence and is not inferred here.
-    @Test func sharedF1ManifestRetainsEveryBlockedEffectAndNewObject() throws {
-        let additionalTracks = (2..<32).map { index in
+    /// This is the representable routing/track census of the shared #971 F1 fixture, not
+    /// hidden/stack/shared-strip native evidence or F1 delivery.
+    @Test func sharedF1RoutingAndTrackManifestRetainsEveryBlockedEffectAndNewObject() throws {
+        let additionalRefs = (2..<32).map { TargetReference(rawValue: "trk_shared_f1_\($0)") }
+        let trackRefs = [source, other] + additionalRefs
+        let trackRows = trackRefs.enumerated().map {
+            TrackState(id: $0.offset, name: "Same", type: .audio)
+        }
+        let additionalTracks = zip(2..<32, additionalRefs).map { index, reference in
             RoutingNode(id: "track_\(index)", kind: .track, displayName: "Same", busNumber: nil,
-                        targetRef: nil, outputClassification: .bus)
+                        targetRef: reference, outputClassification: .bus)
         }
         let sink = RoutingNode(id: "sink_opaque", kind: .output, displayName: "Same",
                                busNumber: nil, targetRef: nil)
@@ -475,6 +489,10 @@ struct Issue966ApprovedRoutingDiffTests {
                 send: SendEdge(sourceTrackRef: source, physicalSlot: 5,
                     destinationBusNumber: 4, destinationRef: nil, displayedName: "Same",
                     level: -17.25, mode: "pre-fader", enabled: false), provenance: .axMixerStrip),
+            RoutingEdge(kind: .send, source: "other_opaque", destination: "previous_opaque",
+                send: SendEdge(sourceTrackRef: other, physicalSlot: 2,
+                    destinationBusNumber: 4, destinationRef: nil, displayedName: "Same",
+                    level: -12, mode: "post-fader", enabled: true), provenance: .axMixerStrip),
         ]
         let candidate = graph(nodes: candidateNodes, edges: candidateEdges)
         #expect(candidate.isConsistent)
@@ -484,14 +502,23 @@ struct Issue966ApprovedRoutingDiffTests {
         var options = Audit.PlanningOptions()
         options.allowCreateAux = true
         options.allowReplaceSend = true
+        let presentation: Value = .object([
+            "mixer_visible": .bool(true),
+            "sort": .object([
+                "criterion": .string("track_name"),
+                "expected_order": .array(trackRefs.map { .string($0.rawValue) }),
+                "inverse_criterion": .string("creation_date"),
+            ]),
+        ])
         let body = try plan(candidate, options: options, policyExtras: [
             "receivers": .array([.object(["bus": .int(3), "aux": .string("new")])]),
             "sends": .array([.object([
                 "target": .string("approved"), "physical_slot": .int(5), "bus": .int(3)])]),
             "protected_paths": .array([.object([
                 "target": .string("approved"), "sink_node_id": .string("sink_opaque")])]),
-            "presentation": finalPresentation,
-        ], names: [.init(target: "approved", name: "Approved, literal name 🎛️")])
+            "presentation": presentation,
+        ], names: [.init(target: "approved", name: "Approved, literal name 🎛️")],
+        captureOverride: capture(tracks: trackRows, references: trackRefs))
 
         let steps = try #require(body["steps"]?.arrayValue).map { try #require($0.objectValue) }
         #expect(steps.compactMap { $0["kind"]?.stringValue } == [
@@ -509,14 +536,66 @@ struct Issue966ApprovedRoutingDiffTests {
         #expect(!executable)
         #expect(body["preview"] == body["steps"])
 
+        let create = steps[0]
+        #expect(create["after"] == .object(["input_bus": .int(3)]))
+        #expect(create["dependencies"] == .array([]))
+        #expect(create["required_invariants"] == .array([
+            "bus_namespace_evidence", "existing_routing_preservation", "inverse_remove_created_aux",
+        ].map(Value.string)))
+        let output = steps[1]
+        #expect(output["target_ref"] == .string(source.rawValue))
+        #expect(output["dependencies"] == .array([.string("create_aux_bus_3")]))
+        let send = steps[2]
+        #expect(send["target_ref"] == .string(source.rawValue))
+        #expect(send["physical_slot"] == .int(5))
+        #expect(send["dependencies"] == .array([.string("create_aux_bus_3")]))
+        let sendDiff = try #require(send["proposed_routing_diff"]?.objectValue)
+        let changedSends = try #require(sendDiff["changed_sends"]?.arrayValue)
+        #expect(changedSends.count == 1)
+        let changedSend = try #require(changedSends.first?.objectValue)
+        let beforeSend = try #require(changedSend["before"]?.objectValue)
+        let afterSend = try #require(changedSend["after"]?.objectValue)
+        #expect(beforeSend["sourceTrackRef"] == .object(["rawValue": .string(source.rawValue)]))
+        #expect(beforeSend["physicalSlot"] == .int(5))
+        #expect(beforeSend["destinationBusNumber"] == .int(4))
+        #expect(afterSend["sourceTrackRef"] == .object(["rawValue": .string(source.rawValue)]))
+        #expect(afterSend["physicalSlot"] == .int(5))
+        #expect(afterSend["destinationBusNumber"] == .int(3))
+        let name = steps[3]
+        #expect(name["target_ref"] == .string(source.rawValue))
+        #expect(name["before"] == .object(["name": .string("Same")]))
+        #expect(name["after"] == .object(["name": .string("Approved, literal name 🎛️")]))
+        let sort = steps[4]
+        #expect(sort["before"]?.objectValue?["order"] == .array(trackRefs.map { .string($0.rawValue) }))
+        #expect(sort["after"]?.objectValue?["order"] == .array(trackRefs.map { .string($0.rawValue) }))
+        let sortBlocked = try #require(sort["blocked_reasons"]?.arrayValue)
+        #expect(sortBlocked.contains(.string("track_population_incomplete")))
+        #expect(sortBlocked.contains(.string("sort_preservation_adapter_unavailable")))
+        let view = steps[5]
+        #expect(view["target_ref"] == .string(project.rawValue))
+        #expect(view["after"] == .object(["visible": .bool(true)]))
+        let protected = try #require(body["protected_invariants"]?.arrayValue?.first?.objectValue)
+        #expect(protected["status"] == .string("unverified"))
+        #expect(protected["final"] == .string("unverified"))
+
+        let topologyIDs = steps.prefix(3).compactMap { $0["id"]?.stringValue }.sorted()
+        #expect(name["dependencies"] == .array(topologyIDs.map(Value.string)))
+        #expect(sort["dependencies"] == .array(steps.prefix(4).compactMap {
+            $0["id"]?.stringValue
+        }.sorted().map(Value.string)))
+        #expect(view["dependencies"] == .array(steps.prefix(5).compactMap {
+            $0["id"]?.stringValue
+        }.sorted().map(Value.string)))
+
         let repeated = try plan(candidate, options: options, policyExtras: [
             "receivers": .array([.object(["bus": .int(3), "aux": .string("new")])]),
             "sends": .array([.object([
                 "target": .string("approved"), "physical_slot": .int(5), "bus": .int(3)])]),
             "protected_paths": .array([.object([
                 "target": .string("approved"), "sink_node_id": .string("sink_opaque")])]),
-            "presentation": finalPresentation,
-        ], names: [.init(target: "approved", name: "Approved, literal name 🎛️")])
+            "presentation": presentation,
+        ], names: [.init(target: "approved", name: "Approved, literal name 🎛️")],
+        captureOverride: capture(tracks: trackRows, references: trackRefs))
         #expect(repeated["digest"] == body["digest"])
         #expect(repeated["new_object_inventory"] == body["new_object_inventory"])
         #expect(repeated["steps"] == body["steps"])
