@@ -236,6 +236,107 @@ struct PianoRollTransformTests {
         #expect(reverseOrder.predictedAfter[1] == notes[1])
     }
 
+    @Test func defaultPolicyRejectsANewSamePitchChannelOverlap() {
+        let notes = [
+            note(pitch: 60, start: 0, duration: 120),
+            note(pitch: 60, start: 180, duration: 60),
+        ]
+
+        #expect(
+            planTransform(
+                region: region(),
+                selection: .occurrences([1]),
+                transform: .quantize(grid: .quarter, strength: 1, swing: 0),
+                beforeSnapshot: snapshot(notes: notes)
+            ) == nil
+        )
+    }
+
+    @Test func defaultPolicyPreservesAnExistingOverlap() throws {
+        let notes = [
+            note(pitch: 60, start: 0, duration: 120, velocity: 40),
+            note(pitch: 60, start: 60, duration: 120, velocity: 70),
+        ]
+        let plan = try #require(
+            planTransform(
+                region: region(),
+                selection: .occurrences([0]),
+                transform: .setVelocity(90),
+                beforeSnapshot: snapshot(notes: notes)
+            )
+        )
+
+        #expect(plan.overlapPolicy == .rejectNewSamePitchAndChannel)
+        #expect(plan.predictedAfter == [
+            note(pitch: 60, start: 0, duration: 120, velocity: 90),
+            notes[1],
+        ])
+    }
+
+    @Test func explicitAllowPolicyPermitsANewOverlap() throws {
+        let notes = [
+            note(pitch: 60, start: 0, duration: 120),
+            note(pitch: 60, start: 180, duration: 60),
+        ]
+        let plan = try #require(
+            planTransform(
+                region: region(),
+                selection: .occurrences([1]),
+                overlapPolicy: .allow,
+                transform: .quantize(grid: .quarter, strength: 1, swing: 0),
+                beforeSnapshot: snapshot(notes: notes)
+            )
+        )
+
+        #expect(plan.overlapPolicy == .allow)
+        #expect(plan.predictedAfter == [
+            notes[0],
+            note(pitch: 60, start: 0, duration: 60),
+        ])
+    }
+
+    @Test func overlapPolicyKeepsChannelsIndependent() throws {
+        let notes = [
+            note(pitch: 60, start: 0, duration: 120, channel: 1),
+            note(pitch: 60, start: 180, duration: 60, channel: 2),
+        ]
+        let plan = try #require(
+            planTransform(
+                region: region(),
+                selection: .occurrences([1]),
+                transform: .quantize(grid: .quarter, strength: 1, swing: 0),
+                beforeSnapshot: snapshot(notes: notes)
+            )
+        )
+
+        #expect(plan.predictedAfter[1] == note(
+            pitch: 60,
+            start: 0,
+            duration: 60,
+            channel: 2
+        ))
+    }
+
+    @Test func overlapPolicyTreatsTouchingEndpointsAsNonoverlapping() throws {
+        let notes = [
+            note(pitch: 60, start: 0, duration: 120),
+            note(pitch: 60, start: 150, duration: 60),
+        ]
+        let plan = try #require(
+            planTransform(
+                region: region(),
+                selection: .occurrences([1]),
+                transform: .quantize(grid: .sixteenth, strength: 1, swing: 0),
+                beforeSnapshot: snapshot(notes: notes)
+            )
+        )
+
+        #expect(plan.predictedAfter == [
+            notes[0],
+            note(pitch: 60, start: 120, duration: 60),
+        ])
+    }
+
     @Test func planBindsGenerationAndRejectsStaleApply() throws {
         let target = region()
         let plan = try #require(

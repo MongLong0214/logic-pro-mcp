@@ -3,11 +3,17 @@ enum MIDINoteSelection: Equatable, Sendable {
     case occurrences([Int])
 }
 
+enum MIDIOverlapPolicy: Equatable, Sendable {
+    case allow
+    case rejectNewSamePitchAndChannel
+}
+
 struct RegionTransformPlan: Sendable {
     let regionRef: MIDIRegionReference
     let boundGeneration: UInt64
     // These indices are local to beforeSnapshot and are not persistent Event List row identity.
     let selectedOccurrenceIndices: [Int]
+    let overlapPolicy: MIDIOverlapPolicy
     let transform: MIDITransform
     let beforeSnapshot: MIDIRegionNoteSnapshot
     let predictedAfter: [MIDINoteEvent]
@@ -16,6 +22,7 @@ struct RegionTransformPlan: Sendable {
 func planTransform(
     region: MIDIRegionReference,
     selection: MIDINoteSelection = .all,
+    overlapPolicy: MIDIOverlapPolicy = .rejectNewSamePitchAndChannel,
     transform: MIDITransform,
     beforeSnapshot: MIDIRegionNoteSnapshot
 ) -> RegionTransformPlan? {
@@ -37,11 +44,13 @@ func planTransform(
     for (index, note) in zip(selectedOccurrenceIndices, transformedNotes) {
         predictedAfter[index] = note
     }
-    guard predictedAfter.allSatisfy(isValidPlanNote) else { return nil }
+    guard predictedAfter.allSatisfy(isValidPlanNote),
+          overlapPolicy.permits(before: beforeSnapshot.notes, after: predictedAfter) else { return nil }
     return RegionTransformPlan(
         regionRef: region,
         boundGeneration: beforeSnapshot.projectEpoch,
         selectedOccurrenceIndices: selectedOccurrenceIndices,
+        overlapPolicy: overlapPolicy,
         transform: transform,
         beforeSnapshot: beforeSnapshot,
         predictedAfter: predictedAfter
@@ -70,6 +79,54 @@ private func isValidPlanNote(_ note: MIDINoteEvent) -> Bool {
           note.durationTicks > 0 else { return false }
     let (_, endOverflow) = note.startTicks.addingReportingOverflow(note.durationTicks)
     return !endOverflow
+}
+
+private extension MIDIOverlapPolicy {
+    func permits(before: [MIDINoteEvent], after: [MIDINoteEvent]) -> Bool {
+        switch self {
+        case .allow:
+            return true
+        case .rejectNewSamePitchAndChannel:
+            guard let beforePairs = samePitchAndChannelOverlapPairs(in: before),
+                  let afterPairs = samePitchAndChannelOverlapPairs(in: after) else { return false }
+            return afterPairs.isSubset(of: beforePairs)
+        }
+    }
+}
+
+private struct MIDINoteOverlapPair: Hashable {
+    let lowerIndex: Int
+    let upperIndex: Int
+}
+
+private func samePitchAndChannelOverlapPairs(
+    in notes: [MIDINoteEvent]
+) -> Set<MIDINoteOverlapPair>? {
+    var pairs: Set<MIDINoteOverlapPair> = []
+    for lowerIndex in notes.indices {
+        let lower = notes[lowerIndex]
+        let (lowerEnd, lowerOverflow) = lower.startTicks.addingReportingOverflow(
+            lower.durationTicks
+        )
+        guard !lowerOverflow else { return nil }
+
+        for upperIndex in notes.indices where upperIndex > lowerIndex {
+            let upper = notes[upperIndex]
+            guard lower.pitch == upper.pitch,
+                  lower.channel == upper.channel else { continue }
+            let (upperEnd, upperOverflow) = upper.startTicks.addingReportingOverflow(
+                upper.durationTicks
+            )
+            guard !upperOverflow else { return nil }
+            if lower.startTicks < upperEnd, upper.startTicks < lowerEnd {
+                pairs.insert(MIDINoteOverlapPair(
+                    lowerIndex: lowerIndex,
+                    upperIndex: upperIndex
+                ))
+            }
+        }
+    }
+    return pairs
 }
 
 enum PlanApplyRejection: Equatable, Sendable {
