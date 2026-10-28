@@ -9,6 +9,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ## [Unreleased]
 
 ### Added
+- **Compressor `ratio` is available through read-only `logic_plugins get_param_verified` (#299).**
+  The Controls row is sampled twice and returns its raw AX value plus Logic's verbatim ratio display
+  (for example `2.1:1`). The existing non-actuation measurement is preserved: the catalog still has
+  no ratio write method, and `set_param_verified` refuses before any AX action.
 - **The fixed verifier can now express the two bounded #291 routing pilots.**
   `docs/acceptance/291.json` covers a verified physical-output change and restore, plus the
   requirement that an occupied Send remain partial routing evidence rather than an invented

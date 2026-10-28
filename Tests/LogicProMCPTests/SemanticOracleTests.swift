@@ -1139,6 +1139,52 @@ struct SemanticOracleStrengthTests {
 
 @Suite("#373 semantic oracle fixtures and mutation")
 struct SemanticOracleMutationTests {
+    @Test func hostParameterManifestOraclePinsTargetRowsRefusalsAndReadOnlyAuthority() throws {
+        let operationID = OperationID.pluginsGetHostParameterManifest
+        let oracle = try #require(SemanticOracleTable.byOperationID[operationID])
+        let fixture = try #require(SemanticOracleFixtures.byOperationID[operationID])
+        let accepted = try #require(oracle.evaluate(
+            responseData: fixture.responseData,
+            readbackData: fixture.readbackData
+        ))
+        #expect(accepted)
+        for mutant in fixture.customMutants {
+            let rejected = oracle.evaluate(
+                responseData: Data(mutant.response.utf8),
+                readbackData: fixture.readbackData
+            ) == false
+            #expect(rejected, "manifest oracle accepted a \(mutant.kind.rawValue) corruption")
+        }
+    }
+
+    @Test func hostParameterManifestOracleAcceptsRefusalOnlyRowsAndRepeatedControlRoles() throws {
+        let operationID = OperationID.pluginsGetHostParameterManifest
+        let oracle = try #require(SemanticOracleTable.byOperationID[operationID])
+        let fixture = try #require(SemanticOracleFixtures.byOperationID[operationID])
+        var response = try #require(
+            JSONSerialization.jsonObject(with: fixture.responseData) as? [String: Any]
+        )
+        response["parameters"] = [Any]()
+        response["parameter_count"] = 0
+        response["row_observations"] = [[
+            "row_index": 0,
+            "observed_label": "Mode",
+            "control_roles": ["AXRadioButton", "AXRadioButton"],
+            "value_description": NSNull(),
+            "value_is_settable": NSNull(),
+            "classification": "refused_ambiguous_control_AXRadioButton,AXRadioButton",
+        ]]
+        response["row_observation_count"] = 1
+        response["refused_row_count"] = 1
+        let responseData = try JSONSerialization.data(withJSONObject: response, options: [.sortedKeys])
+
+        let accepted = try #require(oracle.evaluate(
+            responseData: responseData,
+            readbackData: fixture.readbackData
+        ))
+        #expect(accepted)
+    }
+
     @Test("#448 sort State A rejects a response whose actuated criterion differs from the request")
     func trackSortOracleRejectsWrongActuatedCriterion() throws {
         let oracle = try #require(SemanticOracleTable.byOperationID[.tracksSortVerified])
@@ -1730,7 +1776,7 @@ struct SemanticOracleMutationTests {
             .filter { $0.independentReadbackDeferral != nil }.map(\.operationID))
         #expect(marked == Set<OperationID>([.midiListPorts, .mixerGetOutputVerified, .mixerGetSendDestinationVerified,
             .mixerGetInputBusVerified, .mixerGetSendBypassVerified, .pluginsPlanParameterChanges,
-            .pluginsGetParamVerified, .pluginsGetChannelEQStateVerified]))
+            .pluginsGetHostParameterManifest, .pluginsGetParamVerified, .pluginsGetChannelEQStateVerified]))
         let fixture = try #require(SemanticOracleFixtures.byOperationID[operationID])
         let routed = QualificationSemanticReadbackValidator.validate(
             operationID: operationID.rawValue,

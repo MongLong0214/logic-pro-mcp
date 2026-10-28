@@ -229,6 +229,26 @@ struct ControlsViewParameterEnumeratorTests {
         #expect(refusedIncompleteControlScan)
     }
 
+    @Test func aSupportedControlInAnotherCellRefusesTheOtherwisePairedRowAsAmbiguous() throws {
+        var rows = measuredRows
+        rows[7].additionalControlRole = .checkBox
+        let fixture = makeControlsFixture(
+            rows: rows,
+            cellBinding: .pairedPrimaryAndSeparateAdditional(rowIndex: 7)
+        )
+        let result = try #require(ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: fixture.runtime
+        ))
+
+        #expect(result.rowObservations[7].controlRoles == ["AXCheckBox", "AXSlider"])
+        #expect(result.rowObservations[7].classification == .refusedAmbiguousControl(
+            roles: ["AXCheckBox", "AXSlider"]
+        ))
+        #expect(!result.manifest.parameters.contains { $0.name == "Mix" })
+    }
+
     @Test func unreadableCellDescendantsRefuseInsteadOfClassifyingAPartialCell() {
         let fixture = makeControlsFixture(unreadableCellChildIndexes: [7])
         let result = ControlsViewParameterEnumerator.enumerate(
@@ -286,6 +306,39 @@ struct ControlsViewParameterEnumeratorTests {
         #expect(!emittedMix)
     }
 
+    @Test func labelledSectionRowsAreRetainedWithoutWeakeningTableBinding() throws {
+        var rows = measuredRows
+        rows.insert(RowFixture(
+            label: "Dynamics",
+            controlRole: .slider,
+            value: nil,
+            valueDescription: nil,
+            valueSettable: false,
+            additionalControlRole: nil,
+            includesControl: false
+        ), at: 0)
+        let fixture = makeControlsFixture(rows: rows)
+        let result = try #require(ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: fixture.runtime
+        ))
+
+        #expect(result.rowObservations[0].observedLabel == "Dynamics")
+        #expect(result.rowObservations[0].classification == .refusedNoControl)
+
+        var labelsOnly = rows
+        for index in labelsOnly.indices {
+            labelsOnly[index].includesControl = false
+        }
+        let labelsOnlyFixture = makeControlsFixture(rows: labelsOnly)
+        #expect(ControlsViewParameterEnumerator.enumerate(
+            in: labelsOnlyFixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: labelsOnlyFixture.runtime
+        ) == nil)
+    }
+
     @Test func missingOrUnreadableWindowTitleCannotAdmitTheTrackAsPluginName() {
         let emptyTitleFixture = makeControlsFixture(
             windowTitle: "",
@@ -324,6 +377,41 @@ struct ControlsViewParameterEnumeratorTests {
         #expect(normal.identityEvidence.windowTitle == "Compressor")
         #expect(normal.identityEvidence.directStaticTextValues == ["Raum", "Compressor"])
         #expect(normal.identityEvidence.canonicalPluginIdentifier == nil)
+    }
+
+    @Test func unsupportedOptionalWindowIdentifierIsDefinitiveAbsence() throws {
+        let fixture = makeControlsFixture(windowIdentifierReadError: .attributeUnsupported)
+        let result = try #require(ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: fixture.runtime
+        ))
+
+        #expect(result.identityEvidence.observedWindowAXIdentifier == nil)
+        #expect(!result.manifest.parameters.isEmpty)
+    }
+
+    @Test func noValueOptionalWindowIdentifierIsDefinitiveAbsence() throws {
+        let fixture = makeControlsFixture(windowIdentifierReadError: .noValue)
+        let result = try #require(ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: fixture.runtime
+        ))
+
+        #expect(result.identityEvidence.observedWindowAXIdentifier == nil)
+        #expect(!result.manifest.parameters.isEmpty)
+    }
+
+    @Test func failedOptionalWindowIdentifierReadStillRefusesIdentity() {
+        let fixture = makeControlsFixture(windowIdentifierReadError: .failure)
+        let result = ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: fixture.runtime
+        )
+
+        #expect(result == nil)
     }
 
     @Test func unreadableDirectHeaderRoleRefusesIdentityInsteadOfIgnoringTheCandidate() {
@@ -368,6 +456,7 @@ private struct RowFixture {
     var valueDescription: String?
     var valueSettable: Bool
     var additionalControlRole: GenericParameterControlRole?
+    var includesControl: Bool = true
 }
 
 // The supplied re-measurement names 18 physical rows. Its aggregate says 14
@@ -399,6 +488,7 @@ private enum CellBinding {
     case paired
     case absent
     case separateLabelAndControl(rowIndex: Int)
+    case pairedPrimaryAndSeparateAdditional(rowIndex: Int)
 }
 
 private enum PluginTextPlacement {
@@ -420,7 +510,8 @@ private func makeControlsFixture(
     unreadableControlValueIndexes: Set<Int> = [],
     unreadableAdditionalControlRoleIndexes: Set<Int> = [],
     unreadableCellChildIndexes: Set<Int> = [],
-    unreadableDirectHeaderRole: Bool = false
+    unreadableDirectHeaderRole: Bool = false,
+    windowIdentifierReadError: AXError? = nil
 ) -> ControlsFixture {
     let builder = FakeAXRuntimeBuilder()
     let window = builder.element(90_000)
@@ -450,7 +541,7 @@ private func makeControlsFixture(
             builder: builder
         )
 
-        var controls = [control]
+        var controls = rowFixture.includesControl ? [control] : []
         if let additionalControlRole = rowFixture.additionalControlRole {
             let additionalControl = builder.element(base + 3)
             configure(
@@ -486,7 +577,15 @@ private func makeControlsFixture(
             builder.setChildren(labelCell, [label])
             builder.setChildren(controlCell, controls)
             builder.setChildren(row, [labelCell, controlCell])
-        case .separateLabelAndControl:
+        case .pairedPrimaryAndSeparateAdditional(let targetIndex) where targetIndex == rowIndex:
+            let primaryCell = builder.element(base + 4)
+            let additionalCell = builder.element(base + 5)
+            builder.setRole(primaryCell, kAXCellRole as String)
+            builder.setRole(additionalCell, kAXCellRole as String)
+            builder.setChildren(primaryCell, [label] + Array(controls.prefix(1)))
+            builder.setChildren(additionalCell, Array(controls.dropFirst()))
+            builder.setChildren(row, [primaryCell, additionalCell])
+        case .separateLabelAndControl, .pairedPrimaryAndSeparateAdditional:
             let cell = builder.element(base + 4)
             builder.setRole(cell, kAXCellRole as String)
             builder.setChildren(cell, [label] + controls)
@@ -541,7 +640,8 @@ private func makeControlsFixture(
         || !unreadableControlValueElementIDs.isEmpty
         || !unreadableAdditionalControlRoleElementIDs.isEmpty
         || !unreadableCellElementIDs.isEmpty
-        || unreadableDirectHeaderRole {
+        || unreadableDirectHeaderRole
+        || windowIdentifierReadError != nil {
         runtime = builder.makeAXRuntime(
             attributeValueResultHandler: { element, attribute in
                 let elementID = builder.elementID(element)
@@ -558,6 +658,10 @@ private func makeControlsFixture(
                 let unreadableHeaderRole = unreadableDirectHeaderRole
                     && attribute == (kAXRoleAttribute as String)
                     && elementID == headerDecorationID
+                if attribute == (kAXIdentifierAttribute as String), elementID == windowID,
+                   let windowIdentifierReadError {
+                    return .failure(AXHelpers.AXStatusError(raw: windowIdentifierReadError.rawValue))
+                }
                 guard unreadableLabel
                     || unreadableTitle
                     || unreadableControlValue

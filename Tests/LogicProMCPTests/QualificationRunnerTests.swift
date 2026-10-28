@@ -985,7 +985,7 @@ struct QualificationRunnerTests {
             .filter { $0.independentReadbackDeferral != nil }.map(\.operationID))
         #expect(marked == Set<OperationID>([.midiListPorts, .mixerGetOutputVerified, .mixerGetSendDestinationVerified,
             .mixerGetInputBusVerified, .mixerGetSendBypassVerified, .pluginsPlanParameterChanges,
-            .pluginsGetParamVerified, .pluginsGetChannelEQStateVerified]))
+            .pluginsGetHostParameterManifest, .pluginsGetParamVerified, .pluginsGetChannelEQStateVerified]))
         let readOnlyIDs = Set(OperationRegistry.specs.filter { $0.mutability == .readOnly }.map(\.id.rawValue))
         let markedIDs = Set(marked.map(\.rawValue))
         let passed = operationCases.filter { $0.status == .passed }
@@ -5816,7 +5816,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             .filter { $0.independentReadbackDeferral != nil }.map(\.operationID))
         #expect(marked == Set<OperationID>([.midiListPorts, .mixerGetOutputVerified, .mixerGetSendDestinationVerified,
             .mixerGetInputBusVerified, .mixerGetSendBypassVerified, .pluginsPlanParameterChanges,
-            .pluginsGetParamVerified, .pluginsGetChannelEQStateVerified]))
+            .pluginsGetHostParameterManifest, .pluginsGetParamVerified, .pluginsGetChannelEQStateVerified]))
         let markedIDs = Set(marked.map(\.rawValue))
         let readOnlyIDs = Set(OperationRegistry.specs.filter { $0.mutability == .readOnly }.map(\.id.rawValue))
         let passed = operationCases.filter { $0.status == .passed }
