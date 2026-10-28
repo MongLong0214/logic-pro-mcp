@@ -68,7 +68,9 @@ struct Issue967AuxNamespaceEvidenceTests {
     @Test(arguments: [
         "project", "epoch", "snapshot", "namespace", "consumers", "duplicate_id",
         "duplicate_ref", "unavailable", "occupied_without_aux", "invalid_bus",
-        "empty_project", "wrong_kind_project", "blank_snapshot",
+        "empty_project", "wrong_kind_project", "blank_snapshot", "blank_consumer_id",
+        "padded_consumer_id", "blank_consumer_ref", "padded_consumer_ref",
+        "wrong_kind_consumer_ref",
     ])
     func incompleteStaleOrAmbiguousEvidenceRefuses(_ fault: String) {
         var expected = binding()
@@ -112,6 +114,27 @@ struct Issue967AuxNamespaceEvidenceTests {
         case "blank_snapshot":
             expected = binding(snapshot: "  \n")
             actual = expected
+        case "blank_consumer_id":
+            available = [4]
+            consumers = [consumer("   ", bus: 3)]
+        case "padded_consumer_id":
+            available = [4]
+            consumers = [consumer(" aux ", bus: 3)]
+        case "blank_consumer_ref":
+            available = [4]
+            consumers = [.init(id: "aux", targetReference: TargetReference(rawValue: " \n"),
+                               busNumber: 3, kind: .auxReceiver, displayName: "Same",
+                               hidden: false, mixerOnly: false, sharedStrip: false)]
+        case "padded_consumer_ref":
+            available = [4]
+            consumers = [.init(id: "aux", targetReference: TargetReference(rawValue: " mix_aux "),
+                               busNumber: 3, kind: .auxReceiver, displayName: "Same",
+                               hidden: false, mixerOnly: false, sharedStrip: false)]
+        case "wrong_kind_consumer_ref":
+            available = [4]
+            consumers = [.init(id: "aux", targetReference: TargetReference(rawValue: "prj_not_a_mixer"),
+                               busNumber: 3, kind: .auxReceiver, displayName: "Same",
+                               hidden: false, mixerOnly: false, sharedStrip: false)]
         default: break
         }
         let snapshot = AuxNamespaceEvidence.Snapshot(
@@ -126,6 +149,10 @@ struct Issue967AuxNamespaceEvidenceTests {
             return
         }
         #expect(!reasons.isEmpty)
+        if ["blank_consumer_id", "padded_consumer_id", "blank_consumer_ref",
+            "padded_consumer_ref", "wrong_kind_consumer_ref"].contains(fault) {
+            #expect(reasons.contains(.invalidConsumer))
+        }
     }
 
     @Test func revalidationConflictNeverSubstitutesAnotherAvailableBus() throws {

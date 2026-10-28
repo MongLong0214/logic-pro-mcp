@@ -158,7 +158,13 @@ enum AuxNamespaceEvidence {
         }
 
         let invalidConsumer = snapshot.consumers.contains {
-            $0.id.isEmpty || $0.targetReference.rawValue.isEmpty
+            let trimmedID = $0.id.trimmingCharacters(in: .whitespacesAndNewlines)
+            let reference = $0.targetReference.rawValue
+            let trimmedReference = reference.trimmingCharacters(in: .whitespacesAndNewlines)
+            return $0.id != trimmedID || trimmedID.isEmpty
+                || reference != trimmedReference
+                || !trimmedReference.hasPrefix("mix_")
+                || trimmedReference.dropFirst(4).isEmpty
                 || !OutputAssignment.busNumbers.contains($0.busNumber)
         }
         if invalidConsumer { reasons.insert(.invalidConsumer) }
