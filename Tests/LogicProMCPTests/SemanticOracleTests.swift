@@ -208,6 +208,67 @@ struct SemanticOracleEngineTests {
         #expect(!survivors.isSatisfied(by: root(#"{"positions":"7:1.1.1.1","marker_count_before":3}"#)))
     }
 
+    @Test func arrayCountEqualsChecksExactIntegralCardinality() {
+        let constraint = OracleConstraint.arrayCountEquals(
+            key: "requested_step_windows", countKey: "banks_requested", offset: 0
+        )
+        #expect(constraint.isSatisfied(by: root(
+            #"{"requested_step_windows":["bank 1","bank 2"],"banks_requested":2}"#
+        )))
+        #expect(!constraint.isSatisfied(by: root(
+            #"{"requested_step_windows":["bank 1"],"banks_requested":2}"#
+        )))
+        #expect(!constraint.isSatisfied(by: root(
+            #"{"requested_step_windows":["bank 1","bank 2"],"banks_requested":1.5}"#
+        )))
+        #expect(!constraint.isSatisfied(by: root(
+            #"{"requested_step_windows":["bank 1","bank 2"],"banks_requested":true}"#
+        )))
+
+        let survivors = OracleConstraint.arrayCountEquals(
+            key: "requested_step_windows", countKey: "banks_requested", offset: -1
+        )
+        #expect(survivors.isSatisfied(by: root(
+            #"{"requested_step_windows":["bank 1"],"banks_requested":2}"#
+        )))
+        #expect(!survivors.isSatisfied(by: root(
+            #"{"requested_step_windows":[],"banks_requested":0}"#
+        )))
+    }
+
+    @Test func arrayCountEqualsRejectsAnIntegerOutsideTheHostIntDomain() {
+        let constraint = OracleConstraint.arrayCountEquals(
+            key: "requested_step_windows", countKey: "banks_requested", offset: 0
+        )
+        #expect(!constraint.isSatisfied(by: root(
+            #"{"requested_step_windows":[],"banks_requested":9223372036854775808}"#
+        )))
+    }
+
+    @Test func orderedStringArrayChangesRequiresEverySuccessiveWindowToChange() {
+        let constraint = OracleConstraint.orderedStringArrayChanges(
+            key: "requested_step_windows", initialKey: "window_before"
+        )
+        #expect(constraint.isSatisfied(by: root(
+            #"{"window_before":"bank 0","requested_step_windows":["bank 1","bank 2"]}"#
+        )))
+        #expect(!constraint.isSatisfied(by: root(
+            #"{"window_before":"bank 0","requested_step_windows":["bank 0","bank 1"]}"#
+        )))
+        #expect(!constraint.isSatisfied(by: root(
+            #"{"window_before":"bank 0","requested_step_windows":["bank 1","bank 1"]}"#
+        )))
+        #expect(!constraint.isSatisfied(by: root(
+            #"{"window_before":"bank 0","requested_step_windows":["bank 1",2]}"#
+        )))
+        #expect(!constraint.isSatisfied(by: root(
+            #"{"window_before":"bank 0","requested_step_windows":[]}"#
+        )))
+        #expect(!constraint.isSatisfied(by: root(
+            #"{"requested_step_windows":["bank 1"]}"#
+        )))
+    }
+
     // MARK: - relational constraints (Phase B0)
 
     @Test func fieldsEqualHoldsWhenTwoKeyPathsAgreeAndFailsWhenTheyDiverge() {
@@ -740,7 +801,7 @@ struct SemanticOracleCensusTests {
         #expect(SemanticOracleTable.structurallyUnverifiedMutatingOperationIDs[.mixerBank] == nil)
 
         let oracle = try #require(SemanticOracleTable.byOperationID[.mixerBank])
-        let liveStateA = #"{"success":true,"verified":true,"state":"A","operation":"mixer.bank","channel":"MCU","direction":"right","bank_bookkeeping_before":0,"bank_bookkeeping_after":1,"bank_presses_sent":1,"banks_moved":1,"banks_requested":1,"step_windows":["DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn "],"upper_row_writes_observed":2,"window_before":"AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ","window_after":"DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ","strips":["DelCls","DelCls","DelCls","StdGrn","StdGrn","StdGrn","StdGrn","StdGrn"],"verify_source":"mcu_lcd_upper_row"}"#
+        let liveStateA = #"{"success":true,"verified":true,"state":"A","operation":"mixer.bank","channel":"MCU","direction":"right","bank_bookkeeping_before":0,"bank_bookkeeping_after":1,"bank_presses_sent":1,"banks_moved":1,"banks_requested":1,"bank_steps_disambiguated":0,"bank_probe_unresolved":false,"step_windows":["DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn "],"requested_step_windows":["DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn "],"upper_row_writes_observed":2,"window_before":"AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ","window_after":"DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ","strips":["DelCls","DelCls","DelCls","StdGrn","StdGrn","StdGrn","StdGrn","StdGrn"],"verify_source":"mcu_lcd_upper_row"}"#
         let liveAccepted = try #require(oracle.evaluate(
             responseData: Data(liveStateA.utf8),
             readbackData: Data("{}".utf8)
@@ -798,6 +859,46 @@ struct SemanticOracleCensusTests {
             readbackData: Data("{}".utf8)
         ))
         #expect(!noFreshWriteAccepted)
+    }
+
+    @Test func mixerBankAcceptsAnOrderedMultiStepRequestedWitness() throws {
+        let oracle = try #require(SemanticOracleTable.byOperationID[.mixerBank])
+        let response = #"{"success":true,"verified":true,"state":"A","operation":"mixer.bank","channel":"MCU","direction":"right","bank_bookkeeping_before":0,"bank_bookkeeping_after":2,"bank_presses_sent":4,"banks_moved":2,"banks_requested":2,"bank_steps_disambiguated":1,"bank_probe_unresolved":false,"step_windows":["bank 1","bank 2","probe 3","bank 2"],"requested_step_windows":["bank 1","bank 2"],"upper_row_writes_observed":4,"window_before":"bank 0","window_after":"bank 2","strips":["a","b","c","d","e","f","g","h"],"verify_source":"mcu_lcd_upper_row"}"#
+
+        let accepted = try #require(oracle.evaluate(
+            responseData: Data(response.utf8), readbackData: Data("{}".utf8)
+        ))
+        #expect(accepted)
+    }
+
+    @Test func mixerBankRejectsProbeTrafficPresentedAsARequestedStep() throws {
+        let oracle = try #require(SemanticOracleTable.byOperationID[.mixerBank])
+        let response = #"{"success":true,"verified":true,"state":"A","operation":"mixer.bank","channel":"MCU","direction":"right","bank_bookkeeping_before":0,"bank_bookkeeping_after":2,"bank_presses_sent":4,"banks_moved":2,"banks_requested":2,"bank_steps_disambiguated":1,"bank_probe_unresolved":false,"step_windows":["bank 1","probe 2","bank 1","bank 2"],"requested_step_windows":["bank 1","probe 2"],"upper_row_writes_observed":4,"window_before":"bank 0","window_after":"bank 2","strips":["a","b","c","d","e","f","g","h"],"verify_source":"mcu_lcd_upper_row"}"#
+
+        let accepted = try #require(oracle.evaluate(
+            responseData: Data(response.utf8), readbackData: Data("{}".utf8)
+        ))
+        #expect(!accepted)
+    }
+
+    @Test func mixerBankRejectsImpossiblePressAndWriteCounts() throws {
+        let oracle = try #require(SemanticOracleTable.byOperationID[.mixerBank])
+        let response = #"{"success":true,"verified":true,"state":"A","operation":"mixer.bank","channel":"MCU","direction":"right","bank_bookkeeping_before":0,"bank_bookkeeping_after":2,"bank_presses_sent":1,"banks_moved":2,"banks_requested":2,"bank_steps_disambiguated":0,"bank_probe_unresolved":false,"step_windows":["bank 1","bank 2"],"requested_step_windows":["bank 1","bank 2"],"upper_row_writes_observed":1,"window_before":"bank 0","window_after":"bank 2","strips":["a","b","c","d","e","f","g","h"],"verify_source":"mcu_lcd_upper_row"}"#
+
+        let accepted = try #require(oracle.evaluate(
+            responseData: Data(response.utf8), readbackData: Data("{}".utf8)
+        ))
+        #expect(!accepted)
+    }
+
+    @Test func mixerBankAcceptsTheFinalSameRowLastBankProbe() throws {
+        let oracle = try #require(SemanticOracleTable.byOperationID[.mixerBank])
+        let response = #"{"success":true,"verified":true,"state":"A","operation":"mixer.bank","channel":"MCU","direction":"right","bank_bookkeeping_before":0,"bank_bookkeeping_after":1,"bank_presses_sent":2,"banks_moved":1,"banks_requested":1,"bank_steps_disambiguated":0,"bank_probe_unresolved":false,"step_windows":["last bank","last bank"],"requested_step_windows":["last bank"],"upper_row_writes_observed":2,"window_before":"bank 0","window_after":"last bank","strips":["a","b","c","d","e","f","g","h"],"verify_source":"mcu_lcd_upper_row"}"#
+
+        let accepted = try #require(oracle.evaluate(
+            responseData: Data(response.utf8), readbackData: Data("{}".utf8)
+        ))
+        #expect(accepted)
     }
 
     /// Soundness of the increment: every id in B1..B4 is a REAL `.mutating`,
@@ -1926,6 +2027,52 @@ enum JSONMutator {
                     ("wrong entry count", count + 1),
                 ]))
             }
+        case .arrayCountEquals(let arrayKey, let countKey, _):
+            mutants.append(contentsOf: replacements(root, arrayKey, [
+                ("not an array", "not-an-array"),
+            ]))
+            if let current = JSONPath.resolve(root, keyPath: countKey),
+               let count = JSONInspector.number(of: current) {
+                mutants.append(contentsOf: replacements(root, countKey, [
+                    ("wrong array count", count + 1),
+                ]))
+            }
+        case .orderedStringArrayChanges(let arrayKey, let initialKey):
+            if let initial = JSONPath.resolve(root, keyPath: initialKey) as? String,
+               let rows = JSONPath.resolve(root, keyPath: arrayKey) as? [String],
+               !rows.isEmpty {
+                var unchangedFirst = rows
+                unchangedFirst[0] = initial
+                mutants.append(contentsOf: replacements(root, arrayKey, [
+                    ("first window unchanged", unchangedFirst as [Any]),
+                    ("non-string window", [1] as [Any]),
+                ]))
+                mutants.append(contentsOf: replacements(root, initialKey, [
+                    ("initial equals first window", rows[0]),
+                ]))
+                if rows.count > 1 {
+                    var repeated = rows
+                    repeated[1] = repeated[0]
+                    mutants.append(contentsOf: replacements(root, arrayKey, [
+                        ("successive window repeated", repeated as [Any]),
+                    ]))
+                }
+            }
+        case .bankRequestedWindowWitness(
+            _, _, _, let disambiguatedCountKey, let pressesKey, let writesKey, let finalKey
+        ):
+            mutants.append(contentsOf: replacements(root, disambiguatedCountKey, [
+                ("invented disambiguation", 1),
+            ]))
+            mutants.append(contentsOf: replacements(root, pressesKey, [
+                ("press count below trace", 0),
+            ]))
+            mutants.append(contentsOf: replacements(root, writesKey, [
+                ("write count below trace", 0),
+            ]))
+            mutants.append(contentsOf: replacements(root, finalKey, [
+                ("final window not requested tail", "__wrong_final_window__"),
+            ]))
         case .lengthPrefixedEntriesExclude(let wireKey, let forbiddenEntryKey):
             // Add the forbidden payload as another well-formed wire entry. The
             // delete-marker regression below additionally proves this cannot be

@@ -92,6 +92,28 @@ enum OracleConstraint: Sendable {
     /// The empty string is the canonical zero-entry encoding. Malformed prefixes,
     /// fractional/negative counts, and byte-length overruns fail closed.
     case lengthPrefixedEntryCountEquals(key: String, countKey: String, offset: Int)
+    /// A JSON array contains exactly the number of elements declared by another numeric field,
+    /// plus `offset`. Fractional/negative counts, booleans, missing keys, non-arrays and integer
+    /// overflow all fail closed.
+    case arrayCountEquals(key: String, countKey: String, offset: Int)
+    /// A non-empty ordered string array records a change at every step, beginning at the string
+    /// named by `initialKey`. The first element must differ from the initial value and every later
+    /// element must differ from its immediate predecessor. Missing/non-string values fail closed.
+    case orderedStringArrayChanges(key: String, initialKey: String)
+    /// The requested bank windows must be the requested positions in the full MCU trace, not
+    /// ambiguity-probe traffic relabelled as caller work. Right-bank probes are exact
+    /// `[requested, different, requested]` triples; left-bank walks contain no probes. Press and
+    /// write counts must also cover the complete trace, and its final requested row must be the
+    /// reported final window.
+    case bankRequestedWindowWitness(
+        traceKey: String,
+        requestedKey: String,
+        directionKey: String,
+        disambiguatedCountKey: String,
+        pressesKey: String,
+        writesKey: String,
+        finalKey: String
+    )
     /// A joined `<utf8-byte-count>:<entry>` wire field must not contain the exact
     /// string named by another field. Both the wire and the comparison value must
     /// be readable strings; malformed entries and missing values fail closed.
@@ -189,6 +211,9 @@ enum OracleConstraint: Sendable {
              .typedField(let key, _),
              .outputAssignment(let key),
              .lengthPrefixedEntryCountEquals(let key, _, _),
+             .arrayCountEquals(let key, _, _),
+             .orderedStringArrayChanges(let key, _),
+             .bankRequestedWindowWitness(let key, _, _, _, _, _, _),
              .lengthPrefixedEntriesExclude(let key, _),
              .lengthPrefixedIdentityAtIndexEquals(let key, _, _, _),
              .readbackArrayExcludesResponseIdentity(let key, _, _),
@@ -218,6 +243,9 @@ enum OracleConstraint: Sendable {
         switch self {
         case .valueEquals, .numericRange, .numericMinimum, .integerMinimum, .enumMember, .outputAssignment,
              .lengthPrefixedEntryCountEquals,
+             .arrayCountEquals,
+             .orderedStringArrayChanges,
+             .bankRequestedWindowWitness,
              .lengthPrefixedEntriesExclude, .lengthPrefixedIdentityAtIndexEquals,
              .readbackArrayExcludesResponseIdentity, .fieldsEqual, .utf8StringsEqual, .crossCheck, .numericNear,
              .fieldsDiffer, .booleanFlipped, .numericEqualsOffset:
@@ -273,6 +301,46 @@ enum OracleConstraint: Sendable {
                   let entryCount = Self.lengthPrefixedEntryCount(in: wire) else { return false }
             let (expected, overflow) = count.addingReportingOverflow(offset)
             return !overflow && expected >= 0 && entryCount == expected
+        case .arrayCountEquals(let key, let countKey, let offset):
+            guard let array = JSONPath.resolve(root, keyPath: key) as? [Any],
+                  let rawCount = JSONPath.resolve(root, keyPath: countKey),
+                  let count = JSONInspector.integer(of: rawCount), count >= 0 else { return false }
+            let (expected, overflow) = count.addingReportingOverflow(offset)
+            return !overflow && expected >= 0 && array.count == expected
+        case .orderedStringArrayChanges(let key, let initialKey):
+            guard let initial = JSONPath.resolve(root, keyPath: initialKey) as? String,
+                  let raw = JSONPath.resolve(root, keyPath: key) as? [Any],
+                  !raw.isEmpty else { return false }
+            var previous = initial
+            for value in raw {
+                guard let current = value as? String, current != previous else { return false }
+                previous = current
+            }
+            return true
+        case .bankRequestedWindowWitness(
+            let traceKey, let requestedKey, let directionKey, let disambiguatedCountKey,
+            let pressesKey, let writesKey, let finalKey
+        ):
+            guard let trace = JSONPath.resolve(root, keyPath: traceKey) as? [String],
+                  let requested = JSONPath.resolve(root, keyPath: requestedKey) as? [String],
+                  !requested.isEmpty,
+                  let direction = JSONPath.resolve(root, keyPath: directionKey) as? String,
+                  direction == "left" || direction == "right",
+                  let disambiguatedRaw = JSONPath.resolve(root, keyPath: disambiguatedCountKey),
+                  let disambiguated = JSONInspector.integer(of: disambiguatedRaw),
+                  disambiguated >= 0, disambiguated <= requested.count,
+                  let pressesRaw = JSONPath.resolve(root, keyPath: pressesKey),
+                  let presses = JSONInspector.integer(of: pressesRaw), presses == trace.count,
+                  let writesRaw = JSONPath.resolve(root, keyPath: writesKey),
+                  let writes = JSONInspector.integer(of: writesRaw), writes >= trace.count,
+                  let final = JSONPath.resolve(root, keyPath: finalKey) as? String,
+                  requested.last == final else { return false }
+            return Self.bankTrace(
+                trace,
+                matchesRequested: requested,
+                direction: direction,
+                disambiguatedCount: disambiguated
+            )
         case .lengthPrefixedEntriesExclude(let key, let forbiddenEntryKey):
             guard let wire = JSONPath.resolve(root, keyPath: key) as? String,
                   let forbidden = JSONPath.resolve(root, keyPath: forbiddenEntryKey) as? String,
@@ -413,6 +481,53 @@ enum OracleConstraint: Sendable {
         default:
             return false
         }
+    }
+
+    private struct BankTraceCursor: Hashable {
+        let traceIndex: Int
+        let probes: Int
+    }
+
+    /// Match the exact trace grammar emitted by `MCUChannel.executeBank`. A requested step always
+    /// contributes one row. A successfully disambiguated right step immediately contributes two
+    /// more rows: a different probe row and the requested row again after the inverse press.
+    private static func bankTrace(
+        _ trace: [String],
+        matchesRequested requested: [String],
+        direction: String,
+        disambiguatedCount: Int
+    ) -> Bool {
+        if direction == "left" {
+            return disambiguatedCount == 0 && trace == requested
+        }
+
+        var cursors: Set<BankTraceCursor> = [BankTraceCursor(traceIndex: 0, probes: 0)]
+        for (requestedIndex, requestedRow) in requested.enumerated() {
+            var next: Set<BankTraceCursor> = []
+            for cursor in cursors where trace.indices.contains(cursor.traceIndex)
+                && trace[cursor.traceIndex] == requestedRow {
+                next.insert(BankTraceCursor(traceIndex: cursor.traceIndex + 1, probes: cursor.probes))
+                let probeIndex = cursor.traceIndex + 1
+                let returnIndex = cursor.traceIndex + 2
+                // The final requested right step may be clamped to Logic's last bank. Its one
+                // settlement probe redraws the same requested row and the handler can still
+                // truthfully report that the requested step moved. Earlier same-row probes stop
+                // the walk in State B, so this two-row shape is legal only at the requested tail.
+                if requestedIndex == requested.count - 1,
+                   trace.indices.contains(probeIndex),
+                   trace[probeIndex] == requestedRow {
+                    next.insert(BankTraceCursor(traceIndex: cursor.traceIndex + 2, probes: cursor.probes))
+                }
+                if trace.indices.contains(returnIndex),
+                   trace[probeIndex] != requestedRow,
+                   trace[returnIndex] == requestedRow {
+                    next.insert(BankTraceCursor(traceIndex: cursor.traceIndex + 3, probes: cursor.probes + 1))
+                }
+            }
+            cursors = next
+            if cursors.isEmpty { return false }
+        }
+        return cursors.contains(BankTraceCursor(traceIndex: trace.count, probes: disambiguatedCount))
     }
 
     /// Counts concatenated `<utf8-byte-count>:<entry>` records without decoding
@@ -605,6 +720,8 @@ enum JSONInspector {
         return number.doubleValue
     }
 
+    /// Exact host-sized integer conversion. `Double(Int.max)` is not a safe upper bound because
+    /// it rounds to 2^63 on 64-bit hosts; `Int(exactly:)` rejects that value instead of trapping.
     static func integer(of value: Any) -> Int? {
         guard !isBoolean(value), let number = value as? NSNumber else { return nil }
         return Int(exactly: number)
