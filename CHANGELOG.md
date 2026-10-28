@@ -17,6 +17,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   Its measured Controls row returns an opaque raw AX value plus Logic's verbatim display (for example
   `15.0 ms`). No conversion or write behavior is inferred; `set_param_verified` still refuses before
   any AX action.
+- **Compressor `release` and `makeup` complete the requested read-only scalar recall set (#299).**
+  Their measured Controls rows return opaque raw AX values plus Logic's verbatim displays. No
+  milliseconds/decibels conversion or write behavior is inferred; `set_param_verified` refuses
+  before any AX action.
 - **The fixed verifier can carry an opaque session-issued string from a setup call into the row's
   operation (#1028).** The exact `$observation` parameter form is admitted only for the operation,
   resolves through the stored raw reply with the judge's strict JSON/path rules, and refuses before

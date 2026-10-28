@@ -2313,7 +2313,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                                                  — Read an unapproved Controls-view manifest; never write-qualified
                   get_param_verified -> { target_ref: String (occupied ins_ reference), param: String,
                                           unit?: String } — Read one qualified parameter without audio mutation
-                    Compressor ratio and attack are read-only: raw_ax_value plus verbatim observed_display; neither grants a write method.
+                    Compressor ratio, attack, release, and makeup are read-only: raw_ax_value plus verbatim observed_display; none grants a write method.
                   set_param_verified -> { track: Int, insert: Int, plugin: String,
                                           param: String, value: Float, unit: String,
                                           mode: "duplicate_applyback",

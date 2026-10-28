@@ -1595,6 +1595,56 @@ enum StockPluginCatalog {
                 ]
             )
         ),
+        // The same measured Controls table names Release and Make Up rows
+        // whose sliders expose opaque raw values plus Logic-rendered displays.
+        // Neither row has an actuation measurement, so both remain read-only
+        // and no milliseconds/decibels conversion is inferred.
+        StockPluginParameterMetadata(
+            id: "release",
+            displayName: "Release",
+            unit: "raw_ax_value",
+            valueRange: nil,
+            writeMethod: nil,
+            readbackMethod: "ax_controls_view_slider_display",
+            controlsViewRowLabel: "Release",
+            controlsViewControlRole: "AXSlider",
+            controlsViewActuationState: .unmeasured,
+            availabilityState: .observed,
+            provenance: .observed(
+                method: "controls_view_read_only_observation",
+                observedAt: "2026-08-30T04:02:24Z",
+                logicVersion: "12.x",
+                locale: "ko-KR",
+                evidence: [
+                    "parameter_readback",
+                    "Release Controls row exposes a raw AX value and verbatim engineering display",
+                    "No Release write or raw-to-milliseconds conversion was measured",
+                ]
+            )
+        ),
+        StockPluginParameterMetadata(
+            id: "makeup",
+            displayName: "Make Up",
+            unit: "raw_ax_value",
+            valueRange: nil,
+            writeMethod: nil,
+            readbackMethod: "ax_controls_view_slider_display",
+            controlsViewRowLabel: "Make Up",
+            controlsViewControlRole: "AXSlider",
+            controlsViewActuationState: .unmeasured,
+            availabilityState: .observed,
+            provenance: .observed(
+                method: "controls_view_read_only_observation",
+                observedAt: "2026-08-30T04:02:24Z",
+                logicVersion: "12.x",
+                locale: "ko-KR",
+                evidence: [
+                    "parameter_readback",
+                    "Make Up Controls row exposes a raw AX value and verbatim engineering display",
+                    "No Make Up write or raw-to-decibels conversion was measured",
+                ]
+            )
+        ),
         // This records readability only. No popup menu actuation was measured,
         // so it contains no write method and exists solely to refuse by that
         // missing measurement.

@@ -4394,6 +4394,50 @@ func testIssue299CompressorAttackReadsActualDisplayWithoutAuthorizingAWrite(_ co
     #expect(fixture.controlsCheckboxPressCount.value == 0)
 }
 
+@Test(arguments: ["release", "makeup"], [false, true])
+func testIssue299AdditionalCompressorScalarsPreserveVerbatimDisplayWithoutWrites(
+    _ param: String,
+    _ controls: Bool
+) async throws {
+    let label = param == "release" ? "Release" : "Make Up"
+    let raw = param == "release" ? 64.0 : 58.0
+    let display = param == "release" ? "250 ms" : "+2.0 dB"
+    let fixture = compressorScalarReadFixture(label: label, raw: raw, display: display, controls: controls)
+    let originalView = fixture.currentPluginViewTitle
+    let read = await AccessibilityChannel.defaultGetParamVerified(
+        params: parameterReadParams(param),
+        runtime: parameterReadRuntime(fixture)
+    )
+    let readObject = try #require(sharedJSONObject(read.message))
+    #expect(readObject["state"] as? String == "A", "\(readObject)")
+    #expect(readObject["observed_raw"] as? Double == raw)
+    #expect(readObject["observed_display"] as? String == display)
+    #expect(readObject["raw_unit"] as? String == "raw_ax_value")
+    #expect(readObject["parameter_read_status"] as? String == "read")
+    #expect(fixture.currentPluginViewTitle == originalView)
+
+    let actionCountBeforeWrite = fixture.axActions.value.count
+    var writeParams = parameterReadParams(param)
+    writeParams.merge([
+        "mode": "duplicate_applyback",
+        "value": String(raw),
+        "unit": "raw_ax_value",
+    ]) { _, new in new }
+    let write = await AccessibilityChannel.defaultSetParamVerified(
+        params: writeParams,
+        runtime: parameterReadRuntime(fixture),
+        frontDocumentPath: { expectedPath }
+    )
+    let writeObject = try #require(sharedJSONObject(write.message))
+    #expect(writeObject["state"] as? String == "C", "\(writeObject)")
+    #expect(writeObject["error"] as? String == "unsupported_param_readback")
+    #expect(writeObject["what_was_observed"] as? String == "actuation_unmeasured")
+    #expect(!(try #require(writeObject["write_attempted"] as? Bool)))
+    #expect(fixture.axActions.value.count == actionCountBeforeWrite)
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
 // #1396: measured Gain Controls view has a display-bearing slider, a raw-only
 // sibling slider and its value indicator. Boolean rows contain two named radio
 // buttons. These reads must not borrow the writer's single-control authority.
