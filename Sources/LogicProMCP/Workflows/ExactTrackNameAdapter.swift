@@ -10,6 +10,16 @@ enum ExactTrackNameAdapter {
     @TaskLocal private static var coupledMenuRail: MenuRailCustody?
     @TaskLocal private static var coupledMenuEditor: MenuEditorIdentity?
     @TaskLocal private static var coupledNameFocusTransport: NameFocusTransportCapture?
+    @TaskLocal private static var ownedTemporaryNameRestoration = false
+
+    static var restoringOwnedTemporaryName: Bool { ownedTemporaryNameRestoration }
+
+    @MainActor
+    static func withOwnedTemporaryNameRestoration<T: Sendable>(
+        _ operation: @MainActor @Sendable () async -> T
+    ) async -> T {
+        await $ownedTemporaryNameRestoration.withValue(true, operation: operation)
+    }
 
     /// Configured native transport only, never source or inverse authority.
     struct NameFocusTransport: Sendable {
@@ -194,10 +204,12 @@ enum ExactTrackNameAdapter {
     }
 
     static func operationPermitted() -> Bool {
-        guard !Task.isCancelled else { return false }
+        guard !Task.isCancelled || restoringOwnedTemporaryName else { return false }
         if let context = OperationTraceContext.current {
-            guard !context.cancellationRequested(), context.ownsGate() else { return false }
-            if let deadline = context.deadline, ContinuousClock.now >= deadline { return false }
+            guard (!context.cancellationRequested() || restoringOwnedTemporaryName),
+                  context.ownsGate() else { return false }
+            if let deadline = context.deadline, ContinuousClock.now >= deadline,
+               !restoringOwnedTemporaryName { return false }
         }
         return true
     }

@@ -38,7 +38,7 @@ Each command's accepted parameters and the registry's policy words for it. "Clos
 | Command | Parameters | Required | Unknown parameters | Mutability | Confirmation | Target | Verification | Retry | Availability |
 |---|---|---|---|---|---|---|---|---|---|
 | `create_virtual_port` | `name` | none | closed | mutating | none | none | none | never_automatic | default_install |
-| `export_track_midi` | `path`: string, `project_ref`: string, `target_ref`: string | `project_ref`; `target_ref`; `path` | closed | mutating | none | accepts_stable_target | readback_required | never_automatic | default_install |
+| `export_track_midi` | `allow_temporary_track_rename`: boolean, `path`: string, `project_ref`: string, `target_ref`: string | `project_ref`; `target_ref`; `path` | closed | mutating | none | accepts_stable_target | readback_required | never_automatic | default_install |
 | `import_file` | `path`: string | `path` | closed | mutating | none | none | readback_required | never_automatic | default_install |
 | `list_ports` | none | none | closed | read_only | none | none | none | never_automatic | default_install |
 | `mmc_locate` | `bar`: integer, `time` | `bar` or `time` | closed | mutating | none | none | best_effort | never_automatic | default_install |
@@ -46,7 +46,7 @@ Each command's accepted parameters and the registry's policy words for it. "Clos
 | `mmc_record` | none | none | closed | mutating | none | none | none | never_automatic | default_install |
 | `mmc_stop` | none | none | closed | mutating | none | none | none | never_automatic | default_install |
 | `play_sequence` | `notes`: string, `port`: string (keycmd, midi) | `notes` | closed | mutating | none | none | none | never_automatic | default_install |
-| `read_track_notes` | `project_ref`: string, `target_ref`: string | `project_ref`; `target_ref` | closed | mutating | none | accepts_stable_target | readback_required | never_automatic | default_install |
+| `read_track_notes` | `allow_temporary_track_rename`: boolean, `project_ref`: string, `target_ref`: string | `project_ref`; `target_ref` | closed | mutating | none | accepts_stable_target | readback_required | never_automatic | default_install |
 | `send_aftertouch` | `channel`: integer, `port`: string (keycmd, midi), `value`: integer | `value` | closed | mutating | none | none | none | never_automatic | default_install |
 | `send_cc` | `channel`: integer, `controller`: integer, `port`: string (keycmd, midi), `value`: integer | `controller`; `value` | closed | mutating | none | none | none | never_automatic | default_install |
 | `send_chord` | `channel`: integer, `duration_ms`: integer, `notes`: listOrString, `port`: string (keycmd, midi), `velocity`: integer | `notes` | closed | mutating | none | none | none | never_automatic | default_install |
