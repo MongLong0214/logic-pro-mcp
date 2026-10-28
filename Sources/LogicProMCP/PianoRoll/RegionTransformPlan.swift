@@ -1,6 +1,13 @@
+enum MIDINoteSelection: Equatable, Sendable {
+    case all
+    case occurrences([Int])
+}
+
 struct RegionTransformPlan: Sendable {
     let regionRef: MIDIRegionReference
     let boundGeneration: UInt64
+    // These indices are local to beforeSnapshot and are not persistent Event List row identity.
+    let selectedOccurrenceIndices: [Int]
     let transform: MIDITransform
     let beforeSnapshot: MIDIRegionNoteSnapshot
     let predictedAfter: [MIDINoteEvent]
@@ -8,6 +15,7 @@ struct RegionTransformPlan: Sendable {
 
 func planTransform(
     region: MIDIRegionReference,
+    selection: MIDINoteSelection = .all,
     transform: MIDITransform,
     beforeSnapshot: MIDIRegionNoteSnapshot
 ) -> RegionTransformPlan? {
@@ -15,19 +23,43 @@ func planTransform(
           beforeSnapshot.regionReference == region,
           beforeSnapshot.ppq > 0,
           beforeSnapshot.notes.allSatisfy(isValidPlanNote) else { return nil }
-    let predictedAfter = applyTransform(
+    guard let selectedOccurrenceIndices = resolveSelection(
+        selection,
+        noteCount: beforeSnapshot.notes.count
+    ) else { return nil }
+    let selectedNotes = selectedOccurrenceIndices.map { beforeSnapshot.notes[$0] }
+    let transformedNotes = applyTransform(
         transform,
-        to: beforeSnapshot.notes,
+        to: selectedNotes,
         ppq: beforeSnapshot.ppq
     )
+    var predictedAfter = beforeSnapshot.notes
+    for (index, note) in zip(selectedOccurrenceIndices, transformedNotes) {
+        predictedAfter[index] = note
+    }
     guard predictedAfter.allSatisfy(isValidPlanNote) else { return nil }
     return RegionTransformPlan(
         regionRef: region,
         boundGeneration: beforeSnapshot.projectEpoch,
+        selectedOccurrenceIndices: selectedOccurrenceIndices,
         transform: transform,
         beforeSnapshot: beforeSnapshot,
         predictedAfter: predictedAfter
     )
+}
+
+private func resolveSelection(
+    _ selection: MIDINoteSelection,
+    noteCount: Int
+) -> [Int]? {
+    switch selection {
+    case .all:
+        return Array(0..<noteCount)
+    case .occurrences(let indices):
+        guard Set(indices).count == indices.count,
+              indices.allSatisfy({ (0..<noteCount).contains($0) }) else { return nil }
+        return indices.sorted()
+    }
 }
 
 private func isValidPlanNote(_ note: MIDINoteEvent) -> Bool {

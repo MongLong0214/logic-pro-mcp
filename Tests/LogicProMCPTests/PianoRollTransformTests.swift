@@ -169,6 +169,73 @@ struct PianoRollTransformTests {
         #expect(plan.predictedAfter == [boundary])
     }
 
+    @Test func planTransformsOnlyTheSelectedDuplicateOccurrence() throws {
+        let duplicate = note(pitch: 60, velocity: 40)
+        let untouched = note(pitch: 67, velocity: 70)
+        let plan = try #require(
+            planTransform(
+                region: region(),
+                selection: .occurrences([1]),
+                transform: .setVelocity(90),
+                beforeSnapshot: snapshot(notes: [duplicate, duplicate, untouched])
+            )
+        )
+
+        #expect(plan.selectedOccurrenceIndices == [1])
+        #expect(plan.predictedAfter == [
+            duplicate,
+            note(pitch: 60, velocity: 90),
+            untouched,
+        ])
+    }
+
+    @Test func duplicateOrOutOfBoundsOccurrenceSelectionCannotProducePlan() {
+        let notes = [note(pitch: 60), note(pitch: 64)]
+        for invalidSelection in [
+            MIDINoteSelection.occurrences([0, 0]),
+            .occurrences([-1]),
+            .occurrences([2]),
+        ] {
+            #expect(
+                planTransform(
+                    region: region(),
+                    selection: invalidSelection,
+                    transform: .transpose(semitones: 1),
+                    beforeSnapshot: snapshot(notes: notes)
+                ) == nil
+            )
+        }
+    }
+
+    @Test func selectedOccurrenceOrderDoesNotChangeSeededPrediction() throws {
+        let notes = [
+            note(pitch: 60, start: 100, velocity: 30),
+            note(pitch: 62, start: 200, velocity: 70),
+            note(pitch: 64, start: 300, velocity: 120),
+        ]
+        let transform = MIDITransform.humanize(timingTicks: 40, velocity: 20, seed: 42)
+        let reverseOrder = try #require(
+            planTransform(
+                region: region(),
+                selection: .occurrences([2, 0]),
+                transform: transform,
+                beforeSnapshot: snapshot(notes: notes)
+            )
+        )
+        let canonicalOrder = try #require(
+            planTransform(
+                region: region(),
+                selection: .occurrences([0, 2]),
+                transform: transform,
+                beforeSnapshot: snapshot(notes: notes)
+            )
+        )
+
+        #expect(reverseOrder.selectedOccurrenceIndices == [0, 2])
+        #expect(reverseOrder.predictedAfter == canonicalOrder.predictedAfter)
+        #expect(reverseOrder.predictedAfter[1] == notes[1])
+    }
+
     @Test func planBindsGenerationAndRejectsStaleApply() throws {
         let target = region()
         let plan = try #require(
