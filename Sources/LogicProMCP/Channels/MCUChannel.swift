@@ -1226,7 +1226,8 @@ actor MCUChannel: Channel {
                 hint: hint,
                 extras: [
                     "operation": operation, "channel": "MCU",
-                    "bank_presses_sent": 0, "banks_moved": 0, "step_windows": [String](),
+                    "bank_presses_sent": 0, "banks_moved": 0,
+                    "step_windows": [String](), "requested_step_windows": [String](),
                 ]
             ))
         }
@@ -1251,6 +1252,7 @@ actor MCUChannel: Channel {
                 extras["banks_moved"] = 0
                 extras["banks_requested"] = count
                 extras["step_windows"] = [String]()
+                extras["requested_step_windows"] = [String]()
                 extras["verify_source"] = Self.bankWindowVerifySource
                 for (k, v) in await mcuConnectionExtras() { extras[k] = v }
                 let hint = "\(operation) sent nothing: the MCU LCD upper row has never been received on this "
@@ -1268,6 +1270,9 @@ actor MCUChannel: Channel {
             var pressesSent = 0
             var writesObserved = 0
             var stepWindows: [String] = []
+            // One row for each caller-requested bank step, in order. `stepWindows` remains the
+            // complete diagnostic trace and may additionally contain ambiguity-probe rows.
+            var requestedStepWindows: [String] = []
             var lastWindow = before.row
             // nil while every step so far moved; otherwise how the stopping step ended.
             var stoppedQuiescent: Bool?
@@ -1282,6 +1287,7 @@ actor MCUChannel: Channel {
                 pressesSent += 1
                 writesObserved += reading.writes
                 stepWindows.append(reading.window)
+                requestedStepWindows.append(reading.window)
                 lastWindow = reading.window
 
                 guard reading.redrew else {
@@ -1330,6 +1336,7 @@ actor MCUChannel: Channel {
             extras["bank_probe_unresolved"] = probeUnresolved
             extras["banks_requested"] = count
             extras["step_windows"] = stepWindows
+            extras["requested_step_windows"] = requestedStepWindows
             extras["upper_row_writes_observed"] = writesObserved
             extras["window_after"] = lastWindow
             for (k, v) in await mcuConnectionExtras() { extras[k] = v }

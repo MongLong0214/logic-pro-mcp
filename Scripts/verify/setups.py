@@ -10,7 +10,8 @@ the id is declared here, once, and nowhere else:
                 registered), or None where there is nothing to wait on
     gate        the checks run before every row, over a reading the lifecycle takes:
                 "fingerprint"               the track count and names as declared, every arm, mute
-                                            and solo flag 0 (the verifier's own AX reading, D1)
+                                            and solo flag 0, plus an exact declared Mixer topology
+                                            when present (the verifier's own AX readings, D1)
                 "mcu_upper_row_is_baseline" the MCU LCD upper row equals the one read when the
                                             fixture was first opened in this locale: the bank is
                                             home (the product's reading; nothing else reads the LCD).
@@ -47,6 +48,12 @@ SETUPS = {
         "ready": "mcu",
         "gate": ["fingerprint", "mcu_upper_row_is_baseline"],
     },
+    "lpm-locale-campaign-mixer": {
+        "live": "locale_campaign_mixer",
+        "server_env": {},
+        "ready": None,
+        "gate": ["fingerprint"],
+    },
     # The self-test's spec fixtures (fixtures/spec-*.json). Only FakeLifecycle drives them.
     "selftest-two-tracks": {
         "live": None,
@@ -60,6 +67,13 @@ SETUPS = {
 
 GATES = ("fingerprint", "mcu_upper_row_is_baseline")
 FLAG_WORDS = {"arm": "armed", "mute": "muted", "solo": "soloed"}
+ROUTING_FINGERPRINT_LABELS = {
+    "strip_count": "Mixer routing strip count",
+    "occupied_strips": "Mixer Send occupancy",
+    "send_counts": "Mixer Send-slot counts",
+    "inputs": "Mixer inputs",
+    "outputs": "Mixer outputs",
+}
 
 
 def setup_problems(fixture) -> list:
@@ -86,6 +100,21 @@ def _fingerprint_problems(reading: dict) -> list:
     if fingerprint["track_count"] != declared.get("track_count"):
         return [f"{fingerprint['track_count']} tracks, declared {declared.get('track_count')}"]
     out = []
+    if (declared.get("mixer_strips") is not None
+            and fingerprint.get("mixer_strips") != declared["mixer_strips"]):
+        out.append(f"{fingerprint.get('mixer_strips')} Mixer strips, declared "
+                   f"{declared['mixer_strips']}")
+    wanted_routing = declared.get("routing")
+    if wanted_routing is not None:
+        routing = fingerprint.get("routing")
+        if not isinstance(routing, dict):
+            out.append("the fixture routing could not be read: "
+                       f"{fingerprint.get('routing_cause') or 'no normalized routing'}")
+        else:
+            for field, label in ROUTING_FINGERPRINT_LABELS.items():
+                if routing.get(field) != wanted_routing.get(field):
+                    out.append(f"{label} {routing.get(field)!r}, declared "
+                               f"{wanted_routing.get(field)!r}")
     for i, (name, wanted) in enumerate(zip(fingerprint.get("names") or [], declared.get("names") or [])):
         if name != wanted:
             out.append(f"track {i} is named {name!r}, declared {wanted!r}")
