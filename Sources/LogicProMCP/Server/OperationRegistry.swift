@@ -56,6 +56,7 @@ enum OperationID: String, CaseIterable, Codable, Sendable, Hashable {
     case systemSetupArmKey = "system.setup_arm_key"
     case systemSetupControlSurface = "system.setup_control_surface"
     case pluginsGetInventory = "plugins.get_inventory"
+    case pluginsGetHostParameterManifest = "plugins.get_host_parameter_manifest"
     case pluginsGetParamVerified = "plugins.get_param_verified"
     case pluginsPlanParameterChanges = "plugins.plan_parameter_changes"
     case pluginsGetChannelEQStateVerified = "plugins.get_channel_eq_state_verified"
@@ -208,12 +209,17 @@ enum DeadlineClass: Sendable, Equatable {
     case short
     case medium
     case long
+    /// A Saga owns a complete forward/readback/conditional-compensation
+    /// lifecycle. Keep each ordinary operation in the 300s long tier, while
+    /// allowing the bounded outer lifecycle to contain both directions.
+    case saga
 
     var seconds: Double {
         switch self {
         case .short: 25
         case .medium: 90
         case .long: 300
+        case .saga: 600
         }
     }
 }
@@ -336,7 +342,7 @@ enum OperationRegistry {
             "system.setup_arm_key", "system.setup_control_surface",
         ],
         ToolID.logicPlugins.rawValue: [
-            "plugins.get_inventory", "plugins.get_param_verified", "plugins.get_channel_eq_state_verified", "plugins.plan_parameter_changes", "plugins.set_param_verified", "plugins.set_eq_band_verified", "plugins.insert_verified",
+            "plugins.get_inventory", "plugins.get_host_parameter_manifest", "plugins.get_param_verified", "plugins.get_channel_eq_state_verified", "plugins.plan_parameter_changes", "plugins.set_param_verified", "plugins.set_eq_band_verified", "plugins.insert_verified",
         ],
         ToolID.logicEdit.rawValue: [
             "edit.undo", "edit.redo", "edit.cut", "edit.copy", "edit.paste", "edit.delete",
@@ -397,7 +403,7 @@ enum OperationRegistry {
             "setup_arm_key", "setup_control_surface",
         ],
         ToolID.logicPlugins.rawValue: [
-            "get_inventory", "get_param_verified", "get_channel_eq_state_verified", "plan_parameter_changes", "set_param_verified", "set_eq_band_verified", "insert_verified",
+            "get_inventory", "get_host_parameter_manifest", "get_param_verified", "get_channel_eq_state_verified", "plan_parameter_changes", "set_param_verified", "set_eq_band_verified", "insert_verified",
         ],
         ToolID.logicEdit.rawValue: [
             "undo", "redo", "cut", "copy", "paste", "delete", "select_all", "split", "join",
@@ -707,7 +713,7 @@ enum OperationRegistry {
         (.systemExportSupportBundle, "export_support_bundle", Mutability.`mutating`, DeadlineClass.medium, VerificationPolicy.readbackRequired, ["dir"]),
         (.systemHelp, "help", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, ["category"]),
         (.systemSagaPreflight, "saga_preflight", Mutability.readOnly, DeadlineClass.medium, VerificationPolicy.none, ["idempotency_key", "steps"]),
-        (.systemSagaExecute, "saga_execute", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired, ["idempotency_key", "steps", "confirmed_plan_hash"]),
+        (.systemSagaExecute, "saga_execute", Mutability.`mutating`, DeadlineClass.saga, VerificationPolicy.readbackRequired, ["idempotency_key", "steps", "confirmed_plan_hash"]),
         (.systemSagaStatus, "saga_status", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, ["idempotency_key"]),
         (.systemSagaCancel, "saga_cancel", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, ["idempotency_key"]),
         // WHY: a consent-gated one-time Key Commands configuration write (#413); mutating with a long budget (drives the KC GUI + a functional arm-flip verify), consent is the only required param.
@@ -740,6 +746,15 @@ enum OperationRegistry {
             VerificationPolicy.none,
             TargetPolicy.none,
             ["index", "track", "track_index", "reveal_mixer"]
+        ),
+        (
+            .pluginsGetHostParameterManifest,
+            "get_host_parameter_manifest",
+            Mutability.readOnly,
+            DeadlineClass.medium,
+            VerificationPolicy.none,
+            TargetPolicy.acceptsStableTarget,
+            ["expected_build_fingerprint", "insert", "plugin", "plugin_id", "plugin_name", "track"]
         ),
         (
             .pluginsGetParamVerified,
@@ -920,7 +935,7 @@ enum OperationRegistry {
         ),
         (.projectPlanSessionRepair, "plan_session_repair", Mutability.readOnly, ConfirmationPolicy.none, VerificationPolicy.none, DeadlineClass.short, ["snapshot_id", "policy", "names", "plan_id", "digest", "on_ambiguity", "allow_create_aux", "allow_stack_membership_change", "allow_replace_send"]),
         (.projectApplySessionRepair, "apply_session_repair", Mutability.`mutating`, ConfirmationPolicy.l1,
-            VerificationPolicy.readbackRequired, DeadlineClass.long, ["plan_id", "digest", "confirmed", "idempotency_key"]),
+            VerificationPolicy.readbackRequired, DeadlineClass.saga, ["plan_id", "digest", "confirmed", "idempotency_key"]),
         (
             .projectCleanupApply,
             "cleanup_apply",
@@ -1002,7 +1017,7 @@ enum OperationRegistry {
         (.tracksSolo, "solo", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.acceptsStableTarget, ["enabled", "index", "track"]),
         (.tracksArm, "arm", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.acceptsStableTarget, ["enabled", "index", "track"]),
         (.tracksArmOnly, "arm_only", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.acceptsStableTarget, ["index", "track"]),
-        (.tracksRecordSequence, "record_sequence", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired, TargetPolicy.none, ["bar", "notes", "tempo"]),
+        (.tracksRecordSequence, "record_sequence", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired, TargetPolicy.none, ["bar", "notes", "target_expected_name", "target_track", "tempo"]),
         // #448: the menu action globally reorders the arrange rail. It is
         // structural rather than target-indexed, so it needs explicit L2
         // confirmation but accepts no track target reference.

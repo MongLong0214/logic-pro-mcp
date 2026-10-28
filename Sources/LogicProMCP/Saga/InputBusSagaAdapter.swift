@@ -140,8 +140,9 @@ final class InputBusSagaAdapter: @unchecked Sendable {
               }) else { return false }
         let stop: @Sendable () -> Bool = { (try? SessionPopulationObservation.requireOwnedAcquisition()) == nil }
         let fields = AXHelpers.HelpReadGuard.$current.withValue(.init(allowHelpReads: true, stop: { !permitted() })) {
-            let tracks = AccessibilityChannel.readTrackStates(from: proof.headers, in: pair.track.window,
-                runtime: runtime, readingTypeHelp: false, stoppingWhen: stop).states
+            let tracks = AccessibilityChannel.soloPresentationSafeTrackStates(
+                AccessibilityChannel.readTrackStates(from: proof.headers, in: pair.track.window,
+                    runtime: runtime, readingTypeHelp: false, stoppingWhen: stop).states)
             let strips = AXLogicProElements.mixerChannelStripsIfCompletelyRead(in: pair.strip.mixer, runtime: runtime.ax)
                 .flatMap { AccessibilityChannel.readChannelStrips(from: $0.strips, runtime: runtime,
                     window: pair.strip.window, mixer: pair.strip.mixer, readingScalarHelp: false, stoppingWhen: stop) }
@@ -183,6 +184,7 @@ final class InputBusSagaAdapter: @unchecked Sendable {
         if matchingOnly, let output = approved?.verifiedMatchingInputOutput(at: pair) {
             guard strips[index].output.flatMap(OutputAssignment.observed(slotLabel:)) == output else { return false }
             expected[index].output = strips[index].output
+            expected[index].outputObservation = strips[index].outputObservation
         }
         let encoder = JSONEncoder(); encoder.outputFormatting = [.sortedKeys]
         let input = AXHelpers.HelpReadGuard.$current.withValue(.init(allowHelpReads: true, stop: { !permitted() })) {

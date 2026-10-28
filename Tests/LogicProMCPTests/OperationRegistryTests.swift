@@ -76,6 +76,7 @@ struct OperationRegistryTests {
         #expect(DeadlineClass.short.seconds == 25)
         #expect(DeadlineClass.medium.seconds == 90)
         #expect(DeadlineClass.long.seconds == 300)
+        #expect(DeadlineClass.saga.seconds == 600)
         #expect(OperationRegistry.validationErrors().isEmpty)
     }
 
@@ -498,12 +499,13 @@ struct OperationRegistryTests {
         ("logic_system", "system.help", "help", .readOnly, .short, .none),
         ("logic_system", "system.export_support_bundle", "export_support_bundle", .mutating, .medium, .readbackRequired),
         ("logic_system", "system.saga_preflight", "saga_preflight", .readOnly, .medium, .none),
-        ("logic_system", "system.saga_execute", "saga_execute", .mutating, .long, .readbackRequired),
+        ("logic_system", "system.saga_execute", "saga_execute", .mutating, .saga, .readbackRequired),
         ("logic_system", "system.saga_status", "saga_status", .readOnly, .short, .none),
         ("logic_system", "system.saga_cancel", "saga_cancel", .mutating, .short, .readbackRequired),
         ("logic_system", "system.setup_arm_key", "setup_arm_key", .mutating, .long, .readbackRequired),
         ("logic_system", "system.setup_control_surface", "setup_control_surface", .mutating, .long, .readbackRequired),
         ("logic_plugins", "plugins.get_inventory", "get_inventory", .readOnly, .short, .none),
+        ("logic_plugins", "plugins.get_host_parameter_manifest", "get_host_parameter_manifest", .readOnly, .medium, .none),
         ("logic_plugins", "plugins.get_param_verified", "get_param_verified", .readOnly, .medium, .readbackRequired),
         ("logic_plugins", "plugins.get_channel_eq_state_verified", "get_channel_eq_state_verified", .readOnly, .medium, .readbackRequired),
         ("logic_plugins", "plugins.plan_parameter_changes", "plan_parameter_changes", .readOnly, .medium, .readbackRequired),
@@ -548,7 +550,9 @@ struct OperationRegistryTests {
             #expect(spec.mutability == entry.mutability)
             #expect(spec.confirmation == (id == .systemClearTraces ? .l2 : .none))
             #expect(spec.target == (
-                id == .pluginsGetParamVerified || id == .pluginsGetChannelEQStateVerified || id == .pluginsPlanParameterChanges || id == .pluginsSetParamVerified
+                id == .pluginsGetHostParameterManifest || id == .pluginsGetParamVerified
+                    || id == .pluginsGetChannelEQStateVerified || id == .pluginsPlanParameterChanges
+                    || id == .pluginsSetParamVerified
                     || id == .pluginsSetEQBandVerified || id == .pluginsInsertVerified
                     ? .acceptsStableTarget
                     : .none
@@ -732,7 +736,7 @@ struct OperationRegistryTests {
         ("project.audit", "audit", .readOnly, .short, .none),
         ("project.cleanup_plan", "cleanup_plan", .readOnly, .short, .none),
         ("project.plan_session_repair", "plan_session_repair", .readOnly, .short, .none),
-        ("project.apply_session_repair", "apply_session_repair", .mutating, .long, .readbackRequired),
+        ("project.apply_session_repair", "apply_session_repair", .mutating, .saga, .readbackRequired),
         ("project.inspect_session", "inspect_session", .readOnly, .medium, .none),
         ("project.cleanup_apply", "cleanup_apply", .mutating, .medium, .readbackRequired),
     ]
@@ -822,7 +826,8 @@ struct OperationRegistryTests {
     func projectDeadlineParity() {
         #expect(Self.projectCommands.filter { $0.deadline == .short }.count == 7)
         #expect(Self.projectCommands.filter { $0.deadline == .medium }.count == 6)
-        #expect(Self.projectCommands.filter { $0.deadline == .long }.count == 6)
+        #expect(Self.projectCommands.filter { $0.deadline == .long }.count == 5)
+        #expect(Self.projectCommands.filter { $0.deadline == .saga }.map(\.command) == ["apply_session_repair"])
 
         for entry in Self.projectCommands {
             #expect(OperationRegistry.deadlineSeconds(tool: "logic_project", command: entry.command)
@@ -906,9 +911,20 @@ struct OperationRegistryTests {
             command: "help", params: ["category": .string("plugins")],
             router: ChannelRouter(), cache: StateCache())
         let text = sharedToolText(result)
+        #expect(text.contains("get_host_parameter_manifest"))
+        #expect(text.contains("expected_build_fingerprint"))
         #expect(text.contains("get_param_verified"))
         #expect(text.contains("target_ref"))
         #expect(text.contains("param"))
+        #expect(text.contains(
+            "Compressor ratio is read-only: raw_ax_value plus verbatim observed_display; "
+                + "it grants no write method."
+        ))
+        let pluginDescription = PluginsDispatcher.tool.description ?? ""
+        #expect(pluginDescription.contains(
+            "Compressor ratio is read-only: raw_ax_value plus verbatim observed_display; "
+                + "it grants no write method."
+        ))
     }
 
     @Test("tool description command lists match the registry exactly")

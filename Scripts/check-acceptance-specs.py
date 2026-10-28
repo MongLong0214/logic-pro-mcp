@@ -104,6 +104,21 @@ def _path_selector_strings(path: str, at: str):
             yield from _string_values(segment[2], f"{at}.{segment[1]}")
 
 
+def _call_param_strings(params: dict, at: str):
+    """Strings sent as call params, with `$observation` treated as the path it is.
+
+    `check-spec` has already admitted the document, so an observation wrapper here is exact and its
+    path parses. Its selector values are what can be localized UI labels; the whole path is syntax,
+    just like an expectation path, and must not be compared to the label vocabulary as one string.
+    """
+    for name, value in params.items():
+        where = f"{at}.{name}"
+        if isinstance(value, dict) and set(value) == {"$observation"}:
+            yield from _path_selector_strings(value["$observation"], f"{where}.$observation")
+        else:
+            yield from _string_values(value, where)
+
+
 def scoped_strings(spec: dict):
     """(where, text) for the strings a spec sends to the product or compares with a reading."""
     for row in spec["rows"]:
@@ -111,8 +126,8 @@ def scoped_strings(spec: dict):
         for key in LABEL_SCOPES:
             for i, step in enumerate(row.get(key) or []):
                 if "call" in step:
-                    yield from _string_values(step["call"].get("params"),
-                                              f"{base}.{key}[{i}].call.params")
+                    yield from _call_param_strings(step["call"].get("params") or {},
+                                                   f"{base}.{key}[{i}].call.params")
                 if "wait" in step:
                     until = step["wait"].get("until") or {}
                     joiner = "" if until["path"].startswith("[") else "."

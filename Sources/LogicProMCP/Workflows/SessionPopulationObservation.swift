@@ -173,6 +173,20 @@ enum SessionPopulationObservation {
             return matches(other, matchingFocus: true)
         }
 
+        /// A selection population that began on the passive Track rail temporarily
+        /// focused its already-held selected strip. After that exact association
+        /// restores the rail, accept only a newly read presentation whose remaining
+        /// native owners are unchanged and whose two focus endpoints are the held pair.
+        func matches(_ other: PresentationBinding,
+            restoredPreparedFocusOf association: AccessibilityChannel.HeldSelectionAssociation,
+            source: AXMixerStripBinding.Binding) -> Bool {
+            guard let temporaryFocus = focus, let restoredFocus = other.focus,
+                  CFEqual(temporaryFocus, source.strip),
+                  CFEqual(restoredFocus, association.originalFocus),
+                  association.hasOriginalSourceFocus(source) else { return false }
+            return matches(other, matchingFocus: true)
+        }
+
         private func matches(_ other: PresentationBinding, matchingFocus: Bool) -> Bool {
             func same(_ lhs: AXUIElement?, _ rhs: AXUIElement?) -> Bool {
                 switch (lhs, rhs) {
@@ -895,6 +909,8 @@ enum SessionPopulationObservation {
         let nameReadError: String?
         var nameStatus: String { name != nil ? "observed" : (nameReadError != nil ? "unknown" : "not_read") }
         let output: String?
+        let outputObservation: OutputSlotObservation?
+        var outputStatus: String { outputObservation?.state.rawValue ?? "not_read" }
         let input: String?
         let inputObservation: InputSlotObservation?
         var inputStatus: String { inputObservation?.state.rawValue ?? "not_read" }
@@ -912,6 +928,8 @@ enum SessionPopulationObservation {
             case nameStatus = "name_status"
             case nameReadError = "name_read_error"
             case output
+            case outputObservation = "output_observation"
+            case outputStatus = "output_status"
             case input
             case inputObservation = "input_observation"
             case inputStatus = "input_status"
@@ -936,6 +954,8 @@ enum SessionPopulationObservation {
             try container.encode(nameStatus, forKey: .nameStatus)
             try container.encodeIfPresent(nameReadError, forKey: .nameReadError)
             try container.encodeIfPresent(output, forKey: .output)
+            try container.encodeIfPresent(outputObservation, forKey: .outputObservation)
+            try container.encode(outputStatus, forKey: .outputStatus)
             try container.encodeIfPresent(input, forKey: .input)
             try container.encodeIfPresent(inputObservation, forKey: .inputObservation)
             try container.encode(inputStatus, forKey: .inputStatus)
@@ -1400,6 +1420,7 @@ enum SessionPopulationObservation {
                     name: strip.name,
                     nameReadError: strip.nameReadError,
                     output: strip.output,
+                    outputObservation: strip.outputObservation,
                     input: strip.input,
                     inputObservation: strip.inputObservation,
                     pluginCount: !request.domains.contains(.strips) && strip.pluginsSource == nil

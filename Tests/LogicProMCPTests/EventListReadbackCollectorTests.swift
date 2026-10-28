@@ -20,6 +20,8 @@ import Testing
         let app: AXUIElement
         let eventTab: AXUIElement
         let table: AXUIElement
+        let viewButton: AXUIElement
+        let viewMenu: AXUIElement
         let rows: [AXUIElement]
         let rowFields: [RowFields]
     }
@@ -29,6 +31,11 @@ import Testing
         var selectedIndices: [Int] = []
     }
 
+    private final class MenuActionCounter: @unchecked Sendable {
+        var actions: [String] = []
+        var viewButtonReadsAfterShow = 0
+    }
+
     private static func fixture(
         headerTitles: [String] = Self.headerTitles,
         decoyHeaderTitles: [String]? = nil,
@@ -36,7 +43,9 @@ import Testing
         hollowRows: Set<Int> = [],
         omittedFilterTitle: String? = nil,
         timeMark: String = "",
-        positionText: String = "1 1 1 1"
+        positionText: String = "1 1 1 1",
+        viewMenuInitiallyOpen: Bool = true,
+        includeDisplayMode: Bool = true
     ) -> Fixture {
         let builder = FakeAXRuntimeBuilder()
         var nextID = 1
@@ -190,12 +199,14 @@ import Testing
         builder.setRole(viewButton, kAXMenuButtonRole as String)
         builder.setAttribute(viewButton, kAXTitleAttribute as String, "View")
         builder.setAttribute(viewButton, kAXParentAttribute as String, pane)
+        builder.setActionNames(viewButton, [kAXShowMenuAction as String])
         builder.setRole(viewMenu, kAXMenuRole as String)
+        builder.setActionNames(viewMenu, [kAXCancelAction as String])
         builder.setRole(displayMode, kAXMenuItemRole as String)
         builder.setAttribute(displayMode, kAXTitleAttribute as String, "Event Position and Length as Time")
         builder.setAttribute(displayMode, kAXMenuItemMarkCharAttribute as String, timeMark)
-        builder.setChildren(viewMenu, [displayMode])
-        builder.setChildren(viewButton, [viewMenu])
+        builder.setChildren(viewMenu, includeDisplayMode ? [displayMode] : [])
+        builder.setChildren(viewButton, viewMenuInitiallyOpen ? [viewMenu] : [])
         builder.setChildren(pane, AXHelpers.getChildren(pane, runtime: builder.makeAXRuntime()) + [viewButton])
 
         return Fixture(
@@ -203,6 +214,8 @@ import Testing
             app: app,
             eventTab: eventTab,
             table: table,
+            viewButton: viewButton,
+            viewMenu: viewMenu,
             rows: rows,
             rowFields: rowFields
         )
@@ -254,6 +267,67 @@ import Testing
                 return true
             }
         )
+    }
+
+    private static func ownedViewMenuRuntime(
+        _ fixture: Fixture,
+        cancelSucceeds: Bool = true,
+        delayedAppearanceReads: Int = 0,
+        closureReadFails: Bool = false
+    ) -> (AXLogicProElements.Runtime, MenuActionCounter) {
+        let builder = fixture.builder
+        let eventTab = fixture.eventTab
+        let viewButton = fixture.viewButton
+        let viewMenu = fixture.viewMenu
+        let counter = MenuActionCounter()
+        let runtime = builder.makeLogicRuntime(
+            appElement: fixture.app,
+            childrenHandler: { element in
+                if counter.actions.contains(kAXCancelAction as String) { return nil }
+                guard element == viewButton,
+                      delayedAppearanceReads > 0,
+                      counter.actions.contains(kAXShowMenuAction as String) else { return nil }
+                counter.viewButtonReadsAfterShow += 1
+                if counter.viewButtonReadsAfterShow <= delayedAppearanceReads { return [] }
+                builder.setChildren(viewButton, [viewMenu])
+                return [viewMenu]
+            },
+            childrenResultHandler: { element in
+                if closureReadFails,
+                   element == viewButton,
+                   counter.actions.contains(kAXCancelAction as String) {
+                    return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                }
+                if counter.actions.contains(kAXCancelAction as String) { return nil }
+                guard element == viewButton,
+                      delayedAppearanceReads > 0,
+                      counter.actions.contains(kAXShowMenuAction as String) else { return nil }
+                counter.viewButtonReadsAfterShow += 1
+                if counter.viewButtonReadsAfterShow <= delayedAppearanceReads { return .success([]) }
+                builder.setChildren(viewButton, [viewMenu])
+                return .success([viewMenu])
+            },
+            setAttributeHandler: nil,
+            performActionHandler: { element, action in
+                if element == eventTab, action == (kAXPressAction as String) {
+                    let old = (builder.attributeValue(eventTab, kAXValueAttribute as String) as? Int) ?? 0
+                    builder.setAttribute(eventTab, kAXValueAttribute as String, old == 0 ? 1 : 0)
+                    return true
+                }
+                if element == viewButton, action == (kAXShowMenuAction as String) {
+                    counter.actions.append(action)
+                    if delayedAppearanceReads == 0 { builder.setChildren(viewButton, [viewMenu]) }
+                    return true
+                }
+                if element == viewMenu, action == (kAXCancelAction as String) {
+                    counter.actions.append(action)
+                    if cancelSucceeds { builder.setChildren(viewButton, []) }
+                    return cancelSucceeds
+                }
+                return true
+            }
+        )
+        return (runtime, counter)
     }
 
     /// A six-column list that is NOT the region level. Arity-only matching accepted it — the note
@@ -377,6 +451,136 @@ import Testing
         #expect(throws: EventListReadbackCollectorError.timeDisplayEnabled) {
             try Self.collect(fixture, runtime: Self.toggleEventTabRuntime(fixture))
         }
+    }
+
+    @Test func aViewMenuOpenedByTheCollectorIsCancelledAfterSuccess() throws {
+        let fixture = Self.fixture(viewMenuInitiallyOpen: false)
+        let (runtime, counter) = Self.ownedViewMenuRuntime(fixture)
+
+        _ = try Self.collect(fixture, runtime: runtime)
+
+        #expect(counter.actions == [kAXShowMenuAction as String, kAXCancelAction as String])
+        #expect(AXHelpers.getChildren(fixture.viewButton, runtime: runtime.ax).isEmpty)
+    }
+
+    @Test func aViewMenuOpenedByTheCollectorIsCancelledAfterRefusal() throws {
+        let fixture = Self.fixture(
+            timeMark: "✓",
+            positionText: "01:00:00:00.00",
+            viewMenuInitiallyOpen: false
+        )
+        let (runtime, counter) = Self.ownedViewMenuRuntime(fixture)
+
+        #expect(throws: EventListReadbackCollectorError.timeDisplayEnabled) {
+            try Self.collect(fixture, runtime: runtime)
+        }
+        #expect(counter.actions == [kAXShowMenuAction as String, kAXCancelAction as String])
+        #expect(AXHelpers.getChildren(fixture.viewButton, runtime: runtime.ax).isEmpty)
+    }
+
+    @Test func aMissingDisplayItemStillCancelsTheOwnedViewMenu() throws {
+        let fixture = Self.fixture(viewMenuInitiallyOpen: false, includeDisplayMode: false)
+        let (runtime, counter) = Self.ownedViewMenuRuntime(fixture)
+
+        #expect(throws: EventListReadbackCollectorError.displayModeUnavailable) {
+            try Self.collect(fixture, runtime: runtime)
+        }
+        #expect(counter.actions == [kAXShowMenuAction as String, kAXCancelAction as String])
+    }
+
+    @Test func aViewMenuThatWasAlreadyOpenIsNotCancelled() throws {
+        let fixture = Self.fixture()
+        let (runtime, counter) = Self.ownedViewMenuRuntime(fixture)
+
+        _ = try Self.collect(fixture, runtime: runtime)
+
+        #expect(counter.actions.isEmpty)
+        #expect(AXHelpers.getChildren(fixture.viewButton, runtime: runtime.ax).count == 1)
+    }
+
+    @Test func anUnreadableBaselineDoesNotAcquireOrCancelTheUsersMenu() throws {
+        let fixture = Self.fixture()
+        let counter = MenuActionCounter()
+        let runtime = fixture.builder.makeLogicRuntime(
+            appElement: fixture.app,
+            childrenHandler: { element in
+                element == fixture.viewButton ? [] : nil
+            },
+            childrenResultHandler: { element in
+                element == fixture.viewButton
+                    ? .failure(.init(raw: AXError.cannotComplete.rawValue))
+                    : nil
+            },
+            setAttributeHandler: nil,
+            performActionHandler: { element, action in
+                if element == fixture.eventTab, action == (kAXPressAction as String) {
+                    let old = (fixture.builder.attributeValue(
+                        fixture.eventTab,
+                        kAXValueAttribute as String
+                    ) as? Int) ?? 0
+                    fixture.builder.setAttribute(
+                        fixture.eventTab,
+                        kAXValueAttribute as String,
+                        old == 0 ? 1 : 0
+                    )
+                    return true
+                }
+                counter.actions.append(action)
+                return true
+            }
+        )
+
+        #expect(throws: EventListReadbackCollectorError.displayModeUnavailable) {
+            try Self.collect(fixture, runtime: runtime)
+        }
+        #expect(counter.actions.isEmpty)
+    }
+
+    @Test func aDelayedOwnedViewMenuIsObservedAndCancelled() throws {
+        let fixture = Self.fixture(viewMenuInitiallyOpen: false)
+        let (runtime, counter) = Self.ownedViewMenuRuntime(
+            fixture,
+            delayedAppearanceReads: 1
+        )
+
+        _ = try Self.collect(fixture, runtime: runtime)
+
+        #expect(counter.actions == [kAXShowMenuAction as String, kAXCancelAction as String])
+        #expect(counter.viewButtonReadsAfterShow >= 2)
+    }
+
+    @Test func anUnreadablePostCancelStateIsNotAcceptedAsClosed() throws {
+        let fixture = Self.fixture(viewMenuInitiallyOpen: false)
+        let (runtime, counter) = Self.ownedViewMenuRuntime(
+            fixture,
+            closureReadFails: true
+        )
+
+        do {
+            _ = try Self.collect(fixture, runtime: runtime)
+            Issue.record("expected View-menu restoration failure")
+        } catch let error as EventListReadbackCollectorError {
+            #expect(error.description.contains("View menu"))
+        }
+        #expect(counter.actions == [kAXShowMenuAction as String, kAXCancelAction as String])
+    }
+
+    @Test func cancelFailurePreservesThePrimaryRefusalAndReportsRestorationFailure() throws {
+        let fixture = Self.fixture(
+            timeMark: "✓",
+            positionText: "01:00:00:00.00",
+            viewMenuInitiallyOpen: false
+        )
+        let (runtime, counter) = Self.ownedViewMenuRuntime(fixture, cancelSucceeds: false)
+
+        do {
+            _ = try Self.collect(fixture, runtime: runtime)
+            Issue.record("expected display-mode refusal plus View-menu restoration failure")
+        } catch let error as EventListReadbackCollectorError {
+            #expect(error == .viewMenuDismissalFailed(primary: .timeDisplayEnabled))
+        }
+        #expect(counter.actions == [kAXShowMenuAction as String, kAXCancelAction as String])
+        #expect(AXHelpers.getChildren(fixture.viewButton, runtime: runtime.ax).count == 1)
     }
 
     @Test func incompleteFilterSetIsRefused() throws {

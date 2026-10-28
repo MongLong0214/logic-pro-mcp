@@ -7,6 +7,19 @@ struct SystemDispatcher: OperationTraceDispatching {
     // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
     static let handledCommands: Set<String> = OperationRegistry.commands(for: .logicSystem)
 
+    private static func refreshSectionName(_ key: ResourceCacheKey) -> String {
+        switch key {
+        case .document: "document"
+        case .project: "project"
+        case .tracks: "tracks"
+        case .transport: "transport"
+        case .mixer: "mixer"
+        case .markers: "markers"
+        case .regions: "regions"
+        case .mcu: "mcu"
+        }
+    }
+
     /// Consent-first refusal for `setup_arm_key`. Returns a State C result when the
     /// request does not carry explicit `consent:"true"`, else nil. The server
     /// calls this BEFORE strict-param validation, the mutation gate, the operation
@@ -556,11 +569,14 @@ struct SystemDispatcher: OperationTraceDispatching {
                 // `refreshed:true` for a poll that touched nothing would be a claim this call never
                 // observed (#544 review MAJOR); the prose text is unchanged either way because the
                 // mechanism ("routed through the AX fallback poller") is true regardless of the outcome.
-                let advanced = await poller.refreshNow()
+                let receipt = await poller.refreshNowReceipt()
                 let message = "State refresh completed via AX fallback poller."
                 return toolTextResult(text: message, structured: .object([
                     "operation": .string("system.refresh_cache"),
-                    "refreshed": .bool(advanced),
+                    "refreshed": .bool(receipt.advanced),
+                    "changed_sections": .array(receipt.changedSections.map {
+                        .string(Self.refreshSectionName($0))
+                    }),
                     "source": .string("ax_fallback_poller"),
                     "message": .string(message),
                 ]))
@@ -569,6 +585,7 @@ struct SystemDispatcher: OperationTraceDispatching {
             return toolTextResult(text: message, structured: .object([
                 "operation": .string("system.refresh_cache"),
                 "refreshed": .bool(false),
+                "changed_sections": .array([]),
                 // Not "next_poll_cycle": no poller is attached, so this call never started — and
                 // never scheduled — a future poll cycle. Naming one it did not start would be a
                 // claim about a mechanism that is not wired up (#544 review MINOR).
@@ -1062,7 +1079,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                 }
                 let lifecycleBudgetSeconds = OperationRegistry.spec(
                     tool: ToolID.logicSystem.rawValue, command: "saga_execute"
-                )?.deadline.seconds ?? DeadlineClass.long.seconds
+                )?.deadline.seconds ?? DeadlineClass.saga.seconds
                 let lifecycleDeadline = sagaLifecycleDeadline
                     ?? ContinuousClock.now.advanced(by: .seconds(lifecycleBudgetSeconds))
                 let inherited = OperationTraceContext.current
@@ -1076,6 +1093,14 @@ struct SystemDispatcher: OperationTraceDispatching {
                         }, deadline: lifecycleDeadline,
                         cancellationRequested: { Task.isCancelled || inherited?.cancellationRequested() == true
                             || (pluginPlan && compressorCancellation.value) }) : nil
+                let refreshAfterWrite: @Sendable () async -> Void
+                if let sagaRefreshAfterWrite {
+                    refreshAfterWrite = sagaRefreshAfterWrite
+                } else if let poller {
+                    refreshAfterWrite = { await poller.refreshNow() }
+                } else {
+                    refreshAfterWrite = {}
+                }
                 // ADR-004 / issue #287 — qualification-only fault seam. #399 (CEO
                 // audit P0): the seam and its wiring are compiled solely in debug
                 // via `FAULT_TEST_SEAM`. The release executor is
@@ -1094,7 +1119,8 @@ struct SystemDispatcher: OperationTraceDispatching {
                         environment: ProcessInfo.processInfo.environment,
                         stepCount: plan.steps.count
                     ), approvedSessionRepair: approvedSessionRepair, confirmedCompressorPlan: compressorPlan,
-                    confirmedSelectedEQPlan: selectedEQPlan, sendRemoval: sendRemoval, sendMode: sendMode, sendLevel: sendLevel, inputBus: inputBus
+                    confirmedSelectedEQPlan: selectedEQPlan, sendRemoval: sendRemoval, sendMode: sendMode, sendLevel: sendLevel,
+                    inputBus: inputBus, approvedOutputRefreshAfterWrite: refreshAfterWrite
                 )
                 #else
                 let executor = ProductionSagaStepExecutor(
@@ -1105,7 +1131,9 @@ struct SystemDispatcher: OperationTraceDispatching {
                     liveReadback: sagaLiveReadback ?? .unavailable,
                     liveTrackName: liveTrackName,
                     liveTrackNames: liveTrackNames, approvedSessionRepair: approvedSessionRepair,
-                    confirmedCompressorPlan: compressorPlan, confirmedSelectedEQPlan: selectedEQPlan, sendRemoval: sendRemoval, sendMode: sendMode, sendLevel: sendLevel, inputBus: inputBus
+                    confirmedCompressorPlan: compressorPlan, confirmedSelectedEQPlan: selectedEQPlan, sendRemoval: sendRemoval,
+                    sendMode: sendMode, sendLevel: sendLevel, inputBus: inputBus,
+                    approvedOutputRefreshAfterWrite: refreshAfterWrite
                 )
                 #endif
                 let saga = MutationSaga(
@@ -1113,17 +1141,12 @@ struct SystemDispatcher: OperationTraceDispatching {
                     approvedSessionRepair: approvedSessionRepair,
                     routeAvailable: Self.sagaRouteProbe(router: router)
                 )
-                let refreshAfterWrite: @Sendable () async -> Void
-                if let sagaRefreshAfterWrite {
-                    refreshAfterWrite = sagaRefreshAfterWrite
-                } else if let poller {
-                    refreshAfterWrite = { await poller.refreshNow() }
-                } else {
-                    refreshAfterWrite = {}
-                }
                 let surfaceExecutor = SagaSurfaceStepExecutor(
                     base: executor,
-                    refreshAfterWrite: refreshAfterWrite
+                    refreshAfterWrite: refreshAfterWrite,
+                    refreshAlreadyPerformed: { step in
+                        approvedSessionRepair?.consumeOutputRefresh(step) == true
+                    }
                 )
                 let parentBoundary = SagaFirstWriteBoundary()
                 let onWriteBoundary: @Sendable () async -> Void = {
@@ -2285,8 +2308,12 @@ struct SystemDispatcher: OperationTraceDispatching {
             return """
                 logic_plugins commands:
                   get_inventory     -> { track: Int } — Read a drift-safe insert chain
+                  get_host_parameter_manifest -> { target_ref: String (occupied ins_ reference),
+                                                   expected_build_fingerprint: String }
+                                                 — Read an unapproved Controls-view manifest; never write-qualified
                   get_param_verified -> { target_ref: String (occupied ins_ reference), param: String,
                                           unit?: String } — Read one qualified parameter without audio mutation
+                    Compressor ratio is read-only: raw_ax_value plus verbatim observed_display; it grants no write method.
                   set_param_verified -> { track: Int, insert: Int, plugin: String,
                                           param: String, value: Float, unit: String,
                                           mode: "duplicate_applyback",
@@ -2362,7 +2389,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                   logic_project    — Project lifecycle (open, save, bounce...)
                   logic_audio      — Read-only audio artifact analysis
                   logic_system     — Diagnostics + help
-                  logic_plugins    — Verified plugin reads and apply-back (get_inventory, get_param_verified, set_param_verified, set_eq_band_verified, insert_verified)
+                  logic_plugins    — Verified plugin reads and apply-back (get_inventory, get_host_parameter_manifest, get_param_verified, set_param_verified, set_eq_band_verified, insert_verified)
 
                 Resources (reads — zero tool cost):
                   logic://system/health         — System health
