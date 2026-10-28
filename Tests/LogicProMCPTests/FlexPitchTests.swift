@@ -98,6 +98,109 @@ struct FlexPitchTests {
         )
     }
 
+    @Test func mixedRegionSnapshotCannotAuthorizeAnyReference() {
+        let local = makeFlexReference()
+        let foreign = FlexPitchNoteReference(
+            regionRef: TargetReference(rawValue: "trk_other"),
+            analysisGeneration: local.analysisGeneration,
+            noteOrdinal: 1,
+            startTick: 120,
+            durationTicks: 120,
+            coarsePitch: 61,
+            pitchCurveFingerprint: "curve_1"
+        )
+        let snapshot = makeFlexSnapshot(references: [local, foreign])
+
+        #expect(
+            editEligibility(
+                snapshot: snapshot,
+                ref: local,
+                currentAnalysisGeneration: 7,
+                dualEvidenceCount: 2
+            ) == .experimental(reasons: ["snapshot notes do not share its region"])
+        )
+        #expect(
+            publicEditableReferences(
+                snapshot: snapshot,
+                currentAnalysisGeneration: 7,
+                dualEvidenceCount: 2
+            ).isEmpty
+        )
+    }
+
+    @Test func mixedGenerationSnapshotCannotAuthorizeAnyReference() {
+        let current = makeFlexReference(generation: 7, ordinal: 0)
+        let stale = makeFlexReference(generation: 6, ordinal: 1)
+        let snapshot = makeFlexSnapshot(generation: 7, references: [current, stale])
+
+        #expect(
+            editEligibility(
+                snapshot: snapshot,
+                ref: current,
+                currentAnalysisGeneration: 7,
+                dualEvidenceCount: 2
+            ) == .experimental(reasons: ["snapshot notes do not share its analysis generation"])
+        )
+        #expect(
+            publicEditableReferences(
+                snapshot: snapshot,
+                currentAnalysisGeneration: 7,
+                dualEvidenceCount: 2
+            ).isEmpty
+        )
+    }
+
+    @Test func duplicateReferencesAreAmbiguous() {
+        let reference = makeFlexReference()
+        let snapshot = makeFlexSnapshot(references: [reference, reference])
+
+        #expect(
+            editEligibility(
+                snapshot: snapshot,
+                ref: reference,
+                currentAnalysisGeneration: 7,
+                dualEvidenceCount: 2
+            ) == .experimental(reasons: ["note identity is ambiguous"])
+        )
+        #expect(
+            publicEditableReferences(
+                snapshot: snapshot,
+                currentAnalysisGeneration: 7,
+                dualEvidenceCount: 2
+            ).isEmpty
+        )
+    }
+
+    @Test func ordinalAloneCannotDisambiguateObservedIdentity() {
+        let first = makeFlexReference(ordinal: 0)
+        let second = FlexPitchNoteReference(
+            regionRef: first.regionRef,
+            analysisGeneration: first.analysisGeneration,
+            noteOrdinal: 1,
+            startTick: first.startTick,
+            durationTicks: first.durationTicks,
+            coarsePitch: first.coarsePitch,
+            pitchCurveFingerprint: first.pitchCurveFingerprint
+        )
+        let snapshot = makeFlexSnapshot(references: [first, second])
+
+        #expect(
+            editEligibility(
+                snapshot: snapshot,
+                ref: first,
+                currentAnalysisGeneration: 7,
+                dualEvidenceCount: 2
+            ) == .experimental(reasons: ["note identity is ambiguous"])
+        )
+        #expect(
+            publicEditableReferences(
+                snapshot: snapshot,
+                currentAnalysisGeneration: 7,
+                dualEvidenceCount: 2
+            ).isEmpty
+        )
+    }
+
     @Test func invalidConfidenceAndThresholdFailClosed() {
         for confidence in [Double.nan, -.infinity, .infinity, -0.01, 1.01] {
             let snapshot = makeFlexSnapshot(confidence: confidence)

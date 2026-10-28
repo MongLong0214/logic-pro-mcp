@@ -4274,6 +4274,77 @@ private func parameterReadParams(_ param: String = "threshold") -> [String: Stri
      "expected_slot_read_status": "ok", "expected_plugin_identity": "logic.stock.effect.compressor"]
 }
 
+private func compressorRatioReadFixture(controls: Bool) -> LiveFixture {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "Ratio",
+        controlsViewInitiallySelected: controls,
+        viewSettleDelay: 0
+    )
+    let builder = fixture.builder
+    builder.setAttribute(
+        builder.element(1001),
+        kAXDocumentAttribute as String,
+        URL(fileURLWithPath: expectedPath).absoluteString
+    )
+    let displaySlider = builder.element(299_601)
+    let rawSlider = builder.element(299_602)
+    let displayGroup = builder.element(299_603)
+    let indicator = builder.element(299_604)
+    builder.setRole(displayGroup, kAXGroupRole as String)
+    for slider in [displaySlider, rawSlider] {
+        builder.setRole(slider, kAXSliderRole as String)
+        builder.setAttribute(slider, kAXValueAttribute as String, 42.0)
+    }
+    builder.setAttribute(displaySlider, kAXValueDescriptionAttribute as String, "2.1:1")
+    builder.setRole(indicator, "AXValueIndicator")
+    builder.setAttribute(indicator, kAXValueAttribute as String, 42.0)
+    builder.setChildren(displayGroup, [displaySlider])
+    builder.setChildren(rawSlider, [indicator])
+    builder.setChildren(builder.element(100_905), [builder.element(100_907), displayGroup, rawSlider])
+    return fixture
+}
+
+@Test(arguments: [false, true])
+func testIssue299CompressorRatioReadsActualDisplayWithoutAuthorizingAWrite(_ controls: Bool) async throws {
+    let fixture = compressorRatioReadFixture(controls: controls)
+    let originalView = fixture.currentPluginViewTitle
+    let result = await AccessibilityChannel.defaultGetParamVerified(
+        params: parameterReadParams("ratio"),
+        runtime: parameterReadRuntime(fixture)
+    )
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "A", "\(object)")
+    #expect(object["observed_raw"] as? Double == 42)
+    #expect(object["observed_display"] as? String == "2.1:1")
+    #expect(object["raw_unit"] as? String == "raw_ax_value")
+    #expect(object["parameter_read_status"] as? String == "read")
+    #expect(fixture.currentPluginViewTitle == originalView)
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+@Test func testIssue299CompressorRatioReadMetadataStillRefusesAWrite() async throws {
+    let fixture = compressorRatioReadFixture(controls: true)
+    var params = parameterReadParams("ratio")
+    params.merge([
+        "mode": "duplicate_applyback",
+        "value": "42",
+        "unit": "raw_ax_value",
+    ]) { _, new in new }
+    let result = await AccessibilityChannel.defaultSetParamVerified(
+        params: params,
+        runtime: parameterReadRuntime(fixture),
+        frontDocumentPath: { expectedPath }
+    )
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "C", "\(object)")
+    #expect(object["error"] as? String == "unsupported_param_readback")
+    #expect(!(try #require(object["write_attempted"] as? Bool)))
+    #expect(fixture.axActions.value.isEmpty)
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
 // #1396: measured Gain Controls view has a display-bearing slider, a raw-only
 // sibling slider and its value indicator. Boolean rows contain two named radio
 // buttons. These reads must not borrow the writer's single-control authority.
