@@ -255,6 +255,7 @@ enum SemanticOracleTable {
         .projectApplySessionRepair,
         .midiExportTrackMIDI, .midiReadTrackNotes,
         .mixerBank,
+        .mixerSetOutputVerified,
     ]
 
     /// Every mutating operation the table covers: the B1 verified-write increment
@@ -318,15 +319,6 @@ enum SemanticOracleTable {
             + "bindings live in Logic's preferences and its Setup window, and no logic:// resource "
             + "publishes either, so the only confirmation available is the operation's own MCU "
             + "feedback",
-        .mixerSetOutputVerified:
-            // #291 R2. Post-closure like mixer.bank, and for the same reason NOT back-dated into a
-            // phase set. Its State A is the same strip's output slot read back by R1's reader
-            // (verify_source ax_output_slot) with an unmoved strip count -- an independent
-            // readback, so the exclusion is pending, not structural. No oracle pinning that
-            // envelope exists yet, and until one does this keeps the op out of the covered set.
-            "live State-A contract pending — State A is the same strip's output slot read back "
-            + "(verify_source ax_output_slot) with an unmoved strip count; no oracle pinning that "
-            + "envelope has been written yet",
         .mixerSetInputBusVerified:
             "semantic oracle pending — a bounded native round trip verifies the checked bus "
             + "input, physical output and unchanged strip count, but no independent typed-source "
@@ -618,6 +610,7 @@ enum SemanticOracleTable {
         projectApplySessionRepair,
         midiExportTrackMIDI, midiReadTrackNotes,
         mixerBank,
+        mixerSetOutputVerified,
     ]
 
     static let byOperationID: [OperationID: OperationOracle] = Dictionary(
@@ -2981,6 +2974,64 @@ enum SemanticOracleTable {
             .nonEmptyArray(key: "step_windows"),
             .nonEmptyArray(key: "strips"),
             .valueEquals(key: "verify_source", expected: .string("mcu_lcd_upper_row")),
+        ]
+    )
+
+    // AccessibilityChannel+OutputAssignment `setOutputVerified`. The product
+    // contract grants State A only after the same strip's output reader echoes
+    // the requested destination while the Mixer population stays fixed. The
+    // handler also has a verified no-write branch when that destination was
+    // already present. The alternatives keep those shapes distinct: a changing
+    // write must prove a real before/after difference plus closed-menu and
+    // unchanged-population custody, while a no-write receipt must prove the
+    // before/after/destination identity. Native acceptance remains a separate
+    // #291 evidence decision; this oracle validates only the response envelope.
+    static let mixerSetOutputVerified = SafeMutationOracle.oracle(
+        .mixerSetOutputVerified,
+        semantics: [
+            .valueEquals(key: "operation", expected: .string("mixer.set_output_verified")),
+            .valueEquals(key: "verify_source", expected: .string("ax_output_slot")),
+            .outputAssignment(key: "before"),
+            .outputAssignment(key: "destination"),
+            .outputAssignment(key: "after"),
+            .fieldsEqual(keyA: "after", keyB: "destination"),
+            .anyOf([
+                [.integerMinimum(key: "mixer_strip_index", min: 0)],
+                [.integerMinimum(key: "track", min: 0)],
+            ]),
+            .anyOf([
+                [
+                    .valueEquals(key: "changed", expected: .bool(false)),
+                    .valueEquals(key: "write_attempted", expected: .bool(false)),
+                    .fieldsEqual(keyA: "before", keyB: "after"),
+                    .enumMember(key: "after.kind", allowed: ["bus", "physical", "stereo_output"]),
+                    .integerMinimum(key: "strip_count_before", min: 0),
+                ],
+                [
+                    .valueEquals(key: "changed", expected: .bool(true)),
+                    .valueEquals(key: "write_attempted", expected: .bool(true)),
+                    .fieldsDiffer(keyA: "before", keyB: "after"),
+                    .anyOf([
+                        [
+                            .enumMember(key: "before.kind", allowed: ["bus", "physical", "stereo_output"]),
+                            .enumMember(key: "after.kind", allowed: ["bus", "physical", "stereo_output"]),
+                        ],
+                        [
+                            .valueEquals(key: "before.kind", expected: .string("no_output")),
+                            .valueEquals(key: "after.kind", expected: .string("stereo_output")),
+                        ],
+                        [
+                            .valueEquals(key: "before.kind", expected: .string("stereo_output")),
+                            .valueEquals(key: "after.kind", expected: .string("no_output")),
+                        ],
+                    ]),
+                    .integerMinimum(key: "strip_count_before", min: 0),
+                    .integerMinimum(key: "strip_count_after", min: 0),
+                    .fieldsEqual(keyA: "strip_count_before", keyB: "strip_count_after"),
+                    .valueEquals(key: "popup_menu_state", expected: .string("closed")),
+                    .nonEmptyArray(key: "menu_path"),
+                ],
+            ]),
         ]
     )
 }
