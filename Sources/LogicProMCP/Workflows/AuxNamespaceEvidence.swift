@@ -1,3 +1,5 @@
+import Foundation
+
 /// Pure B1 evidence contract for an explicitly requested receiving Aux bus (#967).
 ///
 /// This type does not read Logic, reserve a Bus, create an Aux, or grant write authority.
@@ -41,6 +43,8 @@ enum AuxNamespaceEvidence {
 
     enum UnavailableReason: String, Equatable, Sendable, Comparable {
         case invalidRequestedBus = "invalid_requested_bus"
+        case invalidProjectReference = "invalid_project_reference"
+        case invalidSnapshotID = "invalid_snapshot_id"
         case projectMismatch = "project_mismatch"
         case epochMismatch = "epoch_mismatch"
         case snapshotMismatch = "snapshot_mismatch"
@@ -126,6 +130,17 @@ enum AuxNamespaceEvidence {
                                           snapshot: Snapshot) -> [UnavailableReason] {
         var reasons = Set<UnavailableReason>()
         if !OutputAssignment.busNumbers.contains(requestedBus) { reasons.insert(.invalidRequestedBus) }
+        let projectReference = expected.projectReference.rawValue
+        let trimmedProjectReference = projectReference.trimmingCharacters(in: .whitespacesAndNewlines)
+        if projectReference != trimmedProjectReference
+            || !trimmedProjectReference.hasPrefix("prj_")
+            || trimmedProjectReference.dropFirst(4).isEmpty {
+            reasons.insert(.invalidProjectReference)
+        }
+        let trimmedSnapshotID = expected.snapshotID.trimmingCharacters(in: .whitespacesAndNewlines)
+        if expected.snapshotID != trimmedSnapshotID || trimmedSnapshotID.isEmpty {
+            reasons.insert(.invalidSnapshotID)
+        }
         if snapshot.binding.projectReference != expected.projectReference { reasons.insert(.projectMismatch) }
         if snapshot.binding.projectEpoch != expected.projectEpoch { reasons.insert(.epochMismatch) }
         if snapshot.binding.snapshotID != expected.snapshotID { reasons.insert(.snapshotMismatch) }

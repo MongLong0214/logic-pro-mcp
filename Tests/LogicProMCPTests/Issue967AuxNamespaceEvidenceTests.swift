@@ -68,9 +68,10 @@ struct Issue967AuxNamespaceEvidenceTests {
     @Test(arguments: [
         "project", "epoch", "snapshot", "namespace", "consumers", "duplicate_id",
         "duplicate_ref", "unavailable", "occupied_without_aux", "invalid_bus",
+        "empty_project", "wrong_kind_project", "blank_snapshot",
     ])
     func incompleteStaleOrAmbiguousEvidenceRefuses(_ fault: String) {
-        let expected = binding()
+        var expected = binding()
         var actual = expected
         var namespaceComplete = true
         var consumersComplete = true
@@ -100,6 +101,17 @@ struct Issue967AuxNamespaceEvidenceTests {
             available = [4]
             consumers = [consumer("instrument", bus: 3, kind: .instrumentMultiOutput)]
         case "invalid_bus": requestedBus = 0
+        case "empty_project":
+            expected = .init(projectReference: TargetReference(rawValue: ""), projectEpoch: 3,
+                             snapshotID: "snapshot_1", namespaceGeneration: 7)
+            actual = expected
+        case "wrong_kind_project":
+            expected = .init(projectReference: TargetReference(rawValue: "mix_not_a_project"), projectEpoch: 3,
+                             snapshotID: "snapshot_1", namespaceGeneration: 7)
+            actual = expected
+        case "blank_snapshot":
+            expected = binding(snapshot: "  \n")
+            actual = expected
         default: break
         }
         let snapshot = AuxNamespaceEvidence.Snapshot(
