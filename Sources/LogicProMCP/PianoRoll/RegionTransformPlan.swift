@@ -14,6 +14,12 @@ struct MIDINoteTransformChange: Equatable, Sendable {
     let after: MIDINoteEvent
 }
 
+enum RegionTransformPlanWarning: Equatable, Sendable {
+    case emptySelection
+    case noChangesPredicted
+    case samePitchAndChannelOverlaps(count: Int)
+}
+
 struct RegionTransformPlan: Sendable {
     let regionRef: MIDIRegionReference
     let boundGeneration: UInt64
@@ -23,8 +29,19 @@ struct RegionTransformPlan: Sendable {
     let overlapPolicy: MIDIOverlapPolicy
     let transform: MIDITransform
     let beforeSnapshot: MIDIRegionNoteSnapshot
+    var beforeFingerprint: String {
+        midiSnapshotCompletenessBinding(
+            regionReference: beforeSnapshot.regionReference,
+            projectEpoch: beforeSnapshot.projectEpoch,
+            provenance: beforeSnapshot.provenance,
+            conversionPipelineID: beforeSnapshot.conversionPipelineID,
+            notes: beforeSnapshot.notes,
+            ppq: beforeSnapshot.ppq
+        )
+    }
     let predictedAfter: [MIDINoteEvent]
     let predictedChanges: [MIDINoteTransformChange]
+    let warnings: [RegionTransformPlanWarning]
 }
 
 func planTransform(
@@ -63,6 +80,20 @@ func planTransform(
             after: after
         )
     }
+    guard let predictedOverlapPairs = samePitchAndChannelOverlapPairs(
+        in: predictedAfter
+    ) else { return nil }
+    var warnings: [RegionTransformPlanWarning] = []
+    if selectedOccurrenceIndices.isEmpty {
+        warnings.append(.emptySelection)
+    } else if predictedChanges.isEmpty {
+        warnings.append(.noChangesPredicted)
+    }
+    if !predictedOverlapPairs.isEmpty {
+        warnings.append(
+            .samePitchAndChannelOverlaps(count: predictedOverlapPairs.count)
+        )
+    }
     return RegionTransformPlan(
         regionRef: region,
         boundGeneration: beforeSnapshot.projectEpoch,
@@ -71,7 +102,8 @@ func planTransform(
         transform: transform,
         beforeSnapshot: beforeSnapshot,
         predictedAfter: predictedAfter,
-        predictedChanges: predictedChanges
+        predictedChanges: predictedChanges,
+        warnings: warnings
     )
 }
 
