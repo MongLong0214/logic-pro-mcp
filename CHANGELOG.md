@@ -9,6 +9,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ## [Unreleased]
 
 ### Added
+- **The fixed verifier can carry an opaque session-issued string from a setup call into the row's
+  operation (#1028).** The exact `$observation` parameter form is admitted only for the operation,
+  resolves through the stored raw reply with the judge's strict JSON/path rules, and refuses before
+  the call on an unreadable, missing, empty or non-string value. `docs/acceptance/299.json` uses it
+  for the bounded Compressor-ratio read/non-interference row on the existing Mixer fixture. This is
+  an acceptance definition, not a live two-locale PASS or whole-issue #299 completion.
 - **The fixed verifier can now express the two bounded #291 routing pilots.**
   `docs/acceptance/291.json` covers a verified physical-output change and restore, plus the
   requirement that an occupied Send remain partial routing evidence rather than an invented

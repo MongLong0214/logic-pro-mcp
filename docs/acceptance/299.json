@@ -1,0 +1,62 @@
+{
+ "format": "lpm-acceptance/1",
+ "issue": 299,
+ "surface": "plugin.parameters",
+ "sources": [
+  {
+   "doc": "issue:299",
+   "sha": null,
+   "quote": "Repeated UI acquisition leaves no stuck popup and cannot interfere with another verified mutation."
+  }
+ ],
+ "fixture": {
+  "id": "lpm-locale-campaign-mixer",
+  "note": "The 19-track lpm-locale-campaign project with every track flag clear and the Mixer shown. Absolute Zero is Arrange track 0 and carries a Compressor at physical insert 0. The lifecycle verifies the track names, flags, Mixer population and declared routing before each row, and reopens the saved file after any miss."
+ },
+ "locales": {
+  "subset": ["en", "ko"],
+  "reason": "The activated #299 read-only ratio slice advertises Desktop en-US/ko-KR only; broader Compressor scope remains backlog."
+ },
+ "rows": [
+  {
+   "id": "ratio-read-preserves-an-armed-track-and-cleans-up",
+   "criterion": 0,
+   "steps": [
+    {"as": "as_found", "probe": {"name": "track_armed", "args": {"index": 0}}},
+    {"as": "setup", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": true}}},
+    {"as": "refresh", "call": {"tool": "logic_system", "command": "refresh_cache", "params": {}}},
+    {"as": "project_info", "read": {"uri": "logic://project/info"}},
+    {"as": "project", "call": {"tool": "logic_project", "command": "inspect_session", "params": {"scope": "whole_project", "domains": ["strips", "routing"]}}},
+    {"as": "inventory", "call": {"tool": "logic_plugins", "command": "get_inventory", "params": {"track": 0, "reveal_mixer": false}}},
+    {"as": "pre", "probe": {"name": "track_armed", "args": {"index": 0}}},
+    {"as": "ratio", "call": {"tool": "logic_plugins", "command": "get_param_verified", "params": {"target_ref": {"$observation": "inventory.plugins[insert=0].plugin_insert_ref"}, "param": "ratio"}}},
+    {"as": "post", "probe": {"name": "track_armed", "args": {"index": 0}}}
+   ],
+   "operation": "ratio",
+   "expect": [
+    {"path": "as_found.armed", "op": "eq", "value": false, "invariant": true},
+    {"path": "pre.armed", "op": "eq", "value": true, "invariant": true},
+    {"path": "ratio.state", "op": "eq", "value": "A"},
+    {"path": "ratio.param", "op": "eq", "value": "ratio"},
+    {"path": "ratio.raw_unit", "op": "eq", "value": "raw_ax_value"},
+    {"path": "ratio.observed_raw", "op": "not_null"},
+    {"path": "ratio.observed_display", "op": "not_null"},
+    {"path": "ratio.write_attempted", "op": "eq", "value": false},
+    {"path": "ratio.plugin_view_restore_observed", "op": "eq", "value": true},
+    {"path": "ratio.editor_close_observed", "op": "eq", "value": true},
+    {"path": "post.armed", "op": "unchanged", "ref": {"obs": "pre.armed"}}
+   ],
+   "counterexample": [
+    {"observation": "as_found", "replaces": "post", "must_fail": [10]}
+   ],
+   "restore": [
+    {"as": "undo", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": false}}},
+    {"as": "restored", "probe": {"name": "track_armed", "args": {"index": 0}}}
+   ],
+   "restore_expect": [
+    {"path": "restored.armed", "op": "eq", "ref": {"obs": "as_found.armed"}}
+   ],
+   "independence": ["as_found", "pre", "post"]
+  }
+ ]
+}
