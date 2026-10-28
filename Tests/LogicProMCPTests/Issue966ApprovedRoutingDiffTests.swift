@@ -454,6 +454,74 @@ struct Issue966ApprovedRoutingDiffTests {
         #expect(repeated["steps"] == body["steps"])
     }
 
+    /// The shared #971 F1 fixture is intentionally planning-only. The graph models the
+    /// representable aggregate (32 duplicate-named tracks, Mixer-only Aux receivers, a
+    /// parallel Send, and a protected sink); hidden/stack hierarchy still needs native
+    /// evidence and is not inferred here.
+    @Test func sharedF1ManifestRetainsEveryBlockedEffectAndNewObject() throws {
+        let additionalTracks = (2..<32).map { index in
+            RoutingNode(id: "track_\(index)", kind: .track, displayName: "Same", busNumber: nil,
+                        targetRef: nil, outputClassification: .bus)
+        }
+        let sink = RoutingNode(id: "sink_opaque", kind: .output, displayName: "Same",
+                               busNumber: nil, targetRef: nil)
+        let candidateNodes = nodes() + additionalTracks + [sink]
+        let candidateEdges = [
+            edge(.mainOutput, "source_opaque", "previous_opaque"),
+            edge(.mainOutput, "other_opaque", "previous_opaque"),
+            edge(.inputAssignment, "previous_opaque", "receiver_one"),
+            edge(.mainOutput, "receiver_one", "sink_opaque"),
+            RoutingEdge(kind: .send, source: "source_opaque", destination: "previous_opaque",
+                send: SendEdge(sourceTrackRef: source, physicalSlot: 5,
+                    destinationBusNumber: 4, destinationRef: nil, displayedName: "Same",
+                    level: -17.25, mode: "pre-fader", enabled: false), provenance: .axMixerStrip),
+        ]
+        let candidate = graph(nodes: candidateNodes, edges: candidateEdges)
+        #expect(candidate.isConsistent)
+        #expect(candidate.nodes.filter { $0.kind == .track }.count == 32)
+        #expect(candidate.nodes.filter { $0.kind == .aux }.count == 2)
+
+        var options = Audit.PlanningOptions()
+        options.allowCreateAux = true
+        options.allowReplaceSend = true
+        let body = try plan(candidate, options: options, policyExtras: [
+            "receivers": .array([.object(["bus": .int(3), "aux": .string("new")])]),
+            "sends": .array([.object([
+                "target": .string("approved"), "physical_slot": .int(5), "bus": .int(3)])]),
+            "protected_paths": .array([.object([
+                "target": .string("approved"), "sink_node_id": .string("sink_opaque")])]),
+            "presentation": finalPresentation,
+        ], names: [.init(target: "approved", name: "Approved, literal name 🎛️")])
+
+        let steps = try #require(body["steps"]?.arrayValue).map { try #require($0.objectValue) }
+        #expect(steps.compactMap { $0["kind"]?.stringValue } == [
+            "create_aux", "main_output", "send_assignment", "name", "track_sort", "mixer_visibility",
+        ])
+        let inventory = try #require(body["new_object_inventory"]?.arrayValue)
+        #expect(inventory == [.object([
+            "handle": .string("new:aux_bus_3"), "kind": .string("aux"),
+            "input_bus": .int(3), "created_by": .string("create_aux_bus_3"),
+        ])])
+        let reasons = try #require(body["reasons"]?.arrayValue)
+        #expect(reasons.contains(.string("aux_creation_adapter_unavailable")))
+        #expect(reasons.contains(.string("protected_path_execution_verifier_unavailable")))
+        let executable = try #require(body["executable"]?.boolValue as Bool?)
+        #expect(!executable)
+        #expect(body["preview"] == body["steps"])
+
+        let repeated = try plan(candidate, options: options, policyExtras: [
+            "receivers": .array([.object(["bus": .int(3), "aux": .string("new")])]),
+            "sends": .array([.object([
+                "target": .string("approved"), "physical_slot": .int(5), "bus": .int(3)])]),
+            "protected_paths": .array([.object([
+                "target": .string("approved"), "sink_node_id": .string("sink_opaque")])]),
+            "presentation": finalPresentation,
+        ], names: [.init(target: "approved", name: "Approved, literal name 🎛️")])
+        #expect(repeated["digest"] == body["digest"])
+        #expect(repeated["new_object_inventory"] == body["new_object_inventory"])
+        #expect(repeated["steps"] == body["steps"])
+    }
+
     @Test(arguments: ["output", "send", "receiver"])
     func unchangedTopologyCannotLeaveDanglingPresentationDependencies(_ kind: String) throws {
         var extras: [String: Value] = ["presentation": .object(["mixer_visible": .bool(true)])]
