@@ -1,0 +1,74 @@
+{
+  "id": "2026-10-21-midi-file-import-creates-an-external-midi-lane-regardless-of-program-or-selection",
+  "date": "2026-10-21",
+  "schema": 3,
+  "subject": "the lane type File > Import > MIDI File creates, and copying its region onto a Software Instrument track",
+  "question": "record_sequence always ends in State B imported_as_gm_device on this host. Does a GM program change in the file, or a selected Software Instrument track, change the lane Logic creates? If not, can the region be moved onto an audible track and verified?",
+  "verdict": "works",
+  "issues": [
+    128,
+    131
+  ],
+  "surface": "arrange.regions",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.4",
+    "build": "6707",
+    "locale": "en-US",
+    "os": "macOS 15.7.4 (24G517)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "In a project whose track 0 is a Software Instrument track, call logic_tracks record_sequence {bar: 3, notes: \"67,0,500,100;69,600,500,100\", target_track: 0, target_expected_name: <track 0 name>}; then repeat with a wrong target_expected_name.",
+    "expected": "The first answers State A with verify_source ax_region_delta, recorded_to_track 0 and gm_device_lane_retained true; the second refuses at relocation_preflight with write_attempted false and no new lane."
+  },
+  "depends": [
+    "Sources/LogicProMCP/Dispatchers/TrackDispatcher+RecordSequence.swift"
+  ],
+  "evidence": [],
+  "method": "A control import (the server's own SMF, notes only) and a test import (a hand-written format 0 SMF with the same notes plus Program Change 0 on channel 1) were made through the same menu path with a Software Instrument track selected, declining the tempo prompt as the server does. Lane names were read with logic_project inspect_session. The move was first done by hand with tracks.select, edit.cut, tracks.select, transport.goto_position and edit.paste, read back with project.get_regions, and confirmed by ear; the implemented relocation uses copy instead of cut.",
+  "observations": [
+    {
+      "probe": "import of the server's notes-only SMF with track 0 (a Software Instrument) selected",
+      "new_lane": "an External MIDI lane",
+      "selected_track_received_region": false
+    },
+    {
+      "probe": "import of the same notes plus Program Change 0 on channel 1",
+      "new_lane": "another External MIDI lane",
+      "note": "a GM program does not make Logic pick a software instrument on this host"
+    },
+    {
+      "probe": "select the new lane, cut, select track 0, playhead at bar 1, paste",
+      "regions_after": "the region on track 0, bars 1-2; the source lane empty",
+      "audible": "yes, confirmed by ear through track 0's instrument"
+    },
+    {
+      "operation": "record_sequence with target_track 0 and a wrong target_expected_name",
+      "state": "C",
+      "error": "target_name_mismatch",
+      "failure_stage": "relocation_preflight",
+      "write_attempted": false
+    },
+    {
+      "operation": "record_sequence bar 3 with target_track 0 and the correct name",
+      "state": "A",
+      "verify_source": "ax_region_delta",
+      "recorded_to_track": 0,
+      "start_bar": 1,
+      "end_bar": 4,
+      "gm_device_lane_retained": true
+    }
+  ],
+  "conclusion": "On this host MIDI file import always creates a new External MIDI lane, whatever the file's program change or the current selection, so the notes-only fix is not available in the file. Selecting a track selects its regions, so copy from the new lane and paste onto a named Software Instrument track at bar 1 moves the take with its bar offset intact, and a new region on the target at the imported bars is independent evidence the move happened.",
+  "limits": [
+    "Single-channel sequences only: a multichannel SMF creates several lanes and is refused rather than guessed at.",
+    "The GM lane is retained, not deleted; removing it stays an explicit, name-corroborated tracks.delete.",
+    "If the target already holds a region with the same name and bars, the paste cannot be told apart from it and the call fails closed as paste_unverified.",
+    "Other Logic versions may create Software Instrument lanes directly (the README demo implies 12.3 did on its host); there the relocation path is simply never taken."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record states a fact about Logic's BEHAVIOUR -- when the MIDI file Open panel accepts a key, where its buttons sit in the AX tree, what kind of lane an import creates -- not about a string Logic ships. There is no key to cite and nothing to prove absent. Rule 13 checks the claim: if any reading here resolved in the corpus the declaration would be refused."
+  }
+}

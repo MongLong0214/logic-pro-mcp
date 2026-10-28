@@ -909,6 +909,8 @@ enum SessionPopulationObservation {
         let nameReadError: String?
         var nameStatus: String { name != nil ? "observed" : (nameReadError != nil ? "unknown" : "not_read") }
         let output: String?
+        let outputObservation: OutputSlotObservation?
+        var outputStatus: String { outputObservation?.state.rawValue ?? "not_read" }
         let input: String?
         let inputObservation: InputSlotObservation?
         var inputStatus: String { inputObservation?.state.rawValue ?? "not_read" }
@@ -926,6 +928,8 @@ enum SessionPopulationObservation {
             case nameStatus = "name_status"
             case nameReadError = "name_read_error"
             case output
+            case outputObservation = "output_observation"
+            case outputStatus = "output_status"
             case input
             case inputObservation = "input_observation"
             case inputStatus = "input_status"
@@ -950,6 +954,8 @@ enum SessionPopulationObservation {
             try container.encode(nameStatus, forKey: .nameStatus)
             try container.encodeIfPresent(nameReadError, forKey: .nameReadError)
             try container.encodeIfPresent(output, forKey: .output)
+            try container.encodeIfPresent(outputObservation, forKey: .outputObservation)
+            try container.encode(outputStatus, forKey: .outputStatus)
             try container.encodeIfPresent(input, forKey: .input)
             try container.encodeIfPresent(inputObservation, forKey: .inputObservation)
             try container.encode(inputStatus, forKey: .inputStatus)
@@ -1414,6 +1420,7 @@ enum SessionPopulationObservation {
                     name: strip.name,
                     nameReadError: strip.nameReadError,
                     output: strip.output,
+                    outputObservation: strip.outputObservation,
                     input: strip.input,
                     inputObservation: strip.inputObservation,
                     pluginCount: !request.domains.contains(.strips) && strip.pluginsSource == nil

@@ -255,6 +255,7 @@ enum SemanticOracleTable {
         .projectApplySessionRepair,
         .midiExportTrackMIDI, .midiReadTrackNotes,
         .mixerBank,
+        .mixerSetOutputVerified,
     ]
 
     /// Every mutating operation the table covers: the B1 verified-write increment
@@ -318,15 +319,6 @@ enum SemanticOracleTable {
             + "bindings live in Logic's preferences and its Setup window, and no logic:// resource "
             + "publishes either, so the only confirmation available is the operation's own MCU "
             + "feedback",
-        .mixerSetOutputVerified:
-            // #291 R2. Post-closure like mixer.bank, and for the same reason NOT back-dated into a
-            // phase set. Its State A is the same strip's output slot read back by R1's reader
-            // (verify_source ax_output_slot) with an unmoved strip count -- an independent
-            // readback, so the exclusion is pending, not structural. No oracle pinning that
-            // envelope exists yet, and until one does this keeps the op out of the covered set.
-            "live State-A contract pending — State A is the same strip's output slot read back "
-            + "(verify_source ax_output_slot) with an unmoved strip count; no oracle pinning that "
-            + "envelope has been written yet",
         .mixerSetInputBusVerified:
             "semantic oracle pending — a bounded native round trip verifies the checked bus "
             + "input, physical output and unchanged strip count, but no independent typed-source "
@@ -533,6 +525,7 @@ enum SemanticOracleTable {
         systemSagaPreflight,
         systemSagaStatus,
         pluginsGetInventory,
+        pluginsGetHostParameterManifest,
         pluginsGetParamVerified,
         pluginsPlanParameterChanges,
         pluginsGetChannelEQStateVerified,
@@ -618,6 +611,7 @@ enum SemanticOracleTable {
         projectApplySessionRepair,
         midiExportTrackMIDI, midiReadTrackNotes,
         mixerBank,
+        mixerSetOutputVerified,
     ]
 
     static let byOperationID: [OperationID: OperationOracle] = Dictionary(
@@ -670,6 +664,8 @@ enum SemanticOracleTable {
         .projectGetRegions,
         // Same shape as projectGetRegions: two success branches, and a flat list can only pin one.
         .audioRecommendEQ,
+        // Conditional parameter/refusal rows need a row-to-parameter bijection and exact counts.
+        .pluginsGetHostParameterManifest,
         // The catalog's checkbox/slider distinction and conditional display status require
         // the custom response validator below, not a single numeric field constraint.
         .pluginsGetParamVerified,
@@ -887,6 +883,197 @@ enum SemanticOracleTable {
             .typedField(key: "plugins", type: .array),
         ]
     )
+
+    // AccessibilityChannel `defaultGetHostParameterManifest` returns one target-bound,
+    // unapproved Controls-view census. The rows and parameters are conditional and must be
+    // checked as a bijection: a flat constraint list cannot prove that readable/unreadable
+    // parameter rows retain their physical row indices while every refusal remains counted.
+    // This validates the response contract only. The same AX acquisition emits both the
+    // manifest and its evidence, and Logic exposes no trusted plug-in build identifier, so it
+    // deliberately retains an independent-readback deferral.
+    static let pluginsGetHostParameterManifest = OperationOracle(
+        custom: .pluginsGetHostParameterManifest,
+        reason: "The Controls-view manifest has conditional parameter/refusal rows whose physical indices, roles, classifications and exact counts must agree; the flat constraint model cannot express that row-to-parameter bijection.",
+        independentReadbackDeferral: QualificationDeferral(
+            code: .semanticValidatorUnavailable,
+            detail: "The manifest rows, identity evidence and caller-expected build fingerprint come from one AX acquisition; no independent build or typed parameter readback exists"
+        )
+    ) { responseData, _ in
+        func nonEmptyString(_ value: Any?) -> String? {
+            guard let value = value as? String else { return nil }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        func exactNonnegativeInt(_ value: Any?) -> Int? {
+            guard let value,
+                  let number = JSONInspector.number(of: value),
+                  number.isFinite, number >= 0,
+                  let exact = Int(exactly: number) else { return nil }
+            return exact
+        }
+        func exactBool(_ value: Any?, _ expected: Bool) -> Bool {
+            guard let value, JSONInspector.isBoolean(value), let boolean = value as? Bool else {
+                return false
+            }
+            return boolean == expected
+        }
+        func nullableString(_ value: Any?) -> Bool {
+            value is NSNull || value is String
+        }
+        func nullableNonEmptyString(_ value: Any?) -> Bool {
+            value is NSNull || nonEmptyString(value) != nil
+        }
+        func nullableBoolean(_ value: Any?) -> Bool {
+            guard let value else { return false }
+            return value is NSNull || JSONInspector.isBoolean(value)
+        }
+        func parameterName(from label: String) -> String {
+            let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
+            let withoutColon = trimmed.hasSuffix(":") ? String(trimmed.dropLast()) : trimmed
+            return withoutColon.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        func targetFingerprintMatchesIdentity(
+            _ fingerprint: String,
+            trackIndex: Int,
+            insert: Int,
+            pluginID: String
+        ) -> Bool {
+            let bytes = Array(fingerprint.utf8)
+            let trackPrefix = Array("\(trackIndex):".utf8)
+            guard bytes.starts(with: trackPrefix) else { return false }
+            let lengthStart = trackPrefix.count
+            guard lengthStart < bytes.count,
+                  let lengthEnd = bytes[lengthStart...].firstIndex(of: 58),
+                  lengthStart < lengthEnd,
+                  let nameLength = Int(String(
+                    decoding: bytes[lengthStart..<lengthEnd],
+                    as: UTF8.self
+                  )),
+                  nameLength >= 0 else { return false }
+            let nameStart = lengthEnd + 1
+            guard nameStart <= bytes.count,
+                  nameLength <= bytes.count - nameStart else { return false }
+            let suffixStart = nameStart + nameLength
+            let expectedSuffix = Array("|insert=\(insert)|plugin=\(pluginID)".utf8)
+            return bytes[suffixStart...].elementsEqual(expectedSuffix)
+        }
+
+        guard let object = JSONInspector.parse(responseData) as? [String: Any],
+              object["state"] as? String == "A",
+              object["hc_schema"].flatMap(JSONInspector.number) == 2,
+              object["operation"] as? String == "logic_plugins.get_host_parameter_manifest",
+              exactBool(object["success"], true),
+              exactBool(object["verified"], true),
+              exactBool(object["complete"], true),
+              exactBool(object["approved"], false),
+              exactBool(object["write_qualified"], false),
+              exactBool(object["write_attempted"], false),
+              object["provider"] as? String == "controls_view_ax",
+              object["build_fingerprint_source"] as? String == "caller_expected_unverified",
+              let targetReference = nonEmptyString(object["target_ref"]),
+              targetReference.hasPrefix("ins_"),
+              let targetFingerprint = nonEmptyString(object["target_fingerprint"]),
+              let targetIdentity = object["target_identity"] as? [String: Any],
+              let targetTrackIndex = exactNonnegativeInt(targetIdentity["track_index"]),
+              let targetInsert = exactNonnegativeInt(targetIdentity["insert"]),
+              let targetPluginID = nonEmptyString(targetIdentity["plugin_id"]),
+              let pluginName = nonEmptyString(object["plugin_name"]),
+              targetPluginID == (VerifiedPluginCatalog.pluginID(forObservedName: pluginName) ?? pluginName),
+              targetFingerprintMatchesIdentity(
+                targetFingerprint,
+                trackIndex: targetTrackIndex,
+                insert: targetInsert,
+                pluginID: targetPluginID
+              ),
+              nonEmptyString(object["build_fingerprint"]) != nil,
+              nonEmptyString(object["ui_signature_fingerprint"]) != nil,
+              nonEmptyString(object["manifest_fingerprint"]) != nil,
+              let parameters = object["parameters"] as? [[String: Any]],
+              let rows = object["row_observations"] as? [[String: Any]], !rows.isEmpty,
+              exactNonnegativeInt(object["parameter_count"]) == parameters.count,
+              exactNonnegativeInt(object["row_observation_count"]) == rows.count,
+              let declaredRefusedCount = exactNonnegativeInt(object["refused_row_count"]),
+              let identity = object["identity_evidence"] as? [String: Any],
+              identity["plugin_name"] as? String == pluginName,
+              identity["plugin_name_source"] as? String == "directWindowStaticText",
+              nonEmptyString(identity["window_title"]) != nil,
+              let directTexts = identity["direct_static_text_values"] as? [String],
+              directTexts.contains(pluginName),
+              object.keys.contains("canonical_plugin_identifier"),
+              identity.keys.contains("canonical_plugin_identifier"),
+              object["canonical_plugin_identifier"] is NSNull,
+              identity["canonical_plugin_identifier"] is NSNull,
+              identity.keys.contains("observed_window_ax_identifier"),
+              nullableNonEmptyString(identity["observed_window_ax_identifier"])
+        else { return false }
+
+        let allowedRoles: Set<String> = ["AXSlider", "AXCheckBox", "AXPopUpButton", "AXRadioButton"]
+        var parameterRows: [Int: (role: String, readable: Bool, label: String)] = [:]
+        var refusedCount = 0
+
+        for (position, row) in rows.enumerated() {
+            guard exactNonnegativeInt(row["row_index"]) == position,
+                  row.keys.contains("observed_label"), nullableString(row["observed_label"]),
+                  let controlRoles = row["control_roles"] as? [String],
+                  controlRoles.allSatisfy(allowedRoles.contains),
+                  row.keys.contains("value_description"), nullableString(row["value_description"]),
+                  row.keys.contains("value_is_settable"), nullableBoolean(row["value_is_settable"]),
+                  let classification = nonEmptyString(row["classification"])
+            else { return false }
+
+            if classification.hasPrefix("parameter_readable_")
+                || classification.hasPrefix("parameter_unreadable_") {
+                let readable = classification.hasPrefix("parameter_readable_")
+                let prefix = readable ? "parameter_readable_" : "parameter_unreadable_"
+                let role = String(classification.dropFirst(prefix.count))
+                guard allowedRoles.contains(role), controlRoles == [role],
+                      let label = nonEmptyString(row["observed_label"]),
+                      parameterRows[position] == nil else { return false }
+                parameterRows[position] = (role, readable, label)
+                continue
+            }
+
+            guard classification.hasPrefix("refused_") else { return false }
+            refusedCount += 1
+            switch classification {
+            case "refused_no_control":
+                guard controlRoles.isEmpty else { return false }
+            case "refused_unpaired_label_and_control":
+                guard controlRoles.count == 1 else { return false }
+            case "refused_empty_label", "refused_placeholder_label", "refused_ambiguous_label":
+                break
+            default:
+                let prefix = "refused_ambiguous_control_"
+                guard classification.hasPrefix(prefix) else { return false }
+                let roles = String(classification.dropFirst(prefix.count))
+                    .split(separator: ",").map(String.init)
+                guard roles.count > 1, roles == controlRoles,
+                      roles.allSatisfy(allowedRoles.contains) else { return false }
+            }
+        }
+
+        guard refusedCount == declaredRefusedCount,
+              parameterRows.count == parameters.count else { return false }
+        var seenReferences = Set<String>()
+        var seenIndices = Set<Int>()
+        for parameter in parameters {
+            guard let index = exactNonnegativeInt(parameter["index"]),
+                  exactNonnegativeInt(parameter["page"]) == 0,
+                  let reference = nonEmptyString(parameter["parameter_ref"]),
+                  reference == "controls_view_row_\(index)",
+                  seenReferences.insert(reference).inserted,
+                  seenIndices.insert(index).inserted,
+                  let name = nonEmptyString(parameter["name"]),
+                  let role = nonEmptyString(parameter["control_role"]),
+                  allowedRoles.contains(role),
+                  let valueKind = nonEmptyString(parameter["value_kind"]),
+                  let row = parameterRows[index], row.role == role,
+                  parameterName(from: row.label) == name,
+                  valueKind == (row.readable ? "normalizedReadbackOnly" : "unsupported")
+            else { return false }
+        }
+        return seenIndices == Set(parameterRows.keys)
+    }
 
     // The response protocol is conditional on the existing catalog's read method:
     // checkbox raw values are Boolean; native-slider raw values are finite numbers.
@@ -2954,33 +3141,102 @@ enum SemanticOracleTable {
         ]
     )
 
-    // MCUChannel.executeBank. #862's ten 2026-09-27 locale records drive this
-    // bounded State-A profile: one requested bank step, one witnessed move and
-    // at least one fresh MCU LCD upper-row write. `step_windows` also contains
-    // ambiguity-probe windows, so the current envelope cannot prove an ordered
-    // multi-step walk; count > 1 deliberately remains unqualified. A one-step
-    // right move can use two probe presses in addition to its requested press,
-    // hence the 1...3 press domain. The before/after inequality rejects a sent-
-    // button receipt or unchanged edge redraw. Bookkeeping stays shape-only
-    // because it is local state, not Logic readback.
+    // MCUChannel.executeBank. #862's ten 2026-09-27 locale records establish the
+    // upper-row witness. `requested_step_windows` now separates exactly one row
+    // per caller-requested bank step from the legacy `step_windows` diagnostic,
+    // which may additionally contain ambiguity-probe rows. State A therefore
+    // requires every requested step to have moved, the ordered requested-row
+    // count to match, and every successive row to differ from the row before it.
+    // One requested right step can use two probe presses, hence at most 3 * 31
+    // presses. Bookkeeping stays shape-only because it is local state, not Logic
+    // readback.
     static let mixerBank = SafeMutationOracle.oracle(
         .mixerBank,
         semantics: [
             .valueEquals(key: "operation", expected: .string("mixer.bank")),
             .valueEquals(key: "channel", expected: .string("MCU")),
             .enumMember(key: "direction", allowed: ["left", "right"]),
-            .valueEquals(key: "banks_requested", expected: .number(1)),
-            .valueEquals(key: "banks_moved", expected: .number(1)),
-            .numericRange(key: "bank_presses_sent", min: 1, max: 3),
+            .numericRange(key: "banks_requested", min: 1, max: 31),
+            .fieldsEqual(keyA: "banks_requested", keyB: "banks_moved"),
+            .numericRange(key: "bank_presses_sent", min: 1, max: 93),
             .numericMinimum(key: "upper_row_writes_observed", min: 1),
             .typedField(key: "bank_bookkeeping_before", type: .number),
             .typedField(key: "bank_bookkeeping_after", type: .number),
             .typedField(key: "window_before", type: .string),
             .typedField(key: "window_after", type: .string),
-            .fieldsDiffer(keyA: "window_before", keyB: "window_after"),
             .nonEmptyArray(key: "step_windows"),
+            .arrayCountEquals(key: "requested_step_windows", countKey: "banks_requested", offset: 0),
+            .orderedStringArrayChanges(key: "requested_step_windows", initialKey: "window_before"),
+            .valueEquals(key: "bank_probe_unresolved", expected: .bool(false)),
+            .bankRequestedWindowWitness(
+                traceKey: "step_windows",
+                requestedKey: "requested_step_windows",
+                directionKey: "direction",
+                disambiguatedCountKey: "bank_steps_disambiguated",
+                pressesKey: "bank_presses_sent",
+                writesKey: "upper_row_writes_observed",
+                finalKey: "window_after"
+            ),
             .nonEmptyArray(key: "strips"),
             .valueEquals(key: "verify_source", expected: .string("mcu_lcd_upper_row")),
+        ]
+    )
+
+    // AccessibilityChannel+OutputAssignment `setOutputVerified`. The product
+    // contract grants State A only after the same strip's output reader echoes
+    // the requested destination while the Mixer population stays fixed. The
+    // handler also has a verified no-write branch when that destination was
+    // already present. The alternatives keep those shapes distinct: a changing
+    // write must prove a real before/after difference plus closed-menu and
+    // unchanged-population custody, while a no-write receipt must prove the
+    // before/after/destination identity. Native acceptance remains a separate
+    // #291 evidence decision; this oracle validates only the response envelope.
+    static let mixerSetOutputVerified = SafeMutationOracle.oracle(
+        .mixerSetOutputVerified,
+        semantics: [
+            .valueEquals(key: "operation", expected: .string("mixer.set_output_verified")),
+            .valueEquals(key: "verify_source", expected: .string("ax_output_slot")),
+            .outputAssignment(key: "before"),
+            .outputAssignment(key: "destination"),
+            .outputAssignment(key: "after"),
+            .fieldsEqual(keyA: "after", keyB: "destination"),
+            .anyOf([
+                [.integerMinimum(key: "mixer_strip_index", min: 0)],
+                [.integerMinimum(key: "track", min: 0)],
+            ]),
+            .anyOf([
+                [
+                    .valueEquals(key: "changed", expected: .bool(false)),
+                    .valueEquals(key: "write_attempted", expected: .bool(false)),
+                    .fieldsEqual(keyA: "before", keyB: "after"),
+                    .enumMember(key: "after.kind", allowed: ["bus", "physical", "stereo_output"]),
+                    .integerMinimum(key: "strip_count_before", min: 0),
+                ],
+                [
+                    .valueEquals(key: "changed", expected: .bool(true)),
+                    .valueEquals(key: "write_attempted", expected: .bool(true)),
+                    .fieldsDiffer(keyA: "before", keyB: "after"),
+                    .anyOf([
+                        [
+                            .enumMember(key: "before.kind", allowed: ["bus", "physical", "stereo_output"]),
+                            .enumMember(key: "after.kind", allowed: ["bus", "physical", "stereo_output"]),
+                        ],
+                        [
+                            .valueEquals(key: "before.kind", expected: .string("no_output")),
+                            .valueEquals(key: "after.kind", expected: .string("stereo_output")),
+                        ],
+                        [
+                            .valueEquals(key: "before.kind", expected: .string("stereo_output")),
+                            .valueEquals(key: "after.kind", expected: .string("no_output")),
+                        ],
+                    ]),
+                    .integerMinimum(key: "strip_count_before", min: 0),
+                    .integerMinimum(key: "strip_count_after", min: 0),
+                    .fieldsEqual(keyA: "strip_count_before", keyB: "strip_count_after"),
+                    .valueEquals(key: "popup_menu_state", expected: .string("closed")),
+                    .nonEmptyArray(key: "menu_path"),
+                ],
+            ]),
         ]
     )
 }

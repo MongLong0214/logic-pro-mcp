@@ -902,6 +902,10 @@ struct Issue1020MCUStripButtonSetTests {
         #expect(obj["banks_moved"] as? Int == 1)
         #expect(obj["bank_presses_sent"] as? Int == 3)
         #expect(obj["bank_steps_disambiguated"] as? Int == 1)
+        let allWindows = try #require(obj["step_windows"] as? [String])
+        #expect(allWindows.count == 3, "requested step plus the two ambiguity-probe windows")
+        let requestedWindows = try #require(obj["requested_step_windows"] as? [String])
+        #expect(requestedWindows == [LCDBankSurface.stripsRow(measuredKoStrips, from: 8)])
 
         // Aligned: track 15 is strip 7 of the bank already showing, pressed with no walk.
         let arm = await rig.channel.execute(operation: "track.set_arm", params: ["index": "15", "enabled": "true"])
