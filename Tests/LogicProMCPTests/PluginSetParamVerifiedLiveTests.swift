@@ -126,6 +126,7 @@ private final class LiveFixture: @unchecked Sendable {
         viewMenuReadFailsAfterFirstSelection: Bool = false,
         controlsTableReadFailsAfterRestoration: Bool = false,
         invalidateTargetSlotAfterViewSelection: Bool = false,
+        invalidateTargetSlotAfterEditorRestoration: Bool = false,
         mutatePluginHeaderAfterViewSelection: Bool = false,
         ambiguousEditorSliderAfterViewSelection: Bool = false,
         viewMenuRevealAfterPolls: Int? = 3,
@@ -600,6 +601,9 @@ private final class LiveFixture: @unchecked Sendable {
                         return true
                     }
                     editorViewMenuPressCount.value += 1
+                    if invalidateTargetSlotAfterEditorRestoration, let targetSlotForViewMutation {
+                        b.setAttribute(targetSlotForViewMutation, kAXDescriptionAttribute as String, "Noise Gate")
+                    }
                     if invalidateTargetSlotAfterViewSelection, let targetSlotForViewMutation {
                         b.setAttribute(targetSlotForViewMutation, kAXDescriptionAttribute as String, "Noise Gate")
                     }
@@ -4270,6 +4274,77 @@ private func parameterReadParams(_ param: String = "threshold") -> [String: Stri
      "expected_slot_read_status": "ok", "expected_plugin_identity": "logic.stock.effect.compressor"]
 }
 
+private func compressorRatioReadFixture(controls: Bool) -> LiveFixture {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "Ratio",
+        controlsViewInitiallySelected: controls,
+        viewSettleDelay: 0
+    )
+    let builder = fixture.builder
+    builder.setAttribute(
+        builder.element(1001),
+        kAXDocumentAttribute as String,
+        URL(fileURLWithPath: expectedPath).absoluteString
+    )
+    let displaySlider = builder.element(299_601)
+    let rawSlider = builder.element(299_602)
+    let displayGroup = builder.element(299_603)
+    let indicator = builder.element(299_604)
+    builder.setRole(displayGroup, kAXGroupRole as String)
+    for slider in [displaySlider, rawSlider] {
+        builder.setRole(slider, kAXSliderRole as String)
+        builder.setAttribute(slider, kAXValueAttribute as String, 42.0)
+    }
+    builder.setAttribute(displaySlider, kAXValueDescriptionAttribute as String, "2.1:1")
+    builder.setRole(indicator, "AXValueIndicator")
+    builder.setAttribute(indicator, kAXValueAttribute as String, 42.0)
+    builder.setChildren(displayGroup, [displaySlider])
+    builder.setChildren(rawSlider, [indicator])
+    builder.setChildren(builder.element(100_905), [builder.element(100_907), displayGroup, rawSlider])
+    return fixture
+}
+
+@Test(arguments: [false, true])
+func testIssue299CompressorRatioReadsActualDisplayWithoutAuthorizingAWrite(_ controls: Bool) async throws {
+    let fixture = compressorRatioReadFixture(controls: controls)
+    let originalView = fixture.currentPluginViewTitle
+    let result = await AccessibilityChannel.defaultGetParamVerified(
+        params: parameterReadParams("ratio"),
+        runtime: parameterReadRuntime(fixture)
+    )
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "A", "\(object)")
+    #expect(object["observed_raw"] as? Double == 42)
+    #expect(object["observed_display"] as? String == "2.1:1")
+    #expect(object["raw_unit"] as? String == "raw_ax_value")
+    #expect(object["parameter_read_status"] as? String == "read")
+    #expect(fixture.currentPluginViewTitle == originalView)
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+@Test func testIssue299CompressorRatioReadMetadataStillRefusesAWrite() async throws {
+    let fixture = compressorRatioReadFixture(controls: true)
+    var params = parameterReadParams("ratio")
+    params.merge([
+        "mode": "duplicate_applyback",
+        "value": "42",
+        "unit": "raw_ax_value",
+    ]) { _, new in new }
+    let result = await AccessibilityChannel.defaultSetParamVerified(
+        params: params,
+        runtime: parameterReadRuntime(fixture),
+        frontDocumentPath: { expectedPath }
+    )
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "C", "\(object)")
+    #expect(object["error"] as? String == "unsupported_param_readback")
+    #expect(!(try #require(object["write_attempted"] as? Bool)))
+    #expect(fixture.axActions.value.isEmpty)
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
 // #1396: measured Gain Controls view has a display-bearing slider, a raw-only
 // sibling slider and its value indicator. Boolean rows contain two named radio
 // buttons. These reads must not borrow the writer's single-control authority.
@@ -5160,6 +5235,319 @@ func testIssue1396GainProtocolOracleChecksMeasuredRawTypeAndUnit(_ param: String
     #expect(fixture.controlsCheckboxPressCount.value == 0)
     #expect(fixture.currentSliderValue == 51)
     #expect(fixture.pluginCloseControlPressCount.value == 0)
+}
+
+@Test func testIssue306HostParameterManifestReusesBoundControlsProducerWithoutWrite() async throws {
+    let fixture = LiveFixture(
+        pluginSlotName: "Compressor",
+        controlsViewRowLabel: "Limiter On",
+        controlsCheckboxBefore: true,
+        controlsViewInitiallySelected: true,
+        viewSettleDelay: 0
+    )
+    fixture.builder.setAttribute(
+        fixture.builder.element(1001),
+        kAXDocumentAttribute as String,
+        URL(fileURLWithPath: expectedPath).absoluteString
+    )
+    let result = await AccessibilityChannel.defaultGetHostParameterManifest(params: [
+        "track": "0", "insert": "6", "plugin": "Compressor",
+        "expected_build_fingerprint": "vendor-build-1",
+        "project_expected_path": expectedPath, "expected_track_name": trackName,
+        "expected_slot_read_status": "ok",
+        "expected_plugin_identity": "logic.stock.effect.compressor",
+    ], runtime: parameterReadRuntime(fixture))
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "A")
+    #expect(object["operation"] as? String == "logic_plugins.get_host_parameter_manifest")
+    #expect(try #require(object["complete"] as? Bool))
+    #expect(object["build_fingerprint"] as? String == "vendor-build-1")
+    #expect(object["build_fingerprint_source"] as? String == "caller_expected_unverified")
+    #expect(!(try #require(object["approved"] as? Bool)))
+    #expect(object["canonical_plugin_identifier"] is NSNull)
+    let parameters = try #require(object["parameters"] as? [[String: Any]])
+    #expect(parameters.count == 1)
+    #expect(object["parameter_count"] as? Int == parameters.count)
+    #expect(parameters[0]["name"] as? String == "Limiter On")
+    #expect(parameters[0]["value_kind"] as? String == "normalizedReadbackOnly")
+    #expect(parameters[0]["control_role"] as? String == "AXCheckBox")
+    let rows = try #require(object["row_observations"] as? [[String: Any]])
+    #expect(rows.count == 2)
+    #expect(object["row_observation_count"] as? Int == rows.count)
+    #expect(object["refused_row_count"] as? Int == 1)
+    #expect(rows[0]["classification"] as? String == "refused_no_control")
+    #expect(rows[1]["classification"] as? String == "parameter_readable_AXCheckBox")
+    #expect(!(try #require(object["write_attempted"] as? Bool)))
+    #expect(!(try #require(object["plugin_view_restore_attempted"] as? Bool)))
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+    #expect(fixture.targetOpenControlPressCount.value == 0)
+}
+
+@Test func testIssue306HostParameterManifestRestoresPriorEditorView() async throws {
+    let fixture = LiveFixture(
+        pluginSlotName: "Compressor",
+        controlsViewRowLabel: "Limiter On",
+        controlsCheckboxBefore: true,
+        controlsViewInitiallySelected: false,
+        viewSettleDelay: 0
+    )
+    fixture.builder.setAttribute(
+        fixture.builder.element(1001),
+        kAXDocumentAttribute as String,
+        URL(fileURLWithPath: expectedPath).absoluteString
+    )
+    let result = await AccessibilityChannel.defaultGetHostParameterManifest(params: [
+        "track": "0", "insert": "6", "plugin": "Compressor",
+        "expected_build_fingerprint": "vendor-build-1",
+        "project_expected_path": expectedPath, "expected_track_name": trackName,
+        "expected_slot_read_status": "ok",
+        "expected_plugin_identity": "logic.stock.effect.compressor",
+    ], runtime: parameterReadRuntime(fixture))
+    let object = try #require(sharedJSONObject(result.message))
+
+    #expect(object["state"] as? String == "A")
+    #expect(try #require(object["plugin_view_restore_attempted"] as? Bool))
+    #expect(try #require(object["plugin_view_restore_observed"] as? Bool))
+    #expect(!(try #require(object["write_attempted"] as? Bool)))
+    #expect(fixture.controlsViewMenuPressCount.value == 1)
+    #expect(fixture.editorViewMenuPressCount.value == 1)
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+@Test func testIssue306HostParameterManifestRejectsTargetDriftDuringViewRestoration() async throws {
+    let fixture = LiveFixture(
+        pluginSlotName: "Compressor",
+        controlsViewRowLabel: "Limiter On",
+        controlsCheckboxBefore: true,
+        controlsViewInitiallySelected: false,
+        invalidateTargetSlotAfterEditorRestoration: true,
+        viewSettleDelay: 0
+    )
+    fixture.builder.setAttribute(
+        fixture.builder.element(1001),
+        kAXDocumentAttribute as String,
+        URL(fileURLWithPath: expectedPath).absoluteString
+    )
+    let result = await AccessibilityChannel.defaultGetHostParameterManifest(params: [
+        "track": "0", "insert": "6", "plugin": "Compressor",
+        "expected_build_fingerprint": "vendor-build-1",
+        "project_expected_path": expectedPath, "expected_track_name": trackName,
+        "expected_slot_read_status": "ok",
+        "expected_plugin_identity": "logic.stock.effect.compressor",
+    ], runtime: parameterReadRuntime(fixture))
+    let object = try #require(sharedJSONObject(result.message))
+
+    #expect(object["state"] as? String == "C")
+    #expect(object["error"] as? String == "stale_target_reference")
+    #expect(try #require(object["plugin_view_restore_attempted"] as? Bool))
+    #expect(!(try #require(object["write_attempted"] as? Bool)))
+    #expect(fixture.controlsViewMenuPressCount.value == 1)
+    #expect(fixture.editorViewMenuPressCount.value == 1)
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+@Test func testIssue306HostParameterManifestRefusesBlankBuildFingerprintBeforeUI() async throws {
+    let fixture = LiveFixture(
+        pluginSlotName: "Compressor",
+        controlsViewRowLabel: "Limiter On",
+        controlsCheckboxBefore: true,
+        controlsViewInitiallySelected: false,
+        viewSettleDelay: 0
+    )
+    fixture.builder.setAttribute(
+        fixture.builder.element(1001),
+        kAXDocumentAttribute as String,
+        URL(fileURLWithPath: expectedPath).absoluteString
+    )
+    let result = await AccessibilityChannel.defaultGetHostParameterManifest(params: [
+        "track": "0", "insert": "6", "plugin": "Compressor",
+        "expected_build_fingerprint": "  \n",
+        "project_expected_path": expectedPath, "expected_track_name": trackName,
+        "expected_slot_read_status": "ok",
+        "expected_plugin_identity": "logic.stock.effect.compressor",
+    ], runtime: parameterReadRuntime(fixture))
+    let object = try #require(sharedJSONObject(result.message))
+
+    #expect(object["state"] as? String == "C")
+    #expect(object["error"] as? String == "invalid_params")
+    #expect(!(try #require(object["write_attempted"] as? Bool)))
+    #expect(fixture.controlsViewMenuPressCount.value == 0)
+    #expect(fixture.editorViewMenuPressCount.value == 0)
+    #expect(fixture.targetOpenControlPressCount.value == 0)
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+@Test func testIssue306HostParameterManifestRefusesWrongThirdPartyEditorHeader() async throws {
+    let fixture = LiveFixture(
+        pluginSlotName: "Raum",
+        pluginWindowStaticTextValues: ["보기:", "Different Plug-in", trackName],
+        controlsViewRowLabel: "Mix:",
+        controlsCheckboxBefore: true,
+        controlsViewInitiallySelected: true,
+        viewSettleDelay: 0
+    )
+    fixture.builder.setAttribute(
+        fixture.builder.element(1001),
+        kAXDocumentAttribute as String,
+        URL(fileURLWithPath: expectedPath).absoluteString
+    )
+    let result = await AccessibilityChannel.defaultGetHostParameterManifest(params: [
+        "track": "0", "insert": "6", "plugin": "Raum",
+        "expected_build_fingerprint": "raum-build-unverified",
+        "project_expected_path": expectedPath, "expected_track_name": trackName,
+        "expected_slot_read_status": "ok", "expected_plugin_identity": "Raum",
+    ], runtime: parameterReadRuntime(fixture))
+    let object = try #require(sharedJSONObject(result.message))
+
+    #expect(object["state"] as? String == "C")
+    #expect(!(try #require(object["write_attempted"] as? Bool)))
+    #expect(Set(object["observed_plugin_window_static_texts"] as? [String] ?? [])
+        == Set(["보기:", "Different Plug-in", trackName]))
+    #expect(fixture.controlsViewMenuPressCount.value == 0)
+    #expect(fixture.editorViewMenuPressCount.value == 0)
+    #expect(fixture.targetOpenControlPressCount.value == 0)
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+@Test func testIssue306PublicManifestResolvesOccupiedInsertReference() async throws {
+    try await FeatureFlags.withAdr002TargetRefForTests(true) {
+        let fixture = LiveFixture(
+            pluginSlotName: "Compressor",
+            controlsViewRowLabel: "Limiter On",
+            controlsCheckboxBefore: true,
+            controlsViewInitiallySelected: true,
+            viewSettleDelay: 0
+        )
+        fixture.builder.setAttribute(
+            fixture.builder.element(1001),
+            kAXDocumentAttribute as String,
+            URL(fileURLWithPath: expectedPath).absoluteString
+        )
+        let router = ChannelRouter()
+        let reader = AccessibilityChannel(runtime: .axBacked(
+            isTrusted: { true }, isLogicProRunning: { true }, hasVisibleWindow: { true },
+            logicRuntime: parameterReadRuntime(fixture), canPostEvents: { false }
+        ))
+        await router.register(reader)
+        let cache = StateCache()
+        let project = ProjectInfo(name: "AcidWashBass copy", filePath: expectedPath)
+        await cache.updateProject(project)
+        await cache.updateTracks([TrackState(id: 0, name: trackName, type: .audio)])
+        let registry = TargetRegistry()
+        let initialSnapshot = await registry.currentSnapshot
+        _ = await registry.snapshotForObservedProject(
+            project,
+            ifCurrent: initialSnapshot,
+            stoppingWhen: { false }
+        )
+        let descriptor = TargetDescriptor(trackIndex: 0, trackName: trackName)
+        let fingerprint = TargetRefResolver.pluginInsertFingerprint(
+            descriptor: descriptor,
+            insert: 6,
+            pluginIdentity: "logic.stock.effect.compressor"
+        )
+        let reference = await registry.bind(
+            kind: .pluginInsert,
+            descriptor: descriptor,
+            fingerprint: fingerprint
+        )
+        let result = await PluginsDispatcher.handle(
+            verifiedGate: VerifiedOpGate(),
+            command: "get_host_parameter_manifest",
+            params: [
+                "target_ref": .string(reference.rawValue),
+                "expected_build_fingerprint": .string("vendor-build-1"),
+            ],
+            router: router,
+            cache: cache,
+            targetRegistry: registry
+        )
+        let object = try #require(sharedJSONObject(sharedToolText(result)))
+        #expect(object["state"] as? String == "A", "Public reader must be reachable: \(object)")
+        #expect(object["target_ref"] as? String == reference.rawValue)
+        #expect(object["target_fingerprint"] as? String == fingerprint)
+        #expect(!(try #require(object["write_attempted"] as? Bool)))
+        #expect(fixture.sliderWriteCount.value == 0)
+        #expect(fixture.controlsCheckboxPressCount.value == 0)
+        #expect(OperationRegistry.spec(
+            tool: "logic_plugins",
+            command: "get_host_parameter_manifest"
+        )?.mutability == .readOnly)
+        #expect(ChannelRouter.routingTable["plugin.get_host_parameter_manifest"] == [.accessibility])
+    }
+}
+
+@Test func testIssue306PublicManifestBindsUncataloguedThirdPartyDisplayIdentity() async throws {
+    try await FeatureFlags.withAdr002TargetRefForTests(true) {
+        let fixture = LiveFixture(
+            pluginSlotName: "Raum",
+            controlsViewRowLabel: "Mix:",
+            controlsCheckboxBefore: true,
+            controlsViewInitiallySelected: true,
+            viewSettleDelay: 0
+        )
+        fixture.builder.setAttribute(
+            fixture.builder.element(1001),
+            kAXDocumentAttribute as String,
+            URL(fileURLWithPath: expectedPath).absoluteString
+        )
+        let router = ChannelRouter()
+        let reader = AccessibilityChannel(runtime: .axBacked(
+            isTrusted: { true }, isLogicProRunning: { true }, hasVisibleWindow: { true },
+            logicRuntime: parameterReadRuntime(fixture), canPostEvents: { false }
+        ))
+        await router.register(reader)
+        let cache = StateCache()
+        let project = ProjectInfo(name: "AcidWashBass copy", filePath: expectedPath)
+        await cache.updateProject(project)
+        await cache.updateTracks([TrackState(id: 0, name: trackName, type: .audio)])
+        let registry = TargetRegistry()
+        let initialSnapshot = await registry.currentSnapshot
+        _ = await registry.snapshotForObservedProject(
+            project,
+            ifCurrent: initialSnapshot,
+            stoppingWhen: { false }
+        )
+        let descriptor = TargetDescriptor(trackIndex: 0, trackName: trackName)
+        let fingerprint = TargetRefResolver.pluginInsertFingerprint(
+            descriptor: descriptor,
+            insert: 6,
+            pluginIdentity: "Raum"
+        )
+        let reference = await registry.bind(
+            kind: .pluginInsert,
+            descriptor: descriptor,
+            fingerprint: fingerprint
+        )
+        let result = await PluginsDispatcher.handle(
+            verifiedGate: VerifiedOpGate(),
+            command: "get_host_parameter_manifest",
+            params: [
+                "target_ref": .string(reference.rawValue),
+                "expected_build_fingerprint": .string("raum-build-unverified"),
+            ],
+            router: router,
+            cache: cache,
+            targetRegistry: registry
+        )
+        let object = try #require(sharedJSONObject(sharedToolText(result)))
+
+        #expect(object["state"] as? String == "A", "Third-party reader: \(object)")
+        #expect(object["plugin_name"] as? String == "Raum")
+        #expect(object["canonical_plugin_identifier"] is NSNull)
+        #expect(object["build_fingerprint_source"] as? String == "caller_expected_unverified")
+        #expect(!(try #require(object["approved"] as? Bool)))
+        #expect(!(try #require(object["write_qualified"] as? Bool)))
+        #expect(!(try #require(object["write_attempted"] as? Bool)))
+        #expect(object["target_ref"] as? String == reference.rawValue)
+        #expect(fixture.sliderWriteCount.value == 0)
+        #expect(fixture.controlsCheckboxPressCount.value == 0)
+    }
 }
 
 // End registry custody only after the actual AX reader has finished restoration.

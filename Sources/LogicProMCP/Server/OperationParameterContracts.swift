@@ -447,6 +447,16 @@ extension OperationRegistry {
                 ($0, ParamRule.unconstrained("omitted when it does not read as an integer; the channel then refuses the request",
                                              sample: .int(0)))
             }).merging(["reveal_mixer": .enforced(.boolean, .bool(false))],uniquingKeysWith:{ _,new in new }), required: [["index", "track", "track_index"]]),
+            "plugins.get_host_parameter_manifest": .init(params: [
+                "target_ref": .enforced(.string, .string("ins_lpm_contract_306")),
+                "project_ref": projectRef,
+                "expected_build_fingerprint": .enforced(.string, .string("vendor-build-1")),
+                "plugin": .enforced(.string, .string("Compressor")),
+                "plugin_id": .enforced(.string, .string("logic.stock.effect.compressor")),
+                "plugin_name": .enforced(.string, .string("Compressor")),
+                "track": .enforced(.integer, .int(0)),
+                "insert": .enforced(.integer, .int(6)),
+            ], required: [["target_ref"], ["expected_build_fingerprint"]]),
             "plugins.get_param_verified": .init(params: [
                 "target_ref": .enforced(.string, .string("ins_lpm_contract_955")), "project_ref": projectRef,
                 "param": .enforced(.string, .string("threshold")),
