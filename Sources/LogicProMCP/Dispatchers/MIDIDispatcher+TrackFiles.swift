@@ -3,8 +3,12 @@ import MCP
 
 extension MIDIDispatcher {
     static func handleTrackFileCommand(command: String, params: [String: Value],
-        export: (@Sendable (String, String, String?) async throws -> MIDITrackFileExport.Result)?) async -> CallTool.Result {
-        let allowed: Set<String> = command == "export_track_midi" ? ["project_ref", "target_ref", "path"] : ["project_ref", "target_ref"]
+        export: (@Sendable (
+            String, String, String?, Bool
+        ) async throws -> MIDITrackFileExport.Result)?) async -> CallTool.Result {
+        let allowed: Set<String> = command == "export_track_midi"
+            ? ["project_ref", "target_ref", "path", "allow_temporary_track_rename"]
+            : ["project_ref", "target_ref", "allow_temporary_track_rename"]
         guard Set(params.keys).isSubset(of: allowed),
               let project = params["project_ref"]?.stringValue, validMIDIReference(project, prefix: "prj_"),
               let track = params["target_ref"]?.stringValue, validMIDIReference(track, prefix: "trk_") else {
@@ -18,6 +22,13 @@ extension MIDIDispatcher {
             }
             path = value
         } else { path = nil }
+        let allowTemporaryRename: Bool
+        if let value = params["allow_temporary_track_rename"] {
+            guard let parsed = value.boolValue else {
+                return toolInvalidParamsResult("allow_temporary_track_rename must be a boolean")
+            }
+            allowTemporaryRename = parsed
+        } else { allowTemporaryRename = false }
         let traceID = await startTraceIfEnabled(command: command)
         guard let export else {
             return await finalizeTrace(midiFilePayload(["error": "native_export_unavailable", "success": false,
@@ -26,7 +37,7 @@ extension MIDIDispatcher {
         }
         let result: CallTool.Result
         do {
-            let exported = try await export(project, track, path)
+            let exported = try await export(project, track, path, allowTemporaryRename)
             let document = exported.document
             var payload: [String: Any] = [
                 "success": true, "state": "A", "operation": "midi.\(command)",
@@ -44,16 +55,67 @@ extension MIDIDispatcher {
                 "time_signatures": document.timeSignatures.map { ["tick": $0.tick, "numerator": $0.signature.numerator, "denominator": $0.signature.denominator] },
                 "ui_effects": ["export_panel": "closed", "selection_cycle": "not_changed_by_provider", "last_export_folder": "not_restored"],
             ]
+            if let rename = exported.temporaryRename {
+                payload["temporary_track_rename"] = [
+                    "original_name": rename.originalName,
+                    "temporary_name": rename.temporaryName,
+                    "restoration": rename.restoration,
+                ]
+                payload["ui_effects"] = [
+                    "export_panel": "closed", "selection_cycle": "not_changed_by_provider",
+                    "last_export_folder": "not_restored", "temporary_track_name": rename.restoration,
+                ]
+            }
             if let path { payload["path"] = path }
             result = midiFilePayload(payload)
         } catch {
+            let classifiedError: any Error
             let code: String
-            switch error {
+            var fields: [String: Any] = [:]
+            var uiEffects: [String: Any] = ["restoration": "unconfirmed"]
+            if let restored = error as? MIDITrackFileExport.RestoredTemporaryRenameFailure {
+                classifiedError = restored.primary
+                fields["temporary_original_name"] = restored.originalName
+                fields["temporary_name"] = restored.temporaryName
+                fields["observed_residual_name"] = restored.residualName
+                fields["cleanup_status"] = "restored"
+                uiEffects = ["temporary_track_name": "restored"]
+            } else {
+                classifiedError = error
+            }
+            switch classifiedError {
             case MIDITrackFileExport.Failure.invalidDestination: code = "invalid_destination"
             case MIDITrackFileExport.Failure.destinationExists: code = "destination_exists"
             case MIDITrackFileExport.Failure.unboundProject: code = "unbound_project"
             case MIDITrackFileExport.Failure.incompleteTrackPopulation: code = "incomplete_track_population"
-            case MIDITrackFileExport.Failure.ambiguousTarget: code = "ambiguous_target"
+            case MIDITrackFileExport.Failure.ambiguousTarget(let indices):
+                code = "ambiguous_target"
+                fields["colliding_track_indices"] = indices
+                fields["temporary_rename_available"] = true
+                uiEffects = ["temporary_track_name": "not_changed"]
+            case MIDITrackFileExport.Failure.temporaryRenameUnavailable(let indices):
+                code = "temporary_rename_unavailable"
+                fields["colliding_track_indices"] = indices
+                uiEffects = ["temporary_track_name": "not_changed"]
+            case MIDITrackFileExport.Failure.temporaryRenamePreparationUnconfirmed(
+                let original, let temporary, let residual, let cleanupStatus, let detail):
+                code = "temporary_rename_preparation_unconfirmed"
+                fields["temporary_original_name"] = original
+                fields["temporary_name"] = temporary
+                if let residual { fields["observed_residual_name"] = residual }
+                fields["cleanup_status"] = cleanupStatus.rawValue
+                fields["cleanup_detail"] = detail
+                uiEffects = ["temporary_track_name": cleanupStatus.rawValue]
+            case MIDITrackFileExport.Failure.temporaryRenameRestorationUnconfirmed(
+                let original, let temporary, let residual, let detail, let primary):
+                code = "temporary_rename_restoration_unconfirmed"
+                fields["temporary_original_name"] = original
+                fields["temporary_name"] = temporary
+                if let residual { fields["observed_residual_name"] = residual }
+                fields["cleanup_status"] = "unconfirmed"
+                fields["cleanup_detail"] = detail
+                if let primary { fields["primary_failure"] = primary }
+                uiEffects = ["temporary_track_name": "unconfirmed"]
             case MIDITrackFileExport.Failure.staleTarget: code = "stale_target"
             case MIDITrackFileExport.Failure.exportCancelled, is CancellationError: code = "cancelled"
             case MIDITrackFileExport.Failure.unreadableArtifact, is SMFReaderError: code = "unreadable_midi_artifact"
@@ -62,10 +124,12 @@ extension MIDIDispatcher {
             case is MIDITrackExportPanel.Failure: code = "native_export_unverified"
             default: code = "midi_export_failed"
             }
-            result = midiFilePayload(["error": code, "verified": false, "success": false,
+            var payload: [String: Any] = ["error": code, "verified": false, "success": false,
                 "state": "C", "operation": "midi.\(command)",
                 "hint": "No completed export or note observation is reported. Inspect the explicit destination before retrying after a file-write failure; native UI cleanup may be unconfirmed.",
-                "detail": String(describing: error), "ui_effects": ["restoration": "unconfirmed"]], isError: true)
+                "detail": String(describing: classifiedError), "ui_effects": uiEffects]
+            payload.merge(fields) { current, _ in current }
+            result = midiFilePayload(payload, isError: true)
         }
         return await finalizeTrace(result, traceID: traceID)
     }
