@@ -334,6 +334,7 @@ def row_problems(row: dict, n_sources: int) -> list:
     out += [f"step name {n!r} is bound twice" for n in sorted({n for n in names if names.count(n) > 1})]
     for step in row["steps"] + row["restore"]:
         out += [f"step {step['as']!r}: {p}" for p in step_problems(step)]
+    out += observation_param_problems(row)
     expect = row["expect"]
     for i, e in enumerate(expect):
         out += [f"expect[{i}]: {p}" for p in expectation_problems(e, set(steps))]
@@ -452,6 +453,77 @@ def row_problems(row: dict, n_sources: int) -> list:
         out.append("no effect over an independent reading bound after the operation is listed in a "
                    "counterexample's must_fail. A row whose only falsifiable checks read the "
                    "operation's own reply is self-report (ADR-027 D1, D4)")
+    return out
+
+
+def contains_observation_param(value) -> bool:
+    """Whether a JSON value uses the reserved dynamic-parameter key at any depth."""
+    if isinstance(value, dict):
+        return "$observation" in value or any(contains_observation_param(v) for v in value.values())
+    if isinstance(value, list):
+        return any(contains_observation_param(v) for v in value)
+    return False
+
+
+# Dynamic values may carry only an opaque product-issued target. Request semantics such as
+# ``param`` or ``mode`` stay literal in the acceptance document and cannot be steered by a prior
+# product reply.
+OBSERVATION_TARGET_PARAMS = frozenset({"target_ref"})
+
+
+def observation_param_problems(row: dict) -> list:
+    """Validate the narrow session-reference seam used by an operation call.
+
+    Only a top-level parameter of the named operation may be an observation reference.  Its source
+    is a call already bound in ``steps`` before the operation.  Thus a transient target reference
+    can flow from a setup inventory reply into the operation without permitting a future, probe,
+    post-operation or restore reading to steer a request.
+    """
+    steps = {step["as"]: step for step in row["steps"]}
+    order = {step["as"]: i for i, step in enumerate(row["steps"])}
+    operation = row["operation"]
+    operation_at = order.get(operation)
+    out = []
+    for section, sequence in (("steps", row["steps"]), ("restore", row["restore"])):
+        for step in sequence:
+            if not is_call(step):
+                if contains_observation_param(step):
+                    out.append(f"step {step['as']!r}: reserved $observation may appear only as "
+                               f"a top-level parameter of the operation call")
+                continue
+            for param, value in step["call"]["params"].items():
+                if not contains_observation_param(value):
+                    continue
+                where = f"step {step['as']!r} call param {param!r}"
+                exact = (isinstance(value, dict) and set(value) == {"$observation"}
+                         and isinstance(value.get("$observation"), str))
+                if not exact:
+                    out.append(f"{where}: $observation is a top-level object with exactly one field, "
+                               f"whose value is a path string")
+                    continue
+                if section != "steps" or step["as"] != operation:
+                    out.append(f"{where}: only the operation {operation!r} may consume an "
+                               f"$observation parameter")
+                    continue
+                if param not in OBSERVATION_TARGET_PARAMS:
+                    out.append(f"{where}: {param!r} is not an admitted target parameter; "
+                               f"$observation may set only {sorted(OBSERVATION_TARGET_PARAMS)!r}")
+                    continue
+                path = value["$observation"]
+                try:
+                    root, segments = P.parse_path(path)
+                except ValueError as exc:
+                    out.append(f"{where}: {exc}")
+                    continue
+                if not segments:
+                    out.append(f"{where}: {path!r} names a whole reply; it must name a string field")
+                    continue
+                if root not in steps or operation_at is None or order[root] >= operation_at:
+                    out.append(f"{where}: source {root!r} is not bound before the operation "
+                               f"{operation!r}")
+                elif not is_call(steps[root]):
+                    out.append(f"{where}: source {root!r} is not a setup call; dynamic request "
+                               f"parameters come only from a prior call reply")
     return out
 
 
