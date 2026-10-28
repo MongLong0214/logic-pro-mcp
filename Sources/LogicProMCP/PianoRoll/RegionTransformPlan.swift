@@ -23,6 +23,16 @@ struct RegionTransformPlan: Sendable {
     let overlapPolicy: MIDIOverlapPolicy
     let transform: MIDITransform
     let beforeSnapshot: MIDIRegionNoteSnapshot
+    var beforeFingerprint: String {
+        midiSnapshotCompletenessBinding(
+            regionReference: beforeSnapshot.regionReference,
+            projectEpoch: beforeSnapshot.projectEpoch,
+            provenance: beforeSnapshot.provenance,
+            conversionPipelineID: beforeSnapshot.conversionPipelineID,
+            notes: beforeSnapshot.notes,
+            ppq: beforeSnapshot.ppq
+        )
+    }
     let predictedAfter: [MIDINoteEvent]
     let predictedChanges: [MIDINoteTransformChange]
 }

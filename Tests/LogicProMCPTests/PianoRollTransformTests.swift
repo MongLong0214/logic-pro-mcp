@@ -100,6 +100,35 @@ struct PianoRollTransformTests {
         #expect(plan.predictedAfter == [note(pitch: 60, start: 480)])
     }
 
+    @Test func planReusesTheExactSnapshotBindingAsItsBeforeFingerprint() throws {
+        let before = snapshot(
+            generation: 42,
+            notes: [
+                note(pitch: 60, start: 0, velocity: 40),
+                note(pitch: 60, start: 0, velocity: 40),
+                note(pitch: 64, start: 960, velocity: 70),
+            ],
+            ppq: 960
+        )
+        let plan = try #require(
+            planTransform(
+                region: before.regionReference,
+                selection: .occurrences([2, 0]),
+                transform: .setVelocity(90),
+                beforeSnapshot: before
+            )
+        )
+
+        #expect(plan.beforeFingerprint == midiSnapshotCompletenessBinding(
+            regionReference: before.regionReference,
+            projectEpoch: before.projectEpoch,
+            provenance: before.provenance,
+            conversionPipelineID: before.conversionPipelineID,
+            notes: before.notes,
+            ppq: before.ppq
+        ))
+    }
+
     @Test func nonpositiveSnapshotPPQCannotProducePlan() {
         #expect(
             planTransform(
