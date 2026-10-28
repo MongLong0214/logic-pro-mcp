@@ -388,6 +388,9 @@ def _resolved_call_params(ctx: dict, params: dict) -> dict:
         if not isinstance(value, dict) or "$observation" not in value:
             resolved[name] = value
             continue
+        if name not in engine.OBSERVATION_TARGET_PARAMS:
+            raise StepUnreadable(
+                f"call param {name!r}: {name!r} is not an admitted target parameter")
         if set(value) != {"$observation"} or not isinstance(value["$observation"], str):
             raise StepUnreadable(
                 f"call param {name!r}: $observation is exactly one string field")

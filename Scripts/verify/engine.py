@@ -465,6 +465,12 @@ def _contains_observation_param(value) -> bool:
     return False
 
 
+# Dynamic values may carry only an opaque product-issued target. Request semantics such as
+# ``param`` or ``mode`` stay literal in the acceptance document and cannot be steered by a prior
+# product reply.
+OBSERVATION_TARGET_PARAMS = frozenset({"target_ref"})
+
+
 def observation_param_problems(row: dict) -> list:
     """Validate the narrow session-reference seam used by an operation call.
 
@@ -498,6 +504,10 @@ def observation_param_problems(row: dict) -> list:
                 if section != "steps" or step["as"] != operation:
                     out.append(f"{where}: only the operation {operation!r} may consume an "
                                f"$observation parameter")
+                    continue
+                if param not in OBSERVATION_TARGET_PARAMS:
+                    out.append(f"{where}: {param!r} is not an admitted target parameter; "
+                               f"$observation may set only {sorted(OBSERVATION_TARGET_PARAMS)!r}")
                     continue
                 path = value["$observation"]
                 try:

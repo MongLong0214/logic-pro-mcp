@@ -187,7 +187,8 @@ A wait condition takes a constant, so `changed`, `unchanged` and `matches_canon`
 and an `interval_ms` above `timeout_ms` is refused because it would read once and call that waiting.
 
 An operation whose target is an opaque, session-issued string may take that string from one earlier
-setup call in the same row. Put this exact object in a top-level operation parameter:
+setup call in the same row. Put this exact object in the operation's top-level `target_ref`
+parameter:
 
 ```json
 {"target_ref": {"$observation": "inventory.plugins[plugin_id=\"logic.stock.effect.compressor\"].plugin_insert_ref"}}
@@ -197,8 +198,9 @@ The source root must be a `call` bound before the named operation. The runner pa
 stored raw JSON with the same duplicate-key and path rules as the judge, requires the selected value
 to be a non-empty string, and refuses before sending the operation when the observation or path is unreadable.
 The reserved key is not admitted on setup calls, post-operation calls, probes, reads, waits, nested
-parameter values or restore calls. This is target transport only: a setup reply remains ineligible as
-an independent expected value or effect proof.
+parameter values or restore calls. It is also refused on request-semantics parameters such as
+`param` and `mode`. This is target transport only: a setup reply remains ineligible as an independent
+expected value or effect proof.
 
 ### Paths
 

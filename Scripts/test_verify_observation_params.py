@@ -109,6 +109,15 @@ class ObservationParamResolutionTests(unittest.TestCase):
             runner._take(self.ctx, step)
         self.assertEqual(self.session.calls, [])
 
+    def test_non_target_parameter_reference_refuses_before_the_operation_is_sent(self):
+        step = call("ratio", "get_param_verified", {
+            "target_ref": "fixed",
+            "param": {"$observation": "inventory.plugins[0].plugin_insert_ref"},
+        })
+        with self.assertRaisesRegex(runner.StepUnreadable, "not an admitted target parameter"):
+            runner._take(self.ctx, step)
+        self.assertEqual(self.session.calls, [])
+
     def test_run_row_makes_each_stored_reply_available_to_the_next_step(self):
         session = ScriptedSession()
         inventory = call("inventory", "get_inventory", {"track": 12})
@@ -207,6 +216,16 @@ class ObservationParamAdmissionTests(unittest.TestCase):
             }},
         })
         self.assertIn("reserved $observation", self.problems(row))
+
+    def test_non_target_operation_parameters_cannot_consume_observations(self):
+        for name in ("param", "mode"):
+            with self.subTest(name=name):
+                row = self.row()
+                row["steps"][1]["call"]["params"]["target_ref"] = "fixed"
+                row["steps"][1]["call"]["params"][name] = {
+                    "$observation": "inventory.plugins[0].plugin_insert_ref",
+                }
+                self.assertIn("not an admitted target parameter", self.problems(row))
 
 
 if __name__ == "__main__":
