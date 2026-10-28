@@ -1568,6 +1568,33 @@ enum StockPluginCatalog {
                 ]
             )
         ),
+        // The measured Controls table associates this value with the Attack
+        // row and exposes both a raw AXValue and Logic's engineering display.
+        // No Attack actuation was measured, so the raw value stays opaque and
+        // this entry deliberately grants no write method.
+        StockPluginParameterMetadata(
+            id: "attack",
+            displayName: "Attack",
+            unit: "raw_ax_value",
+            valueRange: nil,
+            writeMethod: nil,
+            readbackMethod: "ax_controls_view_slider_display",
+            controlsViewRowLabel: "Attack",
+            controlsViewControlRole: "AXSlider",
+            controlsViewActuationState: .unmeasured,
+            availabilityState: .observed,
+            provenance: .observed(
+                method: "controls_view_read_only_observation",
+                observedAt: "2026-08-30T04:02:24Z",
+                logicVersion: "12.x",
+                locale: "ko-KR",
+                evidence: [
+                    "parameter_readback",
+                    "Attack Controls row exposes a raw AX value and verbatim engineering display",
+                    "No Attack write or raw-to-milliseconds conversion was measured",
+                ]
+            )
+        ),
         // This records readability only. No popup menu actuation was measured,
         // so it contains no write method and exists solely to refuse by that
         // missing measurement.

@@ -4274,9 +4274,14 @@ private func parameterReadParams(_ param: String = "threshold") -> [String: Stri
      "expected_slot_read_status": "ok", "expected_plugin_identity": "logic.stock.effect.compressor"]
 }
 
-private func compressorRatioReadFixture(controls: Bool) -> LiveFixture {
+private func compressorScalarReadFixture(
+    label: String,
+    raw: Double,
+    display: String,
+    controls: Bool
+) -> LiveFixture {
     let fixture = LiveFixture(
-        controlsViewRowLabel: "Ratio",
+        controlsViewRowLabel: label,
         controlsViewInitiallySelected: controls,
         viewSettleDelay: 0
     )
@@ -4293,11 +4298,11 @@ private func compressorRatioReadFixture(controls: Bool) -> LiveFixture {
     builder.setRole(displayGroup, kAXGroupRole as String)
     for slider in [displaySlider, rawSlider] {
         builder.setRole(slider, kAXSliderRole as String)
-        builder.setAttribute(slider, kAXValueAttribute as String, 42.0)
+        builder.setAttribute(slider, kAXValueAttribute as String, raw)
     }
-    builder.setAttribute(displaySlider, kAXValueDescriptionAttribute as String, "2.1:1")
+    builder.setAttribute(displaySlider, kAXValueDescriptionAttribute as String, display)
     builder.setRole(indicator, "AXValueIndicator")
-    builder.setAttribute(indicator, kAXValueAttribute as String, 42.0)
+    builder.setAttribute(indicator, kAXValueAttribute as String, raw)
     builder.setChildren(displayGroup, [displaySlider])
     builder.setChildren(rawSlider, [indicator])
     builder.setChildren(builder.element(100_905), [builder.element(100_907), displayGroup, rawSlider])
@@ -4306,7 +4311,7 @@ private func compressorRatioReadFixture(controls: Bool) -> LiveFixture {
 
 @Test(arguments: [false, true])
 func testIssue299CompressorRatioReadsActualDisplayWithoutAuthorizingAWrite(_ controls: Bool) async throws {
-    let fixture = compressorRatioReadFixture(controls: controls)
+    let fixture = compressorScalarReadFixture(label: "Ratio", raw: 42, display: "2.1:1", controls: controls)
     let originalView = fixture.currentPluginViewTitle
     let result = await AccessibilityChannel.defaultGetParamVerified(
         params: parameterReadParams("ratio"),
@@ -4324,11 +4329,52 @@ func testIssue299CompressorRatioReadsActualDisplayWithoutAuthorizingAWrite(_ con
 }
 
 @Test func testIssue299CompressorRatioReadMetadataStillRefusesAWrite() async throws {
-    let fixture = compressorRatioReadFixture(controls: true)
+    let fixture = compressorScalarReadFixture(label: "Ratio", raw: 42, display: "2.1:1", controls: true)
     var params = parameterReadParams("ratio")
     params.merge([
         "mode": "duplicate_applyback",
         "value": "42",
+        "unit": "raw_ax_value",
+    ]) { _, new in new }
+    let result = await AccessibilityChannel.defaultSetParamVerified(
+        params: params,
+        runtime: parameterReadRuntime(fixture),
+        frontDocumentPath: { expectedPath }
+    )
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "C", "\(object)")
+    #expect(object["error"] as? String == "unsupported_param_readback")
+    #expect(!(try #require(object["write_attempted"] as? Bool)))
+    #expect(fixture.axActions.value.isEmpty)
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+@Test(arguments: [false, true])
+func testIssue299CompressorAttackReadsActualDisplayWithoutAuthorizingAWrite(_ controls: Bool) async throws {
+    let fixture = compressorScalarReadFixture(label: "Attack", raw: 15, display: "15.0 ms", controls: controls)
+    let originalView = fixture.currentPluginViewTitle
+    let result = await AccessibilityChannel.defaultGetParamVerified(
+        params: parameterReadParams("attack"),
+        runtime: parameterReadRuntime(fixture)
+    )
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "A", "\(object)")
+    #expect(object["observed_raw"] as? Double == 15)
+    #expect(object["observed_display"] as? String == "15.0 ms")
+    #expect(object["raw_unit"] as? String == "raw_ax_value")
+    #expect(object["parameter_read_status"] as? String == "read")
+    #expect(fixture.currentPluginViewTitle == originalView)
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+@Test func testIssue299CompressorAttackReadMetadataStillRefusesAWrite() async throws {
+    let fixture = compressorScalarReadFixture(label: "Attack", raw: 15, display: "15.0 ms", controls: true)
+    var params = parameterReadParams("attack")
+    params.merge([
+        "mode": "duplicate_applyback",
+        "value": "15",
         "unit": "raw_ax_value",
     ]) { _, new in new }
     let result = await AccessibilityChannel.defaultSetParamVerified(
