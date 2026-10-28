@@ -761,30 +761,115 @@ enum EventListReadbackCollector {
 
     // MARK: - Display mode
 
+    private struct PaneViewMenuAcquisition {
+        let opener: AXUIElement
+        let menu: AXUIElement
+        let openedByCollector: Bool
+    }
+
+    private enum PaneViewMenuAcquisitionResult {
+        case acquired(PaneViewMenuAcquisition)
+        case unavailable
+        case unsettled
+    }
+
+    private static let viewMenuAppearanceTimeout = ControlBarDisplayMode.menuAppearanceTimeout
+    private static let viewMenuPollInterval = ControlBarDisplayMode.menuAppearancePollInterval
+    private static let viewMenuClosureTimeout = ControlBarDisplayMode.modeConfirmationTimeout
+
     /// The Event pane's own View menu, opened so its items are readable.
     ///
     /// The menu has to be shown before its entries materialise; the mark character that says whether
-    /// the Time display is active is only meaningful once they have. The menu is cancelled again by
-    /// the caller's `defer` so the pane is left as it was found.
+    /// the Time display is active is only meaningful once they have. Ownership is explicit so only
+    /// a menu opened by this acquisition is cancelled; a menu the user already had open is retained.
     private static func paneViewMenu(
         in pane: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) -> AXUIElement? {
+    ) -> PaneViewMenuAcquisitionResult {
         let buttons = AXHelpers.findAllDescendants(
             of: pane, role: kAXMenuButtonRole as String, maxDepth: 8, runtime: runtime
         ).filter {
             AXLocalePolicy.elementMatches($0, AXLocalePolicy.viewMenuBar, runtime: runtime)
         }
-        guard buttons.count == 1, let button = buttons.first else { return nil }
-        if let existing = AXHelpers.getChildren(button, runtime: runtime).first(where: {
-            AXHelpers.getRole($0, runtime: runtime) == (kAXMenuRole as String)
-        }) {
-            return existing
+        guard buttons.count == 1, let button = buttons.first,
+              let baseline = paneViewMenus(under: button, runtime: runtime),
+              baseline.count <= 1 else { return .unavailable }
+        if let existing = baseline.first {
+            return .acquired(PaneViewMenuAcquisition(
+                opener: button,
+                menu: existing,
+                openedByCollector: false
+            ))
         }
-        _ = AXHelpers.performAction(button, "AXShowMenu", runtime: runtime)
-        return AXHelpers.getChildren(button, runtime: runtime).first {
-            AXHelpers.getRole($0, runtime: runtime) == (kAXMenuRole as String)
+        _ = AXHelpers.performAction(button, kAXShowMenuAction as String, runtime: runtime)
+        let deadline = Date().addingTimeInterval(viewMenuAppearanceTimeout)
+        repeat {
+            if let menus = paneViewMenus(under: button, runtime: runtime) {
+                if menus.count == 1, let menu = menus.first {
+                    return .acquired(PaneViewMenuAcquisition(
+                        opener: button,
+                        menu: menu,
+                        openedByCollector: true
+                    ))
+                }
+                if menus.count > 1 { return .unsettled }
+            }
+            let remaining = deadline.timeIntervalSinceNow
+            guard remaining > 0 else { break }
+            Thread.sleep(forTimeInterval: min(viewMenuPollInterval, remaining))
+        } while Date() < deadline
+        return .unsettled
+    }
+
+    private static func paneViewMenus(
+        under opener: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> [AXUIElement]? {
+        guard case .success(let children) = AXHelpers.childrenResult(opener, runtime: runtime) else {
+            return nil
         }
+        var menus: [AXUIElement] = []
+        for child in children {
+            let role: Result<String?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+                child,
+                kAXRoleAttribute as String,
+                runtime: runtime
+            )
+            guard case .success(.some(let value)) = role else { return nil }
+            if value == (kAXMenuRole as String) { menus.append(child) }
+        }
+        return menus
+    }
+
+    private static func cancelOwnedPaneViewMenu(
+        _ acquisition: PaneViewMenuAcquisition,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        guard acquisition.openedByCollector,
+              case .success(let actions) = AXHelpers.getActionNamesResult(
+                  acquisition.menu,
+                  runtime: runtime
+              ),
+              actions.contains(kAXCancelAction as String),
+              AXHelpers.performAction(
+                  acquisition.menu,
+                  kAXCancelAction as String,
+                  runtime: runtime
+              ) else {
+            return !acquisition.openedByCollector
+        }
+
+        let deadline = Date().addingTimeInterval(viewMenuClosureTimeout)
+        repeat {
+            if let menus = paneViewMenus(under: acquisition.opener, runtime: runtime),
+               menus.isEmpty {
+                return true
+            }
+            let remaining = deadline.timeIntervalSinceNow
+            guard remaining > 0 else { break }
+            Thread.sleep(forTimeInterval: min(viewMenuPollInterval, remaining))
+        } while Date() < deadline
+        return paneViewMenus(under: acquisition.opener, runtime: runtime)?.isEmpty == true
     }
 
     private static func refuseTimeDisplayIfNeeded(
@@ -799,9 +884,18 @@ enum EventListReadbackCollector {
         // searching there found zero matches and every collect() threw displayModeUnavailable before
         // it could return evidence. Nothing caught it because the collector is reachable from no
         // dispatcher, and the unit tests supply the mode through a seam rather than a live menu.
-        guard let viewMenu = paneViewMenu(in: pane, runtime: runtime.ax) else {
+        let acquisition: PaneViewMenuAcquisition
+        switch paneViewMenu(in: pane, runtime: runtime.ax) {
+        case .acquired(let acquired):
+            acquisition = acquired
+        case .unavailable:
             throw EventListReadbackCollectorError.displayModeUnavailable
+        case .unsettled:
+            throw EventListReadbackCollectorError.viewMenuDismissalFailed(
+                primary: .displayModeUnavailable
+            )
         }
+        let viewMenu = acquisition.menu
         let menuItems = AXHelpers.findAllDescendants(
             of: viewMenu,
             role: kAXMenuItemRole as String,
@@ -812,25 +906,42 @@ enum EventListReadbackCollector {
                 $0, AXLocalePolicy.eventPositionAsTimeMenuItem, runtime: runtime.ax
             )
         }
-        guard menuItems.count == 1, let menuItem = menuItems.first else {
-            throw EventListReadbackCollectorError.displayModeUnavailable
-        }
-        let mark: String? = AXHelpers.getAttribute(menuItem, kAXMenuItemMarkCharAttribute, runtime: runtime.ax)
-        let markedAsTime = !(mark?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
-        let allPositionsAreBBT = rows.values.allSatisfy {
-            $0[positionColumn]?.groupSliderValues?.count == 4
+        let primaryFailure: EventListReadbackCollectorError?
+        if menuItems.count != 1 || menuItems.first == nil {
+            primaryFailure = .displayModeUnavailable
+        } else {
+            let menuItem = menuItems[0]
+            let mark: String? = AXHelpers.getAttribute(
+                menuItem,
+                kAXMenuItemMarkCharAttribute,
+                runtime: runtime.ax
+            )
+            let markedAsTime = !(mark?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+            let allPositionsAreBBT = rows.values.allSatisfy {
+                $0[positionColumn]?.groupSliderValues?.count == 4
+            }
+
+            switch (markedAsTime, allPositionsAreBBT) {
+            case (false, true):
+                primaryFailure = nil
+            case (true, false):
+                primaryFailure = .timeDisplayEnabled
+            default:
+                primaryFailure = .displayModeDisagreement(
+                    markedAsTime: markedAsTime,
+                    positionsAreBBT: allPositionsAreBBT
+                )
+            }
         }
 
-        switch (markedAsTime, allPositionsAreBBT) {
-        case (false, true):
-            return
-        case (true, false):
-            throw EventListReadbackCollectorError.timeDisplayEnabled
-        default:
-            throw EventListReadbackCollectorError.displayModeDisagreement(
-                markedAsTime: markedAsTime,
-                positionsAreBBT: allPositionsAreBBT
+        if acquisition.openedByCollector,
+           !cancelOwnedPaneViewMenu(acquisition, runtime: runtime.ax) {
+            throw EventListReadbackCollectorError.viewMenuDismissalFailed(
+                primary: primaryFailure
             )
+        }
+        if let primaryFailure {
+            throw primaryFailure
         }
     }
 }
@@ -873,6 +984,7 @@ enum EventListReadbackCollectorError: Error, Equatable, Sendable, CustomStringCo
     case displayModeUnavailable
     case timeDisplayEnabled
     case displayModeDisagreement(markedAsTime: Bool, positionsAreBBT: Bool)
+    indirect case viewMenuDismissalFailed(primary: EventListReadbackCollectorError?)
 
     var description: String {
         switch self {
@@ -912,6 +1024,10 @@ enum EventListReadbackCollectorError: Error, Equatable, Sendable, CustomStringCo
         case .timeDisplayEnabled: return "Event List is displaying position and length as time."
         case let .displayModeDisagreement(markedAsTime, positionsAreBBT):
             return "Event List display mode disagrees with Position format (mark=\(markedAsTime), BBT=\(positionsAreBBT))."
+        case let .viewMenuDismissalFailed(primary):
+            return [primary?.description, "The Event List View menu opened by this read could not be dismissed."]
+                .compactMap { $0 }
+                .joined(separator: " ")
         }
     }
 }
