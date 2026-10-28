@@ -228,7 +228,7 @@ struct OperationCatalogTests {
         .tracksMute: ["enabled"],
         .tracksSolo: ["enabled"],
         .tracksArm: ["enabled"],
-        .tracksRecordSequence: ["bar", "notes", "tempo"],
+        .tracksRecordSequence: ["bar", "notes", "target_expected_name", "target_track", "tempo"],
         .tracksSortVerified: ["confirmed", "criterion", "expected_order"],
         .tracksSetAutomation: ["mode"],
         .tracksSetInstrument: ["category", "path", "preset"],

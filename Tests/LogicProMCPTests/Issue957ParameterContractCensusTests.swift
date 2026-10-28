@@ -251,6 +251,27 @@ struct Issue957ParameterContractCensusTests {
         return params
     }
 
+    /// Add samples for every dependency triggered by `params`, including transitive ones. This
+    /// keeps a kind test's control request valid while changing only the value under test.
+    private static func satisfyingDependencies(
+        _ contract: OperationParameterContract,
+        _ params: [String: Value]
+    ) -> [String: Value]? {
+        var result = params
+        var changed = true
+        while changed {
+            changed = false
+            for (key, companions) in contract.dependentRequired where result[key] != nil {
+                for companion in companions where result[companion] == nil {
+                    guard let sample = contract.params[companion]?.sample else { return nil }
+                    result[companion] = sample
+                    changed = true
+                }
+            }
+        }
+        return result
+    }
+
     /// Whether `params` satisfies the branch schema's `params` object as projected: each property's
     /// schema, `additionalProperties`, and the `allOf` of `required` / `anyOf` groups.
     private static func schemaAdmits(_ branch: Value, _ params: [String: Value]) -> Bool {
@@ -263,6 +284,11 @@ struct Issue957ParameterContractCensusTests {
             }
             if !admits(schema, value) { return false }
             if let allowed = schema.objectValue?["enum"]?.arrayValue, !allowed.contains(value) { return false }
+        }
+        for (key, required) in object["dependentRequired"]?.objectValue ?? [:]
+        where params[key] != nil {
+            let companions = required.arrayValue?.compactMap(\.stringValue) ?? []
+            if !companions.allSatisfy({ params[$0] != nil }) { return false }
         }
         func satisfies(_ rule: Value) -> Bool {
             let rule = rule.objectValue ?? [:]
@@ -309,6 +335,12 @@ struct Issue957ParameterContractCensusTests {
             for group in contract.required
             where group.isEmpty || !Set(group.flatMap(OperationParameterContract.keys(of:))).isSubset(of: spec.allowedParams) {
                 problems.append("\(spec.id.rawValue): required group \(group) names an unknown key")
+            }
+            for (key, companions) in contract.dependentRequired {
+                let named = Set([key] + companions)
+                if companions.isEmpty || companions.contains(key) || !named.isSubset(of: spec.allowedParams) {
+                    problems.append("\(spec.id.rawValue): dependent requirement \(key) -> \(companions) is invalid")
+                }
             }
             for (key, rule) in contract.params where (rule.kind == nil) == (rule.reason == nil) {
                 problems.append("\(spec.id.rawValue).\(key): a rule is enforced with a kind or unconstrained with a reason")
@@ -361,6 +393,11 @@ struct Issue957ParameterContractCensusTests {
                 for (label, context) in [("alone", alone), ("beside the others", beside)] {
                     var control = context
                     control[key] = rule.sample
+                    guard let dependencyComplete = Self.satisfyingDependencies(contract, control) else {
+                        problems.append("\(spec.id.rawValue).\(key): a dependency has no sample")
+                        continue
+                    }
+                    control = dependencyComplete
                     if spec.id == .systemSagaExecute, control["confirmed_plan_hash"] != nil {
                         control = try Self.confirmedSagaKindControl(control)
                     }
@@ -415,12 +452,16 @@ struct Issue957ParameterContractCensusTests {
     @Test("a request missing a required group is refused, and one with every group filled is accepted")
     func requiredGroupsAreRequired() async {
         var problems: [String] = []
+        let entries = OperationCatalog.snapshot().operations
         for spec in OperationRegistry.specs {
-            guard let contract = OperationRegistry.parameterContracts[spec.id], !contract.required.isEmpty else { continue }
-            guard var full = Self.filling(contract) else {
+            guard let contract = OperationRegistry.parameterContracts[spec.id],
+                  !contract.required.isEmpty || !contract.dependentRequired.isEmpty,
+                  let entry = entries.first(where: { $0.id == spec.id.rawValue }) else { continue }
+            guard let full = Self.filling(contract) else {
                 problems.append("\(spec.id.rawValue): a required group has no sample")
                 continue
             }
+            let branch = CommandSchemaProjection.branch(for: entry, strictParams: true)
             let accepted = await Self.dispatch(spec, full)
             if !Self.accepted(accepted) {
                 problems.append("\(spec.id.rawValue) with \(full.keys.sorted()): refused: \(Self.describe(accepted))")
@@ -431,6 +472,32 @@ struct Issue957ParameterContractCensusTests {
                 let outcome = await Self.dispatch(spec, missing)
                 if !Self.attributable(control: accepted, outside: outcome) {
                     problems.append("\(spec.id.rawValue) without \(group): \(Self.describe(outcome))")
+                }
+            }
+            for (key, companions) in contract.dependentRequired {
+                guard var control = Self.filling(contract), let sample = contract.params[key]?.sample else {
+                    problems.append("\(spec.id.rawValue).\(key): a dependency control has no sample")
+                    continue
+                }
+                control[key] = sample
+                guard let complete = Self.satisfyingDependencies(contract, control) else {
+                    problems.append("\(spec.id.rawValue).\(key): a dependency companion has no sample")
+                    continue
+                }
+                let accepted = await Self.dispatch(spec, complete)
+                if !Self.accepted(accepted) || !Self.schemaAdmits(branch, complete) {
+                    problems.append("\(spec.id.rawValue).\(key): complete dependency was not accepted")
+                }
+                for companion in companions {
+                    var missing = complete
+                    missing.removeValue(forKey: companion)
+                    let outcome = await Self.dispatch(spec, missing)
+                    if !Self.attributable(control: accepted, outside: outcome) {
+                        problems.append("\(spec.id.rawValue).\(key) without \(companion): \(Self.describe(outcome))")
+                    }
+                    if Self.schemaAdmits(branch, missing) {
+                        problems.append("\(spec.id.rawValue).\(key) without \(companion): schema admitted it")
+                    }
                 }
             }
         }
@@ -532,7 +599,7 @@ struct Issue957ParameterContractCensusTests {
         // #1104 review R1 asked for actual schema validation. `schemaAdmits` is a subset validator;
         // it is a validator for these schemas only while they use no keyword it skips. A skipped
         // keyword (a `pattern`, a `minimum`) would let it admit what a client refuses.
-        let paramsKeywords: Set<String> = ["type", "properties", "additionalProperties", "allOf"]
+        let paramsKeywords: Set<String> = ["type", "properties", "additionalProperties", "allOf", "dependentRequired"]
         let groupKeywords: Set<String> = ["required", "anyOf"]
         let propertyKeywords: Set<String> = ["type", "anyOf", "enum"]
         var problems: [String] = []
@@ -548,6 +615,11 @@ struct Issue957ParameterContractCensusTests {
                 check(group, groupKeywords, "\(entry.id) allOf")
                 for alternative in group.objectValue?["anyOf"]?.arrayValue ?? [] {
                     check(alternative, ["required"], "\(entry.id) allOf anyOf")
+                }
+            }
+            for (key, required) in params.objectValue?["dependentRequired"]?.objectValue ?? [:] {
+                if required.arrayValue?.allSatisfy({ $0.stringValue != nil }) != true {
+                    problems.append("\(entry.id) dependentRequired \(key): not a string array")
                 }
             }
             for (key, property) in params.objectValue?["properties"]?.objectValue ?? [:] {
@@ -678,6 +750,15 @@ struct Issue957ParameterContractCensusTests {
             let groups = params?["allOf"]?.arrayValue ?? []
             if groups.count != contract.required.count {
                 problems.append("\(entry.id): \(groups.count) required groups in the schema, \(contract.required.count) in the contract")
+            }
+            let dependencies = params?["dependentRequired"]?.objectValue ?? [:]
+            let expectedDependencies = Dictionary(uniqueKeysWithValues:
+                contract.dependentRequired.map { key, companions in
+                    (key, Value.array(companions.sorted().map { .string($0) }))
+                }
+            )
+            if dependencies != expectedDependencies {
+                problems.append("\(entry.id): dependent requirements differ from the contract")
             }
         }
         let held = problems.isEmpty
