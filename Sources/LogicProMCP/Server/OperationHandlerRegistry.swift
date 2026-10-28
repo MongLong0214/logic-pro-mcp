@@ -377,13 +377,17 @@ enum OperationHandlerRegistry {
                     params: params,
                     router: dependencies.router,
                     cache: dependencies.cache,
-                    trackFileExport: { project, track, path in
+                    trackFileExport: { project, track, path, allowTemporaryRename in
                         let runtime = await MIDITrackExportProvider.makeRuntime(projectReference: project,
                             acquire: { request in
                                 try await dependencies.poller.acquireSessionPopulation(request: request, targetRegistry: dependencies.targetRegistry)
-                            })
+                            }, router: dependencies.router, cache: dependencies.cache,
+                            registry: dependencies.targetRegistry,
+                            liveTrackName: { AXLogicProElements.trackName(at: $0) },
+                            liveTrackNames: dependencies.liveTrackNamesReader)
                         return try await MIDITrackFileExport.run(projectReference: project, targetReference: track,
-                            destination: path, runtime: runtime)
+                            destination: path, allowTemporaryTrackRename: allowTemporaryRename,
+                            runtime: runtime)
                     }
                 )
                 if command == "import_file",

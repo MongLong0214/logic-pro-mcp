@@ -617,7 +617,7 @@ struct HCGlobalInvariantTests {
             return await MixerDispatcher.handle(command: routeCase.command, params: routeCase.params, router: router, cache: cache)
         case "logic_midi":
             return await MIDIDispatcher.handle(command: routeCase.command, params: routeCase.params, router: router, cache: cache,
-                trackFileExport: { _, _, _ in
+                trackFileExport: { _, _, _, _ in
                     // Envelope/dispatcher fixture, never native qualification.
                     let bytes = Data([0x4D,0x54,0x68,0x64,0,0,0,6,0,1,0,2,1,0xE0,
                         0x4D,0x54,0x72,0x6B,0,0,0,4,0,0xFF,0x2F,0,
