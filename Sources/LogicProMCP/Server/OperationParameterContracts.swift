@@ -333,10 +333,12 @@ extension OperationRegistry {
                 "project_ref": .enforced(.string, .string("prj_00000000-0000-0000-0000-000000000001")),
                 "target_ref": .enforced(.string, .string("trk_00000000-0000-0000-0000-000000000002")),
                 "path": .enforced(.string, .string("/tmp/lpm-track.mid")),
+                "allow_temporary_track_rename": .enforced(.boolean, .bool(false)),
             ], required: [["project_ref"], ["target_ref"], ["path"]]),
             "midi.read_track_notes": .init(params: [
                 "project_ref": .enforced(.string, .string("prj_00000000-0000-0000-0000-000000000001")),
                 "target_ref": .enforced(.string, .string("trk_00000000-0000-0000-0000-000000000002")),
+                "allow_temporary_track_rename": .enforced(.boolean, .bool(false)),
             ], required: [["project_ref"], ["target_ref"]]),
             "midi.create_virtual_port": .init(params: ["name": .unconstrained("read as text with Virtual Port as the default")],
                                               required: []),

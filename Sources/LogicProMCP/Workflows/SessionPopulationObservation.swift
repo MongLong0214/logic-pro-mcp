@@ -231,14 +231,16 @@ enum SessionPopulationObservation {
         let context = OperationTraceContext.current
         if (Task.isCancelled || context?.cancellationRequested() == true)
             && !AccessibilityChannel.OwnedTrackStackObservationNavigation.restoringInterruptedAcquisition
-            && !AccessibilityChannel.restoringInterruptedOutputPopup {
+            && !AccessibilityChannel.restoringInterruptedOutputPopup
+            && !ExactTrackNameAdapter.restoringOwnedTemporaryName {
             throw AcquisitionError.cancelled
         }
         guard let context,
               context.mutationGateAcquired, context.ownsGate() else {
             throw AcquisitionError.ownershipLost
         }
-        if let deadline = context.deadline, ContinuousClock.now >= deadline {
+        if let deadline = context.deadline, ContinuousClock.now >= deadline,
+           !ExactTrackNameAdapter.restoringOwnedTemporaryName {
             throw AcquisitionError.deadline
         }
     }
