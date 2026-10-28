@@ -8,15 +8,40 @@ enum MIDIOverlapPolicy: Equatable, Sendable {
     case rejectNewSamePitchAndChannel
 }
 
+struct MIDINoteTransformChange: Equatable, Sendable {
+    let occurrenceIndex: Int
+    let before: MIDINoteEvent
+    let after: MIDINoteEvent
+}
+
+enum RegionTransformPlanWarning: Equatable, Sendable {
+    case emptySelection
+    case noChangesPredicted
+    case samePitchAndChannelOverlaps(count: Int)
+}
+
 struct RegionTransformPlan: Sendable {
     let regionRef: MIDIRegionReference
     let boundGeneration: UInt64
     // These indices are local to beforeSnapshot and are not persistent Event List row identity.
     let selectedOccurrenceIndices: [Int]
+    var selectedCount: Int { selectedOccurrenceIndices.count }
     let overlapPolicy: MIDIOverlapPolicy
     let transform: MIDITransform
     let beforeSnapshot: MIDIRegionNoteSnapshot
+    var beforeFingerprint: String {
+        midiSnapshotCompletenessBinding(
+            regionReference: beforeSnapshot.regionReference,
+            projectEpoch: beforeSnapshot.projectEpoch,
+            provenance: beforeSnapshot.provenance,
+            conversionPipelineID: beforeSnapshot.conversionPipelineID,
+            notes: beforeSnapshot.notes,
+            ppq: beforeSnapshot.ppq
+        )
+    }
     let predictedAfter: [MIDINoteEvent]
+    let predictedChanges: [MIDINoteTransformChange]
+    let warnings: [RegionTransformPlanWarning]
 }
 
 func planTransform(
@@ -46,6 +71,29 @@ func planTransform(
     }
     guard predictedAfter.allSatisfy(isValidPlanNote),
           overlapPolicy.permits(before: beforeSnapshot.notes, after: predictedAfter) else { return nil }
+    let predictedChanges = selectedOccurrenceIndices.compactMap { index in
+        let before = beforeSnapshot.notes[index]
+        let after = predictedAfter[index]
+        return before == after ? nil : MIDINoteTransformChange(
+            occurrenceIndex: index,
+            before: before,
+            after: after
+        )
+    }
+    guard let predictedOverlapPairs = samePitchAndChannelOverlapPairs(
+        in: predictedAfter
+    ) else { return nil }
+    var warnings: [RegionTransformPlanWarning] = []
+    if selectedOccurrenceIndices.isEmpty {
+        warnings.append(.emptySelection)
+    } else if predictedChanges.isEmpty {
+        warnings.append(.noChangesPredicted)
+    }
+    if !predictedOverlapPairs.isEmpty {
+        warnings.append(
+            .samePitchAndChannelOverlaps(count: predictedOverlapPairs.count)
+        )
+    }
     return RegionTransformPlan(
         regionRef: region,
         boundGeneration: beforeSnapshot.projectEpoch,
@@ -53,7 +101,9 @@ func planTransform(
         overlapPolicy: overlapPolicy,
         transform: transform,
         beforeSnapshot: beforeSnapshot,
-        predictedAfter: predictedAfter
+        predictedAfter: predictedAfter,
+        predictedChanges: predictedChanges,
+        warnings: warnings
     )
 }
 
