@@ -15,6 +15,8 @@ the file is not delivery evidence.
   applicable exact-build, fixture, action, and independent readback evidence.
 - State each actionable finding with its reachable failure condition, exact candidate evidence,
   expected and actual behavior, violated contract, affected consumer, and closure condition.
+- Group confirmed sites that share one cause. Name the siblings actually checked; do not claim an
+  exhaustive sweep that was not performed.
 - Classify a finding as an introduced regression, an existing in-contract defect, an unrelated
   pre-existing issue, or an evidence gap. Do not turn an unrelated old issue, style preference,
   naming preference, or speculative future feature into a correctness blocker.
