@@ -1017,7 +1017,7 @@ enum OperationRegistry {
         (.tracksSolo, "solo", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.acceptsStableTarget, ["enabled", "index", "track"]),
         (.tracksArm, "arm", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.acceptsStableTarget, ["enabled", "index", "track"]),
         (.tracksArmOnly, "arm_only", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.acceptsStableTarget, ["index", "track"]),
-        (.tracksRecordSequence, "record_sequence", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired, TargetPolicy.none, ["bar", "notes", "tempo"]),
+        (.tracksRecordSequence, "record_sequence", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired, TargetPolicy.none, ["bar", "notes", "target_expected_name", "target_track", "tempo"]),
         // #448: the menu action globally reorders the arrange rail. It is
         // structural rather than target-indexed, so it needs explicit L2
         // confirmation but accepts no track target reference.

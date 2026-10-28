@@ -1168,6 +1168,7 @@ actor AccessibilityChannel: Channel {
                OutputAssignment.observed(slotLabel: oldOutput) == nil,
                let newOutput = new.output, OutputAssignment.observed(slotLabel: newOutput) != nil {
                 comparable.output = old.output
+                comparable.outputObservation = old.outputObservation
             }
             guard (try? encoder.encode(comparable)) == oldBytes else { return false }
             refined = true

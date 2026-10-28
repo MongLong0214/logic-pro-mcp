@@ -82,7 +82,8 @@ enum CommandSchemaProjection {
     /// One command's branch: `command` fixed to the command, and `params` naming its parameters.
     /// A parameter whose contract rule is enforced carries its kind's schema; an unconstrained one
     /// carries none. The required groups become `allOf` over `required` (one key) or `anyOf` of
-    /// `required` (aliases or alternatives), and `params` itself is then required.
+    /// `required` (aliases or alternatives); optional cross-field companions become JSON Schema
+    /// `dependentRequired`; and `params` itself is required when an unconditional group exists.
     static func branch(for entry: OperationCatalogEntry, strictParams: Bool) -> Value {
         let rules = contract(for: entry)?.params ?? [:]
         var params: [String: Value] = [
@@ -102,6 +103,14 @@ enum CommandSchemaProjection {
                 }
                 return alternatives.count == 1 ? alternatives[0] : .object(["anyOf": .array(alternatives)])
             })
+        }
+        let dependencies = contract(for: entry)?.dependentRequired ?? [:]
+        if !dependencies.isEmpty {
+            params["dependentRequired"] = .object(Dictionary(uniqueKeysWithValues:
+                dependencies.map { key, companions in
+                    (key, .array(companions.sorted().map { .string($0) }))
+                }
+            ))
         }
         return .object([
             "title": .string(entry.command),
@@ -185,7 +194,8 @@ enum CommandSchemaProjection {
                 + "A parameter followed by a kind (`bar: integer`) is one whose value of another type the dispatcher "
                 + "refuses before any channel runs; a parameter with no kind is one the dispatcher coerces, defaults or "
                 + "ignores, and the registry gives the reason. \"Required\" lists the groups of which one key must be "
-                + "present. Both come from `OperationRegistry.parameterContracts`, which a census drives against every "
+                + "present; it also names an optional parameter's companions as `if key: companion`. Both come from "
+                + "`OperationRegistry.parameterContracts`, which a census drives against every "
                 + "dispatcher. A list in parentheses is the only values the dispatcher takes, read from the dispatcher's own "
                 + "constant. "
                 + "This is a projection of `OperationRegistry`, not a second source, and not qualification evidence.",
@@ -203,10 +213,16 @@ enum CommandSchemaProjection {
                     parameterCell(key, rules[key])
                 }.joined(separator: ", ")
                 let groups = contract(for: entry)?.required ?? []
-                let required = groups.isEmpty ? "none" : groups.map { group in
+                var requiredClauses = groups.map { group in
                     group.map { OperationParameterContract.keys(of: $0).map { "`\($0)`" }.joined(separator: " and ") }
                         .joined(separator: " or ")
-                }.joined(separator: "; ")
+                }
+                requiredClauses.append(contentsOf: (contract(for: entry)?.dependentRequired ?? [:])
+                    .sorted(by: { $0.key < $1.key })
+                    .map { key, companions in
+                        "if `\(key)`: " + companions.sorted().map { "`\($0)`" }.joined(separator: " and ")
+                    })
+                let required = requiredClauses.isEmpty ? "none" : requiredClauses.joined(separator: "; ")
                 let unknown = closesParameters(entry, strictParams: strictParams) ? "closed" : "open"
                 lines.append("| `\(entry.command)` | \(params) | \(required) | \(unknown) | \(entry.mutability) | \(entry.confirmation) | "
                     + "\(entry.target) | \(entry.verification) | \(entry.retry) | \(entry.availability) |")

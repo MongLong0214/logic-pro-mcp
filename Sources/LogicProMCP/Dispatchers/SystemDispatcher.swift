@@ -7,6 +7,19 @@ struct SystemDispatcher: OperationTraceDispatching {
     // Keeps dispatcher cases auditable against the registry so fallback cannot bypass strict validation.
     static let handledCommands: Set<String> = OperationRegistry.commands(for: .logicSystem)
 
+    private static func refreshSectionName(_ key: ResourceCacheKey) -> String {
+        switch key {
+        case .document: "document"
+        case .project: "project"
+        case .tracks: "tracks"
+        case .transport: "transport"
+        case .mixer: "mixer"
+        case .markers: "markers"
+        case .regions: "regions"
+        case .mcu: "mcu"
+        }
+    }
+
     /// Consent-first refusal for `setup_arm_key`. Returns a State C result when the
     /// request does not carry explicit `consent:"true"`, else nil. The server
     /// calls this BEFORE strict-param validation, the mutation gate, the operation
@@ -556,11 +569,14 @@ struct SystemDispatcher: OperationTraceDispatching {
                 // `refreshed:true` for a poll that touched nothing would be a claim this call never
                 // observed (#544 review MAJOR); the prose text is unchanged either way because the
                 // mechanism ("routed through the AX fallback poller") is true regardless of the outcome.
-                let advanced = await poller.refreshNow()
+                let receipt = await poller.refreshNowReceipt()
                 let message = "State refresh completed via AX fallback poller."
                 return toolTextResult(text: message, structured: .object([
                     "operation": .string("system.refresh_cache"),
-                    "refreshed": .bool(advanced),
+                    "refreshed": .bool(receipt.advanced),
+                    "changed_sections": .array(receipt.changedSections.map {
+                        .string(Self.refreshSectionName($0))
+                    }),
                     "source": .string("ax_fallback_poller"),
                     "message": .string(message),
                 ]))
@@ -569,6 +585,7 @@ struct SystemDispatcher: OperationTraceDispatching {
             return toolTextResult(text: message, structured: .object([
                 "operation": .string("system.refresh_cache"),
                 "refreshed": .bool(false),
+                "changed_sections": .array([]),
                 // Not "next_poll_cycle": no poller is attached, so this call never started — and
                 // never scheduled — a future poll cycle. Naming one it did not start would be a
                 // claim about a mechanism that is not wired up (#544 review MINOR).

@@ -631,7 +631,8 @@ struct MCUBankWindowTests {
             "upper_row_writes_observed", "window_before", "window_after",
         ]
         let added: Set<String> = [
-            "banks_moved", "banks_requested", "step_windows", "bank_steps_disambiguated", "bank_probe_unresolved",
+            "banks_moved", "banks_requested", "step_windows", "requested_step_windows",
+            "bank_steps_disambiguated", "bank_probe_unresolved",
         ]
         let cases: [(LCDBankSurface.Response, Set<String>, String, Int)] = [
             (.redraw(row: bank1Row), ["verify_source", "strips"], "A", 1),
@@ -649,6 +650,7 @@ struct MCUBankWindowTests {
             #expect(obj["banks_requested"] as? Int == 1, "\(response)")
             let window = try #require(obj["window_after"] as? String)
             #expect(obj["step_windows"] as? [String] == [window], "\(response)")
+            #expect(obj["requested_step_windows"] as? [String] == [window], "\(response)")
             #expect(obj["bank_bookkeeping_after"] as? Int == moved, "\(response)")
         }
     }
