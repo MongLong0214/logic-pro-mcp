@@ -759,6 +759,23 @@ final class ApprovedSessionRepair: @unchecked Sendable {
     private var outputApplied = false
     private var outputInverseConsumed = false
     private var outputPeerReadbackUnavailable = false
+    private var outputEffect: AccessibilityChannel.ChangedOutputObservation?
+    private var outputRestoredEffect: AccessibilityChannel.ChangedOutputObservation?
+    private struct CheckedOutputEffect: @unchecked Sendable {
+        let effect: AccessibilityChannel.ChangedOutputObservation
+        let assignment: OutputAssignment
+        let sampledAt: String
+    }
+    private struct CheckedOutputPrerequisiteReceipt: @unchecked Sendable {
+        let retained: CheckedOutputEffect
+        let pair: AccessibilityChannel.HeldSelectionAssociation.Pair
+        let renewal: AccessibilityChannel.OriginalHeaderSourceRenewal
+        let proof: AccessibilityChannel.HeldSelectionAssociation
+    }
+    private var checkedOutputEffect: CheckedOutputEffect?
+    private var checkedRestoredOutputEffect: CheckedOutputEffect?
+    private var checkedOutputPrerequisites: CheckedOutputPrerequisiteReceipt?
+    private var outputRefreshPerformed = false
     private var sendInputPeerHeaders: [AXTrackBinding.Binding]?
     private var sendInputPeerHeadersPrepared = false
     private var sortSnapshot: TargetRegistrySnapshot?
@@ -1789,9 +1806,10 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                   headers.filter { CFEqual($0, original.header) }.count == 1
               } == true }),
               AXLogicProElements.hiddenTrackViewRead(headers: headers, in: binding.window, runtime: runtime)?.shown == true,
-              let rows = AccessibilityChannel.readTrackStates(from: headers, in: binding.window,
+              let rawRows = AccessibilityChannel.readTrackStates(from: headers, in: binding.window,
                 runtime: runtime, readingTypeHelp: false,
                 stoppingWhen: { (try? SessionPopulationObservation.requireOwnedAcquisition()) == nil }).states,
+              let rows = AccessibilityChannel.soloPresentationSafeTrackStates(rawRows),
               rows.count == sort.rows.count,
               rows.allSatisfy({ $0.isStackHeader == false && $0.physicalBinding != nil }),
               Set(rows.map(\.name)).count == rows.count,
@@ -2048,8 +2066,9 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         }
         func sampleFields() -> ([TrackState]?, [ChannelStripState]?) {
             return AXHelpers.HelpReadGuard.$current.withValue(.init(allowHelpReads: true, stop: { !permitted() })) {
-                let tracks = AccessibilityChannel.readTrackStates(from: proof.headers, in: pair.track.window,
-                    runtime: runtime, readingTypeHelp: false, stoppingWhen: metadataStopped).states
+                let tracks = AccessibilityChannel.soloPresentationSafeTrackStates(
+                    AccessibilityChannel.readTrackStates(from: proof.headers, in: pair.track.window,
+                        runtime: runtime, readingTypeHelp: false, stoppingWhen: metadataStopped).states)
                 let strips = AXLogicProElements.mixerChannelStripsIfCompletelyRead(in: pair.strip.mixer, runtime: runtime.ax)
                     .flatMap { AccessibilityChannel.readChannelStrips(from: $0.strips, runtime: runtime,
                         window: pair.strip.window, mixer: pair.strip.mixer, readingScalarHelp: false,
@@ -2122,7 +2141,8 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                 return value
             }
         }
-        var expectedTrackRows = task.capture.tracks
+        var expectedTrackRows = AccessibilityChannel.soloPresentationSafeTrackStates(task.capture.tracks)
+            ?? task.capture.tracks
         func effectMatchesSource(_ effect: ExactTrackNameAdapter.VerifiedNameEffect) -> Bool {
             if effect.matches(pair) { return true }
             // A name receipt predates this plan's own output replacement. Only
@@ -2273,6 +2293,31 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         return true
     }
 
+    /// A prior owned popup can leave only an unchanged peer routing display
+    /// offscreen before the next Bus-prerequisite pass begins. Re-expose that
+    /// captured viewport under the existing project/target custody, then
+    /// require the complete protected footprint again. This never accepts the
+    /// missing display or creates new read/write authority.
+    private func recoverOutputPeerReadability(
+        pair: AccessibilityChannel.HeldSelectionAssociation.Pair,
+        assignment: OutputAssignment
+    ) async -> Bool {
+        guard outputPeerReadbackUnavailable, changedNameGoals.isEmpty,
+              let task = outputTask,
+              let originalMixerGeometry = outputOriginalMixerGeometry,
+              let currentProof = outputProof,
+              await currentProof.recoverMixerReadability(restoring: originalMixerGeometry,
+                referenceIsCurrent: { [self] in
+                    guard await projectIsCurrent(allowPendingCancellation: true),
+                          let target = await registry.resolve(task.reference), target.kind == .track,
+                          target.physicalTrack?.matches(task.pair.track) == true else { return false }
+                    return true
+                }, stoppingWhen: {
+                    (try? SessionPopulationObservation.requireOwnedAcquisition()) == nil
+                }) else { return false }
+        return outputFootprintHeld(pair: pair, assignment: assignment)
+    }
+
     /// Bus output or restoration needs current checked prerequisites, not capture-time
     /// captions. These read-only menus run before forward/inverse ownership is
     /// established; neither an input write nor receiver creation is authorized.
@@ -2288,11 +2333,43 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         stage = "entry_footprint"
         guard let label = AXLogicProElements.outputSlotDestination(in: pair.strip.strip, runtime: runtime.ax),
               let assignment = OutputAssignment.observed(slotLabel: label),
-              assignment == task.before || (outputAttempted && assignment == task.desired),
-              outputFootprintHeld(pair: pair, assignment: assignment) else { return false }
+              assignment == task.before || (outputAttempted && assignment == task.desired) else { return false }
+        if !outputFootprintHeld(pair: pair, assignment: assignment) {
+            stage = "entry_peer_recovery"
+            guard await recoverOutputPeerReadability(pair: pair, assignment: assignment) else { return false }
+        }
         guard let source = task.capture.channelStrips.first(where: {
             $0.physicalBinding?.matches(task.pair.strip) == true
         }), let own = source.inputObservation else { return false }
+        // Resolve captured positive receiver owners before the source Input
+        // popup can retire this census. These pairs bound only later optional
+        // relationship discovery; current checked inputs still decide below.
+        if outputRenewal?.observedPairs.isEmpty != false {
+            stage = "receiver_header_observation"
+            let current = outputPair ?? task.pair
+            var receiverCandidates: [AXMixerStripBinding.Binding] = []
+            var coveredBuses = Set<Int>()
+            for row in task.capture.channelStrips {
+                guard let slot = row.inputSlotBinding, !slot.owner.matches(task.pair.strip),
+                      RoutingGraphPublication.classifyOutputLabel(slot.source).0 == .bus,
+                      let bus = RoutingGraphPublication.classifyOutputLabel(slot.source).1,
+                      task.prerequisiteBuses.contains(bus) else { continue }
+                receiverCandidates.append(slot.owner)
+                coveredBuses.insert(bus)
+            }
+            // Captured owners only bound optional relationship discovery. Every
+            // receiver still needs an actual singleton header/strip pair and a
+            // current checked input below; missing coverage keeps ordinary discovery.
+            let requestedReceivers = task.prerequisiteBuses.allSatisfy { coveredBuses.contains($0) }
+                ? receiverCandidates : nil
+            let observed = await AccessibilityChannel.renewSourceThroughOriginalHeader(current, original: current.strip,
+                runtime: runtime, sourceDisposition: .survivingOriginal,
+                restoringMixerGeometry: outputOriginalMixerGeometry,
+                observingReadFocus: { inputFocus.retainAssociation($0) },
+                observingPeerStrips: requestedReceivers)
+            guard let renewal = observed.source, renewal.permits(runtime: runtime) else { return false }
+            outputPair = renewal.pair; outputRenewal = renewal; outputProof = renewal.observation
+        }
         switch own.state {
         case .unreadable: return false
         case .noSlot:
@@ -2310,11 +2387,16 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                   label.utf8.elementsEqual(original.source.utf8),
                   !pair.strip.matches(task.pair.strip) || CFEqual(control, original.control) else { return false }
             let current = AXMixerInputSlotBinding(owner: pair.strip, control: control, source: label)
+            let peerHeaders = outputRenewal.flatMap { renewal in
+                renewal.observedPairs.isEmpty ? nil : renewal.observedPairs.map(\.track)
+            }
             let read = await AXMixerStripBinding.$current.withValue(pair.strip) {
                 await AXMixerStripBinding.$outputAssociation.withValue(pair) {
                     await AccessibilityChannel.getCheckedInputObservation(runtime: runtime,
+                        restoringMixerGeometry: outputOriginalMixerGeometry,
                         observingPopupFocus: { inputFocus.retainRoutingPopupFocus($0) },
-                        observingRenewedFocus: { inputFocus.retainAssociation($0) })
+                        observingRenewedFocus: { inputFocus.retainAssociation($0) },
+                        observingPeerHeaders: peerHeaders)
                 }
             }
             stage = "source_checked_read"
@@ -2334,25 +2416,14 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                 guard read.inputSlot?.matches(current) == true else { return false }
             }
         }
-        // Observe current positive receivers through the owned original-header
-        // census. A menu can retire all strips, not just its own source. These
-        // native pairs supply read custody only; no cached reference is rebound.
-        if outputRenewal?.observedPairs.isEmpty != false {
-            stage = "receiver_header_observation"
-            let current = outputPair ?? task.pair
-            let observed = await AccessibilityChannel.renewSourceThroughOriginalHeader(current, original: current.strip,
-                runtime: runtime, sourceDisposition: .survivingOriginal,
-                observingReadFocus: { inputFocus.retainAssociation($0) })
-            guard let renewal = observed.source, renewal.permits(runtime: runtime) else { return false }
-            outputPair = renewal.pair; outputRenewal = renewal; outputProof = renewal.observation
-        }
         for bus in task.prerequisiteBuses {
             // A checked input excursion can retire the full native census. Each
             // distinct Bus uses the latest actual original-header observation.
-            guard let roster = outputRenewal, roster.permits(runtime: runtime) else { return false }
+            guard var roster = outputRenewal, roster.permits(runtime: runtime) else { return false }
             var receiverVerified = false
-            for receiver in roster.observedPairs {
-                let owner = receiver.strip
+            for initialReceiver in roster.observedPairs {
+                var receiver = initialReceiver
+                var owner = receiver.strip
                 guard !receiver.track.matches(task.pair.track),
                       roster.observedPairs.filter({ $0.strip.matches(owner) }).count == 1 else { continue }
                 stage = "receiver_owner"
@@ -2361,30 +2432,134 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                 guard case .source(let label) = current.reading, let control = current.control,
                       RoutingGraphPublication.classifyOutputLabel(label).0 == .bus,
                       RoutingGraphPublication.classifyOutputLabel(label).1 == bus else { continue }
-                let slot = AXMixerInputSlotBinding(owner: owner, control: control, source: label)
-                let read = await AXMixerStripBinding.$current.withValue(owner) {
+                var slot = AXMixerInputSlotBinding(owner: owner, control: control, source: label)
+                // Capture the exact focused selected-header pair before this
+                // Input popup. If Logic later replaces every strip while leaving
+                // that AX focus retired, this immutable relationship is the only
+                // permitted one-shot focus handoff; it grants no source identity.
+                let focusBaseline = roster.focusedOriginalHeaderBaseline(runtime: runtime)
+                var read = await AXMixerStripBinding.$current.withValue(owner) {
                     await AXMixerStripBinding.$outputAssociation.withValue(receiver) {
                         await AccessibilityChannel.getInputBusObservation(runtime: runtime, requiringOriginalInputControl: slot,
+                            restoringMixerGeometry: outputOriginalMixerGeometry,
                             observingPopupFocus: { inputFocus.retainRoutingPopupFocus($0) },
-                            observingRenewedFocus: { inputFocus.retainAssociation($0) })
+                            observingRenewedFocus: { inputFocus.retainAssociation($0) },
+                            observingPeerHeaders: roster.observedPairs.map(\.track))
                     }
                 }
                 stage = "receiver_checked_read"
-                guard read.assignment == .bus(bus) else {
-                    Log.info("Canonical Bus receiver read: assignment_present=\(read.assignment != nil),slot_present=\(read.inputSlot != nil),renewed=\(read.inputRenewal != nil)", subsystem: "saga")
-                    return false
+                func finishReceiverRead() async -> Bool {
+                    guard read.assignment == .bus(bus) else {
+                        Log.info("Canonical Bus receiver read: assignment_present=\(read.assignment != nil),slot_present=\(read.inputSlot != nil),renewed=\(read.inputRenewal != nil)", subsystem: "saga")
+                        return false
+                    }
+                    if let renewal = read.inputRenewal {
+                        stage = "receiver_original_header_renewal"
+                        guard renewal.original.matches(owner), renewal.originalTrack.matches(receiver.track),
+                              read.inputSlot?.owner.matches(renewal.pair.strip) == true,
+                              let primary = renewal.sourceForOriginalHeader(task.pair, runtime: runtime) else {
+                            return false
+                        }
+                        outputPair = primary.pair; outputRenewal = primary; outputProof = primary.observation
+                    } else {
+                        guard read.inputSlot?.matches(slot) == true,
+                              owner.currentIndex(runtime: runtime) != nil else { return false }
+                    }
+                    stage = "final_project"
+                    return await projectIsCurrent(allowPendingCancellation: true)
                 }
-                if let renewal = read.inputRenewal {
-                    stage = "receiver_original_header_renewal"
-                    guard renewal.original.matches(owner), renewal.originalTrack.matches(receiver.track),
-                          read.inputSlot?.owner.matches(renewal.pair.strip) == true,
-                          let primary = renewal.sourceForOriginalHeader(task.pair, runtime: runtime) else { return false }
-                    outputPair = primary.pair; outputRenewal = primary; outputProof = primary.observation
-                } else {
-                    guard read.inputSlot?.matches(slot) == true, owner.currentIndex(runtime: runtime) != nil else { return false }
+                if read.assignment != .bus(bus) {
+                    // Logic can publish the receiver popup's delayed full-census redraw while the
+                    // reader is renewing through its original header. Retry only when that exact
+                    // read retired the entire held source/receiver census; partial retirement,
+                    // transient unreadability, or a changed receiver remains a hard refusal. The
+                    // retry obtains a new complete source and
+                    // peer roster, then re-proves every output/input fact from their native controls.
+                    let priorSource = outputPair ?? task.pair
+                    // The surrounding checked-input Help guard has correctly
+                    // latched because its held census retired. This one bounded
+                    // retry gets a fresh guard tied only to the unchanged owned
+                    // operation gate; its handoff and every following native
+                    // source/receiver read independently re-prove UI custody.
+                    let recoveryHelp = AXHelpers.HelpReadGuard(allowHelpReads: true, stop: {
+                        (try? SessionPopulationObservation.requireOwnedAcquisition()) == nil
+                    })
+                    let recovered = await AXHelpers.HelpReadGuard.$current.withValue(recoveryHelp) {
+                        let sourceRetired = priorSource.strip.currentIndex(runtime: runtime) == nil
+                        let receiverRetired = owner.currentIndex(runtime: runtime) == nil
+                        guard sourceRetired, receiverRetired, let focusBaseline else {
+                            Log.info("Canonical Bus receiver read: assignment_present=\(read.assignment != nil),slot_present=\(read.inputSlot != nil),renewed=\(read.inputRenewal != nil)", subsystem: "saga")
+                            return false
+                        }
+                        stage = "receiver_census_project"
+                        guard await projectIsCurrent(allowPendingCancellation: true) else { return false }
+                        let observed = await AccessibilityChannel.renewSourceThroughOriginalHeader(
+                            priorSource, original: priorSource.strip, runtime: runtime,
+                            selectedHeaderRequired: true,
+                            sourceDisposition: .retiredOriginal,
+                            restoringMixerGeometry: outputOriginalMixerGeometry,
+                            observingReadFocus: { inputFocus.retainAssociation($0) },
+                            observingPeerHeaders: roster.observedPairs.map(\.track),
+                            recoveringRetiredFocusFrom: focusBaseline)
+                        stage = "receiver_census_source_renewal"
+                        guard let renewedSource = observed.source,
+                              renewedSource.permits(runtime: runtime) else {
+                            Log.info("Canonical Bus receiver census renewal: source_present=\(observed.source != nil),restoration=\(observed.effects.restoration),source_retired=\(sourceRetired),receiver_retired=\(receiverRetired)", subsystem: "saga")
+                            return false
+                        }
+                        stage = "receiver_census_output_readback"
+                        guard let renewedLabel = AXLogicProElements.outputSlotDestination(
+                            in: renewedSource.pair.strip.strip, runtime: runtime.ax),
+                              OutputAssignment.observed(slotLabel: renewedLabel) == assignment else {
+                            return false
+                        }
+                        stage = "receiver_census_final_project"
+                        guard await projectIsCurrent(allowPendingCancellation: true) else { return false }
+                        outputPair = renewedSource.pair
+                        outputRenewal = renewedSource
+                        outputProof = renewedSource.observation
+                        stage = "receiver_census_footprint"
+                        guard outputFootprintHeld(pair: renewedSource.pair, assignment: assignment) else {
+                            return false
+                        }
+
+                        stage = "receiver_census_peer"
+                        let renewedReceivers = renewedSource.observedPairs.filter {
+                            $0.track.matches(receiver.track)
+                        }
+                        guard renewedReceivers.count == 1, let renewedReceiver = renewedReceivers.first,
+                              renewedSource.observedPairs.filter({ $0.strip.matches(renewedReceiver.strip) }).count == 1,
+                              renewedReceiver.strip.currentIndex(runtime: runtime) != nil else { return false }
+                        receiver = renewedReceiver
+                        owner = renewedReceiver.strip
+                        stage = "receiver_census_input_slot"
+                        let renewedInput = AXLogicProElements.inputSlotRead(in: owner.strip, runtime: runtime.ax)
+                        guard case .source(let renewedInputLabel) = renewedInput.reading,
+                              let renewedInputControl = renewedInput.control,
+                              RoutingGraphPublication.classifyOutputLabel(renewedInputLabel) == (.bus, bus) else {
+                            return false
+                        }
+                        slot = AXMixerInputSlotBinding(
+                            owner: owner, control: renewedInputControl, source: renewedInputLabel)
+                        roster = renewedSource
+                        stage = "receiver_census_retry_checked_read"
+                        read = await AXMixerStripBinding.$current.withValue(owner) {
+                            await AXMixerStripBinding.$outputAssociation.withValue(receiver) {
+                                await AccessibilityChannel.getInputBusObservation(
+                                    runtime: runtime, requiringOriginalInputControl: slot,
+                                    restoringMixerGeometry: outputOriginalMixerGeometry,
+                                    observingPopupFocus: { inputFocus.retainRoutingPopupFocus($0) },
+                                    observingRenewedFocus: { inputFocus.retainAssociation($0) },
+                                    observingPeerHeaders: roster.observedPairs.map(\.track))
+                            }
+                        }
+                        return await finishReceiverRead()
+                    }
+                    guard recovered else { return false }
+                    receiverVerified = true
+                    break
                 }
-                stage = "final_project"
-                guard await projectIsCurrent(allowPendingCancellation: true) else { return false }
+                guard await finishReceiverRead() else { return false }
                 receiverVerified = true
                 break
             }
@@ -2392,6 +2567,38 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         }
         accepted = true
         return true
+    }
+
+    /// A retained prerequisite receipt identifies the owned native path; it
+    /// does not freeze either Input menu's checked item. Reopen those exact
+    /// menus before every inverse ownership decision and again at the writer
+    /// boundary so a caption-preserving Input change cannot authorize output.
+    private func recheckOutputBusPrerequisites() async -> Bool {
+        checkedOutputPrerequisites = nil
+        let inputFocus = AccessibilityChannel.OwnedTrackStackObservationNavigation.ReadFocusScope()
+        guard await AXHelpers.HelpReadGuard.$current.withValue(.init(allowHelpReads: true, stop: { [self] in
+            !inputFocus.permits() && outputProof?.permitsRead() != true
+        }), operation: { [self] in await busOutputInputsCurrent(inputFocus: inputFocus) }) else { return false }
+
+        // A checked Input popup may close successfully while making an
+        // unrelated peer's routing caption offscreen. Restore the first
+        // captured viewport when necessary, then always reacquire the Output
+        // checkmark after this exact Input check. A matching slot caption is
+        // never permission to reuse the earlier popup evidence.
+        guard let task = outputTask else { return false }
+        let pair = outputPair ?? task.pair
+        let runtime = pair.track.runtime
+        guard let label = AXLogicProElements.outputSlotDestination(in: pair.strip.strip, runtime: runtime.ax),
+              let assignment = OutputAssignment.observed(slotLabel: label),
+              assignment == task.before || (outputAttempted && assignment == task.desired) else { return false }
+        if !outputFootprintHeld(pair: pair, assignment: assignment) {
+            guard await recoverOutputPeerReadability(pair: pair, assignment: assignment) else { return false }
+        }
+        let checked = await AXMixerStripBinding.$current.withValue(pair.strip) {
+            await AccessibilityChannel.getOutputObservation(runtime: runtime)
+        }
+        return checked.assignment == assignment
+            && outputFootprintHeld(pair: pair, assignment: assignment)
     }
 
     private func outputReading() async -> OutputAssignment? {
@@ -2471,8 +2678,158 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         return assignment
     }
 
-    private func readOutputState(_ step: SagaStep) async -> ObservedState? {
-        guard supports(step), let task = outputTask, let assignment = await outputReading() else { return nil }
+    private func retainedOutputReading(_ retained: CheckedOutputEffect) async -> OutputAssignment? {
+        guard let task = outputTask,
+              retained.assignment == retained.effect.after,
+              retained.effect.original.track.matches(task.pair.track),
+              retained.effect.current.track.matches(task.pair.track),
+              await projectIsCurrent(allowPendingCancellation: true) else { return nil }
+        if !task.prerequisiteBuses.isEmpty, !outputInverseConsumed {
+            if let receipt = checkedOutputPrerequisites,
+               sameCheckedOutputEffect(receipt.retained, retained) {
+                // The Saga's public cancellation changes journal state only. Reuse
+                // the immediately preceding *renewed* Bus-prerequisite receipt for
+                // this exact typed output effect. The receipt is the causal bridge
+                // from the writer's now-retired source to the final source/proof
+                // produced by those popup reads; matching names or ordinals never
+                // manufacture that bridge.
+                let runtime = receipt.pair.track.runtime
+                guard receipt.pair.track.matches(task.pair.track),
+                      let currentPair = outputPair, sameOutputPair(currentPair, receipt.pair),
+                      let currentRenewal = outputRenewal,
+                      sameOutputRenewal(currentRenewal, receipt.renewal),
+                      let currentProof = outputProof, currentProof === receipt.proof,
+                      receipt.renewal.permits(runtime: runtime), receipt.proof.permitsRead(),
+                      await recheckOutputBusPrerequisites(),
+                      let checkedPair = outputPair,
+                      let checkedRenewal = outputRenewal,
+                      let checkedProof = outputProof,
+                      sameOutputPair(checkedRenewal.pair, checkedPair),
+                      checkedRenewal.permits(runtime: checkedPair.track.runtime),
+                      checkedProof.permitsRead(),
+                      let label = AXLogicProElements.outputSlotDestination(
+                        in: checkedPair.strip.strip, runtime: checkedPair.track.runtime.ax),
+                      OutputAssignment.observed(slotLabel: label) == retained.assignment,
+                      outputFootprintHeld(pair: checkedPair,
+                        assignment: retained.assignment) else { return nil }
+                checkedOutputPrerequisites = .init(retained: retained, pair: checkedPair,
+                    renewal: checkedRenewal, proof: checkedProof)
+                return retained.assignment
+            }
+            guard retained.effect.permits(runtime: retained.effect.current.track.runtime),
+                  let proof = outputProof, proof.permitsRead(),
+                  outputPair?.strip.matches(retained.effect.current.strip) == true,
+                  outputRenewal.map({ $0.pair.strip.matches(retained.effect.current.strip)
+                      && $0.permits(runtime: retained.effect.current.track.runtime) })
+                      ?? retained.effect.current.strip.matches(retained.effect.original.strip) else { return nil }
+            // The output effect does not itself freeze its Bus-input
+            // dependencies. Check every source/receiver menu after the
+            // scalar before retaining the one immediate compensation read.
+            guard await recheckOutputBusPrerequisites() else { return nil }
+            let checkedPair = outputPair ?? task.pair
+            guard let label = AXLogicProElements.outputSlotDestination(
+                    in: checkedPair.strip.strip, runtime: checkedPair.track.runtime.ax),
+                  OutputAssignment.observed(slotLabel: label) == retained.assignment else { return nil }
+            if !outputFootprintHeld(pair: checkedPair, assignment: retained.assignment) {
+                guard outputPeerReadbackUnavailable, changedNameGoals.isEmpty,
+                      let originalMixerGeometry = outputOriginalMixerGeometry,
+                      let currentProof = outputProof,
+                      await currentProof.recoverMixerReadability(restoring: originalMixerGeometry,
+                        referenceIsCurrent: { [self] in
+                            guard await projectIsCurrent(allowPendingCancellation: true),
+                                  let target = await registry.resolve(task.reference), target.kind == .track,
+                                  target.physicalTrack?.matches(task.pair.track) == true else { return false }
+                            return true
+                        }, stoppingWhen: {
+                            (try? SessionPopulationObservation.requireOwnedAcquisition()) == nil
+                        }) else { return nil }
+                // Scroll To is a new causal UI excursion. The scalar's earlier
+                // checkmark cannot cross it; reacquire that one leaf only after
+                // the original viewport and protected peers are readable again.
+                let recovered = await AXMixerStripBinding.$current.withValue(checkedPair.strip) {
+                    await AccessibilityChannel.getOutputObservation(runtime: checkedPair.track.runtime)
+                }
+                guard recovered.assignment == retained.assignment,
+                      outputFootprintHeld(pair: checkedPair,
+                        assignment: retained.assignment) else { return nil }
+            }
+            guard let renewal = outputRenewal, let proof = outputProof,
+                  sameOutputPair(renewal.pair, checkedPair),
+                  renewal.permits(runtime: checkedPair.track.runtime), proof.permitsRead() else { return nil }
+            checkedOutputPrerequisites = .init(retained: retained, pair: checkedPair,
+                renewal: renewal, proof: proof)
+        } else {
+            guard retained.effect.permits(runtime: retained.effect.current.track.runtime),
+                  let proof = outputProof, proof.permitsRead(),
+                  outputPair?.strip.matches(retained.effect.current.strip) == true,
+                  outputRenewal.map({ $0.pair.strip.matches(retained.effect.current.strip)
+                      && $0.permits(runtime: retained.effect.current.track.runtime) })
+                      ?? retained.effect.current.strip.matches(retained.effect.original.strip) else { return nil }
+            // A typed scalar receipt does not excuse a changed peer scalar,
+            // plug-in, Send, Input, name, project or population after return.
+            guard outputFootprintHeld(pair: retained.effect.current,
+                    assignment: retained.assignment) else { return nil }
+            // The slot caption is not the checked destination. Physical and
+            // Stereo outputs need the same fresh popup decision as Bus-backed
+            // outputs before a retained inverse may cross its write boundary.
+            let checked = await AXMixerStripBinding.$current.withValue(retained.effect.current.strip) {
+                await AccessibilityChannel.getOutputObservation(
+                    runtime: retained.effect.current.track.runtime)
+            }
+            guard checked.assignment == retained.assignment,
+                  outputFootprintHeld(pair: retained.effect.current,
+                    assignment: retained.assignment),
+                  proof.permitsRead(),
+                  await projectIsCurrent(allowPendingCancellation: true) else { return nil }
+        }
+        return retained.assignment
+    }
+
+    private func sameOutputPair(_ lhs: AccessibilityChannel.HeldSelectionAssociation.Pair,
+                                _ rhs: AccessibilityChannel.HeldSelectionAssociation.Pair) -> Bool {
+        lhs.track.matches(rhs.track) && lhs.strip.matches(rhs.strip)
+            && lhs.source.utf8.elementsEqual(rhs.source.utf8)
+    }
+
+    private func sameOutputRenewal(_ lhs: AccessibilityChannel.OriginalHeaderSourceRenewal,
+                                   _ rhs: AccessibilityChannel.OriginalHeaderSourceRenewal) -> Bool {
+        lhs.index == rhs.index && sameOutputPair(lhs.pair, rhs.pair)
+            && lhs.original.matches(rhs.original) && lhs.originalTrack.matches(rhs.originalTrack)
+            && lhs.observation === rhs.observation
+            && lhs.observedPairs.count == rhs.observedPairs.count
+            && zip(lhs.observedPairs, rhs.observedPairs).allSatisfy { sameOutputPair($0, $1) }
+    }
+
+    private func sameCheckedOutputEffect(_ lhs: CheckedOutputEffect, _ rhs: CheckedOutputEffect) -> Bool {
+        lhs.sampledAt == rhs.sampledAt && lhs.assignment == rhs.assignment
+            && lhs.effect.before == rhs.effect.before && lhs.effect.after == rhs.effect.after
+            && lhs.effect.original.track.matches(rhs.effect.original.track)
+            && lhs.effect.original.strip.matches(rhs.effect.original.strip)
+            && lhs.effect.current.track.matches(rhs.effect.current.track)
+            && lhs.effect.current.strip.matches(rhs.effect.current.strip)
+            && CFEqual(lhs.effect.control, rhs.effect.control)
+            && lhs.effect.population.count == rhs.effect.population.count
+            && zip(lhs.effect.population, rhs.effect.population).allSatisfy { CFEqual($0, $1) }
+    }
+
+    private func readOutputState(
+        _ step: SagaStep,
+        allowingRetainedEffect: Bool = true
+    ) async -> ObservedState? {
+        guard supports(step), let task = outputTask else { return nil }
+        let assignment: OutputAssignment
+        let sampledAt: String
+        let retained = allowingRetainedEffect
+            ? (outputInverseConsumed ? checkedRestoredOutputEffect : checkedOutputEffect)
+            : nil
+        if let retained, let current = await retainedOutputReading(retained) {
+            assignment = current
+            sampledAt = retained.sampledAt
+        } else {
+            guard let current = await outputReading() else { return nil }
+            assignment = current
+            sampledAt = ISO8601DateFormatter.cacheFormatter.string(from: Date())
+        }
         if changedNameGoals.isEmpty {
             // The existing Saga's independent readback establishes whether our
             // attempted output is applied; a scalar acknowledgement does not.
@@ -2480,11 +2837,68 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         }
         let evidence = SagaReadEvidence(readSource: .axOutputMenuCheckmark, provenance: .liveIndependent,
             trackIndex: task.pair.track.currentIndex(), projectReference: projectRef.rawValue, field: "output",
-            observed: .string(assignment.token), sampledAt: ISO8601DateFormatter.cacheFormatter.string(from: Date()))
+            observed: .string(assignment.token), sampledAt: sampledAt)
         return .init(read: evidence)
     }
 
-    func performOutput(_ step: SagaStep, router: ChannelRouter) async -> CallTool.Result {
+    /// Finish the scalar's typed native effect with the Saga's independent
+    /// checked menu read and one post-write protected-footprint census. Later
+    /// ownership/readback calls may revalidate this exact effect without
+    /// reopening the popup that produced it; the inverse writer still performs
+    /// its own full deciding footprint check at the leaf.
+    private func retainCheckedOutputEffect(
+        _ effect: AccessibilityChannel.ChangedOutputObservation,
+        assignment: OutputAssignment,
+        restored: Bool
+    ) async -> Bool {
+        let pair = effect.current, runtime = pair.track.runtime
+        guard effect.after == assignment, effect.permits(runtime: runtime) else { return false }
+        outputPair = pair
+        if let renewal = effect.renewal {
+            outputRenewal = renewal
+            outputProof = renewal.observation
+        } else if outputProof?.permitsRead() != true {
+            guard let proof = heldOutputProof(pair) else { return false }
+            outputProof = proof
+        }
+        let checked = await AXMixerStripBinding.$current.withValue(pair.strip) {
+            await AXMixerStripBinding.$outputAssociation.withValue(pair) {
+                await AccessibilityChannel.getOutputObservation(runtime: runtime)
+            }
+        }
+        guard checked.assignment == assignment else { return false }
+        let sampledAt = ISO8601DateFormatter.cacheFormatter.string(from: Date())
+        guard outputFootprintHeld(pair: pair, assignment: assignment),
+              effect.permits(runtime: runtime),
+              outputProof?.permitsRead() == true,
+              await projectIsCurrent(allowPendingCancellation: true) else { return false }
+        let retained = CheckedOutputEffect(effect: effect, assignment: assignment, sampledAt: sampledAt)
+        if !restored, outputTask?.prerequisiteBuses.isEmpty == false {
+            // Complete the post-write Bus checks before the child writer publishes
+            // State A. A public cancellation can arrive as soon as that result is
+            // visible; deferring this work to the Saga read would let it consume
+            // the compensation allowance before the inverse is even dispatched.
+            guard await retainedOutputReading(retained) == assignment,
+                  checkedOutputPrerequisites.map({ sameCheckedOutputEffect($0.retained, retained) }) == true
+            else { return false }
+        }
+        if restored { checkedRestoredOutputEffect = retained }
+        else { checkedOutputEffect = retained }
+        return true
+    }
+
+    func consumeOutputRefresh(_ step: SagaStep) -> Bool {
+        guard supports(step), step.operationID == .mixerSetOutputVerified,
+              outputRefreshPerformed else { return false }
+        outputRefreshPerformed = false
+        return true
+    }
+
+    func performOutput(
+        _ step: SagaStep,
+        router: ChannelRouter,
+        refreshAfterWrite: @escaping @Sendable () async -> Void = {}
+    ) async -> CallTool.Result {
         guard let task = outputTask, supports(step) else { return toolStateCResult(.unsupportedState, extras: ["write_attempted": false]) }
         let inverse = outputAttempted
         let expected = inverse ? task.desired : task.before
@@ -2510,21 +2924,48 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             Log.info("Canonical output refused: project or operation custody changed before routing", subsystem: "saga")
             return toolStateCResult(.staleTargetReference, extras: ["write_attempted": false])
         }
+        if inverse {
+            let retainedOwnershipIsCurrent: Bool
+            if !task.prerequisiteBuses.isEmpty {
+                retainedOwnershipIsCurrent = await recheckOutputBusPrerequisites()
+            } else {
+                // A downstream channel can fail after the real verified write,
+                // before this wrapper retains a CheckedOutputEffect. Reacquire
+                // the live checkmark and protected footprint here rather than
+                // requiring a receipt that the failure path cannot publish.
+                retainedOwnershipIsCurrent = await outputReading() == expected
+            }
+            guard retainedOwnershipIsCurrent else {
+                Log.info("Canonical output refused: checked destination or Bus prerequisites changed before inverse routing",
+                    subsystem: "saga")
+                return toolStateCResult(.staleTargetReference, extras: ["write_attempted": false])
+            }
+        }
         let pair = outputPair ?? task.pair, runtime = pair.track.runtime
         guard let index = pair.strip.currentIndex(runtime: runtime) else {
             Log.info("Canonical output refused: retained source is no longer uniquely current", subsystem: "saga")
             return toolStateCResult(.staleTargetReference, extras: ["write_attempted": false])
         }
         if inverse { outputInverseConsumed = true }
-        let response = await Self.$outputLeafPermission.withValue({ [self] popup in
-            outputFootprintHeld(pair: pair, assignment: expected, popup: popup)
+        let upstream = AccessibilityChannel.outputChangeObserver
+        let response = await AccessibilityChannel.$outputChangeObserver.withValue({ [self] effect in
+            if effect.original.track.matches(pair.track), effect.original.strip.matches(pair.strip),
+               effect.before == expected, effect.after == desired {
+                if inverse { outputRestoredEffect = effect }
+                else { outputEffect = effect }
+            }
+            upstream?(effect)
         }) {
-            await AXMixerStripBinding.$current.withValue(pair.strip) {
-                await AXMixerStripBinding.$outputAssociation.withValue(pair) {
-                    await Self.$current.withValue(self) {
-                        await OperationTraceWriteBoundaryArm.armed(OperationTraceContext.current?.traceID) {
-                            await routedTextResult(router, operation: "mixer.set_output_verified",
-                                params: ["index": String(index), "destination": desired.token, "expected_current": expected.token])
+            await Self.$outputLeafPermission.withValue({ [self] popup in
+                outputFootprintHeld(pair: pair, assignment: expected, popup: popup)
+            }) {
+                await AXMixerStripBinding.$current.withValue(pair.strip) {
+                    await AXMixerStripBinding.$outputAssociation.withValue(pair) {
+                        await Self.$current.withValue(self) {
+                            await OperationTraceWriteBoundaryArm.armed(OperationTraceContext.current?.traceID) {
+                                await routedTextResult(router, operation: "mixer.set_output_verified",
+                                    params: ["index": String(index), "destination": desired.token, "expected_current": expected.token])
+                            }
                         }
                     }
                 }
@@ -2533,6 +2974,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         let text = sharedOutputText(response)
         guard let body = decodedJSONObject(text), body["write_attempted"] as? Bool == true else { return response }
         outputAttempted = true
+        let changedEffect = inverse ? outputRestoredEffect : outputEffect
         var renewedThisOutput: AccessibilityChannel.OriginalHeaderSourceRenewal?
         let priorCensus = outputRenewal?.observation.strips
             ?? task.capture.channelStrips.compactMap { $0.physicalBinding?.strip }
@@ -2550,7 +2992,15 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                 current.count == priorCensus.count
                     && !zip(current, priorCensus).allSatisfy { CFEqual($0, $1) }
             } == true
-        if sourceRetired || peerRedrawn {
+        if let changedEffect {
+            outputPair = changedEffect.current
+            if let renewal = changedEffect.renewal {
+                outputRenewal = renewal
+                outputProof = renewal.observation
+                renewedThisOutput = renewal
+            }
+        }
+        if renewedThisOutput == nil, sourceRetired || peerRedrawn {
             let renewal = await AccessibilityChannel.renewSourceThroughOriginalHeader(pair, original: pair.strip, runtime: runtime,
                 sourceDisposition: sourceRetired ? .retiredOriginal : .survivingOriginal)
             guard let owned = renewal.source, owned.permits(runtime: runtime) else {
@@ -2559,6 +3009,20 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             outputPair = owned.pair
             outputRenewal = owned
             renewedThisOutput = owned
+        }
+        // Refresh while the child trace is still private, after retaining only
+        // the writer-caused source/census renewal. The refresh can expose a
+        // separate post-write input or peer change; it must precede the checked
+        // Bus receipt and may never be adopted as part of the writer's effect.
+        await refreshAfterWrite()
+        outputRefreshPerformed = true
+        if body["state"] as? String == "A", let changedEffect {
+            guard await retainCheckedOutputEffect(changedEffect, assignment: desired, restored: inverse) else {
+                return toolTextResult(HonestContract.encodeStateB(reason: .readbackUnavailable,
+                    extras: ["operation": "mixer.set_output_verified", "write_attempted": true,
+                        "hint": "The output leaf verified, but its independent checked assignment or protected post-write footprint did not remain current."]), isError: true)
+            }
+            if changedNameGoals.isEmpty { return response }
         }
         // A single-output step is verified by the Saga's mandatory independent
         // read below. Coupled naming retains its separate renewal/read contract.
@@ -2953,7 +3417,8 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         var outputRead: SagaReadEvidence?
         if afterExecution, let output = outputTask {
             guard outputApplied, let step = plan.steps.first, plan.steps.count == 1,
-                  let checked = await readOutputState(step), checked.value == .string(output.desired.token),
+                  let checked = await readOutputState(step, allowingRetainedEffect: false),
+                  checked.value == .string(output.desired.token),
                   let read = checked.read else { return nil }
             outputRead = read
         }
@@ -2973,7 +3438,8 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             // The output's actual checked menu bookends the independent input read.
             // Never turn an old display label or attempted leaf into final goal evidence.
             guard let step = plan.steps.first,
-                  let checked = await readOutputState(step), checked.value == .string(output.desired.token),
+                  let checked = await readOutputState(step, allowingRetainedEffect: false),
+                  checked.value == .string(output.desired.token),
                   let read = checked.read else { return nil }
             outputRead = read
         }

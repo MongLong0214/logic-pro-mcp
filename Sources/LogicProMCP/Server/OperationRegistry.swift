@@ -209,12 +209,17 @@ enum DeadlineClass: Sendable, Equatable {
     case short
     case medium
     case long
+    /// A Saga owns a complete forward/readback/conditional-compensation
+    /// lifecycle. Keep each ordinary operation in the 300s long tier, while
+    /// allowing the bounded outer lifecycle to contain both directions.
+    case saga
 
     var seconds: Double {
         switch self {
         case .short: 25
         case .medium: 90
         case .long: 300
+        case .saga: 600
         }
     }
 }
@@ -708,7 +713,7 @@ enum OperationRegistry {
         (.systemExportSupportBundle, "export_support_bundle", Mutability.`mutating`, DeadlineClass.medium, VerificationPolicy.readbackRequired, ["dir"]),
         (.systemHelp, "help", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, ["category"]),
         (.systemSagaPreflight, "saga_preflight", Mutability.readOnly, DeadlineClass.medium, VerificationPolicy.none, ["idempotency_key", "steps"]),
-        (.systemSagaExecute, "saga_execute", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired, ["idempotency_key", "steps", "confirmed_plan_hash"]),
+        (.systemSagaExecute, "saga_execute", Mutability.`mutating`, DeadlineClass.saga, VerificationPolicy.readbackRequired, ["idempotency_key", "steps", "confirmed_plan_hash"]),
         (.systemSagaStatus, "saga_status", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, ["idempotency_key"]),
         (.systemSagaCancel, "saga_cancel", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, ["idempotency_key"]),
         // WHY: a consent-gated one-time Key Commands configuration write (#413); mutating with a long budget (drives the KC GUI + a functional arm-flip verify), consent is the only required param.
@@ -930,7 +935,7 @@ enum OperationRegistry {
         ),
         (.projectPlanSessionRepair, "plan_session_repair", Mutability.readOnly, ConfirmationPolicy.none, VerificationPolicy.none, DeadlineClass.short, ["snapshot_id", "policy", "names", "plan_id", "digest", "on_ambiguity", "allow_create_aux", "allow_stack_membership_change", "allow_replace_send"]),
         (.projectApplySessionRepair, "apply_session_repair", Mutability.`mutating`, ConfirmationPolicy.l1,
-            VerificationPolicy.readbackRequired, DeadlineClass.long, ["plan_id", "digest", "confirmed", "idempotency_key"]),
+            VerificationPolicy.readbackRequired, DeadlineClass.saga, ["plan_id", "digest", "confirmed", "idempotency_key"]),
         (
             .projectCleanupApply,
             "cleanup_apply",

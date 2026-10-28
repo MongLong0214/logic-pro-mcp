@@ -416,6 +416,7 @@ struct OperationCatalogTests {
         case .short: "short"
         case .medium: "medium"
         case .long: "long"
+        case .saga: "saga"
         }
     }
 
