@@ -582,6 +582,22 @@ struct Issue966ApprovedRoutingDiffTests {
         #expect(send["after"] == .object([
             "target": .string("approved"), "physical_slot": .int(5), "bus": .int(3),
         ]))
+        let expectedSendBefore = Value.object([
+            "destination": .string("previous_opaque"),
+            "kind": .string("send"),
+            "provenance": .string("axMixerStrip"),
+            "send": .object([
+                "destinationBusNumber": .int(4),
+                "displayedName": .string("Same"),
+                "enabled": .bool(false),
+                "level": .double(-17.25),
+                "mode": .string("pre-fader"),
+                "physicalSlot": .int(5),
+                "sourceTrackRef": .object(["rawValue": .string(source.rawValue)]),
+            ]),
+            "source": .string("source_opaque"),
+        ])
+        #expect(send["before"] == expectedSendBefore)
         #expect(send["blocked_reasons"] == .array([
             .string("exact_target_send_adapter_unavailable"),
             .string("routing_prefix_cycle_unverified"),
@@ -598,6 +614,16 @@ struct Issue966ApprovedRoutingDiffTests {
         let changedSend = try #require(changedSends.first?.objectValue)
         let beforeSend = try #require(changedSend["before"]?.objectValue)
         let afterSend = try #require(changedSend["after"]?.objectValue)
+        #expect(changedSend["before"] == expectedSendBefore.objectValue?["send"])
+        #expect(changedSend["after"] == .object([
+            "destinationBusNumber": .int(3),
+            "displayedName": .string("Same"),
+            "enabled": .bool(false),
+            "level": .double(-17.25),
+            "mode": .string("pre-fader"),
+            "physicalSlot": .int(5),
+            "sourceTrackRef": .object(["rawValue": .string(source.rawValue)]),
+        ]))
         #expect(beforeSend["sourceTrackRef"] == .object(["rawValue": .string(source.rawValue)]))
         #expect(beforeSend["physicalSlot"] == .int(5))
         #expect(beforeSend["destinationBusNumber"] == .int(4))
