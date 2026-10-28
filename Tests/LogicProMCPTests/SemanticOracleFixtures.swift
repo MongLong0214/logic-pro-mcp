@@ -1435,7 +1435,7 @@ enum SemanticOracleFixtures {
         // bank step produced a fresh, changed MCU LCD upper row and the final
         // eight strip labels. The other nine locale records carry the same keys.
         .mixerBank: SemanticOracleFixture(
-            response: #"{"success":true,"verified":true,"state":"A","operation":"mixer.bank","channel":"MCU","direction":"right","bank_bookkeeping_before":0,"bank_bookkeeping_after":1,"bank_presses_sent":1,"banks_moved":1,"banks_requested":1,"step_windows":["DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn "],"upper_row_writes_observed":2,"window_before":"AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ","window_after":"DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ","strips":["DelCls","DelCls","DelCls","StdGrn","StdGrn","StdGrn","StdGrn","StdGrn"],"verify_source":"mcu_lcd_upper_row"}"#,
+            response: #"{"success":true,"verified":true,"state":"A","operation":"mixer.bank","channel":"MCU","direction":"right","bank_bookkeeping_before":0,"bank_bookkeeping_after":1,"bank_presses_sent":1,"banks_moved":1,"banks_requested":1,"bank_steps_disambiguated":0,"bank_probe_unresolved":false,"step_windows":["DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn "],"requested_step_windows":["DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn "],"upper_row_writes_observed":2,"window_before":"AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ","window_after":"DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ","strips":["DelCls","DelCls","DelCls","StdGrn","StdGrn","StdGrn","StdGrn","StdGrn"],"verify_source":"mcu_lcd_upper_row"}"#,
             readback: "{}"
         ),
     ]

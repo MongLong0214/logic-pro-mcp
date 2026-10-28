@@ -2954,31 +2954,42 @@ enum SemanticOracleTable {
         ]
     )
 
-    // MCUChannel.executeBank. #862's ten 2026-09-27 locale records drive this
-    // bounded State-A profile: one requested bank step, one witnessed move and
-    // at least one fresh MCU LCD upper-row write. `step_windows` also contains
-    // ambiguity-probe windows, so the current envelope cannot prove an ordered
-    // multi-step walk; count > 1 deliberately remains unqualified. A one-step
-    // right move can use two probe presses in addition to its requested press,
-    // hence the 1...3 press domain. The before/after inequality rejects a sent-
-    // button receipt or unchanged edge redraw. Bookkeeping stays shape-only
-    // because it is local state, not Logic readback.
+    // MCUChannel.executeBank. #862's ten 2026-09-27 locale records establish the
+    // upper-row witness. `requested_step_windows` now separates exactly one row
+    // per caller-requested bank step from the legacy `step_windows` diagnostic,
+    // which may additionally contain ambiguity-probe rows. State A therefore
+    // requires every requested step to have moved, the ordered requested-row
+    // count to match, and every successive row to differ from the row before it.
+    // One requested right step can use two probe presses, hence at most 3 * 31
+    // presses. Bookkeeping stays shape-only because it is local state, not Logic
+    // readback.
     static let mixerBank = SafeMutationOracle.oracle(
         .mixerBank,
         semantics: [
             .valueEquals(key: "operation", expected: .string("mixer.bank")),
             .valueEquals(key: "channel", expected: .string("MCU")),
             .enumMember(key: "direction", allowed: ["left", "right"]),
-            .valueEquals(key: "banks_requested", expected: .number(1)),
-            .valueEquals(key: "banks_moved", expected: .number(1)),
-            .numericRange(key: "bank_presses_sent", min: 1, max: 3),
+            .numericRange(key: "banks_requested", min: 1, max: 31),
+            .fieldsEqual(keyA: "banks_requested", keyB: "banks_moved"),
+            .numericRange(key: "bank_presses_sent", min: 1, max: 93),
             .numericMinimum(key: "upper_row_writes_observed", min: 1),
             .typedField(key: "bank_bookkeeping_before", type: .number),
             .typedField(key: "bank_bookkeeping_after", type: .number),
             .typedField(key: "window_before", type: .string),
             .typedField(key: "window_after", type: .string),
-            .fieldsDiffer(keyA: "window_before", keyB: "window_after"),
             .nonEmptyArray(key: "step_windows"),
+            .arrayCountEquals(key: "requested_step_windows", countKey: "banks_requested", offset: 0),
+            .orderedStringArrayChanges(key: "requested_step_windows", initialKey: "window_before"),
+            .valueEquals(key: "bank_probe_unresolved", expected: .bool(false)),
+            .bankRequestedWindowWitness(
+                traceKey: "step_windows",
+                requestedKey: "requested_step_windows",
+                directionKey: "direction",
+                disambiguatedCountKey: "bank_steps_disambiguated",
+                pressesKey: "bank_presses_sent",
+                writesKey: "upper_row_writes_observed",
+                finalKey: "window_after"
+            ),
             .nonEmptyArray(key: "strips"),
             .valueEquals(key: "verify_source", expected: .string("mcu_lcd_upper_row")),
         ]
