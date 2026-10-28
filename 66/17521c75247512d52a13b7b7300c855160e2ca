@@ -1,0 +1,9 @@
+Limit: Creation-owned focus acquisition retains only the structurally unique new native object for one guarded focus attempt, without rebinding retired peers. One or two completely observed empty send anchors do not replace default or inverse custody checks.
+Unverified: Full native lifecycle completion and acquisition preservation remain unqualified: the deletion receipt stayed residual and preceding acquisition changed the original source volume.
+Record-Id: r-967retiredfocus
+Provenance: inherited 88f3a95d084e596b79b2b7971e9f2f8fb76288b9
+
+Limit: After one issued deletion, complete retirement of the protected peer objects permits only the remaining bounded read-only observations. Exact created-object invalidation and full protected-value proof remain necessary for removal completion; deletion is not reissued.
+Unverified: The native deletion effect was observed but its strict completion receipt remains residual; full lifecycle completion is not qualified.
+Record-Id: r-967removalsettle
+Provenance: inherited 18043fc5de176d31e1e469a22f78885eca3c0e24
