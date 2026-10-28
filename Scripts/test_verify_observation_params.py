@@ -118,6 +118,24 @@ class ObservationParamResolutionTests(unittest.TestCase):
             runner._take(self.ctx, step)
         self.assertEqual(self.session.calls, [])
 
+    def test_nested_reserved_key_refuses_before_the_operation_is_sent(self):
+        path = "inventory.plugins[0].plugin_insert_ref"
+        for name, value in (
+            ("target_ref", {"wrapper": {"$observation": path}}),
+            ("param", {"wrapper": {"$observation": path}}),
+        ):
+            with self.subTest(name=name):
+                self.session.calls.clear()
+                step = call("ratio", "get_param_verified", {
+                    "target_ref": "fixed", "param": "ratio", name: value,
+                })
+                with self.assertRaisesRegex(
+                    runner.StepUnreadable,
+                    r"reserved \$observation|not an admitted target parameter",
+                ):
+                    runner._take(self.ctx, step)
+                self.assertEqual(self.session.calls, [])
+
     def test_run_row_makes_each_stored_reply_available_to_the_next_step(self):
         session = ScriptedSession()
         inventory = call("inventory", "get_inventory", {"track": 12})

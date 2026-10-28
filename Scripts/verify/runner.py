@@ -385,7 +385,7 @@ def _resolved_call_params(ctx: dict, params: dict) -> dict:
     resolved = {}
     entries = ctx.get("observations") or {}
     for name, value in params.items():
-        if not isinstance(value, dict) or "$observation" not in value:
+        if not engine.contains_observation_param(value):
             resolved[name] = value
             continue
         if name not in engine.OBSERVATION_TARGET_PARAMS:
@@ -393,7 +393,7 @@ def _resolved_call_params(ctx: dict, params: dict) -> dict:
                 f"call param {name!r}: {name!r} is not an admitted target parameter")
         if set(value) != {"$observation"} or not isinstance(value["$observation"], str):
             raise StepUnreadable(
-                f"call param {name!r}: $observation is exactly one string field")
+                f"call param {name!r}: reserved $observation must be exactly one string field")
         path = value["$observation"]
         try:
             root, segments = P.parse_path(path)

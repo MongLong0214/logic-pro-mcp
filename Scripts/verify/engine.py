@@ -456,12 +456,12 @@ def row_problems(row: dict, n_sources: int) -> list:
     return out
 
 
-def _contains_observation_param(value) -> bool:
+def contains_observation_param(value) -> bool:
     """Whether a JSON value uses the reserved dynamic-parameter key at any depth."""
     if isinstance(value, dict):
-        return "$observation" in value or any(_contains_observation_param(v) for v in value.values())
+        return "$observation" in value or any(contains_observation_param(v) for v in value.values())
     if isinstance(value, list):
-        return any(_contains_observation_param(v) for v in value)
+        return any(contains_observation_param(v) for v in value)
     return False
 
 
@@ -487,12 +487,12 @@ def observation_param_problems(row: dict) -> list:
     for section, sequence in (("steps", row["steps"]), ("restore", row["restore"])):
         for step in sequence:
             if not is_call(step):
-                if _contains_observation_param(step):
+                if contains_observation_param(step):
                     out.append(f"step {step['as']!r}: reserved $observation may appear only as "
                                f"a top-level parameter of the operation call")
                 continue
             for param, value in step["call"]["params"].items():
-                if not _contains_observation_param(value):
+                if not contains_observation_param(value):
                     continue
                 where = f"step {step['as']!r} call param {param!r}"
                 exact = (isinstance(value, dict) and set(value) == {"$observation"}
