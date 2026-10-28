@@ -975,6 +975,130 @@ private func relocationTrack(
     )
 }
 
+private func physicalRelocationTrack(
+    _ index: Int, _ name: String, _ type: TrackType, binding: AXTrackBinding.Binding,
+    selected: Bool? = nil
+) -> RecordSequenceRelocationTrackObservation {
+    var track = TrackState(id: index, name: name, type: type)
+    track.physicalBinding = binding
+    track.selectionReadback = selected
+    return RecordSequenceRelocationTrackObservation(track: track)
+}
+
+private struct PhysicalRelocationFixture {
+    let builder = FakeAXRuntimeBuilder()
+    let app: AXUIElement
+    let window: AXUIElement
+    let rail: AXUIElement
+    let target: AXUIElement
+    let gm: AXUIElement
+    let unreadableChild: AXUIElement
+    let stackDisclosure: AXUIElement
+    let runtime: AXLogicProElements.Runtime
+    let document = "file:///tmp/RecordSequenceRelocation.logicx"
+
+    init() {
+        app = builder.element(1_400_001)
+        window = builder.element(1_400_002)
+        rail = builder.element(1_400_003)
+        target = builder.element(1_400_004)
+        gm = builder.element(1_400_005)
+        unreadableChild = builder.element(1_400_006)
+        stackDisclosure = builder.element(1_400_007)
+        builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+        builder.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
+        builder.setAttribute(window, kAXDocumentAttribute as String, document)
+        builder.setAttribute(rail, kAXRoleAttribute as String, kAXListRole as String)
+        builder.setAttribute(rail, kAXIdentifierAttribute as String, "Track Headers")
+        for header in [target, gm] {
+            builder.setAttribute(header, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+            builder.setChildren(header, [])
+        }
+        builder.setAttribute(stackDisclosure, kAXRoleAttribute as String, kAXDisclosureTriangleRole as String)
+        builder.setAttribute(stackDisclosure, kAXValueAttribute as String, 1)
+        builder.setChildren(window, [rail])
+        builder.setChildren(rail, [target])
+        runtime = builder.makeLogicRuntime(appElement: app)
+    }
+
+    func inventory(
+        includeGM: Bool, selectedIndex: Int? = nil, unreadableShapeIndex: Int? = nil,
+        changedStackShapeIndex: Int? = nil
+    ) -> [RecordSequenceRelocationTrackObservation] {
+        let headers = includeGM ? [target, gm] : [target]
+        builder.setChildren(rail, headers)
+        return headers.enumerated().map { index, header in
+            if index == unreadableShapeIndex {
+                builder.setChildren(header, [unreadableChild])
+            } else if index == changedStackShapeIndex {
+                builder.setChildren(header, [stackDisclosure])
+            } else {
+                builder.setChildren(header, [])
+            }
+            let binding = AXTrackBinding.Binding(
+                window: window, header: header, document: document, runtime: runtime,
+                observedStackHeader: index == unreadableShapeIndex ? nil : index == changedStackShapeIndex,
+                observedHeaders: headers
+            )
+            return physicalRelocationTrack(
+                index, index == 0 ? "Deluxe Classic" : "GM Device 1",
+                index == 0 ? .softwareInstrument : .externalMIDI,
+                binding: binding, selected: selectedIndex.map { $0 == index }
+            )
+        }
+    }
+}
+
+private final class PhysicalRelocationCopyBoundaryBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private let fixture: PhysicalRelocationFixture
+    private var call = 0
+
+    init(_ fixture: PhysicalRelocationFixture) {
+        self.fixture = fixture
+    }
+
+    func next() -> [RecordSequenceRelocationTrackObservation]? {
+        lock.withLock {
+            defer { call += 1 }
+            switch call {
+            case 0, 1:
+                return fixture.inventory(includeGM: false)
+            case 2:
+                return fixture.inventory(includeGM: true)
+            default:
+                return fixture.inventory(includeGM: true, selectedIndex: 1, unreadableShapeIndex: 1)
+            }
+        }
+    }
+}
+
+private final class PhysicalRelocationPasteBoundaryBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private let fixture: PhysicalRelocationFixture
+    private var call = 0
+
+    init(_ fixture: PhysicalRelocationFixture) {
+        self.fixture = fixture
+    }
+
+    func next() -> [RecordSequenceRelocationTrackObservation]? {
+        lock.withLock {
+            defer { call += 1 }
+            switch call {
+            case 0, 1:
+                return fixture.inventory(includeGM: false)
+            case 2:
+                return fixture.inventory(includeGM: true)
+            case 3:
+                return fixture.inventory(includeGM: true, selectedIndex: 1)
+            default:
+                return fixture.inventory(includeGM: true, selectedIndex: 0, changedStackShapeIndex: 0)
+            }
+        }
+    }
+}
+
 private final class SequentialRelocationInventoryBox: @unchecked Sendable {
     private let lock = NSLock()
     private var values: [[RecordSequenceRelocationTrackObservation]?]
@@ -1370,6 +1494,89 @@ func testRecordSequenceRelocationRequiresPositiveSoftwareInstrumentType(_ type: 
     #expect(object["failure_stage"] as? String == "relocation_copy_boundary")
     #expect((await ax.operations).filter { $0 == "track.select" }.count == 1)
     #expect(await keys.operations.isEmpty)
+}
+
+@Test func testRecordSequenceRelocationRefusesUnreadablePhysicalShapeBeforeCopy() async throws {
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let (router, ax, keys) = try await relocationRouter()
+    let fixture = PhysicalRelocationFixture()
+    let initial = fixture.inventory(includeGM: false)
+    let initialBinding = try #require(initial.first?.physicalBinding)
+    #expect(initialBinding.matches(initialBinding))
+    #expect(initialBinding.currentIndex() == 0)
+    let inventories = PhysicalRelocationCopyBoundaryBox(fixture)
+    let gmRegion = makeRegion(name: "MIDI Region", trackIndex: 1, startBar: 1, endBar: 2)
+    let regionReads = SequentialRegionReadBox([
+        .success([]),
+        .success([gmRegion]),
+        .success([gmRegion]),
+    ])
+
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: [
+            "notes": minimalNoteSpec(),
+            "target_track": .int(0),
+            "target_expected_name": .string("Deluxe Classic"),
+        ],
+        router: router,
+        cache: cache,
+        trackHeaderCount: { 1 },
+        trackNameAt: relocationTrackName,
+        relocationTrackInventory: { inventories.next() },
+        readRegions: { regionReads.next() },
+        settleReadback: {}
+    )
+
+    #expect(try #require(result.isError))
+    let object = recordSequenceJSONObject(result)
+    #expect(object["error"] as? String == "source_changed")
+    #expect(object["failure_stage"] as? String == "relocation_copy_boundary")
+    #expect(await ax.importCalls == 1)
+    #expect((await ax.operations).filter { $0 == "track.select" }.count == 1)
+    #expect(!(await keys.operations).contains("edit.copy"))
+    #expect(!(await keys.operations).contains("edit.paste"))
+    #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+}
+
+@Test func testRecordSequenceRelocationRefusesRecycledPhysicalCarrierBeforePaste() async throws {
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let (router, ax, keys) = try await relocationRouter()
+    let fixture = PhysicalRelocationFixture()
+    let inventories = PhysicalRelocationPasteBoundaryBox(fixture)
+    let gmRegion = makeRegion(name: "MIDI Region", trackIndex: 1, startBar: 1, endBar: 2)
+    let pasted = makeRegion(name: "MIDI Region", trackIndex: 0, startBar: 1, endBar: 2)
+    let regionReads = SequentialRegionReadBox([
+        .success([]),
+        .success([gmRegion]),
+        .success([gmRegion]),
+        .success([gmRegion, pasted]),
+    ])
+
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: [
+            "notes": minimalNoteSpec(),
+            "target_track": .int(0),
+            "target_expected_name": .string("Deluxe Classic"),
+        ],
+        router: router,
+        cache: cache,
+        trackHeaderCount: { 1 },
+        trackNameAt: relocationTrackName,
+        relocationTrackInventory: { inventories.next() },
+        readRegions: { regionReads.next() },
+        settleReadback: {}
+    )
+
+    #expect(try #require(result.isError))
+    let object = recordSequenceJSONObject(result)
+    #expect(object["error"] as? String == "target_changed")
+    #expect(object["failure_stage"] as? String == "relocation_paste_boundary")
+    #expect(await ax.importCalls == 1)
+    #expect((await ax.operations).filter { $0 == "track.select" }.count == 2)
+    #expect(await keys.operations == ["edit.copy"])
+    #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
 }
 
 @Test func testRecordSequenceRelocationRefusesUnverifiedTargetSelectionBeforePaste() async throws {

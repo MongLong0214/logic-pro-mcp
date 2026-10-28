@@ -34,7 +34,25 @@ struct RecordSequenceRelocationTrackObservation: @unchecked Sendable {
         (physicalBinding != nil) != (testIdentity != nil)
     }
 
+    func hasCurrentIdentityAtIssuedIndex() -> Bool {
+        if testIdentity != nil { return physicalBinding == nil }
+        guard testIdentity == nil, let physicalBinding else { return false }
+        return physicalBinding.currentIndex() == index
+    }
+
     func hasSamePhysicalIdentity(as other: Self) -> Bool {
+        if let testIdentity, let otherIdentity = other.testIdentity {
+            return testIdentity == otherIdentity
+        }
+        guard testIdentity == nil, other.testIdentity == nil,
+              let physicalBinding, let otherBinding = other.physicalBinding else { return false }
+        return physicalBinding.matches(otherBinding)
+    }
+
+    /// The import is expected to append one track, which intentionally retires the baseline
+    /// population shape. This narrower comparison is only for that owned append transition; later
+    /// copy/paste boundaries must use `hasSamePhysicalIdentity` and current-index renewal.
+    func hasSameIssuedCarrier(as other: Self) -> Bool {
         if let testIdentity, let otherIdentity = other.testIdentity {
             return testIdentity == otherIdentity
         }
@@ -860,11 +878,29 @@ extension TrackDispatcher {
         _ inventory: [RecordSequenceRelocationTrackObservation]
     ) -> Bool {
         guard !inventory.isEmpty,
-              inventory.enumerated().allSatisfy({ $0.offset == $0.element.index && $0.element.hasIdentity() })
+              inventory.enumerated().allSatisfy({
+                  $0.offset == $0.element.index
+                      && $0.element.hasIdentity()
+                      && $0.element.hasCurrentIdentityAtIssuedIndex()
+              })
         else { return false }
         for first in inventory.indices {
             for second in inventory.indices where first < second {
                 if inventory[first].hasSamePhysicalIdentity(as: inventory[second]) { return false }
+            }
+        }
+        return true
+    }
+
+    private static func relocationInventoryHadExactIssuedStructure(
+        _ inventory: [RecordSequenceRelocationTrackObservation]
+    ) -> Bool {
+        guard !inventory.isEmpty,
+              inventory.enumerated().allSatisfy({ $0.offset == $0.element.index && $0.element.hasIdentity() })
+        else { return false }
+        for first in inventory.indices {
+            for second in inventory.indices where first < second {
+                if inventory[first].hasSameIssuedCarrier(as: inventory[second]) { return false }
             }
         }
         return true
@@ -889,12 +925,12 @@ extension TrackDispatcher {
         current: [RecordSequenceRelocationTrackObservation]
     ) -> Bool {
         guard current.count == baseline.count + 1,
-              relocationInventoryIsExact(baseline), relocationInventoryIsExact(current) else { return false }
+              relocationInventoryHadExactIssuedStructure(baseline), relocationInventoryIsExact(current) else { return false }
         return zip(baseline, current.prefix(baseline.count)).allSatisfy { prior, observed in
             prior.index == observed.index
                 && prior.name.utf8.elementsEqual(observed.name.utf8)
                 && prior.type == observed.type
-                && prior.hasSamePhysicalIdentity(as: observed)
+                && prior.hasSameIssuedCarrier(as: observed)
         }
     }
 
