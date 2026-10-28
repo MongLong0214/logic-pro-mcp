@@ -334,6 +334,78 @@ struct PianoRollTransformTests {
         #expect(plan.predictedChanges.isEmpty)
     }
 
+    @Test func planWarningsDistinguishEmptySelectionFromASelectedNoOp() throws {
+        let notes = [note(pitch: 60)]
+        let empty = try #require(
+            planTransform(
+                region: region(),
+                selection: .occurrences([]),
+                transform: .transpose(semitones: 1),
+                beforeSnapshot: snapshot(notes: notes)
+            )
+        )
+        let selectedNoOp = try #require(
+            planTransform(
+                region: region(),
+                transform: .transpose(semitones: 0),
+                beforeSnapshot: snapshot(notes: notes)
+            )
+        )
+
+        #expect(empty.warnings == [.emptySelection])
+        #expect(selectedNoOp.warnings == [.noChangesPredicted])
+    }
+
+    @Test func planWarningsReportEveryResultingSamePitchChannelOverlapPair() throws {
+        let existingOverlap = [
+            note(pitch: 60, start: 0, duration: 120),
+            note(pitch: 60, start: 60, duration: 120),
+        ]
+        let preserved = try #require(
+            planTransform(
+                region: region(),
+                transform: .setVelocity(90),
+                beforeSnapshot: snapshot(notes: existingOverlap)
+            )
+        )
+        let removed = try #require(
+            planTransform(
+                region: region(),
+                selection: .occurrences([1]),
+                transform: .transpose(semitones: 1),
+                beforeSnapshot: snapshot(notes: existingOverlap)
+            )
+        )
+        let allowedNew = try #require(
+            planTransform(
+                region: region(),
+                selection: .occurrences([1]),
+                overlapPolicy: .allow,
+                transform: .transpose(semitones: -1),
+                beforeSnapshot: snapshot(notes: [
+                    note(pitch: 60, start: 0, duration: 120),
+                    note(pitch: 61, start: 60, duration: 120),
+                ])
+            )
+        )
+
+        #expect(preserved.warnings == [.samePitchAndChannelOverlaps(count: 1)])
+        #expect(removed.warnings.isEmpty)
+        #expect(allowedNew.warnings == [.samePitchAndChannelOverlaps(count: 1)])
+    }
+
+    @Test func ordinaryChangedPlanHasNoWarnings() throws {
+        let plan = try #require(
+            planTransform(
+                region: region(),
+                transform: .setVelocity(90),
+                beforeSnapshot: snapshot(notes: [note(pitch: 60, velocity: 40)])
+            )
+        )
+
+        #expect(plan.warnings.isEmpty)
+    }
+
     @Test func defaultPolicyRejectsANewSamePitchChannelOverlap() {
         let notes = [
             note(pitch: 60, start: 0, duration: 120),
