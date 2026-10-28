@@ -9,16 +9,21 @@ struct RegionTransformPlan: Sendable {
 func planTransform(
     region: MIDIRegionReference,
     transform: MIDITransform,
-    beforeSnapshot: MIDIRegionNoteSnapshot,
-    ppq: Int
+    beforeSnapshot: MIDIRegionNoteSnapshot
 ) -> RegionTransformPlan? {
-    guard beforeSnapshot.complete, beforeSnapshot.regionReference == region else { return nil }
+    guard beforeSnapshot.complete,
+          beforeSnapshot.regionReference == region,
+          beforeSnapshot.ppq > 0 else { return nil }
     return RegionTransformPlan(
         regionRef: region,
         boundGeneration: beforeSnapshot.projectEpoch,
         transform: transform,
         beforeSnapshot: beforeSnapshot,
-        predictedAfter: applyTransform(transform, to: beforeSnapshot.notes, ppq: ppq)
+        predictedAfter: applyTransform(
+            transform,
+            to: beforeSnapshot.notes,
+            ppq: beforeSnapshot.ppq
+        )
     )
 }
 

@@ -78,8 +78,34 @@ struct PianoRollTransformTests {
             planTransform(
                 region: region(),
                 transform: .transpose(semitones: 2),
-                beforeSnapshot: snapshot(complete: false),
-                ppq: 480
+                beforeSnapshot: snapshot(complete: false)
+            ) == nil
+        )
+    }
+
+    @Test func planPredictionUsesTheBoundSnapshotPPQ() throws {
+        let target = region()
+        let plan = try #require(
+            planTransform(
+                region: target,
+                transform: .quantize(grid: .eighth, strength: 1, swing: 0),
+                beforeSnapshot: snapshot(
+                    region: target,
+                    notes: [note(pitch: 60, start: 350)],
+                    ppq: 960
+                )
+            )
+        )
+
+        #expect(plan.predictedAfter == [note(pitch: 60, start: 480)])
+    }
+
+    @Test func nonpositiveSnapshotPPQCannotProducePlan() {
+        #expect(
+            planTransform(
+                region: region(),
+                transform: .transpose(semitones: 2),
+                beforeSnapshot: snapshot(notes: [note(pitch: 60)], ppq: 0)
             ) == nil
         )
     }
@@ -90,8 +116,7 @@ struct PianoRollTransformTests {
             planTransform(
                 region: target,
                 transform: .transpose(semitones: 2),
-                beforeSnapshot: snapshot(region: target, generation: 7, notes: [note(pitch: 60)]),
-                ppq: 480
+                beforeSnapshot: snapshot(region: target, generation: 7, notes: [note(pitch: 60)])
             )
         )
 
@@ -111,8 +136,7 @@ struct PianoRollTransformTests {
             planTransform(
                 region: target,
                 transform: .setVelocity(90),
-                beforeSnapshot: snapshot(region: target),
-                ppq: 480
+                beforeSnapshot: snapshot(region: target)
             )
         )
 
@@ -137,8 +161,7 @@ struct PianoRollTransformTests {
                     region: target,
                     generation: 10,
                     notes: [duplicate, duplicate, other]
-                ),
-                ppq: 480
+                )
             )
         )
         let observed = snapshot(
@@ -220,8 +243,7 @@ struct PianoRollTransformTests {
             planTransform(
                 region: region(),
                 transform: .transpose(semitones: 0),
-                beforeSnapshot: snapshot(notes: [expected, expected]),
-                ppq: 480
+                beforeSnapshot: snapshot(notes: [expected, expected])
             )
         )
         let observed = snapshot(
@@ -377,8 +399,7 @@ struct PianoRollTransformTests {
             planTransform(
                 region: region(),
                 transform: .humanize(timingTicks: 10, velocity: 4, seed: 9),
-                beforeSnapshot: snapshot(notes: before),
-                ppq: 480
+                beforeSnapshot: snapshot(notes: before)
             )
         )
 
@@ -404,8 +425,7 @@ struct PianoRollTransformTests {
         planTransform(
             region: region(),
             transform: .transpose(semitones: 2),
-            beforeSnapshot: snapshot(notes: [note(pitch: 60)]),
-            ppq: 480
+            beforeSnapshot: snapshot(notes: [note(pitch: 60)])
         )
     }
 
@@ -420,12 +440,13 @@ struct PianoRollTransformTests {
         region: MIDIRegionReference? = nil,
         generation: UInt64 = 1,
         complete: Bool = true,
-        notes: [MIDINoteEvent] = []
+        notes: [MIDINoteEvent] = [],
+        ppq: Int = 480
     ) -> MIDIRegionNoteSnapshot {
         let ref = region ?? self.region()
         return complete
-            ? .makeCompleteForTesting(regionReference: ref, projectEpoch: generation, ppq: 480, notes: notes)
-            : .makeIncompleteForTesting(regionReference: ref, projectEpoch: generation, ppq: 480)
+            ? .makeCompleteForTesting(regionReference: ref, projectEpoch: generation, ppq: ppq, notes: notes)
+            : .makeIncompleteForTesting(regionReference: ref, projectEpoch: generation, ppq: ppq)
     }
 
     private func independentExpected(
