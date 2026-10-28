@@ -236,6 +236,75 @@ struct PianoRollTransformTests {
         #expect(reverseOrder.predictedAfter[1] == notes[1])
     }
 
+    @Test func planProjectsSelectedCountAndExactOccurrenceChanges() throws {
+        let notes = [
+            note(pitch: 60, start: 0, velocity: 40),
+            note(pitch: 60, start: 0, velocity: 40),
+            note(pitch: 64, start: 240, velocity: 70),
+        ]
+        let plan = try #require(
+            planTransform(
+                region: region(),
+                selection: .occurrences([2, 0]),
+                transform: .setVelocity(90),
+                beforeSnapshot: snapshot(notes: notes)
+            )
+        )
+
+        #expect(plan.selectedCount == 2)
+        #expect(plan.predictedChanges == [
+            MIDINoteTransformChange(
+                occurrenceIndex: 0,
+                before: notes[0],
+                after: note(pitch: 60, start: 0, velocity: 90)
+            ),
+            MIDINoteTransformChange(
+                occurrenceIndex: 2,
+                before: notes[2],
+                after: note(pitch: 64, start: 240, velocity: 90)
+            ),
+        ])
+        #expect(plan.predictedAfter[1] == notes[1])
+    }
+
+    @Test func selectedNoOpCountsAsSelectedButNotAsAChange() throws {
+        let notes = [
+            note(pitch: 60, velocity: 64),
+            note(pitch: 62, velocity: 30),
+        ]
+        let plan = try #require(
+            planTransform(
+                region: region(),
+                selection: .occurrences([0, 1]),
+                transform: .setVelocity(64),
+                beforeSnapshot: snapshot(notes: notes)
+            )
+        )
+
+        #expect(plan.selectedCount == 2)
+        #expect(plan.predictedChanges == [
+            MIDINoteTransformChange(
+                occurrenceIndex: 1,
+                before: notes[1],
+                after: note(pitch: 62, velocity: 64)
+            ),
+        ])
+    }
+
+    @Test func allSelectionReportsAnEmptyChangeProjectionForANoOp() throws {
+        let notes = [note(pitch: 60), note(pitch: 62)]
+        let plan = try #require(
+            planTransform(
+                region: region(),
+                transform: .transpose(semitones: 0),
+                beforeSnapshot: snapshot(notes: notes)
+            )
+        )
+
+        #expect(plan.selectedCount == 2)
+        #expect(plan.predictedChanges.isEmpty)
+    }
+
     @Test func defaultPolicyRejectsANewSamePitchChannelOverlap() {
         let notes = [
             note(pitch: 60, start: 0, duration: 120),
