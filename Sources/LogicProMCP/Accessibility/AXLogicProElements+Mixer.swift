@@ -1040,6 +1040,7 @@ extension AXLogicProElements {
         guard let walk = preOrderDescendants(of: strip, maxDepth: 4, runtime: runtime) else {
             return (.unreadable, nil)
         }
+        var possibleUnmeasuredOutput = false
         var found: (destination: String, control: AXUIElement)?
         for visit in walk {
             if visit.depth == 4 {
@@ -1059,7 +1060,8 @@ extension AXLogicProElements {
                 guard !AXLocalePolicy.inputSlotHelpKeyword.containsAny(in: loweredHelp),
                       !AXLocalePolicy.sendSlotHelpKeyword.containsAny(in: loweredHelp) else { continue }
                 // A slot whose Help wording is not in the measured set may still carry a known
-                // destination or generic Output caption. It denies absence but grants no output.
+                // destination or generic Output caption. It denies absence but grants no output;
+                // a separate, sole measured output control remains the deciding control.
                 guard case let .success(description) = slotDecidingString(
                     visit.element, kAXDescriptionAttribute as String, runtime: runtime
                 ), case let .success(title) = slotDecidingString(
@@ -1068,7 +1070,7 @@ extension AXLogicProElements {
                 if [description, title].compactMap({ $0 }).contains(where: { value in
                     AXLocalePolicy.outputPopupOutputSubmenuTitle.matches(value, mode: .exact)
                         || RoutingGraphPublication.classifyOutputLabel(value).0 != .unclassified
-                }) { return (.unreadable, nil) }
+                }) { possibleUnmeasuredOutput = true }
                 continue
             }
             guard found == nil,
@@ -1077,8 +1079,8 @@ extension AXLogicProElements {
                   ), let description, !description.isEmpty else { return (.unreadable, nil) }
             found = (description, visit.element)
         }
-        guard let found else { return (.noSlot, nil) }
-        return (.destination(found.destination), found.control)
+        if let found { return (.destination(found.destination), found.control) }
+        return possibleUnmeasuredOutput ? (.unreadable, nil) : (.noSlot, nil)
     }
 
     /// The first button under the strip whose help matches, or nil.

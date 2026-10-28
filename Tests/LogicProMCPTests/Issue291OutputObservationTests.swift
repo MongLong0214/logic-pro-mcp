@@ -64,4 +64,33 @@ struct Issue291OutputObservationTests {
         ) == .unreadable)
         #expect(builder.setCalls.isEmpty && builder.actionCalls.isEmpty)
     }
+
+    @Test("an unmeasured bus-labelled button denies absence but not a sole measured output")
+    func unmeasuredBusButtonDoesNotOverrideTheMeasuredOutput() {
+        let builder = FakeAXRuntimeBuilder()
+        let strip = builder.element(291_770)
+        let unknown = builder.element(291_771)
+        let output = builder.element(291_772)
+        builder.setRole(strip, kAXLayoutItemRole as String)
+        builder.setButton(
+            unknown,
+            description: "Bus 1",
+            help: "Source selector. Choose what this channel strip hears.",
+            x: 0, y: 0, width: 1, height: 1
+        )
+        builder.setButton(
+            output,
+            description: "Stereo Output",
+            help: "Output slot. Choose the channel strip output destination.",
+            x: 0, y: 1, width: 1, height: 1
+        )
+        builder.setChildren(unknown, [])
+        builder.setChildren(output, [])
+        builder.setChildren(strip, [unknown, output])
+
+        #expect(AXLogicProElements.outputSlotReading(
+            in: strip, runtime: builder.makeAXRuntime()
+        ) == .destination("Stereo Output"))
+        #expect(builder.setCalls.isEmpty && builder.actionCalls.isEmpty)
+    }
 }

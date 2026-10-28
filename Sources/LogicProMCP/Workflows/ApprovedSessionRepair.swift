@@ -2101,7 +2101,12 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             }
         }
         var expected = task.capture.channelStrips
-        if assignment != task.before { expected[index].output = strips[index].output }
+        // The owned row was freshly read and already proved to encode `assignment` above.
+        // Preserve that paired display/observation even for a no-op assignment: capture-time
+        // rows can predate output observations, and treating corroborating evidence as drift
+        // makes an unchanged physical output fail its own final footprint check.
+        expected[index].output = strips[index].output
+        expected[index].outputObservation = strips[index].outputObservation
         if let ownedSendChange {
             stage = "owned_send_effect"
             guard taskOverride != nil, let sendTask,
@@ -2239,7 +2244,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                         guard domain == "strips", row != index else { onlyMissingPeerRouting = false; continue }
                         for key in keys {
                             switch key {
-                            case "output":
+                            case "output", "output_observation":
                                 if expected[row].output.flatMap(OutputAssignment.observed(slotLabel:)) == nil
                                     || strips[row].output.flatMap(OutputAssignment.observed(slotLabel:)) != nil {
                                     onlyMissingPeerRouting = false
