@@ -373,10 +373,54 @@ def _probe(ctx: dict, step: dict) -> str:
     return text
 
 
+def _resolved_call_params(ctx: dict, params: dict) -> dict:
+    """Resolve the one dynamic call-parameter form admitted by ``engine``.
+
+    A reference is a top-level parameter value shaped exactly as
+    ``{"$observation": "prior.path"}``.  The referenced observation was already stored by this
+    runner, so parse and walk that stored raw text with the same strict machinery the judge uses.
+    Only strings are substituted: this seam exists for opaque, session-issued target references,
+    not for copying arbitrary reply objects into a later request.
+    """
+    resolved = {}
+    entries = ctx.get("observations") or {}
+    for name, value in params.items():
+        if not isinstance(value, dict) or "$observation" not in value:
+            resolved[name] = value
+            continue
+        if set(value) != {"$observation"} or not isinstance(value["$observation"], str):
+            raise StepUnreadable(
+                f"call param {name!r}: $observation is exactly one string field")
+        path = value["$observation"]
+        try:
+            root, segments = P.parse_path(path)
+        except ValueError as exc:
+            raise StepUnreadable(f"call param {name!r}: {exc}") from exc
+        entry = entries.get(root)
+        if entry is None:
+            raise StepUnreadable(
+                f"call param {name!r}: observation {root!r} is not stored before this call")
+        observed = engine.observation_value(entry)
+        if isinstance(observed, P.Unreadable):
+            raise StepUnreadable(
+                f"call param {name!r}: observation {root!r} is unreadable: {observed.reason}")
+        found = P.walk(observed.value, segments, root)
+        if isinstance(found, P.Unreadable):
+            raise StepUnreadable(f"call param {name!r}: {found.reason}")
+        if not isinstance(found.value, str):
+            raise StepUnreadable(
+                f"call param {name!r}: {path} is {P.kind_of(found.value)}, not a string")
+        if not found.value:
+            raise StepUnreadable(f"call param {name!r}: {path} is an empty string")
+        resolved[name] = found.value
+    return resolved
+
+
 def _take(ctx: dict, step: dict) -> str:
     if "call" in step:
         call = step["call"]
-        return ctx["session"].call(call["tool"], call["command"], call["params"], CALL_TIMEOUT_S)
+        params = _resolved_call_params(ctx, call["params"])
+        return ctx["session"].call(call["tool"], call["command"], params, CALL_TIMEOUT_S)
     if "read" in step:
         return ctx["session"].read(step["read"]["uri"], READ_TIMEOUT_S)
     if "probe" in step:
@@ -414,12 +458,20 @@ def execute_step(ctx: dict, step: dict) -> dict:
 def run_row(ctx: dict, row: dict) -> dict:
     """Every step, then every restore step, whatever happened to the steps before it."""
     entries = {}
+    previous = ctx.get("observations")
+    ctx["observations"] = entries
     try:
         for step in row["steps"]:
             entries[step["as"]] = execute_step(ctx, step)
     finally:
-        for step in row["restore"]:
-            entries[step["as"]] = execute_step(ctx, step)
+        try:
+            for step in row["restore"]:
+                entries[step["as"]] = execute_step(ctx, step)
+        finally:
+            if previous is None:
+                ctx.pop("observations", None)
+            else:
+                ctx["observations"] = previous
     return {"observations": entries}
 
 

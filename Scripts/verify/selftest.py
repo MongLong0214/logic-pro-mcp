@@ -419,9 +419,9 @@ MUTANTS = [
      "old": '    if switched.get("cause"):\n        return f"NOT switched: {switched[\'cause\']}"\n',
      "new": ""},
     {"id": "restore-skipped-after-failure", "file": "runner.py",
-     "old": '        for step in row["restore"]:\n            entries[step["as"]] = execute_step(ctx, step)',
-     "new": ('        for step in (row["restore"] if all("raw" in e for e in entries.values()) else []):\n'
-             '            entries[step["as"]] = execute_step(ctx, step)')},
+     "old": '            for step in row["restore"]:\n                entries[step["as"]] = execute_step(ctx, step)',
+     "new": ('            for step in (row["restore"] if all("raw" in e for e in entries.values()) else []):\n'
+             '                entries[step["as"]] = execute_step(ctx, step)')},
     {"id": "digest-before-verdicts", "file": "runner.py",
      "old": "    return data, parsed, _attest(built, readings, E.sha256_of(parsed), rest)",
      "new": "    return data, parsed, _attest(built, readings, E.sha256_of(dict(parsed, verdicts={})), rest)"},
