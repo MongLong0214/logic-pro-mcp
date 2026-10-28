@@ -2362,7 +2362,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                   logic_project    — Project lifecycle (open, save, bounce...)
                   logic_audio      — Read-only audio artifact analysis
                   logic_system     — Diagnostics + help
-                  logic_plugins    — Verified plugin reads and apply-back (get_inventory, get_param_verified, set_param_verified, set_eq_band_verified, insert_verified)
+                  logic_plugins    — Verified plugin reads and apply-back (get_inventory, get_host_parameter_manifest, get_param_verified, set_param_verified, set_eq_band_verified, insert_verified)
 
                 Resources (reads — zero tool cost):
                   logic://system/health         — System health

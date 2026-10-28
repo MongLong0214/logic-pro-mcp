@@ -286,6 +286,39 @@ struct ControlsViewParameterEnumeratorTests {
         #expect(!emittedMix)
     }
 
+    @Test func labelledSectionRowsAreRetainedWithoutWeakeningTableBinding() throws {
+        var rows = measuredRows
+        rows.insert(RowFixture(
+            label: "Dynamics",
+            controlRole: .slider,
+            value: nil,
+            valueDescription: nil,
+            valueSettable: false,
+            additionalControlRole: nil,
+            includesControl: false
+        ), at: 0)
+        let fixture = makeControlsFixture(rows: rows)
+        let result = try #require(ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: fixture.runtime
+        ))
+
+        #expect(result.rowObservations[0].observedLabel == "Dynamics")
+        #expect(result.rowObservations[0].classification == .refusedNoControl)
+
+        var labelsOnly = rows
+        for index in labelsOnly.indices {
+            labelsOnly[index].includesControl = false
+        }
+        let labelsOnlyFixture = makeControlsFixture(rows: labelsOnly)
+        #expect(ControlsViewParameterEnumerator.enumerate(
+            in: labelsOnlyFixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: labelsOnlyFixture.runtime
+        ) == nil)
+    }
+
     @Test func missingOrUnreadableWindowTitleCannotAdmitTheTrackAsPluginName() {
         let emptyTitleFixture = makeControlsFixture(
             windowTitle: "",
@@ -368,6 +401,7 @@ private struct RowFixture {
     var valueDescription: String?
     var valueSettable: Bool
     var additionalControlRole: GenericParameterControlRole?
+    var includesControl: Bool = true
 }
 
 // The supplied re-measurement names 18 physical rows. Its aggregate says 14
@@ -450,7 +484,7 @@ private func makeControlsFixture(
             builder: builder
         )
 
-        var controls = [control]
+        var controls = rowFixture.includesControl ? [control] : []
         if let additionalControlRole = rowFixture.additionalControlRole {
             let additionalControl = builder.element(base + 3)
             configure(

@@ -298,26 +298,26 @@ enum ControlsViewParameterEnumerator {
     }
 
     /// The Controls-view state is structurally bound to the observed AX shape:
-    /// each table row has AXCells and each row contains a supported control in
-    /// one of those cells. The live evidence makes this a Controls-view fact;
-    /// it prevents a bare AXTable with arbitrary children from qualifying.
+    /// each table row has AXCells and the table contains a supported control
+    /// in one of those cells. Label-only section rows remain observable as
+    /// explicit refused rows, while a bare labels-only AXTable cannot qualify.
     private static func controlsViewStateIsBound(
         rows: [AXUIElement],
         runtime: AXHelpers.Runtime
     ) -> Bool {
-        rows.allSatisfy { row in
+        var tableHasControl = false
+        for row in rows {
             guard let cells = rowCells(in: row, runtime: runtime), !cells.isEmpty else {
                 return false
             }
-            var hasControl = false
             for cell in cells {
                 guard let contents = cellContents(in: cell, runtime: runtime) else {
                     return false
                 }
-                hasControl = hasControl || !contents.controls.isEmpty
+                tableHasControl = tableHasControl || !contents.controls.isEmpty
             }
-            return hasControl
         }
+        return tableHasControl
     }
 
     private static func readRow(
