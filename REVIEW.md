@@ -4,6 +4,10 @@ This file is the repository-owned project input for automated independent review
 exact candidate commit that supplied these bytes; a working tree, newer branch tip, prior review,
 or producer summary is not a substitute.
 
+A review may apply this policy only when the runner preserves its exact bytes and revision together
+with the exact base and head. File presence, a prompt reference, or a model statement that it read
+the file is not delivery evidence.
+
 - Apply the change-type evidence matrix in [CONTRIBUTING.md](CONTRIBUTING.md). The required checks
   follow actual impact, not a file extension or directory name.
 - Apply the citation and observation boundaries in [the canon guide](docs/canon/README.md). A
@@ -19,4 +23,7 @@ or producer summary is not a substitute.
   own boundaries establish.
 - A repair or dispute does not self-certify closure. Re-run the applicable verification and obtain
   fresh independent review of the current candidate before treating a finding as resolved.
+- Resolve disagreement through the existing bounded independent evidence path. If the required
+  evidence remains incomplete at its limit, finish unsuccessfully rather than request a human
+  tie-breaker, risk waiver, or unverified PASS.
 
