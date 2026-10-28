@@ -995,7 +995,10 @@ extension AXLogicProElements {
         in strip: AXUIElement,
         runtime: AXHelpers.Runtime = .production
     ) -> String? {
-        outputSlotRead(in: strip, runtime: runtime)?.destination
+        guard case .destination(let value) = outputSlotRead(in: strip, runtime: runtime).reading else {
+            return nil
+        }
+        return value
     }
 
     /// The output slot's button itself (#291 R2): the element `logic_mixer set_output_verified`
@@ -1008,7 +1011,24 @@ extension AXLogicProElements {
         in strip: AXUIElement,
         runtime: AXHelpers.Runtime = .production
     ) -> AXUIElement? {
-        outputSlotRead(in: strip, runtime: runtime)?.control
+        let read = outputSlotRead(in: strip, runtime: runtime)
+        guard case .destination = read.reading else { return nil }
+        return read.control
+    }
+
+    /// The three answers the legacy optional helpers fold into nil, kept apart for callers whose
+    /// evidence must distinguish a positively absent output control from an unreadable one.
+    enum OutputSlotReading: Equatable, Sendable {
+        case destination(String)
+        case noSlot
+        case unreadable
+    }
+
+    static func outputSlotReading(
+        in strip: AXUIElement,
+        runtime: AXHelpers.Runtime = .production
+    ) -> OutputSlotReading {
+        outputSlotRead(in: strip, runtime: runtime).reading
     }
 
     /// Keep the deciding label and its sole control together. A failed deciding read or omitted
@@ -1016,32 +1036,51 @@ extension AXLogicProElements {
     /// This is display/control evidence only, not destination endpoint identity.
     private static func outputSlotRead(
         in strip: AXUIElement, runtime: AXHelpers.Runtime
-    ) -> (destination: String, control: AXUIElement)? {
-        guard let walk = preOrderDescendants(of: strip, maxDepth: 4, runtime: runtime) else { return nil }
+    ) -> (reading: OutputSlotReading, control: AXUIElement?) {
+        guard let walk = preOrderDescendants(of: strip, maxDepth: 4, runtime: runtime) else {
+            return (.unreadable, nil)
+        }
+        var possibleUnmeasuredOutput = false
         var found: (destination: String, control: AXUIElement)?
         for visit in walk {
             if visit.depth == 4 {
                 guard let children = childrenIfRead(visit.element, runtime: runtime), children.isEmpty else {
-                    return nil
+                    return (.unreadable, nil)
                 }
             }
             guard case let .success(role) = slotDecidingString(
                 visit.element, kAXRoleAttribute as String, runtime: runtime
-            ) else { return nil }
+            ) else { return (.unreadable, nil) }
             guard role == (kAXButtonRole as String) else { continue }
             guard case let .success(help) = slotDecidingString(
                 visit.element, kAXHelpAttribute as String, runtime: runtime
-            ) else { return nil }
-            guard AXLocalePolicy.outputSlotHelpKeyword.containsAny(in: (help ?? "").lowercased()) else {
+            ) else { return (.unreadable, nil) }
+            let loweredHelp = (help ?? "").lowercased()
+            guard AXLocalePolicy.outputSlotHelpKeyword.containsAny(in: loweredHelp) else {
+                guard !AXLocalePolicy.inputSlotHelpKeyword.containsAny(in: loweredHelp),
+                      !AXLocalePolicy.sendSlotHelpKeyword.containsAny(in: loweredHelp) else { continue }
+                // A slot whose Help wording is not in the measured set may still carry a known
+                // destination or generic Output caption. It denies absence but grants no output;
+                // a separate, sole measured output control remains the deciding control.
+                guard case let .success(description) = slotDecidingString(
+                    visit.element, kAXDescriptionAttribute as String, runtime: runtime
+                ), case let .success(title) = slotDecidingString(
+                    visit.element, kAXTitleAttribute as String, runtime: runtime
+                ) else { return (.unreadable, nil) }
+                if [description, title].compactMap({ $0 }).contains(where: { value in
+                    AXLocalePolicy.outputPopupOutputSubmenuTitle.matches(value, mode: .exact)
+                        || RoutingGraphPublication.classifyOutputLabel(value).0 != .unclassified
+                }) { possibleUnmeasuredOutput = true }
                 continue
             }
             guard found == nil,
                   case let .success(description) = slotDecidingString(
                     visit.element, kAXDescriptionAttribute as String, runtime: runtime
-                  ), let description, !description.isEmpty else { return nil }
+                  ), let description, !description.isEmpty else { return (.unreadable, nil) }
             found = (description, visit.element)
         }
-        return found
+        if let found { return (.destination(found.destination), found.control) }
+        return possibleUnmeasuredOutput ? (.unreadable, nil) : (.noSlot, nil)
     }
 
     /// The first button under the strip whose help matches, or nil.

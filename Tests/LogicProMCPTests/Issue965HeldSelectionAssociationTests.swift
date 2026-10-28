@@ -794,6 +794,7 @@ struct Issue965HeldSelectionAssociationTests {
         var routingForeignHelpReads = 0
         var routingForeignHelpFirstStack: [String] = []
         var scrollToChangedOutput = false
+        var scrollToMenuPresses = 0
         var scrollToViewportDriftEnabled = false
         var scrollToViewportShifted = false
         var routingModePresses = 0
@@ -1576,6 +1577,16 @@ struct Issue965HeldSelectionAssociationTests {
     @Test("Recovery restores the first viewport, not a later owned input-menu displacement")
     func canonicalBusRecoveryRetainsItsFirstViewport() async throws {
         try await assertCanonicalPhysicalOutput(mode: "bus_departure_execute_arrival_replacement_offscreen_peer_intermediate_viewport")
+    }
+
+    @Test("Positive output-slot absence cannot authorize Scroll To recovery")
+    func canonicalBusRecoveryRejectsOutputNoSlot() async throws {
+        try await assertCanonicalPhysicalOutput(mode: "bus_departure_execute_arrival_replacement_offscreen_peer_output_no_slot")
+    }
+
+    @Test("Positive input-slot absence cannot authorize Scroll To recovery")
+    func canonicalBusRecoveryRejectsInputNoSlot() async throws {
+        try await assertCanonicalPhysicalOutput(mode: "bus_departure_execute_arrival_replacement_offscreen_peer_input_no_slot")
     }
 
     @Test("Original-header renewal restores its observed Mixer position before retaining an input source",
@@ -2675,6 +2686,7 @@ struct Issue965HeldSelectionAssociationTests {
                 let scrollView = f.builder.element(1_975_400), scrollRoot = f.builder.element(1_975_401)
                 let scrollTo = f.builder.element(1_975_402), scrollSubmenu = f.builder.element(1_975_403)
                 let scrollOutput = f.builder.element(1_975_404), scrollAudio = f.builder.element(1_975_405)
+                let noSlotInputPeer = f.builder.element(1_975_406)
                 if mode.hasPrefix("offscreen_peer") {
                     for (index, strip) in f.strips.enumerated() {
                         f.builder.setFrame(strip, x: CGFloat(index) * 100, y: 100, width: 100, height: 300)
@@ -2781,6 +2793,13 @@ struct Issue965HeldSelectionAssociationTests {
                         f.routingScalarControls.append(control)
                     }
                     f.builder.setChildren(f.strips[index], f.builder.makeAXRuntime().children(f.strips[index]) + [outputs[index], volume, pan])
+                }
+                if mode == "offscreen_peer_input_no_slot" {
+                    f.builder.setButton(noSlotInputPeer, description: "Input 1",
+                        help: "Input slot. Choose the channel strip input source.", x: 0, y: 0, width: 1, height: 1)
+                    f.builder.setChildren(noSlotInputPeer, [])
+                    f.builder.setActionNames(noSlotInputPeer, [kAXPressAction as String])
+                    f.builder.setChildren(f.strips[3], f.builder.makeAXRuntime().children(f.strips[3]) + [noSlotInputPeer])
                 }
                 if mode == "unread_scalar" {
                     f.builder.setAttribute(f.builder.element(1_973_121), kAXValueAttribute as String, NSNull())
@@ -2931,6 +2950,7 @@ struct Issue965HeldSelectionAssociationTests {
                             return true
                         }
                         if CFEqual(element, scrollOutput) || CFEqual(element, scrollAudio) {
+                            f.scrollToMenuPresses += 1
                             // Scroll exposes the unchanged host value; this is
                             // not a destination leaf or another audio write.
                             f.builder.setAttribute(outputs[3], kAXDescriptionAttribute as String, "Stereo Output")
@@ -3105,10 +3125,22 @@ struct Issue965HeldSelectionAssociationTests {
                         if mode.hasPrefix("offscreen_peer"), f.routingDestinationPresses == 1,
                            f.routingOpenedOutputIndex == nil {
                             // Native counterexample: input-popup Cancel retires
-                            // the old presentation and an offscreen peer loses
-                            // its rendered slot value, without an audio write.
+                            // the old presentation. An offscreen peer can lose
+                            // its rendered slot value, or a fresh read can
+                            // positively report that an earlier slot is absent,
+                            // without another audio write.
                             f.routingLateScopeInjected = true
-                            f.builder.setAttribute(outputs[3], kAXDescriptionAttribute as String, "Output")
+                            if mode == "offscreen_peer_output_no_slot" {
+                                f.builder.setChildren(f.strips[3], f.builder.makeAXRuntime().children(f.strips[3]).filter {
+                                    !CFEqual($0, outputs[3])
+                                })
+                            } else if mode == "offscreen_peer_input_no_slot" {
+                                f.builder.setChildren(f.strips[3], f.builder.makeAXRuntime().children(f.strips[3]).filter {
+                                    !CFEqual($0, noSlotInputPeer)
+                                })
+                            } else {
+                                f.builder.setAttribute(outputs[3], kAXDescriptionAttribute as String, "Output")
+                            }
                         }
                         if ["popup_source_retired", "popup_both_retired"].contains(outputMode), f.inputMenuPresses > 2, f.routingReplacement == nil {
                             let replacement = f.builder.element(1_973_140)
@@ -3622,7 +3654,12 @@ struct Issue965HeldSelectionAssociationTests {
                         #expect(position.x == 0, "Restoration belongs to the first viewport, not the later displacement")
                     }
                     let verified = try #require(result["verified"] as? Bool)
-                    if mode == "offscreen_peer_checked_change" {
+                    if ["offscreen_peer_output_no_slot", "offscreen_peer_input_no_slot"].contains(mode) {
+                        #expect(f.scrollToMenuPresses == 0,
+                            "Positive slot absence is not unreadable drift and cannot authorize Scroll To")
+                        #expect(result["saga_state"] as? String != "completed")
+                        #expect(!verified)
+                    } else if mode == "offscreen_peer_checked_change" {
                         #expect(f.scrollToChangedOutput)
                         #expect(result["saga_state"] as? String != "completed", "Do not publish the old pre-navigation checkmark")
                         #expect(!verified)

@@ -7,6 +7,15 @@ import Foundation
 /// those cache surfaces warm from Accessibility so resources and name-based routing do not
 /// degrade to empty state on non-MCU setups.
 actor StatePoller {
+    /// Sections whose conditional writes were accepted by one exact poll cycle.
+    /// This stays attached to that cycle through coalescing; callers must not
+    /// reconstruct it from cache revisions that unrelated writers can advance.
+    struct RefreshReceipt: Sendable, Equatable {
+        let changedSections: [ResourceCacheKey]
+        var advanced: Bool { !changedSections.isEmpty }
+        static let unchanged = RefreshReceipt(changedSections: [])
+    }
+
     struct Runtime: Sendable {
         let hasVisibleWindow: @Sendable () -> Bool
         /// v3.1.4 (#4) — true when Logic currently has a modal dialog/sheet
@@ -125,7 +134,7 @@ actor StatePoller {
     /// not give across `await`; `waitingForNextCycle` holds callers that arrived mid-cycle and are
     /// owed reads taken after their own request.
     private var cycleInProgress = false
-    private var waitingForNextCycle: [CheckedContinuation<Bool, Never>] = []
+    private var waitingForNextCycle: [CheckedContinuation<RefreshReceipt, Never>] = []
     /// Fresh acquisitions keep their request task/context; they are not a shared refresh Bool.
     private var populationWaiters: [(UUID, CheckedContinuation<Bool, Never>)] = []
     /// The handed-off drain, tracked rather than detached so `stop()` still means what it says.
@@ -236,6 +245,13 @@ actor StatePoller {
     /// `runCoalescedCycle` for why that distinction is load-bearing.
     @discardableResult
     func refreshNow() async -> Bool {
+        await refreshNowReceipt().advanced
+    }
+
+    /// The exact coalesced cycle owed to this request, including the sections
+    /// that cycle itself applied. A caller arriving during an in-flight cycle
+    /// receives the next cycle's receipt, never the older cycle's sections.
+    func refreshNowReceipt() async -> RefreshReceipt {
         await runCoalescedCycle()
     }
 
@@ -381,9 +397,9 @@ actor StatePoller {
     /// `yieldingToTextEditing` is the background loop's: its cycle stops at the next read once
     /// Logic's keyboard focus reads as text editing (`pollOnce`). A caller that queues behind a
     /// cycle is served by a cycle of its own, which never yields.
-    private func runCoalescedCycle(yieldingToTextEditing: Bool = false) async -> Bool {
+    private func runCoalescedCycle(yieldingToTextEditing: Bool = false) async -> RefreshReceipt {
         // A stop is under way; starting a cycle now is the AX work that stop exists to end.
-        if stopped { return false }
+        if stopped { return .unchanged }
         if cycleInProgress {
             return await withCheckedContinuation { waitingForNextCycle.append($0) }
         }
@@ -428,7 +444,7 @@ actor StatePoller {
     private func strandWaiters() {
         let stranded = waitingForNextCycle
         waitingForNextCycle = []
-        for waiter in stranded { waiter.resume(returning: false) }
+        for waiter in stranded { waiter.resume(returning: .unchanged) }
     }
 
     /// Releases the cycle and wakes any `stop()` parked on it. Ordering matters: waiters are
@@ -536,14 +552,17 @@ actor StatePoller {
     /// key for the next whole cycle; a resource already published is not notified twice, since the
     /// notifier compares content. A refresh's cycle publishes whatever the focus reads.
     @discardableResult
-    private func finishPoll(_ cacheKeys: [ResourceCacheKey], yieldingToTextEditing: Bool = false) async -> Bool {
+    private func finishPoll(
+        _ cacheKeys: [ResourceCacheKey], yieldingToTextEditing: Bool = false
+    ) async -> RefreshReceipt {
         var publishing = keysHeldByAYield
         keysHeldByAYield = []
         for key in cacheKeys where !publishing.contains(key) { publishing.append(key) }
-        guard !publishing.isEmpty else { return !cacheKeys.isEmpty }
+        let receipt = RefreshReceipt(changedSections: cacheKeys)
+        guard !publishing.isEmpty else { return receipt }
         if backgroundCycleYields(yieldingToTextEditing) {
             keysHeldByAYield = publishing
-            return !cacheKeys.isEmpty
+            return receipt
         }
         let focus = runtime.keyboardFocus
         // Supplementary review S-01: a help read the guard refused stays refused. A focus that
@@ -560,7 +579,7 @@ actor StatePoller {
         if !completed {
             for key in publishing where !keysHeldByAYield.contains(key) { keysHeldByAYield.append(key) }
         }
-        return !cacheKeys.isEmpty
+        return receipt
     }
 
     /// #1079 review R2: how a background cycle ends when it yields to text editing. Its sections
@@ -568,9 +587,9 @@ actor StatePoller {
     /// a live transport read -- and those are the reads the yield exists to hold off. They are
     /// held and published by the next cycle that reaches `finishPoll`. Whether the cache advanced
     /// is answered as `finishPoll` answers it.
-    private func yieldCycle(_ cacheKeys: [ResourceCacheKey]) -> Bool {
+    private func yieldCycle(_ cacheKeys: [ResourceCacheKey]) -> RefreshReceipt {
         for key in cacheKeys where !keysHeldByAYield.contains(key) { keysHeldByAYield.append(key) }
-        return !cacheKeys.isEmpty
+        return RefreshReceipt(changedSections: cacheKeys)
     }
 
     /// #1079 review R1: the focus read at the top of a tick does not cover a user who starts an
@@ -587,7 +606,7 @@ actor StatePoller {
     @discardableResult
     private func pollOnce(
         axChannel: AccessibilityChannel, cache: StateCache, yieldingToTextEditing: Bool
-    ) async -> Bool {
+    ) async -> RefreshReceipt {
         // #1079 after review R3: the checks between reads do not reach inside one. A background
         // cycle runs under a help-read guard, so an AXHelp read anywhere in it asks the focus
         // first, and a section whose read the guard cut short is discarded, not written.
@@ -607,7 +626,7 @@ actor StatePoller {
 
     private func pollOnceReading(
         axChannel: AccessibilityChannel, cache: StateCache, yieldingToTextEditing: Bool
-    ) async -> Bool {
+    ) async -> RefreshReceipt {
         var cacheKeys: [ResourceCacheKey] = []
         guard runtime.hasVisibleWindow() else {
             // Be conservative: a single missed window check is often a transient

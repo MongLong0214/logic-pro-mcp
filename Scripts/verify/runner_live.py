@@ -13,9 +13,10 @@
     fixture   setups.SETUPS names the live/fixture.py declaration; a fixture with none, one at a
               path other than live.locale.FIXTURE (the file every switch reopens), or one that
               needs the Mixer shown is refused before anything is built.
-    gate      live.fixture.read (the verifier's own track_flags_ax walk, D1; the walk goes to a
-              sidecar) plus display.upperRow of logic://mcu/state (the product's reading: nothing
-              else reads the LCD), shaped for setups.gate_problems by `gate_reading_of`.
+    gate      live.fixture.read (the verifier's own track_flags_ax and, for the Mixer fixture,
+              routing_slots_ax walks, D1; the track walk goes to a sidecar) plus display.upperRow
+              of logic://mcu/state (the product's reading: nothing else reads the LCD), shaped for
+              setups.gate_problems by `gate_reading_of`.
     reset     live.fixture.reset: Don't Save, reopen from disk, read. The record, walk and all,
               goes to a sidecar; the evidence keeps the fixture, the locale and its sha256.
     ready     with the declaration's ready "mcu", a bounded wait on logic://mcu/state until
@@ -126,6 +127,26 @@ def text_of(call: dict, items: str) -> str:
     return first["text"]
 
 
+def structured_of(call: dict) -> dict:
+    """A tool result's structured object, without pretending its prose text is that object.
+
+    Some production tools intentionally keep a stable prose ``content`` body beside a different
+    schema-backed ``structuredContent`` receipt.  This accessor is deliberately separate from
+    ``text_of``: ordinary calls retain the strict text/structure equality check, while a caller
+    that explicitly needs such a receipt must opt into this exact object path.
+    """
+    if call.get("timed_out"):
+        raise runner.StepUnreadable(f"no reply within {call.get('elapsed_s') or 0:.1f} s")
+    why = _unsent(call)
+    if why:
+        raise runner.StepUnreadable(why)
+    result = call["reply"]["result"]
+    structured = result.get("structuredContent")
+    if not isinstance(structured, dict):
+        raise runner.StepUnreadable("the result has no structuredContent object")
+    return structured
+
+
 class McpSession(runner.Session):
     """A live.mcp.Server as the runner's Session: started here, stopped by `close`."""
 
@@ -140,6 +161,9 @@ class McpSession(runner.Session):
     def call(self, tool, command, params, timeout_s):
         return text_of(self.server.tool(tool, command, params, timeout_s), "content")
 
+    def call_structured(self, tool, command, params, timeout_s):
+        return structured_of(self.server.tool(tool, command, params, timeout_s))
+
     def read(self, uri, timeout_s):
         return text_of(self.server.resource(uri, timeout_s), "contents")
 
@@ -152,12 +176,25 @@ class McpSession(runner.Session):
 # the gate's reading
 # ---------------------------------------------------------------------------------------------
 
-def gate_reading_of(fx: dict, flags: dict, upper_row) -> dict:
+def gate_reading_of(fx: dict, flags: dict, upper_row, mixer=None, lproj=None) -> dict:
     """The reading setups.gate_problems judges, from one track_flags_ax probe output, the
-    live/fixture.py declaration `fx` it is compared with, and an upper-row reading (or None)."""
+    live/fixture.py declaration `fx` it is compared with, an upper-row reading (or None), and the
+    independently normalized Mixer routing when that declaration carries an exact topology."""
     observation = flags.get("observation") or {}
-    reading = {"declared": {"track_count": fx["track_count"], "names": list(fx["names"])},
-               "fingerprint": fixture.fingerprint_of(observation), "upper_row": upper_row}
+    fingerprint = fixture.fingerprint_of(observation)
+    mixer_observation = (mixer or {}).get("observation") or {}
+    if mixer_observation.get("readable") and mixer_observation.get("mixer_found"):
+        fingerprint["mixer_strips"] = len(mixer_observation.get("strips") or [])
+    if fx.get("routing") is not None:
+        try:
+            fingerprint["routing"] = spec_probes.routing_slots_of(
+                mixer or {}, spec_probes._routing_rows(lproj))
+        except spec_probes.Unreadable as exc:
+            fingerprint["routing"] = None
+            fingerprint["routing_cause"] = str(exc)
+    reading = {"declared": {"track_count": fx["track_count"], "names": list(fx["names"]),
+                            "mixer_strips": fx["mixer_strips"], "routing": fx.get("routing")},
+               "fingerprint": fingerprint, "upper_row": upper_row}
     if not observation.get("readable"):
         reading["cause"] = observation.get("cause") or flags.get("cause") or "track_flags_ax did not read"
     return reading
@@ -241,9 +278,6 @@ class LiveLifecycle(runner.Lifecycle):
         if os.path.realpath(fx["path"]) != os.path.realpath(live_locale.FIXTURE):
             out.append(f"fixture {decl['id']!r} is {fx['path']}, but every locale switch reopens "
                        f"{live_locale.FIXTURE}")
-        if fx["mixer_strips"] is not None:
-            out.append(f"fixture {decl['id']!r} needs the Mixer shown, which neither a switch nor "
-                       f"the gate does")
         if decl.get("ready") not in (None, "mcu"):
             out.append(f"fixture {decl['id']!r} waits on {decl.get('ready')!r}; this lifecycle "
                        f"knows \"mcu\" and none")
@@ -253,7 +287,8 @@ class LiveLifecycle(runner.Lifecycle):
         decl = ctx["decl"]
         record = fixture.read(decl["live"], ctx["lproj"])
         upper_row = self._upper_row(ctx) if "mcu_upper_row_is_baseline" in decl["gate"] else None
-        reading = gate_reading_of(fixture.FIXTURES[decl["live"]], record["track_flags"], upper_row)
+        reading = gate_reading_of(fixture.FIXTURES[decl["live"]], record["track_flags"], upper_row,
+                                  record.get("mixer"), ctx["lproj"])
         if upper_row is not None:
             reading["passing_message"] = self._passing_message(ctx["lproj"])
         data = json.dumps(record["track_flags"], ensure_ascii=False, sort_keys=True, default=repr)
