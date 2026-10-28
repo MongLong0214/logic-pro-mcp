@@ -607,6 +607,92 @@ private actor ExactNameChannel: Channel {
 
 @Suite("#968 exact-local track naming adapter")
 struct Issue968ExactTrackNameAdapterTests {
+    @Test(arguments: ["restored", "user_rename", "peer_rename", "peer_reorder", "user_rename_after_reorder"])
+    func midiExportProviderRetainsTheExactRenameInverseAndNeverOverwritesANewerName(
+        outcome: String
+    ) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            try await Task { @MainActor in
+                let f = ExactNameFixture("Repeated")
+                let (peer, peerField) = f.appendTrack(name: "Repeated", selected: false)
+                let (capture, project, target, _, _) = try await f.coupledCapture()
+                var population = SessionPopulationObservation.FreshPopulation(
+                    project: capture.project, tracks: capture.tracks, strips: nil,
+                    fileTrackCount: capture.tracks.count, beganAt: capture.beganAt,
+                    endedAt: capture.endedAt, stable: true)
+                population.hiddenTracksShown = true
+                population.populationEndSource = "ax_all_shown_single_page"
+                let qualifiedCapture = SessionPopulationObservation.Capture(
+                    before: capture.before, after: capture.after,
+                    projectEpoch: capture.projectEpoch, project: capture.project,
+                    tracks: capture.tracks, tracksFetchedAt: capture.tracksFetchedAt,
+                    channelStrips: capture.channelStrips, mixerFetchedAt: capture.mixerFetchedAt,
+                    fileTrackCount: capture.tracks.count, projectFileNotBound: false,
+                    requestedProjectMatches: true, referencesEnabled: capture.referencesEnabled,
+                    targetSnapshot: capture.targetSnapshot, issued: capture.issued,
+                    projectIssuance: capture.projectIssuance, beganAt: capture.beganAt,
+                    endedAt: capture.endedAt, freshPopulation: population,
+                    mixerReferences: capture.mixerReferences)
+                let nativeRuntime = f.runtime
+                let runtime = MIDITrackExportProvider.makeRuntime(
+                    projectReference: project.rawValue, acquire: { _ in qualifiedCapture },
+                    nativeRuntime: nativeRuntime, router: f.router, cache: f.cache,
+                    registry: f.registry,
+                    liveTrackName: { AXLogicProElements.trackName(at: $0, runtime: nativeRuntime) },
+                    liveTrackNames: { AXLogicProElements.trackNames(runtime: nativeRuntime) })
+                try await OperationTraceContext.$current.withValue(
+                    .init(mutationGateAcquired: true)
+                ) {
+                    let before = try await runtime.observe()
+                    let begin = try #require(runtime.beginTemporaryRename)
+                    let temporaryName = "LPMCP-provider-test"
+                    let acquisition = try await begin(before, target.rawValue, temporaryName)
+                    guard case .acquired(let lease) = acquisition else {
+                        Issue.record("The verified provider refused its exact duplicate-name fixture")
+                        return
+                    }
+                    #expect(AXLogicProElements.trackName(at: 0, runtime: nativeRuntime) == temporaryName)
+                    if outcome == "user_rename" || outcome == "user_rename_after_reorder" {
+                        f.builder.setAttribute(f.field, kAXDescriptionAttribute as String, "User Edit")
+                    }
+                    if outcome == "peer_rename" || outcome == "peer_reorder" {
+                        f.builder.setAttribute(peerField, kAXDescriptionAttribute as String, "Peer Edit")
+                    }
+                    if outcome == "peer_reorder" || outcome == "user_rename_after_reorder" {
+                        f.builder.setChildren(f.rail, [peer, f.header])
+                    }
+                    let restoration = await lease.restore()
+                    if outcome == "restored" || outcome == "peer_rename" || outcome == "peer_reorder" {
+                        guard case .restored(let observed) = restoration else {
+                            Issue.record("The owned exact-name inverse was not restored")
+                            return
+                        }
+                        let restoredTarget = try #require(observed.tracks.first { $0.reference == target.rawValue })
+                        #expect(restoredTarget.name == "Repeated")
+                        #expect(restoredTarget.index == (outcome == "peer_reorder" ? 1 : 0))
+                        #expect(AXLogicProElements.trackName(
+                            at: outcome == "peer_reorder" ? 1 : 0, runtime: nativeRuntime) == "Repeated")
+                        if outcome == "peer_rename" || outcome == "peer_reorder" {
+                            #expect(AXLogicProElements.trackName(
+                                at: outcome == "peer_reorder" ? 0 : 1, runtime: nativeRuntime) == "Peer Edit")
+                        } else {
+                            #expect(observed == before)
+                        }
+                    } else {
+                        guard case .refused(let residualName, _) = restoration else {
+                            Issue.record("A newer user name was overwritten")
+                            return
+                        }
+                        #expect(residualName == "User Edit")
+                        #expect(AXLogicProElements.trackName(
+                            at: outcome == "user_rename_after_reorder" ? 1 : 0,
+                            runtime: nativeRuntime) == "User Edit")
+                    }
+                }
+            }.value
+        }
+    }
+
     @Test(arguments: ["healthy", "foreign_keyboard", "foreign_focus", "foreign_window"])
     func coupledNameMustOwnTheKeyboardBeforeOpeningItsEditor(fault: String) async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
@@ -2552,7 +2638,10 @@ struct Issue968ExactTrackNameAdapterTests {
 
             let f = ExactNameFixture()
             let (project, target) = try await f.prepare(typedProducer: true)
-            let deadline = loss == "deadline" ? ContinuousClock.now.advanced(by: .seconds(1)) : nil
+            // The suite runs many native-identity fixtures concurrently. Leave
+            // enough runway to reach the injected deciding read under that load;
+            // the callback below still expires the actual absolute deadline.
+            let deadline = loss == "deadline" ? ContinuousClock.now.advanced(by: .seconds(15)) : nil
             f.onNameReadAfterWrite = {
                 guard f.nameReadsAfterWrite == finalNameRead else { return }
                 if loss == "ownership" { f.boundaryOwnership = false }
@@ -3523,7 +3612,10 @@ struct Issue968ExactTrackNameAdapterTests {
             f.permitsSelection = true
             f.legacyHeaderRoleObservedRead = 13
             let (project, target) = try await f.prepare(typedProducer: true)
-            let deadline = loss == "deadline" ? ContinuousClock.now.advanced(by: .seconds(1)) : nil
+            // The full affected gate runs this native-identity suite concurrently.
+            // Leave enough runway to reach the injected deciding role read; the
+            // callback below still expires the real absolute deadline itself.
+            let deadline = loss == "deadline" ? ContinuousClock.now.advanced(by: .seconds(15)) : nil
             f.onLegacyHeaderRoleRead = {
                 if loss == "ownership" { f.boundaryOwnership = false }
                 if loss == "cancel" { f.boundaryCancellation = true }
