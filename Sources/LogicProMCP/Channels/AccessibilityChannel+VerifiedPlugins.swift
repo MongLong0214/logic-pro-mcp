@@ -2342,8 +2342,8 @@ extension AccessibilityChannel {
                     "operation": operation,
                     "target_identity": identity,
                     "param": paramAlias,
-                    "what_was_attempted": "preflight the measured Controls-view popup actuation path for \(pluginID).\(paramAlias)",
-                    "what_was_observed": ControlsViewBooleanParameterWriter.LocatorFailure.popupNotAddressableByName.observation,
+                    "what_was_attempted": "preflight the catalog-declared Controls-view actuation path for \(pluginID).\(paramAlias)",
+                    "what_was_observed": "actuation_unmeasured",
                     "safe_to_retry": false,
                     "write_attempted": false,
                 ]

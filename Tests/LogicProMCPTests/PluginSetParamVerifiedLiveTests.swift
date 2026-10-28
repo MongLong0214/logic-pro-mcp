@@ -4385,6 +4385,9 @@ func testIssue299CompressorAttackReadsActualDisplayWithoutAuthorizingAWrite(_ co
     let object = try #require(sharedJSONObject(result.message))
     #expect(object["state"] as? String == "C", "\(object)")
     #expect(object["error"] as? String == "unsupported_param_readback")
+    #expect(object["what_was_attempted"] as? String ==
+        "preflight the catalog-declared Controls-view actuation path for logic.stock.effect.compressor.attack")
+    #expect(object["what_was_observed"] as? String == "actuation_unmeasured")
     #expect(!(try #require(object["write_attempted"] as? Bool)))
     #expect(fixture.axActions.value.isEmpty)
     #expect(fixture.sliderWriteCount.value == 0)
