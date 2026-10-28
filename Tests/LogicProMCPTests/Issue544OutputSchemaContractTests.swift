@@ -214,6 +214,7 @@ struct Issue544OutputSchemaContractTests {
         }
         #expect(fields["refreshed"] == Value.bool(false))
         #expect(fields["source"] == Value.string("ax_fallback_poller"))
+        #expect(fields["changed_sections"] == Value.array([]))
     }
 
     @Test("refresh_cache reports refreshed:true when the attached poller writes fresh state")
@@ -246,6 +247,10 @@ struct Issue544OutputSchemaContractTests {
             Issue.record("expected an object"); return
         }
         #expect(fields["refreshed"] == Value.bool(true))
+        guard case .array(let changed) = fields["changed_sections"] else {
+            Issue.record("expected exact-cycle changed_sections"); return
+        }
+        #expect(changed.contains(.string("mixer")))
         #expect(await cache.getProject().name == "Fresh")
     }
 
@@ -264,6 +269,7 @@ struct Issue544OutputSchemaContractTests {
         }
         #expect(fields["refreshed"] == Value.bool(false))
         #expect(fields["source"] == Value.string("none"))
+        #expect(fields["changed_sections"] == Value.array([]))
     }
 
     // MARK: - #544 review MAJOR — the registry-shape test cannot fail a tool

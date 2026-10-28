@@ -72,12 +72,21 @@ enum OracleConstraint: Sendable {
     /// Environment-dependent number with a real lower bound and no invented
     /// upper bound. Booleans, missing values and non-numbers fail closed.
     case numericMinimum(key: String, min: Double)
+    /// Environment-dependent JSON integer with a real lower bound. Conversion
+    /// is exact across NSNumber's signed domain; fractional, Boolean and
+    /// out-of-Int values fail closed instead of rounding through Double.
+    case integerMinimum(key: String, min: Int)
     /// Field must be one of a closed set of legal tokens.
     case enumMember(key: String, allowed: [String])
     /// Field must be an array with at least one element.
     case nonEmptyArray(key: String)
     /// Field must be present with the given JSON type.
     case typedField(key: String, type: JSONType)
+    /// Field must be one exact public `OutputAssignment` tagged-union object:
+    /// bus 1...256, two ascending physical ports, or a fieldless named output.
+    /// Missing members, fractional numbers, extra members and unknown kinds
+    /// fail closed rather than receiving routing semantic credit.
+    case outputAssignment(key: String)
     /// A joined `<utf8-byte-count>:<entry>` wire field contains exactly the
     /// number of entries declared by another numeric field, plus `offset`.
     /// The empty string is the canonical zero-entry encoding. Malformed prefixes,
@@ -196,9 +205,11 @@ enum OracleConstraint: Sendable {
         case .valueEquals(let key, _),
              .numericRange(let key, _, _),
              .numericMinimum(let key, _),
+             .integerMinimum(let key, _),
              .enumMember(let key, _),
              .nonEmptyArray(let key),
              .typedField(let key, _),
+             .outputAssignment(let key),
              .lengthPrefixedEntryCountEquals(let key, _, _),
              .arrayCountEquals(let key, _, _),
              .orderedStringArrayChanges(let key, _),
@@ -230,7 +241,8 @@ enum OracleConstraint: Sendable {
     /// oracle carrying one is never a checkbox oracle.
     var isValueConstraint: Bool {
         switch self {
-        case .valueEquals, .numericRange, .numericMinimum, .enumMember, .lengthPrefixedEntryCountEquals,
+        case .valueEquals, .numericRange, .numericMinimum, .integerMinimum, .enumMember, .outputAssignment,
+             .lengthPrefixedEntryCountEquals,
              .arrayCountEquals,
              .orderedStringArrayChanges,
              .bankRequestedWindowWitness,
@@ -265,6 +277,10 @@ enum OracleConstraint: Sendable {
             guard let value = JSONPath.resolve(root, keyPath: key),
                   let number = JSONInspector.number(of: value) else { return false }
             return number >= min
+        case .integerMinimum(let key, let min):
+            guard let value = JSONPath.resolve(root, keyPath: key),
+                  let integer = JSONInspector.integer(of: value) else { return false }
+            return integer >= min
         case .enumMember(let key, let allowed):
             guard let value = JSONPath.resolve(root, keyPath: key),
                   let token = JSONInspector.enumToken(of: value) else { return false }
@@ -275,15 +291,15 @@ enum OracleConstraint: Sendable {
         case .typedField(let key, let type):
             guard let value = JSONPath.resolve(root, keyPath: key) else { return false }
             return JSONInspector.type(of: value) == type
+        case .outputAssignment(let key):
+            guard let value = JSONPath.resolve(root, keyPath: key) else { return false }
+            return Self.isExactOutputAssignment(value)
         case .lengthPrefixedEntryCountEquals(let key, let countKey, let offset):
             guard let wire = JSONPath.resolve(root, keyPath: key) as? String,
                   let rawCount = JSONPath.resolve(root, keyPath: countKey),
-                  let count = JSONInspector.number(of: rawCount),
-                  count >= 0,
-                  count.rounded(.towardZero) == count,
-                  count <= Double(Int.max),
+                  let count = JSONInspector.integer(of: rawCount), count >= 0,
                   let entryCount = Self.lengthPrefixedEntryCount(in: wire) else { return false }
-            let (expected, overflow) = Int(count).addingReportingOverflow(offset)
+            let (expected, overflow) = count.addingReportingOverflow(offset)
             return !overflow && expected >= 0 && entryCount == expected
         case .arrayCountEquals(let key, let countKey, let offset):
             guard let array = JSONPath.resolve(root, keyPath: key) as? [Any],
@@ -333,12 +349,9 @@ enum OracleConstraint: Sendable {
         case .lengthPrefixedIdentityAtIndexEquals(let entriesKey, let indexKey, let nameKey, let positionKey):
             guard let rawEntries = JSONPath.resolve(root, keyPath: entriesKey) as? [Any],
                   let rawIndex = JSONPath.resolve(root, keyPath: indexKey),
-                  let indexNumber = JSONInspector.number(of: rawIndex),
-                  indexNumber >= 0,
-                  indexNumber.rounded(.towardZero) == indexNumber,
-                  indexNumber <= Double(Int.max),
-                  rawEntries.indices.contains(Int(indexNumber)),
-                  let identity = rawEntries[Int(indexNumber)] as? String,
+                  let index = JSONInspector.integer(of: rawIndex), index >= 0,
+                  rawEntries.indices.contains(index),
+                  let identity = rawEntries[index] as? String,
                   let name = JSONPath.resolve(root, keyPath: nameKey) as? String,
                   let position = JSONPath.resolve(root, keyPath: positionKey) as? String,
                   let identityEntries = Self.lengthPrefixedEntries(in: identity) else { return false }
@@ -442,6 +455,31 @@ enum OracleConstraint: Sendable {
             return array.allSatisfy { element in
                 constraints.allSatisfy { $0.isSatisfied(by: element, readback: readback) }
             }
+        }
+    }
+
+    private static func isExactOutputAssignment(_ value: Any) -> Bool {
+        guard let object = value as? [String: Any], let kind = object["kind"] as? String else {
+            return false
+        }
+        func integer(_ value: Any?) -> Int? {
+            guard let value else { return nil }
+            return JSONInspector.integer(of: value)
+        }
+        switch kind {
+        case "bus":
+            guard Set(object.keys) == Set(["kind", "number"]),
+                  let number = integer(object["number"]) else { return false }
+            return OutputAssignment.busNumbers.contains(number)
+        case "physical":
+            guard Set(object.keys) == Set(["kind", "ports"]),
+                  let ports = object["ports"] as? [Any], ports.count == 2,
+                  let first = integer(ports[0]), let second = integer(ports[1]) else { return false }
+            return first >= 1 && first < second
+        case "stereo_output", "no_output":
+            return Set(object.keys) == Set(["kind"])
+        default:
+            return false
         }
     }
 
@@ -722,7 +760,10 @@ enum JSONInspector {
         case .bool:
             return (lhs as? NSNumber)?.boolValue == (rhs as? NSNumber)?.boolValue
         case .number:
-            return number(of: lhs) == number(of: rhs)
+            guard let lhsNumber = lhs as? NSNumber, let rhsNumber = rhs as? NSNumber else {
+                return false
+            }
+            return lhsNumber.compare(rhsNumber) == .orderedSame
         case .string:
             return (lhs as? String) == (rhs as? String)
         case .null:
