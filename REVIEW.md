@@ -28,4 +28,3 @@ the file is not delivery evidence.
 - Resolve disagreement through the existing bounded independent evidence path. If the required
   evidence remains incomplete at its limit, finish unsuccessfully rather than request a human
   tie-breaker, risk waiver, or unverified PASS.
-
