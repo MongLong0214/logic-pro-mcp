@@ -522,7 +522,7 @@ enum WorkflowSkillCatalog {
             "insert_plugin", "set_plugin_param", "bank", "set_output_verified", "get_output_verified", "get_input_bus_verified", "set_input_bus_verified", "get_send_destination_verified", "set_send_output_verified", "get_send_bypass_verified", "set_send_bypass_verified", "set_send_level_verified", "set_send_mode_verified",
         ],
         "logic_plugins": [
-            "get_inventory", "get_param_verified", "get_channel_eq_state_verified", "plan_parameter_changes", "set_param_verified", "set_eq_band_verified", "insert_verified",
+            "get_inventory", "get_host_parameter_manifest", "get_param_verified", "get_channel_eq_state_verified", "plan_parameter_changes", "set_param_verified", "set_eq_band_verified", "insert_verified",
         ],
         "logic_midi": [
             "send_note", "send_chord", "play_sequence", "send_cc",

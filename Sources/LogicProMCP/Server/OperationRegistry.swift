@@ -56,6 +56,7 @@ enum OperationID: String, CaseIterable, Codable, Sendable, Hashable {
     case systemSetupArmKey = "system.setup_arm_key"
     case systemSetupControlSurface = "system.setup_control_surface"
     case pluginsGetInventory = "plugins.get_inventory"
+    case pluginsGetHostParameterManifest = "plugins.get_host_parameter_manifest"
     case pluginsGetParamVerified = "plugins.get_param_verified"
     case pluginsPlanParameterChanges = "plugins.plan_parameter_changes"
     case pluginsGetChannelEQStateVerified = "plugins.get_channel_eq_state_verified"
@@ -336,7 +337,7 @@ enum OperationRegistry {
             "system.setup_arm_key", "system.setup_control_surface",
         ],
         ToolID.logicPlugins.rawValue: [
-            "plugins.get_inventory", "plugins.get_param_verified", "plugins.get_channel_eq_state_verified", "plugins.plan_parameter_changes", "plugins.set_param_verified", "plugins.set_eq_band_verified", "plugins.insert_verified",
+            "plugins.get_inventory", "plugins.get_host_parameter_manifest", "plugins.get_param_verified", "plugins.get_channel_eq_state_verified", "plugins.plan_parameter_changes", "plugins.set_param_verified", "plugins.set_eq_band_verified", "plugins.insert_verified",
         ],
         ToolID.logicEdit.rawValue: [
             "edit.undo", "edit.redo", "edit.cut", "edit.copy", "edit.paste", "edit.delete",
@@ -397,7 +398,7 @@ enum OperationRegistry {
             "setup_arm_key", "setup_control_surface",
         ],
         ToolID.logicPlugins.rawValue: [
-            "get_inventory", "get_param_verified", "get_channel_eq_state_verified", "plan_parameter_changes", "set_param_verified", "set_eq_band_verified", "insert_verified",
+            "get_inventory", "get_host_parameter_manifest", "get_param_verified", "get_channel_eq_state_verified", "plan_parameter_changes", "set_param_verified", "set_eq_band_verified", "insert_verified",
         ],
         ToolID.logicEdit.rawValue: [
             "undo", "redo", "cut", "copy", "paste", "delete", "select_all", "split", "join",
@@ -740,6 +741,15 @@ enum OperationRegistry {
             VerificationPolicy.none,
             TargetPolicy.none,
             ["index", "track", "track_index", "reveal_mixer"]
+        ),
+        (
+            .pluginsGetHostParameterManifest,
+            "get_host_parameter_manifest",
+            Mutability.readOnly,
+            DeadlineClass.medium,
+            VerificationPolicy.none,
+            TargetPolicy.acceptsStableTarget,
+            ["expected_build_fingerprint", "insert", "plugin", "plugin_id", "plugin_name", "track"]
         ),
         (
             .pluginsGetParamVerified,

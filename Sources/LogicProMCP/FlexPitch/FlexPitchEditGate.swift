@@ -14,14 +14,23 @@ func editEligibility(
     if !snapshot.complete {
         reasons.append("snapshot incomplete")
     }
+    if !snapshot.notes.allSatisfy({ $0.reference.regionRef == snapshot.regionRef }) {
+        reasons.append("snapshot notes do not share its region")
+    }
+    if !snapshot.notes.allSatisfy({ $0.reference.analysisGeneration == snapshot.analysisGeneration }) {
+        reasons.append("snapshot notes do not share its analysis generation")
+    }
     if snapshot.analysisGeneration != currentAnalysisGeneration {
         reasons.append("stale snapshot")
     }
     if !isReferenceCurrent(ref, currentAnalysisGeneration: currentAnalysisGeneration) {
         reasons.append("stale note reference")
     }
-    if !snapshot.notes.contains(where: { $0.reference == ref }) {
+    let exactMatches = snapshot.notes.filter { $0.reference == ref }
+    if exactMatches.isEmpty {
         reasons.append("note reference does not belong to snapshot")
+    } else if snapshot.notes.filter({ hasSameObservedIdentity($0.reference, ref) }).count != 1 {
+        reasons.append("note identity is ambiguous")
     }
 
     // Fail closed on non-finite / out-of-range confidence or threshold, and only
@@ -45,6 +54,18 @@ func editEligibility(
         reasons.append("dual evidence required")
     }
     return reasons.isEmpty ? .publicEligible : .experimental(reasons: reasons)
+}
+
+private func hasSameObservedIdentity(
+    _ lhs: FlexPitchNoteReference,
+    _ rhs: FlexPitchNoteReference
+) -> Bool {
+    lhs.regionRef == rhs.regionRef
+        && lhs.analysisGeneration == rhs.analysisGeneration
+        && lhs.startTick == rhs.startTick
+        && lhs.durationTicks == rhs.durationTicks
+        && lhs.coarsePitch == rhs.coarsePitch
+        && lhs.pitchCurveFingerprint == rhs.pitchCurveFingerprint
 }
 
 func publicEditableReferences(
