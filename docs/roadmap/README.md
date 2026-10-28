@@ -61,6 +61,7 @@ Current delivery readback for that census:
 - #1442 repairs #291 cancellation custody for attempted and delayed selected-focus preparation; rerun24 predates the exact head and the remaining native routing acceptance stays open.
 - #1438 merged normally at `15213991` and pins the committed one-step, ten-locale `mixer.bank` State-A envelope for #862. PR #1443 exact head `cc498c35` adds a probe-separated ordered multi-step witness, passes 122 affected tests and independent exact-head review, and has fresh hosted CI pending. Exact strip-to-channel binding remains open.
 - #1433 merged normally at `17d200ca` and removed one #1403 policy conflict. #1403 remains open for exact autonomous-review input binding and whole-path outcome acceptance.
+- #1308 merged normally as `572e2e46` and delivered #304 T1 through the public read-only `logic://tempo/map` resource. It exposes a partial `TempoMapAX.Snapshot` from an already-open, project-bound Tempo List; the separate `TempoMapSnapshot` model remains internal. The current-main focused audit passes 53 tests. This supersedes only the ADR-016 row's historical “reachability, NOT a feature” phase; T2–T4 and whole #304 remain open.
 
 | ADR | issue | state | what it is waiting on |
 |---|---|---|---|
