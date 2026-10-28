@@ -1538,6 +1538,8 @@ enum StockPluginCatalog {
                 ]
             )
         ),
+        // Apple's parameter metadata pins the shipped name:
+        // logic-canon://madsp/Compressor/-/2#name = "Ratio".
         // Ratio's Controls row has a display-bearing slider that can be sampled
         // twice without actuating it. Its write surface remains the separately
         // measured non-actuating AXSlider, so readability must not imply a
