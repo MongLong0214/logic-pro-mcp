@@ -407,6 +407,12 @@ struct Issue448TrackSortVerifiedTests {
         try await canonicalSort(cancelAfterSort: cancelAfterSort)
     }
 
+    @Test("Canonical sort preserves a production-normalized Solo presentation",
+          arguments: [false, true])
+    func canonicalSortAcceptsNormalizedSoloPresentation(cancelAfterSort: Bool) async throws {
+        try await canonicalSort(cancelAfterSort: cancelAfterSort, capturedSoloPresentation: true)
+    }
+
     @Test(arguments: ["forward", "cancel_sort", "cancel_view", "view_refuses", "foreign_project", "unowned_name", "unsupported_focus"])
     func canonicalFlatSortAndMixerFinalViewUseTheirOwnedSteps(mode: String) async throws {
         try await canonicalSort(cancelAfterSort: mode == "cancel_sort", composedMode: mode)
@@ -427,7 +433,9 @@ struct Issue448TrackSortVerifiedTests {
         try await canonicalSort(cancelAfterSort: false, composedMode: "forward", matchingMode: mode)
     }
 
-    private func canonicalSort(cancelAfterSort: Bool, composedMode: String? = nil, matchingMode: String? = nil) async throws {
+    private func canonicalSort(cancelAfterSort: Bool, composedMode: String? = nil,
+                               matchingMode: String? = nil,
+                               capturedSoloPresentation: Bool = false) async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             try await FeatureFlags.withAdr004MutationSagaForTests(true) {
                 // Logic's physical header CFs can stay at their rail indexes
@@ -441,6 +449,22 @@ struct Issue448TrackSortVerifiedTests {
                 f.builder.setAttribute(f.app, kAXWindowsAttribute as String, [f.arrangeWindow])
                 for header in f.initialHeaders {
                     f.builder.setAttribute(header, kAXHelpAttribute as String, "audio track")
+                }
+                if capturedSoloPresentation {
+                    for (index, header) in f.initialHeaders.enumerated() {
+                        let mute = f.builder.element(989_000 + index * 2)
+                        let solo = f.builder.element(989_001 + index * 2)
+                        for (control, description, value) in [
+                            (mute, AXLocalePolicy.trackMuteButton.canonical, 0),
+                            (solo, AXLocalePolicy.trackSoloButton.canonical, 1),
+                        ] {
+                            f.builder.setRole(control, kAXCheckBoxRole as String)
+                            f.builder.setAttribute(control, kAXDescriptionAttribute as String, description)
+                            f.builder.setAttribute(control, kAXValueAttribute as String, value)
+                            f.builder.setChildren(control, [])
+                        }
+                        f.builder.setChildren(header, [mute, solo])
+                    }
                 }
                 let bar = f.builder.element(969_010), play = f.builder.element(969_011), record = f.builder.element(969_012)
                 f.builder.setRole(bar, kAXGroupRole as String)
@@ -480,8 +504,11 @@ struct Issue448TrackSortVerifiedTests {
                 await cache.updateProject(project)
                 let legacy = try #require(AccessibilityChannel.defaultGetTrackStates(runtime: f.runtime))
                 #expect(legacy.allSatisfy { $0.type == .audio })
-                let tracks = try #require(AccessibilityChannel.readTrackStates(from: f.initialHeaders,
+                let rawTracks = try #require(AccessibilityChannel.readTrackStates(from: f.initialHeaders,
                     in: f.arrangeWindow, runtime: f.runtime, readingTypeHelp: false, stoppingWhen: { false }).states)
+                let tracks = capturedSoloPresentation
+                    ? try #require(AccessibilityChannel.soloPresentationSafeTrackStates(rawTracks))
+                    : rawTracks
                 #expect(tracks.allSatisfy { $0.type == .unknown })
                 for row in tracks { #expect(row.physicalBinding?.currentIndex() == row.id) }
                 await cache.updateTracks(tracks)

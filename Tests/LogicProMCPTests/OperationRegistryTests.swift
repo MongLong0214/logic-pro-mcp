@@ -76,6 +76,7 @@ struct OperationRegistryTests {
         #expect(DeadlineClass.short.seconds == 25)
         #expect(DeadlineClass.medium.seconds == 90)
         #expect(DeadlineClass.long.seconds == 300)
+        #expect(DeadlineClass.saga.seconds == 600)
         #expect(OperationRegistry.validationErrors().isEmpty)
     }
 
@@ -498,7 +499,7 @@ struct OperationRegistryTests {
         ("logic_system", "system.help", "help", .readOnly, .short, .none),
         ("logic_system", "system.export_support_bundle", "export_support_bundle", .mutating, .medium, .readbackRequired),
         ("logic_system", "system.saga_preflight", "saga_preflight", .readOnly, .medium, .none),
-        ("logic_system", "system.saga_execute", "saga_execute", .mutating, .long, .readbackRequired),
+        ("logic_system", "system.saga_execute", "saga_execute", .mutating, .saga, .readbackRequired),
         ("logic_system", "system.saga_status", "saga_status", .readOnly, .short, .none),
         ("logic_system", "system.saga_cancel", "saga_cancel", .mutating, .short, .readbackRequired),
         ("logic_system", "system.setup_arm_key", "setup_arm_key", .mutating, .long, .readbackRequired),
@@ -732,7 +733,7 @@ struct OperationRegistryTests {
         ("project.audit", "audit", .readOnly, .short, .none),
         ("project.cleanup_plan", "cleanup_plan", .readOnly, .short, .none),
         ("project.plan_session_repair", "plan_session_repair", .readOnly, .short, .none),
-        ("project.apply_session_repair", "apply_session_repair", .mutating, .long, .readbackRequired),
+        ("project.apply_session_repair", "apply_session_repair", .mutating, .saga, .readbackRequired),
         ("project.inspect_session", "inspect_session", .readOnly, .medium, .none),
         ("project.cleanup_apply", "cleanup_apply", .mutating, .medium, .readbackRequired),
     ]
@@ -822,7 +823,8 @@ struct OperationRegistryTests {
     func projectDeadlineParity() {
         #expect(Self.projectCommands.filter { $0.deadline == .short }.count == 7)
         #expect(Self.projectCommands.filter { $0.deadline == .medium }.count == 6)
-        #expect(Self.projectCommands.filter { $0.deadline == .long }.count == 6)
+        #expect(Self.projectCommands.filter { $0.deadline == .long }.count == 5)
+        #expect(Self.projectCommands.filter { $0.deadline == .saga }.map(\.command) == ["apply_session_repair"])
 
         for entry in Self.projectCommands {
             #expect(OperationRegistry.deadlineSeconds(tool: "logic_project", command: entry.command)

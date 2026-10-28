@@ -173,6 +173,20 @@ enum SessionPopulationObservation {
             return matches(other, matchingFocus: true)
         }
 
+        /// A selection population that began on the passive Track rail temporarily
+        /// focused its already-held selected strip. After that exact association
+        /// restores the rail, accept only a newly read presentation whose remaining
+        /// native owners are unchanged and whose two focus endpoints are the held pair.
+        func matches(_ other: PresentationBinding,
+            restoredPreparedFocusOf association: AccessibilityChannel.HeldSelectionAssociation,
+            source: AXMixerStripBinding.Binding) -> Bool {
+            guard let temporaryFocus = focus, let restoredFocus = other.focus,
+                  CFEqual(temporaryFocus, source.strip),
+                  CFEqual(restoredFocus, association.originalFocus),
+                  association.hasOriginalSourceFocus(source) else { return false }
+            return matches(other, matchingFocus: true)
+        }
+
         private func matches(_ other: PresentationBinding, matchingFocus: Bool) -> Bool {
             func same(_ lhs: AXUIElement?, _ rhs: AXUIElement?) -> Bool {
                 switch (lhs, rhs) {

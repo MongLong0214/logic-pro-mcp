@@ -491,6 +491,8 @@ extension AccessibilityChannel {
         var afterLabel: String?
         var after: OutputAssignment?
         var countAfter: Int?
+        var populationAfter: [AXUIElement]?
+        var changedRenewal: OriginalHeaderSourceRenewal?
         var attemptedAssociation = false
         let deadline = Date().addingTimeInterval(Double(timing.readbackTimeoutMs) / 1000.0)
         repeat {
@@ -498,6 +500,7 @@ extension AccessibilityChannel {
                 .flatMap { AXLogicProElements.stripEnumeration(in: $0, runtime: runtime.ax) }
                 .flatMap { $0.unreadableChildren == 0 ? $0 : nil }
             countAfter = enumeration?.strips.count
+            populationAfter = enumeration?.strips
             afterLabel = nil
             if let enumeration, enumeration.strips.count == strips.count,
                physical == nil || physical?.currentIndex(runtime: runtime) == index {
@@ -527,9 +530,12 @@ extension AccessibilityChannel {
                     extras["ui_effects"] = ["navigation_performed": observed.effects.navigationPerformed,
                         "attempted": observed.effects.attempted, "changed": observed.effects.changed,
                         "restoration": observed.effects.restoration, "reason": observed.effects.reason as Any? ?? NSNull()]
-                    if let label = observed.label, let renewedIndex = observed.index {
+                    if let label = observed.label, let renewedIndex = observed.index,
+                       let renewal = observed.renewal {
                         afterLabel = label
                         after = OutputAssignment.observed(slotLabel: label)
+                        populationAfter = renewal.observation.strips
+                        changedRenewal = renewal
                         extras["source_renewal"] = observed.source
                         extras["reference_reread_required"] = true
                         extras["source_index_after"] = renewedIndex
@@ -564,6 +570,16 @@ extension AccessibilityChannel {
                 + "destination. Stop dependent writes and re-read the strip."
             return .success(HonestContract.encodeStateB(reason: .readbackMismatch, extras: extras))
         }
+        let currentPair = changedRenewal?.pair ?? outputAssociation
+        let currentControl = currentPair.flatMap {
+            AXLogicProElements.outputSlotButton(in: $0.strip.strip, runtime: runtime.ax)
+        }
+        guard recordOutputEffect(original: outputAssociation, current: currentPair,
+                  renewal: changedRenewal, control: currentControl, population: populationAfter,
+                  before: before, after: destination, label: afterLabel, runtime: runtime) else {
+            extras["hint"] = "The output was verified, but its exact changed native source/control effect could not be retained for the owning Saga."
+            return .success(HonestContract.encodeStateB(reason: .readbackUnavailable, extras: extras))
+        }
         return .success(HonestContract.encodeStateA(extras: extras))
     }
 
@@ -575,13 +591,14 @@ extension AccessibilityChannel {
         runtime: AXLogicProElements.Runtime,
         sourceDisposition: OriginalHeaderSourceDisposition = .retiredOriginal,
         restoringMixerGeometry: HeldSelectionAssociation.MixerViewportGeometry? = nil
-    ) async -> (label: String?, index: Int?, source: String?, effects: SessionPopulationObservation.UIEffects) {
+    ) async -> (label: String?, index: Int?, source: String?, renewal: OriginalHeaderSourceRenewal?,
+        effects: SessionPopulationObservation.UIEffects) {
         let observed = await renewSourceThroughOriginalHeader(originalPair, original: original, runtime: runtime,
             sourceDisposition: sourceDisposition, restoringMixerGeometry: restoringMixerGeometry)
         guard let source = observed.source,
               let label = AXLogicProElements.outputSlotDestination(in: source.pair.strip.strip, runtime: runtime.ax),
-              source.permits(runtime: runtime) else { return (nil, nil, nil, observed.effects) }
-        return (label, source.index, source.pair.source, observed.effects)
+              source.permits(runtime: runtime) else { return (nil, nil, nil, nil, observed.effects) }
+        return (label, source.index, source.pair.source, source, observed.effects)
     }
 
     struct OriginalHeaderSourceRenewal: Sendable {
@@ -593,6 +610,12 @@ extension AccessibilityChannel {
         /// The actual partial header/strip pairs observed by this owned read.
         /// Empty in older/manual witnesses; never inferred from labels or rows.
         var observedPairs: [HeldSelectionAssociation.Pair] = []
+
+        func focusedOriginalHeaderBaseline(runtime: AXLogicProElements.Runtime)
+            -> HeldSelectionAssociation.OriginalHeaderFocusBaseline? {
+            guard permits(runtime: runtime) else { return nil }
+            return observation.originalHeaderFocusBaseline(observedPairs: observedPairs)
+        }
 
         func sourceForOriginalHeader(_ prior: HeldSelectionAssociation.Pair,
             runtime: AXLogicProElements.Runtime) -> Self? {
@@ -694,12 +717,45 @@ extension AccessibilityChannel {
         restoringMixerGeometry: HeldSelectionAssociation.MixerViewportGeometry? = nil,
         observingReadFocus: @Sendable (HeldSelectionAssociation) -> Void = { _ in },
         observingPeerHeaders: [AXTrackBinding.Binding]? = nil,
-        observingPeerStrips: [AXMixerStripBinding.Binding]? = nil
+        observingPeerStrips: [AXMixerStripBinding.Binding]? = nil,
+        recoveringRetiredFocusFrom focusBaseline: HeldSelectionAssociation.OriginalHeaderFocusBaseline? = nil
     ) async -> (source: OriginalHeaderSourceRenewal?, effects: SessionPopulationObservation.UIEffects) {
+        if let focusBaseline {
+            // The caller captured this immutable before-image immediately before
+            // its checked Input. One focus write may hand off a retired native
+            // selected child; the ordinary original-header observation below is
+            // still the only source and inverse authority.
+            let prepared = await HeldSelectionAssociation.reacquireRetiredOriginalHeaderFocus(
+                focusBaseline, runtime: runtime, restoringMixerGeometry: restoringMixerGeometry)
+            guard let handoff = prepared.handoff else { return (nil, prepared.effects) }
+            let observed = await renewSourceThroughOriginalHeader(
+                originalPair, original: original, runtime: runtime,
+                selectedHeaderRequired: selectedHeaderRequired,
+                sourceDisposition: sourceDisposition,
+                restoringMixerGeometry: restoringMixerGeometry,
+                observingReadFocus: observingReadFocus,
+                observingPeerHeaders: observingPeerHeaders,
+                observingPeerStrips: observingPeerStrips,
+                recoveringRetiredFocusFrom: nil)
+            var effects = observed.effects
+            effects.navigationPerformed = effects.navigationPerformed || prepared.effects.navigationPerformed
+            effects.attempted = prepared.effects.attempted
+                + effects.attempted.filter { !prepared.effects.attempted.contains($0) }
+            effects.changed = prepared.effects.changed
+                + effects.changed.filter { !prepared.effects.changed.contains($0) }
+            if !observed.effects.navigationPerformed {
+                effects.restoration = prepared.effects.restoration
+            }
+            guard let source = observed.source, handoff.isRestored(by: source, runtime: runtime) else {
+                effects.reason = effects.reason ?? "retired_mixer_focus_handoff_unverified"
+                return (nil, effects)
+            }
+            return (source, effects)
+        }
         guard originalPair.strip.matches(original), originalPair.track.currentIndex() != nil,
               let observation = HeldSelectionAssociation(window: original.window, logic: runtime,
                   expectedProject: nil, requiresProjectReference: false, allowsSelectedChildRailEntry: true,
-                  retainedMixerSource: sourceDisposition == .readObservation ? original : nil),
+                  retainedMixerSource: original),
               CFEqual(observation.mixer, original.mixer),
               observation.document.utf8.elementsEqual(original.document.utf8),
               observation.headers.filter({ CFEqual($0, originalPair.track.header) }).count == 1,
