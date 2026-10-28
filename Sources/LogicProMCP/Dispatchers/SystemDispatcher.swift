@@ -1079,7 +1079,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                 }
                 let lifecycleBudgetSeconds = OperationRegistry.spec(
                     tool: ToolID.logicSystem.rawValue, command: "saga_execute"
-                )?.deadline.seconds ?? DeadlineClass.long.seconds
+                )?.deadline.seconds ?? DeadlineClass.saga.seconds
                 let lifecycleDeadline = sagaLifecycleDeadline
                     ?? ContinuousClock.now.advanced(by: .seconds(lifecycleBudgetSeconds))
                 let inherited = OperationTraceContext.current
@@ -1093,6 +1093,14 @@ struct SystemDispatcher: OperationTraceDispatching {
                         }, deadline: lifecycleDeadline,
                         cancellationRequested: { Task.isCancelled || inherited?.cancellationRequested() == true
                             || (pluginPlan && compressorCancellation.value) }) : nil
+                let refreshAfterWrite: @Sendable () async -> Void
+                if let sagaRefreshAfterWrite {
+                    refreshAfterWrite = sagaRefreshAfterWrite
+                } else if let poller {
+                    refreshAfterWrite = { await poller.refreshNow() }
+                } else {
+                    refreshAfterWrite = {}
+                }
                 // ADR-004 / issue #287 — qualification-only fault seam. #399 (CEO
                 // audit P0): the seam and its wiring are compiled solely in debug
                 // via `FAULT_TEST_SEAM`. The release executor is
@@ -1111,7 +1119,8 @@ struct SystemDispatcher: OperationTraceDispatching {
                         environment: ProcessInfo.processInfo.environment,
                         stepCount: plan.steps.count
                     ), approvedSessionRepair: approvedSessionRepair, confirmedCompressorPlan: compressorPlan,
-                    confirmedSelectedEQPlan: selectedEQPlan, sendRemoval: sendRemoval, sendMode: sendMode, sendLevel: sendLevel, inputBus: inputBus
+                    confirmedSelectedEQPlan: selectedEQPlan, sendRemoval: sendRemoval, sendMode: sendMode, sendLevel: sendLevel,
+                    inputBus: inputBus, approvedOutputRefreshAfterWrite: refreshAfterWrite
                 )
                 #else
                 let executor = ProductionSagaStepExecutor(
@@ -1122,7 +1131,9 @@ struct SystemDispatcher: OperationTraceDispatching {
                     liveReadback: sagaLiveReadback ?? .unavailable,
                     liveTrackName: liveTrackName,
                     liveTrackNames: liveTrackNames, approvedSessionRepair: approvedSessionRepair,
-                    confirmedCompressorPlan: compressorPlan, confirmedSelectedEQPlan: selectedEQPlan, sendRemoval: sendRemoval, sendMode: sendMode, sendLevel: sendLevel, inputBus: inputBus
+                    confirmedCompressorPlan: compressorPlan, confirmedSelectedEQPlan: selectedEQPlan, sendRemoval: sendRemoval,
+                    sendMode: sendMode, sendLevel: sendLevel, inputBus: inputBus,
+                    approvedOutputRefreshAfterWrite: refreshAfterWrite
                 )
                 #endif
                 let saga = MutationSaga(
@@ -1130,17 +1141,12 @@ struct SystemDispatcher: OperationTraceDispatching {
                     approvedSessionRepair: approvedSessionRepair,
                     routeAvailable: Self.sagaRouteProbe(router: router)
                 )
-                let refreshAfterWrite: @Sendable () async -> Void
-                if let sagaRefreshAfterWrite {
-                    refreshAfterWrite = sagaRefreshAfterWrite
-                } else if let poller {
-                    refreshAfterWrite = { await poller.refreshNow() }
-                } else {
-                    refreshAfterWrite = {}
-                }
                 let surfaceExecutor = SagaSurfaceStepExecutor(
                     base: executor,
-                    refreshAfterWrite: refreshAfterWrite
+                    refreshAfterWrite: refreshAfterWrite,
+                    refreshAlreadyPerformed: { step in
+                        approvedSessionRepair?.consumeOutputRefresh(step) == true
+                    }
                 )
                 let parentBoundary = SagaFirstWriteBoundary()
                 let onWriteBoundary: @Sendable () async -> Void = {
@@ -2302,6 +2308,9 @@ struct SystemDispatcher: OperationTraceDispatching {
             return """
                 logic_plugins commands:
                   get_inventory     -> { track: Int } — Read a drift-safe insert chain
+                  get_host_parameter_manifest -> { target_ref: String (occupied ins_ reference),
+                                                   expected_build_fingerprint: String }
+                                                 — Read an unapproved Controls-view manifest; never write-qualified
                   get_param_verified -> { target_ref: String (occupied ins_ reference), param: String,
                                           unit?: String } — Read one qualified parameter without audio mutation
                     Compressor ratio is read-only: raw_ax_value plus verbatim observed_display; it grants no write method.
@@ -2380,7 +2389,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                   logic_project    — Project lifecycle (open, save, bounce...)
                   logic_audio      — Read-only audio artifact analysis
                   logic_system     — Diagnostics + help
-                  logic_plugins    — Verified plugin reads and apply-back (get_inventory, get_param_verified, set_param_verified, set_eq_band_verified, insert_verified)
+                  logic_plugins    — Verified plugin reads and apply-back (get_inventory, get_host_parameter_manifest, get_param_verified, set_param_verified, set_eq_band_verified, insert_verified)
 
                 Resources (reads — zero tool cost):
                   logic://system/health         — System health

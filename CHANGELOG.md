@@ -9,6 +9,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ## [Unreleased]
 
 ### Added
+- **Compressor `ratio` is available through read-only `logic_plugins get_param_verified` (#299).**
+  The Controls row is sampled twice and returns its raw AX value plus Logic's verbatim ratio display
+  (for example `2.1:1`). The existing non-actuation measurement is preserved: the catalog still has
+  no ratio write method, and `set_param_verified` refuses before any AX action.
 - **The fixed verifier can carry an opaque session-issued string from a setup call into the row's
   operation (#1028).** The exact `$observation` parameter form is admitted only for the operation,
   resolves through the stored raw reply with the judge's strict JSON/path rules, and refuses before
@@ -31,10 +35,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   Reset confirmation and Undo must restore that full bounded topology. These rows are
   admitted and mutation-tested offline; they are not a live ten-locale PASS and do not close
   #291 or #1028 by themselves.
-- **Compressor `ratio` is available through read-only `logic_plugins get_param_verified` (#299).**
-  The Controls row is sampled twice and returns its raw AX value plus Logic's verbatim ratio display
-  (for example `2.1:1`). The existing non-actuation measurement is preserved: the catalog still has
-  no ratio write method, and `set_param_verified` refuses before any AX action.
 - **`logic_mixer set_output_verified`: one strip's output to one exact destination, read back
   from the same strip (#291 R2).** `destination` is `{kind:"bus", number}`, `{kind:"physical",
   ports:[a,b]}` or `{kind:"stereo_output"}`; the strip is `track` or `target_ref`;

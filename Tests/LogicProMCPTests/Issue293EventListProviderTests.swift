@@ -221,6 +221,7 @@ import Testing
             .displayModeUnavailable,
             .timeDisplayEnabled,
             .displayModeDisagreement(markedAsTime: true, positionsAreBBT: true),
+            .viewMenuDismissalFailed(primary: .timeDisplayEnabled),
         ]
         let expectedProviderErrors: [EventListMIDINoteReadbackProviderError] = [
             .mainWindowUnavailable,
@@ -245,6 +246,7 @@ import Testing
             .displayModeUnavailable,
             .timeDisplayEnabled,
             .displayModeDisagreement(markedAsTime: true, positionsAreBBT: true),
+            .viewMenuDismissalFailed(primary: .timeDisplayEnabled),
         ]
 
         var mappedErrors: [EventListMIDINoteReadbackProviderError] = []

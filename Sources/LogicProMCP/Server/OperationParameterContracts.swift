@@ -16,10 +16,12 @@ import MCP
 /// - `unconstrained(reason)`: the dispatcher coerces, defaults or ignores a value of another type,
 ///   so the schema states nothing about the parameter's type.
 ///
-/// A required group is satisfied by any one of its keys. When every group is satisfied with
-/// samples, the dispatcher routes the call. When a group is missing, it refuses before any channel
-/// runs. `Issue957ParameterContractCensusTests` drives every dispatcher to check each of these
-/// claims, so a rule that states more than the runtime enforces fails a test.
+/// A required group is satisfied by any one of its keys. A dependent-required entry says that when
+/// its key is present, every listed companion must also be present. When every unconditional group
+/// and triggered dependency is satisfied with samples, the dispatcher routes the call. When one is
+/// missing, it refuses before any channel runs. `Issue957ParameterContractCensusTests` drives every
+/// dispatcher to check each of these claims, so a rule that states more than the runtime enforces
+/// fails a test.
 enum ParamKind: String, Sendable, Equatable {
     /// `intParamOrNil` / the MIDI dispatcher's `strictInt`: an integer, an integral number, or a
     /// string of digits.
@@ -114,6 +116,19 @@ struct OperationParameterContract: Sendable, Equatable {
     /// Each group is satisfied by any one of its alternatives. An alternative is one key, or keys
     /// joined by `+` that must all be present (`category+preset`).
     let required: [[String]]
+    /// Optional parameters that acquire companions when present. Symmetric entries express an
+    /// all-or-none group without making that group unconditionally required.
+    let dependentRequired: [String: [String]]
+
+    init(
+        params: [String: ParamRule],
+        required: [[String]],
+        dependentRequired: [String: [String]] = [:]
+    ) {
+        self.params = params
+        self.required = required
+        self.dependentRequired = dependentRequired
+    }
 
     /// The keys of one alternative.
     static func keys(of alternative: String) -> [String] {
@@ -380,7 +395,12 @@ extension OperationRegistry {
                 "bar": index(9), "notes": .enforced(.string, .string("60:0:480")), "tempo": .enforced(.number, .int(120)),
                 "instrument": .unconstrained("read and reported back as ignored; it never selects an instrument"),
                 "instrument_path": .unconstrained("read and reported back as ignored; it never selects an instrument"),
-            ], required: [["notes"]]),
+                "target_track": index(0),
+                "target_expected_name": .enforced(.string, .string("Track 1")),
+            ], required: [["notes"]], dependentRequired: [
+                "target_track": ["target_expected_name"],
+                "target_expected_name": ["target_track"],
+            ]),
             "tracks.sort_verified": .init(params: [
                 "criterion": .enforced(.scalar, .string("midi_channel"), allowed: TrackSortCriterion.allCases.map(\.rawValue)),
                 "expected_order": .enforced(.array, .array([.string("trk:1")])),
@@ -447,6 +467,16 @@ extension OperationRegistry {
                 ($0, ParamRule.unconstrained("omitted when it does not read as an integer; the channel then refuses the request",
                                              sample: .int(0)))
             }).merging(["reveal_mixer": .enforced(.boolean, .bool(false))],uniquingKeysWith:{ _,new in new }), required: [["index", "track", "track_index"]]),
+            "plugins.get_host_parameter_manifest": .init(params: [
+                "target_ref": .enforced(.string, .string("ins_lpm_contract_306")),
+                "project_ref": projectRef,
+                "expected_build_fingerprint": .enforced(.string, .string("vendor-build-1")),
+                "plugin": .enforced(.string, .string("Compressor")),
+                "plugin_id": .enforced(.string, .string("logic.stock.effect.compressor")),
+                "plugin_name": .enforced(.string, .string("Compressor")),
+                "track": .enforced(.integer, .int(0)),
+                "insert": .enforced(.integer, .int(6)),
+            ], required: [["target_ref"], ["expected_build_fingerprint"]]),
             "plugins.get_param_verified": .init(params: [
                 "target_ref": .enforced(.string, .string("ins_lpm_contract_955")), "project_ref": projectRef,
                 "param": .enforced(.string, .string("threshold")),

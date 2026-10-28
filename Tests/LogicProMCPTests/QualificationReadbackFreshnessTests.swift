@@ -179,7 +179,7 @@ struct QualificationReadbackFreshnessTests {
 
     @Test("each deadline class accepts its bound and refuses an older observation")
     func expiredReadbackIsRefusedAtItsOwnDeadline() throws {
-        for deadline in [DeadlineClass.short, .medium, .long] {
+        for deadline in [DeadlineClass.short, .medium, .long, .saga] {
             let clean = Self.verdict(try Self.readback(cacheAge: deadline.seconds), deadline: deadline)
             #expect(clean.isAdmissible)
 

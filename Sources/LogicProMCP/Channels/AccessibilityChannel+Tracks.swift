@@ -132,9 +132,20 @@ extension AccessibilityChannel {
         /// despite caller cancellation. All physical custody checks still apply.
         /// No population read or publication is inside this private scope.
         func restoreAfterInterruptedRead(stoppingWhen stop: @escaping @Sendable () -> Bool) async -> SessionPopulationObservation.UIEffects {
+            await Self.duringInterruptedInverse {
+                await self.restore(stoppingWhen: stop)
+            }
+        }
+
+        /// Run only an already-owned cleanup after the caller's read was
+        /// interrupted. Cancellation is ignored inside the scope; the original
+        /// gate, deadline and every native custody check remain mandatory.
+        static func duringInterruptedInverse<T: Sendable>(
+            _ operation: @escaping @Sendable () async -> T
+        ) async -> T {
             await Task {
                 await Self.$interruptedInverse.withValue(true) {
-                    await self.restore(stoppingWhen: stop)
+                    await operation()
                 }
             }.value
         }

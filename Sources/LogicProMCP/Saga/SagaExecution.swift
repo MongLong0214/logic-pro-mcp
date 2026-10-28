@@ -577,6 +577,7 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
     private let sendMode: SendModeSagaAdapter?
     private let sendLevel: SendLevelSagaAdapter?
     private let inputBus: InputBusSagaAdapter?
+    private let approvedOutputRefreshAfterWrite: @Sendable () async -> Void
     /// ADR-004 / issue #287 — qualification-only fault seam. nil in all normal
     /// operation (env unset); non-nil ONLY when the operator explicitly set
     /// `LOGIC_PRO_MCP_FAULT_INJECT=partial_state` to qualify compensation. A
@@ -604,7 +605,8 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
         sendRemoval: SendRemovalSagaAdapter? = nil,
         sendMode: SendModeSagaAdapter? = nil,
         sendLevel: SendLevelSagaAdapter? = nil,
-        inputBus: InputBusSagaAdapter? = nil
+        inputBus: InputBusSagaAdapter? = nil,
+        approvedOutputRefreshAfterWrite: @escaping @Sendable () async -> Void = {}
     ) {
         self.router = router
         self.cache = cache
@@ -622,6 +624,7 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
         self.sendMode = sendMode
         self.sendLevel = sendLevel
         self.inputBus = inputBus
+        self.approvedOutputRefreshAfterWrite = approvedOutputRefreshAfterWrite
     }
     #else
     init(
@@ -639,7 +642,8 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
         sendRemoval: SendRemovalSagaAdapter? = nil,
         sendMode: SendModeSagaAdapter? = nil,
         sendLevel: SendLevelSagaAdapter? = nil,
-        inputBus: InputBusSagaAdapter? = nil
+        inputBus: InputBusSagaAdapter? = nil,
+        approvedOutputRefreshAfterWrite: @escaping @Sendable () async -> Void = {}
     ) {
         self.router = router
         self.cache = cache
@@ -656,6 +660,7 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
         self.sendMode = sendMode
         self.sendLevel = sendLevel
         self.inputBus = inputBus
+        self.approvedOutputRefreshAfterWrite = approvedOutputRefreshAfterWrite
     }
     #endif
 
@@ -786,7 +791,11 @@ struct ProductionSagaStepExecutor: SagaStepExecutor {
             response = await approvedSessionRepair!.performSort(step, router: router)
         case .mixerSetOutputVerified where approvedSessionRepair?.supports(step) == true:
             let traceID = await MixerDispatcher.startTraceIfEnabled(command: "set_output_verified")
-            let output = await approvedSessionRepair!.performOutput(step, router: router)
+            let output = await approvedSessionRepair!.performOutput(
+                step,
+                router: router,
+                refreshAfterWrite: approvedOutputRefreshAfterWrite
+            )
             response = await MixerDispatcher.finalizeTrace(output, traceID: traceID)
         case .tracksRename:
             response = await TrackDispatcher.handle(
@@ -1115,13 +1124,16 @@ actor SagaFirstWriteBoundary {
 struct SagaSurfaceStepExecutor<Base: SagaStepExecutor>: SagaStepExecutor {
     private let base: Base
     private let refreshAfterWrite: @Sendable () async -> Void
+    private let refreshAlreadyPerformed: @Sendable (SagaStep) async -> Bool
 
     init(
         base: Base,
-        refreshAfterWrite: @escaping @Sendable () async -> Void = {}
+        refreshAfterWrite: @escaping @Sendable () async -> Void = {},
+        refreshAlreadyPerformed: @escaping @Sendable (SagaStep) async -> Bool = { _ in false }
     ) {
         self.base = base
         self.refreshAfterWrite = refreshAfterWrite
+        self.refreshAlreadyPerformed = refreshAlreadyPerformed
     }
 
     func run(_ step: SagaStep) async -> StepResult {
@@ -1133,7 +1145,7 @@ struct SagaSurfaceStepExecutor<Base: SagaStepExecutor>: SagaStepExecutor {
             )
         }
         let result = await base.run(step)
-        if result.writeBoundaryCrossed {
+        if result.writeBoundaryCrossed, !(await refreshAlreadyPerformed(step)) {
             await refreshAfterWrite()
         }
         return result
