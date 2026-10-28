@@ -537,18 +537,61 @@ struct Issue966ApprovedRoutingDiffTests {
         #expect(body["preview"] == body["steps"])
 
         let create = steps[0]
+        #expect(create["before"] == .object([:]))
         #expect(create["after"] == .object(["input_bus": .int(3)]))
         #expect(create["dependencies"] == .array([]))
+        #expect(create["blocked_reasons"] == .array([
+            .string("aux_creation_adapter_unavailable"),
+        ]))
         #expect(create["required_invariants"] == .array([
             "bus_namespace_evidence", "existing_routing_preservation", "inverse_remove_created_aux",
         ].map(Value.string)))
         let output = steps[1]
         #expect(output["target_ref"] == .string(source.rawValue))
         #expect(output["dependencies"] == .array([.string("create_aux_bus_3")]))
+        #expect(output["before"] == .object([
+            "bus_number": .int(4), "display_name": .string("Same"),
+            "node_id": .string("previous_opaque"), "output": .string("bus"),
+        ]))
+        #expect(output["after"] == .object([
+            "bus_number": .int(3), "output": .string("bus"),
+        ]))
+        #expect(output["blocked_reasons"] == .array([
+            .string("exact_target_routing_adapter_unavailable"),
+            .string("routing_prefix_cycle_unverified"),
+        ]))
+        #expect(output["required_invariants"] == .array([
+            "exact_strip_identity", "receiver_fanout", "intermediate_audio_paths",
+            "sidechain_and_monitoring_preservation", "inverse_output_assignment",
+        ].map(Value.string)))
+        let outputDiff = try #require(output["proposed_routing_diff"]?.objectValue)
+        #expect(outputDiff["output_changes"] == .array([.object([
+            "before": .object([
+                "kind": .string("mainOutput"), "source": .string("source_opaque"),
+                "destination": .string("previous_opaque"), "provenance": .string("axMixerStrip"),
+            ]),
+            "after": .object([
+                "kind": .string("mainOutput"), "source": .string("source_opaque"),
+                "destination": .string("destination_opaque"), "provenance": .string("other"),
+            ]),
+        ])]))
         let send = steps[2]
         #expect(send["target_ref"] == .string(source.rawValue))
         #expect(send["physical_slot"] == .int(5))
         #expect(send["dependencies"] == .array([.string("create_aux_bus_3")]))
+        #expect(send["after"] == .object([
+            "target": .string("approved"), "physical_slot": .int(5), "bus": .int(3),
+        ]))
+        #expect(send["blocked_reasons"] == .array([
+            .string("exact_target_send_adapter_unavailable"),
+            .string("routing_prefix_cycle_unverified"),
+            .string("send_preservation_adapter_unavailable"),
+        ]))
+        #expect(send["required_invariants"] == .array([
+            "exact_strip_identity", "exact_send_slot_and_destination", "preserved_send_scalars",
+            "receiver_fanout", "protected_and_intermediate_audio_paths", "channel_format_preservation",
+            "sidechain_and_monitoring_preservation", "conditional_inverse_send",
+        ].map(Value.string)))
         let sendDiff = try #require(send["proposed_routing_diff"]?.objectValue)
         let changedSends = try #require(sendDiff["changed_sends"]?.arrayValue)
         #expect(changedSends.count == 1)
@@ -565,18 +608,56 @@ struct Issue966ApprovedRoutingDiffTests {
         #expect(name["target_ref"] == .string(source.rawValue))
         #expect(name["before"] == .object(["name": .string("Same")]))
         #expect(name["after"] == .object(["name": .string("Approved, literal name 🎛️")]))
+        #expect(name["blocked_reasons"] == .array([
+            .string("naming_preservation_adapter_unavailable"),
+        ]))
+        #expect(name["required_invariants"] == .array([
+            "exact_track_identity", "coupled_name_preservation", "inverse_name",
+        ].map(Value.string)))
         let sort = steps[4]
-        #expect(sort["before"]?.objectValue?["order"] == .array(trackRefs.map { .string($0.rawValue) }))
-        #expect(sort["after"]?.objectValue?["order"] == .array(trackRefs.map { .string($0.rawValue) }))
-        let sortBlocked = try #require(sort["blocked_reasons"]?.arrayValue)
-        #expect(sortBlocked.contains(.string("track_population_incomplete")))
-        #expect(sortBlocked.contains(.string("sort_preservation_adapter_unavailable")))
+        let expectedOrder = Value.array(trackRefs.map { .string($0.rawValue) })
+        #expect(sort["before"] == .object([
+            "coverage": .string("partial"), "order": expectedOrder,
+        ]))
+        #expect(sort["after"] == .object([
+            "criterion": .string("track_name"), "order": expectedOrder,
+        ]))
+        #expect(sort["blocked_reasons"] == .array([
+            .string("sort_coupled_footprint_unavailable"),
+            .string("sort_locale_measurement_unavailable"),
+            .string("sort_preservation_adapter_unavailable"),
+            .string("track_population_incomplete"),
+            .string("transport_state_unobserved"),
+        ]))
+        #expect(sort["required_invariants"] == .array([
+            "complete_issued_track_order", "observed_stopped_non_recording", "measured_sort_menu",
+            "conditional_inverse_order", "coupled_sort_preservation",
+        ].map(Value.string)))
         let view = steps[5]
         #expect(view["target_ref"] == .string(project.rawValue))
+        #expect(view["before"] == .object(["visible": .null]))
         #expect(view["after"] == .object(["visible": .bool(true)]))
+        #expect(view["blocked_reasons"] == .array([
+            .string("mixer_visibility_unobserved"),
+            .string("mutation_saga_unavailable"),
+            .string("project_view_binding_unavailable"),
+            .string("transport_state_unobserved"),
+        ]))
+        #expect(view["required_invariants"] == .array([
+            "project_bound_view", "observed_stopped_non_recording", "conditional_inverse_visibility",
+            "menu_cleanup",
+        ].map(Value.string)))
         let protected = try #require(body["protected_invariants"]?.arrayValue?.first?.objectValue)
+        #expect(protected["baseline"] == .string("connected"))
         #expect(protected["status"] == .string("unverified"))
         #expect(protected["final"] == .string("unverified"))
+        #expect(protected["prefixes"] == .array([
+            .object(["state": .string("unverified"), "step_id": .string("create_aux_bus_3")]),
+            .object(["state": .string("unverified"),
+                     "step_id": .string("output_main_output.target.approved")]),
+            .object(["state": .string("unverified"),
+                     "step_id": .string("send_send.target.approved.slot.5")]),
+        ]))
 
         let topologyIDs = steps.prefix(3).compactMap { $0["id"]?.stringValue }.sorted()
         #expect(name["dependencies"] == .array(topologyIDs.map(Value.string)))
