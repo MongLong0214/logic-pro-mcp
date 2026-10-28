@@ -102,6 +102,9 @@ struct Issue967OwnedAuxLifecycleTests {
         var cancelOnOptions = false
         var cancelled = false
         var invalidatesDeletedCF = true
+        var removalObservationSamples = 0
+        var deletionRetiredPeers: [AXUIElement] = []
+        var deletionRetiredReadFailures = 0
         var optionPresses = 0
         var menuFault: MenuFault?
         var menuField: MenuField = .semantic
@@ -765,6 +768,10 @@ struct Issue967OwnedAuxLifecycleTests {
                     }
                 }
             }
+            if removed, deletionRetiredPeers.contains(where: { CFEqual($0, element) }) {
+                deletionRetiredReadFailures += 1
+                return .failure(.init(raw: AXError.invalidUIElement.rawValue))
+            }
             if CFEqual(element, created), removed, removalDelay == 0, invalidatesDeletedCF {
                 return .failure(.init(raw: AXError.invalidUIElement.rawValue))
             }
@@ -1269,6 +1276,20 @@ struct Issue967OwnedAuxLifecycleTests {
         }
     }
 
+    @Test func wholePeerRedrawWithRetiredFocusHardRefusesAgentFocusWrite() async throws {
+        try await owned {
+            let f = Fixture(); f.modelWholePeerRetirement()
+            f.focusOnCreation = f.original[0]
+            let context = try f.context(nativeControls: true)
+            let result = await context.create()
+            #expect(result.status == .pending)
+            #expect(result.created == nil)
+            #expect(result.inverse == nil)
+            #expect(await context.create().status == .pending)
+            #expect(f.createPresses == 1 && f.deletePresses == 0)
+        }
+    }
+
     @Test(arguments: ["success", "unacked_effect", "late_project", "stale_focus", "no_hide_effect", "show_ignored", "cancel_after_hide"])
     func oneOwnedDisplayRefreshExposesAndSelectsTheLatentCreation(fault: String) async throws {
         let f = Fixture(); f.modelLatentCreationUntilOwnedRefresh()
@@ -1337,6 +1358,38 @@ struct Issue967OwnedAuxLifecycleTests {
             let expected: OwnedAuxLifecycle.Status = fault == "preserved" ? .removed : .residual
             #expect(await context.remove(inverse).status == expected)
             #expect(await context.remove(inverse).status == expected)
+            #expect(f.createPresses == 1 && f.deletePresses == 1)
+        }
+    }
+
+    @Test(arguments: ["healthy", "changed_peer", "foreign_document", "cancelled"])
+    func settlingWholePeerRedrawUsesItsRemainingReadOnlySamples(fault: String) async throws {
+        let f = Fixture(); f.modelWholePeerRetirement()
+        try await owned(f) {
+            let slider = f.b.element(967_811)
+            let context = try f.context(nativeControls: true, waitForNextSample: {
+                guard f.removed else { return }
+                f.removalObservationSamples += 1
+                if f.removalObservationSamples == 2 {
+                    f.invalidatesDeletedCF = true
+                    if fault == "changed_peer" { f.b.setAttribute(slider, kAXValueAttribute, 0.5) }
+                    if fault == "foreign_document" { f.b.setAttribute(f.window, kAXDocumentAttribute, "file:///tmp/Foreign.logicx") }
+                    if fault == "cancelled" { f.cancelled = true }
+                }
+            })
+            let inverse = try #require(await context.create().inverse)
+            f.b.setRole(slider, kAXSliderRole as String); f.b.setAttribute(slider, kAXValueAttribute, 0.75)
+            f.b.setChildren(slider, [])
+            let peers = [f.b.element(967_812), f.b.element(967_813)]
+            for peer in peers { f.b.setRole(peer, kAXLayoutItemRole as String) }
+            f.b.setChildren(peers[0], [slider]); f.b.setChildren(peers[1], [])
+            f.retiredDeletionPeers = peers
+            f.deletionRetiredPeers = try #require(f.retiredPeerCopies)
+            f.invalidatesDeletedCF = false
+            let result = await context.remove(inverse)
+            #expect(f.deletionRetiredReadFailures > 0, "The first sample must actually lose the retired peer objects")
+            #expect(f.removalObservationSamples >= 2 && f.removalObservationSamples <= 3)
+            #expect(result.status == (fault == "healthy" ? .removed : .residual))
             #expect(f.createPresses == 1 && f.deletePresses == 1)
         }
     }
@@ -1763,6 +1816,62 @@ struct Issue967OwnedAuxLifecycleTests {
             #expect(receipt.inverse == nil)
             #expect(f.createPresses == 1)
             #expect(f.deletePresses == 0)
+        }
+    }
+
+    @Test(arguments: ["single_empty", "two_empty", "missing", "three_empty", "occupied", "malformed", "changed_default"])
+    func defaultSendPresentationRequiresCompleteEmptyObservation(profile: String) async throws {
+        try await owned {
+            let f = Fixture()
+            let send = f.b.element(967_131)
+            let existing = f.b.makeAXRuntime().children(f.created)
+            var children = existing.filter { !CFEqual($0, f.b.element(967_132)) }
+            if profile == "two_empty" { children = existing }
+            if profile == "missing" { children.removeAll { CFEqual($0, send) } }
+            if profile == "three_empty" {
+                let extra = f.b.element(967_133)
+                f.b.setRole(extra, kAXButtonRole as String); f.b.setChildren(extra, [])
+                f.b.setAttribute(extra, kAXHelpAttribute, AXLocalePolicy.sendSlotHelpKeyword.canonical)
+                children = existing + [extra]
+            }
+            if profile == "occupied" {
+                let knob = f.b.element(967_133)
+                f.b.setRole(knob, kAXSliderRole as String); f.b.setChildren(knob, [])
+                f.b.setAttribute(knob, kAXHelpAttribute, AXLocalePolicy.sendLevelKnobHelpKeyword.canonical)
+                f.b.setAttribute(knob, kAXValueAttribute, 0)
+                children.append(knob)
+            }
+            if profile == "malformed" { f.b.setAttribute(send, kAXHelpAttribute, NSNumber(value: 7)) }
+            if profile == "changed_default" {
+                f.b.setAttribute(f.controls[.input]!, kAXDescriptionAttribute, "Bus 7")
+            }
+            f.b.setChildren(f.created, children)
+            let healthy = profile == "single_empty" || profile == "two_empty"
+            let slots = AXLogicProElements.sendSlotObservations(in: f.created, runtime: f.runtime.ax)
+            if healthy {
+                #expect(slots?.count == (profile == "single_empty" ? 1 : 2))
+            }
+            if profile == "occupied" {
+                let hasOccupiedSlot = try #require(
+                    slots?.contains { $0.state != .observedEmpty } as Bool?
+                )
+                #expect(hasOccupiedSlot)
+            }
+            let context = try f.context(nativeControls: true)
+            let receipt = await context.create()
+            #expect(receipt.status == (healthy ? .created : .configurationPartial))
+            let created = try #require(receipt.created)
+            #expect(CFEqual(created, f.created))
+            #expect(f.createPresses == 1 && f.deletePresses == 0)
+            if healthy {
+                #expect(receipt.defaults == Fixture.defaults)
+                if let proof = receipt.inverse {
+                    f.selected = [f.created]
+                    f.b.setAttribute(f.app, kAXFocusedUIElementAttribute, f.created)
+                    #expect(await context.remove(proof).status == .removed)
+                    #expect(f.deletePresses == 1)
+                } else { Issue.record("Observed empty native presentation did not retain an owned inverse") }
+            } else { #expect(receipt.inverse == nil) }
         }
     }
 
