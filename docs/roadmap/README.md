@@ -40,10 +40,10 @@ still list the issue rather than delete its row.
 It does not check the prose. The "waiting on" column, the order, and the state block below are still
 claims dated by the "measured" line, and only issue numbers and open/closed are mechanised.
 
-## State — measured 2026-10-28 at `6617521c`
+## State — measured 2026-10-28 at `55af6b17`
 
 ```
-24 open issues and 12 open pull requests after a paginated GitHub API read · issue bodies and owner comments remain the acceptance authority
+24 open issues and 19 open pull requests after a paginated GitHub API read · issue bodies and owner comments remain the acceptance authority
 ```
 
 Current delivery readback for that census:
@@ -62,6 +62,15 @@ Current delivery readback for that census:
 - #1438 merged normally at `15213991` and pins the committed one-step, ten-locale `mixer.bank` State-A envelope for #862. PR #1443 renewed exact head `88a4a79c` on current main adds a probe-separated ordered multi-step witness; its empty remerge diff and identical patch-id preserve the reviewed change, 122 affected tests and independent exact-head review pass, and fresh hosted CI is pending. Exact strip-to-channel binding remains open.
 - #1444 exposes the existing Controls-view producer through a read-only exact target-ref-bound host manifest for #306 V1. Exact head `d6306a4e` binds track/insert/display identity to the target fingerprint, preserves refusal-only and duplicate-role rows, keeps caller build identity unverified and write authority false, passes the 334-test affected gate plus independent exact-head review, and has fresh hosted CI pending. V2–V4, native named-build write/restoration, lifecycle and three-vendor acceptance remain open.
 - #1445 adds the repository-owned `REVIEW.md` input for #1403 at exact head `197377c9`. Independent exact-head review passed on current main. Its enforcement path is split across Frontier #52 (bounded prompt rendering) and agent-control-plane #1267 (exact candidate-object binding and actual prompt-digest evidence); all three PRs are partial and #1403 remains open for integrated whole-path outcomes.
+- #1446 merged normally as `55af6b17` and reconciled the publication-status wording for #816. It did not publish a final artifact or close #816.
+- #1447 is stacked on #1437 and carries opaque verifier `target_ref` observations plus a read-only #299 acceptance row. It has no hosted checks on the stacked head and supplies neither live fixture evidence nor whole #299/#1028 acceptance.
+- #1448 exact head `7e9ac1f5` adds a pure injected #967 Bus/Aux namespace decision contract. It does not acquire a native namespace, reserve a Bus, create an Aux, execute a write or complete #967; hosted CI is still running.
+- #1449 exact head `f1dc4a0a` pins the representable pure-planning portion of #971's shared F1 manifest. It remains non-executable and does not prove hidden/stack/shared-strip coverage, native F1 execution or whole #971 acceptance; hosted CI is pending.
+- #1450 exact head `98fbd38d` is a bounded #302 M3 cleanup slice that settles and dismisses only the Event List View menu it owns while preserving typed read failures. Native Event List acceptance, production proof issuance and whole #302 remain open; hosted CI is pending.
+- #1451 exact head `3d74e728` is a pure #303 N1 timing slice: plans now derive PPQ from their complete bound snapshot and reject nonpositive PPQ. Exact selection, writes, independent positive verification and whole #303 remain open; hosted CI is pending.
+- #1452 exact head `a6912a07` is a fail-closed #305 identity-containment slice on current main. It rejects mixed region/generation and duplicate observed identities, but adds no analysed-region producer, native edit or whole #305 completion; hosted CI is pending.
+- #1453 is stacked on #1451 at exact head `8d530238` and validates full before/predicted note ranges plus tick-end overflow for #303. Exact selection, overlap policy, production writes and native verification remain open; no hosted checks have run on this stacked head.
+- #1454 is stacked on #1453 at exact head `29376d31` and binds deterministic selection to snapshot-local duplicate-preserving occurrences for #303. Occurrence indices are not persistent Event List row identity; production re-resolution/write policy, overlap, native verification and whole #303 remain open. Focused 29/29 and provider 4/4 tests plus independent exact-head review pass; no hosted checks have run on this stacked head.
 - #1433 merged normally at `17d200ca` and removed one #1403 policy conflict.
 - #1308 merged normally as `572e2e46` and delivered #304 T1 through the public read-only `logic://tempo/map` resource. It exposes a partial `TempoMapAX.Snapshot` from an already-open, project-bound Tempo List; the separate `TempoMapSnapshot` model remains internal. The current-main focused audit passes 53 tests. This supersedes only the ADR-016 row's historical “reachability, NOT a feature” phase; T2–T4 and whole #304 remain open.
 
