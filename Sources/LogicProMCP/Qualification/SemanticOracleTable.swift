@@ -1121,6 +1121,10 @@ enum SemanticOracleTable {
             case let .popupSelection(choices):
                 guard let selected = raw as? String, choices.contains(selected),
                       display as? String == selected else { return false }
+            case .popupCurrentValue:
+                guard let selected = raw as? String,
+                      !selected.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+                      display as? String == selected else { return false }
             }
             guard displayStatus == "read", let text = display as? String, !text.isEmpty else { return false }
         } else {

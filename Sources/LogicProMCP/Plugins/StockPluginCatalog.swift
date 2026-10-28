@@ -1651,10 +1651,10 @@ enum StockPluginCatalog {
         StockPluginParameterMetadata(
             id: "circuit_type",
             displayName: "Circuit Type",
-            unit: "enumerated",
+            unit: "string",
             valueRange: nil,
             writeMethod: nil,
-            readbackMethod: "ax_value_observed",
+            readbackMethod: "ax_controls_view_popup_current_value",
             controlsViewRowLabel: "Circuit Type",
             controlsViewControlRole: "AXPopUpButton",
             controlsViewActuationState: .unmeasured,
@@ -1670,7 +1670,7 @@ enum StockPluginCatalog {
                     // this token alone is not sufficient to verify a parameter.
                     "parameter_readback",
                     "controls-view-write-20260902-113017",
-                    "Circuit Type AXValue Platinum Digital observed; popup selection was not measured",
+                    "Circuit Type AXValue Platinum Digital observed; popup selection and a complete choice list were not measured",
                 ]
             )
         ),

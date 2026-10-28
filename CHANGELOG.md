@@ -21,6 +21,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   Their measured Controls rows return opaque raw AX values plus Logic's verbatim displays. No
   milliseconds/decibels conversion or write behavior is inferred; `set_param_verified` refuses
   before any AX action.
+- **Compressor `circuit_type` exposes its current value read-only (#299).**
+  The already-selected Controls popup value is sampled twice and returned as a verbatim string
+  without opening the menu. This does not infer a complete choice list or grant selection/write
+  authority; `set_param_verified` still refuses before any AX action.
 - **The fixed verifier can carry an opaque session-issued string from a setup call into the row's
   operation (#1028).** The exact `$observation` parameter form is admitted only for the operation,
   resolves through the stored raw reply with the judge's strict JSON/path rules, and refuses before
