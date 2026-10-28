@@ -359,6 +359,41 @@ struct ControlsViewParameterEnumeratorTests {
         #expect(normal.identityEvidence.canonicalPluginIdentifier == nil)
     }
 
+    @Test func unsupportedOptionalWindowIdentifierIsDefinitiveAbsence() throws {
+        let fixture = makeControlsFixture(windowIdentifierReadError: .attributeUnsupported)
+        let result = try #require(ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: fixture.runtime
+        ))
+
+        #expect(result.identityEvidence.observedWindowAXIdentifier == nil)
+        #expect(!result.manifest.parameters.isEmpty)
+    }
+
+    @Test func noValueOptionalWindowIdentifierIsDefinitiveAbsence() throws {
+        let fixture = makeControlsFixture(windowIdentifierReadError: .noValue)
+        let result = try #require(ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: fixture.runtime
+        ))
+
+        #expect(result.identityEvidence.observedWindowAXIdentifier == nil)
+        #expect(!result.manifest.parameters.isEmpty)
+    }
+
+    @Test func failedOptionalWindowIdentifierReadStillRefusesIdentity() {
+        let fixture = makeControlsFixture(windowIdentifierReadError: .failure)
+        let result = ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: fixture.runtime
+        )
+
+        #expect(result == nil)
+    }
+
     @Test func unreadableDirectHeaderRoleRefusesIdentityInsteadOfIgnoringTheCandidate() {
         let fixture = makeControlsFixture(unreadableDirectHeaderRole: true)
         let result = ControlsViewParameterEnumerator.enumerate(
@@ -454,7 +489,8 @@ private func makeControlsFixture(
     unreadableControlValueIndexes: Set<Int> = [],
     unreadableAdditionalControlRoleIndexes: Set<Int> = [],
     unreadableCellChildIndexes: Set<Int> = [],
-    unreadableDirectHeaderRole: Bool = false
+    unreadableDirectHeaderRole: Bool = false,
+    windowIdentifierReadError: AXError? = nil
 ) -> ControlsFixture {
     let builder = FakeAXRuntimeBuilder()
     let window = builder.element(90_000)
@@ -575,7 +611,8 @@ private func makeControlsFixture(
         || !unreadableControlValueElementIDs.isEmpty
         || !unreadableAdditionalControlRoleElementIDs.isEmpty
         || !unreadableCellElementIDs.isEmpty
-        || unreadableDirectHeaderRole {
+        || unreadableDirectHeaderRole
+        || windowIdentifierReadError != nil {
         runtime = builder.makeAXRuntime(
             attributeValueResultHandler: { element, attribute in
                 let elementID = builder.elementID(element)
@@ -592,6 +629,10 @@ private func makeControlsFixture(
                 let unreadableHeaderRole = unreadableDirectHeaderRole
                     && attribute == (kAXRoleAttribute as String)
                     && elementID == headerDecorationID
+                if attribute == (kAXIdentifierAttribute as String), elementID == windowID,
+                   let windowIdentifierReadError {
+                    return .failure(AXHelpers.AXStatusError(raw: windowIdentifierReadError.rawValue))
+                }
                 guard unreadableLabel
                     || unreadableTitle
                     || unreadableControlValue

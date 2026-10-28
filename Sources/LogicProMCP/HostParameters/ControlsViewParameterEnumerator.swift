@@ -564,6 +564,8 @@ enum ControlsViewParameterEnumerator {
                 return nil
             }
             observedWindowAXIdentifier = trimmed(identifier)
+        case .failure(let error) where error.isDefinitiveAbsence:
+            observedWindowAXIdentifier = nil
         case .failure:
             return nil
         }
