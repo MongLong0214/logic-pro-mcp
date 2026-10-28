@@ -13,18 +13,31 @@ func planTransform(
 ) -> RegionTransformPlan? {
     guard beforeSnapshot.complete,
           beforeSnapshot.regionReference == region,
-          beforeSnapshot.ppq > 0 else { return nil }
+          beforeSnapshot.ppq > 0,
+          beforeSnapshot.notes.allSatisfy(isValidPlanNote) else { return nil }
+    let predictedAfter = applyTransform(
+        transform,
+        to: beforeSnapshot.notes,
+        ppq: beforeSnapshot.ppq
+    )
+    guard predictedAfter.allSatisfy(isValidPlanNote) else { return nil }
     return RegionTransformPlan(
         regionRef: region,
         boundGeneration: beforeSnapshot.projectEpoch,
         transform: transform,
         beforeSnapshot: beforeSnapshot,
-        predictedAfter: applyTransform(
-            transform,
-            to: beforeSnapshot.notes,
-            ppq: beforeSnapshot.ppq
-        )
+        predictedAfter: predictedAfter
     )
+}
+
+private func isValidPlanNote(_ note: MIDINoteEvent) -> Bool {
+    guard note.pitch <= 127,
+          (1...127).contains(note.velocity),
+          (1...16).contains(note.channel),
+          note.startTicks >= 0,
+          note.durationTicks > 0 else { return false }
+    let (_, endOverflow) = note.startTicks.addingReportingOverflow(note.durationTicks)
+    return !endOverflow
 }
 
 enum PlanApplyRejection: Equatable, Sendable {

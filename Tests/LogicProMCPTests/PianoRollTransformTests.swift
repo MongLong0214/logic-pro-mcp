@@ -110,6 +110,65 @@ struct PianoRollTransformTests {
         )
     }
 
+    @Test func outOfRangeSnapshotNoteCannotProducePlan() {
+        let invalidNotes = [
+            note(pitch: 128),
+            note(pitch: 60, velocity: 0),
+            note(pitch: 60, channel: 0),
+            note(pitch: 60, channel: 17),
+            note(pitch: 60, start: -1),
+            note(pitch: 60, duration: 0),
+            note(pitch: 60, duration: -1),
+            note(pitch: 60, start: Int64.max, duration: 1),
+        ]
+
+        for invalidNote in invalidNotes {
+            #expect(
+                planTransform(
+                    region: region(),
+                    transform: .transpose(semitones: 0),
+                    beforeSnapshot: snapshot(notes: [invalidNote])
+                ) == nil
+            )
+        }
+    }
+
+    @Test func predictedNoteEndOverflowCannotProducePlan() {
+        let lastValidTick = Int64.max
+        #expect(
+            planTransform(
+                region: region(),
+                transform: .quantize(grid: .quarter, strength: 1, swing: 0),
+                beforeSnapshot: snapshot(notes: [
+                    note(
+                        pitch: 60,
+                        start: 300,
+                        duration: lastValidTick - 300
+                    ),
+                ])
+            ) == nil
+        )
+    }
+
+    @Test func exactMidiRangeBoundariesCanProducePlan() throws {
+        let boundary = note(
+            pitch: 127,
+            start: 0,
+            duration: Int64.max,
+            velocity: 1,
+            channel: 16
+        )
+        let plan = try #require(
+            planTransform(
+                region: region(),
+                transform: .transpose(semitones: 0),
+                beforeSnapshot: snapshot(notes: [boundary])
+            )
+        )
+
+        #expect(plan.predictedAfter == [boundary])
+    }
+
     @Test func planBindsGenerationAndRejectsStaleApply() throws {
         let target = region()
         let plan = try #require(
@@ -470,7 +529,7 @@ struct PianoRollTransformTests {
         start: Int64 = 0,
         duration: Int64 = 120,
         velocity: UInt8 = 100,
-        channel: UInt8 = 0
+        channel: UInt8 = 1
     ) -> MIDINoteEvent {
         MIDINoteEvent(
             pitch: pitch,
