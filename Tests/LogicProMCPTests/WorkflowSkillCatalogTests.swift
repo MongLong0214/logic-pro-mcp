@@ -333,6 +333,48 @@ struct WorkflowSkillCatalogTests {
         #expect(exportPlan.steps.contains { $0.tool == "logic_project" && $0.command == "export_plan" })
     }
 
+    @Test("default workflow outcomes terminate without human recovery requests")
+    func defaultWorkflowOutcomesTerminateWithoutHumanRecoveryRequests() throws {
+        let workflows = WorkflowSkillCatalog.defaultWorkflows()
+        let publishedText = workflows.flatMap { workflow in
+            [workflow.intent, workflow.scope, workflow.rollbackOrRecovery]
+                + workflow.prerequisites
+                + workflow.failureModes
+                + workflow.limitations
+        }.joined(separator: "\n").lowercased()
+
+        for request in [
+            "manual recovery",
+            "manual undo",
+            "manual midi learn",
+            "manual library suggestion",
+            "before manual bounce",
+            "export remains manual",
+            "caller reviews",
+            "client reviews",
+            "user confirmation",
+        ] {
+            #expect(!publishedText.contains(request), "workflow catalog requested human recovery through: \(request)")
+        }
+
+        let guarded = workflows.filter { $0.mutationKind == .guardedMutation }
+        #expect(!guarded.isEmpty)
+        for workflow in guarded {
+            let recovery = workflow.rollbackOrRecovery.lowercased()
+            #expect(
+                recovery.contains("terminal") || recovery.contains("terminates"),
+                "\(workflow.id) must describe a bounded terminal outcome when verified recovery is unavailable"
+            )
+        }
+
+        let composition = try #require(workflows.first { $0.id == "logic.workflow.composition.session_plan" })
+        #expect(composition.limitations.contains { $0.contains("reported as unsupported") })
+
+        let bounce = try #require(workflows.first { $0.id == "logic.workflow.bounce.readiness" })
+        #expect(bounce.scope.contains("unsupported"))
+        #expect(bounce.scope.contains("terminates before any write"))
+    }
+
     @Test("default workflows declare required fields that match served top-level resource shapes")
     func defaultWorkflowRequiredFieldsMatchResourceShapes() {
         let workflows = WorkflowSkillCatalog.defaultWorkflows()
