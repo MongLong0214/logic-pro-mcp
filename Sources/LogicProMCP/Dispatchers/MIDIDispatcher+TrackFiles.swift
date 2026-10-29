@@ -126,7 +126,8 @@ extension MIDIDispatcher {
             }
             var payload: [String: Any] = ["error": code, "verified": false, "success": false,
                 "state": "C", "operation": "midi.\(command)",
-                "hint": "No completed export or note observation is reported. Inspect the explicit destination before retrying after a file-write failure; native UI cleanup may be unconfirmed.",
+                "terminal": true, "human_intervention_required": false, "safe_to_retry": false,
+                "hint": "No completed export or note observation is reported. The explicit destination and any unconfirmed native UI cleanup remain evidence in this terminal result; no automatic continuation is authorized.",
                 "detail": String(describing: classifiedError), "ui_effects": uiEffects]
             payload.merge(fields) { current, _ in current }
             result = midiFilePayload(payload, isError: true)

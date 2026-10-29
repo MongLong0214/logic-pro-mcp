@@ -105,6 +105,13 @@ func midiTrackCommandsRejectMalformedRequestsBeforeTheProvider(fault: String) as
     #expect(body["state"] as? String == "C")
     let verified = try #require(body["verified"] as? Bool)
     #expect(!verified)
+    #expect(try #require(body["terminal"] as? Bool))
+    #expect(!(try #require(body["human_intervention_required"] as? Bool)))
+    #expect(!(try #require(body["safe_to_retry"] as? Bool)))
+    let hint = try #require(body["hint"] as? String)
+    for request in ["inspect", "retry", "manual"] {
+        #expect(!hint.localizedCaseInsensitiveContains(request))
+    }
 }
 
 @Test func midiTrackCommandsReportCollidingIndicesAndTheExplicitRecoveryOption() async throws {
@@ -142,6 +149,9 @@ func midiTrackCommandsRejectMalformedRequestsBeforeTheProvider(fault: String) as
     #expect(body["temporary_name"] as? String == "LPMCP-owned")
     #expect(body["observed_residual_name"] as? String == "User Edit")
     #expect(body["cleanup_status"] as? String == "unconfirmed")
+    #expect(try #require(body["terminal"] as? Bool))
+    #expect(!(try #require(body["human_intervention_required"] as? Bool)))
+    #expect(!(try #require(body["safe_to_retry"] as? Bool)))
 }
 
 @Test func midiTrackCommandsPreservePrimaryCancellationAfterVerifiedTemporaryRenameCleanup() async throws {
