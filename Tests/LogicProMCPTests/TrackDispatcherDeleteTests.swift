@@ -225,9 +225,13 @@ private actor StateBSelectMockChannel: Channel {
         let terminal = try #require(body["terminal"] as? Bool)
         let humanRequired = try #require(body["human_intervention_required"] as? Bool)
         let writeAttempted = try #require(body["write_attempted"] as? Bool)
+        let selectionWriteAttempted = try #require(body["selection_write_attempted"] as? Bool)
+        let targetMutationAttempted = try #require(body["target_mutation_attempted"] as? Bool)
         #expect(terminal)
         #expect(!humanRequired)
-        #expect(!writeAttempted)
+        #expect(writeAttempted)
+        #expect(selectionWriteAttempted)
+        #expect(!targetMutationAttempted)
 
         let hint = try #require(body["hint"] as? String)
         for instruction in ["re-select", "fix Logic", "retry"] {

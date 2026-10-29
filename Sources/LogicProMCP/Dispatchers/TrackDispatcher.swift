@@ -273,7 +273,9 @@ struct TrackDispatcher: OperationTraceDispatching {
                         "operation": "track.delete",
                         "requested_index": index,
                         "select_response": selectResult.message,
-                        "write_attempted": false,
+                        "write_attempted": true,
+                        "selection_write_attempted": true,
+                        "target_mutation_attempted": false,
                         "terminal": true,
                         "human_intervention_required": false,
                     ]
@@ -354,7 +356,9 @@ struct TrackDispatcher: OperationTraceDispatching {
                         "operation": "track.duplicate",
                         "requested_index": index,
                         "select_response": selectResult.message,
-                        "write_attempted": false,
+                        "write_attempted": true,
+                        "selection_write_attempted": true,
+                        "target_mutation_attempted": false,
                         "terminal": true,
                         "human_intervention_required": false,
                     ]
