@@ -96,7 +96,7 @@
     "One protected fixture, one Compressor instance, one host, and ko-KR only.",
     "The native receipt observed the RMS-selected state. Focused tests cover both Peak and RMS plus both/neither selected, wrong title, duplicate, unreadable and drifting evidence, but those test fixtures are not additional native observations.",
     "This read-only observation establishes neither Peak/RMS actuation nor write support, inverse behavior, idempotency, cross-model availability, or a physical-unit mapping.",
-    "The measured binary was built from product source at candidate 79f0229c084c12b3cbe94ddc1bf7b8ec79346de0. The later harness and receipt commit changes no product or test source under measurement.",
+    "The measured binary was built from product source at candidate 79f0229c084c12b3cbe94ddc1bf7b8ec79346de0. The later harness, receipt and CI-guard repair commits change no product source under measurement.",
     "This extends the read-only C1 workflow; it does not satisfy #299's C2 physical-unit write, C3 snapshot/compensation, C4 recommendation/application, or full Compressor closure."
   ],
   "supersedes": null,

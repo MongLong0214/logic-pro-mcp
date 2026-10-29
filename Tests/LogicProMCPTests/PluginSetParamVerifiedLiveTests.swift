@@ -4645,7 +4645,9 @@ func testIssue299CompressorRMSModeReadsOneHotSelectionWithoutWriting(
     )
     let object = try #require(sharedJSONObject(read.message))
     #expect(object["state"] as? String == "A", "\(object)")
-    #expect(object["observed_raw"] as? Bool == rmsSelected)
+    let observedRaw = try #require(object["observed_raw"] as? Bool)
+    if rmsSelected { #expect(observedRaw) }
+    else { #expect(!observedRaw) }
     #expect(object["observed_display"] as? String == (rmsSelected ? "RMS" : "Peak"))
     #expect(object["raw_unit"] as? String == "boolean")
     #expect(object["parameter_read_status"] as? String == "read")
