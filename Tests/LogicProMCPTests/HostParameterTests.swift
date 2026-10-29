@@ -27,7 +27,7 @@ struct HostParameterTests {
     @Test func fingerprintChangesInvalidateManifestAndHideParameters() {
         let parameter = makeParameter("ins_gain", .exactWriteReadback)
         let subject = makeManifest(
-            provider: .mcuC4PluginEdit,
+            provider: .controlsViewAX,
             approved: true,
             parameters: [parameter]
         )

@@ -8,7 +8,7 @@
   "issues": [
     862
   ],
-  "surface": "plugin.mcu",
+  "surface": "system.midi",
   "host": {
     "app": "Logic Pro",
     "version": "12.3",
@@ -25,7 +25,9 @@
     "Sources/LogicProMCP/HostParameters/HostParameterPlane.swift",
     "Tests/LogicProMCPTests/HostParameterTests.swift"
   ],
-  "evidence": [],
+  "evidence": [
+    "evidence/2026-10-29-862-mcu-plugin-edit-strip-identity.json"
+  ],
   "method": "On the live host, selection was changed across a bank boundary and the same strip-relative request was repeated. The selected channel, server-side bank bookkeeping, upper LCD parameter row, lower LCD value row and channel-name toast were compared. A settle delay repaired one immediate bank timing defect but did not create a readback for Logic's bank offset or remove stale lower-row residue.",
   "observations": [
     {
