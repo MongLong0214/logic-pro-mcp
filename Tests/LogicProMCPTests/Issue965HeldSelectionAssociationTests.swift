@@ -814,6 +814,7 @@ struct Issue965HeldSelectionAssociationTests {
         var routingForeignHelpReads = 0
         var routingForeignHelpFirstStack: [String] = []
         var scrollToChangedOutput = false
+        var scrollToMenuPresses = 0
         var scrollToViewportDriftEnabled = false
         var scrollToViewportShifted = false
         var routingModePresses = 0
@@ -896,6 +897,10 @@ struct Issue965HeldSelectionAssociationTests {
         var lateAssociationFocusSampled = false
         var lateAssociationFocusLanded = false
         var inputMenuPresses = 0
+        var outputMenuPresses = 0
+        var measureForwardOutputSampleTime = false
+        var firstOutputMenuOpenAfterForwardWriteAt: Date?
+        var forwardOutputSampledAt: Date?
         var matchingGoalContextID: ObjectIdentifier?
         var matchingAfterNameReads: Int?
         var matchingNameCancelTask: Task<CallTool.Result, Never>?
@@ -1670,6 +1675,11 @@ struct Issue965HeldSelectionAssociationTests {
         try await assertCanonicalPhysicalOutput(mode: mode)
     }
 
+    @Test("Final physical-output popup custody loss is a terminal automatic-cleanup refusal")
+    func finalPhysicalOutputPopupCustodyLossIsTerminal() async throws {
+        try await assertCanonicalPhysicalOutput(mode: "terminal_late_project")
+    }
+
     @Test("An existing checked Bus output may depart only through a singleton local output goal",
           arguments: ["physical", "stereo", "physical_input", "misleading_input", "mixed_name", "mixed_input", "no_output", "no_receiver", "own_bus_input"])
     func canonicalBusDeparturePreviewRetainsItsNarrowContract(destination: String) async throws {
@@ -1717,6 +1727,16 @@ struct Issue965HeldSelectionAssociationTests {
     @Test("Recovery restores the first viewport, not a later owned input-menu displacement")
     func canonicalBusRecoveryRetainsItsFirstViewport() async throws {
         try await assertCanonicalPhysicalOutput(mode: "bus_departure_execute_arrival_replacement_offscreen_peer_intermediate_viewport")
+    }
+
+    @Test("Positive output-slot absence cannot authorize Scroll To recovery")
+    func canonicalBusRecoveryRejectsOutputNoSlot() async throws {
+        try await assertCanonicalPhysicalOutput(mode: "bus_departure_execute_arrival_replacement_offscreen_peer_output_no_slot")
+    }
+
+    @Test("Positive input-slot absence cannot authorize Scroll To recovery")
+    func canonicalBusRecoveryRejectsInputNoSlot() async throws {
+        try await assertCanonicalPhysicalOutput(mode: "bus_departure_execute_arrival_replacement_offscreen_peer_input_no_slot")
     }
 
     @Test("Original-header renewal restores its observed Mixer position before retaining an input source",
@@ -2473,10 +2493,30 @@ struct Issue965HeldSelectionAssociationTests {
     @Test("Canonical output cancellation retains independent Saga reads without duplicate adapter popup reads")
     func canonicalOutputCancellationDoesNotRepeatTheSagasIndependentReadback() async throws {
         let f = try Fixture()
-        try await assertCanonicalPhysicalOutput(mode: "cancel", fixture: f)
+        f.measureForwardOutputSampleTime = true
+        try await assertCanonicalPhysicalOutput(mode: "bus_departure_execute_cancel", fixture: f)
         #expect(f.routingDestinationPresses == 2)
-        #expect(f.inputMenuPresses <= 11,
-                "Keep the captured baseline and bounded independent ownership/writer checkmark reads; no adapter retry may add another popup cycle")
+        #expect(f.inputMenuPresses == 14,
+                "The immediate forward read may reuse its Bus receipt; the inverse still needs a fresh checked Output receipt after its caption readback")
+        #expect(f.outputMenuPresses == 9,
+                "Effect retention must reuse the forward Bus receipt but independently check the restored destination")
+        let forwardOutputSampledAt = try #require(f.forwardOutputSampledAt)
+        let firstOutputMenuOpenAfterForwardWriteAt = try #require(f.firstOutputMenuOpenAfterForwardWriteAt)
+        #expect(forwardOutputSampledAt >= firstOutputMenuOpenAfterForwardWriteAt,
+                "The retained live-independent sampled_at must follow the surviving Output-popup read that produced it")
+    }
+
+    @Test("Inverse scalar caption readback cannot replace its checked compensation receipt")
+    func canonicalOutputCancellationRejectsPostInverseCheckmarkChange() async throws {
+        let f = try Fixture()
+        try await assertCanonicalPhysicalOutput(
+            mode: "bus_departure_execute_cancel_inverse_checkmark_change",
+            fixture: f
+        )
+        #expect(f.routingLateScopeInjected,
+            "Reach the actual boundary after the inverse scalar readback and before compensation publication")
+        #expect(f.routingDestinationPresses == 2,
+            "The counterexample changes only the checked destination after the owned inverse write")
     }
 
     @Test("Canonical output cancellation revalidates the exact Bus receipt after its source is renewed")
@@ -2764,8 +2804,10 @@ struct Issue965HeldSelectionAssociationTests {
                                             lateCheckedReceiverInputChange: Bool,
                                             lateCheckedOutputChange: Bool,
                                             lateUnreadablePeerRouting: Bool) async throws {
-        let survivingSource = requestedMode.hasPrefix("surviving_")
-        let profile = survivingSource ? String(requestedMode.dropFirst("surviving_".count)) : requestedMode
+        let terminalCustodyDiagnostic = requestedMode == "terminal_late_project"
+        let normalizedMode = terminalCustodyDiagnostic ? "forward" : requestedMode
+        let survivingSource = normalizedMode.hasPrefix("surviving_")
+        let profile = survivingSource ? String(normalizedMode.dropFirst("surviving_".count)) : normalizedMode
         let busDeparture = profile.hasPrefix("bus_departure_")
             ? String(profile.dropFirst("bus_departure_".count)) : nil
         let executingBusDeparture = busDeparture?.hasPrefix("execute_") == true
@@ -2788,6 +2830,8 @@ struct Issue965HeldSelectionAssociationTests {
             : !noOutput ? profile : profile == "canonical_no_output" ? "forward"
             : String(profile.dropFirst("canonical_no_output_".count))
         let popupCancellation = executingBusDeparture && requestedOutputMode.hasPrefix("cancel_popup_")
+        let inverseCheckmarkChange = executingBusDeparture
+            && requestedOutputMode == "cancel_inverse_checkmark_change"
         let outputMode = popupCancellation
             ? String(requestedOutputMode.dropFirst("cancel_".count)) : requestedOutputMode
         let delayedReceiverCensus = outputMode.hasPrefix("popup_both_delayed_census")
@@ -2818,7 +2862,7 @@ struct Issue965HeldSelectionAssociationTests {
         let misleadingBeforeReceiver = busReplacement && executingBusDeparture && outputMode == "misleading_before"
         let misleadingReceiver = misleadingBeforeReceiver || (executingBusDeparture && (outputMode == "misleading_receiver"
             || (busReplacement && outputMode == "misleading_after")))
-        let mode = popupCancellation ? "cancel"
+        let mode = popupCancellation || inverseCheckmarkChange ? "cancel"
             : inputPopupFocus ? "forward" : physicalBusInput || changedBusInput ? (outputMode == "physical_input" ? "forward" : "cancel")
             : outputMode.hasPrefix("return_late_") ? String(outputMode.dropFirst("return_".count)) : outputMode
         let destinationLeafLabel = noOutput ? "No Output" : "Output 3-4"
@@ -3113,6 +3157,7 @@ struct Issue965HeldSelectionAssociationTests {
                 let scrollView = f.builder.element(1_975_400), scrollRoot = f.builder.element(1_975_401)
                 let scrollTo = f.builder.element(1_975_402), scrollSubmenu = f.builder.element(1_975_403)
                 let scrollOutput = f.builder.element(1_975_404), scrollAudio = f.builder.element(1_975_405)
+                let noSlotInputPeer = f.builder.element(1_975_406)
                 if mode.hasPrefix("offscreen_peer") {
                     for (index, strip) in f.strips.enumerated() {
                         f.builder.setFrame(strip, x: CGFloat(index) * 100, y: 100, width: 100, height: 300)
@@ -3257,6 +3302,14 @@ struct Issue965HeldSelectionAssociationTests {
                     if outputs.contains(where: { CFEqual($0, element) }), attribute == kAXHelpAttribute as String {
                         f.routingClassifierHelpReads += 1
                     }
+                    if terminalCustodyDiagnostic,
+                       CFEqual(element, f.window), attribute == kAXDocumentAttribute as String,
+                       f.routingOpenedOutputIndex == 1, !f.routingLateScopeInjected,
+                       Thread.callStackSymbols.contains(where: { $0.contains("sourceStillCurrent") }) {
+                        f.routingLateScopeInjected = true
+                        f.builder.setAttribute(f.window, kAXDocumentAttribute as String,
+                            "file:///tmp/Foreign.logicx")
+                    }
                     if mode == "late_peer", CFEqual(element, noOutputReturn ? stereo : busArrival ? busTwo : physical), attribute == kAXEnabledAttribute as String,
                        !busArrival || ApprovedSessionRepair.outputLeafPermission != nil,
                        f.routingOpenedOutputIndex == 1, f.inputMenuPresses > 1, !f.routingLateScopeInjected {
@@ -3293,6 +3346,13 @@ struct Issue965HeldSelectionAssociationTests {
                         f.routingScalarControls.append(control)
                     }
                     f.builder.setChildren(f.strips[index], f.builder.makeAXRuntime().children(f.strips[index]) + [outputs[index], volume, pan])
+                }
+                if mode == "offscreen_peer_input_no_slot" {
+                    f.builder.setButton(noSlotInputPeer, description: "Input 1",
+                        help: "Input slot. Choose the channel strip input source.", x: 0, y: 0, width: 1, height: 1)
+                    f.builder.setChildren(noSlotInputPeer, [])
+                    f.builder.setActionNames(noSlotInputPeer, [kAXPressAction as String])
+                    f.builder.setChildren(f.strips[3], f.builder.makeAXRuntime().children(f.strips[3]) + [noSlotInputPeer])
                 }
                 if mode == "unread_scalar" {
                     f.builder.setAttribute(f.builder.element(1_973_121), kAXValueAttribute as String, NSNull())
@@ -3443,6 +3503,7 @@ struct Issue965HeldSelectionAssociationTests {
                             return true
                         }
                         if CFEqual(element, scrollOutput) || CFEqual(element, scrollAudio) {
+                            f.scrollToMenuPresses += 1
                             // Scroll exposes the unchanged host value; this is
                             // not a destination leaf or another audio write.
                             f.builder.setAttribute(outputs[3], kAXDescriptionAttribute as String, "Stereo Output")
@@ -3553,6 +3614,12 @@ struct Issue965HeldSelectionAssociationTests {
                     }
                     if action == kAXPressAction as String,
                        let index = outputs.firstIndex(where: { CFEqual($0, element) }) {
+                        if f.measureForwardOutputSampleTime, f.routingDestinationPresses == 1,
+                           f.firstOutputMenuOpenAfterForwardWriteAt == nil {
+                            Thread.sleep(forTimeInterval: 0.02)
+                            f.firstOutputMenuOpenAfterForwardWriteAt = Date()
+                        }
+                        f.outputMenuPresses += 1
                         let label = f.builder.attributeValue(outputs[index], kAXDescriptionAttribute as String) as? String
                         f.builder.setAttribute(echo, kAXTitleAttribute as String, label)
                         if busDeparture != nil { f.builder.setChildren(root, [echo, parent, busParent]) }
@@ -3621,10 +3688,22 @@ struct Issue965HeldSelectionAssociationTests {
                         if mode.hasPrefix("offscreen_peer"), f.routingDestinationPresses == 1,
                            f.routingOpenedOutputIndex == nil {
                             // Native counterexample: input-popup Cancel retires
-                            // the old presentation and an offscreen peer loses
-                            // its rendered slot value, without an audio write.
+                            // the old presentation. An offscreen peer can lose
+                            // its rendered slot value, or a fresh read can
+                            // positively report that an earlier slot is absent,
+                            // without another audio write.
                             f.routingLateScopeInjected = true
-                            f.builder.setAttribute(outputs[3], kAXDescriptionAttribute as String, "Output")
+                            if mode == "offscreen_peer_output_no_slot" {
+                                f.builder.setChildren(f.strips[3], f.builder.makeAXRuntime().children(f.strips[3]).filter {
+                                    !CFEqual($0, outputs[3])
+                                })
+                            } else if mode == "offscreen_peer_input_no_slot" {
+                                f.builder.setChildren(f.strips[3], f.builder.makeAXRuntime().children(f.strips[3]).filter {
+                                    !CFEqual($0, noSlotInputPeer)
+                                })
+                            } else {
+                                f.builder.setAttribute(outputs[3], kAXDescriptionAttribute as String, "Output")
+                            }
                         }
                         if outputMode == "popup_source_retired" || outputMode.hasPrefix("popup_both_"),
                            f.inputMenuPresses > 2, f.routingReplacement == nil {
@@ -3987,7 +4066,7 @@ struct Issue965HeldSelectionAssociationTests {
                     }))
                 } else if mode == "coupled_second_failure" || mode == "coupled_menu_overlay_second_failure" {
                     await router.register(SelectedOutputSagaResultBoundary(f.channel()))
-                } else if noOutput || executingBusDeparture {
+                } else if noOutput || executingBusDeparture || terminalCustodyDiagnostic {
                     await router.register(SelectedOutputSagaResultBoundary(f.channel(), shouldFail: false, observed: { response in
                         f.routingOutputChannelStates.append(response.message)
                     }))
@@ -4044,6 +4123,15 @@ struct Issue965HeldSelectionAssociationTests {
                                 f.builder.setAttribute(outputs[1], kAXDescriptionAttribute as String, "Output 5-6")
                             }
                             if changedBusInput, f.routingDestinationPresses == 1 { f.routingLateScopeInjected = true }
+                            if inverseCheckmarkChange, f.routingDestinationPresses == 2,
+                               !f.routingLateScopeInjected {
+                                // Preserve the inverse slot caption while the next
+                                // independent Output popup reports a different
+                                // checked destination. A scalar State A cannot
+                                // publish this as verified compensation.
+                                f.routingLateScopeInjected = true
+                                f.scrollToChangedOutput = true
+                            }
                             if ["cancel", "newer", "ack_only"].contains(mode) { _ = await journal.cancel(idempotencyKey: key) }
                         }, sagaLiveReadback: .unavailable, approvedSessionRepair: approval)
                 }
@@ -4111,6 +4199,19 @@ struct Issue965HeldSelectionAssociationTests {
                     return
                 }
                 let result = try #require(sharedJSONObject(sharedToolText(await run())))
+                if terminalCustodyDiagnostic {
+                    let message = try #require(f.routingOutputChannelStates.last)
+                    let direct = try #require(sharedJSONObject(message))
+                    #expect(direct["state"] as? String == "C")
+                    #expect(direct["error"] as? String == HonestContract.FailureError.staleTargetReference.rawValue)
+                    #expect(direct["popup_menu_state"] as? String == "custody_lost")
+                    #expect(direct["recovery_hint"] as? String
+                        == "Original popup custody was lost, so automatic cleanup was not authorized. This result is terminal; preserve the observed project state.")
+                    let attempted = try #require(direct["write_attempted"] as? Bool)
+                    #expect(!attempted && f.routingDestinationPresses == 0)
+                    #expect(result["saga_state"] as? String != "completed")
+                    return
+                }
                 if delayedReceiverCensus, delayedReceiverFocusFault != nil {
                     #expect(f.routingDelayedReceiverRedrawInjected,
                         "Reach both exact all-strip redraws before refusing the handoff")
@@ -4176,6 +4277,18 @@ struct Issue965HeldSelectionAssociationTests {
                     #expect(result["saga_state"] as? String != "completed")
                     return
                 }
+                if inverseCheckmarkChange {
+                    #expect(f.routingLateScopeInjected,
+                        "Reach the post-inverse checked-destination contradiction")
+                    #expect(f.routingDestinationPresses == 2,
+                        "The contradiction must not add a third output write")
+                    #expect(result["saga_state"] as? String == "rollbackUncertain",
+                        "Caption-only State A cannot verify a changed popup checkmark: \(result)")
+                    let step = try #require((result["steps"] as? [[String: Any]])?.first)
+                    let compensation = try #require(step["compensation"] as? [String: Any])
+                    #expect(compensation["disposition"] as? String != "verified")
+                    return
+                }
                 if changedBusInput || misleadingReceiver {
                     if changedBusInput { #expect(f.routingLateScopeInjected, "Change the actual input assignment only after the forward write") }
                     #expect(f.routingDestinationPresses == (misleadingReceiver ? 0 : 1),
@@ -4188,6 +4301,12 @@ struct Issue965HeldSelectionAssociationTests {
                 if executingBusDeparture, ["forward", "cancel", "retired"].contains(mode) {
                     let step = try #require((result["steps"] as? [[String: Any]])?.first)
                     let evidence = try #require(step["evidence"] as? [String: Any])
+                    if f.measureForwardOutputSampleTime,
+                       let verification = evidence["verification"] as? [String: Any],
+                       let readback = verification["readback"] as? [String: Any],
+                       let sampledAt = readback["sampled_at"] as? String {
+                        f.forwardOutputSampledAt = ISO8601DateFormatter.cacheFormatter.date(from: sampledAt)
+                    }
                     #expect((evidence["before_state"] as? [String: Any])?["observed"] as? String == (busReplacement ? "bus:3" : busArrival ? "stereo_output" : "bus:2"))
                     if mode == "cancel" {
                         let inverse = try #require(step["compensation"] as? [String: Any])
@@ -4258,7 +4377,12 @@ struct Issue965HeldSelectionAssociationTests {
                         #expect(position.x == 0, "Restoration belongs to the first viewport, not the later displacement")
                     }
                     let verified = try #require(result["verified"] as? Bool)
-                    if mode == "offscreen_peer_checked_change" {
+                    if ["offscreen_peer_output_no_slot", "offscreen_peer_input_no_slot"].contains(mode) {
+                        #expect(f.scrollToMenuPresses == 0,
+                            "Positive slot absence is not unreadable drift and cannot authorize Scroll To")
+                        #expect(result["saga_state"] as? String != "completed")
+                        #expect(!verified)
+                    } else if mode == "offscreen_peer_checked_change" {
                         #expect(f.scrollToChangedOutput)
                         #expect(result["saga_state"] as? String != "completed", "Do not publish the old pre-navigation checkmark")
                         #expect(!verified)
@@ -11445,6 +11569,7 @@ struct Issue965HeldSelectionAssociationTests {
                 if action == kAXPressAction as String, CFEqual(element, input) || CFEqual(element, replacementInput) || CFEqual(element, output) {
                     let inputPressed = !CFEqual(element, output)
                     if inputPressed { f.inputMenuPresses += 1 }
+                    else { f.outputMenuPresses += 1 }
                     if outcome.hasPrefix("composed_name_execution_caption_"), inputPressed, f.routingNameConfirms == 2 {
                         b.setAttribute(source, kAXDescriptionAttribute as String, "Duplicate")
                     }
@@ -13710,6 +13835,131 @@ struct Issue965HeldSelectionAssociationTests {
             #expect(CFEqual(f.focusRestorationWrites[0], f.strips[1]))
             #expect(CFEqual(f.focusRestorationWrites[1], f.rail))
         }
+        let focus: AXUIElement = try #require(AXHelpers.getAttribute(f.app,
+            kAXFocusedUIElementAttribute as String, runtime: f.builder.makeAXRuntime()))
+        #expect(CFEqual(focus, f.rail))
+    }
+
+    @Test("An acknowledged selected-child focus that has not landed still fences the original rail")
+    func unobservedSelectedChildFocusAcknowledgementStillFencesTheOriginalRail() async throws {
+        let f = try Fixture(withViewport: true)
+        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.rail)
+        f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[1]])
+        f.builder.setAttributeSettable(f.rail, kAXFocusedAttribute as String, true)
+        f.builder.setAttributeSettable(f.strips[1], kAXFocusedAttribute as String, true)
+        f.selectedFocusAckOnly = true
+        f.routingReadResult = { element, attribute in
+            if CFEqual(element, f.rail), [kAXValueAttribute, kAXSelectedTextAttribute,
+                kAXNumberOfCharactersAttribute, kAXInsertionPointLineNumberAttribute]
+                .map({ $0 as String }).contains(attribute) {
+                return .failure(.init(raw: AXError.noValue.rawValue))
+            }
+            return nil
+        }
+
+        let body = try await inspect(f, scope: "selection")
+
+        let rows = (body["associations"] as? [String: Any])?["rows"] as? [[String: Any]] ?? []
+        #expect(rows.isEmpty)
+        #expect(f.focusRestorationWrites.count == 2,
+            "The acknowledged selected-focus request owns an inverse duty even when its landing was not observed")
+        if f.focusRestorationWrites.count == 2 {
+            #expect(CFEqual(f.focusRestorationWrites[0], f.strips[1]))
+            #expect(CFEqual(f.focusRestorationWrites[1], f.rail))
+        }
+        #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "restored")
+        let focus: AXUIElement = try #require(AXHelpers.getAttribute(f.app,
+            kAXFocusedUIElementAttribute as String, runtime: f.builder.makeAXRuntime()))
+        #expect(CFEqual(focus, f.rail))
+    }
+
+    @Test("A delayed selected-child focus landing after the rail fence is restored again")
+    func delayedSelectedChildFocusAfterTheRailFenceIsRestoredAgain() async throws {
+        let f = try Fixture(withViewport: true)
+        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.rail)
+        f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[1]])
+        f.builder.setAttributeSettable(f.rail, kAXFocusedAttribute as String, true)
+        f.builder.setAttributeSettable(f.strips[1], kAXFocusedAttribute as String, true)
+        f.selectedFocusAckOnly = true
+        let delayedLandingInjected = SagaAbandonFlag()
+        f.routingRead = { element, attribute in
+            if CFEqual(element, f.app), attribute == kAXFocusedUIElementAttribute as String,
+               f.focusRestorationWrites.count == 2, !delayedLandingInjected.value {
+                delayedLandingInjected.set(true)
+                f.builder.setAttribute(f.app, attribute, f.strips[1])
+            }
+        }
+        f.routingReadResult = { element, attribute in
+            if CFEqual(element, f.rail), [kAXValueAttribute, kAXSelectedTextAttribute,
+                kAXNumberOfCharactersAttribute, kAXInsertionPointLineNumberAttribute]
+                .map({ $0 as String }).contains(attribute) {
+                return .failure(.init(raw: AXError.noValue.rawValue))
+            }
+            return nil
+        }
+
+        let body = try await inspect(f, scope: "selection")
+
+        let rows = (body["associations"] as? [String: Any])?["rows"] as? [[String: Any]] ?? []
+        #expect(rows.isEmpty)
+        #expect(delayedLandingInjected.value)
+        #expect(f.focusRestorationWrites.count == 3)
+        if f.focusRestorationWrites.count == 3 {
+            #expect(CFEqual(f.focusRestorationWrites[0], f.strips[1]))
+            #expect(CFEqual(f.focusRestorationWrites[1], f.rail))
+            #expect(CFEqual(f.focusRestorationWrites[2], f.rail))
+        }
+        #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "restored")
+        let focus: AXUIElement = try #require(AXHelpers.getAttribute(f.app,
+            kAXFocusedUIElementAttribute as String, runtime: f.builder.makeAXRuntime()))
+        #expect(CFEqual(focus, f.rail))
+    }
+
+    @Test("A selected-child landing at a retained focus boundary is still restored",
+          arguments: [5, 209])
+    func delayedSelectedChildFocusDuringFencePreflightIsRestored(
+        railMetadataCallback: Int
+    ) async throws {
+        let f = try Fixture(withViewport: true)
+        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.rail)
+        f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[1]])
+        f.builder.setAttributeSettable(f.rail, kAXFocusedAttribute as String, true)
+        f.builder.setAttributeSettable(f.strips[1], kAXFocusedAttribute as String, true)
+        f.selectedFocusAckOnly = true
+        // Callback 5 lands inside the first post-write passive witness.
+        // Callback 209 lands inside cleanup's original-rail preflight after
+        // the selection-scope population's first 208 retained callbacks.
+        let railReadsAfterAcknowledgement = (0..<railMetadataCallback).map { _ in SagaAbandonFlag() }
+        let delayedLandingInjected = SagaAbandonFlag()
+        f.routingReadResult = { element, attribute in
+            if CFEqual(element, f.rail), [kAXValueAttribute, kAXSelectedTextAttribute,
+                kAXNumberOfCharactersAttribute, kAXInsertionPointLineNumberAttribute]
+                .map({ $0 as String }).contains(attribute) {
+                if f.focusRestorationWrites.count == 1,
+                   let next = railReadsAfterAcknowledgement.first(where: { !$0.value }) {
+                    next.set(true)
+                    if railReadsAfterAcknowledgement.allSatisfy(\.value),
+                       !delayedLandingInjected.value {
+                        delayedLandingInjected.set(true)
+                        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.strips[1])
+                    }
+                }
+                return .failure(.init(raw: AXError.noValue.rawValue))
+            }
+            return nil
+        }
+
+        let body = try await inspect(f, scope: "selection")
+
+        let rows = (body["associations"] as? [String: Any])?["rows"] as? [[String: Any]] ?? []
+        #expect(rows.isEmpty)
+        #expect(delayedLandingInjected.value)
+        #expect(f.focusRestorationWrites.count == 2)
+        if f.focusRestorationWrites.count == 2 {
+            #expect(CFEqual(f.focusRestorationWrites[0], f.strips[1]))
+            #expect(CFEqual(f.focusRestorationWrites[1], f.rail))
+        }
+        #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "restored")
         let focus: AXUIElement = try #require(AXHelpers.getAttribute(f.app,
             kAXFocusedUIElementAttribute as String, runtime: f.builder.makeAXRuntime()))
         #expect(CFEqual(focus, f.rail))

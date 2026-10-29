@@ -9,6 +9,52 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 ## [Unreleased]
 
 ### Added
+- **Compressor `ratio` is available through read-only `logic_plugins get_param_verified` (#299).**
+  The Controls row is sampled twice and returns its raw AX value plus Logic's verbatim ratio display
+  (for example `2.1:1`). The existing non-actuation measurement is preserved: the catalog still has
+  no ratio write method, and `set_param_verified` refuses before any AX action.
+- **Compressor `knee` is available through the same read-only path (#299).**
+  Its measured Controls row returns an opaque raw AX value plus Logic's verbatim display. No
+  normalized conversion or write behavior is inferred; `set_param_verified` still refuses before
+  any AX action.
+- **Compressor `attack` is available through the same read-only path (#299).**
+  Its measured Controls row returns an opaque raw AX value plus Logic's verbatim display (for example
+  `15.0 ms`). No conversion or write behavior is inferred; `set_param_verified` still refuses before
+  any AX action.
+- **Compressor `release` and `makeup` complete the requested read-only scalar recall set (#299).**
+  Their measured Controls rows return opaque raw AX values plus Logic's verbatim displays. No
+  milliseconds/decibels conversion or write behavior is inferred; `set_param_verified` refuses
+  before any AX action.
+- **Compressor `circuit_type` exposes its current value read-only (#299).**
+  The already-selected Controls popup value is sampled twice and returned as a verbatim string
+  without opening the menu. This does not infer a complete choice list or grant selection/write
+  authority; `set_param_verified` still refuses before any AX action.
+- **Compressor `auto_gain` and `distortion` expose their current values read-only (#299).**
+  Their already-selected Controls popup values are sampled twice and returned as verbatim strings
+  without opening either menu. The measured duplicate/unnamed menu choices remain unaddressable by
+  name, so no write method or ordinal-selection authority is granted.
+- **The fixed verifier can carry an opaque session-issued string from a setup call into the row's
+  operation (#1028).** The exact `$observation` parameter form is admitted only for the operation,
+  resolves through the stored raw reply with the judge's strict JSON/path rules, and refuses before
+  the call on an unreadable, missing, empty or non-string value. `docs/acceptance/299.json` uses it
+  for the bounded Compressor-ratio read/non-interference row on the existing Mixer fixture. This is
+  an acceptance definition, not a live two-locale PASS or whole-issue #299 completion.
+- **The fixed verifier can now express the two bounded #291 routing pilots.**
+  `docs/acceptance/291.json` covers a verified physical-output change and restore, plus the
+  requirement that an occupied Send remain partial routing evidence rather than an invented
+  source edge. The live lifecycle gates the exact declared Mixer inputs, outputs, Send-slot counts
+  and occupancy, not only its strip count. Independent probes keep their raw walks as sidecars,
+  require the requested refresh cycle's structured receipt to name `mixer` in `changed_sections`,
+  allow an explicitly uninitialized `fetched_at:null` only before that first refresh, and otherwise
+  require the Mixer timestamp to advance. They also require typed product input and output
+  observations, so missing or unreadable routing cannot impersonate absence while a positively
+  completed output-control walk can report `no_slot` for the fixture's terminal strips.
+  The refreshed product topology must equal the independent AX walk; its full edge list is compared
+  with `inspect_session`, and a Send source edge is refused when the independent Mixer surface has
+  no destination witness.
+  Reset confirmation and Undo must restore that full bounded topology. These rows are
+  admitted and mutation-tested offline; they are not a live ten-locale PASS and do not close
+  #291 or #1028 by themselves.
 - **`logic_mixer set_output_verified`: one strip's output to one exact destination, read back
   from the same strip (#291 R2).** `destination` is `{kind:"bus", number}`, `{kind:"physical",
   ports:[a,b]}` or `{kind:"stereo_output"}`; the strip is `track` or `target_ref`;
@@ -33,6 +79,21 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   censuses grow to 117 operations; the op joins the `legacy_index_allowed` census.
 
 ### Fixed
+- **`record_sequence` works in Logic's default control-bar display mode (#1420).** In "Beats & Project"
+  the Playhead Position group exposes only bar and beat, so the seek to `1.1.1.1` could never reach
+  State A and every `record_sequence` refused with "failed to reset playhead to bar 1". A bar-and-beat
+  reading cannot see a sub-beat offset, and the region check after the import compares bars only, so
+  a partial reading is not accepted. Instead, when the readback before the seek is partial,
+  `record_sequence` switches the display mode to Beats (the existing `displayModePopupLabel` and
+  `beatsDisplayModeItem` labels), reads the position again, requires the seek's full State A as
+  before, and restores the original mode whether the seek was verified or refused. The restore acts
+  only while the same window, project and popup still show Beats, so a mode the user chose in between
+  is left alone, and the import waits until the restore is confirmed. After a verified seek, an
+  unconfirmed restore fails with `display_mode_restore_unverified`; if the seek also refused, its
+  failure remains primary and `display_mode_restore_refused` still names the cleanup failure. Responses
+  report `display_mode_switched_from` and `display_mode_restored`, or
+  `display_mode_switch_unavailable` when the switch could not be made (the seek then refuses as
+  before).
 - **`record_sequence` no longer splits into two tracks for notes off channel 1.** The tick-0 padding
   CC#110 that keeps Logic from dropping the bar offset was always written on channel 1. Logic's MIDI import
   splits a file by channel, so notes on any other channel arrived as two tracks, one holding only the

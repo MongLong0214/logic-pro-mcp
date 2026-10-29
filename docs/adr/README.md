@@ -36,7 +36,7 @@ Two parts of that paragraph no longer hold. ADR-004's in-memory `MutationSaga` i
 | ADR | Name | Category | Status | GitHub issue |
 | --- | --- | --- | --- | --- |
 | ADR-008 | Verified Mixer Routing Graph | C | `In Implementation` | [#291](https://github.com/MongLong0214/logic-pro-mcp/issues/291) |
-| ADR-009 | Verified Plugin Apply-back Expansion | C | `In Implementation` | [#292](https://github.com/MongLong0214/logic-pro-mcp/issues/292) |
+| ADR-009 | Verified Plugin Apply-back Expansion | C | `Closed` | [#292](https://github.com/MongLong0214/logic-pro-mcp/issues/292) |
 | ADR-010 | MIDI Note-level Independent Readback Research | C | `Superseded` | [#293](https://github.com/MongLong0214/logic-pro-mcp/issues/293) closed 2026-09-21 with a non-completion disposition; the implementation queue is [#302](https://github.com/MongLong0214/logic-pro-mcp/issues/302) |
 
 ## Category D — Capability ADRs
@@ -58,10 +58,10 @@ Filed 2026-09-22 and selected in #308 §3 as incremental extensions over #28/#95
 
 | ADR | Name | Category | Status | GitHub issue |
 | --- | --- | --- | --- | --- |
-| ADR-020 | Whole-session Observation | E | `Accepted` | [#965](https://github.com/MongLong0214/logic-pro-mcp/issues/965) |
-| ADR-021 | Intent-aware Session Audit and Repair Planning | E | `Accepted` | [#966](https://github.com/MongLong0214/logic-pro-mcp/issues/966) |
+| ADR-020 | Whole-session Observation | E | `Closed` | [#965](https://github.com/MongLong0214/logic-pro-mcp/issues/965) |
+| ADR-021 | Intent-aware Session Audit and Repair Planning | E | `Closed` | [#966](https://github.com/MongLong0214/logic-pro-mcp/issues/966) |
 | ADR-022 | Verified Bus/Aux Lifecycle | E | `Accepted` | [#967](https://github.com/MongLong0214/logic-pro-mcp/issues/967) |
-| ADR-023 | Non-destructive Session Cleanup (exact naming) | E | `Accepted` | [#968](https://github.com/MongLong0214/logic-pro-mcp/issues/968) |
+| ADR-023 | Non-destructive Session Cleanup (exact naming) | E | `Closed` | [#968](https://github.com/MongLong0214/logic-pro-mcp/issues/968) |
 | ADR-024 | Stack-safe Track Organization | E | `Accepted` | [#969](https://github.com/MongLong0214/logic-pro-mcp/issues/969) |
 | ADR-025 | Verified Track/Strip Colors | E | `Accepted` | [#970](https://github.com/MongLong0214/logic-pro-mcp/issues/970) |
 | ADR-026 | End-to-end Session Repair | E | `Accepted` | [#971](https://github.com/MongLong0214/logic-pro-mcp/issues/971) |
@@ -151,7 +151,7 @@ Kernel increments merged to `main`. State-changing pilot paths stay behind their
 - Deterministic graph-core and runtime-publication tests cover reference-only edges, unresolved and unreadable endpoints, empty-label refusal, declared send omission, partial-graph invariants, write preflight, diffing, and Codable round-trip.
 - Deferred (honest scope): live AX mixer-strip readback (building the graph from real Logic), the popup-driven verified write execution, and live qualification (English/Korean × Desktop/Creator, 32-track fixture). Those need real Logic UI and are not claimed here.
 
-### ADR-009 — Verified Plugin Apply-back Expansion (`In Implementation`)
+### ADR-009 — Verified Plugin Apply-back Expansion (`Closed`)
 - Verified-capability model + registry + pure verification/apply logic only, behind `FeatureFlags.adr009PluginCapabilities` (default off), with no runtime path (no plugin windows are driven).
 - **Honesty core** — `VerifiedParameterCapability` (plugin identity, parameter id, semantic value type + allowed range + tolerance, write/readback method, required view, selector signatures, qualification evidence, lifecycle status) with an `isPubliclyExposable` invariant. The `CapabilityRegistry` seeds candidate parameters (Compressor threshold/ratio/attack/release/makeup, Gain gain/phase-invert, Limiter gain/ceiling/release — Channel EQ deliberately excluded) **all as `experimental` with no evidence**, so `publicCapabilities()` is **empty** — "generic AX control movement is not verified apply-back," and nothing is publicly exposed until live evidence exists.
 - **Pure verification / apply logic** — `verifyReadback` (semantic-value normalization + tolerance → `confirmed` / `mismatch(observed, expected, tolerance)`), `planBatchApply` (all-or-nothing preflight that fails closed on an unsupported parameter or an out-of-range value **before any write**), a `BatchApplyResult` / `BatchApplyOutcome` where a partial application is `complete: false` and **never reports top-level success**, and a `snapshotDiff` for before/after apply-back.
@@ -214,9 +214,9 @@ Kernel increments merged to `main`. State-changing pilot paths stay behind their
 
 ### ADR-018 — Verified Third-Party Host-Parameter Control (`In Implementation`)
 - Host-parameter provider-plane model + capability manifest + a pure host-write gate only, behind `FeatureFlags.adr018HostParams` (default off), with no runtime path. This is host-exposed automatable parameter control, **not** arbitrary GUI automation.
-- **Honesty core (`canHostVerifiedWrite`)** — the provider planes are, in priority order, `mcuC4PluginEdit` › `controlsViewAX` › `separateAUInstance` › `pixelGUI`; only the first two can be a host-verified write. A **separate `AUParameterTree` / AU instance is never host-verifiable** (the MCP server is not the host attached to Logic's live AU instance, so mutating a separate instance would not change the project's insert), and **pixel/coordinate GUI automation is never host-verifiable** (unsafe across plug-in updates / scaling / skins / locale).
+- **Honesty core (`canHostVerifiedWrite`)** — the provider planes retain the potential priority order `mcuC4PluginEdit` › `controlsViewAX` › `separateAUInstance` › `pixelGUI`, but **Controls-view AX is currently the only host-verified plane**. MCU/C4 Plug-in Edit has no exact readback for Logic's bank offset, so a strip index cannot yet be bound to the named channel; it fails closed and is excluded from preference until that identity exists. A **separate `AUParameterTree` / AU instance is never host-verifiable** (the MCP server is not the host attached to Logic's live AU instance, so mutating a separate instance would not change the project's insert), and **pixel/coordinate GUI automation is never host-verifiable** (unsafe across plug-in updates / scaling / skins / locale).
 - **Manifest lifecycle** — a `PluginCapabilityManifest` (provider, per-parameter `GenericPluginParameter` with a value kind, build + UI-signature fingerprints, approval flag) whose parameters are exposed only when the manifest is **approved AND still valid**; a changed build or UI-signature fingerprint **auto-invalidates** the manifest (empty public parameters), an unapproved manifest fails closed, and an `unsupported` value kind is hidden and rejected. Saga eligibility requires a full parameter snapshot **and** a verified inverse snapshot.
-- 11 deterministic synthetic tests (only-Logic-hosted-planes-verify, non-hosted-provider-cannot-expose/validate, fingerprint-invalidation, unapproved-fails-closed, unsupported-hidden/rejected, approved-valid-passes, deterministic rejection reasons, saga-requires-full+verified-inverse, provider priority, Codable round-trip, flag-default-off).
+- 13 deterministic synthetic tests (only-currently-target-bound-plane-verifies, unbound-MCU manifest fails closed, non-hosted-provider-cannot-expose/validate, fingerprint-invalidation, unapproved-fails-closed, unsupported-hidden/rejected, approved-valid-passes, deterministic rejection reasons, saga-requires-full+verified-inverse, verified-provider priority, Codable round-trip, flag-default-off).
 - Deferred (honest scope): the live MCU/C4 Plug-in-Edit and Controls-view AX parameter enumeration/write/readback, live manifest creation + third-party plug-in qualification, and the MCP surface (`approve_plugin_manifest` / …). Those need real Logic and are not claimed here.
 
 ### Release qualification

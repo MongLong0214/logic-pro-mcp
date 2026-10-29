@@ -129,10 +129,10 @@ extension AccessibilityChannel {
     /// `strip_has_no_inserts` confidence we cannot actually verify.
     static let insertSectionNotEnumerableRecoveryHint =
         "No insert slots were enumerable on the located mixer strip. This usually "
-        + "means the mixer's AX layout drifted (reopen it via View > Show Mixer and "
-        + "retry) or the addressed strip has no insert section (e.g. a Master or VCA "
-        + "strip). Confirm the target track's channel strip shows an Audio FX "
-        + "section, then retry."
+        + "means the mixer's AX layout drifted or the addressed strip has no insert "
+        + "section (e.g. a Master or VCA strip). No automatic recovery established "
+        + "an enumerable Audio FX section, so this operation terminated "
+        + "without verified inventory."
 
     struct SlotAddressingFailureDetail {
         let observed: String
@@ -255,7 +255,9 @@ extension AccessibilityChannel {
                         : reveal.attempted
                         ? "the mixer remained hidden after the reveal attempt, so the insert subtree could not be read"
                         : "mixer area was not locatable in the AX tree",
-                    "recovery_hint": "Open View > Show Mixer in Logic Pro and retry the inventory read.",
+                    "recovery_hint": reveal.attempted
+                        ? "Automatic Mixer reveal did not expose a readable insert subtree; the operation terminated without verified inventory."
+                        : "No automatic Mixer reveal was authorized for this read from the observed state; the operation terminated without verified inventory.",
                     "safe_to_retry": true,
                 ]
             ))
@@ -342,7 +344,7 @@ extension AccessibilityChannel {
                     "mixer_reveal_attempted": reveal.attempted,
                     "mixer_reveal_strategies": reveal.strategies,
                     "what_was_observed": "an occupied insert exposed a generic slot label instead of its plugin name",
-                    "recovery_hint": "Scroll the target channel strip into the Mixer view and retry.",
+                    "recovery_hint": "The occupied insert name remained unreadable, so the operation terminated incomplete.",
                     "safe_to_retry": true,
                 ]
             ))
@@ -2335,7 +2337,7 @@ extension AccessibilityChannel {
                     "write_attempted": false,
                 ]
             ))
-        case .unmeasured:
+        case .measuredNotAddressableByName:
             return .failure(HonestContract.encodeV2StateC(
                 error: .unsupportedParamReadback,
                 extras: [
@@ -2344,6 +2346,19 @@ extension AccessibilityChannel {
                     "param": paramAlias,
                     "what_was_attempted": "preflight the measured Controls-view popup actuation path for \(pluginID).\(paramAlias)",
                     "what_was_observed": ControlsViewBooleanParameterWriter.LocatorFailure.popupNotAddressableByName.observation,
+                    "safe_to_retry": false,
+                    "write_attempted": false,
+                ]
+            ))
+        case .unmeasured:
+            return .failure(HonestContract.encodeV2StateC(
+                error: .unsupportedParamReadback,
+                extras: [
+                    "operation": operation,
+                    "target_identity": identity,
+                    "param": paramAlias,
+                    "what_was_attempted": "preflight the catalog-declared Controls-view actuation path for \(pluginID).\(paramAlias)",
+                    "what_was_observed": "actuation_unmeasured",
                     "safe_to_retry": false,
                     "write_attempted": false,
                 ]
@@ -2524,23 +2539,141 @@ extension AccessibilityChannel {
     /// UI acquisition and its owned view/editor cleanup are shared with writers.
     private enum VerifiedParameterAccess {
         case read(unit: String, contextIsCurrent: () -> Bool, openerOverride: PluginWindowOpener?)
+        case readManifest(
+            buildFingerprint: String,
+            contextIsCurrent: () -> Bool,
+            openerOverride: PluginWindowOpener?
+        )
         case readEQState(contextIsCurrent: () -> Bool, openerOverride: PluginWindowOpener?)
         case write(requested: Double, walkTarget: SliderIncrementWalk.Target?, displayUnit: String, budget: Int)
 
         var isRead: Bool { readContextIsCurrent != nil }
+        var isManifestRead: Bool { if case .readManifest = self { return true }; return false }
         var isEQStateRead: Bool { if case .readEQState = self { return true }; return false }
         var readContextIsCurrent: (() -> Bool)? {
             switch self {
-            case let .read(_, context, _), let .readEQState(context, _): return context
+            case let .read(_, context, _), let .readManifest(_, context, _), let .readEQState(context, _):
+                return context
             case .write: return nil
             }
         }
         var readOpenerOverride: PluginWindowOpener? {
             switch self {
-            case let .read(_, _, opener), let .readEQState(_, opener): return opener
+            case let .read(_, _, opener), let .readManifest(_, _, opener), let .readEQState(_, opener):
+                return opener
             case .write: return nil
             }
         }
+        var manifestBuildFingerprint: String? {
+            if case let .readManifest(buildFingerprint, _, _) = self { return buildFingerprint }
+            return nil
+        }
+    }
+
+    static func defaultGetHostParameterManifest(
+        params: [String: String],
+        runtime: AXLogicProElements.Runtime = .production,
+        pluginWindowOpener: PluginWindowOpener? = nil
+    ) async -> ChannelResult {
+        let operation = "logic_plugins.get_host_parameter_manifest"
+        let expectedPluginIdentity = params["expected_plugin_identity"]?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        let resolvedPluginIdentity = expectedPluginIdentity.flatMap { identity -> String? in
+            guard !identity.isEmpty else { return nil }
+            return VerifiedPluginCatalog.canonicalPluginID(from: identity) ?? identity
+        }
+        guard params["value"] == nil, params["mode"] == nil, params["confirmation"] == nil,
+              let trackRaw = params["track"], let track = Int(trackRaw), track >= 0,
+              let insertRaw = params["insert"], let insert = Int(insertRaw), insert >= 0,
+              let pluginAlias = params["plugin"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !pluginAlias.isEmpty,
+              let pluginID = resolvedPluginIdentity,
+              (VerifiedPluginCatalog.canonicalPluginID(from: pluginAlias) ?? pluginAlias) == pluginID,
+              let buildFingerprint = params["expected_build_fingerprint"]?
+                .trimmingCharacters(in: .whitespacesAndNewlines),
+              !buildFingerprint.isEmpty,
+              let expectedPath = params["project_expected_path"], !expectedPath.isEmpty,
+              params["expected_track_name"] != nil,
+              params["expected_slot_read_status"] == "ok" else {
+            return .error(invalidParamsStateC(
+                operation,
+                "a manifest read requires a resolved occupied insert, project binding and non-empty expected_build_fingerprint; it accepts no write inputs"
+            ))
+        }
+        let modal = AXLogicProElements.dialogPresenceReason(runtime: runtime)
+        guard !modal.isBlocked else {
+            return .error(HonestContract.encodeV2StateC(
+                error: .readbackUnavailable,
+                extras: [
+                    "operation": operation,
+                    "dialog_presence_reason": modal.rawValue,
+                    "refusal_names_an_actual_dialog": modal.namesAnActualDialog,
+                    "write_attempted": false,
+                ]
+            ))
+        }
+        guard case .found(let projectWindow) = AXLogicProElements.arrangeWindowVerifiedRead(runtime: runtime),
+              case .success(.some(let document)) = AXLogicProElements.projectPickerDocumentRead(
+                  projectWindow,
+                  runtime: runtime
+              ),
+              let documentURL = URL(string: document),
+              documentURL.isFileURL,
+              AppleScriptChannel.projectPathsMatch(expectedPath, documentURL.path) else {
+            return .error(HonestContract.encodeV2StateC(
+                error: .projectIdentityMismatch,
+                extras: ["operation": operation, "write_attempted": false]
+            ))
+        }
+        let contextIsCurrent: () -> Bool = {
+            guard !Task.isCancelled,
+                  !AXLogicProElements.dialogPresent(runtime: runtime),
+                  case .found(let currentWindow) = AXLogicProElements.arrangeWindowVerifiedRead(runtime: runtime),
+                  CFEqual(currentWindow, projectWindow),
+                  case .success(.some(let currentDocument)) = AXLogicProElements.projectPickerDocumentRead(
+                      currentWindow,
+                      runtime: runtime
+                  ),
+                  currentDocument.utf8.elementsEqual(document.utf8) else {
+                return false
+            }
+            return true
+        }
+        let popupCheck: PluginPopupMenuCleaner = { runtime in
+            guard let count = logicOwnedPopupMenuWindowCount(runtime: runtime) else {
+                return .popupCountUnavailable
+            }
+            return count == 0
+                ? .noPopupObserved
+                : .couldNotDismiss(initialPopupCount: count, remainingPopupCount: count)
+        }
+        let result = await performVerifiedParameterAccess(
+            operation: operation,
+            referenceParams: params,
+            track: track,
+            insert: insert,
+            pluginID: pluginID,
+            paramKey: "",
+            paramAlias: "host_parameter_manifest",
+            access: .readManifest(
+                buildFingerprint: buildFingerprint,
+                contextIsCurrent: contextIsCurrent,
+                openerOverride: pluginWindowOpener
+            ),
+            writeMethod: "",
+            runtime: runtime,
+            entryLookup: VerifiedPluginCatalog.productionEntryLookup,
+            pluginWindowOpener: pluginWindowOpener ?? livePluginWindowOpener,
+            pluginPopupMenuCleaner: popupCheck
+        )
+        guard contextIsCurrent() else {
+            return parameterReadContextFailure(
+                result,
+                error: .projectIdentityMismatch,
+                operation: operation
+            )
+        }
+        return result
     }
 
     /// Internal reads share the caller's existing UI ownership; the public
@@ -2707,6 +2840,97 @@ extension AccessibilityChannel {
         return .error(HonestContract.encodeV2StateC(error: error, extras: extras))
     }
 
+    private static func hostParameterManifestEnvelope(
+        _ observation: ControlsViewParameterEnumerator.Result,
+        operation: String,
+        targetIdentity: [String: Any]
+    ) -> [String: Any] {
+        let manifest = observation.manifest
+        let identity = observation.identityEvidence
+        let parameters: [[String: Any]] = manifest.parameters.map { parameter in
+            [
+                "parameter_ref": parameter.parameterRef.rawValue,
+                "name": parameter.name,
+                "value_kind": parameter.valueKind.rawValue,
+                "control_role": parameter.controlRole?.rawValue ?? NSNull(),
+                "page": parameter.page,
+                "index": parameter.index,
+            ]
+        }
+        let rows: [[String: Any]] = observation.rowObservations.map { row in
+            let classification: String
+            switch row.classification {
+            case let .parameter(role, valueIsReadable):
+                classification = valueIsReadable
+                    ? "parameter_readable_\(role.rawValue)"
+                    : "parameter_unreadable_\(role.rawValue)"
+            case .refusedNoControl:
+                classification = "refused_no_control"
+            case let .refusedAmbiguousControl(roles):
+                classification = "refused_ambiguous_control_\(roles.joined(separator: ","))"
+            case .refusedUnpairedLabelAndControl:
+                classification = "refused_unpaired_label_and_control"
+            case .refusedEmptyLabel:
+                classification = "refused_empty_label"
+            case .refusedPlaceholderLabel:
+                classification = "refused_placeholder_label"
+            case .refusedAmbiguousLabel:
+                classification = "refused_ambiguous_label"
+            }
+            return [
+                "row_index": row.rowIndex,
+                "observed_label": row.observedLabel ?? NSNull(),
+                "control_roles": row.controlRoles,
+                "value_description": row.valueDescription ?? NSNull(),
+                "value_is_settable": row.valueIsSettable.map { $0 as Any } ?? NSNull(),
+                "classification": classification,
+            ]
+        }
+        let observedWindowIdentifier: Any
+        if let identifier = identity.observedWindowAXIdentifier {
+            observedWindowIdentifier = identifier
+        } else {
+            observedWindowIdentifier = NSNull()
+        }
+        let canonicalPluginIdentifier: Any
+        if let identifier = identity.canonicalPluginIdentifier {
+            canonicalPluginIdentifier = identifier
+        } else {
+            canonicalPluginIdentifier = NSNull()
+        }
+        let identityEnvelope: [String: Any] = [
+            "plugin_name": identity.pluginName,
+            "plugin_name_source": identity.pluginNameSource.rawValue,
+            "window_title": identity.windowTitle,
+            "direct_static_text_values": identity.directStaticTextValues,
+            "observed_window_ax_identifier": observedWindowIdentifier,
+            "canonical_plugin_identifier": canonicalPluginIdentifier,
+        ]
+        return [
+            "operation": operation,
+            "target_identity": targetIdentity,
+            "provider": "controls_view_ax",
+            "plugin_name": manifest.pluginName,
+            "build_fingerprint": manifest.buildFingerprint,
+            "build_fingerprint_source": "caller_expected_unverified",
+            "ui_signature_fingerprint": manifest.uiSignatureFingerprint,
+            "manifest_fingerprint": manifest.manifestFingerprint,
+            "approved": manifest.approved,
+            "write_qualified": false,
+            "complete": true,
+            "parameters": parameters,
+            "parameter_count": parameters.count,
+            "row_observations": rows,
+            "row_observation_count": rows.count,
+            "refused_row_count": rows.filter {
+                ($0["classification"] as? String)?.hasPrefix("refused_") == true
+            }.count,
+            "identity_evidence": identityEnvelope,
+            "canonical_plugin_identifier": canonicalPluginIdentifier,
+            "write_attempted": false,
+        ]
+    }
+
     /// Shared exact occupied-insert acquisition, observed parameter access and
     /// owned UI cleanup. Reads return before every setter/walker branch. Writes
     /// retain their established requested-versus-observed verification contract.
@@ -2731,7 +2955,14 @@ extension AccessibilityChannel {
         // Read metadata selects its plane without borrowing write qualification.
         let controlsViewCheckbox = access.isRead ? readsControlsCheckbox
             : writeMethod == "ax_controls_view_checkbox_press"
-        let usesControlsView = controlsViewCheckbox || (access.isRead && controlsReadKind != nil)
+        let usesControlsView = controlsViewCheckbox
+            || (access.isRead && controlsReadKind != nil)
+            || access.isManifestRead
+        // An unqualified manifest read may bind the exact display identity
+        // retained in its occupied insert reference. This flag never reaches
+        // the catalog-backed parameter read/write capability decisions.
+        let matchesTargetBoundObservedPluginName = access.isManifestRead
+            && VerifiedPluginCatalog.canonicalPluginID(from: pluginID) == nil
         let controlsViewRowLabel = usesControlsView
             ? VerifiedPluginCatalog.controlsViewRowLabel(
                 pluginID: pluginID,
@@ -2778,7 +3009,7 @@ extension AccessibilityChannel {
         // by its measured track/plugin header first, then select and confirm
         // the view required by the write plane before any slider lookup.
         let requiringWindowSlider = false
-        if usesControlsView, controlsViewRowLabel == nil {
+        if usesControlsView, !access.isManifestRead, controlsViewRowLabel == nil {
             return .error(HonestContract.encodeV2StateC(
                 error: .unsupportedParamReadback,
                 extras: [
@@ -2891,7 +3122,10 @@ extension AccessibilityChannel {
         if let refusal = pluginInsertReferenceGuard(params: referenceParams, slot: slots[insert], operation: operation) {
             return refusal
         }
-        guard observedPluginID == pluginID else {
+        let observedPluginMatches = matchesTargetBoundObservedPluginName
+            ? observedPluginName?.trimmingCharacters(in: .whitespacesAndNewlines) == pluginID
+            : observedPluginID == pluginID
+        guard observedPluginMatches else {
             return .error(HonestContract.encodeV2StateC(
                 error: .targetPluginMismatch,
                 extras: [
@@ -2914,10 +3148,13 @@ extension AccessibilityChannel {
         let conflictingInsertIndices = slots.compactMap { slot -> Int? in
             guard slot.occupied,
                   slot.readStatus == .occupiedReadable,
-                  let name = slot.name,
-                  VerifiedPluginCatalog.pluginID(forObservedName: name) == pluginID else {
+                  let name = slot.name else {
                 return nil
             }
+            let matches = matchesTargetBoundObservedPluginName
+                ? name.trimmingCharacters(in: .whitespacesAndNewlines) == pluginID
+                : VerifiedPluginCatalog.pluginID(forObservedName: name) == pluginID
+            guard matches else { return nil }
             return slot.index
         }
         let duplicatedPluginInstance = conflictingInsertIndices.count > 1
@@ -2935,7 +3172,9 @@ extension AccessibilityChannel {
             guard let contextIsCurrent = access.readContextIsCurrent else { return true }
             guard !readContextEnded, contextIsCurrent(),
                   targetPluginIdentityIsStable(target: target, insert: insert, pluginID: pluginID,
-                    originalSlot: slots[insert].element, runtime: runtime) else {
+                    originalSlot: slots[insert].element,
+                    matchingObservedPluginName: matchesTargetBoundObservedPluginName,
+                    runtime: runtime) else {
                 readContextEnded = true
                 return false
             }
@@ -2950,9 +3189,14 @@ extension AccessibilityChannel {
             guard let contextIsCurrent = access.readContextIsCurrent else { return true }
             guard !readContextEnded, contextIsCurrent(),
                   targetPluginIdentityIsStable(target: target, insert: insert, pluginID: pluginID,
-                    originalSlot: slots[insert].element, runtime: runtime),
+                    originalSlot: slots[insert].element,
+                    matchingObservedPluginName: matchesTargetBoundObservedPluginName,
+                    runtime: runtime),
                   case .success(let editors) = AXLogicProElements.matchingPluginEditorWindows(
-                    forTrackName: trackName, matchingPluginID: pluginID, runtime: runtime),
+                    forTrackName: trackName,
+                    matchingPluginID: pluginID,
+                    matchingObservedPluginName: matchesTargetBoundObservedPluginName ? pluginID : nil,
+                    runtime: runtime),
                   editors.contains(where: { CFEqual($0, window) }) else {
                 readContextEnded = true
                 return false
@@ -2981,14 +3225,14 @@ extension AccessibilityChannel {
             if restoration.leftViewChanged {
                 extras["plugin_view_left_changed"] = true
                 extras["plugin_view_restore_observed_structure"] = restoration.observedStructure ?? NSNull()
-                extras["plugin_view_restore_recovery_hint"] = "The plug-in view could not be restored to the view observed before this operation. Select the prior view manually before continuing."
+                extras["plugin_view_restore_recovery_hint"] = "Automatic plug-in view restoration could not restore the pre-operation view; the operation is terminal until a later call can re-establish verified view state."
             } else if !restoration.confirmed {
                 // A failed restore confirmation does not establish that the
                 // view changed. When AX cannot classify the current view, say
                 // exactly that rather than reporting an unobserved change.
                 extras["plugin_view_restore_unobserved"] = true
                 extras["plugin_view_restore_observed_structure"] = restoration.observedStructure ?? NSNull()
-                extras["plugin_view_restore_recovery_hint"] = "The plug-in view restoration could not be observed. Verify the prior view before continuing."
+                extras["plugin_view_restore_recovery_hint"] = "Automatic plug-in view restoration could not be observed; the operation is terminal without a verified restored view."
             }
         }
 
@@ -3024,12 +3268,12 @@ extension AccessibilityChannel {
             if !closeObserved {
                 if access.isRead, readContextEnded {
                     extras["editor_cleanup_unobserved"] = true
-                    extras["recovery_hint"] = "Editor ownership ended before cleanup could be confirmed. Inspect the open editor manually before continuing."
+                    extras["recovery_hint"] = "Automatic editor cleanup lost target custody before cleanup could be confirmed; this outcome is terminal and does not authorize another editor mutation."
                 } else if !access.isRead || windows.contains(where: {
                     AXLogicProElements.pluginEditorWindowIsOpen($0, runtime: runtime) == true
                 }) {
                     extras["editor_still_open"] = true
-                    extras["recovery_hint"] = "The \(pluginID) editor opened for this operation is still visible on track \(track). Close it before another duplicate-instance write."
+                    extras["recovery_hint"] = "Automatic editor cleanup failed for the \(pluginID) editor opened on track \(track); later duplicate-instance writes refuse while that editor remains observable."
                 } else {
                     extras["editor_cleanup_unobserved"] = true
                 }
@@ -3092,6 +3336,7 @@ extension AccessibilityChannel {
             switch AXLogicProElements.matchingPluginEditorWindows(
                 forTrackName: trackName,
                 matchingPluginID: pluginID,
+                matchingObservedPluginName: matchesTargetBoundObservedPluginName ? pluginID : nil,
                 runtime: runtime
             ) {
             case let .success(observed):
@@ -3122,6 +3367,7 @@ extension AccessibilityChannel {
             if case let .pluginIdentityMismatch(observedNames) = AXLogicProElements.pluginWindowMatch(
                 forTrackName: trackName,
                 matchingPluginID: pluginID,
+                matchingObservedPluginName: matchesTargetBoundObservedPluginName ? pluginID : nil,
                 matchingSliderDescription: axDescription,
                 requiringMatchingSlider: requiringWindowSlider,
                 runtime: runtime
@@ -3136,6 +3382,7 @@ extension AccessibilityChannel {
             if case let .unreadable(error) = AXLogicProElements.pluginWindowMatch(
                 forTrackName: trackName,
                 matchingPluginID: pluginID,
+                matchingObservedPluginName: matchesTargetBoundObservedPluginName ? pluginID : nil,
                 matchingSliderDescription: axDescription,
                 requiringMatchingSlider: requiringWindowSlider,
                 runtime: runtime
@@ -3194,6 +3441,7 @@ extension AccessibilityChannel {
             switch await pollMatchingPluginEditorWindows(
                 trackName: trackName,
                 pluginID: pluginID,
+                matchingObservedPluginName: matchesTargetBoundObservedPluginName,
                 runtime: runtime,
                 timeoutMs: 1_250,
                 contextIsCurrent: acquisitionAllowed
@@ -3221,6 +3469,7 @@ extension AccessibilityChannel {
                 if case let .pluginIdentityMismatch(observedNames) = AXLogicProElements.pluginWindowMatch(
                     forTrackName: trackName,
                     matchingPluginID: pluginID,
+                    matchingObservedPluginName: matchesTargetBoundObservedPluginName ? pluginID : nil,
                     matchingSliderDescription: axDescription,
                     requiringMatchingSlider: requiringWindowSlider,
                     runtime: runtime
@@ -3255,6 +3504,7 @@ extension AccessibilityChannel {
         let preAcquisitionWindowMatch = AXLogicProElements.pluginWindowMatch(
             forTrackName: trackName,
             matchingPluginID: pluginID,
+            matchingObservedPluginName: matchesTargetBoundObservedPluginName ? pluginID : nil,
             matchingSliderDescription: axDescription,
             requiringMatchingSlider: requiringWindowSlider,
             runtime: runtime
@@ -3327,6 +3577,7 @@ extension AccessibilityChannel {
                 trackName: trackName,
                 axDescription: controlsViewEditorAnchor ?? "",
                 requiringMatchingSlider: false,
+                matchingObservedPluginName: matchesTargetBoundObservedPluginName,
                 runtime: runtime,
                 allowingChanges: beginAcquisitionAction,
                 contextIsCurrent: acquisitionAllowed
@@ -3351,7 +3602,10 @@ extension AccessibilityChannel {
             if access.isRead, acquisitionActionAttempted,
                let before = pluginEditorWindowsBeforeNormalAcquisition,
                case let .success(editors) = AXLogicProElements.matchingPluginEditorWindows(
-                    forTrackName: trackName, matchingPluginID: pluginID, runtime: runtime) {
+                    forTrackName: trackName,
+                    matchingPluginID: pluginID,
+                    matchingObservedPluginName: matchesTargetBoundObservedPluginName ? pluginID : nil,
+                    runtime: runtime) {
                 let created = editors.filter { candidate in !before.contains { CFEqual($0, candidate) } }
                 if created.count == 1 { constructedWindowsNeedingCleanup = created }
             }
@@ -3362,6 +3616,7 @@ extension AccessibilityChannel {
             if case let .pluginIdentityMismatch(observedNames) = AXLogicProElements.pluginWindowMatch(
                 forTrackName: trackName,
                 matchingPluginID: pluginID,
+                matchingObservedPluginName: matchesTargetBoundObservedPluginName ? pluginID : nil,
                 matchingSliderDescription: axDescription,
                 requiringMatchingSlider: requiringWindowSlider,
                 runtime: runtime
@@ -3392,6 +3647,7 @@ extension AccessibilityChannel {
             switch AXLogicProElements.pluginWindowMatch(
                 forTrackName: trackName,
                 matchingPluginID: pluginID,
+                matchingObservedPluginName: matchesTargetBoundObservedPluginName ? pluginID : nil,
                 matchingSliderDescription: axDescription,
                 requiringMatchingSlider: requiringWindowSlider,
                 runtime: runtime
@@ -3469,6 +3725,7 @@ extension AccessibilityChannel {
             switch AXLogicProElements.matchingPluginEditorWindows(
                 forTrackName: trackName,
                 matchingPluginID: pluginID,
+                matchingObservedPluginName: matchesTargetBoundObservedPluginName ? pluginID : nil,
                 runtime: runtime
             ) {
             case let .success(editors) where editors.count == 1:
@@ -3482,9 +3739,14 @@ extension AccessibilityChannel {
             guard let contextIsCurrent = access.readContextIsCurrent else { return true }
             guard !readContextEnded, contextIsCurrent(),
                   targetPluginIdentityIsStable(target: target, insert: insert, pluginID: pluginID,
-                    originalSlot: slots[insert].element, runtime: runtime),
+                    originalSlot: slots[insert].element,
+                    matchingObservedPluginName: matchesTargetBoundObservedPluginName,
+                    runtime: runtime),
                   case .success(let editors) = AXLogicProElements.matchingPluginEditorWindows(
-                    forTrackName: trackName, matchingPluginID: pluginID, runtime: runtime),
+                    forTrackName: trackName,
+                    matchingPluginID: pluginID,
+                    matchingObservedPluginName: matchesTargetBoundObservedPluginName ? pluginID : nil,
+                    runtime: runtime),
                   editors.count == 1, CFEqual(editors[0], window) else {
                 readContextEnded = true
                 return false
@@ -3494,6 +3756,13 @@ extension AccessibilityChannel {
         func readViewIsBound(_ view: ControlsViewBooleanParameterWriter.PluginWindowView) -> Bool {
             guard viewChangesAllowed() else { return false }
             if view == .controls {
+                if let buildFingerprint = access.manifestBuildFingerprint {
+                    return ControlsViewParameterEnumerator.enumerate(
+                        in: window,
+                        buildFingerprint: buildFingerprint,
+                        runtime: runtime.ax
+                    ) != nil && viewChangesAllowed()
+                }
                 guard let controlsViewRowLabel,
                       case let .success(controls) = ControlsViewBooleanParameterWriter.rowControls(
                         label: controlsViewRowLabel, in: window, runtime: runtime.ax),
@@ -3506,7 +3775,7 @@ extension AccessibilityChannel {
             in: window,
             windowRefresher: refreshPluginWindowForViewSelection,
             allowingChanges: viewChangesAllowed,
-            headerBoundUndescribedView: access.isRead && controlsReadKind != nil ? readViewIsBound : nil,
+            headerBoundUndescribedView: usesControlsView ? readViewIsBound : nil,
             runtime: runtime.ax
         ) {
         case let .refused(failure, restoration):
@@ -3536,15 +3805,79 @@ extension AccessibilityChannel {
         }
         restorePluginViewOnExit = { viewSession.restore(allowingChanges: viewChangesAllowed) }
         let resultAfterViewPreparation: ChannelResult = {
+        if case let .readManifest(buildFingerprint, contextIsCurrent, _) = access {
+            func currentInstance() -> Bool {
+                contextIsCurrent() && targetPluginIdentityIsStable(
+                    target: target,
+                    insert: insert,
+                    pluginID: pluginID,
+                    originalSlot: slots[insert].element,
+                    matchingObservedPluginName: matchesTargetBoundObservedPluginName,
+                    runtime: runtime
+                ) && controlsViewAcquiredPluginWindowFailureStateC(
+                    acquiredWindow: window,
+                    operation: operation,
+                    identity: identity,
+                    pluginID: pluginID,
+                    trackName: trackName,
+                    matchingObservedPluginName: matchesTargetBoundObservedPluginName,
+                    runtime: runtime
+                ) == nil
+            }
+            guard currentInstance() else {
+                readContextEnded = true
+                return .error(windowIdentityUnresolvedStateC(
+                    operation,
+                    identity,
+                    "the acquired target/editor context ended before its Controls-view manifest read"
+                ))
+            }
+            guard let observation = ControlsViewParameterEnumerator.enumerate(
+                in: window,
+                buildFingerprint: buildFingerprint,
+                runtime: runtime.ax
+            ) else {
+                return .error(HonestContract.encodeV2StateC(
+                    error: .readbackUnavailable,
+                    extras: [
+                        "operation": operation,
+                        "target_identity": identity,
+                        "what_was_attempted": "enumerate every Controls-view parameter row",
+                        "what_was_observed": "the Controls-view table or a required row/header attribute was unavailable",
+                        "write_attempted": false,
+                    ]
+                ))
+            }
+            guard currentInstance() else {
+                readContextEnded = true
+                return .error(windowIdentityUnresolvedStateC(
+                    operation,
+                    identity,
+                    "the acquired target/editor context ended during its Controls-view manifest read"
+                ))
+            }
+            var extras = hostParameterManifestEnvelope(
+                observation,
+                operation: operation,
+                targetIdentity: identity
+            )
+            appendPluginViewRestoration(to: &extras)
+            appendOwnedEditorCleanup(to: &extras)
+            return .success(HonestContract.encodeV2StateA(extras: extras))
+        }
         if let controlsReadKind, let controlsViewRowLabel,
            case let .read(rawUnit, contextIsCurrent, _) = access {
             func currentInstance() -> Bool {
                 contextIsCurrent() && targetPluginIdentityIsStable(
                     target: target, insert: insert, pluginID: pluginID,
-                    originalSlot: slots[insert].element, runtime: runtime
+                    originalSlot: slots[insert].element,
+                    matchingObservedPluginName: matchesTargetBoundObservedPluginName,
+                    runtime: runtime
                 ) && controlsViewAcquiredPluginWindowFailureStateC(
                     acquiredWindow: window, operation: operation, identity: identity,
-                    pluginID: pluginID, trackName: trackName, runtime: runtime
+                    pluginID: pluginID, trackName: trackName,
+                    matchingObservedPluginName: matchesTargetBoundObservedPluginName,
+                    runtime: runtime
                 ) == nil
             }
             guard currentInstance() else {
@@ -3584,10 +3917,14 @@ extension AccessibilityChannel {
             let instanceIsCurrent: () -> Bool = {
                 contextIsCurrent() && targetPluginIdentityIsStable(
                     target: target, insert: insert, pluginID: pluginID,
-                    originalSlot: slots[insert].element, runtime: runtime
+                    originalSlot: slots[insert].element,
+                    matchingObservedPluginName: matchesTargetBoundObservedPluginName,
+                    runtime: runtime
                 ) && controlsViewAcquiredPluginWindowFailureStateC(
                     acquiredWindow: window, operation: operation, identity: identity,
-                    pluginID: pluginID, trackName: trackName, runtime: runtime
+                    pluginID: pluginID, trackName: trackName,
+                    matchingObservedPluginName: matchesTargetBoundObservedPluginName,
+                    runtime: runtime
                 ) == nil
             }
             var extras = ChannelEQControlsStateReader.collect(
@@ -3638,6 +3975,7 @@ extension AccessibilityChannel {
                 insert: insert,
                 pluginID: pluginID,
                 originalSlot: slots[insert].element,
+                matchingObservedPluginName: matchesTargetBoundObservedPluginName,
                 runtime: runtime
             ) else {
                 return .error(windowIdentityUnresolvedStateC(
@@ -3652,6 +3990,7 @@ extension AccessibilityChannel {
                 identity: identity,
                 pluginID: pluginID,
                 trackName: trackName,
+                matchingObservedPluginName: matchesTargetBoundObservedPluginName,
                 runtime: runtime
             ) {
                 return .error(failure)
@@ -3668,9 +4007,13 @@ extension AccessibilityChannel {
                 func currentControl() -> Bool {
                     guard contextIsCurrent(),
                           targetPluginIdentityIsStable(target: target, insert: insert, pluginID: pluginID,
-                            originalSlot: slots[insert].element, runtime: runtime),
+                            originalSlot: slots[insert].element,
+                            matchingObservedPluginName: matchesTargetBoundObservedPluginName,
+                            runtime: runtime),
                           controlsViewAcquiredPluginWindowFailureStateC(acquiredWindow: window, operation: operation,
-                            identity: identity, pluginID: pluginID, trackName: trackName, runtime: runtime) == nil,
+                            identity: identity, pluginID: pluginID, trackName: trackName,
+                            matchingObservedPluginName: matchesTargetBoundObservedPluginName,
+                            runtime: runtime) == nil,
                           case .found(.checkBox(let current)) = ControlsViewBooleanParameterWriter.locate(
                             label: controlsViewRowLabel, in: window, runtime: runtime.ax), CFEqual(current, checkbox) else { return false }
                     return true
@@ -3729,9 +4072,13 @@ extension AccessibilityChannel {
                         projectPath: referenceParams["project_expected_path"] ?? "", observed: .bool(before)),
                         pluginRollbackOperationIsCurrent(),
                         targetPluginIdentityIsStable(target: target, insert: insert, pluginID: pluginID,
-                            originalSlot: slots[insert].element, runtime: runtime),
+                            originalSlot: slots[insert].element,
+                            matchingObservedPluginName: matchesTargetBoundObservedPluginName,
+                            runtime: runtime),
                         controlsViewAcquiredPluginWindowFailureStateC(acquiredWindow: window, operation: operation,
-                            identity: identity, pluginID: pluginID, trackName: trackName, runtime: runtime) == nil,
+                            identity: identity, pluginID: pluginID, trackName: trackName,
+                            matchingObservedPluginName: matchesTargetBoundObservedPluginName,
+                            runtime: runtime) == nil,
                         case .found(.checkBox(let current)) = ControlsViewBooleanParameterWriter.locate(
                             label: controlsViewRowLabel, in: window, runtime: runtime.ax), CFEqual(current, checkbox),
                         case .success(.some(let latest)) = AXValueExtractors.extractButtonStateResult(checkbox, runtime: runtime.ax),
@@ -3803,7 +4150,9 @@ extension AccessibilityChannel {
             func currentControl() -> Bool {
                 guard contextIsCurrent(),
                       targetPluginIdentityIsStable(target: target, insert: insert, pluginID: pluginID,
-                        originalSlot: slots[insert].element, runtime: runtime),
+                        originalSlot: slots[insert].element,
+                        matchingObservedPluginName: matchesTargetBoundObservedPluginName,
+                        runtime: runtime),
                       acquiredPluginWindowFailureStateC(acquiredWindow: window, operation: operation,
                         identity: identity, pluginID: pluginID, trackName: trackName,
                         axDescription: axDescription, detail: "the editor changed during the parameter read", runtime: runtime) == nil,
@@ -3891,6 +4240,7 @@ extension AccessibilityChannel {
             insert: insert,
             pluginID: pluginID,
             originalSlot: slots[insert].element,
+            matchingObservedPluginName: matchesTargetBoundObservedPluginName,
             runtime: runtime
         ) else {
             return .error(windowIdentityUnresolvedStateC(
@@ -3928,7 +4278,9 @@ extension AccessibilityChannel {
         func rollbackTargetIsCurrent() -> Bool {
             guard pluginRollbackOperationIsCurrent(),
                   targetPluginIdentityIsStable(target: target, insert: insert, pluginID: pluginID,
-                    originalSlot: slots[insert].element, runtime: runtime),
+                    originalSlot: slots[insert].element,
+                    matchingObservedPluginName: matchesTargetBoundObservedPluginName,
+                    runtime: runtime),
                   acquiredPluginWindowFailureStateC(acquiredWindow: window, operation: operation,
                     identity: identity, pluginID: pluginID, trackName: trackName,
                     axDescription: axDescription, detail: "the acquired editor changed before rollback", runtime: runtime) == nil,
@@ -4199,10 +4551,13 @@ extension AccessibilityChannel {
         if access.isRead, readContextEnded {
             return parameterReadContextFailure(finished, error: .windowIdentityUnresolved, operation: operation)
         }
-        if (access.isEQStateRead || controlsReadKind != nil), let contextIsCurrent = access.readContextIsCurrent,
+        if (access.isManifestRead || access.isEQStateRead || controlsReadKind != nil),
+           let contextIsCurrent = access.readContextIsCurrent,
            (!contextIsCurrent() || !targetPluginIdentityIsStable(
                 target: target, insert: insert, pluginID: pluginID,
-                originalSlot: slots[insert].element, runtime: runtime
+                originalSlot: slots[insert].element,
+                matchingObservedPluginName: matchesTargetBoundObservedPluginName,
+                runtime: runtime
            )) {
             // Cleanup can yield after collection. Revalidate the occupied
             // instance, not just the project document, without requiring an
@@ -4741,13 +5096,9 @@ extension AccessibilityChannel {
                 "what_was_attempted": "confirm no \(pluginID) editor was already open before pressing insert \(insert)",
                 "what_was_observed": "\(matchingEditorCount) matching \(pluginID) editor(s) were already open on track \(track)",
                 // A duplicated plug-in can only be bound by opening its editor
-                // from a known-empty state, so an already-open editor is the one
-                // thing the caller must clear. This operation closes the editors
-                // it opens, so reaching here means either a human opened one or a
-                // previous close could not be verified.
-                "recovery_hint": "Close the open \(pluginID) editor(s) on track \(track), then retry. "
-                    + "While the plug-in occupies more than one insert, its editor must be "
-                    + "opened by this operation for the write to be attributable to insert \(insert).",
+                // from a known-empty state. A pre-existing editor prevents this
+                // operation from owning or automatically cleaning up that state.
+                "recovery_hint": "A pre-existing \(pluginID) editor on track \(track) prevents attributable insert \(insert) acquisition; the operation terminated before plug-in parameter or editor mutation.",
                 "safe_to_retry": false,
                 "write_attempted": false,
             ]
@@ -4838,12 +5189,14 @@ extension AccessibilityChannel {
         identity: [String: Any],
         pluginID: String,
         trackName: String,
+        matchingObservedPluginName: Bool = false,
         runtime: AXLogicProElements.Runtime
     ) -> String? {
         let headerBoundWindows: [AXUIElement]
         switch AXLogicProElements.matchingPluginEditorWindows(
             forTrackName: trackName,
             matchingPluginID: pluginID,
+            matchingObservedPluginName: matchingObservedPluginName ? pluginID : nil,
             runtime: runtime
         ) {
         case let .success(observed):
@@ -4877,6 +5230,7 @@ extension AccessibilityChannel {
         trackName: String,
         axDescription: String,
         requiringMatchingSlider: Bool = true,
+        matchingObservedPluginName: Bool = false,
         runtime: AXLogicProElements.Runtime,
         allowingChanges: () -> Bool = { true },
         contextIsCurrent: () -> Bool = { true }
@@ -4884,6 +5238,7 @@ extension AccessibilityChannel {
         switch AXLogicProElements.pluginWindowMatch(
             forTrackName: trackName,
             matchingPluginID: pluginID,
+            matchingObservedPluginName: matchingObservedPluginName ? pluginID : nil,
             matchingSliderDescription: axDescription,
             requiringMatchingSlider: requiringMatchingSlider,
             runtime: runtime
@@ -4929,6 +5284,7 @@ extension AccessibilityChannel {
                 trackName: trackName,
                 axDescription: axDescription,
                 requiringMatchingSlider: requiringMatchingSlider,
+                matchingObservedPluginName: matchingObservedPluginName,
                 runtime: runtime,
                 timeoutMs: 1_250,
                 contextIsCurrent: contextIsCurrent
@@ -5000,16 +5356,20 @@ extension AccessibilityChannel {
         insert: Int,
         pluginID: String,
         originalSlot: AXUIElement,
+        matchingObservedPluginName: Bool = false,
         runtime: AXLogicProElements.Runtime
     ) -> Bool {
         guard AXPluginTrackBinding.isStable(target, runtime: runtime),
               let slots = AXLogicProElements.audioPluginInsertSlots(in: target.strip, runtime: runtime.ax),
               slots.indices.contains(insert), slots[insert].occupied,
               slots[insert].readStatus == .occupiedReadable,
-              let observedName = slots[insert].name,
-              VerifiedPluginCatalog.pluginID(forObservedName: observedName) == pluginID else {
+              let observedName = slots[insert].name else {
             return false
         }
+        let identityMatches = matchingObservedPluginName
+            ? observedName.trimmingCharacters(in: .whitespacesAndNewlines) == pluginID
+            : VerifiedPluginCatalog.pluginID(forObservedName: observedName) == pluginID
+        guard identityMatches else { return false }
         return CFEqual(slots[insert].element, originalSlot)
     }
 
@@ -5088,11 +5448,11 @@ extension AccessibilityChannel {
             return [:]
         case .popupCountUnavailable:
             var fields = pluginPopupMenuStateFields(outcome)
-            fields["recovery_hint"] = "Logic popup-menu state could not be read after plugin-window acquisition. Dismiss any visible popup with Escape before retrying."
+            fields["recovery_hint"] = "Automatic popup cleanup could not read Logic's popup-menu state after plugin-window acquisition; the operation terminated without authorizing another call."
             return fields
         case .couldNotDismiss:
             var fields = pluginPopupMenuStateFields(outcome)
-            fields["recovery_hint"] = "A Logic popup menu remained open after plugin-window acquisition. Dismiss it with Escape before retrying, because it can block Logic's AppleEvent handler."
+            fields["recovery_hint"] = "Automatic popup cleanup could not dismiss a Logic popup menu after plugin-window acquisition; the operation terminated because the menu can block Logic's AppleEvent handler."
             return fields
         }
     }
@@ -5191,6 +5551,7 @@ extension AccessibilityChannel {
         trackName: String,
         axDescription: String,
         requiringMatchingSlider: Bool = true,
+        matchingObservedPluginName: Bool = false,
         runtime: AXLogicProElements.Runtime,
         timeoutMs: Int,
         contextIsCurrent: () -> Bool = { true }
@@ -5201,6 +5562,7 @@ extension AccessibilityChannel {
             switch AXLogicProElements.pluginWindowMatch(
                 forTrackName: trackName,
                 matchingPluginID: pluginID,
+                matchingObservedPluginName: matchingObservedPluginName ? pluginID : nil,
                 matchingSliderDescription: axDescription,
                 requiringMatchingSlider: requiringMatchingSlider,
                 runtime: runtime
@@ -5231,6 +5593,7 @@ extension AccessibilityChannel {
     private static func pollMatchingPluginEditorWindows(
         trackName: String,
         pluginID: String,
+        matchingObservedPluginName: Bool = false,
         runtime: AXLogicProElements.Runtime,
         timeoutMs: Int,
         contextIsCurrent: () -> Bool = { true }
@@ -5241,6 +5604,7 @@ extension AccessibilityChannel {
             switch AXLogicProElements.matchingPluginEditorWindows(
                 forTrackName: trackName,
                 matchingPluginID: pluginID,
+                matchingObservedPluginName: matchingObservedPluginName ? pluginID : nil,
                 runtime: runtime
             ) {
             case let .success(observed):
@@ -5287,12 +5651,12 @@ extension AccessibilityChannel {
         runtime: AXLogicProElements.Runtime,
         allowingChanges: (AXUIElement) -> Bool = { _ in true }
     ) -> Bool {
-        guard let closeButton: AXUIElement = AXHelpers.getAttribute(
-            window, kAXCloseButtonAttribute, runtime: runtime.ax
-        ) else {
-            return false
-        }
         for attempt in 0..<3 {
+            guard let closeButton: AXUIElement = AXHelpers.getAttribute(
+                window, kAXCloseButtonAttribute, runtime: runtime.ax
+            ) else {
+                return false
+            }
             guard allowingChanges(window) else { return false }
             _ = pressElement(closeButton, runtime: runtime.ax)
             if AXLogicProElements.pluginEditorWindowIsOpen(window, runtime: runtime) == false {
@@ -5722,11 +6086,10 @@ extension AccessibilityChannel {
                     "safe_to_retry": false,
                     "write_attempted": true,
                 ]
-                // When the automatic rollback could NOT confirm removal, the stray
-                // plugin is still mounted — guide an LLM agent to clean up manually
-                // rather than leave it guessing (P3-b).
+                // When automatic rollback cannot confirm removal, the stray plug-in
+                // remains an observed partial effect and this target is terminal.
                 if !rollbackResult.succeeded {
-                    extras["recovery_action"] = "undo the last insert manually in Logic Pro (Edit > Undo) — the plugin remains mounted at slot \(observedSlot)"
+                    extras["recovery_action"] = "automatic rollback exhausted; removal of the partial effect was not confirmed at slot \(observedSlot); the operation terminated with no further writes to this target"
                 }
                 return .error(HonestContract.encodeV2StateC(
                     error: .insertLandedAtDifferentSlot,
@@ -5808,10 +6171,10 @@ extension AccessibilityChannel {
                     "rollback_last_click": rollbackResult.lastClickResult,
                     "select_trace": trace,
                     "what_was_attempted": "roll back a stray exact-slot popup insert before continuing",
-                    "what_was_observed": "a plugin mutation remained after automatic rollback could not confirm removal",
+                    "what_was_observed": "automatic rollback could not confirm removal of the previously observed plugin mutation",
                     "recovery_action": slot.map {
-                        "inspect Logic Pro insert slot \($0) and undo/remove the stray plugin manually before retrying"
-                    } ?? "inspect Logic Pro and undo/remove the stray plugin manually before retrying",
+                        "automatic rollback exhausted at insert slot \($0); removal of the partial effect was not confirmed; the operation terminated with no further writes to this target"
+                    } ?? "automatic rollback exhausted; removal of the partial effect was not confirmed; the operation terminated with no further writes to this target",
                     "safe_to_retry": false,
                     "write_attempted": true,
                 ]

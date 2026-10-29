@@ -80,6 +80,7 @@ enum EventListMIDINoteReadbackProviderError: Error, Equatable, Sendable {
     case displayModeUnavailable
     case timeDisplayEnabled
     case displayModeDisagreement(markedAsTime: Bool, positionsAreBBT: Bool)
+    indirect case viewMenuDismissalFailed(primary: EventListMIDINoteReadbackProviderError?)
 
     init(collectorError: EventListReadbackCollectorError) {
         switch collectorError {
@@ -129,6 +130,10 @@ enum EventListMIDINoteReadbackProviderError: Error, Equatable, Sendable {
             self = .displayModeDisagreement(
                 markedAsTime: markedAsTime,
                 positionsAreBBT: positionsAreBBT
+            )
+        case let .viewMenuDismissalFailed(primary):
+            self = .viewMenuDismissalFailed(
+                primary: primary.map(EventListMIDINoteReadbackProviderError.init(collectorError:))
             )
         }
     }

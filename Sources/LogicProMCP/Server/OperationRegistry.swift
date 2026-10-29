@@ -56,6 +56,7 @@ enum OperationID: String, CaseIterable, Codable, Sendable, Hashable {
     case systemSetupArmKey = "system.setup_arm_key"
     case systemSetupControlSurface = "system.setup_control_surface"
     case pluginsGetInventory = "plugins.get_inventory"
+    case pluginsGetHostParameterManifest = "plugins.get_host_parameter_manifest"
     case pluginsGetParamVerified = "plugins.get_param_verified"
     case pluginsPlanParameterChanges = "plugins.plan_parameter_changes"
     case pluginsGetChannelEQStateVerified = "plugins.get_channel_eq_state_verified"
@@ -210,7 +211,10 @@ enum DeadlineClass: Sendable, Equatable {
     case long
     /// A Saga owns a complete forward/readback/conditional-compensation
     /// lifecycle. Keep each ordinary operation in the 300s long tier, while
-    /// allowing the bounded outer lifecycle to contain both directions.
+    /// allowing the bounded outer lifecycle to contain both directions plus
+    /// their independent ownership/readback bookends. #291 measured the
+    /// 32-track/38-strip output path crossing both write boundaries but losing
+    /// the compensation readback at the former 600s wall.
     case saga
 
     var seconds: Double {
@@ -218,7 +222,7 @@ enum DeadlineClass: Sendable, Equatable {
         case .short: 25
         case .medium: 90
         case .long: 300
-        case .saga: 600
+        case .saga: 900
         }
     }
 }
@@ -341,7 +345,7 @@ enum OperationRegistry {
             "system.setup_arm_key", "system.setup_control_surface",
         ],
         ToolID.logicPlugins.rawValue: [
-            "plugins.get_inventory", "plugins.get_param_verified", "plugins.get_channel_eq_state_verified", "plugins.plan_parameter_changes", "plugins.set_param_verified", "plugins.set_eq_band_verified", "plugins.insert_verified",
+            "plugins.get_inventory", "plugins.get_host_parameter_manifest", "plugins.get_param_verified", "plugins.get_channel_eq_state_verified", "plugins.plan_parameter_changes", "plugins.set_param_verified", "plugins.set_eq_band_verified", "plugins.insert_verified",
         ],
         ToolID.logicEdit.rawValue: [
             "edit.undo", "edit.redo", "edit.cut", "edit.copy", "edit.paste", "edit.delete",
@@ -402,7 +406,7 @@ enum OperationRegistry {
             "setup_arm_key", "setup_control_surface",
         ],
         ToolID.logicPlugins.rawValue: [
-            "get_inventory", "get_param_verified", "get_channel_eq_state_verified", "plan_parameter_changes", "set_param_verified", "set_eq_band_verified", "insert_verified",
+            "get_inventory", "get_host_parameter_manifest", "get_param_verified", "get_channel_eq_state_verified", "plan_parameter_changes", "set_param_verified", "set_eq_band_verified", "insert_verified",
         ],
         ToolID.logicEdit.rawValue: [
             "undo", "redo", "cut", "copy", "paste", "delete", "select_all", "split", "join",
@@ -632,8 +636,13 @@ enum OperationRegistry {
             target: entry.3,
             verification: .readbackRequired,
             retry: .neverAutomatic,
-            // Compound routing edits retain source renewal, protected peer reads and owned acquisitions.
-            deadline: [.mixerSetInputBusVerified, .mixerSetSendOutputVerified, .mixerSetSendLevelVerified, .mixerSetSendModeVerified].contains(entry.0) ? .medium : .short,
+            // Compound routing edits retain source renewal, protected peer reads
+            // and owned acquisitions. The selected-output path additionally
+            // scans and rechecks the complete protected Mixer footprint; #291's
+            // 32-track/38-strip run measured 177s before its verified State A.
+            deadline: entry.0 == .mixerSetOutputVerified ? .long
+                : [.mixerSetInputBusVerified, .mixerSetSendOutputVerified,
+                   .mixerSetSendLevelVerified, .mixerSetSendModeVerified].contains(entry.0) ? .medium : .short,
             availability: .defaultInstall,
             allowedParams: allowedParams(
                 for: entry.0,
@@ -745,6 +754,15 @@ enum OperationRegistry {
             VerificationPolicy.none,
             TargetPolicy.none,
             ["index", "track", "track_index", "reveal_mixer"]
+        ),
+        (
+            .pluginsGetHostParameterManifest,
+            "get_host_parameter_manifest",
+            Mutability.readOnly,
+            DeadlineClass.medium,
+            VerificationPolicy.none,
+            TargetPolicy.acceptsStableTarget,
+            ["expected_build_fingerprint", "insert", "plugin", "plugin_id", "plugin_name", "track"]
         ),
         (
             .pluginsGetParamVerified,
@@ -961,8 +979,8 @@ enum OperationRegistry {
         (.midiSendSysEx, "send_sysex", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none, ["bytes", "data"]),
         (.midiPlaySequence, "play_sequence", Mutability.`mutating`, DeadlineClass.medium, VerificationPolicy.none, ["notes", "port"]),
         (.midiImportFile, "import_file", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired, ["path"]),
-        (.midiExportTrackMIDI, "export_track_midi", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired, ["project_ref", "target_ref", "path"]),
-        (.midiReadTrackNotes, "read_track_notes", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired, ["project_ref", "target_ref"]),
+        (.midiExportTrackMIDI, "export_track_midi", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired, ["project_ref", "target_ref", "path", "allow_temporary_track_rename"]),
+        (.midiReadTrackNotes, "read_track_notes", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired, ["project_ref", "target_ref", "allow_temporary_track_rename"]),
         (.midiListPorts, "list_ports", Mutability.readOnly, DeadlineClass.short, VerificationPolicy.none, []),
         (.midiCreateVirtualPort, "create_virtual_port", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none, ["name"]),
         (.midiStepInput, "step_input", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.none, ["duration", "note"]),
@@ -1007,7 +1025,7 @@ enum OperationRegistry {
         (.tracksSolo, "solo", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.acceptsStableTarget, ["enabled", "index", "track"]),
         (.tracksArm, "arm", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.acceptsStableTarget, ["enabled", "index", "track"]),
         (.tracksArmOnly, "arm_only", Mutability.`mutating`, DeadlineClass.short, VerificationPolicy.readbackRequired, TargetPolicy.acceptsStableTarget, ["index", "track"]),
-        (.tracksRecordSequence, "record_sequence", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired, TargetPolicy.none, ["bar", "notes", "tempo"]),
+        (.tracksRecordSequence, "record_sequence", Mutability.`mutating`, DeadlineClass.long, VerificationPolicy.readbackRequired, TargetPolicy.none, ["bar", "notes", "target_expected_name", "target_track", "tempo"]),
         // #448: the menu action globally reorders the arrange rail. It is
         // structural rather than target-indexed, so it needs explicit L2
         // confirmation but accepts no track target reference.

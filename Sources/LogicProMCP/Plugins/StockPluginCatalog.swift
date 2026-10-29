@@ -29,6 +29,7 @@ enum StockPluginSafeWriteCapability: String, Codable, Sendable {
 /// non-actuation is useful safety evidence, but it is never a write capability.
 enum ControlsViewActuationState: String, Codable, Sendable, Equatable {
     case measuredNotActuable = "measured_not_actuable"
+    case measuredNotAddressableByName = "measured_not_addressable_by_name"
     case unmeasured
 }
 
@@ -1538,58 +1539,214 @@ enum StockPluginCatalog {
                 ]
             )
         ),
-        // Ratio has the same observed Controls-view AXSlider non-actuation.
-        // It is intentionally catalogued as a refusal target, not as a
-        // verified parameter, so callers receive the established measurement
-        // rather than the generic "not in the verified allowlist" response.
+        // Apple's parameter metadata pins the shipped name:
+        // logic-canon://madsp/Compressor/-/2#name = "Ratio".
+        // Ratio's Controls row has a display-bearing slider that can be sampled
+        // twice without actuating it. Its write surface remains the separately
+        // measured non-actuating AXSlider, so readability must not imply a
+        // write method.
         StockPluginParameterMetadata(
             id: "ratio",
             displayName: "Ratio",
             unit: "raw_ax_value",
             valueRange: nil,
             writeMethod: nil,
-            readbackMethod: "ax_value_observed",
+            readbackMethod: "ax_controls_view_slider_display",
             controlsViewRowLabel: "Ratio",
             controlsViewControlRole: "AXSlider",
             controlsViewActuationState: .measuredNotActuable,
             availabilityState: .observed,
             provenance: .observed(
-                method: "controls_view_axslider_nonactuation_measurement",
+                method: "controls_view_axslider_read_and_nonactuation_measurement",
                 observedAt: "2026-09-02T11:30:17+09:00",
                 logicVersion: nil,
                 locale: "ko-KR",
                 evidence: [
+                    "parameter_readback",
                     "controls-view-write-20260902-113017",
+                    "Ratio Controls row exposes a stable raw value and verbatim ratio display",
                     "Ratio AXSlider direct AXValue set and AXIncrement were observed non-actuating",
                 ]
             )
         ),
-        // This records readability only. No popup menu actuation was measured,
-        // so it contains no write method and exists solely to refuse by that
-        // missing measurement.
+        // The same measured Controls table associates Knee with a display-bearing
+        // slider. Its raw AX value remains opaque: no normalization or actuation
+        // was measured, so the reader returns Logic's display verbatim and the
+        // catalog grants no write method.
         StockPluginParameterMetadata(
-            id: "circuit_type",
-            displayName: "Circuit Type",
-            unit: "enumerated",
+            id: "knee",
+            displayName: "Knee",
+            unit: "raw_ax_value",
             valueRange: nil,
             writeMethod: nil,
-            readbackMethod: "ax_value_observed",
-            controlsViewRowLabel: "Circuit Type",
-            controlsViewControlRole: "AXPopUpButton",
+            readbackMethod: "ax_controls_view_slider_display",
+            controlsViewRowLabel: "Knee",
+            controlsViewControlRole: "AXSlider",
             controlsViewActuationState: .unmeasured,
             availabilityState: .observed,
             provenance: .observed(
-                method: "controls_view_axpopup_read_measurement",
-                observedAt: "2026-09-02T11:30:17+09:00",
-                logicVersion: nil,
+                method: "exact_head_get_param_verified_read_only_observation",
+                observedAt: "2026-10-29T04:15:10Z",
+                logicVersion: "12.3 (6674)",
                 locale: "ko-KR",
                 evidence: [
-                    // Evidence from the observed Controls-view probe. The catalog
-                    // validator requires corroborating write/readback evidence;
-                    // this token alone is not sufficient to verify a parameter.
                     "parameter_readback",
-                    "controls-view-write-20260902-113017",
-                    "Circuit Type AXValue Platinum Digital observed; popup selection was not measured",
+                    "docs/observations/2026-10-29-299-compressor-knee-read-only-state-a.json",
+                    "State A observed raw 7 and verbatim display 0.7 on the protected fixture",
+                    "No Knee write or raw-to-normalized conversion was measured",
+                ]
+            )
+        ),
+        // The measured Controls table associates this value with the Attack
+        // row and exposes both a raw AXValue and Logic's engineering display.
+        // No Attack actuation was measured, so the raw value stays opaque and
+        // this entry deliberately grants no write method.
+        StockPluginParameterMetadata(
+            id: "attack",
+            displayName: "Attack",
+            unit: "raw_ax_value",
+            valueRange: nil,
+            writeMethod: nil,
+            readbackMethod: "ax_controls_view_slider_display",
+            controlsViewRowLabel: "Attack",
+            controlsViewControlRole: "AXSlider",
+            controlsViewActuationState: .unmeasured,
+            availabilityState: .observed,
+            provenance: .observed(
+                method: "controls_view_read_only_observation",
+                observedAt: "2026-08-30T04:02:24Z",
+                logicVersion: "12.x",
+                locale: "ko-KR",
+                evidence: [
+                    "parameter_readback",
+                    "Attack Controls row exposes a raw AX value and verbatim engineering display",
+                    "No Attack write or raw-to-milliseconds conversion was measured",
+                ]
+            )
+        ),
+        // The same measured Controls table names Release and Make Up rows
+        // whose sliders expose opaque raw values plus Logic-rendered displays.
+        // Neither row has an actuation measurement, so both remain read-only
+        // and no milliseconds/decibels conversion is inferred.
+        StockPluginParameterMetadata(
+            id: "release",
+            displayName: "Release",
+            unit: "raw_ax_value",
+            valueRange: nil,
+            writeMethod: nil,
+            readbackMethod: "ax_controls_view_slider_display",
+            controlsViewRowLabel: "Release",
+            controlsViewControlRole: "AXSlider",
+            controlsViewActuationState: .unmeasured,
+            availabilityState: .observed,
+            provenance: .observed(
+                method: "controls_view_read_only_observation",
+                observedAt: "2026-08-30T04:02:24Z",
+                logicVersion: "12.x",
+                locale: "ko-KR",
+                evidence: [
+                    "parameter_readback",
+                    "Release Controls row exposes a raw AX value and verbatim engineering display",
+                    "No Release write or raw-to-milliseconds conversion was measured",
+                ]
+            )
+        ),
+        StockPluginParameterMetadata(
+            id: "makeup",
+            displayName: "Make Up",
+            unit: "raw_ax_value",
+            valueRange: nil,
+            writeMethod: nil,
+            readbackMethod: "ax_controls_view_slider_display",
+            controlsViewRowLabel: "Make Up",
+            controlsViewControlRole: "AXSlider",
+            controlsViewActuationState: .unmeasured,
+            availabilityState: .observed,
+            provenance: .observed(
+                method: "controls_view_read_only_observation",
+                observedAt: "2026-08-30T04:02:24Z",
+                logicVersion: "12.x",
+                locale: "ko-KR",
+                evidence: [
+                    "parameter_readback",
+                    "Make Up Controls row exposes a raw AX value and verbatim engineering display",
+                    "No Make Up write or raw-to-decibels conversion was measured",
+                ]
+            )
+        ),
+        // These rows record readability only. The 2026-09-04 popup census
+        // measured that the already-selected value is readable, while the
+        // opened menus expose only the current choice or indistinguishable
+        // titles. No entry grants a write method or ordinal selection.
+        StockPluginParameterMetadata(
+            id: "circuit_type",
+            displayName: "Circuit Type",
+            unit: "string",
+            valueRange: nil,
+            writeMethod: nil,
+            readbackMethod: "ax_controls_view_popup_current_value",
+            controlsViewRowLabel: "Circuit Type",
+            controlsViewControlRole: "AXPopUpButton",
+            controlsViewActuationState: .measuredNotAddressableByName,
+            availabilityState: .observed,
+            provenance: .observed(
+                method: "controls_view_axpopup_read_measurement",
+                observedAt: "2026-09-04",
+                logicVersion: "12.3 (6674)",
+                locale: "ko-KR",
+                evidence: [
+                    "parameter_readback",
+                    "docs/observations/2026-09-04-controls-view-popup-selection.json",
+                    "Circuit Type current AXValue Platinum Digital observed",
+                    "Popup selection was measured not addressable by name",
+                ]
+            )
+        ),
+        StockPluginParameterMetadata(
+            id: "auto_gain",
+            displayName: "Auto Gain",
+            unit: "string",
+            valueRange: nil,
+            writeMethod: nil,
+            readbackMethod: "ax_controls_view_popup_current_value",
+            controlsViewRowLabel: "Auto Gain",
+            controlsViewControlRole: "AXPopUpButton",
+            controlsViewActuationState: .measuredNotAddressableByName,
+            availabilityState: .observed,
+            provenance: .observed(
+                method: "controls_view_axpopup_read_measurement",
+                observedAt: "2026-09-04",
+                logicVersion: "12.3 (6674)",
+                locale: "ko-KR",
+                evidence: [
+                    "parameter_readback",
+                    "docs/observations/2026-09-04-controls-view-popup-selection.json",
+                    "Auto Gain current AXValue -12 dB observed",
+                    "Three enabled popup items exposed the same -12 dB title; no choice was addressable by name",
+                ]
+            )
+        ),
+        StockPluginParameterMetadata(
+            id: "distortion",
+            displayName: "Distortion",
+            unit: "string",
+            valueRange: nil,
+            writeMethod: nil,
+            readbackMethod: "ax_controls_view_popup_current_value",
+            controlsViewRowLabel: "Distortion",
+            controlsViewControlRole: "AXPopUpButton",
+            controlsViewActuationState: .measuredNotAddressableByName,
+            availabilityState: .observed,
+            provenance: .observed(
+                method: "controls_view_axpopup_read_measurement",
+                observedAt: "2026-09-04",
+                logicVersion: "12.3 (6674)",
+                locale: "ko-KR",
+                evidence: [
+                    "parameter_readback",
+                    "docs/observations/2026-09-04-controls-view-popup-selection.json",
+                    "Distortion current AXValue Off observed",
+                    "The opened popup exposed no separately named alternative choice",
                 ]
             )
         ),

@@ -240,16 +240,16 @@ struct MutationSagaTests {
     /// ADR-004: a plan whose modeled duration (2× per-step registry deadline —
     /// write + verification readback) reaches the saga-execute budget rejects
     /// before step 1, on >= (an exact fit has zero headroom for unmodeled
-    /// work). The 12 allowlisted ops are DeadlineClass.short (25s → 50s
-    /// modeled) and the bounded Saga lifecycle is 600s, so 12 steps
-    /// (600s modeled) reject while 11 (550s) pass the budget check.
+    /// work). The 18 allowlisted ops are DeadlineClass.short (25s → 50s
+    /// modeled) and the bounded Saga lifecycle is 900s, so 18 steps
+    /// (900s modeled) reject while 17 (850s) pass the budget check.
     @Test
     func preflightRejectsPlansExceedingDeadlineBudget() async {
         let registry = TargetRegistry()
         let valid = await bind(registry, index: 0, name: "Valid")
         let executor = MockSagaExecutor(states: [valid: .string("Before")], behaviors: [])
         let saga = MutationSaga(targetRegistry: registry, enabled: true, routeAvailable: { _ in true })
-        let steps = (0..<12).map { index in
+        let steps = (0..<18).map { index in
             step(.tracksRename, target: valid, value: .string("After-\(index)"))
         }
         let outcome = await saga.execute(
@@ -258,12 +258,12 @@ struct MutationSagaTests {
         )
         #expect(!outcome.complete)
         #expect(outcome.preflightIssues.contains(
-            .deadlineBudgetExceeded(totalSeconds: 600, budgetSeconds: 600)
+            .deadlineBudgetExceeded(totalSeconds: 900, budgetSeconds: 900)
         ))
         #expect(await executor.runCount() == 0)
     }
 
-    /// Boundary control: an 11-step plan (550s modeled < 600s budget) passes the
+    /// Boundary control: a 17-step plan (850s modeled < 900s budget) passes the
     /// budget check and executes — proving the gate discriminates rather than
     /// blanket-rejecting multi-step plans.
     @Test
@@ -272,7 +272,7 @@ struct MutationSagaTests {
         let valid = await bind(registry, index: 0, name: "Valid")
         let executor = MockSagaExecutor(states: [valid: .string("Before")], behaviors: [])
         let saga = MutationSaga(targetRegistry: registry, enabled: true, routeAvailable: { _ in true })
-        let steps = (0..<11).map { index in
+        let steps = (0..<17).map { index in
             step(.tracksRename, target: valid, value: .string("After-\(index)"))
         }
         let outcome = await saga.execute(
@@ -281,7 +281,7 @@ struct MutationSagaTests {
         )
         #expect(outcome.preflightIssues.isEmpty)
         #expect(outcome.complete)
-        #expect(await executor.runCount() == 11)
+        #expect(await executor.runCount() == 17)
     }
 
     /// ADR-004: a step whose registry spec declares a confirmation policy is

@@ -369,9 +369,38 @@ import Testing
 
     private static func failure(
         _ outcome: ArmKeyCommandSetup.Outcome
-    ) -> (stage: String, evidence: ArmKeyCommandSetup.Evidence)? {
-        guard case .failed(let stage, _, let evidence) = outcome else { return nil }
-        return (stage, evidence)
+    ) -> (stage: String, hint: String, evidence: ArmKeyCommandSetup.Evidence)? {
+        guard case .failed(let stage, let hint, let evidence) = outcome else { return nil }
+        return (stage, hint, evidence)
+    }
+
+    private static func expectTerminalDiagnostic(
+        _ outcome: ArmKeyCommandSetup.Outcome,
+        sourceLocation: SourceLocation = #_sourceLocation
+    ) {
+        let message: String
+        switch outcome {
+        case .configInvalid(let hint):
+            message = hint
+        case .failed(_, let hint, _):
+            message = hint
+        case .configuredUnverified(let why, _):
+            message = why
+        default:
+            Issue.record("expected a terminal unsuccessful outcome; got \(outcome)", sourceLocation: sourceLocation)
+            return
+        }
+        let normalized = message.lowercased()
+        for humanStep in [
+            "manually", "re-run", "arm a track", "open it", "close/reset",
+            "check the track", "verify \"toggle track record enable\"",
+            "choose a different chord", "configure a modifier chord", "use the default",
+        ] where normalized.contains(humanStep) {
+            Issue.record(
+                "terminal diagnostic requested a human step `\(humanStep)`: \(message)",
+                sourceLocation: sourceLocation
+            )
+        }
     }
 
     /// A runtime whose every side-effecting hook trips a flag — so we can assert
@@ -502,6 +531,29 @@ import Testing
         #expect(fixture.probe.verifyCalls == 1)
         // Nothing mutated → the response is safe to retry once a track is armed.
         #expect(failure.evidence.safeToRetry)
+        Self.expectTerminalDiagnostic(outcome)
+    }
+
+    @Test func setupFailureDiagnosticsNeverCreateAHumanRecoveryStep() {
+        let outcomes = [
+            ArmKeyCommandSetup.run(
+                consent: true, keyCode: 40, modifiers: [.maskControl, .maskShift],
+                runtime: Self.fixture().runtime
+            ),
+            ArmKeyCommandSetup.run(
+                consent: true, keyCode: 15, modifiers: [], runtime: Self.fixture().runtime
+            ),
+            Self.run(Self.fixture(uiLocale: "unsupported-locale")),
+            Self.run(Self.fixture(windowInitiallyOpen: false, optionKPostSucceeds: false)),
+            Self.run(Self.fixture(commandValues: [])),
+            Self.run(Self.fixture(declineButtonFails: true, conflictAlertOnChord: true)),
+            Self.run(Self.fixture(closeRemovesWindow: false, verify: .verified)),
+            Self.run(Self.fixture(verify: .unmapped)),
+            Self.run(Self.fixture(firstVerify: .unmapped, verify: .environmentUnavailable)),
+        ]
+        for outcome in outcomes {
+            Self.expectTerminalDiagnostic(outcome)
+        }
     }
 
     // MARK: - GUI assignment success (functional arm-flip is the only gate)
@@ -887,7 +939,7 @@ import Testing
         let conflictObserved = try #require(evidence.conflictObserved)
         #expect(conflictObserved)
         // The dismissal failed — reported honestly, NEVER escalated to a steal.
-        #expect(hint.contains("could not be dismissed"))
+        #expect(hint.contains("dismissal was not observed"))
         #expect(!fixture.probe.reassignPressed)
     }
 

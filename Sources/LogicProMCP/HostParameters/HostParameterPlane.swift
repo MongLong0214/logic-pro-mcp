@@ -11,12 +11,13 @@ enum PluginParameterProvider: Int, Codable, Comparable, Sendable {
 
 extension PluginParameterProvider {
     var canHostVerifiedWrite: Bool {
-        self == .mcuC4PluginEdit || self == .controlsViewAX
+        // MCU remains potential-only until Logic's bank and exact strip identity have independent readback (#862).
+        self == .controlsViewAX
     }
 }
 
 func preferredHostPlane(
     available: Set<PluginParameterProvider>
 ) -> PluginParameterProvider? {
-    available.min()
+    available.filter(\.canHostVerifiedWrite).min()
 }

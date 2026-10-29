@@ -731,15 +731,25 @@ extension AccessibilityChannel {
 
         private func passiveReadBegins() -> Bool {
             guard !lost, (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
-                  Self.exclusiveIndex(headers, ax: logic.ax) == expectedIndex,
-                  passiveFocusMatches() else { lost = true; return false }
-            return true
+                  Self.exclusiveIndex(headers, ax: logic.ax) == expectedIndex else {
+                lost = true; return false
+            }
+            return passiveFocusMatches()
         }
 
         private func passiveReadEnds() -> Bool {
             guard Self.exclusiveIndex(headers, ax: logic.ax) == expectedIndex,
-                  let final: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
-                  CFEqual(final, expectedFocus), selectedChildCustodyMatches() else { lost = true; return false }
+                  let final: AXUIElement = AXHelpers.getAttribute(app,
+                    kAXFocusedUIElementAttribute as String, runtime: logic.ax) else {
+                lost = true; return false
+            }
+            // An acknowledged AXFocused request may land after the passive
+            // witness began. It grants no read permission, but the exact
+            // retained selected child still owns a cleanup inverse.
+            if unobservedPreparedSelectedFocusMatches(final) { return false }
+            guard CFEqual(final, expectedFocus), selectedChildCustodyMatches() else {
+                lost = true; return false
+            }
             return true
         }
 
@@ -868,7 +878,11 @@ extension AccessibilityChannel {
         /// population custody still authorize every association action, inverse
         /// and publication. Passive Help never acquires that authority.
         func permitsPassiveFocusRead() -> Bool {
-            guard passiveFocusMatches(), owned(checkingAssociation: false) else { lost = true; return false }
+            // passiveFocusMatches distinguishes an exact delayed preparation
+            // endpoint from foreign focus. Both refuse the read, but only the
+            // latter retires cleanup custody.
+            guard passiveFocusMatches() else { return false }
+            guard owned(checkingAssociation: false) else { lost = true; return false }
             // Fresh final values from this original app, not owned()'s earlier
             // sample. Help still asks the complete proof before every real read.
             let finalApp = AXHelpers.getNonHelpAttributes(app,
@@ -882,6 +896,7 @@ extension AccessibilityChannel {
             let final = unsafeBitCast(rawFocus, to: AXUIElement.self)
             let main = unsafeBitCast(rawMain, to: AXUIElement.self)
             let focusedWindow = unsafeBitCast(rawWindow, to: AXUIElement.self)
+            if unobservedPreparedSelectedFocusMatches(final) { return false }
             guard
                   CFEqual(final, expectedFocus),
                   CFEqual(main, window),
@@ -894,9 +909,21 @@ extension AccessibilityChannel {
 
         private func passiveFocusMatches() -> Bool {
             guard !lost, (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
-                  let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: logic.ax),
-                  CFEqual(focus, expectedFocus) else { lost = true; return false }
+                  let focus: AXUIElement = AXHelpers.getAttribute(app,
+                    kAXFocusedUIElementAttribute as String, runtime: logic.ax) else {
+                lost = true; return false
+            }
+            if unobservedPreparedSelectedFocusMatches(focus) { return false }
+            guard CFEqual(focus, expectedFocus) else { lost = true; return false }
             return passiveAssociationFocusMatches(focus)
+        }
+
+        private func unobservedPreparedSelectedFocusMatches(_ focus: AXUIElement) -> Bool {
+            preparedPopulationFocusRestorationPending
+                && !preparedPopulationFocusIsActive
+                && expectedIndex == originalIndex
+                && CFEqual(expectedFocus, originalFocus)
+                && expectedSelectedChild.map({ CFEqual(focus, $0) }) == true
         }
 
         private func passiveAssociationFocusMatches(_ focus: AXUIElement) -> Bool {
@@ -1357,7 +1384,6 @@ extension AccessibilityChannel {
                 guard attempt < 2 else { break }
                 do { try await Task.sleep(for: .milliseconds(25)) } catch {
                     effects.reason = "mixer_focus_acquisition_unverified"
-                    effects.restoration = "restored"
                     return false
                 }
             }
@@ -1374,7 +1400,6 @@ extension AccessibilityChannel {
                   !stop(), await referenceIsCurrent(), permitsRead(),
                   (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else {
                 effects.reason = "mixer_focus_acquisition_unverified"
-                effects.restoration = "restored"
                 return false
             }
             let source = AXMixerStripBinding.Binding(window: window, mixer: mixer,
@@ -1400,17 +1425,14 @@ extension AccessibilityChannel {
                 }
                 guard clicked, attempt < 2 else {
                     effects.reason = "mixer_focus_acquisition_unverified"
-                    effects.restoration = "restored"
                     return false
                 }
                 do { try await Task.sleep(for: .milliseconds(25)) } catch {
                     effects.reason = "mixer_focus_acquisition_unverified"
-                    effects.restoration = "restored"
                     return false
                 }
             }
             effects.reason = "mixer_focus_acquisition_unverified"
-            effects.restoration = "restored"
             return false
         }
 
@@ -2023,8 +2045,10 @@ extension AccessibilityChannel {
         /// Logic may restore the held selection while retaining the prior strip's
         /// focus; never publish a pair manufactured by this explicit inverse.
         private func restoreOriginalFocus(referenceIsCurrent: @Sendable () async -> Bool,
-                                          stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
-            guard expectedIndex == originalIndex, !CFEqual(expectedFocus, originalFocus),
+                                          stoppingWhen stop: @Sendable () -> Bool,
+                                          fenceUnobservedPreparation: Bool = false) async -> Bool {
+            guard expectedIndex == originalIndex,
+                  fenceUnobservedPreparation || !CFEqual(expectedFocus, originalFocus),
                   !stop(), await referenceIsCurrent() else { return false }
             let originalFocusMatches: Bool
             if let originalRailFocus, CFEqual(originalRailFocus, originalFocus) {
@@ -2037,21 +2061,62 @@ extension AccessibilityChannel {
             }
             guard originalFocusMatches,
                   AXHelpers.isAttributeSettable(originalFocus, kAXFocusedAttribute as String, runtime: logic.ax) == true,
-                  let beforeViewport = currentViewport(), Self.sameViewport(beforeViewport, expectedViewport),
-                  permitsRead(), !stop(), owned(),
-                  // The final census may retire a reference or move focus while
-                  // leaving document, population and transport intact. Renew the
-                  // deciding focus, then scope and reference, after that census.
-                  let decidingFocus: AXUIElement = AXHelpers.getAttribute(app,
+                  let beforeViewport = currentViewport() else {
+                return false
+            }
+            var adoptedDelayedSelectedFocus = false
+            if fenceUnobservedPreparation {
+                // A selected-child focus acknowledgement can land between the
+                // passive rail census above and the full ownership census. The
+                // latter can itself consult focus-scoped retained bindings, so
+                // classify the exact retained endpoint before running it.
+                guard !stop(),
+                      let preflightFocus: AXUIElement = AXHelpers.getAttribute(app,
+                        kAXFocusedUIElementAttribute as String, runtime: logic.ax) else { return false }
+                if let selected = expectedSelectedChild, CFEqual(preflightFocus, selected) {
+                    expectedFocus = selected
+                    expectedViewport = beforeViewport
+                    preparedPopulationFocusIsActive = true
+                    adoptedDelayedSelectedFocus = true
+                    if !effects.changed.contains("keyboard_focus") {
+                        effects.changed.append("keyboard_focus")
+                    }
+                } else {
+                    guard CFEqual(preflightFocus, expectedFocus),
+                          Self.sameViewport(beforeViewport, expectedViewport) else { return false }
+                }
+                guard owned() else { return false }
+            } else {
+                guard Self.sameViewport(beforeViewport, expectedViewport),
+                      permitsRead(), !stop(), owned() else { return false }
+            }
+            // The final census may retire a reference or move focus while
+            // leaving document, population and transport intact. Renew the
+            // deciding focus, then scope and reference, after that census.
+            guard let decidingFocus: AXUIElement = AXHelpers.getAttribute(app,
                     kAXFocusedUIElementAttribute as String, runtime: logic.ax),
-                  CFEqual(decidingFocus, expectedFocus),
                   Self.exclusiveIndex(headers, ax: logic.ax) == originalIndex,
                   let main: AXUIElement = AXHelpers.getAttribute(app, kAXMainWindowAttribute as String, runtime: logic.ax),
                   let focusedWindow: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedWindowAttribute as String, runtime: logic.ax),
                   CFEqual(main, window), CFEqual(focusedWindow, window), currentWindowScopeMatches(),
                   logic.logicProPID() == pid, logic.focusedApplicationPID() == pid,
                   await referenceIsCurrent(), !stop(),
-                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                  CFEqual(decidingFocus, expectedFocus) else { return false }
+            if adoptedDelayedSelectedFocus {
+                guard retainMixerViewportAfterOwnedAction(), permitsRead(), !stop(),
+                      await referenceIsCurrent(),
+                      (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else {
+                    Log.info("Prepared focus preflight refused delayed landing", subsystem: "ax")
+                    return false
+                }
+                let restored = await restoreOriginalFocus(
+                    referenceIsCurrent: referenceIsCurrent, stoppingWhen: stop)
+                if !restored {
+                    Log.info("Prepared focus preflight could not inverse delayed landing", subsystem: "ax")
+                }
+                return restored
+            }
             if expectedMixerViewport != nil {
                 guard !stop(), await referenceIsCurrent(), mixerViewportIsExpected() else { return false }
             }
@@ -2062,6 +2127,58 @@ extension AccessibilityChannel {
             guard AXHelpers.setAttribute(originalFocus, kAXFocusedAttribute as String,
                 NSNumber(value: true), runtime: logic.ax) else { return false }
             let precedingFocus = expectedFocus
+            if fenceUnobservedPreparation {
+                for attempt in 0..<4 {
+                    // Read the deciding focus before the ordinary owned()
+                    // check: a delayed landing is one of the two retained
+                    // endpoints, but owned() still expects the rail until we
+                    // classify and adopt that exact selected child.
+                    guard let focus: AXUIElement = AXHelpers.getAttribute(app,
+                            kAXFocusedUIElementAttribute as String, runtime: logic.ax) else { return false }
+                    if CFEqual(focus, originalFocus) {
+                        guard owned(), let afterViewport = currentViewport(),
+                              Self.sameViewport(afterViewport, expectedViewport) else { return false }
+                        if attempt == 3 {
+                            expectedFocus = originalFocus
+                            expectedViewport = afterViewport
+                            guard retainMixerViewportAfterOwnedAction(), permitsRead(), !stop(),
+                                  await referenceIsCurrent() else { return false }
+                            if !effects.changed.contains("keyboard_focus_restoration") {
+                                effects.changed.append("keyboard_focus_restoration")
+                            }
+                            return true
+                        }
+                        do { try await Task.sleep(for: .milliseconds(30)) } catch { return false }
+                        continue
+                    }
+                    if let selected = expectedSelectedChild, CFEqual(focus, selected),
+                       let afterViewport = currentViewport() {
+                        expectedFocus = selected
+                        expectedViewport = afterViewport
+                        preparedPopulationFocusIsActive = true
+                        if !effects.changed.contains("keyboard_focus") {
+                            effects.changed.append("keyboard_focus")
+                        }
+                        guard retainMixerViewportAfterOwnedAction() else {
+                            Log.info("Prepared focus fence refused delayed landing: viewport custody", subsystem: "ax")
+                            return false
+                        }
+                        guard permitsRead() else {
+                            Log.info("Prepared focus fence refused delayed landing: selected focus custody", subsystem: "ax")
+                            return false
+                        }
+                        let restored = await restoreOriginalFocus(
+                            referenceIsCurrent: referenceIsCurrent, stoppingWhen: stop)
+                        if !restored {
+                            Log.info("Prepared focus fence could not inverse delayed landing", subsystem: "ax")
+                        }
+                        return restored
+                    }
+                    lost = true
+                    return false
+                }
+                return false
+            }
             for attempt in 0..<3 {
                 // As in select(), renew our observed focus before consulting
                 // the passive editing guard: it still holds the preceding focus
@@ -2099,6 +2216,7 @@ extension AccessibilityChannel {
                 effects.reason = effects.reason ?? "association_restoration_unverified"
                 return false
             }
+            var unobservedPreparationFenceRestored: Bool?
             if preparedPopulationFocusRestorationPending,
                !preparedPopulationFocusIsActive {
                 guard let focus: AXUIElement = AXHelpers.getAttribute(app,
@@ -2110,6 +2228,14 @@ extension AccessibilityChannel {
                 if CFEqual(focus, originalFocus) {
                     guard let current = currentViewport(),
                           Self.sameViewport(current, expectedViewport) else {
+                        effects.restoration = "not_restored"
+                        effects.reason = effects.reason ?? "association_restoration_unverified"
+                        return false
+                    }
+                    unobservedPreparationFenceRestored = await restoreOriginalFocus(
+                        referenceIsCurrent: referenceIsCurrent, stoppingWhen: stop,
+                        fenceUnobservedPreparation: true)
+                    guard unobservedPreparationFenceRestored == true else {
                         effects.restoration = "not_restored"
                         effects.reason = effects.reason ?? "association_restoration_unverified"
                         return false
@@ -2135,7 +2261,9 @@ extension AccessibilityChannel {
                 }
             }
             let focusRestored: Bool
-            if expectedIndex == originalIndex, CFEqual(expectedFocus, originalFocus) {
+            if let unobservedPreparationFenceRestored {
+                focusRestored = unobservedPreparationFenceRestored
+            } else if expectedIndex == originalIndex, CFEqual(expectedFocus, originalFocus) {
                 focusRestored = permitsRead()
             } else if expectedIndex == originalIndex {
                 focusRestored = await restoreOriginalFocus(

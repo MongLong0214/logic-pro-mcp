@@ -45,6 +45,7 @@ struct OperationCatalogTests {
     // Plugin selectors are consumed after channel/AX routing, so deterministic headless proof is delegated to live qualification.
     private static let selectorsRequiringLiveQualificationByOperation: [OperationID: Set<String>] = [
         .pluginsGetInventory: ["index", "track"],
+        .pluginsGetHostParameterManifest: ["track"],
         .pluginsGetParamVerified: ["track"],
         .pluginsGetChannelEQStateVerified: ["track"],
         .pluginsPlanParameterChanges: ["track"],
@@ -54,6 +55,7 @@ struct OperationCatalogTests {
     ]
     private static let selectorLiveQualificationReasonByOperation: [OperationID: String] = [
         .pluginsGetInventory: "AX inventory must expose the selected strip identity after ChannelRouter forwarding",
+        .pluginsGetHostParameterManifest: "AX Controls-view enumeration must preserve the occupied insert identity; track only corroborates its issued target_ref",
         .pluginsGetParamVerified: "AX parameter read must expose the occupied insert identity; track only corroborates its issued target_ref",
         .pluginsGetChannelEQStateVerified: "AX whole-EQ read must expose the occupied Channel EQ insert identity; track only corroborates its issued target_ref",
         .pluginsPlanParameterChanges: "B1 reuses the occupied-insert AX B0 reader; track only corroborates its issued reference",
@@ -174,6 +176,9 @@ struct OperationCatalogTests {
         .systemSetupArmKey: ["consent"],
         .systemSetupControlSurface: ["consent"],
         .pluginsGetInventory: ["track_index", "reveal_mixer"],
+        .pluginsGetHostParameterManifest: [
+            "expected_build_fingerprint", "insert", "plugin", "plugin_id", "plugin_name",
+        ],
         .pluginsGetParamVerified: ["insert", "param", "plugin", "plugin_id", "plugin_name", "unit"],
         .pluginsGetChannelEQStateVerified: ["insert", "plugin", "plugin_id", "plugin_name", "project_expected_path"],
         .pluginsPlanParameterChanges: ["changes", "insert", "plugin", "plugin_id", "plugin_name"],
@@ -218,7 +223,8 @@ struct OperationCatalogTests {
         .midiSendSysEx: ["bytes", "data"],
         .midiPlaySequence: ["notes", "port"],
         .midiImportFile: ["path"],
-        .midiExportTrackMIDI: ["path"],
+        .midiExportTrackMIDI: ["allow_temporary_track_rename", "path"],
+        .midiReadTrackNotes: ["allow_temporary_track_rename"],
         .midiCreateVirtualPort: ["name"],
         .midiStepInput: ["duration", "note"],
         .midiMMCLocate: ["bar", "time"],
@@ -227,7 +233,7 @@ struct OperationCatalogTests {
         .tracksMute: ["enabled"],
         .tracksSolo: ["enabled"],
         .tracksArm: ["enabled"],
-        .tracksRecordSequence: ["bar", "notes", "tempo"],
+        .tracksRecordSequence: ["bar", "notes", "target_expected_name", "target_track", "tempo"],
         .tracksSortVerified: ["confirmed", "criterion", "expected_order"],
         .tracksSetAutomation: ["mode"],
         .tracksSetInstrument: ["category", "path", "preset"],

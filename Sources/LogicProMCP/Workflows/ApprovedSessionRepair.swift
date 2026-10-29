@@ -2120,7 +2120,12 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             }
         }
         var expected = task.capture.channelStrips
-        if assignment != task.before { expected[index].output = strips[index].output }
+        // The owned row was freshly read and already proved to encode `assignment` above.
+        // Preserve that paired display/observation even for a no-op assignment: capture-time
+        // rows can predate output observations, and treating corroborating evidence as drift
+        // makes an unchanged physical output fail its own final footprint check.
+        expected[index].output = strips[index].output
+        expected[index].outputObservation = strips[index].outputObservation
         if let ownedSendChange {
             stage = "owned_send_effect"
             guard taskOverride != nil, let sendTask,
@@ -2244,6 +2249,35 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             var changed: [String] = []
             var onlyMissingPeerRouting = expectedTracks == currentTracks
             var missingPeerRouting = false
+            func outputReadbackBecameUnavailable(_ row: Int) -> Bool {
+                guard let oldLabel = expected[row].output,
+                      let oldObservation = expected[row].outputObservation,
+                      oldObservation.state == .observedDestination,
+                      oldObservation.destination == oldLabel,
+                      OutputAssignment.observed(slotLabel: oldLabel) != nil,
+                      let newObservation = strips[row].outputObservation else { return false }
+                switch newObservation.state {
+                case .unreadable:
+                    return strips[row].output == nil && newObservation.destination == nil
+                case .observedDestination:
+                    guard let newLabel = strips[row].output,
+                          newObservation.destination == newLabel else { return false }
+                    return OutputAssignment.observed(slotLabel: newLabel) == nil
+                case .noSlot:
+                    return false
+                }
+            }
+            func inputReadbackBecameUnavailable(_ row: Int) -> Bool {
+                guard let oldSource = expected[row].input,
+                      let oldObservation = expected[row].inputObservation,
+                      oldObservation.state == .observedSource,
+                      oldObservation.source == oldSource,
+                      strips[row].input == nil,
+                      let newObservation = strips[row].inputObservation,
+                      newObservation.state == .unreadable,
+                      newObservation.source == nil else { return false }
+                return true
+            }
             for (domain, oldData, newData) in [("tracks", expectedTracks, currentTracks), ("strips", expectedStrips, currentStrips)] {
                 guard let old = try? JSONSerialization.jsonObject(with: oldData) as? [[String: Any]],
                       let new = try? JSONSerialization.jsonObject(with: newData) as? [[String: Any]] else {
@@ -2259,13 +2293,12 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                         guard domain == "strips", row != index else { onlyMissingPeerRouting = false; continue }
                         for key in keys {
                             switch key {
-                            case "output":
-                                if expected[row].output.flatMap(OutputAssignment.observed(slotLabel:)) == nil
-                                    || strips[row].output.flatMap(OutputAssignment.observed(slotLabel:)) != nil {
+                            case "output", "output_observation":
+                                if !outputReadbackBecameUnavailable(row) {
                                     onlyMissingPeerRouting = false
                                 }
                             case "input", "input_observation":
-                                if expected[row].input == nil || strips[row].input != nil { onlyMissingPeerRouting = false }
+                                if !inputReadbackBecameUnavailable(row) { onlyMissingPeerRouting = false }
                             default: onlyMissingPeerRouting = false
                             }
                         }
@@ -2570,9 +2603,11 @@ final class ApprovedSessionRepair: @unchecked Sendable {
     }
 
     /// A retained prerequisite receipt identifies the owned native path; it
-    /// does not freeze either Input menu's checked item. Reopen those exact
-    /// menus before every inverse ownership decision and again at the writer
-    /// boundary so a caption-preserving Input change cannot authorize output.
+    /// does not freeze either Input menu's checked item. The writer's checked
+    /// effect-retention receipt may bridge only the immediately following Saga
+    /// after-state read. Compensation ownership and every inverse writer both
+    /// reopen the menus, so a caption-preserving Input change cannot authorize
+    /// output.
     private func recheckOutputBusPrerequisites() async -> Bool {
         checkedOutputPrerequisites = nil
         let inputFocus = AccessibilityChannel.OwnedTrackStackObservationNavigation.ReadFocusScope()
@@ -2684,23 +2719,45 @@ final class ApprovedSessionRepair: @unchecked Sendable {
               retained.effect.original.track.matches(task.pair.track),
               retained.effect.current.track.matches(task.pair.track),
               await projectIsCurrent(allowPendingCancellation: true) else { return nil }
+        if outputInverseConsumed {
+            // Effect retention has just reopened this exact Output popup after
+            // the verified inverse scalar. Carry that checked effect across only
+            // the immediately following Saga compensation read; the ownership
+            // comparison and inverse writer have already kept their separate
+            // fresh Bus-prerequisite checks.
+            guard retained.effect.permits(runtime: retained.effect.current.track.runtime),
+                  let proof = outputProof, proof.permitsRead(),
+                  outputPair?.strip.matches(retained.effect.current.strip) == true,
+                  outputRenewal.map({ $0.pair.strip.matches(retained.effect.current.strip)
+                      && $0.permits(runtime: retained.effect.current.track.runtime) })
+                      ?? retained.effect.current.strip.matches(retained.effect.original.strip),
+                  outputFootprintHeld(pair: retained.effect.current,
+                    assignment: retained.assignment) else { return nil }
+            return retained.assignment
+        }
         if !task.prerequisiteBuses.isEmpty, !outputInverseConsumed {
             if let receipt = checkedOutputPrerequisites,
                sameCheckedOutputEffect(receipt.retained, retained) {
-                // The Saga's public cancellation changes journal state only. Reuse
-                // the immediately preceding *renewed* Bus-prerequisite receipt for
-                // this exact typed output effect. The receipt is the causal bridge
-                // from the writer's now-retired source to the final source/proof
-                // produced by those popup reads; matching names or ordinals never
-                // manufacture that bridge.
+                // Effect retention already reopened every checked Input before
+                // publishing State A. The Saga's immediately following after-state
+                // read may reuse that exact renewed receipt. Once that read sets
+                // `outputApplied`, compensation's ownership comparison reopens
+                // every source/receiver menu, and `performOutput` does so again at
+                // the inverse leaf boundary before any destination press. This
+                // removes one duplicate post-write popup cycle without weakening
+                // either inverse-authority check.
                 let runtime = receipt.pair.track.runtime
                 guard receipt.pair.track.matches(task.pair.track),
                       let currentPair = outputPair, sameOutputPair(currentPair, receipt.pair),
                       let currentRenewal = outputRenewal,
                       sameOutputRenewal(currentRenewal, receipt.renewal),
                       let currentProof = outputProof, currentProof === receipt.proof,
-                      receipt.renewal.permits(runtime: runtime), receipt.proof.permitsRead(),
-                      await recheckOutputBusPrerequisites(),
+                      receipt.renewal.permits(runtime: runtime), receipt.proof.permitsRead()
+                else { return nil }
+                if outputApplied {
+                    guard await recheckOutputBusPrerequisites() else { return nil }
+                }
+                guard
                       let checkedPair = outputPair,
                       let checkedRenewal = outputRenewal,
                       let checkedProof = outputProof,
@@ -2841,11 +2898,12 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         return .init(read: evidence)
     }
 
-    /// Finish the scalar's typed native effect with the Saga's independent
-    /// checked menu read and one post-write protected-footprint census. Later
-    /// ownership/readback calls may revalidate this exact effect without
-    /// reopening the popup that produced it; the inverse writer still performs
-    /// its own full deciding footprint check at the leaf.
+    /// Finish the scalar's typed native effect with a post-write protected-
+    /// footprint census. Forward Bus output uses its immediately following
+    /// prerequisite check as the Saga receipt. Every other effect, including a
+    /// restored inverse, must independently reopen Output before the receipt can
+    /// cross into the Saga read. The inverse writer still performs its own full
+    /// deciding footprint check.
     private func retainCheckedOutputEffect(
         _ effect: AccessibilityChannel.ChangedOutputObservation,
         assignment: OutputAssignment,
@@ -2861,26 +2919,52 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             guard let proof = heldOutputProof(pair) else { return false }
             outputProof = proof
         }
-        let checked = await AXMixerStripBinding.$current.withValue(pair.strip) {
-            await AXMixerStripBinding.$outputAssociation.withValue(pair) {
-                await AccessibilityChannel.getOutputObservation(runtime: runtime)
+        let forwardBusReceiptChecksOutput = !restored
+            && outputTask?.prerequisiteBuses.isEmpty == false
+        var checkedAt: String?
+        if !forwardBusReceiptChecksOutput {
+            let checked = await AXMixerStripBinding.$current.withValue(pair.strip) {
+                await AXMixerStripBinding.$outputAssociation.withValue(pair) {
+                    await AccessibilityChannel.getOutputObservation(runtime: runtime)
+                }
             }
+            guard checked.assignment == assignment else { return false }
+            checkedAt = ISO8601DateFormatter.cacheFormatter.string(from: Date())
         }
-        guard checked.assignment == assignment else { return false }
-        let sampledAt = ISO8601DateFormatter.cacheFormatter.string(from: Date())
         guard outputFootprintHeld(pair: pair, assignment: assignment),
               effect.permits(runtime: runtime),
               outputProof?.permitsRead() == true,
               await projectIsCurrent(allowPendingCancellation: true) else { return false }
-        let retained = CheckedOutputEffect(effect: effect, assignment: assignment, sampledAt: sampledAt)
-        if !restored, outputTask?.prerequisiteBuses.isEmpty == false {
+        let retained: CheckedOutputEffect
+        if restored {
+            // The scalar's State A proves only its slot-caption readback. The
+            // popup above supplies the distinct checked-destination receipt;
+            // State B never reaches this branch.
+            guard let checkedAt else { return false }
+            retained = CheckedOutputEffect(effect: effect, assignment: assignment,
+                sampledAt: checkedAt)
+        } else if forwardBusReceiptChecksOutput {
             // Complete the post-write Bus checks before the child writer publishes
             // State A. A public cancellation can arrive as soon as that result is
-            // visible; deferring this work to the Saga read would let it consume
-            // the compensation allowance before the inverse is even dispatched.
-            guard await retainedOutputReading(retained) == assignment,
-                  checkedOutputPrerequisites.map({ sameCheckedOutputEffect($0.retained, retained) }) == true
+            // visible. This exact check ends with its own Output-popup read, so it
+            // is also the retained checked effect; opening the same Output popup
+            // immediately before it would add latency without adding authority.
+            let candidate = CheckedOutputEffect(effect: effect, assignment: assignment,
+                sampledAt: ISO8601DateFormatter.cacheFormatter.string(from: Date()))
+            guard await retainedOutputReading(candidate) == assignment,
+                  let receipt = checkedOutputPrerequisites,
+                  sameCheckedOutputEffect(receipt.retained, candidate)
             else { return false }
+            // `candidate` is internal authority only. Publish a timestamp sampled
+            // after the Bus scan's surviving Output-popup read, then carry the
+            // exact same renewed prerequisite receipt into the Saga readback.
+            retained = CheckedOutputEffect(effect: effect, assignment: assignment,
+                sampledAt: ISO8601DateFormatter.cacheFormatter.string(from: Date()))
+            checkedOutputPrerequisites = .init(retained: retained, pair: receipt.pair,
+                renewal: receipt.renewal, proof: receipt.proof)
+        } else {
+            retained = CheckedOutputEffect(effect: effect, assignment: assignment,
+                sampledAt: ISO8601DateFormatter.cacheFormatter.string(from: Date()))
         }
         if restored { checkedRestoredOutputEffect = retained }
         else { checkedOutputEffect = retained }

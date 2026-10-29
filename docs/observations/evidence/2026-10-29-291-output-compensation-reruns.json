@@ -1,0 +1,108 @@
+{
+  "schema": 1,
+  "issue": 291,
+  "mode": "canonical_flat_existing_bus_output_cancel",
+  "host": {
+    "logic_version": "12.3",
+    "logic_build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "runs": [
+    {
+      "run": 28,
+      "head": "72ce61dfab53d947bdd0b79e96fa67a6d99877ee",
+      "tree": "84392f9e39338b1de2b472d4cf813dd4558fc273",
+      "binary_sha256": "756b123aa8e33777e7e71c0210919893e50375a2c2412a468f7430b8b02e2eff",
+      "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "runner_exit": 1,
+      "runner_elapsed_seconds": 846.31,
+      "result_sha256": "3d952067fc9b7e997105846f7ed1940b85483cda751cd8ca9c19ec1689dab1c4",
+      "log_sha256": "8927e3cac203883469fa42fde5851a6b4dc8652e1ad30683a195a73863a69687",
+      "product": {
+        "state": "B",
+        "saga_state": "rollbackUncertain",
+        "verified": false,
+        "forward_write_boundary_count": 1,
+        "compensation_write_boundary_count": 1,
+        "verified_compensation_count": 0,
+        "uncertain_compensation_count": 1,
+        "readback_evidence_count": 0,
+        "saga_elapsed_seconds": 600.0115081250001,
+        "forward_transition": {
+          "before": "stereo_output",
+          "desired": "bus:1",
+          "observed": "bus:1",
+          "verified": true
+        }
+      },
+      "owned_server_stop": {
+        "returncode": 0,
+        "pid_gone": true,
+        "reader_finished": true
+      }
+    },
+    {
+      "run": 29,
+      "head": "92aaac84e9dc5f294a084068e3d8000164819209",
+      "tree": "639a0bb7d90d60f417079ce4541a53f786b231c1",
+      "binary_sha256": "100caed8263b6788e1381f69b8675bf7b5c3aade346c1f2310a51272143f7f57",
+      "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "runner_exit": 1,
+      "runner_elapsed_seconds": 1.31,
+      "result_sha256": "28dad6ac2d4b4784554051a3f37573fedf37770fcc9431b1dc9e4eba8f5b5012",
+      "log_sha256": "4344d0427dc6b9a46edbbcb58df312e696722aa6df4249b465545ac12ab75868",
+      "infrastructure_failure": "independent_continuation_missing",
+      "product_execution_started": false,
+      "owned_server_stop": {
+        "returncode": 0,
+        "pid_gone": true,
+        "reader_finished": true
+      }
+    },
+    {
+      "run": 30,
+      "head": "92aaac84e9dc5f294a084068e3d8000164819209",
+      "tree": "639a0bb7d90d60f417079ce4541a53f786b231c1",
+      "binary_sha256": "100caed8263b6788e1381f69b8675bf7b5c3aade346c1f2310a51272143f7f57",
+      "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "runner_exit": 1,
+      "runner_elapsed_seconds": 831.0,
+      "result_sha256": "65c40a69294efd1174b18f127bba38e22f2fa94ae17e0dbbc2e0ea14df368abe",
+      "log_sha256": "eb3edc069447e7be6c548d782c03f9840462a60a0a9036c49509b9e4f42f24df",
+      "product": {
+        "state": "B",
+        "saga_state": "rollbackUncertain",
+        "verified": false,
+        "forward_write_boundary_count": 1,
+        "compensation_write_boundary_count": 1,
+        "verified_compensation_count": 0,
+        "uncertain_compensation_count": 1,
+        "readback_evidence_count": 0,
+        "saga_elapsed_seconds": 600.00770875,
+        "forward_transition": {
+          "before": "stereo_output",
+          "desired": "bus:1",
+          "observed": "bus:1",
+          "verified": true
+        }
+      },
+      "independent_terminal_readback": {
+        "exact_project_window": true,
+        "track_index": 13,
+        "selected_track": true,
+        "output": "stereo_output",
+        "play": false,
+        "record": false,
+        "open_menu_or_dialog": false,
+        "logic_input_sent": false,
+        "qualification": "physical_recovery_only_not_product_pass"
+      },
+      "owned_server_stop": {
+        "returncode": 0,
+        "pid_gone": true,
+        "reader_finished": true
+      }
+    }
+  ]
+}

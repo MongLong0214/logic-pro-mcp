@@ -111,6 +111,26 @@ struct SemanticOracleEngineTests {
         #expect(!OracleConstraint.numericRange(key: "missing", min: 0, max: 10).isSatisfied(by: object))
     }
 
+    @Test func numericMinimumIsInclusiveWithoutInventingAnUpperBound() {
+        let object = root(#"{"low":1,"high":1000000000000,"zero":0,"text":"1","flag":true}"#)
+        #expect(OracleConstraint.numericMinimum(key: "low", min: 1).isSatisfied(by: object))
+        #expect(OracleConstraint.numericMinimum(key: "high", min: 1).isSatisfied(by: object))
+        #expect(!OracleConstraint.numericMinimum(key: "zero", min: 1).isSatisfied(by: object))
+        #expect(!OracleConstraint.numericMinimum(key: "text", min: 1).isSatisfied(by: object))
+        #expect(!OracleConstraint.numericMinimum(key: "flag", min: 1).isSatisfied(by: object))
+        #expect(!OracleConstraint.numericMinimum(key: "missing", min: 1).isSatisfied(by: object))
+    }
+
+    @Test func integerMinimumRejectsFractionalBooleanAndOutOfRangeValues() {
+        let minimum = OracleConstraint.integerMinimum(key: "value", min: 0)
+        #expect(minimum.isSatisfied(by: root(#"{"value":0}"#)))
+        #expect(minimum.isSatisfied(by: root(#"{"value":9223372036854775807}"#)))
+        #expect(!minimum.isSatisfied(by: root(#"{"value":-1}"#)))
+        #expect(!minimum.isSatisfied(by: root(#"{"value":0.5}"#)))
+        #expect(!minimum.isSatisfied(by: root(#"{"value":true}"#)))
+        #expect(!minimum.isSatisfied(by: root(#"{"value":9223372036854775808}"#)))
+    }
+
     @Test func enumMemberAcceptsLegalTokensAndRejectsOutsiders() {
         let object = root(#"{"status":"ok","flag":false,"n":1}"#)
         #expect(OracleConstraint.enumMember(key: "status", allowed: ["ok", "bad"]).isSatisfied(by: object))
@@ -143,6 +163,33 @@ struct SemanticOracleEngineTests {
         #expect(!OracleConstraint.typedField(key: "missing", type: .string).isSatisfied(by: object))
     }
 
+    @Test func outputAssignmentRequiresTheExactTaggedUnionShape() {
+        for valid in [
+            #"{"route":{"kind":"bus","number":1}}"#,
+            #"{"route":{"kind":"bus","number":256}}"#,
+            #"{"route":{"kind":"physical","ports":[3,4]}}"#,
+            #"{"route":{"kind":"stereo_output"}}"#,
+            #"{"route":{"kind":"no_output"}}"#,
+        ] {
+            #expect(OracleConstraint.outputAssignment(key: "route").isSatisfied(by: root(valid)))
+        }
+        for invalid in [
+            #"{"route":{"kind":"bus"}}"#,
+            #"{"route":{"kind":"bus","number":0}}"#,
+            #"{"route":{"kind":"bus","number":1.5}}"#,
+            #"{"route":{"kind":"physical","ports":[9223372036854775808,9223372036854775809]}}"#,
+            #"{"route":{"kind":"bus","number":1,"ports":[1,2]}}"#,
+            #"{"route":{"kind":"physical"}}"#,
+            #"{"route":{"kind":"physical","ports":[3,3]}}"#,
+            #"{"route":{"kind":"physical","ports":[4,3]}}"#,
+            #"{"route":{"kind":"physical","ports":[0,1]}}"#,
+            #"{"route":{"kind":"stereo_output","number":1}}"#,
+            #"{"route":{"kind":"unknown"}}"#,
+        ] {
+            #expect(!OracleConstraint.outputAssignment(key: "route").isSatisfied(by: root(invalid)))
+        }
+    }
+
     @Test func lengthPrefixedEntryCountChecksUTF8BoundariesAndNumericCount() {
         let entryCount = OracleConstraint.lengthPrefixedEntryCountEquals(
             key: "positions", countKey: "marker_count", offset: 0
@@ -152,12 +199,74 @@ struct SemanticOracleEngineTests {
         #expect(!entryCount.isSatisfied(by: root(#"{"positions":"7:1.1.1.18:12.1.1.1","marker_count":3}"#)))
         #expect(!entryCount.isSatisfied(by: root(#"{"positions":"8:5.1.1.1","marker_count":1}"#)))
         #expect(!entryCount.isSatisfied(by: root(#"{"positions":"7:1.1.1.1","marker_count":1.5}"#)))
+        #expect(!entryCount.isSatisfied(by: root(#"{"positions":"","marker_count":9223372036854775808}"#)))
 
         let survivors = OracleConstraint.lengthPrefixedEntryCountEquals(
             key: "positions", countKey: "marker_count_before", offset: -1
         )
         #expect(survivors.isSatisfied(by: root(#"{"positions":"7:1.1.1.1","marker_count_before":2}"#)))
         #expect(!survivors.isSatisfied(by: root(#"{"positions":"7:1.1.1.1","marker_count_before":3}"#)))
+    }
+
+    @Test func arrayCountEqualsChecksExactIntegralCardinality() {
+        let constraint = OracleConstraint.arrayCountEquals(
+            key: "requested_step_windows", countKey: "banks_requested", offset: 0
+        )
+        #expect(constraint.isSatisfied(by: root(
+            #"{"requested_step_windows":["bank 1","bank 2"],"banks_requested":2}"#
+        )))
+        #expect(!constraint.isSatisfied(by: root(
+            #"{"requested_step_windows":["bank 1"],"banks_requested":2}"#
+        )))
+        #expect(!constraint.isSatisfied(by: root(
+            #"{"requested_step_windows":["bank 1","bank 2"],"banks_requested":1.5}"#
+        )))
+        #expect(!constraint.isSatisfied(by: root(
+            #"{"requested_step_windows":["bank 1","bank 2"],"banks_requested":true}"#
+        )))
+
+        let survivors = OracleConstraint.arrayCountEquals(
+            key: "requested_step_windows", countKey: "banks_requested", offset: -1
+        )
+        #expect(survivors.isSatisfied(by: root(
+            #"{"requested_step_windows":["bank 1"],"banks_requested":2}"#
+        )))
+        #expect(!survivors.isSatisfied(by: root(
+            #"{"requested_step_windows":[],"banks_requested":0}"#
+        )))
+    }
+
+    @Test func arrayCountEqualsRejectsAnIntegerOutsideTheHostIntDomain() {
+        let constraint = OracleConstraint.arrayCountEquals(
+            key: "requested_step_windows", countKey: "banks_requested", offset: 0
+        )
+        #expect(!constraint.isSatisfied(by: root(
+            #"{"requested_step_windows":[],"banks_requested":9223372036854775808}"#
+        )))
+    }
+
+    @Test func orderedStringArrayChangesRequiresEverySuccessiveWindowToChange() {
+        let constraint = OracleConstraint.orderedStringArrayChanges(
+            key: "requested_step_windows", initialKey: "window_before"
+        )
+        #expect(constraint.isSatisfied(by: root(
+            #"{"window_before":"bank 0","requested_step_windows":["bank 1","bank 2"]}"#
+        )))
+        #expect(!constraint.isSatisfied(by: root(
+            #"{"window_before":"bank 0","requested_step_windows":["bank 0","bank 1"]}"#
+        )))
+        #expect(!constraint.isSatisfied(by: root(
+            #"{"window_before":"bank 0","requested_step_windows":["bank 1","bank 1"]}"#
+        )))
+        #expect(!constraint.isSatisfied(by: root(
+            #"{"window_before":"bank 0","requested_step_windows":["bank 1",2]}"#
+        )))
+        #expect(!constraint.isSatisfied(by: root(
+            #"{"window_before":"bank 0","requested_step_windows":[]}"#
+        )))
+        #expect(!constraint.isSatisfied(by: root(
+            #"{"requested_step_windows":["bank 1"]}"#
+        )))
     }
 
     // MARK: - relational constraints (Phase B0)
@@ -169,6 +278,14 @@ struct SemanticOracleEngineTests {
         // A missing side can never agree — corrupt inputs fail closed, not open.
         #expect(!OracleConstraint.fieldsEqual(keyA: "requested", keyB: "absent").isSatisfied(by: object))
         #expect(!OracleConstraint.fieldsEqual(keyA: "absent", keyB: "observed").isSatisfied(by: object))
+    }
+
+    @Test func fieldsDifferRequiresTwoPresentUnequalValues() {
+        let object = root(#"{"before":"bank 0","after":"bank 1","same":"bank 0"}"#)
+        let differs = OracleConstraint.fieldsDiffer(keyA: "before", keyB: "after")
+        #expect(differs.isSatisfied(by: object))
+        #expect(!OracleConstraint.fieldsDiffer(keyA: "before", keyB: "same").isSatisfied(by: object))
+        #expect(!OracleConstraint.fieldsDiffer(keyA: "before", keyB: "absent").isSatisfied(by: object))
     }
 
     @Test func readbackArrayExcludesResponseIdentityRequiresAReadableIndependentAbsence() {
@@ -237,6 +354,7 @@ struct SemanticOracleEngineTests {
         // rejection: two PRESENT equal leaves agree — including null==null.
         #expect(eq.isSatisfied(by: root(#"{"a":null,"b":null}"#)))
         #expect(eq.isSatisfied(by: root(#"{"a":"","b":""}"#)))
+        #expect(!eq.isSatisfied(by: root(#"{"a":9007199254740992,"b":9007199254740993}"#)))
     }
 
     // MARK: - numericNear / emptyArray (Phase B1)
@@ -549,6 +667,240 @@ struct SemanticOracleCensusTests {
         )
     }
 
+    /// #291 — pin the product's Bus 1 -> Stereo Output State-A envelope, whose
+    /// same-strip output readback equals the destination and whose Mixer
+    /// population stays fixed. The handler also has an honest no-write State-A
+    /// branch when that destination is already present; pin both shapes. This
+    /// is response-contract verification, not native acceptance evidence.
+    @Test func mixerSetOutputVerifiedStateAContractIsPinnedPostClosure() throws {
+        #expect(SemanticOracleTable.postClosureMutatingOperationIDs.contains(.mixerSetOutputVerified))
+        #expect(SemanticOracleTable.structurallyUnverifiedMutatingOperationIDs[.mixerSetOutputVerified] == nil)
+
+        let oracle = try #require(SemanticOracleTable.byOperationID[.mixerSetOutputVerified])
+        let liveWrite = #"{"success":true,"verified":true,"state":"A","operation":"mixer.set_output_verified","mixer_strip_index":12,"destination":{"kind":"stereo_output"},"before":{"kind":"bus","number":1},"after":{"kind":"stereo_output"},"changed":true,"write_attempted":true,"strip_count_before":38,"strip_count_after":38,"menu_path":["출력","Stereo Output"],"popup_menu_state":"closed","verify_source":"ax_output_slot"}"#
+        let liveAccepted = try #require(oracle.evaluate(
+            responseData: Data(liveWrite.utf8), readbackData: Data("{}".utf8)
+        ))
+        #expect(liveAccepted)
+
+        let noWrite = #"{"success":true,"verified":true,"state":"A","operation":"mixer.set_output_verified","track":0,"destination":{"kind":"bus","number":1},"before":{"kind":"bus","number":1},"after":{"kind":"bus","number":1},"changed":false,"write_attempted":false,"strip_count_before":3,"verify_source":"ax_output_slot"}"#
+        let noWriteAccepted = try #require(oracle.evaluate(
+            responseData: Data(noWrite.utf8), readbackData: Data("{}".utf8)
+        ))
+        #expect(noWriteAccepted)
+
+        // OutputAssignment's public object is a tagged union, not merely an
+        // object carrying a recognized `kind`. Missing/out-of-domain payloads
+        // cannot become a verified State-A route merely because the malformed
+        // destination and after objects echo one another.
+        for malformed in [
+            liveWrite
+                .replacingOccurrences(of: "\"destination\":{\"kind\":\"stereo_output\"}", with: "\"destination\":{\"kind\":\"bus\"}")
+                .replacingOccurrences(of: "\"after\":{\"kind\":\"stereo_output\"}", with: "\"after\":{\"kind\":\"bus\"}"),
+            liveWrite
+                .replacingOccurrences(of: "\"destination\":{\"kind\":\"stereo_output\"}", with: "\"destination\":{\"kind\":\"bus\",\"number\":0}")
+                .replacingOccurrences(of: "\"after\":{\"kind\":\"stereo_output\"}", with: "\"after\":{\"kind\":\"bus\",\"number\":0}"),
+            liveWrite
+                .replacingOccurrences(of: "\"destination\":{\"kind\":\"stereo_output\"}", with: "\"destination\":{\"kind\":\"physical\"}")
+                .replacingOccurrences(of: "\"after\":{\"kind\":\"stereo_output\"}", with: "\"after\":{\"kind\":\"physical\"}"),
+            liveWrite.replacingOccurrences(
+                of: "\"before\":{\"kind\":\"bus\",\"number\":1}",
+                with: "\"before\":{\"kind\":\"unknown\"}"
+            ),
+            #"{"success":true,"verified":true,"state":"A","operation":"mixer.set_output_verified","destination":{"kind":"no_output"},"before":{"kind":"no_output"},"after":{"kind":"no_output"},"changed":false,"write_attempted":false,"strip_count_before":38,"verify_source":"ax_output_slot"}"#,
+            #"{"success":true,"verified":true,"state":"A","operation":"mixer.set_output_verified","destination":{"kind":"no_output"},"before":{"kind":"bus","number":1},"after":{"kind":"no_output"},"changed":true,"write_attempted":true,"strip_count_before":38,"strip_count_after":38,"popup_menu_state":"closed","menu_path":["x"],"verify_source":"ax_output_slot"}"#,
+        ] {
+            let accepted = try #require(oracle.evaluate(
+                responseData: Data(malformed.utf8), readbackData: Data("{}".utf8)
+            ))
+            #expect(!accepted, "malformed OutputAssignment passed: \(malformed)")
+        }
+
+        // Route equality is integer-exact. NSNumber.doubleValue rounds these
+        // adjacent JSON integers to the same Double, but they name different
+        // physical ports and therefore cannot verify the requested route.
+        let roundedPortMismatch = liveWrite
+            .replacingOccurrences(
+                of: "\"destination\":{\"kind\":\"stereo_output\"}",
+                with: "\"destination\":{\"kind\":\"physical\",\"ports\":[9007199254740992,9007199254740994]}"
+            )
+            .replacingOccurrences(
+                of: "\"after\":{\"kind\":\"stereo_output\"}",
+                with: "\"after\":{\"kind\":\"physical\",\"ports\":[9007199254740993,9007199254740994]}"
+            )
+        let roundedPortAccepted = try #require(oracle.evaluate(
+            responseData: Data(roundedPortMismatch.utf8), readbackData: Data("{}".utf8)
+        ))
+        #expect(!roundedPortAccepted)
+
+        // State A must identify the exact target and carry real nonnegative
+        // integer population counts. Equal malformed values are not evidence
+        // that the Mixer population stayed fixed.
+        for malformed in [
+            liveWrite.replacingOccurrences(of: "\"mixer_strip_index\":12,", with: ""),
+            noWrite.replacingOccurrences(of: "\"track\":0,", with: ""),
+            liveWrite.replacingOccurrences(of: "\"mixer_strip_index\":12", with: "\"mixer_strip_index\":-1"),
+            liveWrite.replacingOccurrences(of: "\"mixer_strip_index\":12", with: "\"mixer_strip_index\":12.5"),
+            liveWrite
+                .replacingOccurrences(of: "\"strip_count_before\":38", with: "\"strip_count_before\":\"38\"")
+                .replacingOccurrences(of: "\"strip_count_after\":38", with: "\"strip_count_after\":\"38\""),
+            liveWrite
+                .replacingOccurrences(of: "\"strip_count_before\":38", with: "\"strip_count_before\":true")
+                .replacingOccurrences(of: "\"strip_count_after\":38", with: "\"strip_count_after\":true"),
+            liveWrite
+                .replacingOccurrences(of: "\"strip_count_before\":38", with: "\"strip_count_before\":38.5")
+                .replacingOccurrences(of: "\"strip_count_after\":38", with: "\"strip_count_after\":38.5"),
+            liveWrite
+                .replacingOccurrences(of: "\"strip_count_before\":38", with: "\"strip_count_before\":-1")
+                .replacingOccurrences(of: "\"strip_count_after\":38", with: "\"strip_count_after\":-1"),
+        ] {
+            let accepted = try #require(oracle.evaluate(
+                responseData: Data(malformed.utf8), readbackData: Data("{}".utf8)
+            ))
+            #expect(!accepted, "malformed target/count passed: \(malformed)")
+        }
+
+        // The generic mutant harness must exercise the verified no-write
+        // alternative independently of the committed write-shaped fixture.
+        let noWriteRoot = try #require(JSONInspector.parse(Data(noWrite.utf8)))
+        let branchConstraint = try #require(oracle.constraints.first { constraint in
+            if case .anyOf(let alternatives) = constraint {
+                return alternatives.flatMap { $0 }.contains { $0.key == "changed" }
+            }
+            return false
+        })
+        let noWriteMutants = JSONMutator.mutants(for: branchConstraint, in: noWriteRoot)
+        #expect(noWriteMutants.count >= 8, "no-write branch produced only \(noWriteMutants.count) mutants")
+        for mutant in noWriteMutants {
+            let data = try #require(JSONMutator.encode(mutant.json))
+            let survived = oracle.evaluate(
+                responseData: data, readbackData: Data("{}".utf8)
+            ) == true
+            #expect(!survived, "no-write branch survived mutant [\(mutant.label)]")
+        }
+
+        for forged in [
+            liveWrite.replacingOccurrences(of: "ax_output_slot", with: "menu_item_pressed"),
+            liveWrite.replacingOccurrences(of: "\"strip_count_after\":38", with: "\"strip_count_after\":39"),
+            liveWrite.replacingOccurrences(of: "\"after\":{\"kind\":\"stereo_output\"}", with: "\"after\":{\"kind\":\"bus\",\"number\":1}"),
+            liveWrite.replacingOccurrences(of: "\"before\":{\"kind\":\"bus\",\"number\":1}", with: "\"before\":{\"kind\":\"stereo_output\"}"),
+        ] {
+            let accepted = try #require(oracle.evaluate(
+                responseData: Data(forged.utf8), readbackData: Data("{}".utf8)
+            ))
+            #expect(!accepted)
+        }
+    }
+
+    /// #862 — the ten-locale 2026-09-27 native records include a real one-step
+    /// State-A `mixer.bank` response whose independent witness is the freshly
+    /// redrawn MCU LCD upper row. Keep that bounded profile on the covered side,
+    /// and reject forged, partial, multi-step and no-fresh-write receipts.
+    @Test func mixerBankLiveStateAContractIsPinnedPostClosure() throws {
+        #expect(SemanticOracleTable.postClosureMutatingOperationIDs.contains(.mixerBank))
+        #expect(SemanticOracleTable.structurallyUnverifiedMutatingOperationIDs[.mixerBank] == nil)
+
+        let oracle = try #require(SemanticOracleTable.byOperationID[.mixerBank])
+        let liveStateA = #"{"success":true,"verified":true,"state":"A","operation":"mixer.bank","channel":"MCU","direction":"right","bank_bookkeeping_before":0,"bank_bookkeeping_after":1,"bank_presses_sent":1,"banks_moved":1,"banks_requested":1,"bank_steps_disambiguated":0,"bank_probe_unresolved":false,"step_windows":["DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn "],"requested_step_windows":["DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn "],"upper_row_writes_observed":2,"window_before":"AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls ","window_after":"DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ","strips":["DelCls","DelCls","DelCls","StdGrn","StdGrn","StdGrn","StdGrn","StdGrn"],"verify_source":"mcu_lcd_upper_row"}"#
+        let liveAccepted = try #require(oracle.evaluate(
+            responseData: Data(liveStateA.utf8),
+            readbackData: Data("{}".utf8)
+        ))
+        #expect(liveAccepted)
+
+        let forgedWitness = liveStateA.replacingOccurrences(
+            of: "mcu_lcd_upper_row", with: "button_press_sent"
+        )
+        let forgedAccepted = try #require(oracle.evaluate(
+            responseData: Data(forgedWitness.utf8),
+            readbackData: Data("{}".utf8)
+        ))
+        #expect(!forgedAccepted)
+
+        let partialWalk = liveStateA.replacingOccurrences(
+            of: "\"banks_moved\":1", with: "\"banks_moved\":0"
+        )
+        let partialAccepted = try #require(oracle.evaluate(
+            responseData: Data(partialWalk.utf8),
+            readbackData: Data("{}".utf8)
+        ))
+        #expect(!partialAccepted)
+
+        let unchangedWindow = liveStateA.replacingOccurrences(
+            of: "DelCls DelCls DelCls StdGrn StdGrn StdGrn StdGrn StdGrn ",
+            with: "AbsZer Audio1 DelCls DelCls DelCls DelCls DelCls DelCls "
+        )
+        let unchangedAccepted = try #require(oracle.evaluate(
+            responseData: Data(unchangedWindow.utf8),
+            readbackData: Data("{}".utf8)
+        ))
+        #expect(!unchangedAccepted)
+
+        // The current envelope interleaves requested-step and ambiguity-probe
+        // windows in `step_windows`, so it cannot prove an ordered multi-step
+        // walk. Keep this promotion to the independently witnessed one-step
+        // profile instead of accepting a net before/after change as two moves.
+        let unprovableMultiStep = liveStateA
+            .replacingOccurrences(of: "\"bank_presses_sent\":1", with: "\"bank_presses_sent\":2")
+            .replacingOccurrences(of: "\"banks_moved\":1", with: "\"banks_moved\":2")
+            .replacingOccurrences(of: "\"banks_requested\":1", with: "\"banks_requested\":2")
+            .replacingOccurrences(of: "\"upper_row_writes_observed\":2", with: "\"upper_row_writes_observed\":4")
+        let multiStepAccepted = try #require(oracle.evaluate(
+            responseData: Data(unprovableMultiStep.utf8),
+            readbackData: Data("{}".utf8)
+        ))
+        #expect(!multiStepAccepted)
+
+        let noFreshUpperRowWrite = liveStateA.replacingOccurrences(
+            of: "\"upper_row_writes_observed\":2", with: "\"upper_row_writes_observed\":0"
+        )
+        let noFreshWriteAccepted = try #require(oracle.evaluate(
+            responseData: Data(noFreshUpperRowWrite.utf8),
+            readbackData: Data("{}".utf8)
+        ))
+        #expect(!noFreshWriteAccepted)
+    }
+
+    @Test func mixerBankAcceptsAnOrderedMultiStepRequestedWitness() throws {
+        let oracle = try #require(SemanticOracleTable.byOperationID[.mixerBank])
+        let response = #"{"success":true,"verified":true,"state":"A","operation":"mixer.bank","channel":"MCU","direction":"right","bank_bookkeeping_before":0,"bank_bookkeeping_after":2,"bank_presses_sent":4,"banks_moved":2,"banks_requested":2,"bank_steps_disambiguated":1,"bank_probe_unresolved":false,"step_windows":["bank 1","bank 2","probe 3","bank 2"],"requested_step_windows":["bank 1","bank 2"],"upper_row_writes_observed":4,"window_before":"bank 0","window_after":"bank 2","strips":["a","b","c","d","e","f","g","h"],"verify_source":"mcu_lcd_upper_row"}"#
+
+        let accepted = try #require(oracle.evaluate(
+            responseData: Data(response.utf8), readbackData: Data("{}".utf8)
+        ))
+        #expect(accepted)
+    }
+
+    @Test func mixerBankRejectsProbeTrafficPresentedAsARequestedStep() throws {
+        let oracle = try #require(SemanticOracleTable.byOperationID[.mixerBank])
+        let response = #"{"success":true,"verified":true,"state":"A","operation":"mixer.bank","channel":"MCU","direction":"right","bank_bookkeeping_before":0,"bank_bookkeeping_after":2,"bank_presses_sent":4,"banks_moved":2,"banks_requested":2,"bank_steps_disambiguated":1,"bank_probe_unresolved":false,"step_windows":["bank 1","probe 2","bank 1","bank 2"],"requested_step_windows":["bank 1","probe 2"],"upper_row_writes_observed":4,"window_before":"bank 0","window_after":"bank 2","strips":["a","b","c","d","e","f","g","h"],"verify_source":"mcu_lcd_upper_row"}"#
+
+        let accepted = try #require(oracle.evaluate(
+            responseData: Data(response.utf8), readbackData: Data("{}".utf8)
+        ))
+        #expect(!accepted)
+    }
+
+    @Test func mixerBankRejectsImpossiblePressAndWriteCounts() throws {
+        let oracle = try #require(SemanticOracleTable.byOperationID[.mixerBank])
+        let response = #"{"success":true,"verified":true,"state":"A","operation":"mixer.bank","channel":"MCU","direction":"right","bank_bookkeeping_before":0,"bank_bookkeeping_after":2,"bank_presses_sent":1,"banks_moved":2,"banks_requested":2,"bank_steps_disambiguated":0,"bank_probe_unresolved":false,"step_windows":["bank 1","bank 2"],"requested_step_windows":["bank 1","bank 2"],"upper_row_writes_observed":1,"window_before":"bank 0","window_after":"bank 2","strips":["a","b","c","d","e","f","g","h"],"verify_source":"mcu_lcd_upper_row"}"#
+
+        let accepted = try #require(oracle.evaluate(
+            responseData: Data(response.utf8), readbackData: Data("{}".utf8)
+        ))
+        #expect(!accepted)
+    }
+
+    @Test func mixerBankAcceptsTheFinalSameRowLastBankProbe() throws {
+        let oracle = try #require(SemanticOracleTable.byOperationID[.mixerBank])
+        let response = #"{"success":true,"verified":true,"state":"A","operation":"mixer.bank","channel":"MCU","direction":"right","bank_bookkeeping_before":0,"bank_bookkeeping_after":1,"bank_presses_sent":2,"banks_moved":1,"banks_requested":1,"bank_steps_disambiguated":0,"bank_probe_unresolved":false,"step_windows":["last bank","last bank"],"requested_step_windows":["last bank"],"upper_row_writes_observed":2,"window_before":"bank 0","window_after":"last bank","strips":["a","b","c","d","e","f","g","h"],"verify_source":"mcu_lcd_upper_row"}"#
+
+        let accepted = try #require(oracle.evaluate(
+            responseData: Data(response.utf8), readbackData: Data("{}".utf8)
+        ))
+        #expect(accepted)
+    }
+
     /// Soundness of the increment: every id in B1..B4 is a REAL `.mutating`,
     /// non-`.unsupported` registry spec — a read-only id or a typo cannot
     /// masquerade as mutating coverage.
@@ -755,6 +1107,7 @@ struct SemanticOracleStrengthTests {
     /// constant onto a mutation oracle whose real check is the agreement.
     @Test func relationalConstraintsAreValueBearingAndSurviveTheStrengthGate() {
         #expect(OracleConstraint.fieldsEqual(keyA: "a", keyB: "b").isValueConstraint)
+        #expect(OracleConstraint.fieldsDiffer(keyA: "a", keyB: "b").isValueConstraint)
         #expect(OracleConstraint.crossCheck(responseKey: "a", readbackKey: "b").isValueConstraint)
 
         let fieldsEqualOnly = OperationOracle(
@@ -786,6 +1139,52 @@ struct SemanticOracleStrengthTests {
 
 @Suite("#373 semantic oracle fixtures and mutation")
 struct SemanticOracleMutationTests {
+    @Test func hostParameterManifestOraclePinsTargetRowsRefusalsAndReadOnlyAuthority() throws {
+        let operationID = OperationID.pluginsGetHostParameterManifest
+        let oracle = try #require(SemanticOracleTable.byOperationID[operationID])
+        let fixture = try #require(SemanticOracleFixtures.byOperationID[operationID])
+        let accepted = try #require(oracle.evaluate(
+            responseData: fixture.responseData,
+            readbackData: fixture.readbackData
+        ))
+        #expect(accepted)
+        for mutant in fixture.customMutants {
+            let rejected = oracle.evaluate(
+                responseData: Data(mutant.response.utf8),
+                readbackData: fixture.readbackData
+            ) == false
+            #expect(rejected, "manifest oracle accepted a \(mutant.kind.rawValue) corruption")
+        }
+    }
+
+    @Test func hostParameterManifestOracleAcceptsRefusalOnlyRowsAndRepeatedControlRoles() throws {
+        let operationID = OperationID.pluginsGetHostParameterManifest
+        let oracle = try #require(SemanticOracleTable.byOperationID[operationID])
+        let fixture = try #require(SemanticOracleFixtures.byOperationID[operationID])
+        var response = try #require(
+            JSONSerialization.jsonObject(with: fixture.responseData) as? [String: Any]
+        )
+        response["parameters"] = [Any]()
+        response["parameter_count"] = 0
+        response["row_observations"] = [[
+            "row_index": 0,
+            "observed_label": "Mode",
+            "control_roles": ["AXRadioButton", "AXRadioButton"],
+            "value_description": NSNull(),
+            "value_is_settable": NSNull(),
+            "classification": "refused_ambiguous_control_AXRadioButton,AXRadioButton",
+        ]]
+        response["row_observation_count"] = 1
+        response["refused_row_count"] = 1
+        let responseData = try JSONSerialization.data(withJSONObject: response, options: [.sortedKeys])
+
+        let accepted = try #require(oracle.evaluate(
+            responseData: responseData,
+            readbackData: fixture.readbackData
+        ))
+        #expect(accepted)
+    }
+
     @Test("#448 sort State A rejects a response whose actuated criterion differs from the request")
     func trackSortOracleRejectsWrongActuatedCriterion() throws {
         let oracle = try #require(SemanticOracleTable.byOperationID[.tracksSortVerified])
@@ -1377,7 +1776,7 @@ struct SemanticOracleMutationTests {
             .filter { $0.independentReadbackDeferral != nil }.map(\.operationID))
         #expect(marked == Set<OperationID>([.midiListPorts, .mixerGetOutputVerified, .mixerGetSendDestinationVerified,
             .mixerGetInputBusVerified, .mixerGetSendBypassVerified, .pluginsPlanParameterChanges,
-            .pluginsGetParamVerified, .pluginsGetChannelEQStateVerified]))
+            .pluginsGetHostParameterManifest, .pluginsGetParamVerified, .pluginsGetChannelEQStateVerified]))
         let fixture = try #require(SemanticOracleFixtures.byOperationID[operationID])
         let routed = QualificationSemanticReadbackValidator.validate(
             operationID: operationID.rawValue,
@@ -1634,6 +2033,18 @@ enum JSONMutator {
                 ("below min", min - 1),
                 ("not a number", "not-a-number"),
             ]))
+        case .numericMinimum(_, let min):
+            mutants.append(contentsOf: replacements(root, key, [
+                ("below min", min - 1),
+                ("not a number", "not-a-number"),
+            ]))
+        case .integerMinimum(_, let min):
+            mutants.append(contentsOf: replacements(root, key, [
+                ("below min", min - 1),
+                ("fractional", Double(min) + 0.5),
+                ("not a number", "not-a-number"),
+                ("boolean", true),
+            ]))
         case .enumMember:
             mutants.append(contentsOf: replacements(root, key, [
                 ("outside enum", "__not_a_member__"),
@@ -1642,6 +2053,14 @@ enum JSONMutator {
             mutants.append(contentsOf: replacements(root, key, [("emptied", [Any]())]))
         case .typedField(_, let type):
             mutants.append(contentsOf: replacements(root, key, [("wrong type", wrongTyped(type))]))
+        case .outputAssignment:
+            mutants.append(contentsOf: replacements(root, key, [
+                ("bus missing number", ["kind": "bus"] as [String: Any]),
+                ("bus number out of range", ["kind": "bus", "number": 0] as [String: Any]),
+                ("physical missing ports", ["kind": "physical"] as [String: Any]),
+                ("physical descending ports", ["kind": "physical", "ports": [4, 3]] as [String: Any]),
+                ("unknown output kind", ["kind": "unknown"] as [String: Any]),
+            ]))
         case .lengthPrefixedEntryCountEquals(let wireKey, let countKey, _):
             // Corrupt the self-describing wire field and independently make its
             // declared numeric cardinality disagree. (`drop wireKey` is generic.)
@@ -1654,6 +2073,52 @@ enum JSONMutator {
                     ("wrong entry count", count + 1),
                 ]))
             }
+        case .arrayCountEquals(let arrayKey, let countKey, _):
+            mutants.append(contentsOf: replacements(root, arrayKey, [
+                ("not an array", "not-an-array"),
+            ]))
+            if let current = JSONPath.resolve(root, keyPath: countKey),
+               let count = JSONInspector.number(of: current) {
+                mutants.append(contentsOf: replacements(root, countKey, [
+                    ("wrong array count", count + 1),
+                ]))
+            }
+        case .orderedStringArrayChanges(let arrayKey, let initialKey):
+            if let initial = JSONPath.resolve(root, keyPath: initialKey) as? String,
+               let rows = JSONPath.resolve(root, keyPath: arrayKey) as? [String],
+               !rows.isEmpty {
+                var unchangedFirst = rows
+                unchangedFirst[0] = initial
+                mutants.append(contentsOf: replacements(root, arrayKey, [
+                    ("first window unchanged", unchangedFirst as [Any]),
+                    ("non-string window", [1] as [Any]),
+                ]))
+                mutants.append(contentsOf: replacements(root, initialKey, [
+                    ("initial equals first window", rows[0]),
+                ]))
+                if rows.count > 1 {
+                    var repeated = rows
+                    repeated[1] = repeated[0]
+                    mutants.append(contentsOf: replacements(root, arrayKey, [
+                        ("successive window repeated", repeated as [Any]),
+                    ]))
+                }
+            }
+        case .bankRequestedWindowWitness(
+            _, _, _, let disambiguatedCountKey, let pressesKey, let writesKey, let finalKey
+        ):
+            mutants.append(contentsOf: replacements(root, disambiguatedCountKey, [
+                ("invented disambiguation", 1),
+            ]))
+            mutants.append(contentsOf: replacements(root, pressesKey, [
+                ("press count below trace", 0),
+            ]))
+            mutants.append(contentsOf: replacements(root, writesKey, [
+                ("write count below trace", 0),
+            ]))
+            mutants.append(contentsOf: replacements(root, finalKey, [
+                ("final window not requested tail", "__wrong_final_window__"),
+            ]))
         case .lengthPrefixedEntriesExclude(let wireKey, let forbiddenEntryKey):
             // Add the forbidden payload as another well-formed wire entry. The
             // delete-marker regression below additionally proves this cannot be
@@ -1708,6 +2173,15 @@ enum JSONMutator {
             }
             if let currentB = JSONPath.resolve(root, keyPath: keyB) {
                 mutants.append(contentsOf: replacements(root, keyB, [("diverge", divergent(from: currentB))]))
+            }
+        case .fieldsDiffer(let keyA, let keyB):
+            // Collapse either side onto the other; the before/after witness must
+            // remain genuinely different. (`drop keyA` is generic above.)
+            if let currentB = JSONPath.resolve(root, keyPath: keyB) {
+                mutants.append(contentsOf: replacements(root, keyA, [("make equal", currentB)]))
+            }
+            if let currentA = JSONPath.resolve(root, keyPath: keyA) {
+                mutants.append(contentsOf: replacements(root, keyB, [("make equal", currentA)]))
             }
         case .crossCheck(let responseKey, _):
             // The harness holds the readback fixed and mutates the response, so

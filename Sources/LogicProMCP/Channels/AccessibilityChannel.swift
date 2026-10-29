@@ -931,10 +931,20 @@ actor AccessibilityChannel: Channel {
                         population.uiEffects.reason = "association_population_moved"
                     }
                 }
-            } else if associationFocusPreparation != nil, let effects = association?.effects {
-                population.uiEffects = mergedEffects(population.uiEffects, effects)
-                if effects.reason != nil
-                    || (effects.navigationPerformed && effects.restoration != "restored") {
+            } else if associationFocusPreparation != nil, let association {
+                // An acknowledged AXFocused write owns an inverse even when
+                // Logic has not exposed its landing yet. A false preparation
+                // result therefore still runs the retained cleanup instead of
+                // treating the currently observed rail focus as final.
+                let restored = await association.restorePreparedPopulationFocus(
+                    referenceIsCurrent: navigationReferenceIsCurrent, stoppingWhen: stop)
+                let populationReason = population.uiEffects.reason
+                population.uiEffects = mergedEffects(population.uiEffects, association.effects)
+                if restored { population.uiEffects.restoration = association.effects.restoration }
+                population.uiEffects.reason = populationReason ?? association.effects.reason
+                if !restored || association.effects.reason != nil
+                    || (association.effects.navigationPerformed
+                        && association.effects.restoration != "restored") {
                     population.stable = false
                 }
             }
@@ -1158,6 +1168,7 @@ actor AccessibilityChannel: Channel {
                OutputAssignment.observed(slotLabel: oldOutput) == nil,
                let newOutput = new.output, OutputAssignment.observed(slotLabel: newOutput) != nil {
                 comparable.output = old.output
+                comparable.outputObservation = old.outputObservation
             }
             guard (try? encoder.encode(comparable)) == oldBytes else { return false }
             refined = true
@@ -2206,6 +2217,8 @@ actor AccessibilityChannel: Channel {
         // and State-C fail-closed behavior for unsupported or drifting UI.
         case "plugin.get_inventory":
             return await AccessibilityChannel.defaultGetPluginInventory(params: params, runtime: runtime.logicRuntime)
+        case "plugin.get_host_parameter_manifest":
+            return await AccessibilityChannel.defaultGetHostParameterManifest(params: params, runtime: runtime.logicRuntime)
         case "plugin.get_param_verified":
             return await AccessibilityChannel.defaultGetParamVerified(params: params, runtime: runtime.logicRuntime)
         case "plugin.get_channel_eq_state_verified":

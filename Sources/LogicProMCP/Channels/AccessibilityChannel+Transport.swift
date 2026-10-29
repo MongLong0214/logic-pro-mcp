@@ -765,7 +765,7 @@ extension AccessibilityChannel {
                         "what_was_attempted": "locate numeric cycle locator AX text fields, then drive Logic's 'Set Locators' dialog as a fallback",
                         "what_was_observed": "Logic exposes no cycle start/end AX text fields in the transport bar, so the fallback write could not be independently read back",
                         "scanned_landmarks": transportLandmarks,
-                        "recovery_hint": "Set the cycle range manually in Logic or select a region and use Logic's 'Set Locators by Selection' command before bounce/export."
+                        "recovery_hint": "Automatic cycle-range recovery ended without verified locator readback. This result is terminal; preserve the observed project state."
                     ]
                 ))
             }
@@ -784,7 +784,7 @@ extension AccessibilityChannel {
                     "what_was_attempted": "locate numeric cycle locator AX text fields, then open Logic's 'Set Locators' dialog as a fallback",
                     "what_was_observed": "Logic exposes no cycle start/end AX text fields in the transport bar and the fallback dialog could not be completed",
                     "scanned_landmarks": transportLandmarks,
-                    "recovery_hint": "Set the cycle range manually in Logic or select a region and use Logic's 'Set Locators by Selection' command before bounce/export."
+                    "recovery_hint": "Automatic cycle-range recovery found no verified write path. This result is terminal; preserve the observed project state."
                 ]
             ))
         }
@@ -807,7 +807,7 @@ extension AccessibilityChannel {
                     "what_was_attempted": "find the transport bar, then drive Logic's 'Set Locators' dialog as a fallback",
                     "what_was_observed": "no transport bar was locatable for AX readback, so the fallback write could not be independently verified",
                     "scanned_landmarks": missingTransportLandmarks,
-                    "recovery_hint": "Bring the arrange window to the front and set the cycle range manually before bounce/export."
+                    "recovery_hint": "Automatic cycle-range recovery ended without verified locator readback. This result is terminal; preserve the observed project state."
                 ]
             ))
         }
@@ -825,7 +825,7 @@ extension AccessibilityChannel {
                 "what_was_attempted": "find Logic's transport bar and numeric cycle locator fields",
                 "what_was_observed": "no transport bar was locatable and the fallback dialog path could not be completed",
                 "scanned_landmarks": missingTransportLandmarks,
-                "recovery_hint": "Bring the arrange window to the front and set the cycle range manually before bounce/export."
+                "recovery_hint": "Automatic cycle-range recovery found no verified write path. This result is terminal; preserve the observed project state."
             ]
         ))
     }

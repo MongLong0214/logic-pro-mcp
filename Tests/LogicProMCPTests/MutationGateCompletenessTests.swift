@@ -42,7 +42,7 @@ struct MutationGateCompletenessTests {
             "refresh_cache", "saga_preflight", "saga_status",
         ],
         "logic_audio": ["analyze_file", "analyze_spectrum", "compare_spectra", "recommend_eq"],
-        "logic_plugins": ["get_inventory", "get_param_verified", "get_channel_eq_state_verified", "plan_parameter_changes"],
+        "logic_plugins": ["get_inventory", "get_host_parameter_manifest", "get_param_verified", "get_channel_eq_state_verified", "plan_parameter_changes"],
     ]
 
     /// Error-only labels that exist as switch cases but return a "not exposed in

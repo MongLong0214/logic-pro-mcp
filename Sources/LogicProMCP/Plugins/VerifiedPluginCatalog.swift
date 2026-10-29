@@ -95,6 +95,9 @@ enum VerifiedPluginCatalog {
             "ratio": "ratio",
             "circuit_type": "circuit_type",
             "circuit type": "circuit_type",
+            "auto_gain": "auto_gain",
+            "auto gain": "auto_gain",
+            "distortion": "distortion",
         ],
     ]
 

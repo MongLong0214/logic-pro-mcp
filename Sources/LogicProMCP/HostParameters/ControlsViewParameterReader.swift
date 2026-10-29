@@ -9,6 +9,7 @@ enum ControlsViewParameterReader {
         case sampleCount
         case radioPair(off: String, on: String)
         case popupSelection(choices: [String])
+        case popupCurrentValue
     }
 
     enum Outcome {
@@ -34,6 +35,10 @@ enum ControlsViewParameterReader {
            choices.allSatisfy({ !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }),
            Set(choices).count == choices.count {
             return .popupSelection(choices: choices)
+        }
+        if metadata.readbackMethod == "ax_controls_view_popup_current_value",
+           metadata.controlsViewControlRole == "AXPopUpButton" {
+            return .popupCurrentValue
         }
         return nil
     }
@@ -189,6 +194,17 @@ enum ControlsViewParameterReader {
             // be an actuator and is deliberately not part of this provider.
             guard let selected = try text(controls[0], kAXValueAttribute as String, runtime: runtime),
                   choices.contains(selected) else {
+                throw ReadFailure(status: "popup_selection_unknown")
+            }
+            return Snapshot(value: .text(selected), display: selected, controls: controls)
+        case .popupCurrentValue:
+            guard controls.count == 1, roles == ["AXPopUpButton"] else {
+                throw ReadFailure(status: "control_shape_unconfirmed")
+            }
+            // This provider reads only the already-selected AXValue. It does
+            // not open the popup or infer a complete choice list.
+            guard let selected = try text(controls[0], kAXValueAttribute as String, runtime: runtime),
+                  !selected.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
                 throw ReadFailure(status: "popup_selection_unknown")
             }
             return Snapshot(value: .text(selected), display: selected, controls: controls)

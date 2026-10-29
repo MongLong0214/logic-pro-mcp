@@ -602,17 +602,15 @@ extension AXLogicProElements {
     /// description can corroborate that binding or, when explicitly required,
     /// additionally constrain it.
     ///
-    /// Measured for stock Logic editors only: their direct static-text children
-    /// contain the English plug-in display name in both editor and Controls
-    /// views, but its position varies and other labels are localized. The AX
-    /// title and one direct static-text value are the *track* name, so that
-    /// value is excluded before catalog lookup. Third-party editors and
-    /// catalog/display-name differences remain unmeasured, so their observed
-    /// names must resolve through `VerifiedPluginCatalog` rather than being
-    /// accepted by raw string comparison.
+    /// Measured stock identities resolve through `VerifiedPluginCatalog`.
+    /// `matchingObservedPluginName` is narrower: a caller that already owns an
+    /// occupied target reference may require the exact display identity stored
+    /// in that reference. It does not add the name to the verified catalog or
+    /// grant any write capability.
     static func pluginWindowMatch(
         forTrackName trackName: String,
         matchingPluginID pluginID: String,
+        matchingObservedPluginName: String? = nil,
         matchingSliderDescription axDescription: String?,
         requiringMatchingSlider: Bool = true,
         runtime: Runtime = .production
@@ -641,6 +639,7 @@ extension AXLogicProElements {
             let headerMatchesPlugin = pluginWindowHeaderNames(
                 observedNames,
                 containPluginID: pluginID,
+                matchingObservedPluginName: matchingObservedPluginName,
                 excludingTrackName: candidate.title,
                 callerTrackName: target
             )
@@ -717,6 +716,7 @@ extension AXLogicProElements {
     static func matchingPluginEditorWindows(
         forTrackName trackName: String,
         matchingPluginID pluginID: String,
+        matchingObservedPluginName: String? = nil,
         runtime: Runtime = .production
     ) -> Result<[AXUIElement], AXHelpers.AXStatusError> {
         let target = trackName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -740,6 +740,7 @@ extension AXLogicProElements {
             if pluginWindowHeaderNames(
                 observedNames,
                 containPluginID: pluginID,
+                matchingObservedPluginName: matchingObservedPluginName,
                 excludingTrackName: candidate.title,
                 callerTrackName: target
             ) {
@@ -779,16 +780,24 @@ extension AXLogicProElements {
     private static func pluginWindowHeaderNames(
         _ observedNames: [String],
         containPluginID pluginID: String,
+        matchingObservedPluginName: String?,
         excludingTrackName title: String,
         callerTrackName target: String
     ) -> Bool {
-        observedNames.contains { observedName in
+        let expectedObservedName = matchingObservedPluginName?.trimmingCharacters(
+            in: .whitespacesAndNewlines
+        )
+        return observedNames.contains { observedName in
             // Logic exposes the track name in both AXTitle and a direct static
             // text child. A track called "Compressor" must not authenticate a
             // Noise Gate window as Compressor merely because both have a
             // Threshold slider. Keep both values here: the caller-resolved
             // track name is a second defense if Logic normalizes AXTitle.
             guard observedName != title, observedName != target else { return false }
+            if let expectedObservedName {
+                return observedName.trimmingCharacters(in: .whitespacesAndNewlines)
+                    == expectedObservedName
+            }
             return VerifiedPluginCatalog.pluginID(forObservedName: observedName) == pluginID
         }
     }

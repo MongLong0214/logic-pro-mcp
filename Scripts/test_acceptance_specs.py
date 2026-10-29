@@ -223,6 +223,18 @@ class Guard(unittest.TestCase):
         self._refused(self._tree({PILOT: spec}), "restore_expect[0].ref.obs", "'Mixer'",
                       "as a literal")
 
+    def test_a_label_literal_in_an_operation_parameter_observation_path_is_refused(self):
+        spec = _pilot()
+        steps = spec["rows"][0]["steps"]
+        steps.insert(0, {"as": "inventory", "call": {
+            "tool": "logic_tracks", "command": "list", "params": {},
+        }})
+        steps[2]["call"]["params"]["target_ref"] = {
+            "$observation": 'inventory.rows[name="Mixer"].target_ref',
+        }
+        self._refused(self._tree({PILOT: spec}), "call.params.target_ref.$observation.name",
+                      "'Mixer'", "as a literal")
+
     def test_path_keys_and_non_label_selectors_pass(self):
         spec = _pilot()
         spec["rows"][0]["expect"][3]["path"] = \

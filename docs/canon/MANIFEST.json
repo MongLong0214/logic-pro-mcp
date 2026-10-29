@@ -95,7 +95,7 @@
     "absence/stringsdict.zh_TW.folded.u32": "d1dc38a107e01ed7edd04ca5c5c5b0e122a7040e54c5305eb18ea17d8efaa2f8",
     "absence/stringsdict.zh_TW.u32": "4c4aae4613e29973635c5d725abb88aea4994a043c2eec1cb22572dfbb44df26",
     "absence/translated.en.u32": "77b0230c9f97342f6bab1750d2f0cb164455ec4b873bf26fb8ee67fe6a91ac32",
-    "index/madsp.tsv": "8f0c41c994ce439e1e91f5290c7d663e0d0961b7ee41468fa7032028ea321c9e",
+    "index/madsp.tsv": "d52ff5ba7a4e6f622d624e275488705246f52a0fffc9501c72d9976071e5cf82",
     "index/madsp.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/nib.tsv": "cfa538478c6a0197d838e2629612e14ec1706fd42e09252351619754c7b2d59c",
     "index/nib.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
@@ -113,13 +113,13 @@
     "index/strings.values.tsv": "38d6d4d79b22e359d2af139961cbd1bcd214044d448107e03a32c70ee5303b77",
     "index/stringsdict.tsv": "538081502dfdd84fb916e331a08b1682b64807cdbc2adbfe6faf9c70a983a511",
     "index/stringsdict.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
-    "ledger/casefold.tsv": "cf95f857930fdaacdae34e79d6c7d807d4592ff6d845adeb5fc84fb581037c9a",
+    "ledger/casefold.tsv": "953350c1f3dcd78542f996667d3733c95c226393c98c5ab56428cc9f56d7fd75",
     "ledger/presence.tsv": "b641162e32be742f0fc5a615e1f3eea02b94d6d0ea2c0c84b690b39145884a95"
   },
   "extractor_version": 3,
   "ledger_casefold_entries": {
     "madsp": {
-      "-": 16
+      "-": 17
     },
     "niblabels": {
       "-": 37,
@@ -228,7 +228,7 @@
       "absence_false_positive": {
         "-": 9.11299e-07
       },
-      "cited_rows": 3,
+      "cited_rows": 6,
       "cited_values": 0,
       "corpus_digest": "3e015ce94a8c7ff1889b360fc443fb96667cce1302649a9d4d467b9a298bb64e",
       "english_equal_rows_in_translated_units": {},

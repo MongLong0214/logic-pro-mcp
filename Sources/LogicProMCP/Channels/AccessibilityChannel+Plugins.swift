@@ -209,9 +209,9 @@ extension AccessibilityChannel {
             ]
             refusalExtras.merge(pluginPopupMenuStateFields(popupCleanup)) { _, new in new }
             if !popupCleanup.isClean {
-                refusalExtras["recovery_hint"] = "The plug-in menu this refusal opened may still be "
-                    + "on screen. Dismiss any Logic popup menu with Escape before the next call, "
-                    + "because an open one blocks Logic's AppleEvent handler."
+                refusalExtras["recovery_hint"] = "Automatic popup cleanup could not establish a clean "
+                    + "Logic popup-menu state after this refusal; the operation terminated because an "
+                    + "open menu can block Logic's AppleEvent handler."
             }
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,

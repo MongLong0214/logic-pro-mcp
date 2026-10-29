@@ -1132,6 +1132,47 @@ func outputAssignmentRefusesWhenNoPopupOpens() async throws {
     #expect(fixture.presses == [fixture.id(fixture.outputButton)])
 }
 
+@Test("unknown output-popup cleanup terminates without requesting a person")
+func outputPopupUnknownCleanupHasAutomaticTerminalRecovery() async throws {
+    let builder = FakeAXRuntimeBuilder()
+    let runtime = builder.makeLogicRuntime(pid: r2PID, appElement: builder.element(291_99_001))
+
+    let fields = await AccessibilityChannel.closeOutputPopup(
+        runtime: runtime,
+        timing: .immediate,
+        waitForSelfClose: false,
+        cleaner: { _ in .popupCountUnavailable }
+    )
+
+    #expect(fields["popup_menu_state"] as? String == "window_count_unavailable")
+    let hint = try #require(fields["recovery_hint"] as? String)
+    #expect(hint.contains("Automatic output-popup cleanup"))
+    #expect(hint.contains("operation terminated"))
+    #expect(!hint.contains("Escape before"))
+}
+
+@Test("stuck output-popup cleanup terminates with observed counts and no human request")
+func outputPopupStuckCleanupHasAutomaticTerminalRecovery() async throws {
+    let builder = FakeAXRuntimeBuilder()
+    let runtime = builder.makeLogicRuntime(pid: r2PID, appElement: builder.element(291_99_002))
+
+    let fields = await AccessibilityChannel.closeOutputPopup(
+        runtime: runtime,
+        timing: .immediate,
+        waitForSelfClose: false,
+        cleaner: { _ in .couldNotDismiss(initialPopupCount: 2, remainingPopupCount: 1) }
+    )
+
+    #expect(fields["popup_menu_state"] as? String == "could_not_be_dismissed")
+    #expect(fields["popup_menu_initial_window_count"] as? Int == 2)
+    #expect(fields["popup_menu_remaining_window_count"] as? Int == 1)
+    let hint = try #require(fields["recovery_hint"] as? String)
+    #expect(hint.contains("Automatic output-popup cleanup"))
+    #expect(hint.contains("operation terminated"))
+    #expect(!hint.contains("Dismiss it"))
+    #expect(!hint.contains("Escape before"))
+}
+
 // MARK: - After the press
 
 /// Kills M15: treating an unreadable after-read as "not equal" (it would say readback_mismatch).

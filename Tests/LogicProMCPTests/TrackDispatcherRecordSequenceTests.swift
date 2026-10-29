@@ -24,19 +24,22 @@ private actor RecordingMockChannel: Channel {
     let dialogOutput: String?
     let gotoResult: ChannelResult?
     var transportReadbacks: [ChannelResult]
+    var trackSelectResults: [ChannelResult]
     var operations: [String] = []
     var rawGotoResult: ChannelResult?
 
     init(id: ChannelID, importResult: ChannelResult,
          gotoRuntime: AXLogicProElements.Runtime? = nil, dialogOutput: String? = nil,
          gotoResult: ChannelResult? = nil,
-         transportReadbacks: [ChannelResult] = []) {
+         transportReadbacks: [ChannelResult] = [],
+         trackSelectResults: [ChannelResult] = [.success(HonestContract.encodeStateA())]) {
         self.id = id
         self.importResult = importResult
         self.gotoRuntime = gotoRuntime
         self.dialogOutput = dialogOutput
         self.gotoResult = gotoResult
         self.transportReadbacks = transportReadbacks
+        self.trackSelectResults = trackSelectResults
     }
 
     func start() async throws {}
@@ -59,6 +62,11 @@ private actor RecordingMockChannel: Channel {
                 reconcileAfterDialogExecutionFailure: { false }, createDialogIssuanceLedger: { nil })
             rawGotoResult = result
             return result
+        }
+        if operation == "track.select" {
+            return trackSelectResults.count > 1
+                ? trackSelectResults.removeFirst()
+                : trackSelectResults[0]
         }
         if operation == "midi.import_file" {
             importCalls += 1
@@ -223,6 +231,253 @@ func testRecordSequenceWithholdsImportWithoutVerifiedPosition(_ mode: String) as
     }
     #expect(builder.setCalls.isEmpty)
     #expect(builder.actionCalls.isEmpty)
+}
+
+// #1420 — Logic's default control-bar display mode ("Beats & Project") shows only bar and beat, so
+// the seek's readback cannot reach State A there. record_sequence switches to Beats for the seek,
+// reads the position again in that mode, and restores the original mode before importing; the
+// import waits for that restore to be confirmed.
+private final class DisplayModeLog: @unchecked Sendable {
+    var switches = 0
+    var events: [String] = []
+}
+
+private func recordSequenceRuntime(_ builder: FakeAXRuntimeBuilder) -> AXLogicProElements.Runtime {
+    AXLogicProElements.Runtime(
+        logicProPID: { 4242 }, ax: builder.makeAXRuntime(),
+        executeAppleScript: { _ in Issue.record("native script prohibited"); return .error("inert") },
+        onScreenWindowList: { nil }, postPopupMenuEscape: { Issue.record("native escape prohibited") })
+}
+
+private func displayModeLease() -> ControlBarDisplayMode.Lease {
+    ControlBarDisplayMode.Lease(
+        original: "Beats & Project", window: AXUIElementCreateApplication(142_100),
+        windowTitle: "Untitled - Tracks", document: "file:///tmp/RecordSequence.logicx",
+        popup: AXUIElementCreateApplication(142_101))
+}
+
+// "lagging_readback": live on Logic 12.4 the Playhead Position group still exposed bar and beat on
+// the first reread after the switch; the seek's before-reading must wait for all four.
+@Test(arguments: ["restored", "restore_refused", "lagging_readback"])
+func testRecordSequenceSeeksInAFullPositionDisplayAndRestoresItBeforeImport(_ mode: String) async throws {
+    let builder = FakeAXRuntimeBuilder()
+    let partial = try recordSequencePosition("2.1", components: [.bar, .beat])
+    let channel = RecordingMockChannel(
+        id: .accessibility, importResult: .success("imported"),
+        gotoRuntime: recordSequenceRuntime(builder), dialogOutput: #"{"result":"OK"}"#,
+        transportReadbacks: (mode == "lagging_readback" ? [partial, partial, partial] : [partial])
+            + [try recordSequencePosition("2.1.1.1"), try recordSequencePosition("1.1.1.1")])
+    let router = ChannelRouter()
+    await router.register(channel)
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let counts = SequentialIntBox([1, 2])
+    let regions = SequentialRegionReadBox([
+        .success([]), .success([makeRegion(trackIndex: 1, startBar: 1, endBar: 2)])])
+    let log = DisplayModeLog()
+    let lease = displayModeLease()
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: ["notes": minimalNoteSpec()], router: router, cache: cache,
+        trackHeaderCount: { log.events.append("import_tracks"); return counts.next() },
+        trackNameAt: { $0 == 1 ? "Imported Piano" : nil },
+        readRegions: { regions.next() }, settleReadback: {},
+        selectFullPositionDisplay: { log.switches += 1; return .switched(lease) },
+        restorePositionDisplay: {
+            #expect($0 == lease)
+            log.events.append("restore")
+            return mode == "restore_refused" ? .refused("display_mode_changed_since_switch") : .restored
+        })
+    #expect(log.switches == 1)
+    let object = recordSequenceJSONObject(result)
+    #expect(object["display_mode_switched_from"] as? String == "Beats & Project")
+    if mode != "restore_refused" {
+        #expect(!(try #require(result.isError)))
+        #expect(try #require(object["verified"] as? Bool))
+        let displayModeRestored = try #require(object["display_mode_restored"] as? Bool)
+        #expect(displayModeRestored)
+        #expect(log.events.first == "restore")
+        #expect(log.events.dropFirst().allSatisfy { $0 == "import_tracks" })
+        let rereads = Array(repeating: "transport.get_state", count: mode == "lagging_readback" ? 3 : 1)
+        #expect(await channel.operations == ["transport.get_state"] + rereads
+            + ["transport.goto_position", "transport.get_state", "midi.import_file"])
+        #expect(await channel.importCalls == 1)
+    } else {
+        #expect(try #require(result.isError))
+        #expect(object["error"] as? String == "display_mode_restore_unverified")
+        let displayModeRestored = try #require(object["display_mode_restored"] as? Bool)
+        #expect(!displayModeRestored)
+        #expect(object["display_mode_restore_refused"] as? String == "display_mode_changed_since_switch")
+        #expect(log.events == ["restore"])
+        #expect(await channel.importCalls == 0)
+        #expect(!(await channel.operations).contains("midi.import_file"))
+    }
+    #expect(builder.setCalls.isEmpty)
+    #expect(builder.actionCalls.isEmpty)
+}
+
+// The reviewer's counterexample: a playhead one sixteenth after 1.1.1.1 reads "1.1" in the default
+// mode, and a region imported there keeps the same bar envelope, so a bar-level check would pass
+// it. Read in the full display it is 1.1.2.1, and the import is withheld. A cancelled seek is
+// refused the same way, and both still restore the display mode. Without a full display the
+// partial reading is refused as before.
+@Test(arguments: ["sub_beat_offset", "seek_cancelled", "switch_unavailable"])
+func testRecordSequenceWithholdsImportWhenTheAnchorIsNotTickExact(_ mode: String) async throws {
+    let builder = FakeAXRuntimeBuilder()
+    let partialBefore = try recordSequencePosition("2.1", components: [.bar, .beat])
+    let readbacks: [ChannelResult]
+    switch mode {
+    case "sub_beat_offset":
+        readbacks = [partialBefore, try recordSequencePosition("2.1.1.1"), try recordSequencePosition("1.1.2.1")]
+    case "seek_cancelled":
+        readbacks = [partialBefore, try recordSequencePosition("2.1.1.1"), try recordSequencePosition("2.1.1.1")]
+    default:
+        readbacks = [partialBefore, try recordSequencePosition("1.1", components: [.bar, .beat])]
+    }
+    let channel = RecordingMockChannel(
+        id: .accessibility, importResult: .error("bounded unexpected import"),
+        gotoRuntime: recordSequenceRuntime(builder), dialogOutput: #"{"result":"OK"}"#,
+        gotoResult: mode == "seek_cancelled" ? .error("Go to Position dialog was cancelled") : nil,
+        transportReadbacks: readbacks)
+    let router = ChannelRouter()
+    await router.register(channel)
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let log = DisplayModeLog()
+    let lease = displayModeLease()
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: ["notes": minimalNoteSpec()], router: router, cache: cache,
+        trackHeaderCount: { Issue.record("unverified position must not discover tracks"); return 0 },
+        trackNameAt: { _ in Issue.record("unverified position must not read names"); return nil },
+        readRegions: { Issue.record("unverified position must not read regions"); return .success([]) },
+        settleReadback: { Issue.record("unverified position must not settle import") },
+        selectFullPositionDisplay: {
+            log.switches += 1
+            return mode == "switch_unavailable" ? .unavailable("display_mode_popup_not_found") : .switched(lease)
+        },
+        restorePositionDisplay: { _ in log.events.append("restore"); return .restored })
+    #expect(try #require(result.isError))
+    #expect(await channel.importCalls == 0)
+    #expect(!(await channel.operations).contains("midi.import_file"))
+    #expect(log.switches == 1)
+    let prefix = "record_sequence failed to reset playhead to bar 1 (required for accurate import): "
+    let text = sharedToolText(result)
+    #expect(text.hasPrefix(prefix))
+    if mode == "switch_unavailable" {
+        let diagnostic = try #require(sharedJSONObject(String(text.dropFirst(prefix.count))))
+        #expect(diagnostic["state"] as? String == "B")
+        #expect(diagnostic["display_mode_switch_unavailable"] as? String == "display_mode_popup_not_found")
+        #expect(log.events.isEmpty)
+    } else {
+        #expect(log.events == ["restore"])
+        if mode == "sub_beat_offset" {
+            let diagnostic = try #require(sharedJSONObject(String(text.dropFirst(prefix.count))))
+            #expect(diagnostic["state"] as? String == "B")
+            #expect(!(try #require(diagnostic["verified"] as? Bool)))
+            #expect(diagnostic["observed"] as? String == "1.1.2.1")
+            #expect(diagnostic["display_mode_switched_from"] as? String == "Beats & Project")
+            let displayModeRestored = try #require(diagnostic["display_mode_restored"] as? Bool)
+            #expect(displayModeRestored)
+        }
+    }
+    #expect(builder.setCalls.isEmpty)
+    #expect(builder.actionCalls.isEmpty)
+}
+
+@Test func testRecordSequenceLeavesAFullPositionDisplayAlone() async throws {
+    let builder = FakeAXRuntimeBuilder()
+    let channel = RecordingMockChannel(
+        id: .accessibility, importResult: .success("imported"),
+        gotoRuntime: recordSequenceRuntime(builder), dialogOutput: #"{"result":"OK"}"#,
+        transportReadbacks: [try recordSequencePosition("2.1.1.1"), try recordSequencePosition("1.1.1.1")])
+    let router = ChannelRouter()
+    await router.register(channel)
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let counts = SequentialIntBox([1, 2])
+    let regions = SequentialRegionReadBox([
+        .success([]), .success([makeRegion(trackIndex: 1, startBar: 1, endBar: 2)])])
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: ["notes": minimalNoteSpec()], router: router, cache: cache,
+        trackHeaderCount: { counts.next() }, trackNameAt: { $0 == 1 ? "Imported Piano" : nil },
+        readRegions: { regions.next() }, settleReadback: {},
+        selectFullPositionDisplay: { Issue.record("a full display must not be switched"); return .unavailable("inert") },
+        restorePositionDisplay: { _ in Issue.record("nothing was switched to restore"); return .refused("inert") })
+    #expect(!(try #require(result.isError)))
+    let object = recordSequenceJSONObject(result)
+    #expect(try #require(object["verified"] as? Bool))
+    #expect(object["display_mode_switched_from"] == nil)
+    #expect(object["display_mode_restored"] == nil)
+}
+
+@Test func testRecordSequenceStopsBeforeSeekAfterAnUnsettledDisplaySwitch() async throws {
+    let builder = FakeAXRuntimeBuilder()
+    let partial = try recordSequencePosition("2.1", components: [.bar, .beat])
+    let channel = RecordingMockChannel(
+        id: .accessibility, importResult: .error("unsettled display must not import"),
+        gotoRuntime: recordSequenceRuntime(builder), dialogOutput: #"{"result":"OK"}"#,
+        transportReadbacks: [partial])
+    let router = ChannelRouter()
+    await router.register(channel)
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let lease = displayModeLease()
+    let log = DisplayModeLog()
+
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: ["notes": minimalNoteSpec()], router: router, cache: cache,
+        trackHeaderCount: { Issue.record("unsettled display must not discover tracks"); return 0 },
+        trackNameAt: { _ in Issue.record("unsettled display must not read names"); return nil },
+        readRegions: { Issue.record("unsettled display must not read regions"); return .success([]) },
+        settleReadback: { Issue.record("unsettled display must not settle import") },
+        selectFullPositionDisplay: {
+            .unsettled(lease, "display_mode_window_changed")
+        },
+        restorePositionDisplay: {
+            #expect($0 == lease)
+            log.events.append("restore")
+            return .refused("display_mode_window_changed")
+        })
+
+    #expect(try #require(result.isError))
+    let object = recordSequenceJSONObject(result)
+    #expect(object["error"] as? String == "display_mode_switch_unsettled")
+    #expect(object["failure_stage"] as? String == "display_mode_switch")
+    #expect(object["display_mode_switch_unsettled"] as? String == "display_mode_window_changed")
+    #expect(object["display_mode_restore_refused"] as? String == "display_mode_window_changed")
+    #expect(log.events == ["restore"])
+    #expect(await channel.operations == ["transport.get_state"])
+    #expect(await channel.importCalls == 0)
+    #expect(builder.setCalls.isEmpty)
+    #expect(builder.actionCalls.isEmpty)
+}
+
+@Test func testRecordSequenceTrackCreationFailureRetainsDisplayModeDiagnostics() async throws {
+    let builder = FakeAXRuntimeBuilder()
+    let partial = try recordSequencePosition("2.1", components: [.bar, .beat])
+    let channel = RecordingMockChannel(
+        id: .accessibility, importResult: .success("imported"),
+        gotoRuntime: recordSequenceRuntime(builder), dialogOutput: #"{"result":"OK"}"#,
+        transportReadbacks: [
+            partial, try recordSequencePosition("2.1.1.1"), try recordSequencePosition("1.1.1.1"),
+        ])
+    let router = ChannelRouter()
+    await router.register(channel)
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let counts = SequentialIntBox([1, 1, 1, 1, 1, 1, 1])
+    let lease = displayModeLease()
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: ["notes": minimalNoteSpec()], router: router, cache: cache,
+        trackHeaderCount: { counts.next() }, trackNameAt: { _ in nil },
+        readRegions: { .success([]) }, settleReadback: {},
+        selectFullPositionDisplay: { .switched(lease) },
+        restorePositionDisplay: { _ in .restored })
+    #expect(try #require(result.isError))
+    let object = recordSequenceJSONObject(result)
+    #expect(object["failure_stage"] as? String == "track_creation")
+    #expect(object["display_mode_switched_from"] as? String == "Beats & Project")
+    let restored = try #require(object["display_mode_restored"] as? Bool)
+    #expect(restored)
 }
 
 private func minimalNoteSpec() -> Value {
@@ -665,4 +920,1048 @@ private func recordSequenceJSONObject(_ result: CallTool.Result) -> [String: Any
     #expect(object["region_name"] as? String == "Imported Idea")
     #expect(object["start_bar"] as? Int == -1)
     #expect(object["end_bar"] as? Int == -1)
+}
+
+// MARK: - GM Device relocation (target_track / target_expected_name)
+//
+// Logic 12.4 imports every SMF onto a new GM Device lane. With an explicit, name-corroborated
+// Software Instrument target, record_sequence copies the region onto it and verifies it by region
+// readback. These pin the safety boundary: refusals happen before the import, the take is copied
+// rather than cut, and State A needs a NEW region on the target at the imported bars.
+
+private func gmDowngradeEnvelope() -> String {
+    HonestContract.encodeStateB(
+        reason: .importedAsGMDevice,
+        extras: [
+            "track_count_before": 1,
+            "track_count_after": 2,
+            "observed_delta": 1,
+            "audible": false,
+            "gm_device_lanes": ["GM Device 1"],
+            "imported_lanes": ["GM Device 1"],
+            "file_open_dialog_seen": true,
+            "tempo_dialog_seen": true,
+        ]
+    )
+}
+
+private func relocationRouter() async throws -> (ChannelRouter, RecordingMockChannel, RecordingMockChannel) {
+    let ax = RecordingMockChannel(
+        id: .accessibility, importResult: .success(gmDowngradeEnvelope()),
+        transportReadbacks: [try recordSequencePosition("1.1.1.1")]
+    )
+    let keys = RecordingMockChannel(id: .cgEvent, importResult: .error("keystroke channel never imports"))
+    let router = ChannelRouter()
+    await router.register(ax)
+    await router.register(keys)
+    return (router, ax, keys)
+}
+
+private func relocationTrackName(_ index: Int) -> String? {
+    switch index {
+    case 0: return "Deluxe Classic"
+    case 1: return "GM Device 1"
+    default: return nil
+    }
+}
+
+private func relocationTrack(
+    _ index: Int, _ name: String, _ type: TrackType, identity: String? = nil,
+    selected: Bool? = nil
+) -> RecordSequenceRelocationTrackObservation {
+    RecordSequenceRelocationTrackObservation(
+        index: index, name: name, type: type, testIdentity: identity ?? "track-\(index)",
+        selectionReadback: selected
+    )
+}
+
+private func physicalRelocationTrack(
+    _ index: Int, _ name: String, _ type: TrackType, binding: AXTrackBinding.Binding,
+    selected: Bool? = nil
+) -> RecordSequenceRelocationTrackObservation {
+    var track = TrackState(id: index, name: name, type: type)
+    track.physicalBinding = binding
+    track.selectionReadback = selected
+    return RecordSequenceRelocationTrackObservation(track: track)
+}
+
+private struct PhysicalRelocationFixture {
+    let builder = FakeAXRuntimeBuilder()
+    let app: AXUIElement
+    let window: AXUIElement
+    let rail: AXUIElement
+    let target: AXUIElement
+    let gm: AXUIElement
+    let unreadableChild: AXUIElement
+    let stackDisclosure: AXUIElement
+    let runtime: AXLogicProElements.Runtime
+    let document = "file:///tmp/RecordSequenceRelocation.logicx"
+
+    init() {
+        app = builder.element(1_400_001)
+        window = builder.element(1_400_002)
+        rail = builder.element(1_400_003)
+        target = builder.element(1_400_004)
+        gm = builder.element(1_400_005)
+        unreadableChild = builder.element(1_400_006)
+        stackDisclosure = builder.element(1_400_007)
+        builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+        builder.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
+        builder.setAttribute(window, kAXDocumentAttribute as String, document)
+        builder.setAttribute(rail, kAXRoleAttribute as String, kAXListRole as String)
+        builder.setAttribute(rail, kAXIdentifierAttribute as String, "Track Headers")
+        for header in [target, gm] {
+            builder.setAttribute(header, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+            builder.setChildren(header, [])
+        }
+        builder.setAttribute(stackDisclosure, kAXRoleAttribute as String, kAXDisclosureTriangleRole as String)
+        builder.setAttribute(stackDisclosure, kAXValueAttribute as String, 1)
+        builder.setChildren(window, [rail])
+        builder.setChildren(rail, [target])
+        runtime = builder.makeLogicRuntime(appElement: app)
+    }
+
+    func inventory(
+        includeGM: Bool, selectedIndex: Int? = nil, unreadableShapeIndex: Int? = nil,
+        changedStackShapeIndex: Int? = nil
+    ) -> [RecordSequenceRelocationTrackObservation] {
+        let headers = includeGM ? [target, gm] : [target]
+        builder.setChildren(rail, headers)
+        return headers.enumerated().map { index, header in
+            if index == unreadableShapeIndex {
+                builder.setChildren(header, [unreadableChild])
+            } else if index == changedStackShapeIndex {
+                builder.setChildren(header, [stackDisclosure])
+            } else {
+                builder.setChildren(header, [])
+            }
+            let binding = AXTrackBinding.Binding(
+                window: window, header: header, document: document, runtime: runtime,
+                observedStackHeader: index == unreadableShapeIndex ? nil : index == changedStackShapeIndex,
+                observedHeaders: headers
+            )
+            return physicalRelocationTrack(
+                index, index == 0 ? "Deluxe Classic" : "GM Device 1",
+                index == 0 ? .softwareInstrument : .externalMIDI,
+                binding: binding, selected: selectedIndex.map { $0 == index }
+            )
+        }
+    }
+}
+
+private final class PhysicalRelocationCopyBoundaryBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private let fixture: PhysicalRelocationFixture
+    private var call = 0
+
+    init(_ fixture: PhysicalRelocationFixture) {
+        self.fixture = fixture
+    }
+
+    func next() -> [RecordSequenceRelocationTrackObservation]? {
+        lock.withLock {
+            defer { call += 1 }
+            switch call {
+            case 0, 1:
+                return fixture.inventory(includeGM: false)
+            case 2:
+                return fixture.inventory(includeGM: true)
+            default:
+                return fixture.inventory(includeGM: true, selectedIndex: 1, unreadableShapeIndex: 1)
+            }
+        }
+    }
+}
+
+private final class PhysicalRelocationPasteBoundaryBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private let fixture: PhysicalRelocationFixture
+    private var call = 0
+
+    init(_ fixture: PhysicalRelocationFixture) {
+        self.fixture = fixture
+    }
+
+    func next() -> [RecordSequenceRelocationTrackObservation]? {
+        lock.withLock {
+            defer { call += 1 }
+            switch call {
+            case 0, 1:
+                return fixture.inventory(includeGM: false)
+            case 2:
+                return fixture.inventory(includeGM: true)
+            case 3:
+                return fixture.inventory(includeGM: true, selectedIndex: 1)
+            default:
+                return fixture.inventory(includeGM: true, selectedIndex: 0, changedStackShapeIndex: 0)
+            }
+        }
+    }
+}
+
+private final class SequentialRelocationInventoryBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var values: [[RecordSequenceRelocationTrackObservation]?]
+
+    init(_ values: [[RecordSequenceRelocationTrackObservation]?]) {
+        self.values = values
+    }
+
+    func next() -> [RecordSequenceRelocationTrackObservation]? {
+        lock.withLock {
+            guard values.count > 1 else { return values.first ?? nil }
+            return values.removeFirst()
+        }
+    }
+}
+
+@Test(arguments: [
+    ("Wrong Name", 0, "target_name_mismatch"),
+    ("GM Device 1", 1, "target_not_software_instrument"),
+    ("Deluxe Classic", 5, "target_track_not_found"),
+])
+func testRecordSequenceRelocationPreflightRefusesBeforeImport(
+    _ expectedName: String, _ index: Int, _ expectedError: String
+) async throws {
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let (router, ax, keys) = try await relocationRouter()
+
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: [
+            "notes": minimalNoteSpec(),
+            "target_track": .int(index),
+            "target_expected_name": .string(expectedName),
+        ],
+        router: router,
+        cache: cache,
+        trackHeaderCount: { 2 },
+        trackNameAt: relocationTrackName,
+        relocationTrackInventory: {
+            [
+                relocationTrack(0, "Deluxe Classic", .softwareInstrument),
+                relocationTrack(1, "GM Device 1", .externalMIDI),
+            ]
+        },
+        readRegions: { .success([]) },
+        settleReadback: {}
+    )
+
+    #expect(try #require(result.isError))
+    let object = recordSequenceJSONObject(result)
+    #expect(object["error"] as? String == expectedError)
+    #expect(object["failure_stage"] as? String == "relocation_preflight")
+    #expect(!(try #require(object["write_attempted"] as? Bool)))
+    #expect(await ax.importCalls == 0)
+    #expect(await keys.operations.isEmpty)
+}
+
+@Test(arguments: [TrackType.audio, .externalMIDI, .unknown])
+func testRecordSequenceRelocationRequiresPositiveSoftwareInstrumentType(_ type: TrackType) async throws {
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let (router, ax, keys) = try await relocationRouter()
+
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: [
+            "notes": minimalNoteSpec(),
+            "target_track": .int(0),
+            "target_expected_name": .string("Deluxe Classic"),
+        ],
+        router: router,
+        cache: cache,
+        trackHeaderCount: { 1 },
+        trackNameAt: relocationTrackName,
+        relocationTrackInventory: { [relocationTrack(0, "Deluxe Classic", type)] },
+        readRegions: { .success([]) },
+        settleReadback: {}
+    )
+
+    #expect(try #require(result.isError))
+    let object = recordSequenceJSONObject(result)
+    #expect(object["error"] as? String == "target_not_software_instrument")
+    #expect(object["failure_stage"] as? String == "relocation_preflight")
+    #expect(!(try #require(object["write_attempted"] as? Bool)))
+    #expect(await ax.importCalls == 0)
+    #expect(await keys.operations.isEmpty)
+}
+
+@Test func testRecordSequenceRelocationRejectsDuplicateExpectedNameBeforeAnyWrite() async throws {
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let (router, ax, keys) = try await relocationRouter()
+
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: [
+            "notes": minimalNoteSpec(),
+            "target_track": .int(0),
+            "target_expected_name": .string("Deluxe Classic"),
+        ],
+        router: router,
+        cache: cache,
+        trackHeaderCount: { 2 },
+        trackNameAt: relocationTrackName,
+        relocationTrackInventory: {
+            [
+                relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "first"),
+                relocationTrack(1, "Deluxe Classic", .softwareInstrument, identity: "second"),
+            ]
+        },
+        readRegions: { .success([]) },
+        settleReadback: {}
+    )
+
+    #expect(try #require(result.isError))
+    let object = recordSequenceJSONObject(result)
+    #expect(object["error"] as? String == "target_name_ambiguous")
+    #expect(!(try #require(object["write_attempted"] as? Bool)))
+    #expect(await ax.importCalls == 0)
+    #expect(await keys.operations.isEmpty)
+}
+
+@Test func testRecordSequenceRelocationWrongTargetOffBarDoesNotSeekOrImport() async throws {
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let channel = RecordingMockChannel(
+        id: .accessibility,
+        importResult: .success(gmDowngradeEnvelope()),
+        gotoResult: .success("goto delivered"),
+        transportReadbacks: [
+            try recordSequencePosition("2.1.1.1"),
+            try recordSequencePosition("1.1.1.1"),
+        ]
+    )
+    let keys = RecordingMockChannel(id: .cgEvent, importResult: .error("unused"))
+    let router = ChannelRouter()
+    await router.register(channel)
+    await router.register(keys)
+
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: [
+            "notes": minimalNoteSpec(),
+            "target_track": .int(0),
+            "target_expected_name": .string("Wrong Name"),
+        ],
+        router: router,
+        cache: cache,
+        trackHeaderCount: { 1 },
+        trackNameAt: relocationTrackName,
+        relocationTrackInventory: { [relocationTrack(0, "Deluxe Classic", .softwareInstrument)] },
+        readRegions: { .success([]) },
+        settleReadback: {}
+    )
+
+    #expect(try #require(result.isError))
+    let object = recordSequenceJSONObject(result)
+    #expect(object["error"] as? String == "target_name_mismatch")
+    #expect(!(try #require(object["write_attempted"] as? Bool)))
+    #expect(!(await channel.operations).contains("transport.goto_position"))
+    #expect(await channel.importCalls == 0)
+    #expect(await keys.operations.isEmpty)
+}
+
+@Test func testRecordSequenceRelocationRenewsTargetAfterSeekBeforeImport() async throws {
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let channel = RecordingMockChannel(
+        id: .accessibility,
+        importResult: .success(gmDowngradeEnvelope()),
+        gotoResult: .success("goto delivered"),
+        transportReadbacks: [
+            try recordSequencePosition("2.1.1.1"),
+            try recordSequencePosition("1.1.1.1"),
+        ]
+    )
+    let keys = RecordingMockChannel(id: .cgEvent, importResult: .error("unused"))
+    let router = ChannelRouter()
+    await router.register(channel)
+    await router.register(keys)
+    let inventories = SequentialRelocationInventoryBox([
+        [relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target")],
+        [relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "replacement")],
+    ])
+
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: [
+            "notes": minimalNoteSpec(),
+            "target_track": .int(0),
+            "target_expected_name": .string("Deluxe Classic"),
+        ],
+        router: router,
+        cache: cache,
+        trackHeaderCount: { 1 },
+        trackNameAt: relocationTrackName,
+        relocationTrackInventory: { inventories.next() },
+        readRegions: { .success([]) },
+        settleReadback: {}
+    )
+
+    #expect(try #require(result.isError))
+    let object = recordSequenceJSONObject(result)
+    #expect(object["error"] as? String == "target_changed")
+    #expect(object["failure_stage"] as? String == "relocation_preimport")
+    #expect(try #require(object["write_attempted"] as? Bool))
+    #expect((await channel.operations).contains("transport.goto_position"))
+    #expect(await channel.importCalls == 0)
+    #expect(await keys.operations.isEmpty)
+}
+
+@Test func testRecordSequenceRelocationRequiresExpectedName() async throws {
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let (router, ax, _) = try await relocationRouter()
+
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: ["notes": minimalNoteSpec(), "target_track": .int(0)],
+        router: router,
+        cache: cache,
+        trackHeaderCount: { 1 },
+        trackNameAt: relocationTrackName,
+        readRegions: { .success([]) },
+        settleReadback: {}
+    )
+
+    #expect(try #require(result.isError))
+    #expect(sharedToolText(result).contains("target_expected_name"))
+    #expect(await ax.importCalls == 0)
+}
+
+@Test func testRecordSequenceRelocatesGMDeviceImportByCopyAndVerifiesTarget() async throws {
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let (router, ax, keys) = try await relocationRouter()
+
+    let gmRegion = makeRegion(name: "MIDI Region", trackIndex: 1, startBar: 1, endBar: 2)
+    let pasted = makeRegion(name: "MIDI Region", trackIndex: 0, startBar: 1, endBar: 2)
+    let trackCounts = SequentialIntBox([1, 2])
+    let inventories = SequentialRelocationInventoryBox([
+        [relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target")],
+        [relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target")],
+        [
+            relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target"),
+            relocationTrack(1, "GM Device 1", .externalMIDI, identity: "gm"),
+        ],
+        [
+            relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target", selected: false),
+            relocationTrack(1, "GM Device 1", .externalMIDI, identity: "gm", selected: true),
+        ],
+        [
+            relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target", selected: true),
+            relocationTrack(1, "GM Device 1", .externalMIDI, identity: "gm", selected: false),
+        ],
+    ])
+    let regionReads = SequentialRegionReadBox([
+        .success([]),                   // pre-import snapshot
+        .success([gmRegion]),           // source region on the GM lane
+        .success([gmRegion]),           // target snapshot before paste
+        .success([gmRegion, pasted]),   // after paste
+    ])
+
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: [
+            "notes": minimalNoteSpec(),
+            "target_track": .int(0),
+            "target_expected_name": .string("Deluxe Classic"),
+        ],
+        router: router,
+        cache: cache,
+        trackHeaderCount: { trackCounts.next() },
+        trackNameAt: relocationTrackName,
+        relocationTrackInventory: { inventories.next() },
+        readRegions: { regionReads.next() },
+        settleReadback: {}
+    )
+
+    let isError = try #require(result.isError as Bool?)
+    #expect(!isError, "expected State A, got: \(sharedToolText(result))")
+    let object = recordSequenceJSONObject(result)
+    #expect(try #require(object["success"] as? Bool))
+    #expect(try #require(object["verified"] as? Bool))
+    #expect(object["recorded_to_track"] as? Int == 0)
+    #expect(object["gm_device_lane_index"] as? Int == 1)
+    #expect(object["relocation"] as? String == "gm_device_to_instrument_copy")
+    #expect(object["verify_source"] as? String == "ax_region_delta")
+    #expect(try #require(object["gm_device_lane_retained"] as? Bool))
+
+    #expect(await ax.importCalls == 1)
+    #expect(await ax.operations.filter { $0 == "track.select" }.count == 2)
+    let keyOps = await keys.operations
+    #expect(keyOps == ["edit.copy", "edit.paste"])
+    #expect(!keyOps.contains("edit.cut"))
+}
+
+@Test func testRecordSequenceRelocationRefusesUnverifiedSourceSelectionBeforeCopy() async throws {
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let ax = RecordingMockChannel(
+        id: .accessibility,
+        importResult: .success(gmDowngradeEnvelope()),
+        transportReadbacks: [try recordSequencePosition("1.1.1.1")],
+        trackSelectResults: [.success(HonestContract.encodeStateB(reason: .retryExhausted))]
+    )
+    let keys = RecordingMockChannel(id: .cgEvent, importResult: .error("keystroke channel never imports"))
+    let router = ChannelRouter()
+    await router.register(ax)
+    await router.register(keys)
+
+    let gmRegion = makeRegion(name: "MIDI Region", trackIndex: 1, startBar: 1, endBar: 2)
+    let trackCounts = SequentialIntBox([1, 2])
+    let inventories = SequentialRelocationInventoryBox([
+        [relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target")],
+        [relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target")],
+        [
+            relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target"),
+            relocationTrack(1, "GM Device 1", .externalMIDI, identity: "gm"),
+        ],
+    ])
+    let regionReads = SequentialRegionReadBox([
+        .success([]),
+        .success([gmRegion]),
+        .success([gmRegion]),
+    ])
+
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: [
+            "notes": minimalNoteSpec(),
+            "target_track": .int(0),
+            "target_expected_name": .string("Deluxe Classic"),
+        ],
+        router: router,
+        cache: cache,
+        trackHeaderCount: { trackCounts.next() },
+        trackNameAt: relocationTrackName,
+        relocationTrackInventory: { inventories.next() },
+        readRegions: { regionReads.next() },
+        settleReadback: {}
+    )
+
+    #expect(try #require(result.isError))
+    let object = recordSequenceJSONObject(result)
+    #expect(object["error"] as? String == "select_failed")
+    #expect(object["failure_stage"] as? String == "relocation_select_source")
+    #expect(!(try #require(object["verified"] as? Bool)))
+    #expect(try #require(object["write_attempted"] as? Bool))
+    #expect(await ax.importCalls == 1)
+    #expect((await ax.operations).filter { $0 == "track.select" }.count == 1)
+    #expect(await keys.operations.isEmpty)
+}
+
+@Test func testRecordSequenceRelocationRefusesChangedSourceSelectionAtCopyBoundary() async throws {
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let (router, ax, keys) = try await relocationRouter()
+
+    let gmRegion = makeRegion(name: "MIDI Region", trackIndex: 1, startBar: 1, endBar: 2)
+    let pasted = makeRegion(name: "MIDI Region", trackIndex: 0, startBar: 1, endBar: 2)
+    let trackCounts = SequentialIntBox([1, 2])
+    let inventories = SequentialRelocationInventoryBox([
+        [relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target")],
+        [relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target")],
+        [
+            relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target"),
+            relocationTrack(1, "GM Device 1", .externalMIDI, identity: "gm"),
+        ],
+        [
+            relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target", selected: true),
+            relocationTrack(1, "GM Device 1", .externalMIDI, identity: "gm", selected: true),
+        ],
+    ])
+    let regionReads = SequentialRegionReadBox([
+        .success([]),
+        .success([gmRegion]),
+        .success([gmRegion]),
+        .success([gmRegion, pasted]),
+    ])
+
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: [
+            "notes": minimalNoteSpec(),
+            "target_track": .int(0),
+            "target_expected_name": .string("Deluxe Classic"),
+        ],
+        router: router,
+        cache: cache,
+        trackHeaderCount: { trackCounts.next() },
+        trackNameAt: relocationTrackName,
+        relocationTrackInventory: { inventories.next() },
+        readRegions: { regionReads.next() },
+        settleReadback: {}
+    )
+
+    #expect(try #require(result.isError))
+    let object = recordSequenceJSONObject(result)
+    #expect(object["error"] as? String == "source_changed")
+    #expect(object["failure_stage"] as? String == "relocation_copy_boundary")
+    #expect((await ax.operations).filter { $0 == "track.select" }.count == 1)
+    #expect(await keys.operations.isEmpty)
+}
+
+@Test func testRecordSequenceRelocationRefusesUnreadablePhysicalShapeBeforeCopy() async throws {
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let (router, ax, keys) = try await relocationRouter()
+    let fixture = PhysicalRelocationFixture()
+    let initial = fixture.inventory(includeGM: false)
+    let initialBinding = try #require(initial.first?.physicalBinding)
+    #expect(initialBinding.matches(initialBinding))
+    #expect(initialBinding.currentIndex() == 0)
+    let inventories = PhysicalRelocationCopyBoundaryBox(fixture)
+    let gmRegion = makeRegion(name: "MIDI Region", trackIndex: 1, startBar: 1, endBar: 2)
+    let regionReads = SequentialRegionReadBox([
+        .success([]),
+        .success([gmRegion]),
+        .success([gmRegion]),
+    ])
+
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: [
+            "notes": minimalNoteSpec(),
+            "target_track": .int(0),
+            "target_expected_name": .string("Deluxe Classic"),
+        ],
+        router: router,
+        cache: cache,
+        trackHeaderCount: { 1 },
+        trackNameAt: relocationTrackName,
+        relocationTrackInventory: { inventories.next() },
+        readRegions: { regionReads.next() },
+        settleReadback: {}
+    )
+
+    #expect(try #require(result.isError))
+    let object = recordSequenceJSONObject(result)
+    #expect(object["error"] as? String == "source_changed")
+    #expect(object["failure_stage"] as? String == "relocation_copy_boundary")
+    #expect(await ax.importCalls == 1)
+    #expect((await ax.operations).filter { $0 == "track.select" }.count == 1)
+    #expect(!(await keys.operations).contains("edit.copy"))
+    #expect(!(await keys.operations).contains("edit.paste"))
+    #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+}
+
+@Test func testRecordSequenceRelocationRefusesRecycledPhysicalCarrierBeforePaste() async throws {
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let (router, ax, keys) = try await relocationRouter()
+    let fixture = PhysicalRelocationFixture()
+    let inventories = PhysicalRelocationPasteBoundaryBox(fixture)
+    let gmRegion = makeRegion(name: "MIDI Region", trackIndex: 1, startBar: 1, endBar: 2)
+    let pasted = makeRegion(name: "MIDI Region", trackIndex: 0, startBar: 1, endBar: 2)
+    let regionReads = SequentialRegionReadBox([
+        .success([]),
+        .success([gmRegion]),
+        .success([gmRegion]),
+        .success([gmRegion, pasted]),
+    ])
+
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: [
+            "notes": minimalNoteSpec(),
+            "target_track": .int(0),
+            "target_expected_name": .string("Deluxe Classic"),
+        ],
+        router: router,
+        cache: cache,
+        trackHeaderCount: { 1 },
+        trackNameAt: relocationTrackName,
+        relocationTrackInventory: { inventories.next() },
+        readRegions: { regionReads.next() },
+        settleReadback: {}
+    )
+
+    #expect(try #require(result.isError))
+    let object = recordSequenceJSONObject(result)
+    #expect(object["error"] as? String == "target_changed")
+    #expect(object["failure_stage"] as? String == "relocation_paste_boundary")
+    #expect(await ax.importCalls == 1)
+    #expect((await ax.operations).filter { $0 == "track.select" }.count == 2)
+    #expect(await keys.operations == ["edit.copy"])
+    #expect(fixture.builder.setCalls.isEmpty && fixture.builder.actionCalls.isEmpty)
+}
+
+@Test func testRecordSequenceRelocationRefusesUnverifiedTargetSelectionBeforePaste() async throws {
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let ax = RecordingMockChannel(
+        id: .accessibility,
+        importResult: .success(gmDowngradeEnvelope()),
+        transportReadbacks: [try recordSequencePosition("1.1.1.1")],
+        trackSelectResults: [
+            .success(HonestContract.encodeStateA()),
+            .success(HonestContract.encodeStateB(reason: .readbackMismatch)),
+        ]
+    )
+    let keys = RecordingMockChannel(id: .cgEvent, importResult: .error("keystroke channel never imports"))
+    let router = ChannelRouter()
+    await router.register(ax)
+    await router.register(keys)
+
+    let gmRegion = makeRegion(name: "MIDI Region", trackIndex: 1, startBar: 1, endBar: 2)
+    let pasted = makeRegion(name: "MIDI Region", trackIndex: 0, startBar: 1, endBar: 2)
+    let trackCounts = SequentialIntBox([1, 2])
+    let inventories = SequentialRelocationInventoryBox([
+        [relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target")],
+        [relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target")],
+        [
+            relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target"),
+            relocationTrack(1, "GM Device 1", .externalMIDI, identity: "gm"),
+        ],
+        [
+            relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target", selected: false),
+            relocationTrack(1, "GM Device 1", .externalMIDI, identity: "gm", selected: true),
+        ],
+    ])
+    let regionReads = SequentialRegionReadBox([
+        .success([]),
+        .success([gmRegion]),
+        .success([gmRegion]),
+        .success([gmRegion, pasted]),
+    ])
+
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: [
+            "notes": minimalNoteSpec(),
+            "target_track": .int(0),
+            "target_expected_name": .string("Deluxe Classic"),
+        ],
+        router: router,
+        cache: cache,
+        trackHeaderCount: { trackCounts.next() },
+        trackNameAt: relocationTrackName,
+        relocationTrackInventory: { inventories.next() },
+        readRegions: { regionReads.next() },
+        settleReadback: {}
+    )
+
+    #expect(try #require(result.isError))
+    let object = recordSequenceJSONObject(result)
+    #expect(object["error"] as? String == "select_failed")
+    #expect(object["failure_stage"] as? String == "relocation_select_target")
+    #expect((await ax.operations).filter { $0 == "track.select" }.count == 2)
+    #expect(await keys.operations == ["edit.copy"])
+}
+
+@Test func testRecordSequenceRelocationRejectsExtraPasteDelta() async throws {
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let (router, _, keys) = try await relocationRouter()
+
+    let gmRegion = makeRegion(name: "MIDI Region", trackIndex: 1, startBar: 1, endBar: 2)
+    let pasted = makeRegion(name: "MIDI Region", trackIndex: 0, startBar: 1, endBar: 2)
+    let spill = makeRegion(name: "Clipboard Spill", trackIndex: 1, startBar: 1, endBar: 2)
+    let trackCounts = SequentialIntBox([1, 2])
+    let inventories = SequentialRelocationInventoryBox([
+        [relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target")],
+        [relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target")],
+        [
+            relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target"),
+            relocationTrack(1, "GM Device 1", .externalMIDI, identity: "gm"),
+        ],
+        [
+            relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target", selected: false),
+            relocationTrack(1, "GM Device 1", .externalMIDI, identity: "gm", selected: true),
+        ],
+        [
+            relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target", selected: true),
+            relocationTrack(1, "GM Device 1", .externalMIDI, identity: "gm", selected: false),
+        ],
+    ])
+    let regionReads = SequentialRegionReadBox([
+        .success([]),
+        .success([gmRegion]),
+        .success([gmRegion]),
+        .success([gmRegion, pasted, spill]),
+    ])
+
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: [
+            "notes": minimalNoteSpec(),
+            "target_track": .int(0),
+            "target_expected_name": .string("Deluxe Classic"),
+        ],
+        router: router,
+        cache: cache,
+        trackHeaderCount: { trackCounts.next() },
+        trackNameAt: relocationTrackName,
+        relocationTrackInventory: { inventories.next() },
+        readRegions: { regionReads.next() },
+        settleReadback: {}
+    )
+
+    #expect(try #require(result.isError))
+    let object = recordSequenceJSONObject(result)
+    #expect(object["error"] as? String == "paste_unverified")
+    #expect(object["failure_stage"] as? String == "relocation_verify")
+    #expect(await keys.operations == ["edit.copy", "edit.paste"])
+}
+
+@Test func testRecordSequenceRelocationRejectsExtraPasteDeltaAfterExpectedRegionAppears() async throws {
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let (router, _, keys) = try await relocationRouter()
+
+    let gmRegion = makeRegion(name: "MIDI Region", trackIndex: 1, startBar: 1, endBar: 2)
+    let pasted = makeRegion(name: "MIDI Region", trackIndex: 0, startBar: 1, endBar: 2)
+    let spill = makeRegion(name: "Clipboard Spill", trackIndex: 1, startBar: 1, endBar: 2)
+    let trackCounts = SequentialIntBox([1, 2])
+    let inventories = SequentialRelocationInventoryBox([
+        [relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target")],
+        [relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target")],
+        [
+            relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target"),
+            relocationTrack(1, "GM Device 1", .externalMIDI, identity: "gm"),
+        ],
+        [
+            relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target", selected: false),
+            relocationTrack(1, "GM Device 1", .externalMIDI, identity: "gm", selected: true),
+        ],
+        [
+            relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target", selected: true),
+            relocationTrack(1, "GM Device 1", .externalMIDI, identity: "gm", selected: false),
+        ],
+    ])
+    let regionReads = SequentialRegionReadBox([
+        .success([]),
+        .success([gmRegion]),
+        .success([gmRegion]),
+        .success([gmRegion, pasted]),
+        .success([gmRegion, pasted, spill]),
+    ])
+
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: [
+            "notes": minimalNoteSpec(),
+            "target_track": .int(0),
+            "target_expected_name": .string("Deluxe Classic"),
+        ],
+        router: router,
+        cache: cache,
+        trackHeaderCount: { trackCounts.next() },
+        trackNameAt: relocationTrackName,
+        relocationTrackInventory: { inventories.next() },
+        readRegions: { regionReads.next() },
+        settleReadback: {}
+    )
+
+    #expect(try #require(result.isError))
+    let object = recordSequenceJSONObject(result)
+    #expect(object["error"] as? String == "paste_unverified")
+    #expect(object["failure_stage"] as? String == "relocation_verify")
+    #expect(await keys.operations == ["edit.copy", "edit.paste"])
+}
+
+@Test func testRecordSequenceRelocationRefusesIncompletePrePasteRegionCensus() async throws {
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let (router, _, keys) = try await relocationRouter()
+
+    let gmRegion = makeRegion(name: "MIDI Region", trackIndex: 1, startBar: 1, endBar: 2)
+    let trackCounts = SequentialIntBox([1, 2])
+    let inventories = SequentialRelocationInventoryBox([
+        [relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target")],
+        [relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target")],
+        [
+            relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target"),
+            relocationTrack(1, "GM Device 1", .externalMIDI, identity: "gm"),
+        ],
+    ])
+    let regionReads = SequentialRegionReadBox([
+        .success([]),
+        .success([gmRegion]),
+        .success([gmRegion], complete: false),
+    ])
+
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: [
+            "notes": minimalNoteSpec(),
+            "target_track": .int(0),
+            "target_expected_name": .string("Deluxe Classic"),
+        ],
+        router: router,
+        cache: cache,
+        trackHeaderCount: { trackCounts.next() },
+        trackNameAt: relocationTrackName,
+        relocationTrackInventory: { inventories.next() },
+        readRegions: { regionReads.next() },
+        settleReadback: {}
+    )
+
+    #expect(try #require(result.isError))
+    let object = recordSequenceJSONObject(result)
+    #expect(object["error"] as? String == "unreadable_readback")
+    #expect(object["failure_stage"] as? String == "relocation_source")
+    #expect(await keys.operations.isEmpty)
+}
+
+@Test func testRecordSequenceRelocationRefusesIncompletePostPasteRegionCensus() async throws {
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let (router, _, keys) = try await relocationRouter()
+
+    let gmRegion = makeRegion(name: "MIDI Region", trackIndex: 1, startBar: 1, endBar: 2)
+    let pasted = makeRegion(name: "MIDI Region", trackIndex: 0, startBar: 1, endBar: 2)
+    let trackCounts = SequentialIntBox([1, 2])
+    let inventories = SequentialRelocationInventoryBox([
+        [relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target")],
+        [relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target")],
+        [
+            relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target"),
+            relocationTrack(1, "GM Device 1", .externalMIDI, identity: "gm"),
+        ],
+        [
+            relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target", selected: false),
+            relocationTrack(1, "GM Device 1", .externalMIDI, identity: "gm", selected: true),
+        ],
+        [
+            relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target", selected: true),
+            relocationTrack(1, "GM Device 1", .externalMIDI, identity: "gm", selected: false),
+        ],
+    ])
+    let regionReads = SequentialRegionReadBox([
+        .success([]),
+        .success([gmRegion]),
+        .success([gmRegion]),
+        .success([gmRegion, pasted], complete: false),
+    ])
+
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: [
+            "notes": minimalNoteSpec(),
+            "target_track": .int(0),
+            "target_expected_name": .string("Deluxe Classic"),
+        ],
+        router: router,
+        cache: cache,
+        trackHeaderCount: { trackCounts.next() },
+        trackNameAt: relocationTrackName,
+        relocationTrackInventory: { inventories.next() },
+        readRegions: { regionReads.next() },
+        settleReadback: {}
+    )
+
+    #expect(try #require(result.isError))
+    let object = recordSequenceJSONObject(result)
+    #expect(object["error"] as? String == "paste_unverified")
+    #expect(object["failure_stage"] as? String == "relocation_verify")
+    #expect(await keys.operations == ["edit.copy", "edit.paste"])
+}
+
+@Test func testRecordSequenceRelocationFailsClosedWhenPasteDoesNotAppear() async throws {
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let (router, _, keys) = try await relocationRouter()
+
+    let gmRegion = makeRegion(name: "MIDI Region", trackIndex: 1, startBar: 1, endBar: 2)
+    let trackCounts = SequentialIntBox([1, 2])
+    let inventories = SequentialRelocationInventoryBox([
+        [relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target")],
+        [relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target")],
+        [
+            relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target"),
+            relocationTrack(1, "GM Device 1", .externalMIDI, identity: "gm"),
+        ],
+        [
+            relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target", selected: false),
+            relocationTrack(1, "GM Device 1", .externalMIDI, identity: "gm", selected: true),
+        ],
+        [
+            relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target", selected: true),
+            relocationTrack(1, "GM Device 1", .externalMIDI, identity: "gm", selected: false),
+        ],
+    ])
+    let regionReads = SequentialRegionReadBox([.success([]), .success([gmRegion])])
+
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: [
+            "notes": minimalNoteSpec(),
+            "target_track": .int(0),
+            "target_expected_name": .string("Deluxe Classic"),
+        ],
+        router: router,
+        cache: cache,
+        trackHeaderCount: { trackCounts.next() },
+        trackNameAt: relocationTrackName,
+        relocationTrackInventory: { inventories.next() },
+        readRegions: { regionReads.next() },
+        settleReadback: {}
+    )
+
+    #expect(try #require(result.isError))
+    let object = recordSequenceJSONObject(result)
+    #expect(object["error"] as? String == "paste_unverified")
+    #expect(!(try #require(object["verified"] as? Bool)))
+    let hint = try #require(object["hint"] as? String)
+    #expect(hint.contains("still on GM Device lane 1"))
+    #expect(object["recorded_to_track"] == nil)
+    #expect(!(await keys.operations).contains("edit.cut"))
+}
+
+@Test(arguments: ["replaced", "reordered", "type_changed", "selection_changed"])
+func testRecordSequenceRelocationRenewsExactTargetImmediatelyBeforePaste(_ mode: String) async throws {
+    let cache = StateCache()
+    await cache.updateDocumentState(true)
+    let (router, _, keys) = try await relocationRouter()
+
+    let baseline = [
+        relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target"),
+        relocationTrack(1, "Pads", .softwareInstrument, identity: "pads"),
+    ]
+    let imported = baseline + [relocationTrack(2, "GM Device 1", .externalMIDI, identity: "gm")]
+    let changed: [RecordSequenceRelocationTrackObservation]
+    switch mode {
+    case "replaced":
+        changed = [
+            relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "replacement"),
+            imported[1], imported[2],
+        ]
+    case "reordered":
+        changed = [
+            relocationTrack(0, "Pads", .softwareInstrument, identity: "pads"),
+            relocationTrack(1, "Deluxe Classic", .softwareInstrument, identity: "target"),
+            imported[2],
+        ]
+    case "type_changed":
+        changed = [
+            relocationTrack(0, "Deluxe Classic", .audio, identity: "target"),
+            imported[1], imported[2],
+        ]
+    default:
+        changed = [
+            relocationTrack(0, "Deluxe Classic", .softwareInstrument, identity: "target", selected: false),
+            imported[1], imported[2],
+        ]
+    }
+    let sourceSelected = imported.enumerated().map { index, observation in
+        relocationTrack(
+            index, observation.name, observation.type, identity: observation.testIdentity,
+            selected: index == 2
+        )
+    }
+    let inventories = SequentialRelocationInventoryBox([
+        baseline, baseline, imported, sourceSelected, changed,
+    ])
+    let gmRegion = makeRegion(name: "MIDI Region", trackIndex: 2, startBar: 1, endBar: 2)
+    let regionReads = SequentialRegionReadBox([.success([]), .success([gmRegion]), .success([gmRegion])])
+
+    let result = await TrackDispatcher.handleRecordSequenceSMF(
+        params: [
+            "notes": minimalNoteSpec(),
+            "target_track": .int(0),
+            "target_expected_name": .string("Deluxe Classic"),
+        ],
+        router: router,
+        cache: cache,
+        trackHeaderCount: { mode == "before" ? 2 : 3 },
+        trackNameAt: { index in index == 2 ? "GM Device 1" : relocationTrackName(index) },
+        relocationTrackInventory: { inventories.next() },
+        readRegions: { regionReads.next() },
+        settleReadback: {}
+    )
+
+    #expect(try #require(result.isError))
+    let object = recordSequenceJSONObject(result)
+    #expect(object["error"] as? String == "target_changed")
+    #expect(object["failure_stage"] as? String == "relocation_paste_boundary")
+    #expect(!(await keys.operations).contains("edit.paste"))
+    #expect(!(await keys.operations).contains("edit.cut"))
 }
