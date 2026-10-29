@@ -282,6 +282,11 @@ func testIssue1228OccupiedPlaceholderIsUnreadable(name: String) {
     let verified = try #require(obj["verified"] as? Bool)
     #expect(!verified)
     #expect(obj["plugins_unknown_reason"] as? String == "occupied_insert_name_unreadable")
+    let recoveryHint = try #require(obj["recovery_hint"] as? String)
+    #expect(recoveryHint.contains("occupied insert name remained unreadable"))
+    #expect(recoveryHint.contains("operation terminated incomplete"))
+    #expect(!recoveryHint.contains("viewport acquisition"))
+    #expect(!recoveryHint.lowercased().contains("scroll the target"))
     #expect(obj["plugins"] == nil)
 }
 
@@ -343,6 +348,9 @@ func inventoryReadDoesNotActuateUnknownWindow(mode: String) async throws {
     #expect(obj["state"] as? String == "B")
     let attempted = try #require(obj["mixer_reveal_attempted"] as? Bool)
     #expect(!attempted)
+    let hint = try #require(obj["recovery_hint"] as? String)
+    #expect(hint.contains("No automatic Mixer reveal was authorized"))
+    #expect(!hint.contains("Automatic Mixer reveal did not"))
 }
 
 @Test("#1262 inventory preserves the exact binding refusal and failing header index")
@@ -504,7 +512,7 @@ func testGetInventoryDoesNotReportUnreadChildrenAsAbsent(mixerUnread: Bool, mixe
     #expect(resolvedStrategies.contains("ax_menu_view_show_mixer_retry"))
 }
 
-@Test func testGetInventoryReportsMixerNotVisibleDirectlyWhenRevealFails() async {
+@Test func testGetInventoryReportsMixerNotVisibleDirectlyWhenRevealFails() async throws {
     let b = FakeAXRuntimeBuilder()
     let app = b.element(770)
     let window = b.element(771)
@@ -542,7 +550,9 @@ func testGetInventoryDoesNotReportUnreadChildrenAsAbsent(mixerUnread: Bool, mixe
     #expect((obj["mixer_reveal_menu_item_found"] as? Bool)!)
     #expect((obj["mixer_reveal_menu_clicked"] as? Bool)!)
     #expect((obj["mixer_reveal_key_sent"] as? Bool)!)
-    #expect(((obj["recovery_hint"] as? String)?.contains("Show Mixer"))!)
+    let recoveryHint = try #require(obj["recovery_hint"] as? String)
+    #expect(recoveryHint.contains("Automatic Mixer reveal"))
+    #expect(!recoveryHint.lowercased().contains("manually"))
 }
 
 // MARK: - #234 zero-slot honesty gate (US-3 / AC-1..AC-4)
@@ -577,6 +587,9 @@ func testGetInventoryDoesNotReportUnreadChildrenAsAbsent(mixerUnread: Bool, mixe
     let hint = (obj["recovery_hint"] as? String) ?? ""
     #expect(hint.contains("drift"))
     #expect(hint.contains("Master"))
+    #expect(hint.contains("No automatic recovery established"))
+    #expect(!hint.contains("Mixer reveal did not"))
+    #expect(!hint.lowercased().contains("confirm"))
 }
 
 @Test func testGetInventoryZeroSlotsCarriesRevealDiagnostics() async {

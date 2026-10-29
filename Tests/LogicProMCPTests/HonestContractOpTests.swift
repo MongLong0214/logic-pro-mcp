@@ -160,6 +160,10 @@ private func decodeJSON(_ s: String) -> [String: Any] {
     #expect(obj["observed"] as? [String: Any] != nil)
     #expect(obj["scanned_landmarks"] as? [String: Any] != nil)
     #expect(!((obj["safe_to_retry"] as? Bool)!))
+    #expect(
+        obj["recovery_hint"] as? String
+            == "Automatic cycle-range recovery found no verified write path. This result is terminal; preserve the observed project state."
+    )
 }
 
 @Test func testSetCycleRangeOsascriptFallbackFailsClosedWithoutReadback() {
@@ -182,6 +186,36 @@ private func decodeJSON(_ s: String) -> [String: Any] {
     #expect(obj["method"] as? String == "osascript_set_locators_dialog")
     #expect((obj["write_attempted"] as? Bool)!)
     #expect(obj["observed"] as? [String: Any] != nil)
+    #expect(
+        obj["recovery_hint"] as? String
+            == "Automatic cycle-range recovery ended without verified locator readback. This result is terminal; preserve the observed project state."
+    )
+}
+
+@Test func testSetCycleRangeHasNoManualRecoveryRequestInAnyTerminalBranch() throws {
+    let repositoryRoot = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let source = try String(
+        contentsOf: repositoryRoot.appendingPathComponent(
+            "Sources/LogicProMCP/Channels/AccessibilityChannel+Transport.swift"
+        ),
+        encoding: .utf8
+    )
+
+    #expect(!source.contains("Set the cycle range manually"))
+    #expect(!source.contains("Bring the arrange window to the front"))
+    #expect(
+        source.components(separatedBy:
+            "Automatic cycle-range recovery found no verified write path. This result is terminal; preserve the observed project state."
+        ).count - 1 == 2
+    )
+    #expect(
+        source.components(separatedBy:
+            "Automatic cycle-range recovery ended without verified locator readback. This result is terminal; preserve the observed project state."
+        ).count - 1 == 2
+    )
 }
 
 // MARK: - T-3 (v3.1.1): track.rename — HC envelope

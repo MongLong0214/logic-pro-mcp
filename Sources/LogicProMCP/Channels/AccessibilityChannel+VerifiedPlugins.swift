@@ -129,10 +129,10 @@ extension AccessibilityChannel {
     /// `strip_has_no_inserts` confidence we cannot actually verify.
     static let insertSectionNotEnumerableRecoveryHint =
         "No insert slots were enumerable on the located mixer strip. This usually "
-        + "means the mixer's AX layout drifted (reopen it via View > Show Mixer and "
-        + "retry) or the addressed strip has no insert section (e.g. a Master or VCA "
-        + "strip). Confirm the target track's channel strip shows an Audio FX "
-        + "section, then retry."
+        + "means the mixer's AX layout drifted or the addressed strip has no insert "
+        + "section (e.g. a Master or VCA strip). No automatic recovery established "
+        + "an enumerable Audio FX section, so this operation terminated "
+        + "without verified inventory."
 
     struct SlotAddressingFailureDetail {
         let observed: String
@@ -255,7 +255,9 @@ extension AccessibilityChannel {
                         : reveal.attempted
                         ? "the mixer remained hidden after the reveal attempt, so the insert subtree could not be read"
                         : "mixer area was not locatable in the AX tree",
-                    "recovery_hint": "Open View > Show Mixer in Logic Pro and retry the inventory read.",
+                    "recovery_hint": reveal.attempted
+                        ? "Automatic Mixer reveal did not expose a readable insert subtree; the operation terminated without verified inventory."
+                        : "No automatic Mixer reveal was authorized for this read from the observed state; the operation terminated without verified inventory.",
                     "safe_to_retry": true,
                 ]
             ))
@@ -342,7 +344,7 @@ extension AccessibilityChannel {
                     "mixer_reveal_attempted": reveal.attempted,
                     "mixer_reveal_strategies": reveal.strategies,
                     "what_was_observed": "an occupied insert exposed a generic slot label instead of its plugin name",
-                    "recovery_hint": "Scroll the target channel strip into the Mixer view and retry.",
+                    "recovery_hint": "The occupied insert name remained unreadable, so the operation terminated incomplete.",
                     "safe_to_retry": true,
                 ]
             ))
@@ -3223,14 +3225,14 @@ extension AccessibilityChannel {
             if restoration.leftViewChanged {
                 extras["plugin_view_left_changed"] = true
                 extras["plugin_view_restore_observed_structure"] = restoration.observedStructure ?? NSNull()
-                extras["plugin_view_restore_recovery_hint"] = "The plug-in view could not be restored to the view observed before this operation. Select the prior view manually before continuing."
+                extras["plugin_view_restore_recovery_hint"] = "Automatic plug-in view restoration could not restore the pre-operation view; the operation is terminal until a later call can re-establish verified view state."
             } else if !restoration.confirmed {
                 // A failed restore confirmation does not establish that the
                 // view changed. When AX cannot classify the current view, say
                 // exactly that rather than reporting an unobserved change.
                 extras["plugin_view_restore_unobserved"] = true
                 extras["plugin_view_restore_observed_structure"] = restoration.observedStructure ?? NSNull()
-                extras["plugin_view_restore_recovery_hint"] = "The plug-in view restoration could not be observed. Verify the prior view before continuing."
+                extras["plugin_view_restore_recovery_hint"] = "Automatic plug-in view restoration could not be observed; the operation is terminal without a verified restored view."
             }
         }
 
@@ -3266,12 +3268,12 @@ extension AccessibilityChannel {
             if !closeObserved {
                 if access.isRead, readContextEnded {
                     extras["editor_cleanup_unobserved"] = true
-                    extras["recovery_hint"] = "Editor ownership ended before cleanup could be confirmed. Inspect the open editor manually before continuing."
+                    extras["recovery_hint"] = "Automatic editor cleanup lost target custody before cleanup could be confirmed; this outcome is terminal and does not authorize another editor mutation."
                 } else if !access.isRead || windows.contains(where: {
                     AXLogicProElements.pluginEditorWindowIsOpen($0, runtime: runtime) == true
                 }) {
                     extras["editor_still_open"] = true
-                    extras["recovery_hint"] = "The \(pluginID) editor opened for this operation is still visible on track \(track). Close it before another duplicate-instance write."
+                    extras["recovery_hint"] = "Automatic editor cleanup failed for the \(pluginID) editor opened on track \(track); later duplicate-instance writes refuse while that editor remains observable."
                 } else {
                     extras["editor_cleanup_unobserved"] = true
                 }
@@ -5094,13 +5096,9 @@ extension AccessibilityChannel {
                 "what_was_attempted": "confirm no \(pluginID) editor was already open before pressing insert \(insert)",
                 "what_was_observed": "\(matchingEditorCount) matching \(pluginID) editor(s) were already open on track \(track)",
                 // A duplicated plug-in can only be bound by opening its editor
-                // from a known-empty state, so an already-open editor is the one
-                // thing the caller must clear. This operation closes the editors
-                // it opens, so reaching here means either a human opened one or a
-                // previous close could not be verified.
-                "recovery_hint": "Close the open \(pluginID) editor(s) on track \(track), then retry. "
-                    + "While the plug-in occupies more than one insert, its editor must be "
-                    + "opened by this operation for the write to be attributable to insert \(insert).",
+                // from a known-empty state. A pre-existing editor prevents this
+                // operation from owning or automatically cleaning up that state.
+                "recovery_hint": "A pre-existing \(pluginID) editor on track \(track) prevents attributable insert \(insert) acquisition; the operation terminated before plug-in parameter or editor mutation.",
                 "safe_to_retry": false,
                 "write_attempted": false,
             ]
@@ -5450,11 +5448,11 @@ extension AccessibilityChannel {
             return [:]
         case .popupCountUnavailable:
             var fields = pluginPopupMenuStateFields(outcome)
-            fields["recovery_hint"] = "Logic popup-menu state could not be read after plugin-window acquisition. Dismiss any visible popup with Escape before retrying."
+            fields["recovery_hint"] = "Automatic popup cleanup could not read Logic's popup-menu state after plugin-window acquisition; the operation terminated without authorizing another call."
             return fields
         case .couldNotDismiss:
             var fields = pluginPopupMenuStateFields(outcome)
-            fields["recovery_hint"] = "A Logic popup menu remained open after plugin-window acquisition. Dismiss it with Escape before retrying, because it can block Logic's AppleEvent handler."
+            fields["recovery_hint"] = "Automatic popup cleanup could not dismiss a Logic popup menu after plugin-window acquisition; the operation terminated because the menu can block Logic's AppleEvent handler."
             return fields
         }
     }
@@ -6088,11 +6086,10 @@ extension AccessibilityChannel {
                     "safe_to_retry": false,
                     "write_attempted": true,
                 ]
-                // When the automatic rollback could NOT confirm removal, the stray
-                // plugin is still mounted — guide an LLM agent to clean up manually
-                // rather than leave it guessing (P3-b).
+                // When automatic rollback cannot confirm removal, the stray plug-in
+                // remains an observed partial effect and this target is terminal.
                 if !rollbackResult.succeeded {
-                    extras["recovery_action"] = "undo the last insert manually in Logic Pro (Edit > Undo) — the plugin remains mounted at slot \(observedSlot)"
+                    extras["recovery_action"] = "automatic rollback exhausted; removal of the partial effect was not confirmed at slot \(observedSlot); the operation terminated with no further writes to this target"
                 }
                 return .error(HonestContract.encodeV2StateC(
                     error: .insertLandedAtDifferentSlot,
@@ -6174,10 +6171,10 @@ extension AccessibilityChannel {
                     "rollback_last_click": rollbackResult.lastClickResult,
                     "select_trace": trace,
                     "what_was_attempted": "roll back a stray exact-slot popup insert before continuing",
-                    "what_was_observed": "a plugin mutation remained after automatic rollback could not confirm removal",
+                    "what_was_observed": "automatic rollback could not confirm removal of the previously observed plugin mutation",
                     "recovery_action": slot.map {
-                        "inspect Logic Pro insert slot \($0) and undo/remove the stray plugin manually before retrying"
-                    } ?? "inspect Logic Pro and undo/remove the stray plugin manually before retrying",
+                        "automatic rollback exhausted at insert slot \($0); removal of the partial effect was not confirmed; the operation terminated with no further writes to this target"
+                    } ?? "automatic rollback exhausted; removal of the partial effect was not confirmed; the operation terminated with no further writes to this target",
                     "safe_to_retry": false,
                     "write_attempted": true,
                 ]
