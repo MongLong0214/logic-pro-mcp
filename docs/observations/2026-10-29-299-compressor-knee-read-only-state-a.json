@@ -17,8 +17,8 @@
     "os": "macOS 26.3 (25D125)"
   },
   "reverify": {
-    "kind": "harness",
-    "command": "python3 Scripts/livekit/live_299_compressor_knee_read.py <candidate-binary> <out.json> --project /Users/isaac/lpm-evidence/965-flat-native-20261013.logicx --track 13 --insert 1",
+    "kind": "script",
+    "command": "python3 Scripts/livekit/probe_299_compressor_knee_read.py <candidate-binary> <out.json> --project /Users/isaac/lpm-evidence/965-flat-native-20261013.logicx --track 13 --insert 1",
     "expected": "exits 0 and writes a receipt whose checks are all true: State A returns separate raw and verbatim display values with write_attempted false, the view restore and new-editor close are observed, before and after inventories identify the same target, and stdin close removes the server process",
     "cost": "about thirty seconds on the protected fixture with stopped playback"
   },

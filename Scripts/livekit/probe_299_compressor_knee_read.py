@@ -1,5 +1,10 @@
 #!/usr/bin/env python3
-"""Re-run the bounded #299 Compressor Knee read without calling a setter."""
+"""Probe the bounded #299 Compressor Knee read without calling a setter.
+
+This writes a compact non-visual read receipt, not an ``evidence.Evidence``
+document.  It is deliberately named ``probe_*``: ``live_*`` is reserved for
+harnesses that satisfy the repository's visual capture and recording contract.
+"""
 
 from __future__ import annotations
 
