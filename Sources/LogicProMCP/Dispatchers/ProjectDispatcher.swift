@@ -978,6 +978,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
         }
 
         var renamed: [[String: Any]] = []
+        var anyRenameWriteAttempted = false
         // #389: cleanup_apply reaches the router only through nested
         // TrackDispatcher.handle calls, each of which arms and commits its OWN
         // child boundary — the parent trace would otherwise show none. Keep the
@@ -993,6 +994,12 @@ struct ProjectDispatcher: OperationTraceDispatching {
                 cache: cache
             )
             let body = cleanupApplyResultText(result)
+            let proof = cleanupApplyResultJSONObject(body)
+            let childWriteAttempted = proof?["write_attempted"] as? Bool
+            if childWriteAttempted == true
+                || (proof?["state"] as? String == "A" && proof?["verified"] as? Bool == true) {
+                anyRenameWriteAttempted = true
+            }
             renamed.append([
                 "track_index": target,
                 "new_name": newName,
@@ -1003,21 +1010,26 @@ struct ProjectDispatcher: OperationTraceDispatching {
             // underlying HC envelope as State C — do NOT report State A for a
             // batch where a later track could not be confirmed.
             if result.isError == true {
+                var failureExtras: [String: Any] = [
+                    "tool": "logic_tracks",
+                    "command": "rename",
+                    "failed_track_index": target,
+                    "applied": renamed,
+                    "underlying": body,
+                    "terminal": true,
+                    "human_intervention_required": false,
+                ]
+                if anyRenameWriteAttempted || childWriteAttempted != nil {
+                    failureExtras["write_attempted"] = anyRenameWriteAttempted
+                } else {
+                    failureExtras["write_attempted_known"] = false
+                }
                 return cleanupApplyStateC(
                     .readbackMismatch,
                     stepID: step.id,
                     hint: "cleanup_apply: rename step '\(step.id)' terminated at track \(target) because "
                         + "the track.rename path did not confirm a verified rename (State B/C).",
-                    extras: [
-                        "tool": "logic_tracks",
-                        "command": "rename",
-                        "failed_track_index": target,
-                        "applied": renamed,
-                        "underlying": body,
-                        "write_attempted": true,
-                        "terminal": true,
-                        "human_intervention_required": false,
-                    ]
+                    extras: failureExtras
                 )
             }
         }
@@ -1227,6 +1239,11 @@ struct ProjectDispatcher: OperationTraceDispatching {
         guard let first = result.content.first else { return "" }
         if case .text(let text, _, _) = first { return text }
         return ""
+    }
+
+    private static func cleanupApplyResultJSONObject(_ text: String) -> [String: Any]? {
+        guard let data = text.data(using: .utf8) else { return nil }
+        return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     }
 
     /// Build a State C (hard-failure) Honest Contract envelope for cleanup_apply

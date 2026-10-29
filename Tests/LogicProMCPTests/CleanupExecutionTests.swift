@@ -59,6 +59,14 @@ private func stateBRename(name: String) -> ChannelResult {
     ]))
 }
 
+private func prewriteStateCRename(name: String) -> ChannelResult {
+    .error(HonestContract.encodeStateC(error: .staleSnapshot, extras: [
+        "op": "track.rename",
+        "requested": name,
+        "write_attempted": false,
+    ]))
+}
+
 // MARK: - Cache fixtures
 
 /// Seed a cache with two duplicate-named tracks so the deterministic audit
@@ -587,6 +595,33 @@ func scalarRenamePreservesPrintableAndJoinerNameBytes(name: String) async throws
     // Some rename(s) were attempted; the failure surfaces the failed track.
     let calls = await channel.calls()
     #expect(!(calls.isEmpty))
+}
+
+@Test func testCleanupApplyPreservesFirstRenamePrewriteRefusal() async throws {
+    let cache = StateCache()
+    let stepID = await seedDuplicateTracks(cache)
+    let channel = FakeRenameChannel { prewriteStateCRename(name: $0) }
+    let router = await routerWith(channel)
+
+    let result = await ProjectDispatcher.handle(
+        command: "cleanup_apply",
+        params: [
+            "step_id": .string(stepID),
+            "confirmed": .bool(true),
+            "names": .string("Kick L,Kick R"),
+        ],
+        router: router,
+        cache: cache,
+        cleanupAuditFileReader: headlessCleanupAuditFileReader
+    )
+
+    #expect(try #require(result.isError))
+    let json = try #require(sharedJSONObject(sharedToolText(result)))
+    #expect(json["state"] as? String == "C")
+    #expect(!(try #require(json["write_attempted"] as? Bool)))
+    #expect(json["failed_track_index"] as? Int == 0)
+    let calls = await channel.calls()
+    #expect(calls.count == 1)
 }
 
 @Test func testCleanupApplyRefusesNameCountMismatch() async throws {
