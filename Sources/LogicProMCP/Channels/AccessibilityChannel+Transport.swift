@@ -3303,7 +3303,8 @@ extension AccessibilityChannel {
         guard let controlBar, let control = observedAutopunchControl(in: controlBar, runtime: runtime) else {
             return .error(HonestContract.encodeStateC(
                 error: .elementNotFound,
-                hint: "A unique readable Autopunch mode checkbox was not found directly in Logic Pro's Control Bar. Customize the Control Bar to show Autopunch, then retry.",
+                hint: "Autopunch toggle terminated because a unique readable mode checkbox was not "
+                    + "found directly in Logic Pro's Control Bar.",
                 extras: [
                     "button": "Autopunch",
                     "operation": "transport.toggle_autopunch",
@@ -3311,7 +3312,9 @@ extension AccessibilityChannel {
                     "control_bar_checkboxes": controlBar.map {
                         transportLandmarkLabels(root: $0, role: kAXCheckBoxRole, runtime: runtime)
                     } ?? [],
-                    "recovery_hint": "Customize Logic Pro's Control Bar and enable the Autopunch button."
+                    "write_attempted": false,
+                    "terminal": true,
+                    "human_intervention_required": false,
                 ]
             ))
         }

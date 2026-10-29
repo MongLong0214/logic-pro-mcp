@@ -2326,10 +2326,19 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     #expect(!v1)
     #expect(try #require(object["state"] as? String) == "C")
     #expect(try #require(object["error"] as? String) == "element_not_found")
+    let terminal = try #require(object["terminal"] as? Bool)
+    let humanRequired = try #require(object["human_intervention_required"] as? Bool)
+    let writeAttempted = try #require(object["write_attempted"] as? Bool)
+    #expect(terminal)
+    #expect(!humanRequired)
+    #expect(!writeAttempted)
     let hint = try #require(object["hint"] as? String)
     #expect(hint.contains("Control Bar"))
     #expect(hint.contains("Autopunch"))
-    #expect(hint.lowercased().contains("customize"))
+    #expect(hint.localizedCaseInsensitiveContains("terminated"))
+    #expect(!hint.localizedCaseInsensitiveContains("customize"))
+    #expect(!hint.localizedCaseInsensitiveContains("retry"))
+    #expect(object["recovery_hint"] == nil)
 }
 
 @Test func testAccessibilityChannelAXBackedTransportErrorPaths() async {
