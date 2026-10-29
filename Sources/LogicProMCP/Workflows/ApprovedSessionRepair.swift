@@ -2720,11 +2720,11 @@ final class ApprovedSessionRepair: @unchecked Sendable {
               retained.effect.current.track.matches(task.pair.track),
               await projectIsCurrent(allowPendingCancellation: true) else { return nil }
         if outputInverseConsumed {
-            // The verified inverse scalar has just read back this exact changed
-            // source and published its request-local native receipt. Carry that
-            // checked effect across only the immediately following Saga
-            // compensation read; the ownership comparison and inverse writer
-            // have already kept their separate fresh Bus-prerequisite checks.
+            // Effect retention has just reopened this exact Output popup after
+            // the verified inverse scalar. Carry that checked effect across only
+            // the immediately following Saga compensation read; the ownership
+            // comparison and inverse writer have already kept their separate
+            // fresh Bus-prerequisite checks.
             guard retained.effect.permits(runtime: retained.effect.current.track.runtime),
                   let proof = outputProof, proof.permitsRead(),
                   outputPair?.strip.matches(retained.effect.current.strip) == true,
@@ -2900,10 +2900,10 @@ final class ApprovedSessionRepair: @unchecked Sendable {
 
     /// Finish the scalar's typed native effect with a post-write protected-
     /// footprint census. Forward Bus output uses its immediately following
-    /// prerequisite check as the Saga receipt. A verified inverse scalar already
-    /// owns an exact checked native effect, so its immediately following
-    /// compensation read may retain that receipt without opening Output again.
-    /// The inverse writer still performs its own full deciding footprint check.
+    /// prerequisite check as the Saga receipt. Every other effect, including a
+    /// restored inverse, must independently reopen Output before the receipt can
+    /// cross into the Saga read. The inverse writer still performs its own full
+    /// deciding footprint check.
     private func retainCheckedOutputEffect(
         _ effect: AccessibilityChannel.ChangedOutputObservation,
         assignment: OutputAssignment,
@@ -2921,13 +2921,15 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         }
         let forwardBusReceiptChecksOutput = !restored
             && outputTask?.prerequisiteBuses.isEmpty == false
-        if !forwardBusReceiptChecksOutput && !restored {
+        var checkedAt: String?
+        if !forwardBusReceiptChecksOutput {
             let checked = await AXMixerStripBinding.$current.withValue(pair.strip) {
                 await AXMixerStripBinding.$outputAssociation.withValue(pair) {
                     await AccessibilityChannel.getOutputObservation(runtime: runtime)
                 }
             }
             guard checked.assignment == assignment else { return false }
+            checkedAt = ISO8601DateFormatter.cacheFormatter.string(from: Date())
         }
         guard outputFootprintHeld(pair: pair, assignment: assignment),
               effect.permits(runtime: runtime),
@@ -2935,13 +2937,12 @@ final class ApprovedSessionRepair: @unchecked Sendable {
               await projectIsCurrent(allowPendingCancellation: true) else { return false }
         let retained: CheckedOutputEffect
         if restored {
-            // State A is emitted only after the scalar has checked the changed
-            // destination and `recordOutputEffect` has retained this exact
-            // source/control/population/focus receipt. State B never reaches
-            // this branch. Reuse the scalar's own readback timestamp rather than
-            // adding a consecutive Output-popup cycle to compensation.
+            // The scalar's State A proves only its slot-caption readback. The
+            // popup above supplies the distinct checked-destination receipt;
+            // State B never reaches this branch.
+            guard let checkedAt else { return false }
             retained = CheckedOutputEffect(effect: effect, assignment: assignment,
-                sampledAt: effect.sampledAt)
+                sampledAt: checkedAt)
         } else if forwardBusReceiptChecksOutput {
             // Complete the post-write Bus checks before the child writer publishes
             // State A. A public cancellation can arrive as soon as that result is

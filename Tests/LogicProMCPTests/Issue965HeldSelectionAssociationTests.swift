@@ -2491,14 +2491,27 @@ struct Issue965HeldSelectionAssociationTests {
         f.measureForwardOutputSampleTime = true
         try await assertCanonicalPhysicalOutput(mode: "bus_departure_execute_cancel", fixture: f)
         #expect(f.routingDestinationPresses == 2)
-        #expect(f.inputMenuPresses == 13,
-                "The immediate forward read may reuse its Bus receipt and the restored read may reuse the verified inverse scalar receipt while both fresh inverse routing checks remain")
-        #expect(f.outputMenuPresses == 8,
-                "Effect retention must not reopen Output after either the forward Bus receipt or the verified inverse scalar has already checked the exact destination")
+        #expect(f.inputMenuPresses == 14,
+                "The immediate forward read may reuse its Bus receipt; the inverse still needs a fresh checked Output receipt after its caption readback")
+        #expect(f.outputMenuPresses == 9,
+                "Effect retention must reuse the forward Bus receipt but independently check the restored destination")
         let forwardOutputSampledAt = try #require(f.forwardOutputSampledAt)
         let firstOutputMenuOpenAfterForwardWriteAt = try #require(f.firstOutputMenuOpenAfterForwardWriteAt)
         #expect(forwardOutputSampledAt >= firstOutputMenuOpenAfterForwardWriteAt,
                 "The retained live-independent sampled_at must follow the surviving Output-popup read that produced it")
+    }
+
+    @Test("Inverse scalar caption readback cannot replace its checked compensation receipt")
+    func canonicalOutputCancellationRejectsPostInverseCheckmarkChange() async throws {
+        let f = try Fixture()
+        try await assertCanonicalPhysicalOutput(
+            mode: "bus_departure_execute_cancel_inverse_checkmark_change",
+            fixture: f
+        )
+        #expect(f.routingLateScopeInjected,
+            "Reach the actual boundary after the inverse scalar readback and before compensation publication")
+        #expect(f.routingDestinationPresses == 2,
+            "The counterexample changes only the checked destination after the owned inverse write")
     }
 
     @Test("Canonical output cancellation revalidates the exact Bus receipt after its source is renewed")
@@ -2810,6 +2823,8 @@ struct Issue965HeldSelectionAssociationTests {
             : !noOutput ? profile : profile == "canonical_no_output" ? "forward"
             : String(profile.dropFirst("canonical_no_output_".count))
         let popupCancellation = executingBusDeparture && requestedOutputMode.hasPrefix("cancel_popup_")
+        let inverseCheckmarkChange = executingBusDeparture
+            && requestedOutputMode == "cancel_inverse_checkmark_change"
         let outputMode = popupCancellation
             ? String(requestedOutputMode.dropFirst("cancel_".count)) : requestedOutputMode
         let delayedReceiverCensus = outputMode.hasPrefix("popup_both_delayed_census")
@@ -2840,7 +2855,7 @@ struct Issue965HeldSelectionAssociationTests {
         let misleadingBeforeReceiver = busReplacement && executingBusDeparture && outputMode == "misleading_before"
         let misleadingReceiver = misleadingBeforeReceiver || (executingBusDeparture && (outputMode == "misleading_receiver"
             || (busReplacement && outputMode == "misleading_after")))
-        let mode = popupCancellation ? "cancel"
+        let mode = popupCancellation || inverseCheckmarkChange ? "cancel"
             : inputPopupFocus ? "forward" : physicalBusInput || changedBusInput ? (outputMode == "physical_input" ? "forward" : "cancel")
             : outputMode.hasPrefix("return_late_") ? String(outputMode.dropFirst("return_".count)) : outputMode
         let destinationLeafLabel = noOutput ? "No Output" : "Output 3-4"
@@ -4093,6 +4108,15 @@ struct Issue965HeldSelectionAssociationTests {
                                 f.builder.setAttribute(outputs[1], kAXDescriptionAttribute as String, "Output 5-6")
                             }
                             if changedBusInput, f.routingDestinationPresses == 1 { f.routingLateScopeInjected = true }
+                            if inverseCheckmarkChange, f.routingDestinationPresses == 2,
+                               !f.routingLateScopeInjected {
+                                // Preserve the inverse slot caption while the next
+                                // independent Output popup reports a different
+                                // checked destination. A scalar State A cannot
+                                // publish this as verified compensation.
+                                f.routingLateScopeInjected = true
+                                f.scrollToChangedOutput = true
+                            }
                             if ["cancel", "newer", "ack_only"].contains(mode) { _ = await journal.cancel(idempotencyKey: key) }
                         }, sagaLiveReadback: .unavailable, approvedSessionRepair: approval)
                 }
@@ -4223,6 +4247,18 @@ struct Issue965HeldSelectionAssociationTests {
                     #expect(f.inputForeignScopeHelpReads == 0, "No physical Help may reach the host after native custody is lost")
                     #expect(f.routingDestinationPresses == 0)
                     #expect(result["saga_state"] as? String != "completed")
+                    return
+                }
+                if inverseCheckmarkChange {
+                    #expect(f.routingLateScopeInjected,
+                        "Reach the post-inverse checked-destination contradiction")
+                    #expect(f.routingDestinationPresses == 2,
+                        "The contradiction must not add a third output write")
+                    #expect(result["saga_state"] as? String == "rollbackUncertain",
+                        "Caption-only State A cannot verify a changed popup checkmark: \(result)")
+                    let step = try #require((result["steps"] as? [[String: Any]])?.first)
+                    let compensation = try #require(step["compensation"] as? [String: Any])
+                    #expect(compensation["disposition"] as? String != "verified")
                     return
                 }
                 if changedBusInput || misleadingReceiver {
