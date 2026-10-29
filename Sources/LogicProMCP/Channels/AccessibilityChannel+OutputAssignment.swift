@@ -1511,14 +1511,12 @@ extension AccessibilityChannel {
             return ["popup_menu_state": "dismissed"]
         case .popupCountUnavailable:
             return ["popup_menu_state": "window_count_unavailable",
-                    "recovery_hint": "Whether the output popup closed could not be read. Dismiss any "
-                        + "Logic popup menu with Escape before the next call."]
+                    "recovery_hint": "Automatic output-popup cleanup could not read whether the popup closed; the operation terminated without authorizing another routing call."]
         case let .couldNotDismiss(initial, remaining):
             return ["popup_menu_state": "could_not_be_dismissed",
                     "popup_menu_initial_window_count": initial,
                     "popup_menu_remaining_window_count": remaining,
-                    "recovery_hint": "A Logic popup menu stayed open. Dismiss it with Escape before the "
-                        + "next call, because an open one blocks Logic's AppleEvent handler."]
+                    "recovery_hint": "Automatic output-popup cleanup could not dismiss a Logic popup menu; the operation terminated because an open menu can block Logic's AppleEvent handler."]
         }
     }
 }
