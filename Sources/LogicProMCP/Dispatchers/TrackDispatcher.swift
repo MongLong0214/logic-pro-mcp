@@ -812,12 +812,14 @@ struct TrackDispatcher: OperationTraceDispatching {
             case .missing(let references):
                 return toolStateCResult(
                     .staleTargetReference,
-                    hint: "sort_verified expected_order names track references that are unavailable or stale: \(references.joined(separator: ", ")). Re-read logic://tracks and retry with its current track_ref values.",
+                    hint: "sort_verified terminated before routing because expected_order names unavailable or stale track references: \(references.joined(separator: ", ")).",
                     extras: [
                         "operation": "track.sort_verified",
                         "reason": "expected_order_unknown_track_refs",
                         "missing_track_refs": references,
                         "write_attempted": false,
+                        "terminal": true,
+                        "human_intervention_required": false,
                     ]
                 )
             }

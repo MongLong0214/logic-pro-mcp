@@ -1235,12 +1235,21 @@ struct Issue448TrackSortVerifiedTests {
         let body = try #require(sharedJSONObject(sharedToolText(result)))
         let missingReferences = try #require(body["missing_track_refs"] as? [String])
         let noWriteWasRouted = await stateBChannel.calls.isEmpty
+        let terminal = try #require(body["terminal"] as? Bool)
+        let humanRequired = try #require(body["human_intervention_required"] as? Bool)
+        let writeAttempted = try #require(body["write_attempted"] as? Bool)
         let namedAbsentReference = result.isError == true
             && body["reason"] as? String == "expected_order_unknown_track_refs"
             && missingReferences == [absentReference]
             && noWriteWasRouted
 
         #expect(namedAbsentReference)
+        #expect(terminal)
+        #expect(!humanRequired)
+        #expect(!writeAttempted)
+        let hint = try #require(body["hint"] as? String)
+        #expect(!hint.localizedCaseInsensitiveContains("re-read"))
+        #expect(!hint.localizedCaseInsensitiveContains("retry"))
     }
 
     @Test("an AXWindows read failure refuses instead of falling through a legacy empty list")
