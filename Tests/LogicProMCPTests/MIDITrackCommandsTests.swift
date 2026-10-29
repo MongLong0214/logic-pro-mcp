@@ -109,9 +109,27 @@ func midiTrackCommandsRejectMalformedRequestsBeforeTheProvider(fault: String) as
     #expect(!(try #require(body["human_intervention_required"] as? Bool)))
     #expect(!(try #require(body["safe_to_retry"] as? Bool)))
     let hint = try #require(body["hint"] as? String)
-    for request in ["inspect", "retry", "manual"] {
+    #expect(body["path"] == nil)
+    for request in ["inspect", "retry", "manual", "destination"] {
         #expect(!hint.localizedCaseInsensitiveContains(request))
     }
+}
+
+@Test func midiTrackExportFailurePreservesItsExplicitDestination() async throws {
+    let result = await MIDIDispatcher.handle(command: "export_track_midi",
+        params: [
+            "project_ref": .string(midiCommandProject),
+            "target_ref": .string(midiCommandTrack),
+            "path": .string("/tmp/existing-target.mid"),
+        ], router: ChannelRouter(), cache: StateCache(), trackFileExport: { _, _, _, _ in
+            throw MIDITrackFileExport.Failure.destinationExists
+        })
+    #expect(try #require(result.isError))
+    let body = try #require(sharedJSONObject(sharedToolText(result)))
+    #expect(body["error"] as? String == "destination_exists")
+    #expect(body["path"] as? String == "/tmp/existing-target.mid")
+    let hint = try #require(body["hint"] as? String)
+    #expect(hint.localizedCaseInsensitiveContains("destination"))
 }
 
 @Test func midiTrackCommandsReportCollidingIndicesAndTheExplicitRecoveryOption() async throws {
