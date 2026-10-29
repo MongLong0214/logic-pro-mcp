@@ -5651,12 +5651,12 @@ extension AccessibilityChannel {
         runtime: AXLogicProElements.Runtime,
         allowingChanges: (AXUIElement) -> Bool = { _ in true }
     ) -> Bool {
-        guard let closeButton: AXUIElement = AXHelpers.getAttribute(
-            window, kAXCloseButtonAttribute, runtime: runtime.ax
-        ) else {
-            return false
-        }
         for attempt in 0..<3 {
+            guard let closeButton: AXUIElement = AXHelpers.getAttribute(
+                window, kAXCloseButtonAttribute, runtime: runtime.ax
+            ) else {
+                return false
+            }
             guard allowingChanges(window) else { return false }
             _ = pressElement(closeButton, runtime: runtime.ax)
             if AXLogicProElements.pluginEditorWindowIsOpen(window, runtime: runtime) == false {
