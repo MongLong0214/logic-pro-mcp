@@ -92,6 +92,29 @@ struct Issue606SaveAsFieldIdentityTests {
         builder.setAttribute(builder.element(3), kAXFocusedAttribute as String, true)
         #expect(AccessibilityChannel.filenameFieldCandidates(in: panel, runtime: runtime).count == 2)
     }
+
+    @Test("a failed automatic frontmost preparation terminates without a human recovery request")
+    func frontmostPreparationFailureIsTerminalAndNonHuman() async throws {
+        let result = await AccessibilityChannel.saveAsViaAXDialog(
+            path: "/Users/test/terminal-save-as.logicx",
+            runtime: FakeAXRuntimeBuilder().makeLogicRuntime(),
+            isFrontmost: { false },
+            activateLogic: { false },
+            sleepMicros: { _ in }
+        )
+
+        #expect(!result.isSuccess)
+        let envelope = try #require(sharedJSONObject(result.message))
+        #expect(envelope["frontmost_preparation"] as? String == "activation_refused")
+        #expect(!(try #require(envelope["write_attempted"] as? Bool)))
+        #expect(try #require(envelope["terminal"] as? Bool))
+        #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+        #expect(try #require(envelope["automatic_frontmost_attempts_exhausted"] as? Bool))
+        let hint = try #require(envelope["hint"] as? String)
+        for request in ["bring Logic", "retry", "manually"] {
+            #expect(!hint.localizedCaseInsensitiveContains(request))
+        }
+    }
 }
 
 /// #606 follow-up: the menu gate must refuse an UNREADABLE `AXEnabled`, not only a false one.

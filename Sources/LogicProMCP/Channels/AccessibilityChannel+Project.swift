@@ -1098,14 +1098,16 @@ extension AccessibilityChannel {
         guard preparation.isReady else {
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
-                hint: "save_as drives Logic's own File menu, and Logic disables Save As while it is "
-                    + "in the background — the press would report success and open nothing. Nothing "
-                    + "was touched. Bring Logic Pro to the front and retry.",
+                hint: "save_as terminated before mutation because automatic Logic frontmost "
+                    + "preparation failed; no menu was pressed and no panel was opened.",
                 extras: [
                     "operation": "project.save_as",
                     "frontmost_preparation": preparation.rawValue,
                     "write_attempted": false,
-                    "safe_to_retry": true,
+                    "safe_to_retry": false,
+                    "automatic_frontmost_attempts_exhausted": true,
+                    "terminal": true,
+                    "human_intervention_required": false,
                 ]
             ))
         }
