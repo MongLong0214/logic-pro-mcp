@@ -2396,7 +2396,7 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     #expect(!HonestContract.isTerminalStateC(pressFailure.message))
 }
 
-@Test func testAccessibilityChannelAXBackedTempoFallbackCanBeInjected() async {
+@Test func testAccessibilityChannelAXBackedTempoFallbackCanBeInjected() async throws {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(160)
     let window = builder.element(161)
@@ -2432,6 +2432,12 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     #expect(result.message.contains("\"track_header_count\":1"))
     #expect(result.message.contains("\"control_bar_found\":true"))
     #expect(result.message.contains("\"control_bar_slider_descriptions\":[\"Bar\"]"))
+    let object = decodeAccessibilityJSON(result.message)
+    #expect(try #require(object["write_attempted"] as? Bool))
+    #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(try #require(object["automatic_readback_attempts_exhausted"] as? Bool))
 }
 
 @Test func testImportMIDIFileFailsClosedWhenSystemEventsAutomationDenied() async throws {

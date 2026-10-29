@@ -507,7 +507,14 @@ extension AccessibilityChannel {
             return .error(HonestContract.encodeStateC(
                 error: .readbackUnavailable,
                 hint: "tempo fallback executed but no tempo readback was available",
-                extras: missingExtras.merging(["via": "keyboard-fallback"]) { _, new in new }
+                extras: missingExtras.merging([
+                    "via": "keyboard-fallback",
+                    "write_attempted": true,
+                    "safe_to_retry": false,
+                    "automatic_readback_attempts_exhausted": true,
+                    "terminal": true,
+                    "human_intervention_required": false,
+                ]) { _, new in new }
             ))
         }
         return .error(HonestContract.encodeStateC(
