@@ -1584,13 +1584,14 @@ enum StockPluginCatalog {
             controlsViewActuationState: .unmeasured,
             availabilityState: .observed,
             provenance: .observed(
-                method: "controls_view_read_only_observation",
-                observedAt: "2026-08-30T04:02:24Z",
-                logicVersion: "12.x",
+                method: "exact_head_get_param_verified_read_only_observation",
+                observedAt: "2026-10-29T04:15:10Z",
+                logicVersion: "12.3 (6674)",
                 locale: "ko-KR",
                 evidence: [
                     "parameter_readback",
-                    "Knee Controls row exposes a raw AX value and verbatim display",
+                    "docs/observations/2026-10-29-299-compressor-knee-read-only-state-a.json",
+                    "State A observed raw 7 and verbatim display 0.7 on the protected fixture",
                     "No Knee write or raw-to-normalized conversion was measured",
                 ]
             )
