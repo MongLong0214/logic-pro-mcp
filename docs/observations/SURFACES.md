@@ -21,6 +21,7 @@ harder question, **"what have we never measured?"**
 | `inspector.channel_strip` | the left/right channel strips the Inspector shows for the selected track, in the main window with the Mixer closed |
 | `plugin.window` | the editor window frame, view switcher, presets |
 | `plugin.controls_view` | Logic's host-provided Controls table |
+| `plugin.mcu` | plug-in parameters exposed through MCU/C4 assignment mode |
 | `plugin.native_view` | a plug-in's own UI |
 | `editor.piano_roll` | the Piano Roll |
 | `editor.event_list` | the Event List |

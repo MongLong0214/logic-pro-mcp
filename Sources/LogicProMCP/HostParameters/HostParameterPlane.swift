@@ -11,12 +11,12 @@ enum PluginParameterProvider: Int, Codable, Comparable, Sendable {
 
 extension PluginParameterProvider {
     var canHostVerifiedWrite: Bool {
-        self == .mcuC4PluginEdit || self == .controlsViewAX
+        self == .controlsViewAX
     }
 }
 
 func preferredHostPlane(
     available: Set<PluginParameterProvider>
 ) -> PluginParameterProvider? {
-    available.min()
+    available.filter(\.canHostVerifiedWrite).min()
 }

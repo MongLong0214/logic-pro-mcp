@@ -1,0 +1,68 @@
+{
+  "schema": 3,
+  "id": "2026-10-29-862-mcu-plugin-edit-lacks-strip-identity",
+  "date": "2026-10-29",
+  "subject": "MCU/C4 Plug-in Edit strip identity after Logic rebanks around the selected channel",
+  "question": "Can an MCU strip-relative plug-in edit be bound to the named Logic channel strongly enough to expose a host-verified write?",
+  "verdict": "wall",
+  "issues": [
+    862
+  ],
+  "surface": "plugin.mcu",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "manual",
+    "command": "Bind Mackie Control input and output to LogicProMCP-MCU-Internal, select a channel that causes Logic to rebank, then repeat the same strip-relative read while comparing the selected arrange channel, server bank bookkeeping, the MCU name toast and LCD value row.",
+    "expected": "The repeated strip index cannot be credited unless an independent readback proves Logic's current bank offset and the exact selected channel; stale or disagreeing identity must refuse before a write."
+  },
+  "depends": [
+    "Sources/LogicProMCP/HostParameters/HostParameterPlane.swift",
+    "Tests/LogicProMCPTests/HostParameterTests.swift"
+  ],
+  "evidence": [],
+  "method": "On the live host, selection was changed across a bank boundary and the same strip-relative request was repeated. The selected channel, server-side bank bookkeeping, upper LCD parameter row, lower LCD value row and channel-name toast were compared. A settle delay repaired one immediate bank timing defect but did not create a readback for Logic's bank offset or remove stale lower-row residue.",
+  "observations": [
+    {
+      "what": "identical strip-relative requests after Logic rebanked",
+      "first_and_next_named_channels_disagreed": true,
+      "server_bank_compared_with_logic": false,
+      "exact_strip_identity_proved": false
+    },
+    {
+      "what": "bank timing control",
+      "bank_press_settle_ms": 250,
+      "single_call_selection_repaired": true,
+      "logic_bank_offset_readback_available": false
+    },
+    {
+      "what": "LCD completeness",
+      "upper_parameter_row_redrawn_on_assignment_change": true,
+      "lower_value_row_fully_redrawn": false,
+      "reselecting_same_strip_emitted_fresh_name_toast": false,
+      "stale_value_residue_observed": true
+    },
+    {
+      "what": "safe product disposition",
+      "mcu_host_verified_write": false,
+      "mcu_only_preferred_plane": null,
+      "controls_view_ax_host_verified_write": true
+    }
+  ],
+  "conclusion": "The MCU plane cannot claim a host-verified write until exact strip identity is established; the product model must fail it closed and prefer Controls-view AX.",
+  "limits": [
+    "One Logic build, one locale, one project and one Mackie Control binding were measured.",
+    "The observation does not prove that a future independent bank-offset or exact channel-identity provider is impossible.",
+    "The settle control isolates an immediate timing defect but does not establish stable target identity.",
+    "Fixture channel names and LCD residue are runtime project data, not claims about Apple's canonical strings."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record measures live rebanking, delta LCD behavior and target-identity disagreement. It does not claim that a quoted label is shipped in Apple's canonical string corpus."
+  }
+}
