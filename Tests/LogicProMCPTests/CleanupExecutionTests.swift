@@ -59,6 +59,16 @@ private func stateBRename(name: String) -> ChannelResult {
     ]))
 }
 
+private func noOpStateARename(name: String) -> ChannelResult {
+    .success(HonestContract.encodeStateA(extras: [
+        "op": "track.rename",
+        "requested": name,
+        "observed": name,
+        "via": "no-op",
+        "write_attempted": false,
+    ]))
+}
+
 private func prewriteStateCRename(name: String) -> ChannelResult {
     .error(HonestContract.encodeStateC(error: .staleSnapshot, extras: [
         "op": "track.rename",
@@ -620,6 +630,58 @@ func scalarRenamePreservesPrintableAndJoinerNameBytes(name: String) async throws
     #expect(json["state"] as? String == "C")
     #expect(!(try #require(json["write_attempted"] as? Bool)))
     #expect(json["failed_track_index"] as? Int == 0)
+    let calls = await channel.calls()
+    #expect(calls.count == 1)
+}
+
+@Test func testCleanupApplyPreservesNoOpThenPrewriteRefusal() async throws {
+    let cache = StateCache()
+    let stepID = await seedDuplicateTracks(cache)
+    let channel = FakeRenameChannel { name in
+        name == "Kick" ? noOpStateARename(name: name) : prewriteStateCRename(name: name)
+    }
+    let router = await routerWith(channel)
+
+    let result = await ProjectDispatcher.handle(
+        command: "cleanup_apply",
+        params: [
+            "step_id": .string(stepID),
+            "confirmed": .bool(true),
+            "names": .string("Kick,Kick R"),
+        ],
+        router: router,
+        cache: cache,
+        cleanupAuditFileReader: headlessCleanupAuditFileReader
+    )
+
+    #expect(try #require(result.isError))
+    let json = try #require(sharedJSONObject(sharedToolText(result)))
+    #expect(!(try #require(json["write_attempted"] as? Bool)))
+    let calls = await channel.calls()
+    #expect(calls.count == 2)
+}
+
+@Test func testCleanupApplyTreatsFirstRenameStateBAsAttempted() async throws {
+    let cache = StateCache()
+    let stepID = await seedDuplicateTracks(cache)
+    let channel = FakeRenameChannel { stateBRename(name: $0) }
+    let router = await routerWith(channel)
+
+    let result = await ProjectDispatcher.handle(
+        command: "cleanup_apply",
+        params: [
+            "step_id": .string(stepID),
+            "confirmed": .bool(true),
+            "names": .string("Kick L,Kick R"),
+        ],
+        router: router,
+        cache: cache,
+        cleanupAuditFileReader: headlessCleanupAuditFileReader
+    )
+
+    #expect(try #require(result.isError))
+    let json = try #require(sharedJSONObject(sharedToolText(result)))
+    #expect(try #require(json["write_attempted"] as? Bool))
     let calls = await channel.calls()
     #expect(calls.count == 1)
 }

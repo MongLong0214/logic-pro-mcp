@@ -3288,6 +3288,20 @@ private func makeTempoSliderFixture(
     #expect(renameResult.isSuccess)
     #expect((builder.attributeValue(nameField, kAXValueAttribute as String) as? String) == "Lead")
     #expect(builder.actionCalls.contains { $0.elementID == builder.elementID(nameField) && $0.action == kAXConfirmAction as String })
+
+    let confirmCount = builder.actionCalls.filter {
+        $0.elementID == builder.elementID(nameField) && $0.action == kAXConfirmAction as String
+    }.count
+    let renameNoOp = await channel.execute(
+        operation: "track.rename", params: ["index": "0", "name": "Lead"]
+    )
+    #expect(renameNoOp.isSuccess)
+    let renameNoOpReceipt = decodeAccessibilityJSON(renameNoOp.message)
+    #expect(renameNoOpReceipt["via"] as? String == "no-op")
+    #expect(!(try #require(renameNoOpReceipt["write_attempted"] as? Bool)))
+    #expect(builder.actionCalls.filter {
+        $0.elementID == builder.elementID(nameField) && $0.action == kAXConfirmAction as String
+    }.count == confirmCount)
 }
 
 @Test func testAccessibilityChannelAXBackedTrackSelectVerifiesReadbackWhenSelectionMetadataExists() async throws {

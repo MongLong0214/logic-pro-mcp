@@ -979,6 +979,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
 
         var renamed: [[String: Any]] = []
         var anyRenameWriteAttempted = false
+        var allRenameWriteAttemptsKnown = true
         // #389: cleanup_apply reaches the router only through nested
         // TrackDispatcher.handle calls, each of which arms and commits its OWN
         // child boundary — the parent trace would otherwise show none. Keep the
@@ -995,11 +996,22 @@ struct ProjectDispatcher: OperationTraceDispatching {
             )
             let body = cleanupApplyResultText(result)
             let proof = cleanupApplyResultJSONObject(body)
-            let childWriteAttempted = proof?["write_attempted"] as? Bool
-            if childWriteAttempted == true
-                || (proof?["state"] as? String == "A" && proof?["verified"] as? Bool == true) {
+            let childWriteAttempted: Bool?
+            if let explicit = proof?["write_attempted"] as? Bool {
+                childWriteAttempted = explicit
+            } else if proof?["state"] as? String == "B" {
+                // Honest Contract State B means the child write landed but its
+                // readback could not establish a verified outcome.
+                childWriteAttempted = true
+            } else if proof?["state"] as? String == "A", proof?["via"] as? String == "no-op" {
+                childWriteAttempted = false
+            } else {
+                childWriteAttempted = nil
+            }
+            if childWriteAttempted == true {
                 anyRenameWriteAttempted = true
             }
+            if childWriteAttempted == nil { allRenameWriteAttemptsKnown = false }
             renamed.append([
                 "track_index": target,
                 "new_name": newName,
@@ -1019,7 +1031,9 @@ struct ProjectDispatcher: OperationTraceDispatching {
                     "terminal": true,
                     "human_intervention_required": false,
                 ]
-                if anyRenameWriteAttempted || childWriteAttempted != nil {
+                if anyRenameWriteAttempted {
+                    failureExtras["write_attempted"] = true
+                } else if allRenameWriteAttemptsKnown {
                     failureExtras["write_attempted"] = anyRenameWriteAttempted
                 } else {
                     failureExtras["write_attempted_known"] = false

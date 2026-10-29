@@ -3190,7 +3190,8 @@ extension AccessibilityChannel {
             return .success(HonestContract.encodeStateA(
                 extras: baseExtras.merging([
                     "observed": observed,
-                    "via": via
+                    "via": via,
+                    "write_attempted": true,
                 ]) { _, new in new }
             ))
         }
@@ -3199,7 +3200,8 @@ extension AccessibilityChannel {
             return .success(HonestContract.encodeStateA(
                 extras: baseExtras.merging([
                     "observed": currentName,
-                    "via": "no-op"
+                    "via": "no-op",
+                    "write_attempted": false,
                 ]) { _, new in new }
             ))
         }
@@ -3297,7 +3299,8 @@ extension AccessibilityChannel {
             reason: observed == nil ? .readbackUnavailable : .readbackMismatch,
             extras: baseExtras.merging([
                 "observed": observed as Any? ?? NSNull(),
-                "via": "track_menu"
+                "via": "track_menu",
+                "write_attempted": true,
             ]) { _, new in new }
         ))
     }
