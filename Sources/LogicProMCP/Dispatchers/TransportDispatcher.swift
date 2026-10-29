@@ -330,9 +330,12 @@ struct TransportDispatcher: OperationTraceDispatching {
             )
             extras["poll_attempts"] = attempts
             extras["write_result"] = writePayload
+            extras["automatic_read_attempts_exhausted"] = true
+            extras["human_intervention_required"] = false
+            extras["terminal"] = true
             return toolTextResult(HonestContract.encodeStateC(
                 error: .readbackUnavailable,
-                hint: "transport.stop executed, but live transport state could not be refreshed. Focus Logic's Tracks window, dismiss modal or plugin dialogs, then retry or run logic_system refresh_cache.",
+                hint: "transport.stop exhausted 12 automatic live readback attempts; the command terminated with the stop effect unverified and no further writes.",
                 extras: extras
             ), isError: true)
         }
@@ -376,6 +379,8 @@ struct TransportDispatcher: OperationTraceDispatching {
         func refusalBeforeWrite(_ hint: String) -> CallTool.Result {
             extras["write_attempted"] = false
             extras["safe_to_retry"] = true
+            extras["human_intervention_required"] = false
+            extras["terminal"] = true
             return toolTextResult(HonestContract.encodeStateC(
                 error: .readbackUnavailable,
                 hint: hint,
@@ -394,7 +399,7 @@ struct TransportDispatcher: OperationTraceDispatching {
         }
 
         guard let first = await liveTransportState(router: router, cache: cache) else {
-            return refusalBeforeWrite("transport.pause is a toggle and the transport state could not be read, so nothing was sent. Focus Logic's Tracks window, dismiss modal or plugin dialogs, then retry.")
+            return refusalBeforeWrite("transport.pause terminated before the toggle because live transport state was unavailable; nothing was sent.")
         }
         if first.isPlaying == false {
             return notPlaying(first)
@@ -417,7 +422,7 @@ struct TransportDispatcher: OperationTraceDispatching {
         extras["stillness_gap_ms"] = Int(gap / 1_000_000)
         await sleep(gap)
         guard let second = await liveTransportState(router: router, cache: cache) else {
-            return refusalBeforeWrite("transport.pause is a toggle and the second transport reading failed, so nothing was sent. Retry.")
+            return refusalBeforeWrite("transport.pause terminated before the toggle because the second live transport reading failed; nothing was sent.")
         }
         if second.isPlaying == false {
             return notPlaying(second)
@@ -565,6 +570,8 @@ struct TransportDispatcher: OperationTraceDispatching {
         func refusalBeforeWrite(_ hint: String) -> CallTool.Result {
             extras["write_attempted"] = false
             extras["safe_to_retry"] = true
+            extras["human_intervention_required"] = false
+            extras["terminal"] = true
             return toolTextResult(HonestContract.encodeStateC(
                 error: .readbackUnavailable,
                 hint: hint,
@@ -589,7 +596,7 @@ struct TransportDispatcher: OperationTraceDispatching {
         extras["stillness_gap_ms"] = Int(gap / 1_000_000)
         await sleep(gap)
         guard let second = await readTransportState(router: router) else {
-            return refusalBeforeWrite("Play is on, but the second transport reading failed, so a paused transport could not be told from a playing one and nothing was sent. Retry.")
+            return refusalBeforeWrite("transport.play terminated before resume because the second live transport reading failed; no transport command was sent.")
         }
         if second.isPlaying == false {
             return await routeAndVerifyTransportCommand(

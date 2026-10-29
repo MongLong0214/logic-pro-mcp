@@ -1043,6 +1043,42 @@ private let stillnessPreWriteRefusals: [(command: String, write: String, failure
     ("play", "transport.resume", "position_unread"),
 ]
 
+@Test func testTransportPauseInitialReadFailureTerminatesWithoutHumanRecovery() async throws {
+    let router = ChannelRouter()
+    let keyWrite = FixedResultChannel(id: .cgEvent, result: .success("pause key sent"))
+    let readback = SequencedTransportReadbackChannel(
+        id: .accessibility,
+        observedTempo: 120.0,
+        transportStates: []
+    )
+    await router.register(keyWrite)
+    await router.register(readback)
+
+    let result = await TransportDispatcher.handle(
+        command: "pause",
+        params: [:],
+        router: router,
+        cache: StateCache(),
+        sleep: { _ in }
+    )
+
+    #expect(result.isError!)
+    #expect(await keyWrite.executedOps.isEmpty)
+    let object = try #require(parseDispatcherObject(dispatcherText(result)))
+    #expect(object["state"] as? String == "C")
+    let writeAttempted = try #require(object["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+    let terminal = try #require(object["terminal"] as? Bool)
+    #expect(terminal)
+    let humanInterventionRequired = try #require(object["human_intervention_required"] as? Bool)
+    #expect(!humanInterventionRequired)
+    let hint = try #require(object["hint"] as? String)
+    #expect(hint.contains("terminated before the toggle"))
+    for request in ["focus", "dismiss", "retry", "click", "run "] {
+        #expect(!hint.lowercased().contains(request))
+    }
+}
+
 @Test(arguments: stillnessPreWriteRefusals)
 func testTransportDispatcherStillnessRefusalsBeforeTheKeyAreStateC(
     command: String, write: String, failure: String
@@ -1086,6 +1122,14 @@ func testTransportDispatcherStillnessRefusalsBeforeTheKeyAreStateC(
     #expect(object["error"] as? String == "readback_unavailable")
     let writeAttempted = try #require(object["write_attempted"] as? Bool)
     #expect(!writeAttempted)
+    let terminal = try #require(object["terminal"] as? Bool)
+    #expect(terminal)
+    let humanInterventionRequired = try #require(object["human_intervention_required"] as? Bool)
+    #expect(!humanInterventionRequired)
+    let hint = try #require(object["hint"] as? String)
+    for request in ["focus", "dismiss", "retry", "click", "run "] {
+        #expect(!hint.lowercased().contains(request))
+    }
 }
 
 @Test func testTransportDispatcherPauseAtAnObservedTempoStillDecides() async throws {
@@ -4640,7 +4684,7 @@ private actor TransportStateSequenceChannel: Channel {
     #expect(await cgEvent.executedOps.map(\.0) == ["transport.stop"])
 }
 
-@Test func testTransportDispatcherStopFailsClosedWhenLiveReadbackUnavailable() async {
+@Test func testTransportDispatcherStopFailsClosedWhenLiveReadbackUnavailable() async throws {
     let router = ChannelRouter()
     let ax = ScriptedTransportChannel(id: .accessibility, results: [
         "transport.stop": .success(HonestContract.encodeStateB(
@@ -4675,7 +4719,18 @@ private actor TransportStateSequenceChannel: Channel {
     #expect(json["refresh_error"] as? String == "element_not_found")
     #expect(json["cached_source"] as? String == "cache")
     #expect((json["cache_age_sec"] as? Double ?? 0) > 0)
-    #expect(((json["hint"] as? String)?.contains("refresh_cache"))!)
+    let terminal = try #require(json["terminal"] as? Bool)
+    #expect(terminal)
+    let humanInterventionRequired = try #require(json["human_intervention_required"] as? Bool)
+    #expect(!humanInterventionRequired)
+    let attemptsExhausted = try #require(json["automatic_read_attempts_exhausted"] as? Bool)
+    #expect(attemptsExhausted)
+    let hint = json["hint"] as? String ?? ""
+    #expect(hint.contains("12 automatic live readback attempts"))
+    #expect(hint.contains("terminated"))
+    for request in ["focus", "dismiss", "retry", "click", "run "] {
+        #expect(!hint.lowercased().contains(request))
+    }
 }
 
 @Test func testTransportDispatcherStopFailsClosedWhenLiveStateStillReportsPlayback() async {
