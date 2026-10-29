@@ -21,10 +21,13 @@ usable answer; presenting something unverified as verified is not.
 |---|---|
 | **You** | the change, the tests that cover it, the evidence you can actually produce, and an honest list of what you could not |
 | **CI** | the full applicable regression suite, the coverage floors, and every repository guard — before anything merges |
-| **Maintainers** | approving workflow runs on a first-time contribution, repository configuration, live Logic verification you have no way to do, and attributing CI failures that are not yours |
+| **Authorized automation** | applicable live Logic verification, bounded recovery, independent review, merge, and explicit unsuccessful termination when a required capability remains unavailable |
 
-Open a **draft** pull request when the remaining verification needs a maintainer — a live Logic
-observation, a release dry run, a permission you do not have. That is what drafts are for.
+Do not turn missing verification into a request for somebody to click, log in, grant access, attest a
+result, retry, or merge. Record the missing evidence and its reason. The authorized workflow either
+collects it through its existing noninteractive host and credentials, recovers within its finite
+budget, or terminates unsuccessfully with the gap preserved. A draft may describe incomplete work,
+but it is not a human-action queue.
 
 ### Local evidence, by kind of change
 
@@ -34,7 +37,7 @@ observation, a release dry run, a permission you do not have. That is what draft
 | Package or build declarations | the relevant build, `swift package describe` for a product change, and a consumer smoke build where one applies | the existing full regression suite and guards, in CI |
 | Narrow parser or validation behaviour | the targeted test and a relevant build | CI regression and coverage |
 | Shared state, routing or safety | focused evidence; the full local suite when that is feasible for you | CI, plus focused review of the evidence |
-| Logic-facing readback or write | focused tests and whatever observation you can make — say so if you have no live access | live evidence, coordinated before acceptance rather than before you open a draft |
+| Logic-facing readback or write | focused tests and whatever observation you can make — say so if you have no live access | the authorized native-verification workflow, with explicit failure if its required host or capability remains unavailable |
 | CI or workflow changes | the guard and condition tests for what you touched, and any lint you can run | how the checks actually behave on a representative Actions run, plus existing CI |
 
 A small contribution is meant to stay small. [#944](https://github.com/MongLong0214/logic-pro-mcp/issues/944)
@@ -59,7 +62,8 @@ Scripts/check-canon-citations.py                  # the gate CI runs
 
 **You do need Logic to pin a key nobody has cited yet.** `resolve` reads the committed index, and
 only `Scripts/logic_canon.py build` on a machine with Logic can add to it. If you need a key that
-is not there, say so in the pull request and a maintainer will pin it — do not work around it by
+is not there, say so in the pull request. The authorized workflow must acquire it noninteractively
+or terminate with that evidence gap; do not request a manual pin and do not work around it by
 quoting a value the index cannot check.
 
 **If your change states nothing about Logic**, write the sentence `docs/canon/README.md` gives
@@ -216,7 +220,7 @@ git switch -c fix/permission-summary-automation-copy
 
 The local-evidence table above is the whole pre-submission obligation. What follows is not a list
 of commands to run before submitting — it is what a change of a particular kind still needs before
-it can be merged, and most of it is CI's job or a maintainer's.
+it can be merged, and most of it is owned by CI or the authorized automation.
 
 - New behaviour is covered by at least one test.
 - CI holds the coverage floors (`region >= 70%`, `line >= 78%`). You do not have to measure them
@@ -230,10 +234,12 @@ it can be merged, and most of it is CI's job or a maintainer's.
   `CHANGELOG.md` when the public behaviour or the live evidence changes.
 - Release version change → leave published install URLs pinned to the existing stable tag until a
   real release exists. Publishing bumps `ServerConfig`, the manifest, the Formula, the installer
-  default, the tests, README, SETUP, API and CHANGELOG together, and that is maintainer work.
+  default, the tests, README, SETUP, API and CHANGELOG together through the authorized release
+  workflow.
 
 If a gate is one you cannot run, say so in the description and say why. Do not mark unverified live
-behaviour as verified.
+behaviour as verified, and do not request a person to supply the missing result. The automated path
+must produce the evidence, recover within its budget, or finish unsuccessfully with the gap intact.
 
 ## Security Reports
 
