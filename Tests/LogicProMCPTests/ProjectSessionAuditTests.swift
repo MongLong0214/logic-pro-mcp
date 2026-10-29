@@ -81,6 +81,30 @@ private func makeAuditSnapshot(
     #expect(!report.findings.contains { $0.id == "empty_tracks_detected" })
 }
 
+@Test func testEmptyTrackAuditTerminatesWithoutHumanRecoveryInstructions() throws {
+    let report = ProjectSessionAudit.buildAudit(snapshot: makeAuditSnapshot(
+        tracks: [TrackState(id: 0, name: "Empty", type: .audio)],
+        regions: []
+    ))
+
+    let finding = try #require(report.findings.first { $0.id == "empty_tracks_detected" })
+    #expect(finding.summary == "Tracks with no cached regions were detected; this read-only audit makes no delete or hide decision.")
+
+    let step = try #require(report.cleanupPlan.first { $0.id == "review_empty_tracks_no_delete" })
+    #expect(step.proposedOperation == "No deletion or hiding is proposed for tracks with no cached regions.")
+    #expect(step.requiredConfirmation == "none; terminal read-only result")
+    #expect(step.expectedReadback == "not applicable; this step performs no project mutation")
+
+    let terminalText = [
+        finding.summary,
+        step.proposedOperation,
+        step.requiredConfirmation,
+        step.expectedReadback,
+    ].joined(separator: " ").lowercased()
+    #expect(!terminalText.contains("manual"))
+    #expect(!terminalText.contains("review"))
+}
+
 private func messySnapshot(
     now: Date = Date(timeIntervalSince1970: 1_730_000_000)
 ) -> ProjectSessionAudit.Snapshot {
