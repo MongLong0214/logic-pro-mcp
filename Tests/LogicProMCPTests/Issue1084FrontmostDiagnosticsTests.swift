@@ -252,6 +252,13 @@ private func ownershipPayload(_ reading: ProcessUtils.KeyboardOwnershipObservati
     let writeAttempted = try #require(object["write_attempted"] as? Bool)
     #expect(!writeAttempted)
     #expect(object["frontmost_preparation"] as? String == "activation_refused")
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(try #require(object["automatic_frontmost_attempts_exhausted"] as? Bool))
+    let hint = try #require(object["hint"] as? String)
+    for request in ["bring Logic", "retry", "manually"] {
+        #expect(!hint.localizedCaseInsensitiveContains(request))
+    }
     let reading = try #require(object["frontmost_observation"] as? [String: Any])
     #expect(reading["reason"] as? String == "keyboard_owner_not_logic")
 }

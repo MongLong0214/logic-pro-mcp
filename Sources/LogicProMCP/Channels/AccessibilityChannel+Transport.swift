@@ -1096,15 +1096,18 @@ extension AccessibilityChannel {
         guard preparation.isReady else {
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
-                hint: "goto_position drives Logic's own UI; from the background it moves the playhead "
-                    + "to the wrong bar, so nothing was touched. Bring Logic Pro to the front and retry. "
-                    + "The fixed ownership reason is in frontmost_observation.reason when observed.",
+                hint: "goto_position terminated before mutation because automatic Logic keyboard "
+                    + "ownership preparation failed; no UI action occurred. The fixed ownership "
+                    + "reason is in frontmost_observation.reason when observed.",
                 extras: baseExtras.merging([
                     "operation": "transport.goto_position",
                     "method": "ax_goto_position_dialog",
                     "frontmost_preparation": preparation.rawValue,
                     "write_attempted": false,
-                    "safe_to_retry": true,
+                    "safe_to_retry": false,
+                    "automatic_frontmost_attempts_exhausted": true,
+                    "terminal": true,
+                    "human_intervention_required": false,
                 ]) { _, new in new }
             ))
         }
