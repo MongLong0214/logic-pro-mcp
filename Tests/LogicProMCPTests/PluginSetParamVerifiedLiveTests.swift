@@ -113,6 +113,10 @@ private final class LiveFixture: @unchecked Sendable {
         // AXWindows. The close must be judged by the observed window list, not
         // by the press returning true.
         pluginCloseControlFailsToClose: Bool = false,
+        // Logic 12.4 can replace the editor's close control after the first
+        // accepted press. Only the freshly acquired control closes the exact
+        // editor window in this fixture.
+        pluginCloseControlRenewsAfterFirstAttempt: Bool = false,
         controlsViewRowLabel: String? = nil,
         controlsViewControlRole: String = kAXCheckBoxRole as String,
         controlsCheckboxBefore: Bool = false,
@@ -151,6 +155,7 @@ private final class LiveFixture: @unchecked Sendable {
         let pluginWindow = b.element(1004)
         let slider = b.element(1005)
         let pluginClose = b.element(1006)
+        let renewedPluginClose = b.element(100_915)
         let pluginBypass = b.element(1007)
         let pluginLink = b.element(1008)
         let controlsViewSwitcher = b.element(1009)
@@ -283,6 +288,7 @@ private final class LiveFixture: @unchecked Sendable {
         }
         b.setAttribute(slider, kAXValueDescriptionAttribute as String, formatSliderDisplay(beforeValue))
         b.setAttribute(pluginClose, kAXRoleAttribute as String, kAXButtonRole as String)
+        b.setAttribute(renewedPluginClose, kAXRoleAttribute as String, kAXButtonRole as String)
         b.setAttribute(pluginBypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
         b.setAttribute(pluginBypass, kAXDescriptionAttribute as String, "bypass")
         b.setAttribute(pluginLink, kAXRoleAttribute as String, kAXCheckBoxRole as String)
@@ -389,6 +395,7 @@ private final class LiveFixture: @unchecked Sendable {
         let targetSlotForViewMutation = targetSlot
         let targetOpenButtonKey = targetOpenButton.map { b.elementID($0) }
         let pluginCloseKey = b.elementID(pluginClose)
+        let renewedPluginCloseKey = b.elementID(renewedPluginClose)
         let controlsCheckboxKey = b.elementID(controlsCheckbox)
         let controlsViewMenuItemKey = b.elementID(controlsViewMenuItem)
         let editorViewMenuItemKey = b.elementID(editorViewMenuItem)
@@ -628,6 +635,21 @@ private final class LiveFixture: @unchecked Sendable {
                 }
                 guard action == (kAXPressAction as String) else { return true }
                 if key == pluginCloseKey {
+                    pluginCloseControlPressCount.value += 1
+                    if pluginCloseControlRenewsAfterFirstAttempt {
+                        b.setAttribute(
+                            pluginWindow,
+                            kAXCloseButtonAttribute as String,
+                            renewedPluginClose
+                        )
+                        return true
+                    }
+                    if !pluginCloseControlFailsToClose {
+                        b.setAttribute(app, kAXWindowsAttribute as String, [arrangeWindow])
+                    }
+                    return true
+                }
+                if key == renewedPluginCloseKey {
                     pluginCloseControlPressCount.value += 1
                     if !pluginCloseControlFailsToClose {
                         b.setAttribute(app, kAXWindowsAttribute as String, [arrangeWindow])
@@ -4166,6 +4188,26 @@ private final class Counter: @unchecked Sendable {
     }
     let constructedEditorWasClosed = remainingEditors.isEmpty
     #expect(constructedEditorWasClosed)
+}
+
+@Test func testOwnedEditorCloseReacquiresAReplacedCloseControl() async throws {
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginWindowPresent: false,
+        openWindowOnSlotPress: true,
+        pluginSlotNamesByTrack: [0: [0: "Compressor", 6: "Compressor"]],
+        pluginCloseControlRenewsAfterFirstAttempt: true
+    )
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "A")
+    #expect(fixture.currentSliderValue == 60)
+    #expect(try #require(obj["editor_close_observed"] as? Bool))
+    #expect(fixture.pluginCloseControlPressCount.value == 2)
+    let remainingWindows = try #require(
+        fixture.builder.attributeValue(fixture.app, kAXWindowsAttribute as String) as? [AXUIElement]
+    )
+    #expect(remainingWindows.count == 1)
 }
 
 @Test func testReusedEditorIsNotClosedByTheOperation() async {
