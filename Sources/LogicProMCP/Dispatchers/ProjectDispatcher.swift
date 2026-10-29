@@ -846,7 +846,13 @@ struct ProjectDispatcher: OperationTraceDispatching {
             return cleanupApplyStateC(
                 .staleSnapshot,
                 stepID: stepID,
-                hint: blockingHint
+                hint: blockingHint,
+                extras: [
+                    "write_attempted": false,
+                    "automatic_read_attempts_exhausted": true,
+                    "terminal": true,
+                    "human_intervention_required": false,
+                ]
             )
         }
 
@@ -1037,17 +1043,22 @@ struct ProjectDispatcher: OperationTraceDispatching {
     /// readback gap), else nil. Keeps the stale/occluded/gap gate in one place.
     private static func cleanupApplyInventoryBlocker(_ report: ProjectSessionAudit.AuditReport) -> String? {
         if !report.evidence.hasDocument {
-            return "cleanup_apply: no open Logic document is confirmed; refusing to mutate."
+            return "cleanup_apply terminated before mutation: the current automatic audit did not "
+                + "confirm an open Logic document."
         }
         if report.evidence.axOccluded {
-            return "cleanup_apply: Accessibility readback is occluded (modal/floating window); the plan's targets cannot be trusted. Dismiss the dialog, re-run the audit, and retry."
+            return "cleanup_apply terminated before mutation: the bounded automatic audit found "
+                + "occluded Accessibility readback, so the plan's targets cannot be trusted."
         }
         let tracksFreshness = report.evidence.tracks.freshness
         if !tracksFreshness.available || tracksFreshness.stale {
-            return "cleanup_apply: track inventory is unread or stale (available=\(tracksFreshness.available), stale=\(tracksFreshness.stale)); re-read logic://tracks before applying a step."
+            return "cleanup_apply terminated before mutation: the bounded automatic track inventory "
+                + "read was unavailable or stale (available=\(tracksFreshness.available), "
+                + "stale=\(tracksFreshness.stale))."
         }
         if report.findings.contains(where: { $0.id == "track_readback_gap" }) {
-            return "cleanup_apply: the project file reports more tracks than Accessibility surfaced (track_readback_gap); plan target indices may not match the live arrange. Bring the arrange window forward, re-run the audit, and retry."
+            return "cleanup_apply terminated before mutation: the automatic audit found a "
+                + "track_readback_gap, so plan target indices cannot be bound to the live arrange."
         }
         return nil
     }

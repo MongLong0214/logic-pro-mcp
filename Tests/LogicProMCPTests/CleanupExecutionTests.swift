@@ -536,6 +536,14 @@ func scalarRenamePreservesPrintableAndJoinerNameBytes(name: String) async throws
     let json = try #require(sharedJSONObject(sharedToolText(result)))
     #expect(!(try #require(json["success"] as? Bool)))
     #expect(json["error"] as? String == "stale_snapshot")
+    #expect(try #require(json["terminal"] as? Bool))
+    #expect(!(try #require(json["human_intervention_required"] as? Bool)))
+    #expect(try #require(json["automatic_read_attempts_exhausted"] as? Bool))
+    #expect(!(try #require(json["write_attempted"] as? Bool)))
+    let hint = try #require(json["hint"] as? String)
+    for request in ["dismiss", "bring", "re-read", "re-run", "retry", "manually"] {
+        #expect(!hint.localizedCaseInsensitiveContains(request))
+    }
     let calls = await channel.calls()
     #expect(calls.isEmpty)
 }
