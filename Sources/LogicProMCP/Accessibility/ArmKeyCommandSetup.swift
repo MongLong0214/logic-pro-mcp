@@ -58,11 +58,11 @@ import Foundation
 /// success is judged by a polled OBSERVED effect (window appeared / command
 /// matched+selected / Learn value on / arm flipped / window gone), never by an AX
 /// action's return code. On any step whose effect does not materialise the run
-/// fails closed with an actionable manual-fallback hint. Prior art: PR #408.
+/// fails closed with a machine-actionable terminal diagnostic. Prior art: PR #408.
 enum ArmKeyCommandSetup {
     /// The command name and checkbox title, as the ENGLISH Logic spells them.
     ///
-    /// These stay because dozens of manual-fallback hints quote them and because they are the
+    /// These stay because diagnostics quote them and because they are the
     /// canonical member of the label sets below. What changed on 2026-09-14 is that the setup no
     /// longer MATCHES on them directly: the old comment here said a non-EN run "fails closed
     /// rather than mis-assigning", which was true and was also the whole story — the operation
@@ -323,8 +323,8 @@ enum ArmKeyCommandSetup {
                 hint: "The record-arm chord resolves to key code \(keyCode), which is not in the "
                     + "server's known-safe key-glyph map, so a conflict with an existing command "
                     + "cannot be reasoned about safely. No Key Commands window was opened and no key "
-                    + "was posted. Use the default Ctrl+Shift+E, or set LOGIC_PRO_MCP_ARM_KEYCODE to a "
-                    + "supported key (E=14, R=15)."
+                    + "was posted. Automated setup accepts only the supported key codes E=14 and R=15; "
+                    + "this run terminated without mutation."
             )
         }
         // Bare chord (no modifiers) hard-refuse — BEFORE verify-first, so no key is
@@ -336,8 +336,8 @@ enum ArmKeyCommandSetup {
             return .configInvalid(
                 hint: "The record-arm chord has no modifier keys. A bare key is never a valid arm chord "
                     + "(bare 'r' starts transport recording; any bare key triggers a global command). "
-                    + "No Key Commands window was opened and no key was posted. Configure a modifier chord "
-                    + "(default Ctrl+Shift+E), or set LOGIC_PRO_MCP_ARM_KEY_MODIFIERS to a non-empty chord."
+                    + "No Key Commands window was opened and no key was posted. Automated setup accepts only "
+                    + "a non-empty modifier chord; this run terminated without mutation."
             )
         }
 
@@ -389,7 +389,7 @@ enum ArmKeyCommandSetup {
                 stage: "verify_environment_unavailable",
                 hint: "No selectable track was available to functionally test the record-arm chord, so setup "
                     + "could neither confirm an existing mapping nor verify a new one; no Key Commands change "
-                    + "was made. Arm a track and re-run, or assign \"\(commandName)\" manually.",
+                    + "was made. Setup terminated unsuccessfully at functional-target preflight.",
                 evidence: evidence
             )
         case .partialRestore(let detail):
@@ -398,15 +398,14 @@ enum ArmKeyCommandSetup {
             return .failed(
                 stage: "verify_partial_restore",
                 hint: "The verification arm flip could not be fully undone (\(detail)); the host may be "
-                    + "left dirty, so setup refused to make any Key Commands change. Re-run once the track "
-                    + "is settled, or assign \"\(commandName)\" manually.",
+                    + "left dirty, so setup refused to make any Key Commands change and terminated unsuccessfully.",
                 evidence: evidence
             )
         case .couldNotPost:
             return .failed(
                 stage: "verify_post_failed",
                 hint: "Could not drive the verification chord to test the existing mapping (Logic did not "
-                    + "accept the key). No Key Commands change was made. Re-run, or assign \"\(commandName)\" manually.",
+                    + "accept the key). No Key Commands change was made; setup terminated unsuccessfully.",
                 evidence: evidence
             )
         }
@@ -422,8 +421,7 @@ enum ArmKeyCommandSetup {
                 hint: "Logic's menus read as \(hostLocale ?? "an unknown language"), and this server has no Apple "
                     + "spelling of the record-arm command for it, so it refused to type the English name into "
                     + "a translated Key Commands search. No Key Commands window was opened and no key was "
-                    + "typed. Assign \"\(commandName)\" (under its name in Logic's language) to "
-                    + "\(chordLabel(keyCode: keyCode, modifiers: modifiers)) manually.",
+                    + "typed; unsupported-locale setup terminated without mutation.",
                 evidence: evidence
             )
         }
@@ -456,8 +454,7 @@ enum ArmKeyCommandSetup {
                 return fail(
                     stage: "open_key_commands",
                     hint: "Could not post Option+K to open the Key Commands window (Logic did not accept "
-                        + "the key). Open it manually (Logic Pro ▸ Key Commands ▸ Edit) and assign "
-                        + "\"\(commandName)\" to a shortcut."
+                        + "the key). No configuration write followed; setup terminated unsuccessfully."
                 )
             }
             window = poll(runtime: runtime, deadline: 4.0) { keyCommandsWindow(runtime: runtime) }
@@ -465,8 +462,8 @@ enum ArmKeyCommandSetup {
         guard let kcWindow = window else {
             return fail(
                 stage: "open_key_commands",
-                hint: "The Key Commands window did not open (Option+K). Open it manually "
-                    + "(Logic Pro ▸ Key Commands ▸ Edit) and assign \"\(commandName)\" to a shortcut."
+                hint: "The Key Commands window did not open after Option+K. No configuration write followed; "
+                    + "setup terminated unsuccessfully."
             )
         }
         evidence.windowOpened = true
@@ -532,7 +529,7 @@ enum ArmKeyCommandSetup {
             return fail(
                 stage: "search_field",
                 hint: "Could not find the Key Commands search field (no AXSearchField in the window). "
-                    + "Assign \"\(commandName)\" manually."
+                    + "No command was selected; setup terminated unsuccessfully."
             )
         }
         // Collapse the list by TYPING the command name into the search field.
@@ -550,7 +547,7 @@ enum ArmKeyCommandSetup {
             return fail(
                 stage: "search_focus",
                 hint: "Could not confirm the Key Commands search field positively holds keyboard focus; "
-                    + "refused to type (a key could have gone elsewhere). Assign \"\(commandName)\" manually."
+                    + "refused to type because a key could have gone elsewhere. Setup terminated unsuccessfully."
             )
         }
         // Cancellation checkpoint before typing: the deadline may have fired while
@@ -578,7 +575,7 @@ enum ArmKeyCommandSetup {
             return fail(
                 stage: "command_not_found",
                 hint: "Could not find the \"\(typedQuery)\" command in Logic's Key Commands list. "
-                    + "Assign the record-arm command to \(chordLabel(keyCode: keyCode, modifiers: modifiers)) manually."
+                    + "No assignment was attempted; setup terminated unsuccessfully."
             )
         }
         evidence.matchCount = matches.count
@@ -588,7 +585,7 @@ enum ArmKeyCommandSetup {
             return fail(
                 stage: "command_ambiguous",
                 hint: "The Key Commands filter for \"\(typedQuery)\" resolved to \(matches.count) commands, "
-                    + "not exactly one; refused to Learn onto an ambiguous match. Assign \"\(commandName)\" manually."
+                    + "not exactly one; the ambiguous match was not selected and setup terminated unsuccessfully."
             )
         }
         evidence.matchIdentity = commandIdentity(commandEl, runtime: runtime)
@@ -607,7 +604,7 @@ enum ArmKeyCommandSetup {
             return fail(
                 stage: "select_command",
                 hint: "Found the \"\(commandName)\" command but Logic did not confirm its selection; "
-                    + "refused to Learn onto an unconfirmed selection. Assign \"\(commandName)\" manually."
+                    + "the unconfirmed selection received no assignment and setup terminated unsuccessfully."
             )
         }
         // Post-selection identity re-read: the still-selected element carries the
@@ -617,7 +614,7 @@ enum ArmKeyCommandSetup {
             return fail(
                 stage: "selection_identity_mismatch",
                 hint: "The selected Key Commands entry no longer read as \"\(commandName)\" after selection; "
-                    + "refused to Learn onto a mismatched selection. Assign \"\(commandName)\" manually."
+                    + "the mismatched selection received no assignment and setup terminated unsuccessfully."
             )
         }
         evidence.selectionReadback = true
@@ -631,7 +628,8 @@ enum ArmKeyCommandSetup {
             recordWindowOnlyCleanup()
             return fail(
                 stage: "learn_checkbox",
-                hint: "Could not find the \"\(learnCheckboxTitle)\" control. Assign \"\(commandName)\" manually."
+                hint: "Could not find the \"\(learnCheckboxTitle)\" control. No assignment was attempted; "
+                    + "setup terminated unsuccessfully."
             )
         }
         // Capture Learn's prior state as a TRISTATE. If it is UNREADABLE we cannot
@@ -643,8 +641,8 @@ enum ArmKeyCommandSetup {
             return fail(
                 stage: "learn_state_unreadable",
                 hint: "Logic's \"\(learnCheckboxTitle)\" state was unreadable; refused to press or send "
-                    + "\(chordLabel(keyCode: keyCode, modifiers: modifiers)) (a checkbox whose state cannot "
-                    + "be read must never be toggled). Assign \"\(commandName)\" manually."
+                    + "\(chordLabel(keyCode: keyCode, modifiers: modifiers)) because an unreadable checkbox "
+                    + "must not be toggled. Setup terminated unsuccessfully."
             )
         }
         evidence.learnBefore = learnWasOn
@@ -666,8 +664,8 @@ enum ArmKeyCommandSetup {
             return fail(
                 stage: "learn_engage",
                 hint: "Could not confirm Logic's \"\(learnCheckboxTitle)\" mode engaged; refused to send "
-                    + "\(chordLabel(keyCode: keyCode, modifiers: modifiers)) (nothing was assigned). "
-                    + "Assign \"\(commandName)\" manually."
+                    + "\(chordLabel(keyCode: keyCode, modifiers: modifiers)). Nothing was assigned and setup "
+                    + "terminated unsuccessfully."
             )
         }
         evidence.learnAfter = true
@@ -678,7 +676,7 @@ enum ArmKeyCommandSetup {
             return fail(
                 stage: "logic_not_frontmost",
                 hint: "Logic left the foreground before \(chordLabel(keyCode: keyCode, modifiers: modifiers)) "
-                    + "could be sent; refused to post it. Re-run, or assign \"\(commandName)\" manually."
+                    + "could be sent; the chord was not posted and setup terminated unsuccessfully."
             )
         }
         guard !mutationBlocked() else { return timedOut(learn: learn, learnWasOn: learnWasOn) }
@@ -693,9 +691,9 @@ enum ArmKeyCommandSetup {
             recordLearnCleanup(learn, wasOn: learnWasOn)
             return fail(
                 stage: "selection_drifted",
-                hint: "The selected Key Commands entry changed after it was confirmed; refused to send "
-                    + "\(chordLabel(keyCode: keyCode, modifiers: modifiers)) onto a drifted selection. "
-                    + "Assign \"\(commandName)\" manually."
+                hint: "The selected Key Commands entry changed after it was confirmed; "
+                    + "\(chordLabel(keyCode: keyCode, modifiers: modifiers)) was not sent to the drifted selection. "
+                    + "Setup terminated unsuccessfully."
             )
         }
 
@@ -711,7 +709,7 @@ enum ArmKeyCommandSetup {
                 stage: "key_commands_not_focused",
                 hint: "The Key Commands window was not Logic's focused window (or \"\(learnCheckboxTitle)\" "
                     + "was no longer engaged) immediately before \(chordLabel(keyCode: keyCode, modifiers: modifiers)); "
-                    + "refused to post it. Re-run, or assign \"\(commandName)\" manually."
+                    + "the chord was not posted and setup terminated unsuccessfully."
             )
         }
 
@@ -730,8 +728,8 @@ enum ArmKeyCommandSetup {
             return fail(
                 stage: "assignment_post_failed",
                 hint: "The assignment chord \(chordLabel(keyCode: keyCode, modifiers: modifiers)) could not be "
-                    + "posted (Logic did not accept the key); nothing was assigned. Re-run, or assign "
-                    + "\"\(commandName)\" manually."
+                    + "posted because Logic did not accept the key. Nothing was assigned and setup terminated "
+                    + "unsuccessfully."
             )
         }
         runtime.sleep(0.3)
@@ -760,10 +758,10 @@ enum ArmKeyCommandSetup {
                 hint: dismissed
                     ? "Posting \(chordLabel(keyCode: keyCode, modifiers: modifiers)) raised a Logic dialog "
                         + "(\(label)); it was declined (Cancel) and no command was reassigned. The chord is "
-                        + "already owned by another command — choose a different chord."
+                        + "already owned by another command; setup terminated unsuccessfully."
                     : "Posting \(chordLabel(keyCode: keyCode, modifiers: modifiers)) raised a Logic dialog "
-                        + "(\(label)) that could not be dismissed automatically — decline it manually (Cancel). "
-                        + "No command was reassigned."
+                        + "(\(label)) whose dismissal was not observed. No reassignment control was pressed; "
+                        + "setup terminated unsuccessfully."
             )
         }
         evidence.conflictObserved = false
@@ -815,7 +813,7 @@ enum ArmKeyCommandSetup {
                         + "live arm flip, but the Key Commands surface was left dirty ("
                         + (learnRestored ? "" : "\"\(learnCheckboxTitle)\" still on; ")
                         + (closed ? "" : "Key Commands window still open; ")
-                        + "close/reset it manually). Setup did not claim success."
+                        + "cleanup incomplete). Setup terminated unsuccessfully."
                 )
             }
             evidence.restored = true
@@ -831,7 +829,7 @@ enum ArmKeyCommandSetup {
             return fail(
                 stage: "verify",
                 hint: "Assigned \(chordLabel(keyCode: keyCode, modifiers: modifiers)) but a test arm did not "
-                    + "flip record-enable — the assignment may not have taken. Re-run, or assign \"\(commandName)\" manually."
+                    + "flip record-enable. The assignment effect remains unverified and setup terminated unsuccessfully."
             )
         case .partialRestore(let detail):
             // The verify flip mutated the host and a restore failed — fail closed
@@ -842,8 +840,8 @@ enum ArmKeyCommandSetup {
             return fail(
                 stage: "verify_partial_restore",
                 hint: "\(chordLabel(keyCode: keyCode, modifiers: modifiers)) may have been assigned, but the "
-                    + "verification arm flip could not be fully undone (\(detail)); the host was left dirty. "
-                    + "Check the track/transport and re-run, or assign \"\(commandName)\" manually."
+                    + "verification arm flip could not be fully undone (\(detail)); the host was left dirty and "
+                    + "setup terminated unsuccessfully."
             )
         case .couldNotPost:
             evidence.verifyRestored = true
@@ -851,8 +849,8 @@ enum ArmKeyCommandSetup {
             return fail(
                 stage: "verify_post_failed",
                 hint: "Assigned \(chordLabel(keyCode: keyCode, modifiers: modifiers)) but could not drive a "
-                    + "verification arm flip (Logic did not accept the key), so success is not claimed. "
-                    + "Re-run, or verify \"\(commandName)\" manually."
+                    + "verification arm flip because Logic did not accept the key. The assignment effect remains "
+                    + "unverified and setup terminated unsuccessfully."
             )
         case .environmentUnavailable:
             // No track to test on: no verify flip was driven, so its own restore is
@@ -860,8 +858,9 @@ enum ArmKeyCommandSetup {
             evidence.verifyRestored = true
             evidence.restored = learnRestored && closed
             return .configuredUnverified(
-                why: "no selectable track to test on; arm a track and re-run to confirm "
-                    + "\(chordLabel(keyCode: keyCode, modifiers: modifiers)) works",
+                why: "No selectable track was available for the final functional test. The "
+                    + "\(chordLabel(keyCode: keyCode, modifiers: modifiers)) assignment effect remains unverified; "
+                    + "setup terminated unsuccessfully.",
                 evidence: evidence
             )
         }
