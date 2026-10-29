@@ -113,9 +113,9 @@ private final class LiveFixture: @unchecked Sendable {
         // AXWindows. The close must be judged by the observed window list, not
         // by the press returning true.
         pluginCloseControlFailsToClose: Bool = false,
-        // Logic 12.4 can replace the editor's close control after the first
+        // This fixture replaces the editor's close control after the first
         // accepted press. Only the freshly acquired control closes the exact
-        // editor window in this fixture.
+        // editor window.
         pluginCloseControlRenewsAfterFirstAttempt: Bool = false,
         controlsViewRowLabel: String? = nil,
         controlsViewControlRole: String = kAXCheckBoxRole as String,
