@@ -36,8 +36,9 @@ record the change rests on, or saying you are not talking about it.
 
 On an ISSUE that sentence is asked for, not required: nothing is blocked, nothing is closed, and
 you do not need a corpus build — or Logic — to report a problem. Open it with whatever evidence you
-have, including none, and a maintainer can map what you saw to a row and add the reference. The
-form below is what a pull request is gated on.
+have, including none. The authorized workflow may map the report to a row and add the reference;
+if it cannot do so within its evidence budget, it preserves the gap and terminates that attempt
+without requesting a manual mapping. The form below is what a pull request is gated on.
 
 * Stating something about Logic: a `logic-canon://<source>/<locale>#value` reference AND the value
   in quotes. The forms and what each proves are below under *A citation without a key*. A worked
@@ -78,9 +79,11 @@ repository, and that a quoted value's digest matches Apple's at the pinned Logic
 more. It is a check on the FORM of your evidence: it never ran Logic, it cannot tell you your
 sentence about Logic is true, and passing it is not a statement that the change works.
 
-**What stays human, or stays for runtime.** Whether the cited row is the RIGHT row. Whether a
-`canon_absent` declaration is honest. Anything about how Logic behaves rather than what it ships —
-that is measured live and recorded under `docs/observations/`, and no gate here does it for you.
+**What stays for independent evidence or runtime.** Whether the cited row is the RIGHT row. Whether
+a `canon_absent` declaration is honest. Anything about how Logic behaves rather than what it ships
+is measured live and recorded under `docs/observations/`; no gate here establishes those facts.
+The authorized evidence workflow must establish them noninteractively or finish unsuccessfully
+with the missing boundary explicit.
 
 **An issue is advised; a pull request is gated.** `canon-issue.yml` leaves ONE note on an issue and
 edits that same note as you edit the body; nothing is blocked and no label is applied. A pull
