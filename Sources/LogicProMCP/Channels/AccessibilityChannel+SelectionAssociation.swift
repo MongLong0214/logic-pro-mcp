@@ -475,7 +475,8 @@ extension AccessibilityChannel {
             guard currentWindowScopeMatches() else { return refuseWindowScope("window_scope") }
             // dialogPresent delegates to this same read. Preserve its existing
             // position after window scope, and retain the actual refusal reason.
-            let dialogReason = AXLogicProElements.dialogPresenceReason(runtime: logic)
+            let dialogReason = AXLogicProElements.dialogPresenceReason(runtime: logic,
+                renewingRetiredNonMainWindowCensusAround: window)
             guard !dialogReason.isBlocked else { return refuseWindowScope("dialog_" + dialogReason.rawValue) }
             guard railMatches() else {
                 Log.info("Held association ownership refused: original rail census", subsystem: "ax")
