@@ -898,6 +898,9 @@ struct Issue965HeldSelectionAssociationTests {
         var lateAssociationFocusLanded = false
         var inputMenuPresses = 0
         var outputMenuPresses = 0
+        var measureForwardOutputSampleTime = false
+        var firstOutputMenuOpenAfterForwardWriteAt: Date?
+        var forwardOutputSampledAt: Date?
         var matchingGoalContextID: ObjectIdentifier?
         var matchingAfterNameReads: Int?
         var matchingNameCancelTask: Task<CallTool.Result, Never>?
@@ -2485,12 +2488,17 @@ struct Issue965HeldSelectionAssociationTests {
     @Test("Canonical output cancellation retains independent Saga reads without duplicate adapter popup reads")
     func canonicalOutputCancellationDoesNotRepeatTheSagasIndependentReadback() async throws {
         let f = try Fixture()
+        f.measureForwardOutputSampleTime = true
         try await assertCanonicalPhysicalOutput(mode: "bus_departure_execute_cancel", fixture: f)
         #expect(f.routingDestinationPresses == 2)
         #expect(f.inputMenuPresses == 14,
                 "The immediate forward and restored Saga reads may reuse each writer's exact checked effect while compensation ownership and the inverse writer retain their fresh routing checks")
         #expect(f.outputMenuPresses == 9,
                 "Effect retention must reuse the forward Bus-prerequisite check's exact Output popup instead of opening one consecutive duplicate popup")
+        let forwardOutputSampledAt = try #require(f.forwardOutputSampledAt)
+        let firstOutputMenuOpenAfterForwardWriteAt = try #require(f.firstOutputMenuOpenAfterForwardWriteAt)
+        #expect(forwardOutputSampledAt >= firstOutputMenuOpenAfterForwardWriteAt,
+                "The retained live-independent sampled_at must follow the surviving Output-popup read that produced it")
     }
 
     @Test("Canonical output cancellation revalidates the exact Bus receipt after its source is renewed")
@@ -3576,6 +3584,11 @@ struct Issue965HeldSelectionAssociationTests {
                     }
                     if action == kAXPressAction as String,
                        let index = outputs.firstIndex(where: { CFEqual($0, element) }) {
+                        if f.measureForwardOutputSampleTime, f.routingDestinationPresses == 1,
+                           f.firstOutputMenuOpenAfterForwardWriteAt == nil {
+                            Thread.sleep(forTimeInterval: 0.02)
+                            f.firstOutputMenuOpenAfterForwardWriteAt = Date()
+                        }
                         f.outputMenuPresses += 1
                         let label = f.builder.attributeValue(outputs[index], kAXDescriptionAttribute as String) as? String
                         f.builder.setAttribute(echo, kAXTitleAttribute as String, label)
@@ -4224,6 +4237,12 @@ struct Issue965HeldSelectionAssociationTests {
                 if executingBusDeparture, ["forward", "cancel", "retired"].contains(mode) {
                     let step = try #require((result["steps"] as? [[String: Any]])?.first)
                     let evidence = try #require(step["evidence"] as? [String: Any])
+                    if f.measureForwardOutputSampleTime,
+                       let verification = evidence["verification"] as? [String: Any],
+                       let readback = verification["readback"] as? [String: Any],
+                       let sampledAt = readback["sampled_at"] as? String {
+                        f.forwardOutputSampledAt = ISO8601DateFormatter.cacheFormatter.date(from: sampledAt)
+                    }
                     #expect((evidence["before_state"] as? [String: Any])?["observed"] as? String == (busReplacement ? "bus:3" : busArrival ? "stereo_output" : "bus:2"))
                     if mode == "cancel" {
                         let inverse = try #require(step["compensation"] as? [String: Any])

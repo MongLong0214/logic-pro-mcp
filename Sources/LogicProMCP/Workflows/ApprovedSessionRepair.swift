@@ -2929,21 +2929,33 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             }
             guard checked.assignment == assignment else { return false }
         }
-        let sampledAt = ISO8601DateFormatter.cacheFormatter.string(from: Date())
         guard outputFootprintHeld(pair: pair, assignment: assignment),
               effect.permits(runtime: runtime),
               outputProof?.permitsRead() == true,
               await projectIsCurrent(allowPendingCancellation: true) else { return false }
-        let retained = CheckedOutputEffect(effect: effect, assignment: assignment, sampledAt: sampledAt)
+        let retained: CheckedOutputEffect
         if forwardBusReceiptChecksOutput {
             // Complete the post-write Bus checks before the child writer publishes
             // State A. A public cancellation can arrive as soon as that result is
             // visible. This exact check ends with its own Output-popup read, so it
             // is also the retained checked effect; opening the same Output popup
             // immediately before it would add latency without adding authority.
-            guard await retainedOutputReading(retained) == assignment,
-                  checkedOutputPrerequisites.map({ sameCheckedOutputEffect($0.retained, retained) }) == true
+            let candidate = CheckedOutputEffect(effect: effect, assignment: assignment,
+                sampledAt: ISO8601DateFormatter.cacheFormatter.string(from: Date()))
+            guard await retainedOutputReading(candidate) == assignment,
+                  let receipt = checkedOutputPrerequisites,
+                  sameCheckedOutputEffect(receipt.retained, candidate)
             else { return false }
+            // `candidate` is internal authority only. Publish a timestamp sampled
+            // after the Bus scan's surviving Output-popup read, then carry the
+            // exact same renewed prerequisite receipt into the Saga readback.
+            retained = CheckedOutputEffect(effect: effect, assignment: assignment,
+                sampledAt: ISO8601DateFormatter.cacheFormatter.string(from: Date()))
+            checkedOutputPrerequisites = .init(retained: retained, pair: receipt.pair,
+                renewal: receipt.renewal, proof: receipt.proof)
+        } else {
+            retained = CheckedOutputEffect(effect: effect, assignment: assignment,
+                sampledAt: ISO8601DateFormatter.cacheFormatter.string(from: Date()))
         }
         if restored { checkedRestoredOutputEffect = retained }
         else { checkedOutputEffect = retained }
