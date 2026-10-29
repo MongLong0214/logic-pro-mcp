@@ -4391,6 +4391,37 @@ private func compressorCircuitReadFixture(
     compressorPopupReadFixture(label: "Circuit Type", value: value, controls: controls)
 }
 
+private func compressorDetectionReadFixture(
+    rmsSelected: Bool,
+    controls: Bool
+) -> LiveFixture {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "Peak/RMS:",
+        controlsViewInitiallySelected: controls,
+        viewSettleDelay: 0
+    )
+    let builder = fixture.builder
+    builder.setAttribute(
+        builder.element(1001),
+        kAXDocumentAttribute as String,
+        URL(fileURLWithPath: expectedPath).absoluteString
+    )
+    for (id, title, selected) in [
+        (299_801, "Peak", !rmsSelected),
+        (299_802, "RMS", rmsSelected),
+    ] {
+        let radio = builder.element(id)
+        builder.setRole(radio, kAXRadioButtonRole as String)
+        builder.setAttribute(radio, kAXTitleAttribute as String, title)
+        builder.setAttribute(radio, kAXValueAttribute as String, selected ? 1 : 0)
+    }
+    builder.setChildren(
+        builder.element(100_905),
+        [builder.element(100_907), builder.element(299_801), builder.element(299_802)]
+    )
+    return fixture
+}
+
 @Test(arguments: [false, true])
 func testIssue299CompressorRatioReadsActualDisplayWithoutAuthorizingAWrite(_ controls: Bool) async throws {
     let fixture = compressorScalarReadFixture(label: "Ratio", raw: 42, display: "2.1:1", controls: controls)
@@ -4639,6 +4670,112 @@ func testIssue299AdditionalCompressorPopupsReadCurrentValueWithoutOpeningOrWriti
         == ControlsViewBooleanParameterWriter.LocatorFailure.popupNotAddressableByName.observation)
     #expect(!(try #require(writeObject["write_attempted"] as? Bool)))
     #expect(fixture.axActions.value.count == actionCountBeforeWrite)
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+@Test(arguments: [false, true], [false, true])
+func testIssue299CompressorRMSModeReadsOneHotSelectionWithoutWriting(
+    _ rmsSelected: Bool,
+    _ controls: Bool
+) async throws {
+    let fixture = compressorDetectionReadFixture(rmsSelected: rmsSelected, controls: controls)
+    let originalView = fixture.currentPluginViewTitle
+    let read = await AccessibilityChannel.defaultGetParamVerified(
+        params: parameterReadParams("rms_mode"),
+        runtime: parameterReadRuntime(fixture)
+    )
+    let object = try #require(sharedJSONObject(read.message))
+    #expect(object["state"] as? String == "A", "\(object)")
+    let observedRaw = try #require(object["observed_raw"] as? Bool)
+    if rmsSelected { #expect(observedRaw) }
+    else { #expect(!observedRaw) }
+    #expect(object["observed_display"] as? String == (rmsSelected ? "RMS" : "Peak"))
+    #expect(object["raw_unit"] as? String == "boolean")
+    #expect(object["parameter_read_status"] as? String == "read")
+    #expect(fixture.currentPluginViewTitle == originalView)
+    #expect(!fixture.axActions.value.contains { (299_801...299_802).contains($0.element) })
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+@Test(arguments: ["both_selected", "neither_selected", "wrong_title", "duplicate", "unreadable", "drift"])
+func testIssue299CompressorRMSModeRejectsUncertainRadioEvidenceWithoutActuation(
+    _ fault: String
+) async throws {
+    let fixture = compressorDetectionReadFixture(rmsSelected: false, controls: true)
+    let builder = fixture.builder
+    let peak = builder.element(299_801)
+    let rms = builder.element(299_802)
+    switch fault {
+    case "both_selected":
+        builder.setAttribute(peak, kAXValueAttribute as String, 1)
+        builder.setAttribute(rms, kAXValueAttribute as String, 1)
+    case "neither_selected":
+        builder.setAttribute(peak, kAXValueAttribute as String, 0)
+        builder.setAttribute(rms, kAXValueAttribute as String, 0)
+    case "wrong_title":
+        builder.setAttribute(rms, kAXTitleAttribute as String, "Average")
+    case "duplicate":
+        let duplicate = builder.element(299_803)
+        builder.setRole(duplicate, kAXRadioButtonRole as String)
+        builder.setAttribute(duplicate, kAXTitleAttribute as String, "Peak")
+        builder.setAttribute(duplicate, kAXValueAttribute as String, 0)
+        builder.setChildren(
+            builder.element(100_905),
+            [builder.element(100_907), peak, rms, duplicate]
+        )
+    default:
+        break
+    }
+    let reads = MutableBox(0)
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        guard attribute == kAXValueAttribute as String else { return nil }
+        if fault == "unreadable", CFEqual(element, peak) {
+            return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+        }
+        if fault == "drift", CFEqual(element, peak) || CFEqual(element, rms) {
+            reads.value += 1
+            let secondSample = reads.value > 2
+            let selected = secondSample ? CFEqual(element, rms) : CFEqual(element, peak)
+            return .success(NSNumber(value: selected ? 1 : 0))
+        }
+        return nil
+    })
+    let originalView = fixture.currentPluginViewTitle
+    let read = await AccessibilityChannel.defaultGetParamVerified(
+        params: parameterReadParams("rms_mode"),
+        runtime: runtime
+    )
+    let object = try #require(sharedJSONObject(read.message))
+    #expect(object["state"] as? String == "B", "\(fault): \(object)")
+    #expect(object["observed_raw"] == nil)
+    #expect(object["observed_display"] == nil)
+    #expect(fixture.currentPluginViewTitle == originalView)
+    #expect(!fixture.axActions.value.contains { (299_801...299_803).contains($0.element) })
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+@Test func testIssue299CompressorRMSModeReadMetadataStillRefusesAWrite() async throws {
+    let fixture = compressorDetectionReadFixture(rmsSelected: false, controls: true)
+    var params = parameterReadParams("rms_mode")
+    params.merge([
+        "mode": "duplicate_applyback",
+        "value": "1",
+        "unit": "boolean",
+    ]) { _, new in new }
+    let result = await AccessibilityChannel.defaultSetParamVerified(
+        params: params,
+        runtime: parameterReadRuntime(fixture),
+        frontDocumentPath: { expectedPath }
+    )
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "C", "\(object)")
+    #expect(object["error"] as? String == "unsupported_param_readback")
+    #expect(object["what_was_observed"] as? String == "actuation_unmeasured")
+    #expect(!(try #require(object["write_attempted"] as? Bool)))
+    #expect(fixture.axActions.value.isEmpty)
     #expect(fixture.sliderWriteCount.value == 0)
     #expect(fixture.controlsCheckboxPressCount.value == 0)
 }

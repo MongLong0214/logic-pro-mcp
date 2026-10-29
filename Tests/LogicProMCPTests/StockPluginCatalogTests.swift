@@ -501,6 +501,13 @@ struct StockPluginCatalogTests {
         #expect(threshold.readbackMethod == "ax_slider_axvalue")
     }
 
+    @Test("Compressor RMS provenance matches the committed native receipt")
+    func compressorRMSProvenanceUsesReceiptTimestamp() throws {
+        let entry = try #require(StockPluginCatalog.entry(id: "logic.stock.effect.compressor"))
+        let rmsMode = try #require(entry.parameters.first { $0.id == "rms_mode" })
+        #expect(rmsMode.provenance.observedAt == "2026-10-29T16:07:03.668599Z")
+    }
+
     @Test("search matches id, name, category, and type case-insensitively")
     func searchSemantics() {
         let snapshot = StockPluginCatalog.defaultSnapshot(census: .deterministic())
