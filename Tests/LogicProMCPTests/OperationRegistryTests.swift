@@ -921,7 +921,7 @@ struct OperationRegistryTests {
                 + "none grants a write method."
         ))
         #expect(text.contains(
-            "Compressor circuit_type is a read-only current string; it does not open the popup or claim a complete choice list."
+            "Compressor circuit_type, auto_gain, and distortion are read-only current strings; they do not open the popups or claim complete choice lists."
         ))
         let pluginDescription = PluginsDispatcher.tool.description ?? ""
         #expect(pluginDescription.contains(
@@ -929,7 +929,7 @@ struct OperationRegistryTests {
                 + "none grants a write method."
         ))
         #expect(pluginDescription.contains(
-            "Compressor circuit_type is a read-only current string; it neither opens the popup nor grants a write method or complete choice list."
+            "Compressor circuit_type, auto_gain, and distortion are read-only current strings; they neither open the popups nor grant write methods or complete choice lists."
         ))
     }
 
