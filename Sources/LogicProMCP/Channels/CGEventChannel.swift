@@ -797,9 +797,9 @@ actor CGEventChannel: Channel {
 
     /// State C for a plain letter under an input source that is not ASCII-capable and could not be
     /// switched away from for the key (`switchFailure`), or that did not read (`source` nil). Not
-    /// terminal, so the router tries the next rung, and when there is none the caller gets this
-    /// refusal rather than a send-only success for a key that could not act. `restore` is the
-    /// reading after a selection that did not read back was undone.
+    /// terminal after the bounded automatic input-source preparation, and when there is no other
+    /// route the caller gets this refusal rather than a send-only success for a key that could not
+    /// act. `restore` is the reading after a selection that did not read back was undone.
     static func inputSourceRefusal(
         operation: String,
         source: InputSourceReading?,
@@ -812,7 +812,10 @@ actor CGEventChannel: Channel {
             "reason": source == nil ? "input_source_unreadable" : "input_source_blocks_plain_letters",
             "events_posted": 0,
             "write_attempted": false,
-            "safe_to_retry": true,
+            "safe_to_retry": false,
+            "automatic_input_source_attempts_exhausted": true,
+            "terminal": true,
+            "human_intervention_required": false,
         ]
         if let id = source?.id {
             extras["input_source_id"] = id
@@ -848,17 +851,17 @@ actor CGEventChannel: Channel {
             if let restore {
                 restored = restore.restored
                     ? " The input source reads \(restore.originalID) again."
-                    : " Selecting \(restore.originalID) back did not read back either: the input source reads "
-                        + "\(restore.after?.id ?? "unreadable"). Select \(restore.originalID) again."
+                    : " Automatic restoration to \(restore.originalID) did not read back either: the input "
+                        + "source reads \(restore.after?.id ?? "unreadable"). No further selection was attempted."
             }
             hint = "The active input source (\(name)) is not ASCII-capable, so a plain letter key reaches "
                 + "Logic as that source's character and runs no key command (measured under 2-Set "
-                + "Korean: Q, N and X ran nothing).\(why) No event was posted.\(restored) Switch to an "
-                + "ASCII-capable input source such as ABC and retry."
+                + "Korean: Q, N and X ran nothing).\(why) No event was posted.\(restored) The bounded "
+                + "automatic input-source preparation terminated."
         } else {
             hint = "The active input source did not read, so whether a plain letter key would reach "
                 + "Logic as a letter is unknown (under 2-Set Korean, Q, N and X ran nothing). No event "
-                + "was posted. Retry, or select an ASCII-capable input source such as ABC."
+                + "was posted. The bounded automatic input-source preparation terminated."
         }
         return .error(HonestContract.encodeStateC(error: .notSupported, hint: hint, extras: extras))
     }
