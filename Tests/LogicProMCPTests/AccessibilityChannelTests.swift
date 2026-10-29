@@ -5712,12 +5712,22 @@ private struct Issue1097Rail {
     #expect(result.message.contains("\"verified\":true"), "\(result.message)")
 }
 
-@Test func issue1097RenameWritesNothingWhileAnotherTrackStaysSelected() async {
+@Test func issue1097RenameWritesNothingWhileAnotherTrackStaysSelected() async throws {
     let rail = Issue1097Rail(selected: [true, true], additive: true)
     let channel = makeAXBackedAccessibilityChannel(builder: rail.builder, app: rail.app, logicRuntime: rail.runtime)
     let result = await channel.execute(operation: "track.rename", params: ["index": "0", "name": "Lead"])
+    let body = decodeAccessibilityJSON(result.message)
     #expect(!result.isSuccess, "\(result.message)")
     #expect(result.message.contains("selection_not_exclusive"), "\(result.message)")
+    let terminal = try #require(body["terminal"] as? Bool)
+    let humanRequired = try #require(body["human_intervention_required"] as? Bool)
+    let writeAttempted = try #require(body["write_attempted"] as? Bool)
+    #expect(terminal)
+    #expect(!humanRequired)
+    #expect(!writeAttempted)
+    let hint = body["hint"] as? String ?? ""
+    #expect(!hint.localizedCaseInsensitiveContains("deselect"))
+    #expect(!hint.localizedCaseInsensitiveContains("retry"))
     let untouched = rail.name(0) == "Track 1"
     #expect(untouched, "the name field was written: \(String(describing: rail.name(0)))")
     let confirmed = rail.builder.actionCalls.contains {

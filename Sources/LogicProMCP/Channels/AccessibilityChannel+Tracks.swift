@@ -3231,11 +3231,13 @@ extension AccessibilityChannel {
                 return .error(HonestContract.encodeStateC(
                     error: .selectionNotExclusive,
                     hint: "track \(index) could not be made the only selected track, and Logic renames every "
-                        + "selected track. Nothing was renamed. Deselect the other tracks and retry.",
+                        + "selected track. Rename terminated before any name write.",
                     extras: baseExtras.merging([
                         "also_selected": states.enumerated().compactMap { $0.offset != index && $0.element == true ? $0.offset : nil },
                         "selection_unreadable": states.enumerated().compactMap { $0.offset != index && $0.element == nil ? $0.offset : nil },
                         "write_attempted": false,
+                        "terminal": true,
+                        "human_intervention_required": false,
                     ]) { _, new in new }
                 ))
             }
