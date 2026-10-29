@@ -545,7 +545,7 @@ actor CGEventChannel: Channel {
                         + "\(switched.originalID) again."
                     : ". The input source was switched to \(switched.layoutID) for the key and could not "
                         + "be selected back: it reads \(restore.after?.id ?? "unreadable"), not "
-                        + "\(switched.originalID). Select \(switched.originalID) again."
+                        + "\(switched.originalID). No further selection was attempted."
             }
             return Self.retainingFrontmostError(message, from: observedPreparation)
         }
@@ -648,8 +648,13 @@ actor CGEventChannel: Channel {
         ]
         if !restore.restored {
             extras["hint"] = "The key went out under \(layoutID), selected in place of \(originalID) "
-                + "because \(originalID) is not ASCII-capable. Selecting \(originalID) again did not read "
-                + "back: the input source reads \(restore.after?.id ?? "unreadable"). Select \(originalID) again."
+                + "because \(originalID) is not ASCII-capable. Automatic restoration to \(originalID) did not "
+                + "read back: the input source reads \(restore.after?.id ?? "unreadable"). No further selection "
+                + "was attempted."
+            extras["safe_to_retry"] = false
+            extras["automatic_input_source_restore_attempts_exhausted"] = true
+            extras["terminal"] = true
+            extras["human_intervention_required"] = false
         }
         return extras
     }
