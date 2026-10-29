@@ -756,7 +756,12 @@ private func runLive(
 
 private func reportsFailedPluginViewRestoration(_ envelope: [String: Any]) -> Bool {
     guard let attempted = envelope["plugin_view_restore_attempted"] as? Bool,
-          let observed = envelope["plugin_view_restore_observed"] as? Bool else {
+          let observed = envelope["plugin_view_restore_observed"] as? Bool,
+          let recovery = envelope["plugin_view_restore_recovery_hint"] as? String,
+          recovery.contains("Automatic plug-in view restoration"),
+          !recovery.lowercased().contains("manually"),
+          !recovery.contains("Select the prior view"),
+          !recovery.contains("Verify the prior view") else {
         return false
     }
     if let leftChanged = envelope["plugin_view_left_changed"] as? Bool {
@@ -4206,7 +4211,9 @@ private final class Counter: @unchecked Sendable {
     #expect(!closeObserved)
     #expect(editorStillOpen)
     let recoveryHint = try #require(obj["recovery_hint"] as? String)
-    #expect(recoveryHint.contains("Close it before another duplicate-instance write"))
+    #expect(recoveryHint.contains("Automatic editor cleanup failed"))
+    #expect(recoveryHint.contains("later duplicate-instance writes refuse"))
+    #expect(!recoveryHint.lowercased().contains("close it"))
     // Tried, and retried, rather than giving up after one press.
     #expect(fixture.pluginCloseControlPressCount.value == 3)
 }
@@ -4220,7 +4227,10 @@ private final class Counter: @unchecked Sendable {
 
     #expect(obj["error"] as? String == "duplicate_plugin_editor_already_open")
     let hint = try #require(obj["recovery_hint"] as? String)
-    #expect(hint.contains("Close the open"))
+    #expect(hint.contains("pre-existing"))
+    #expect(hint.contains("terminated before plug-in parameter or editor mutation"))
+    #expect(!hint.contains("terminated before mutation"))
+    #expect(!hint.lowercased().contains("close the open"))
 }
 
 // #955 B0: use the actual channel entry point, not a requested-value echo or
@@ -6249,6 +6259,10 @@ func testIssue955ReadDoesNotCloseAnEditorAfterOwnershipEnds(_ changed: String) a
     #expect(!(try #require(object["editor_close_observed"] as? Bool)))
     #expect(try #require(object["editor_cleanup_unobserved"] as? Bool))
     #expect(object["editor_still_open"] == nil, "Lost custody cannot establish the original editor's residual state")
+    let recoveryHint = try #require(object["recovery_hint"] as? String)
+    #expect(recoveryHint.contains("Automatic editor cleanup lost target custody"))
+    #expect(recoveryHint.contains("terminal"))
+    #expect(!recoveryHint.lowercased().contains("manually"))
     #expect(fixture.pluginCloseControlPressCount.value == 0, "Do not close a window through lost ownership")
     #expect(fixture.sliderWriteCount.value == 0)
     #expect(fixture.controlsCheckboxPressCount.value == 0)
