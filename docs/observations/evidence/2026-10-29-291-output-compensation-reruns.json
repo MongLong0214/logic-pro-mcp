@@ -103,6 +103,60 @@
         "pid_gone": true,
         "reader_finished": true
       }
+    },
+    {
+      "run": 42,
+      "head": "4677d893c3a9ef15a87d4a28e28473f4413d1406",
+      "tree": "df9ce3d035d230af162d014ee432619577bd6bf7",
+      "binary_sha256": "bdafb6c8b0c328f5d43d0134307ccfd1d7a15b27e284d932b9a2b36ae4c7c83d",
+      "tracked_diff_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "runner_exit": 0,
+      "runner_elapsed_seconds": 876.75,
+      "result_sha256": "ba282bad6323702ba33fda886252b19114f639142716b02a444c4043613627ce",
+      "log_sha256": "9338dfd6ec1c30931ed21f2448a433abd1f8b1f71e6ea23dc106df912754e369",
+      "product": {
+        "state": "C",
+        "saga_state": "fullyCompensated",
+        "verified_terminal_outcome": true,
+        "forward_write_boundary_count": 1,
+        "compensation_write_boundary_count": 1,
+        "verified_compensation_count": 1,
+        "failed_compensation_count": 0,
+        "uncertain_compensation_count": 0,
+        "readback_evidence_count": 1,
+        "forward_transition": {
+          "before": "stereo_output",
+          "desired": "bus:1",
+          "observed": "bus:1",
+          "verified": true
+        },
+        "compensation_transition": {
+          "desired": "stereo_output",
+          "observed": "stereo_output",
+          "verified": true
+        },
+        "same_key_replay": {
+          "duplicate": true,
+          "additional_write_count": 0
+        }
+      },
+      "independent_terminal_readback": {
+        "sha256": "5329e55a121ac4f6561ea375908217815888c9f1a75808137e6f6996e3c83d6a",
+        "exact_project_window": true,
+        "track_index": 13,
+        "selected_track": true,
+        "output": "stereo_output",
+        "play": false,
+        "record": false,
+        "open_menu_or_dialog": false,
+        "logic_input_sent": false,
+        "qualification": "product_verified_compensation_pass"
+      },
+      "owned_server_stop": {
+        "returncode": 0,
+        "pid_gone": true,
+        "reader_finished": true
+      }
     }
   ]
 }
