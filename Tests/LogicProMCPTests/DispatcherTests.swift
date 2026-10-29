@@ -587,8 +587,8 @@ private func liveTransportJSON(
 
 @Test func testBlockingLogicDialogResultEnrichesDiagnosticWithDialogIdentity() throws {
     // #190: when a blocking dialog is identified, the refusal envelope must carry
-    // its title, role, owning window, buttons, and a safe recovery action — not
-    // just a generic blocking_dialog_present.
+    // its title, role, owning window, and buttons — without converting that
+    // observation into a person-owned dismissal/retry step.
     let info = AXLogicProElements.BlockingDialogInfo(
         title: "Save",
         role: "AXDialog",
@@ -609,8 +609,16 @@ private func liveTransportJSON(
     #expect(object["dialog_role"] as? String == "AXDialog")
     #expect(object["owning_window"] as? String == "Demo - Tracks")
     #expect((object["dialog_buttons"] as? [String])!.contains("Cancel"))
-    #expect(object["recovery_action"] as? String == info.recoveryAction)
-    #expect((object["hint"] as? String)!.contains("Cancel"))
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+    #expect(try #require(object["automatic_precondition_attempts_exhausted"] as? Bool))
+    let recoveryAction = try #require(object["recovery_action"] as? String)
+    let hint = try #require(object["hint"] as? String)
+    for request in ["press", "dismiss", "close", "escape", "retry", "manual"] {
+        #expect(!recoveryAction.localizedCaseInsensitiveContains(request))
+        #expect(!hint.localizedCaseInsensitiveContains(request))
+    }
 }
 
 @Test func testBlockingLogicDialogResultWithoutInfoStaysGenericButHonest() throws {
@@ -625,6 +633,14 @@ private func liveTransportJSON(
     #expect(object["dialog_title"] == nil)
     #expect(object["dialog_role"] == nil)
     #expect(object["recovery_action"] == nil)
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+    #expect(try #require(object["automatic_precondition_attempts_exhausted"] as? Bool))
+    let hint = try #require(object["hint"] as? String)
+    for request in ["dismiss", "retry", "check that", "manual"] {
+        #expect(!hint.localizedCaseInsensitiveContains(request))
+    }
 }
 
 @Test func testTransportDispatcherToggleMetronomeVerifiesViaTransportStateReadback() async throws {

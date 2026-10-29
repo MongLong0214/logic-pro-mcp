@@ -141,9 +141,9 @@ import Testing
     #expect(AXLogicProElements.dialogPresent(runtime: runtime))
 }
 
-@Test func testBlockingDialogInfoReportsIdentityAndCancelRecovery() {
+@Test func testBlockingDialogInfoReportsIdentityWithoutHumanRecovery() {
     // #190: a blocking dialog must be identified — title, role, owning window,
-    // buttons, and a safe (Cancel-first) recovery action.
+    // buttons, and a terminal diagnostic that does not ask a person to act.
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(1)
     let dialog = builder.element(2)
@@ -171,7 +171,9 @@ import Testing
     #expect(resolved.owningWindow == "Demo - Tracks")
     #expect(resolved.buttonTitles.contains("Cancel"))
     #expect(resolved.buttonTitles.contains("Save"))
-    #expect(resolved.recoveryAction.contains("Cancel"))
+    for request in ["press", "dismiss", "close", "escape", "retry", "manual"] {
+        #expect(!resolved.recoveryAction.localizedCaseInsensitiveContains(request))
+    }
 }
 
 @Test func testBlockingDialogInfoReturnsNilWhenNoDialog() {
