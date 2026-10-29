@@ -1254,12 +1254,15 @@ actor MCUChannel: Channel {
                 extras["step_windows"] = [String]()
                 extras["requested_step_windows"] = [String]()
                 extras["verify_source"] = Self.bankWindowVerifySource
+                extras["safe_to_retry"] = false
+                extras["automatic_precondition_attempts_exhausted"] = true
+                extras["terminal"] = true
+                extras["human_intervention_required"] = false
                 for (k, v) in await mcuConnectionExtras() { extras[k] = v }
                 let hint = "\(operation) sent nothing: the MCU LCD upper row has never been received on this "
-                    + "server, so there is no bank window to compare a move against. Install the Mackie "
-                    + "Control surface with both ports bound to LogicProMCP-MCU-Internal "
-                    + "(logic_system setup_control_surface), confirm logic://mcu/state shows "
-                    + "display.upperRow, then retry."
+                    + "server, so there is no bank window to compare a move against. This invocation "
+                    + "terminated before sending a bank press because it has no authorized in-operation "
+                    + "precondition recovery."
                 return .error(HonestContract.encodeStateC(
                     error: .readbackUnavailable, hint: hint, extras: extras
                 ))
