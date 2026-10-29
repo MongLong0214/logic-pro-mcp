@@ -513,7 +513,12 @@ extension AccessibilityChannel {
         return .error(HonestContract.encodeStateC(
             error: .elementNotFound,
             hint: missingHint,
-            extras: missingExtras
+            extras: missingExtras.merging([
+                "write_attempted": false,
+                "automatic_tempo_lookup_exhausted": true,
+                "terminal": true,
+                "human_intervention_required": false,
+            ]) { _, new in new }
         ))
     }
 
@@ -554,18 +559,18 @@ extension AccessibilityChannel {
         let transportBarFound = landmarks["transport_bar_found"] as? Bool ?? false
 
         if dialogPresent {
-            return "tempo slider not located while a Logic dialog is present. Dismiss the dialog, clear the Create New Track prompt if visible, and retry."
+            return "automatic tempo lookup terminated because a Logic dialog prevented a trustworthy control census."
         }
         if trackHeaderCount == 0 {
-            return "tempo slider not located: no track headers are visible yet. Clear the Create New Track dialog or create a software instrument track first."
+            return "automatic tempo lookup terminated: no track headers were visible in the current Accessibility census."
         }
         if !controlBarFound && !transportBarFound {
-            return "tempo slider not located: Logic's Control Bar and transport UI were both absent from the AX tree. Ensure the project window is frontmost and fully loaded, then retry."
+            return "automatic tempo lookup terminated because neither Logic's Control Bar nor transport UI was present in the Accessibility tree."
         }
         if !controlBarFound {
-            return "tempo slider not located in Logic's Control Bar. Ensure the project window is frontmost and the Control Bar is visible, then retry."
+            return "automatic tempo lookup terminated because Logic's Control Bar was absent from the Accessibility tree."
         }
-        return "tempo slider not located in Logic control bar; ensure Logic Pro is frontmost with an open project"
+        return "automatic tempo lookup terminated because no eligible tempo control was found in the observed Logic controls."
     }
 
     private static func shouldAttemptTempoFallback(landmarks: [String: Any]) -> Bool {

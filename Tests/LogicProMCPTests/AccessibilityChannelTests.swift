@@ -2904,7 +2904,7 @@ private func makeTempoSliderFixture(
     #expect(AccessibilityChannel.validatedMIDIImportPath(tempFile.fileURL.path + "\n") == nil)
 }
 
-@Test func testAccessibilityChannelAXBackedTempoReturnsErrorWhenAXFieldMissing() async {
+@Test func testAccessibilityChannelAXBackedTempoReturnsErrorWhenAXFieldMissing() async throws {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(700)
     let window = builder.element(701)
@@ -2928,9 +2928,17 @@ private func makeTempoSliderFixture(
     let result = await channel.execute(operation: "transport.set_tempo", params: ["tempo": "126"])
     #expect(!result.isSuccess)
     #expect(result.message.contains("\"error\":\"element_not_found\""))
-    #expect(result.message.contains("tempo slider not located"))
-    #expect(result.message.contains("create a software instrument track first"))
+    #expect(result.message.contains("automatic tempo lookup terminated"))
     let object = decodeAccessibilityJSON(result.message)
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(try #require(object["automatic_tempo_lookup_exhausted"] as? Bool))
+    #expect(!(try #require(object["write_attempted"] as? Bool)))
+    let hint = object["hint"] as? String ?? ""
+    #expect(hint.contains("automatic tempo lookup terminated"))
+    for request in ["dismiss", "clear", "create", "ensure", "retry", "manually"] {
+        #expect(!hint.localizedCaseInsensitiveContains(request))
+    }
     #expect(object["track_header_count"] as? Int == 0)
     #expect((object["transport_bar_found"] as? Bool)!)
     #expect(!((object["control_bar_found"] as? Bool)!))
