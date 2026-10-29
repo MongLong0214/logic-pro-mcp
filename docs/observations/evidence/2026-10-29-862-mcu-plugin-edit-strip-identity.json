@@ -1,0 +1,49 @@
+{
+  "schema": 1,
+  "issue": 862,
+  "source": "https://github.com/MongLong0214/logic-pro-mcp/issues/862",
+  "measured_at": "2026-09-11",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "project": "lpm-locale-campaign",
+    "control_surface": "Mackie Control",
+    "input": "LogicProMCP-MCU-Internal",
+    "output": "LogicProMCP-MCU-Internal"
+  },
+  "readings": [
+    {
+      "what": "same strip-relative request after selection-triggered rebanking",
+      "first_named_channel": "Studio Grand",
+      "next_named_channel": "Deluxe Classic",
+      "server_bank_compared_with_logic": false,
+      "exact_strip_identity_proved": false
+    },
+    {
+      "what": "bank timing control",
+      "bank_press_spacing_ms": 1,
+      "settle_control_ms": 250,
+      "settle_control_repaired_single_call": true,
+      "logic_bank_offset_readback_available": false
+    },
+    {
+      "what": "LCD delta behavior",
+      "upper_parameter_row_redrawn_on_assignment_change": true,
+      "lower_value_row_fully_redrawn": false,
+      "same_strip_reselection_emitted_fresh_name_toast": false,
+      "stale_value_residue_observed": true
+    },
+    {
+      "what": "safe interpretation",
+      "host_verified_write_supported": false,
+      "reason": "no independent Logic bank-offset or exact channel-identity readback"
+    }
+  ],
+  "limits": [
+    "This file preserves the issue's measured readings; it is not a headless replay of the native MCU session.",
+    "One host, locale, project and control-surface binding were measured.",
+    "The settle control repairs immediate timing only and does not establish stable target identity."
+  ]
+}
