@@ -226,13 +226,13 @@ func blockingLogicDialogResult(
         "human_intervention_required": false,
     ]
     var hint = sawADialog
-        ? "Refusing \(operation) because a pre-existing blocking Logic dialog/sheet is present. "
-            + "This request does not own it and terminated before any write."
+        ? "Refusing \(operation) because a blocking Logic dialog/sheet was observed at the "
+            + "pre-write guard. This refusal actuated no dialog control and terminated before any write."
         : "Refusing \(operation): the blocking-dialog preflight could not establish whether a dialog "
             + "is present (\(reason.rawValue)), so it terminated before any write. No modal identity "
             + "or cleanup authority was inferred."
-    // #190: preserve the observed dialog identity without turning it into a person-owned cleanup
-    // step. A pre-existing dialog is outside this request's custody.
+    // #190: preserve the observed dialog identity without fabricating when it appeared or turning
+    // the observation into cleanup authority.
     if info == nil {
         // #606: refusing without an identity is refusing on something nobody can name. Say what the
         // guard saw so the caller is not sent hunting for a dialog that is not there.
@@ -243,11 +243,11 @@ func blockingLogicDialogResult(
         extras["dialog_role"] = info.role
         extras["owning_window"] = info.owningWindow
         extras["dialog_buttons"] = info.buttonTitles
-        let terminalOutcome = "none: the request does not own the pre-existing dialog and terminated before any write"
+        let terminalOutcome = "none: the pre-write guard actuated no dialog control and inferred no cleanup authority"
         extras["recovery_action"] = terminalOutcome
         let label = info.title.isEmpty ? info.role : info.title
-        hint = "Refusing \(operation): a pre-existing blocking Logic dialog/sheet is present (\(label)). "
-            + "The request does not own it and terminated before any write."
+        hint = "Refusing \(operation): a blocking Logic dialog/sheet was observed at the pre-write "
+            + "guard (\(label)). This refusal actuated no dialog control and terminated before any write."
     }
     return toolTextResult(
         HonestContract.encodeStateC(error: .unsupportedState, hint: hint, extras: extras),

@@ -615,7 +615,10 @@ private func liveTransportJSON(
     #expect(try #require(object["automatic_precondition_attempts_exhausted"] as? Bool))
     let recoveryAction = try #require(object["recovery_action"] as? String)
     let hint = try #require(object["hint"] as? String)
-    for request in ["press", "dismiss", "close", "escape", "retry", "manual"] {
+    for request in [
+        "press", "dismiss", "close", "escape", "retry", "manual",
+        "predates", "pre-existing", "does not own",
+    ] {
         #expect(!recoveryAction.localizedCaseInsensitiveContains(request))
         #expect(!hint.localizedCaseInsensitiveContains(request))
     }

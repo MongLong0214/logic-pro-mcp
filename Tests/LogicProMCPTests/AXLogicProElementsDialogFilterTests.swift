@@ -171,7 +171,10 @@ import Testing
     #expect(resolved.owningWindow == "Demo - Tracks")
     #expect(resolved.buttonTitles.contains("Cancel"))
     #expect(resolved.buttonTitles.contains("Save"))
-    for request in ["press", "dismiss", "close", "escape", "retry", "manual"] {
+    for request in [
+        "press", "dismiss", "close", "escape", "retry", "manual",
+        "predates", "pre-existing", "does not own",
+    ] {
         #expect(!resolved.recoveryAction.localizedCaseInsensitiveContains(request))
     }
 }

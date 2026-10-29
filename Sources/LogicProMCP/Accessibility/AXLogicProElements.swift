@@ -702,15 +702,15 @@ enum AXLogicProElements {
     }
 
     /// A non-mutating terminal diagnostic for a blocking dialog. The dialog's
-    /// controls remain separately observable, but a request that did not create
-    /// the dialog does not obtain cleanup authority from their presence.
+    /// controls remain separately observable, but their presence alone does not
+    /// establish temporal provenance or cleanup authority.
     private static func blockingDialogRecoveryAction(title: String, buttons: [String]) -> String {
         let identity = title.isEmpty ? "blocking Logic dialog" : "\"\(title)\" Logic dialog"
         let census = buttons.isEmpty
             ? "No dialog controls were enumerated."
             : "\(buttons.count) dialog control(s) were observed and are reported separately."
-        return "The observed \(identity) predates this request. \(census) No dialog control was "
-            + "actuated because this request does not own the dialog; the request terminated."
+        return "The observed \(identity) was present at the blocking-dialog census. \(census) "
+            + "No dialog control was actuated, and no cleanup authority was inferred."
     }
 
     /// True when `window` carries an AXSubrole indicating a modal dialog/sheet.
