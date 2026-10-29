@@ -1,0 +1,130 @@
+{
+  "format": "logic-pro-mcp/native-read-receipt-v1",
+  "observed_at_utc": "2026-10-29T16:07:03.668599Z",
+  "candidate": {
+    "head": "79f0229c084c12b3cbe94ddc1bf7b8ec79346de0",
+    "tree": "db3ad991bf25bd7d57bde84860165788bf53eecd",
+    "binary_sha256": "38d99aba5b890e25631c798aaa78499b17130647f0771a5694d60a3d5afcc447"
+  },
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "fixture": {
+    "project_path": "/Users/isaac/lpm-evidence/965-flat-native-20261013.logicx",
+    "project_name": "965-flat-native-20261013",
+    "track_index": 13,
+    "track_name": "Audio 13",
+    "mixer_strip_index": 12,
+    "insert_index": 1,
+    "plugin_id": "logic.stock.effect.compressor",
+    "target_ref": "ins_174FF1C9-AC8C-4070-B1EC-7DB60D717D2B",
+    "target_fingerprint": "13:8:Audio 13|insert=1|plugin=logic.stock.effect.compressor"
+  },
+  "read_only_precondition_sequence": [
+    "logic_system.refresh_cache",
+    "logic://project/info",
+    "logic_plugins.get_inventory(track=13,reveal_mixer=false)",
+    "logic_plugins.get_param_verified(target_ref=<issued>,param=rms_mode)",
+    "logic_plugins.get_inventory(track=13,reveal_mixer=false)"
+  ],
+  "observations": {
+    "project_info": {
+      "file_path": "/Users/isaac/lpm-evidence/965-flat-native-20261013.logicx",
+      "source": "ax_live",
+      "ax_occluded": false
+    },
+    "before_inventory": {
+      "state": "A",
+      "verified": true,
+      "complete": true,
+      "track": 13,
+      "track_name": "Audio 13",
+      "mixer_strip_index": 12,
+      "insert": 1,
+      "plugin_id": "logic.stock.effect.compressor",
+      "read_status": "ok"
+    },
+    "rms_mode_read": {
+      "state": "A",
+      "success": true,
+      "verified": true,
+      "param": "rms_mode",
+      "observed_raw": true,
+      "raw_unit": "boolean",
+      "observed_display": "RMS",
+      "parameter_read_status": "read",
+      "display_read_status": "read",
+      "write_attempted": false,
+      "verify_source": "ax_plugin_window",
+      "plugin_view_restore_attempted": true,
+      "plugin_view_restore_observed": true,
+      "editor_close_attempted": true,
+      "editor_close_observed": true
+    },
+    "after_inventory": {
+      "state": "A",
+      "verified": true,
+      "complete": true,
+      "track": 13,
+      "track_name": "Audio 13",
+      "mixer_strip_index": 12,
+      "insert": 1,
+      "plugin_id": "logic.stock.effect.compressor",
+      "read_status": "ok"
+    },
+    "before_after_target_unchanged": true
+  },
+  "checks": {
+    "project_matches": true,
+    "before_inventory_state_a": true,
+    "read_state_a": true,
+    "read_verified": true,
+    "raw_is_boolean": true,
+    "raw_unit_is_boolean": true,
+    "display_matches_boolean": true,
+    "parameter_read_status": true,
+    "write_not_attempted": true,
+    "view_restored": true,
+    "new_editor_closed": true,
+    "same_target_after": true,
+    "no_timeout": true,
+    "server_pid_gone": true
+  },
+  "sorted_json_sha256": {
+    "refresh_cache": "81eb7eb9b93f9dbdb5d42e1c3a4fc42e9e8d0220867cecf0eab3640d76abb0b2",
+    "project_info": "cdd8e2218c6da553b547ce872daaecce7000a98b4da38e5b67fed088ee5ed39b",
+    "before_inventory": "2734433dfcc70d438bf84981addbe3a3b18fad536ce3655cea47e44bd8856477",
+    "rms_mode_read": "3e464b8f43db1690d7705e1bbba3ed027a69c1595019e1275ce585d27604a790",
+    "after_inventory": "b458dd1e994c7521aea2d0f19f1572c69490650e5bc2991fa4dbcfed7dbf2772"
+  },
+  "server_shutdown": {
+    "pid": 28929,
+    "method": "stdin_close",
+    "returncode": 0,
+    "pid_gone": true,
+    "reader_finished": true
+  },
+  "independent_ui_readback": {
+    "method": "Logic Pro accessibility snapshot through native UI automation",
+    "window_title": "965-flat-native-20261013 - 트랙",
+    "standard_window_count": 1,
+    "selected_track": "Audio 13",
+    "playback_stopped": true,
+    "recording_stopped": true,
+    "mixer_visible": true,
+    "open_menu_detected": false,
+    "plugin_editor_window_detected": false,
+    "key_input_sent": false,
+    "click_input_sent": false
+  },
+  "mutation_boundary": {
+    "setter_called": false,
+    "save_called": false,
+    "project_close_called": false,
+    "logic_process_terminated": false
+  }
+}
