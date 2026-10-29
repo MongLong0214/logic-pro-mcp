@@ -23,7 +23,9 @@
     "cost": "more than ten minutes on the protected fixture with stopped playback"
   },
   "depends": [
+    "Sources/LogicProMCP/Server/OperationRegistry.swift",
     "Sources/LogicProMCP/Workflows/ApprovedSessionRepair.swift",
+    "Tests/LogicProMCPTests/OperationRegistryTests.swift",
     "Tests/LogicProMCPTests/Issue965HeldSelectionAssociationTests.swift"
   ],
   "evidence": [

@@ -211,7 +211,10 @@ enum DeadlineClass: Sendable, Equatable {
     case long
     /// A Saga owns a complete forward/readback/conditional-compensation
     /// lifecycle. Keep each ordinary operation in the 300s long tier, while
-    /// allowing the bounded outer lifecycle to contain both directions.
+    /// allowing the bounded outer lifecycle to contain both directions plus
+    /// their independent ownership/readback bookends. #291 measured the
+    /// 32-track/38-strip output path crossing both write boundaries but losing
+    /// the compensation readback at the former 600s wall.
     case saga
 
     var seconds: Double {
@@ -219,7 +222,7 @@ enum DeadlineClass: Sendable, Equatable {
         case .short: 25
         case .medium: 90
         case .long: 300
-        case .saga: 600
+        case .saga: 900
         }
     }
 }
@@ -633,8 +636,13 @@ enum OperationRegistry {
             target: entry.3,
             verification: .readbackRequired,
             retry: .neverAutomatic,
-            // Compound routing edits retain source renewal, protected peer reads and owned acquisitions.
-            deadline: [.mixerSetInputBusVerified, .mixerSetSendOutputVerified, .mixerSetSendLevelVerified, .mixerSetSendModeVerified].contains(entry.0) ? .medium : .short,
+            // Compound routing edits retain source renewal, protected peer reads
+            // and owned acquisitions. The selected-output path additionally
+            // scans and rechecks the complete protected Mixer footprint; #291's
+            // 32-track/38-strip run measured 177s before its verified State A.
+            deadline: entry.0 == .mixerSetOutputVerified ? .long
+                : [.mixerSetInputBusVerified, .mixerSetSendOutputVerified,
+                   .mixerSetSendLevelVerified, .mixerSetSendModeVerified].contains(entry.0) ? .medium : .short,
             availability: .defaultInstall,
             allowedParams: allowedParams(
                 for: entry.0,
