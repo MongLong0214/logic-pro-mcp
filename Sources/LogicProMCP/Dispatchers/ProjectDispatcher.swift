@@ -1000,13 +1000,17 @@ struct ProjectDispatcher: OperationTraceDispatching {
                 return cleanupApplyStateC(
                     .readbackMismatch,
                     stepID: step.id,
-                    hint: "cleanup_apply: rename step '\(step.id)' stopped at track \(target) — the track.rename path did not confirm a verified rename (State B/C). Re-read logic://tracks and retry.",
+                    hint: "cleanup_apply: rename step '\(step.id)' terminated at track \(target) because "
+                        + "the track.rename path did not confirm a verified rename (State B/C).",
                     extras: [
                         "tool": "logic_tracks",
                         "command": "rename",
                         "failed_track_index": target,
                         "applied": renamed,
                         "underlying": body,
+                        "write_attempted": true,
+                        "terminal": true,
+                        "human_intervention_required": false,
                     ]
                 )
             }
