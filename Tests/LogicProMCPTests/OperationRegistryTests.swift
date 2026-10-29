@@ -917,7 +917,7 @@ struct OperationRegistryTests {
         #expect(text.contains("target_ref"))
         #expect(text.contains("param"))
         #expect(text.contains(
-            "Compressor ratio, attack, release, and makeup are read-only: raw_ax_value plus verbatim observed_display; "
+            "Compressor ratio, knee, attack, release, and makeup are read-only: raw_ax_value plus verbatim observed_display; "
                 + "none grants a write method."
         ))
         #expect(text.contains(
@@ -925,7 +925,7 @@ struct OperationRegistryTests {
         ))
         let pluginDescription = PluginsDispatcher.tool.description ?? ""
         #expect(pluginDescription.contains(
-            "Compressor ratio, attack, release, and makeup are read-only: raw_ax_value plus verbatim observed_display; "
+            "Compressor ratio, knee, attack, release, and makeup are read-only: raw_ax_value plus verbatim observed_display; "
                 + "none grants a write method."
         ))
         #expect(pluginDescription.contains(

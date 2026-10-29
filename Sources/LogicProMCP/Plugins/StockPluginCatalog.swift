@@ -1568,6 +1568,33 @@ enum StockPluginCatalog {
                 ]
             )
         ),
+        // The same measured Controls table associates Knee with a display-bearing
+        // slider. Its raw AX value remains opaque: no normalization or actuation
+        // was measured, so the reader returns Logic's display verbatim and the
+        // catalog grants no write method.
+        StockPluginParameterMetadata(
+            id: "knee",
+            displayName: "Knee",
+            unit: "raw_ax_value",
+            valueRange: nil,
+            writeMethod: nil,
+            readbackMethod: "ax_controls_view_slider_display",
+            controlsViewRowLabel: "Knee",
+            controlsViewControlRole: "AXSlider",
+            controlsViewActuationState: .unmeasured,
+            availabilityState: .observed,
+            provenance: .observed(
+                method: "controls_view_read_only_observation",
+                observedAt: "2026-08-30T04:02:24Z",
+                logicVersion: "12.x",
+                locale: "ko-KR",
+                evidence: [
+                    "parameter_readback",
+                    "Knee Controls row exposes a raw AX value and verbatim display",
+                    "No Knee write or raw-to-normalized conversion was measured",
+                ]
+            )
+        ),
         // The measured Controls table associates this value with the Attack
         // row and exposes both a raw AXValue and Logic's engineering display.
         // No Attack actuation was measured, so the raw value stays opaque and
