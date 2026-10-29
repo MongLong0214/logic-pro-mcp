@@ -2314,7 +2314,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                   get_param_verified -> { target_ref: String (occupied ins_ reference), param: String,
                                           unit?: String } — Read one qualified parameter without audio mutation
                     Compressor ratio, knee, attack, release, and makeup are read-only: raw_ax_value plus verbatim observed_display; none grants a write method.
-                    Compressor circuit_type is a read-only current string; it does not open the popup or claim a complete choice list.
+                    Compressor circuit_type, auto_gain, and distortion are read-only current strings; they do not open the popups or claim complete choice lists.
                   set_param_verified -> { track: Int, insert: Int, plugin: String,
                                           param: String, value: Float, unit: String,
                                           mode: "duplicate_applyback",

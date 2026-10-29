@@ -29,6 +29,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   The already-selected Controls popup value is sampled twice and returned as a verbatim string
   without opening the menu. This does not infer a complete choice list or grant selection/write
   authority; `set_param_verified` still refuses before any AX action.
+- **Compressor `auto_gain` and `distortion` expose their current values read-only (#299).**
+  Their already-selected Controls popup values are sampled twice and returned as verbatim strings
+  without opening either menu. The measured duplicate/unnamed menu choices remain unaddressable by
+  name, so no write method or ordinal-selection authority is granted.
 - **The fixed verifier can carry an opaque session-issued string from a setup call into the row's
   operation (#1028).** The exact `$observation` parameter form is admitted only for the operation,
   resolves through the stored raw reply with the judge's strict JSON/path rules, and refuses before

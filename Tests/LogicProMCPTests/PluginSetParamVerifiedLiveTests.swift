@@ -4309,12 +4309,13 @@ private func compressorScalarReadFixture(
     return fixture
 }
 
-private func compressorCircuitReadFixture(
-    value: Any = "Platinum Digital",
+private func compressorPopupReadFixture(
+    label: String,
+    value: Any,
     controls: Bool
 ) -> LiveFixture {
     let fixture = LiveFixture(
-        controlsViewRowLabel: "Circuit Type",
+        controlsViewRowLabel: label,
         controlsViewInitiallySelected: controls,
         viewSettleDelay: 0
     )
@@ -4329,6 +4330,13 @@ private func compressorCircuitReadFixture(
     builder.setAttribute(popup, kAXValueAttribute as String, value)
     builder.setChildren(builder.element(100_905), [builder.element(100_907), popup])
     return fixture
+}
+
+private func compressorCircuitReadFixture(
+    value: Any = "Platinum Digital",
+    controls: Bool
+) -> LiveFixture {
+    compressorPopupReadFixture(label: "Circuit Type", value: value, controls: controls)
 }
 
 @Test(arguments: [false, true])
@@ -4530,7 +4538,53 @@ func testIssue299CompressorCircuitReadsCurrentValueWithoutOpeningOrWriting(_ con
     let writeObject = try #require(sharedJSONObject(write.message))
     #expect(writeObject["state"] as? String == "C", "\(writeObject)")
     #expect(writeObject["error"] as? String == "unsupported_param_readback")
-    #expect(writeObject["what_was_observed"] as? String == "actuation_unmeasured")
+    #expect(writeObject["what_was_observed"] as? String
+        == ControlsViewBooleanParameterWriter.LocatorFailure.popupNotAddressableByName.observation)
+    #expect(!(try #require(writeObject["write_attempted"] as? Bool)))
+    #expect(fixture.axActions.value.count == actionCountBeforeWrite)
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+@Test(arguments: ["auto_gain", "distortion"], [false, true])
+func testIssue299AdditionalCompressorPopupsReadCurrentValueWithoutOpeningOrWriting(
+    _ param: String,
+    _ controls: Bool
+) async throws {
+    let label = param == "auto_gain" ? "Auto Gain:" : "Distortion:"
+    let selected = param == "auto_gain" ? "-12 dB" : "Off"
+    let fixture = compressorPopupReadFixture(label: label, value: selected, controls: controls)
+    let originalView = fixture.currentPluginViewTitle
+    let read = await AccessibilityChannel.defaultGetParamVerified(
+        params: parameterReadParams(param),
+        runtime: parameterReadRuntime(fixture)
+    )
+    let readObject = try #require(sharedJSONObject(read.message))
+    #expect(readObject["state"] as? String == "A", "\(readObject)")
+    #expect(readObject["observed_raw"] as? String == selected)
+    #expect(readObject["observed_display"] as? String == selected)
+    #expect(readObject["raw_unit"] as? String == "string")
+    #expect(readObject["parameter_read_status"] as? String == "read")
+    #expect(fixture.currentPluginViewTitle == originalView)
+    #expect(!fixture.axActions.value.contains { $0.element == 299_701 })
+
+    let actionCountBeforeWrite = fixture.axActions.value.count
+    var writeParams = parameterReadParams(param)
+    writeParams.merge([
+        "mode": "duplicate_applyback",
+        "value": "0",
+        "unit": "string",
+    ]) { _, new in new }
+    let write = await AccessibilityChannel.defaultSetParamVerified(
+        params: writeParams,
+        runtime: parameterReadRuntime(fixture),
+        frontDocumentPath: { expectedPath }
+    )
+    let writeObject = try #require(sharedJSONObject(write.message))
+    #expect(writeObject["state"] as? String == "C", "\(writeObject)")
+    #expect(writeObject["error"] as? String == "unsupported_param_readback")
+    #expect(writeObject["what_was_observed"] as? String
+        == ControlsViewBooleanParameterWriter.LocatorFailure.popupNotAddressableByName.observation)
     #expect(!(try #require(writeObject["write_attempted"] as? Bool)))
     #expect(fixture.axActions.value.count == actionCountBeforeWrite)
     #expect(fixture.sliderWriteCount.value == 0)

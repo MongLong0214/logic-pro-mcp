@@ -2335,6 +2335,19 @@ extension AccessibilityChannel {
                     "write_attempted": false,
                 ]
             ))
+        case .measuredNotAddressableByName:
+            return .failure(HonestContract.encodeV2StateC(
+                error: .unsupportedParamReadback,
+                extras: [
+                    "operation": operation,
+                    "target_identity": identity,
+                    "param": paramAlias,
+                    "what_was_attempted": "preflight the measured Controls-view popup actuation path for \(pluginID).\(paramAlias)",
+                    "what_was_observed": ControlsViewBooleanParameterWriter.LocatorFailure.popupNotAddressableByName.observation,
+                    "safe_to_retry": false,
+                    "write_attempted": false,
+                ]
+            ))
         case .unmeasured:
             return .failure(HonestContract.encodeV2StateC(
                 error: .unsupportedParamReadback,
