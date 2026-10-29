@@ -3745,15 +3745,23 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
     let obj = decodeAccessibilityJSON(result.message)
     #expect(obj["error"] as? String == "library_panel_unavailable")
     #expect(obj["precondition"] as? String == "panel_closed")
+    #expect(obj["recovery_attempted"] as? String == "open_panel")
+    let humanInterventionRequired = try #require(obj["human_intervention_required"] as? Bool)
+    #expect(!humanInterventionRequired)
+    let terminal = try #require(obj["terminal"] as? Bool)
+    #expect(terminal)
     let hint = try #require(obj["hint"] as? String)
-    #expect(hint.contains("Y"))
+    #expect(hint.contains("automatic open"))
+    #expect(hint.contains("terminated"))
+    #expect(!hint.contains("Open Library"))
+    #expect(!hint.contains("retry"))
     // Auto-open must have been attempted before failing closed.
     #expect(openAttempted.value)
     // Must NOT be the misleading legacy error.
     #expect(obj["error"] as? String != "ax_write_failed")
 }
 
-@Test func testSetInstrumentPathNotInCacheReturnsPathNotInLibrary() async {
+@Test func testSetInstrumentPathNotInCacheReturnsPathNotInLibrary() async throws {
     // Panel open, target type OK, but the injected cache resolver reports the
     // path is ABSENT → terminal precondition `path_not_in_library` (NOT a nav
     // attempt, NOT ax_write_failed).
@@ -3790,6 +3798,15 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
     let obj = decodeAccessibilityJSON(result.message)
     #expect(obj["error"] as? String == "path_not_in_library")
     #expect(obj["precondition"] as? String == "missing_path")
+    #expect(obj["next_machine_action"] as? String == "logic_tracks.scan_library")
+    let humanInterventionRequired = try #require(obj["human_intervention_required"] as? Bool)
+    #expect(!humanInterventionRequired)
+    let terminal = try #require(obj["terminal"] as? Bool)
+    #expect(terminal)
+    let hint = obj["hint"] as? String ?? ""
+    #expect(hint.contains("terminated"))
+    #expect(!hint.contains("Run scan_library"))
+    #expect(!hint.contains("pick"))
     #expect(obj["error"] as? String != "ax_write_failed")
 }
 
@@ -3850,7 +3867,7 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
     #expect(presetWasNotNavigated)
 }
 
-@Test func testSetInstrumentFolderPathFailsClosedBeforeAXNav() async {
+@Test func testSetInstrumentFolderPathFailsClosedBeforeAXNav() async throws {
     let fixture = makeSetInstrumentFixture()
     fixture.builder.setAttribute(fixture.category, kAXValueAttribute as String, "Synthesizer")
     fixture.builder.setAttribute(fixture.preset, kAXValueAttribute as String, "Bass")
@@ -3888,6 +3905,14 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
     #expect(obj["error"] as? String == "folder_not_preset")
     #expect(obj["precondition"] as? String == "folder_path")
     #expect(obj["requested_path"] as? String == "Synthesizer/Bass")
+    #expect(obj["next_machine_action"] as? String == "logic_tracks.scan_library")
+    let humanInterventionRequired = try #require(obj["human_intervention_required"] as? Bool)
+    #expect(!humanInterventionRequired)
+    let terminal = try #require(obj["terminal"] as? Bool)
+    #expect(terminal)
+    let hint = obj["hint"] as? String ?? ""
+    #expect(hint.contains("terminated"))
+    #expect(!hint.contains("Pick"))
     #expect(!fixture.builder.actionCalls.map(\.elementID).contains(fixture.builder.elementID(fixture.category)))
     #expect(!fixture.builder.actionCalls.map(\.elementID).contains(fixture.builder.elementID(fixture.preset)))
 }

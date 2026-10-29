@@ -866,14 +866,19 @@ extension AccessibilityChannel {
             if !staging.isPanelOpen(runtime) {
                 return .error(HonestContract.encodeStateC(
                     error: .libraryPanelUnavailable,
-                    hint: "Library panel not found. Open Library (Y) in Logic Pro, then retry.",
+                    hint: "Library panel remained unavailable after the bounded automatic open attempt; set_instrument terminated before target selection.",
                     extras: setInstrumentBaseExtras(
                         requestedPath: resolvedPath,
                         category: category,
                         preset: preset,
                         targetTrackIndex: targetTrackIndex as Any? ?? NSNull(),
                         targetTrackName: targetTrackName
-                    ).merging(["precondition": "panel_closed"]) { _, new in new }
+                    ).merging([
+                        "precondition": "panel_closed",
+                        "recovery_attempted": "open_panel",
+                        "human_intervention_required": false,
+                        "terminal": true,
+                    ]) { _, new in new }
                 ))
             }
         }
@@ -887,7 +892,7 @@ extension AccessibilityChannel {
         if let pathKind = staging.resolvePathKind(resolvedPath), pathKind != .leaf {
             return .error(HonestContract.encodeStateC(
                 error: .folderNotPreset,
-                hint: "Library path '\(resolvedPath)' resolves to a \(pathKind.rawValue), not a loadable preset leaf. Pick a leaf path below it from scan_library.",
+                hint: "Library path '\(resolvedPath)' resolves to a \(pathKind.rawValue), not a loadable preset leaf; set_instrument terminated before Library navigation.",
                 extras: setInstrumentBaseExtras(
                     requestedPath: resolvedPath,
                     category: category,
@@ -897,20 +902,28 @@ extension AccessibilityChannel {
                 ).merging([
                     "precondition": "folder_path",
                     "path_kind": pathKind.rawValue,
+                    "next_machine_action": "logic_tracks.scan_library",
+                    "human_intervention_required": false,
+                    "terminal": true,
                 ]) { _, new in new }
             ))
         }
         if staging.resolvePath(resolvedPath) == false {
             return .error(HonestContract.encodeStateC(
                 error: .pathNotInLibrary,
-                hint: "Library path '\(resolvedPath)' was not found in the scanned inventory. Run scan_library and pick an existing path.",
+                hint: "Library path '\(resolvedPath)' was not found in the scanned inventory; set_instrument terminated before Library navigation.",
                 extras: setInstrumentBaseExtras(
                     requestedPath: resolvedPath,
                     category: category,
                     preset: preset,
                     targetTrackIndex: targetTrackIndex as Any? ?? NSNull(),
                     targetTrackName: targetTrackName
-                ).merging(["precondition": "missing_path"]) { _, new in new }
+                ).merging([
+                    "precondition": "missing_path",
+                    "next_machine_action": "logic_tracks.scan_library",
+                    "human_intervention_required": false,
+                    "terminal": true,
+                ]) { _, new in new }
             ))
         }
 
