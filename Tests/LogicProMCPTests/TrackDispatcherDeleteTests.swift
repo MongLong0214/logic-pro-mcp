@@ -205,3 +205,34 @@ private actor StateBSelectMockChannel: Channel {
     #expect((selectResponse?.contains("retry_exhausted"))!, "expected reason forwarded, got: \(text)")
     #expect((selectResponse?.contains("\"verified\":false"))!, "expected envelope detail, got: \(text)")
 }
+
+@Test func testUnverifiedSelectionRefusalsTerminateWithoutHumanRecovery() async throws {
+    for command in ["delete", "duplicate"] {
+        let router = ChannelRouter()
+        let selection = StateBSelectMockChannel(id: .mcu)
+        let mutation = MockChannel(id: .midiKeyCommands)
+        await router.register(selection)
+        await router.register(mutation)
+
+        let result = await TrackDispatcher.handle(
+            command: command,
+            params: ["index": .int(5), "expected_name": .string("Target")],
+            router: router,
+            cache: StateCache(),
+            liveTrackNames: sharedLiveTrackNames([5: "Target"])
+        )
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+        let terminal = try #require(body["terminal"] as? Bool)
+        let humanRequired = try #require(body["human_intervention_required"] as? Bool)
+        let writeAttempted = try #require(body["write_attempted"] as? Bool)
+        #expect(terminal)
+        #expect(!humanRequired)
+        #expect(!writeAttempted)
+
+        let hint = try #require(body["hint"] as? String)
+        for instruction in ["re-select", "fix Logic", "retry"] {
+            #expect(!hint.localizedCaseInsensitiveContains(instruction))
+        }
+        #expect(await mutation.executedOps.isEmpty)
+    }
+}
