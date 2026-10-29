@@ -13,6 +13,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   The Controls row is sampled twice and returns its raw AX value plus Logic's verbatim ratio display
   (for example `2.1:1`). The existing non-actuation measurement is preserved: the catalog still has
   no ratio write method, and `set_param_verified` refuses before any AX action.
+- **Compressor `knee` is available through the same read-only path (#299).**
+  Its measured Controls row returns an opaque raw AX value plus Logic's verbatim display. No
+  normalized conversion or write behavior is inferred; `set_param_verified` still refuses before
+  any AX action.
 - **Compressor `attack` is available through the same read-only path (#299).**
   Its measured Controls row returns an opaque raw AX value plus Logic's verbatim display (for example
   `15.0 ms`). No conversion or write behavior is inferred; `set_param_verified` still refuses before
