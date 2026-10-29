@@ -326,23 +326,34 @@ enum AXLogicProElements {
         return (reason, carried)
     }
 
-    static func dialogPresenceReason(runtime: Runtime = .production) -> DialogPresenceReason {
+    static func dialogPresenceReason(
+        runtime: Runtime = .production,
+        renewingRetiredNonMainWindowCensusAround heldMainWindow: AXUIElement? = nil
+    ) -> DialogPresenceReason {
         var ignored: Int32?
-        return dialogPresenceReason(runtime: runtime, windowsReadError: &ignored)
+        return dialogPresenceReason(runtime: runtime,
+            renewingRetiredNonMainWindowCensusAround: heldMainWindow,
+            windowsReadError: &ignored)
     }
 
     private static func dialogPresenceReason(
         runtime: Runtime,
+        renewingRetiredNonMainWindowCensusAround heldMainWindow: AXUIElement? = nil,
         windowsReadError: inout Int32?
     ) -> DialogPresenceReason {
         let reason: DialogPresenceReason
         var axError: Int32?
         if let app = appRoot(runtime: runtime) {
             func rereadWindows(failureReason: DialogPresenceReason,
-                               previousWindowsError: Int32? = nil) -> (DialogPresenceReason, Int32?) {
+                               previousWindowsError: Int32? = nil,
+                               requiring heldWindow: AXUIElement? = nil) -> (DialogPresenceReason, Int32?) {
                 usleep(200_000)
                 switch AXHelpers.getAXUIElementArrayRead(app, kAXWindowsAttribute as String, runtime: runtime.ax) {
                 case .success(.elements(let windows)):
+                    if let heldWindow,
+                       windows.filter({ CFEqual($0, heldWindow) }).count != 1 {
+                        return (.windowsReadFailed, previousWindowsError)
+                    }
                     return (summarise(windows.map { blockingModalFinding($0, runtime: runtime.ax) }), nil)
                 case .success(.absent): return (.windowsAttributeAbsent, previousWindowsError)
                 case .success(.malformed): return (.windowsAttributeMalformed, previousWindowsError)
@@ -353,15 +364,38 @@ enum AXLogicProElements {
                 app, kAXWindowsAttribute as String, runtime: runtime.ax
             ) {
             case .success(.elements(let windows)):
-                let findings = windows.map { blockingModalFinding($0, runtime: runtime.ax) }
+                let findings = windows.map {
+                    (window: $0, finding: blockingModalFinding($0, runtime: runtime.ax))
+                }
                 // Only an incomplete CannotComplete census gets the one reread.
                 // A seen modal or any other failure keeps its original refusal.
                 // Start from fresh AXWindows so a newly appeared modal is not
                 // hidden behind the original window's successful second read.
-                if findings.contains(where: { $0.isRetryableReadFailure }),
-                   findings.allSatisfy({ !$0.isBlocking || $0.isRetryableReadFailure }) {
+                if findings.contains(where: { $0.finding.isRetryableReadFailure }),
+                   findings.allSatisfy({ !$0.finding.isBlocking || $0.finding.isRetryableReadFailure }) {
                     (reason, axError) = rereadWindows(failureReason: .windowsReadFailed)
-                } else { reason = summarise(findings) }
+                } else if let heldMainWindow,
+                          windows.filter({ CFEqual($0, heldMainWindow) }).count == 1,
+                          findings.contains(where: {
+                              !CFEqual($0.window, heldMainWindow)
+                                  && $0.finding.isRetiredElementReadFailure
+                          }),
+                          findings.allSatisfy({ row in
+                              !row.finding.isBlocking
+                                  || (!CFEqual(row.window, heldMainWindow)
+                                      && row.finding.isRetiredElementReadFailure)
+                          }) {
+                    // A held association has already proved this exact main
+                    // window, document and focused-window identity. Logic can
+                    // leave a separately retired AXWindow in the application
+                    // list while closing its own popup. Renew only that complete
+                    // read-only modal census: the held main must survive exactly
+                    // once, and any modal or unreadable row in the fresh list
+                    // still blocks. The ordinary global guard never gets this
+                    // exception and continues to refuse retired elements.
+                    (reason, axError) = rereadWindows(failureReason: .windowsReadFailed,
+                        requiring: heldMainWindow)
+                } else { reason = summarise(findings.map(\.finding)) }
             case .success(.absent):
                 reason = .windowsAttributeAbsent
             case .success(.malformed):
@@ -411,6 +445,10 @@ enum AXLogicProElements {
         var isAnActualModal: Bool { if case .sawModal = self { return true }; return false }
         var isRetryableReadFailure: Bool {
             if case .readFailed(let error) = self { return error.raw == AXError.cannotComplete.rawValue }
+            return false
+        }
+        var isRetiredElementReadFailure: Bool {
+            if case .readFailed(let error) = self { return error.raw == AXError.invalidUIElement.rawValue }
             return false
         }
     }

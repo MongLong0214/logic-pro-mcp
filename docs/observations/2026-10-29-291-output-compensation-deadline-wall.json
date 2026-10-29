@@ -4,7 +4,7 @@
   "date": "2026-10-29",
   "subject": "canonical physical-output cancellation after a verified forward route change",
   "question": "Does the exact candidate verify the owned inverse and finish fully compensated when cancellation is requested after a verified output write?",
-  "verdict": "wall",
+  "verdict": "works",
   "issues": [
     291
   ],
@@ -25,6 +25,8 @@
   "depends": [
     "Sources/LogicProMCP/Server/OperationRegistry.swift",
     "Sources/LogicProMCP/Workflows/ApprovedSessionRepair.swift",
+    "Sources/LogicProMCP/Accessibility/AXLogicProElements.swift:dialogPresenceReason",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+SelectionAssociation.swift",
     "Tests/LogicProMCPTests/OperationRegistryTests.swift",
     "Tests/LogicProMCPTests/Issue965HeldSelectionAssociationTests.swift"
   ],
@@ -81,13 +83,52 @@
       "server_returncode": 0,
       "pid_gone": true,
       "reader_finished": true
+    },
+    {
+      "what": "exact repaired-candidate product execution",
+      "run": 42,
+      "head": "4677d893c3a9ef15a87d4a28e28473f4413d1406",
+      "tree": "df9ce3d035d230af162d014ee432619577bd6bf7",
+      "binary_sha256": "bdafb6c8b0c328f5d43d0134307ccfd1d7a15b27e284d932b9a2b36ae4c7c83d",
+      "forward_verified": true,
+      "saga_state": "fullyCompensated",
+      "runner_elapsed_seconds": 876.75,
+      "forward_write_boundary_count": 1,
+      "compensation_write_boundary_count": 1,
+      "verified_compensation_count": 1,
+      "failed_compensation_count": 0,
+      "uncertain_compensation_count": 0,
+      "readback_evidence_count": 1
+    },
+    {
+      "what": "same-key terminal replay after repaired-candidate compensation",
+      "run": 42,
+      "duplicate": true,
+      "additional_write_count": 0,
+      "retained_saga_state": "fullyCompensated"
+    },
+    {
+      "what": "independent terminal UI readback after repaired-candidate compensation",
+      "run": 42,
+      "exact_project": true,
+      "track_index": 13,
+      "selected_track": true,
+      "physical_output": "stereo_output",
+      "play": false,
+      "record": false,
+      "open_menu_or_dialog": false,
+      "logic_input_sent": false,
+      "product_pass": true,
+      "server_returncode": 0,
+      "pid_gone": true
     }
   ],
-  "conclusion": "Both product executions verified the forward route but failed to verify compensation at the same deadline boundary. Independent physical recovery is not a product PASS, so the cancellation acceptance remains blocked.",
+  "conclusion": "Runs 28 and 30 preserve the original deadline failure. Run 42 on the repaired exact candidate crossed 1 forward and 1 compensation write boundary, published 1 verified compensation with independent stereo_output readback, retained the fullyCompensated result on replay with 0 additional writes, and exited cleanly. This closes only the measured cancellation slice, not whole issue 291.",
   "limits": [
     "One protected project, one track, one host and one locale were measured.",
     "The independent terminal readback proves the visible physical value after the product result; it does not supply the missing product compensation receipt.",
     "The infrastructure-control run did not execute the product and is not counted as a behavioral failure.",
+    "The repaired result is one warm protected fixture on one track; it does not generalize the retired-window renewal beyond an exact held main window and one fresh complete read-only census.",
     "The observation does not establish complete graph topology, broader compensation, cross-locale behavior or whole-issue completion."
   ],
   "supersedes": null,

@@ -11,15 +11,17 @@ struct Issue971ModalCensusRecoveryTests {
         let sheet: AXUIElement, dialog: AXUIElement, broken: AXUIElement
         let stage: String, recovery: String, status: Int32, persistent: Bool
         let initialModal: Bool, initialWindowsFailure: Bool, mixedFailure: Bool
+        let retiredExtra: Bool
         private(set) var windowsReads = 0, childrenReads = 0, roleReads = 0
 
         init(stage: String, recovery: String = "clear", status: Int32 = AXError.cannotComplete.rawValue,
              persistent: Bool = false, initialModal: Bool = false, initialWindowsFailure: Bool = false,
-             mixedFailure: Bool = false) {
+             mixedFailure: Bool = false, retiredExtra: Bool = false) {
             self.stage = stage; self.recovery = recovery; self.status = status
             self.persistent = persistent; self.initialModal = initialModal
             self.initialWindowsFailure = initialWindowsFailure
             self.mixedFailure = mixedFailure
+            self.retiredExtra = retiredExtra
             app = b.element(971_608_0); window = b.element(971_608_1)
             child = b.element(971_608_2); sheet = b.element(971_608_3); dialog = b.element(971_608_4)
             broken = b.element(971_608_5)
@@ -40,8 +42,9 @@ struct Issue971ModalCensusRecoveryTests {
                     if initialWindowsFailure, windowsReads == 1 {
                         return .failure(.init(raw: AXError.cannotComplete.rawValue))
                     }
-                    return .success(([window] + (initialModal || (windowsReads > 1 && recovery == "dialog")
-                        ? [dialog] : []) + (mixedFailure && windowsReads == 1 ? [broken] : [])) as AnyObject)
+                    let held = windowsReads > 1 && recovery == "missing_held" ? [] : [window]
+                    return .success((held + (initialModal || (windowsReads > 1 && recovery == "dialog")
+                        ? [dialog] : []) + ((mixedFailure || retiredExtra) && windowsReads == 1 ? [broken] : [])) as AnyObject)
                 }
                 if CFEqual(element, child), attribute == kAXRoleAttribute as String {
                     roleReads += 1
@@ -49,7 +52,10 @@ struct Issue971ModalCensusRecoveryTests {
                 }
                 return nil
             }, childrenResultHandler: { [self] element in
-                if CFEqual(element, broken) { return .failure(.init(raw: AXError.apiDisabled.rawValue)) }
+                if CFEqual(element, broken) {
+                    return .failure(.init(raw: retiredExtra
+                        ? AXError.invalidUIElement.rawValue : AXError.apiDisabled.rawValue))
+                }
                 guard CFEqual(element, window) else { return nil }
                 childrenReads += 1
                 if stage == "children", persistent || childrenReads == 1 { return .failure(.init(raw: status)) }
@@ -96,6 +102,56 @@ struct Issue971ModalCensusRecoveryTests {
         let reason = AXLogicProElements.dialogPresenceReason(runtime: f.runtime())
         #expect(reason == .windowChildrenUnreadable && !reason.namesAnActualDialog)
         #expect(f.windowsReads == 1 && f.childrenReads == 1)
+    }
+
+    @Test("An exact held main window may renew one retired non-main modal census")
+    func retiredNonMainWindowGetsOneFreshCompleteCensus() {
+        let f = Fixture(stage: "none", retiredExtra: true)
+        let reason = AXLogicProElements.dialogPresenceReason(
+            runtime: f.runtime(), renewingRetiredNonMainWindowCensusAround: f.window
+        )
+        #expect(reason == .noBlockingWindow)
+        #expect(f.windowsReads == 2 && f.childrenReads == 2)
+    }
+
+    @Test("A retired held main window remains blocked without a census retry")
+    func retiredHeldMainWindowDoesNotRenew() {
+        let f = Fixture(stage: "children", status: AXError.invalidUIElement.rawValue)
+        let reason = AXLogicProElements.dialogPresenceReason(
+            runtime: f.runtime(), renewingRetiredNonMainWindowCensusAround: f.window
+        )
+        #expect(reason == .windowChildrenUnreadable)
+        #expect(f.windowsReads == 1 && f.childrenReads == 1)
+    }
+
+    @Test("A modal appearing in the retired-window renewal remains blocking")
+    func retiredNonMainRenewalCannotEraseANewModal() {
+        let f = Fixture(stage: "none", recovery: "dialog", retiredExtra: true)
+        let reason = AXLogicProElements.dialogPresenceReason(
+            runtime: f.runtime(), renewingRetiredNonMainWindowCensusAround: f.window
+        )
+        #expect(reason == .blockingWindowFound && reason.namesAnActualDialog)
+        #expect(f.windowsReads == 2)
+    }
+
+    @Test("A retired-window renewal cannot continue after losing the held main window")
+    func retiredNonMainRenewalRequiresTheHeldMainWindow() {
+        let f = Fixture(stage: "none", recovery: "missing_held", retiredExtra: true)
+        let reason = AXLogicProElements.dialogPresenceReason(
+            runtime: f.runtime(), renewingRetiredNonMainWindowCensusAround: f.window
+        )
+        #expect(reason.isBlocked)
+        #expect(f.windowsReads == 2)
+    }
+
+    @Test("A held-window renewal does not widen a mixed permission failure")
+    func retiredNonMainRenewalRefusesMixedFailures() {
+        let f = Fixture(stage: "none", mixedFailure: true)
+        let reason = AXLogicProElements.dialogPresenceReason(
+            runtime: f.runtime(), renewingRetiredNonMainWindowCensusAround: f.window
+        )
+        #expect(reason == .windowChildrenUnreadable)
+        #expect(f.windowsReads == 1)
     }
 
     @Test("A transient failure cannot hide a separate permission failure behind a fresh window list",
