@@ -1,10 +1,10 @@
 {
   "format": "logic-pro-mcp/native-read-receipt-v1",
-  "observed_at_utc": "2026-10-29T04:15:10Z",
+  "observed_at_utc": "2026-10-29T04:19:54Z",
   "candidate": {
-    "head": "4fa4055d6f9f09a4ffc66f93d8344cbf0cd61f58",
-    "tree": "2b87d326b6e5406729ae05305e9ea91907349d7e",
-    "binary_sha256": "257a0d1ff17a4bb36633c8d226c1e95b405c1854312a3f3b9ef10c9cd9ca3060"
+    "head": "6017d9b2423f423466e6c6ade389de44608018e6",
+    "tree": "412c6b68f09f53651057aa30bcdf21e17cb4184d",
+    "binary_sha256": "6c11b99a5dcbf206eb3158fad615002e19425a7bf7d0d0187b84e2cf6ebf61dd"
   },
   "host": {
     "app": "Logic Pro",
@@ -21,7 +21,7 @@
     "mixer_strip_index": 12,
     "insert_index": 1,
     "plugin_id": "logic.stock.effect.compressor",
-    "target_ref": "ins_F0F4ABB4-366A-48A1-9BCD-F40AE36B554E",
+    "target_ref": "ins_94693EBA-4615-4266-8D3A-4A17B8F72A73",
     "target_fingerprint": "13:8:Audio 13|insert=1|plugin=logic.stock.effect.compressor"
   },
   "read_only_precondition_sequence": [
@@ -40,8 +40,8 @@
     },
     "inspect_session": {
       "read_only": true,
-      "began_at": "2026-10-29T04:14:53.643Z",
-      "ended_at": "2026-10-29T04:15:00.102Z",
+      "began_at": "2026-10-29T04:19:38.551Z",
+      "ended_at": "2026-10-29T04:19:45.191Z",
       "is_playing": false,
       "is_recording": false,
       "mixer_visible": true,
@@ -93,14 +93,14 @@
   },
   "sorted_json_sha256": {
     "refresh_cache": "81eb7eb9b93f9dbdb5d42e1c3a4fc42e9e8d0220867cecf0eab3640d76abb0b2",
-    "project_info": "bed1f3407f748f2523a89bbe26b35b4d050d858484a98112388f62e0ecece59a",
-    "inspect_session": "e1bacca7af7ff95dcabe9f0bb95dbf14802f3003fc6063bd5340e73853dd4154",
-    "before_inventory": "2a136822d5623e128b70d9702045bd722d483af38f06c12f1f6ab7fbd3269803",
-    "knee_read": "40790733c5a407212b0ee91f6d8432c6eedabadbe0f5078bfde200bcbd8d40f1",
-    "after_inventory": "d4c20689c504aaca63f13ac9f99ed3ea581bb35f945b37d68188e51b7a1c7c2e"
+    "project_info": "41a661762a80a27dae67ab14e3793c6cd8d3e7bc1549266ef4cde2063533eb0c",
+    "inspect_session": "cf1659edc480b5f212bcf5e8338974214f664f9ebfb3cabb5c0cd4440e0aa3d8",
+    "before_inventory": "f4ad16420a77d118bb9ada443cc37c364c60b5dac024b6c99baaf987598bfe39",
+    "knee_read": "05a24f45df65dfe8acd7ba8654490bd0e8b840b8d94653fe8957e4e466083aa0",
+    "after_inventory": "796edfe8ef0efc4fb5d9aaed62cff120987bcec8e5e6f6decb50ff1e74bb31e5"
   },
   "server_shutdown": {
-    "pid": 7090,
+    "pid": 36052,
     "method": "stdin_close",
     "returncode": 0,
     "pid_gone": true,

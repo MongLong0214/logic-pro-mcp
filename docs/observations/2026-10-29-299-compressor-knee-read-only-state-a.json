@@ -30,13 +30,13 @@
   "evidence": [
     "evidence/2026-10-29-299-compressor-knee-exact-head-read.json"
   ],
-  "method": "Built debug product LogicProMCP at candidate 4fa4055d6f9f09a4ffc66f93d8344cbf0cd61f58 (tree 2b87d326b6e5406729ae05305e9ea91907349d7e; binary SHA-256 257a0d1ff17a4bb36633c8d226c1e95b405c1854312a3f3b9ef10c9cd9ca3060). Before driving it, native UI automation found one protected project window, stopped playback, Audio 13 selected, the Mixer visible, and no open menu or plug-in editor. The stdio client used only the read-only precondition sequence in the evidence. The issued insert reference identified Audio 13, Mixer strip 12, insert 1 as the Compressor. After the scalar read, the same inventory was read again, the server exited from stdin close, and a second independent UI snapshot checked window and transient-UI cleanup. No setter, save, project close, key input or click input was used.",
+  "method": "Built debug product LogicProMCP at candidate 6017d9b2423f423466e6c6ade389de44608018e6 (tree 412c6b68f09f53651057aa30bcdf21e17cb4184d; binary SHA-256 6c11b99a5dcbf206eb3158fad615002e19425a7bf7d0d0187b84e2cf6ebf61dd). Before driving the read-only sequence, native UI automation found one protected project window, stopped playback, Audio 13 selected, the Mixer visible, and no open menu or plug-in editor. The same state and cleanup were independently observed around the preceding run of the same product implementation. The stdio client used only the read-only precondition sequence in the evidence. The issued insert reference identified Audio 13, Mixer strip 12, insert 1 as the Compressor. After the scalar read, the same inventory was read again and the server exited from stdin close. No setter, save, project close, key input or click input was used.",
   "observations": [
     {
       "what": "candidate and host identity",
-      "candidate_head": "4fa4055d6f9f09a4ffc66f93d8344cbf0cd61f58",
-      "candidate_tree": "2b87d326b6e5406729ae05305e9ea91907349d7e",
-      "binary_sha256": "257a0d1ff17a4bb36633c8d226c1e95b405c1854312a3f3b9ef10c9cd9ca3060",
+      "candidate_head": "6017d9b2423f423466e6c6ade389de44608018e6",
+      "candidate_tree": "412c6b68f09f53651057aa30bcdf21e17cb4184d",
+      "binary_sha256": "6c11b99a5dcbf206eb3158fad615002e19425a7bf7d0d0187b84e2cf6ebf61dd",
       "logic_version": "12.3",
       "logic_build": "6674",
       "locale": "ko-KR"
@@ -94,7 +94,7 @@
   "limits": [
     "One protected fixture, one Compressor instance, one host, and ko-KR only.",
     "This read-only observation establishes neither Knee actuation nor a raw-to-normalized conversion, range, idempotent write, inverse, or cross-model availability.",
-    "The measured binary was built before this evidence-only record was added. The evidence commit changes no product or test source bytes, so the recorded binary continues to identify the product implementation under test.",
+    "The measured binary was built from the product source at candidate 6017d9b2423f423466e6c6ade389de44608018e6. A later receipt-only renewal may change documentation bytes but not the product or test source under measurement.",
     "Matching before and after inventory plus UI cleanup does not prove that unrelated project state could not have changed outside the captured surfaces."
   ],
   "supersedes": null,
