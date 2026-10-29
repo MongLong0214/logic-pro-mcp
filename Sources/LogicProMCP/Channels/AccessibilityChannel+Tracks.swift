@@ -1479,7 +1479,7 @@ extension AccessibilityChannel {
                 .invalidParams,
                 criterion: criterion.rawValue,
                 reason: "collapsed_track_stack",
-                hint: "sort_verified refused before the menu action because track \(index) ('\(name)') is a collapsed stack; expand it and re-read logic://tracks so the complete track order can be checked.",
+                hint: "sort_verified terminated before the menu action because track \(index) ('\(name)') is a collapsed stack and the complete track order is not observable.",
                 extras: ["collapsed_stack": ["index": index, "name": name]]
             )
         }
@@ -1495,7 +1495,7 @@ extension AccessibilityChannel {
                     .staleTargetReference,
                     criterion: criterion.rawValue,
                     reason: "expected_order_track_refs_not_in_before_order",
-                    hint: "sort_verified expected_order names track references that are not in the current pre-sort order: \(missing.joined(separator: ", ")). Re-read logic://tracks and retry with its current track_ref values.",
+                    hint: "sort_verified terminated before the menu action because expected_order names references outside the current pre-sort order: \(missing.joined(separator: ", ")).",
                     extras: ["missing_track_refs": missing]
                 )
             case .ambiguous(let references):
@@ -1503,7 +1503,7 @@ extension AccessibilityChannel {
                     .staleTargetReference,
                     criterion: criterion.rawValue,
                     reason: "duplicate_name_reference_identity_unprovable",
-                    hint: "sort_verified refused before the menu action because duplicate track names have no issued per-track identity beyond index and name. Rename duplicates and re-read logic://tracks before sorting.",
+                    hint: "sort_verified terminated before the menu action because duplicate track names have no issued per-track identity beyond index and name.",
                     extras: ["ambiguous_track_refs": references]
                 )
             case .matched:
@@ -1891,6 +1891,8 @@ extension AccessibilityChannel {
         details["criterion"] = criterion ?? NSNull()
         details["reason"] = reason
         details["write_attempted"] = false
+        details["terminal"] = true
+        details["human_intervention_required"] = false
         return .error(HonestContract.encodeStateC(error: error, hint: hint, extras: details))
     }
 
@@ -1929,7 +1931,7 @@ extension AccessibilityChannel {
                 .elementNotFound,
                 criterion: criterion.rawValue,
                 reason: "unmeasured_locale_missing_sort_menu_measurement",
-                hint: "sort_verified has no measured Track > Sort Tracks By labels for Logic UI locale '\(locale)'; measure that locale before enabling this command.",
+                hint: "sort_verified terminated because Track > Sort Tracks By has no qualified labels for Logic UI locale '\(locale)'.",
                 extras: extras
             )
         case .criterionLabelMissing(let label):
