@@ -864,8 +864,9 @@ actor CGEventChannel: Channel {
     }
 
     /// State C for a refused preparation. `write_attempted` is false and
-    /// `events_posted` is zero because nothing was created: the caller can
-    /// retry without wondering whether a partial keystroke landed.
+    /// `events_posted` is zero because nothing was created. The bounded
+    /// automatic ownership attempt is terminal rather than a request for a
+    /// person to foreground Logic and retry.
     /// #1092 review R1, R1092-01: a keystroke this process is not authorized to post is discarded by
     /// macOS, and the State B success after it would report a key Logic never received. Asked before
     /// Logic is brought forward, so a refusal moves nothing.
@@ -895,14 +896,17 @@ actor CGEventChannel: Channel {
             "frontmost_preparation": preparation.rawValue,
             "events_posted": 0,
             "write_attempted": false,
-            "safe_to_retry": true,
+            "safe_to_retry": false,
+            "automatic_frontmost_attempts_exhausted": true,
+            "terminal": true,
+            "human_intervention_required": false,
         ]
         if let observation { extras["frontmost_observation"] = observation.diagnostic }
         return .error(HonestContract.encodeStateC(
             error: .axWriteFailed,
             hint: "CGEvent keystrokes are delivered to the frontmost application; Logic Pro did not own the "
-                + "keyboard, so no event was posted. Bring Logic Pro to the front and retry. "
-                + "The fixed ownership reason is in frontmost_observation.reason when observed.",
+                + "keyboard after the bounded automatic ownership attempt, so no event was posted. "
+                + "The fixed terminal reason is in frontmost_observation.reason when observed.",
             extras: extras
         ))
     }

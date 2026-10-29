@@ -278,6 +278,14 @@ func cgMappedAndGotoRefusalsCarryOwnSnapshotAndPostZero(_ operation: String) asy
     let writeAttempted = try #require(object["write_attempted"] as? Bool)
     #expect(!writeAttempted)
     #expect(object["events_posted"] as? Int == 0)
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(try #require(object["automatic_frontmost_attempts_exhausted"] as? Bool))
+    #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+    let hint = try #require(object["hint"] as? String)
+    for request in ["bring Logic", "retry", "manually"] {
+        #expect(!hint.localizedCaseInsensitiveContains(request))
+    }
     let reading = try #require(object["frontmost_observation"] as? [String: Any])
     #expect(reading["keyboard_owner_pid"] as? Int == 77)
 }
