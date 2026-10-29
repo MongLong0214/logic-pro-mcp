@@ -3769,8 +3769,8 @@ extension AccessibilityChannel {
             precondition = "text_focus_not_reached"
             sent = 0
             reading = focus
-            hint = "the rename field never took Logic's keyboard focus — no character, Return or "
-                + "Escape was posted. Click the track area so Logic has the keyboard, then retry."
+            hint = "track.rename terminated after the bounded focus wait because the rename field "
+                + "did not take Logic's keyboard focus; no character, Return or Escape was posted."
         case .textFocusLost(let count, let focus):
             precondition = "text_focus_lost"
             sent = count
@@ -3797,7 +3797,10 @@ extension AccessibilityChannel {
                 "sent_code_units": sent,
                 "keyboard_focus": reading.map(describe) as Any? ?? NSNull(),
                 "observed": observed as Any? ?? NSNull(),
-                "write_attempted": sent > 0
+                "write_attempted": sent > 0,
+                "automatic_focus_attempts_exhausted": precondition == "text_focus_not_reached",
+                "terminal": true,
+                "human_intervention_required": false,
             ]) { _, new in new }
         ))
     }
