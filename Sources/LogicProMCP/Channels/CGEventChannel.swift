@@ -982,8 +982,8 @@ actor CGEventChannel: Channel {
 
     /// State C for a goto_position whose dialog was not observed. No position character and no
     /// Return was posted, so `write_attempted` is false. When the opener went out, whatever it did
-    /// is unknown -- a dialog can still appear after the bound -- so the caller is told to read the
-    /// screen before retrying and no other channel may take the operation over.
+    /// is unknown -- a dialog can still appear after the bound -- so the operation terminates with
+    /// that effect preserved and no other channel may take the operation over.
     static func gotoDialogRefusal(
         position: String,
         preparation: FrontmostPreparation,
@@ -993,10 +993,10 @@ actor CGEventChannel: Channel {
     ) -> ChannelResult {
         let hint = openerPosted
             ? "The Go To Position key was posted, but the dialog was not read on screen (\(reason)), so the "
-                + "position and Return were not typed. Whatever the key did is unobserved: read Logic's windows "
-                + "before retrying, and close a Go To Position dialog that appeared late."
+                + "position and Return were not typed. Whatever the key did remains unobserved; the bounded "
+                + "dialog observation terminated without another key or cleanup action."
             : "The window list did not read before the Go To Position key, so a dialog could not have been "
-                + "told apart from what was already on screen. Nothing was posted; retry."
+                + "told apart from what was already on screen. The operation terminated before posting anything."
         return .error(HonestContract.encodeStateC(
             error: .dialogNotFound,
             hint: hint,
@@ -1010,8 +1010,11 @@ actor CGEventChannel: Channel {
                 "dialog_opener_posted": openerPosted,
                 "dialog_observation": reading as Any? ?? NSNull(),
                 "write_attempted": false,
-                "safe_to_retry": !openerPosted,
+                "safe_to_retry": false,
                 "fallback_unsafe": openerPosted,
+                "automatic_dialog_attempts_exhausted": true,
+                "terminal": true,
+                "human_intervention_required": false,
             ]
         ))
     }
