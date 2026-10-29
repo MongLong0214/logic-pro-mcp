@@ -154,10 +154,16 @@ struct NavigateDispatcher: OperationTraceDispatching {
                 return toolTextResult(
                     HonestContract.encodeStateC(
                         error: .elementNotFound,
-                        hint: "goto_marker: marker index \(indexStr) not found in cached marker list (count=\(markers.count)). The marker list cache may be cold (poller hasn't refreshed, or the marker list window is closed on Logic 12.2). Try `system.refresh_cache` and retry, or supply `name` instead. Pre-v3.4.0 this fell back to the legacy CC 38 keycmd which silently advanced to the next marker — this fallback is removed because it ignored the requested index.",
+                        hint: "goto_marker terminated without navigation: marker index \(indexStr) was not "
+                            + "found in cached marker list (count=\(markers.count)). The cache may be cold "
+                            + "or the Marker List may be closed on Logic 12.2. The removed legacy CC 38 "
+                            + "fallback is not used because it ignores the requested index.",
                         extras: [
                             "requested_index": indexStr,
                             "cached_marker_count": markers.count,
+                            "write_attempted": false,
+                            "terminal": true,
+                            "human_intervention_required": false,
                         ]
                     ),
                     isError: true
@@ -176,10 +182,14 @@ struct NavigateDispatcher: OperationTraceDispatching {
             return toolTextResult(
                 HonestContract.encodeStateC(
                     error: .elementNotFound,
-                    hint: "goto_marker: no marker matching name '\(name)' in cached list (count=\(markers.count)). Try `system.refresh_cache` and retry.",
+                    hint: "goto_marker terminated without navigation: no marker matching name '\(name)' "
+                        + "was found in the cached list (count=\(markers.count)).",
                     extras: [
                         "requested_name": name,
                         "cached_marker_count": markers.count,
+                        "write_attempted": false,
+                        "terminal": true,
+                        "human_intervention_required": false,
                     ]
                 ),
                 isError: true
