@@ -2603,9 +2603,11 @@ final class ApprovedSessionRepair: @unchecked Sendable {
     }
 
     /// A retained prerequisite receipt identifies the owned native path; it
-    /// does not freeze either Input menu's checked item. Reopen those exact
-    /// menus before every inverse ownership decision and again at the writer
-    /// boundary so a caption-preserving Input change cannot authorize output.
+    /// does not freeze either Input menu's checked item. The writer's checked
+    /// effect-retention receipt may bridge only the immediately following Saga
+    /// after-state read. Compensation ownership and every inverse writer both
+    /// reopen the menus, so a caption-preserving Input change cannot authorize
+    /// output.
     private func recheckOutputBusPrerequisites() async -> Bool {
         checkedOutputPrerequisites = nil
         let inputFocus = AccessibilityChannel.OwnedTrackStackObservationNavigation.ReadFocusScope()
@@ -2720,20 +2722,26 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         if !task.prerequisiteBuses.isEmpty, !outputInverseConsumed {
             if let receipt = checkedOutputPrerequisites,
                sameCheckedOutputEffect(receipt.retained, retained) {
-                // The Saga's public cancellation changes journal state only. Reuse
-                // the immediately preceding *renewed* Bus-prerequisite receipt for
-                // this exact typed output effect. The receipt is the causal bridge
-                // from the writer's now-retired source to the final source/proof
-                // produced by those popup reads; matching names or ordinals never
-                // manufacture that bridge.
+                // Effect retention already reopened every checked Input before
+                // publishing State A. The Saga's immediately following after-state
+                // read may reuse that exact renewed receipt. Once that read sets
+                // `outputApplied`, compensation's ownership comparison reopens
+                // every source/receiver menu, and `performOutput` does so again at
+                // the inverse leaf boundary before any destination press. This
+                // removes one duplicate post-write popup cycle without weakening
+                // either inverse-authority check.
                 let runtime = receipt.pair.track.runtime
                 guard receipt.pair.track.matches(task.pair.track),
                       let currentPair = outputPair, sameOutputPair(currentPair, receipt.pair),
                       let currentRenewal = outputRenewal,
                       sameOutputRenewal(currentRenewal, receipt.renewal),
                       let currentProof = outputProof, currentProof === receipt.proof,
-                      receipt.renewal.permits(runtime: runtime), receipt.proof.permitsRead(),
-                      await recheckOutputBusPrerequisites(),
+                      receipt.renewal.permits(runtime: runtime), receipt.proof.permitsRead()
+                else { return nil }
+                if outputApplied {
+                    guard await recheckOutputBusPrerequisites() else { return nil }
+                }
+                guard
                       let checkedPair = outputPair,
                       let checkedRenewal = outputRenewal,
                       let checkedProof = outputProof,

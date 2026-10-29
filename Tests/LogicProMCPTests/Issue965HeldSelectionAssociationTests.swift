@@ -2484,10 +2484,10 @@ struct Issue965HeldSelectionAssociationTests {
     @Test("Canonical output cancellation retains independent Saga reads without duplicate adapter popup reads")
     func canonicalOutputCancellationDoesNotRepeatTheSagasIndependentReadback() async throws {
         let f = try Fixture()
-        try await assertCanonicalPhysicalOutput(mode: "cancel", fixture: f)
+        try await assertCanonicalPhysicalOutput(mode: "bus_departure_execute_cancel", fixture: f)
         #expect(f.routingDestinationPresses == 2)
-        #expect(f.inputMenuPresses <= 11,
-                "Keep the captured baseline and bounded independent ownership/writer checkmark reads; no adapter retry may add another popup cycle")
+        #expect(f.inputMenuPresses == 16,
+                "The Saga after-state read may reuse the writer's exact effect receipt; compensation ownership and the inverse writer still perform fresh source/receiver checks")
     }
 
     @Test("Canonical output cancellation revalidates the exact Bus receipt after its source is renewed")
