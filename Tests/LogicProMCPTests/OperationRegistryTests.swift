@@ -917,13 +917,19 @@ struct OperationRegistryTests {
         #expect(text.contains("target_ref"))
         #expect(text.contains("param"))
         #expect(text.contains(
-            "Compressor ratio is read-only: raw_ax_value plus verbatim observed_display; "
-                + "it grants no write method."
+            "Compressor ratio, attack, release, and makeup are read-only: raw_ax_value plus verbatim observed_display; "
+                + "none grants a write method."
+        ))
+        #expect(text.contains(
+            "Compressor circuit_type is a read-only current string; it does not open the popup or claim a complete choice list."
         ))
         let pluginDescription = PluginsDispatcher.tool.description ?? ""
         #expect(pluginDescription.contains(
-            "Compressor ratio is read-only: raw_ax_value plus verbatim observed_display; "
-                + "it grants no write method."
+            "Compressor ratio, attack, release, and makeup are read-only: raw_ax_value plus verbatim observed_display; "
+                + "none grants a write method."
+        ))
+        #expect(pluginDescription.contains(
+            "Compressor circuit_type is a read-only current string; it neither opens the popup nor grants a write method or complete choice list."
         ))
     }
 

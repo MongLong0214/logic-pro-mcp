@@ -1568,16 +1568,93 @@ enum StockPluginCatalog {
                 ]
             )
         ),
+        // The measured Controls table associates this value with the Attack
+        // row and exposes both a raw AXValue and Logic's engineering display.
+        // No Attack actuation was measured, so the raw value stays opaque and
+        // this entry deliberately grants no write method.
+        StockPluginParameterMetadata(
+            id: "attack",
+            displayName: "Attack",
+            unit: "raw_ax_value",
+            valueRange: nil,
+            writeMethod: nil,
+            readbackMethod: "ax_controls_view_slider_display",
+            controlsViewRowLabel: "Attack",
+            controlsViewControlRole: "AXSlider",
+            controlsViewActuationState: .unmeasured,
+            availabilityState: .observed,
+            provenance: .observed(
+                method: "controls_view_read_only_observation",
+                observedAt: "2026-08-30T04:02:24Z",
+                logicVersion: "12.x",
+                locale: "ko-KR",
+                evidence: [
+                    "parameter_readback",
+                    "Attack Controls row exposes a raw AX value and verbatim engineering display",
+                    "No Attack write or raw-to-milliseconds conversion was measured",
+                ]
+            )
+        ),
+        // The same measured Controls table names Release and Make Up rows
+        // whose sliders expose opaque raw values plus Logic-rendered displays.
+        // Neither row has an actuation measurement, so both remain read-only
+        // and no milliseconds/decibels conversion is inferred.
+        StockPluginParameterMetadata(
+            id: "release",
+            displayName: "Release",
+            unit: "raw_ax_value",
+            valueRange: nil,
+            writeMethod: nil,
+            readbackMethod: "ax_controls_view_slider_display",
+            controlsViewRowLabel: "Release",
+            controlsViewControlRole: "AXSlider",
+            controlsViewActuationState: .unmeasured,
+            availabilityState: .observed,
+            provenance: .observed(
+                method: "controls_view_read_only_observation",
+                observedAt: "2026-08-30T04:02:24Z",
+                logicVersion: "12.x",
+                locale: "ko-KR",
+                evidence: [
+                    "parameter_readback",
+                    "Release Controls row exposes a raw AX value and verbatim engineering display",
+                    "No Release write or raw-to-milliseconds conversion was measured",
+                ]
+            )
+        ),
+        StockPluginParameterMetadata(
+            id: "makeup",
+            displayName: "Make Up",
+            unit: "raw_ax_value",
+            valueRange: nil,
+            writeMethod: nil,
+            readbackMethod: "ax_controls_view_slider_display",
+            controlsViewRowLabel: "Make Up",
+            controlsViewControlRole: "AXSlider",
+            controlsViewActuationState: .unmeasured,
+            availabilityState: .observed,
+            provenance: .observed(
+                method: "controls_view_read_only_observation",
+                observedAt: "2026-08-30T04:02:24Z",
+                logicVersion: "12.x",
+                locale: "ko-KR",
+                evidence: [
+                    "parameter_readback",
+                    "Make Up Controls row exposes a raw AX value and verbatim engineering display",
+                    "No Make Up write or raw-to-decibels conversion was measured",
+                ]
+            )
+        ),
         // This records readability only. No popup menu actuation was measured,
         // so it contains no write method and exists solely to refuse by that
         // missing measurement.
         StockPluginParameterMetadata(
             id: "circuit_type",
             displayName: "Circuit Type",
-            unit: "enumerated",
+            unit: "string",
             valueRange: nil,
             writeMethod: nil,
-            readbackMethod: "ax_value_observed",
+            readbackMethod: "ax_controls_view_popup_current_value",
             controlsViewRowLabel: "Circuit Type",
             controlsViewControlRole: "AXPopUpButton",
             controlsViewActuationState: .unmeasured,
@@ -1593,7 +1670,7 @@ enum StockPluginCatalog {
                     // this token alone is not sufficient to verify a parameter.
                     "parameter_readback",
                     "controls-view-write-20260902-113017",
-                    "Circuit Type AXValue Platinum Digital observed; popup selection was not measured",
+                    "Circuit Type AXValue Platinum Digital observed; popup selection and a complete choice list were not measured",
                 ]
             )
         ),

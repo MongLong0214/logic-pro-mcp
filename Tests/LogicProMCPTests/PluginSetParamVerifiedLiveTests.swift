@@ -4274,9 +4274,14 @@ private func parameterReadParams(_ param: String = "threshold") -> [String: Stri
      "expected_slot_read_status": "ok", "expected_plugin_identity": "logic.stock.effect.compressor"]
 }
 
-private func compressorRatioReadFixture(controls: Bool) -> LiveFixture {
+private func compressorScalarReadFixture(
+    label: String,
+    raw: Double,
+    display: String,
+    controls: Bool
+) -> LiveFixture {
     let fixture = LiveFixture(
-        controlsViewRowLabel: "Ratio",
+        controlsViewRowLabel: label,
         controlsViewInitiallySelected: controls,
         viewSettleDelay: 0
     )
@@ -4293,20 +4298,42 @@ private func compressorRatioReadFixture(controls: Bool) -> LiveFixture {
     builder.setRole(displayGroup, kAXGroupRole as String)
     for slider in [displaySlider, rawSlider] {
         builder.setRole(slider, kAXSliderRole as String)
-        builder.setAttribute(slider, kAXValueAttribute as String, 42.0)
+        builder.setAttribute(slider, kAXValueAttribute as String, raw)
     }
-    builder.setAttribute(displaySlider, kAXValueDescriptionAttribute as String, "2.1:1")
+    builder.setAttribute(displaySlider, kAXValueDescriptionAttribute as String, display)
     builder.setRole(indicator, "AXValueIndicator")
-    builder.setAttribute(indicator, kAXValueAttribute as String, 42.0)
+    builder.setAttribute(indicator, kAXValueAttribute as String, raw)
     builder.setChildren(displayGroup, [displaySlider])
     builder.setChildren(rawSlider, [indicator])
     builder.setChildren(builder.element(100_905), [builder.element(100_907), displayGroup, rawSlider])
     return fixture
 }
 
+private func compressorCircuitReadFixture(
+    value: Any = "Platinum Digital",
+    controls: Bool
+) -> LiveFixture {
+    let fixture = LiveFixture(
+        controlsViewRowLabel: "Circuit Type",
+        controlsViewInitiallySelected: controls,
+        viewSettleDelay: 0
+    )
+    let builder = fixture.builder
+    builder.setAttribute(
+        builder.element(1001),
+        kAXDocumentAttribute as String,
+        URL(fileURLWithPath: expectedPath).absoluteString
+    )
+    let popup = builder.element(299_701)
+    builder.setRole(popup, kAXPopUpButtonRole as String)
+    builder.setAttribute(popup, kAXValueAttribute as String, value)
+    builder.setChildren(builder.element(100_905), [builder.element(100_907), popup])
+    return fixture
+}
+
 @Test(arguments: [false, true])
 func testIssue299CompressorRatioReadsActualDisplayWithoutAuthorizingAWrite(_ controls: Bool) async throws {
-    let fixture = compressorRatioReadFixture(controls: controls)
+    let fixture = compressorScalarReadFixture(label: "Ratio", raw: 42, display: "2.1:1", controls: controls)
     let originalView = fixture.currentPluginViewTitle
     let result = await AccessibilityChannel.defaultGetParamVerified(
         params: parameterReadParams("ratio"),
@@ -4324,7 +4351,7 @@ func testIssue299CompressorRatioReadsActualDisplayWithoutAuthorizingAWrite(_ con
 }
 
 @Test func testIssue299CompressorRatioReadMetadataStillRefusesAWrite() async throws {
-    let fixture = compressorRatioReadFixture(controls: true)
+    let fixture = compressorScalarReadFixture(label: "Ratio", raw: 42, display: "2.1:1", controls: true)
     var params = parameterReadParams("ratio")
     params.merge([
         "mode": "duplicate_applyback",
@@ -4343,6 +4370,207 @@ func testIssue299CompressorRatioReadsActualDisplayWithoutAuthorizingAWrite(_ con
     #expect(fixture.axActions.value.isEmpty)
     #expect(fixture.sliderWriteCount.value == 0)
     #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+@Test(arguments: [false, true])
+func testIssue299CompressorAttackReadsActualDisplayWithoutAuthorizingAWrite(_ controls: Bool) async throws {
+    let fixture = compressorScalarReadFixture(label: "Attack", raw: 15, display: "15.0 ms", controls: controls)
+    let originalView = fixture.currentPluginViewTitle
+    let result = await AccessibilityChannel.defaultGetParamVerified(
+        params: parameterReadParams("attack"),
+        runtime: parameterReadRuntime(fixture)
+    )
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "A", "\(object)")
+    #expect(object["observed_raw"] as? Double == 15)
+    #expect(object["observed_display"] as? String == "15.0 ms")
+    #expect(object["raw_unit"] as? String == "raw_ax_value")
+    #expect(object["parameter_read_status"] as? String == "read")
+    #expect(fixture.currentPluginViewTitle == originalView)
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+@Test func testIssue299CompressorAttackReadMetadataStillRefusesAWrite() async throws {
+    let fixture = compressorScalarReadFixture(label: "Attack", raw: 15, display: "15.0 ms", controls: true)
+    var params = parameterReadParams("attack")
+    params.merge([
+        "mode": "duplicate_applyback",
+        "value": "15",
+        "unit": "raw_ax_value",
+    ]) { _, new in new }
+    let result = await AccessibilityChannel.defaultSetParamVerified(
+        params: params,
+        runtime: parameterReadRuntime(fixture),
+        frontDocumentPath: { expectedPath }
+    )
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "C", "\(object)")
+    #expect(object["error"] as? String == "unsupported_param_readback")
+    #expect(object["what_was_attempted"] as? String ==
+        "preflight the catalog-declared Controls-view actuation path for logic.stock.effect.compressor.attack")
+    #expect(object["what_was_observed"] as? String == "actuation_unmeasured")
+    #expect(!(try #require(object["write_attempted"] as? Bool)))
+    #expect(fixture.axActions.value.isEmpty)
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+@Test(arguments: ["release", "makeup"], [false, true])
+func testIssue299AdditionalCompressorScalarsPreserveVerbatimDisplayWithoutWrites(
+    _ param: String,
+    _ controls: Bool
+) async throws {
+    let label = param == "release" ? "Release" : "Make Up"
+    let raw = param == "release" ? 64.0 : 58.0
+    let display = param == "release" ? "250 ms" : "+2.0 dB"
+    let fixture = compressorScalarReadFixture(label: label, raw: raw, display: display, controls: controls)
+    let originalView = fixture.currentPluginViewTitle
+    let read = await AccessibilityChannel.defaultGetParamVerified(
+        params: parameterReadParams(param),
+        runtime: parameterReadRuntime(fixture)
+    )
+    let readObject = try #require(sharedJSONObject(read.message))
+    #expect(readObject["state"] as? String == "A", "\(readObject)")
+    #expect(readObject["observed_raw"] as? Double == raw)
+    #expect(readObject["observed_display"] as? String == display)
+    #expect(readObject["raw_unit"] as? String == "raw_ax_value")
+    #expect(readObject["parameter_read_status"] as? String == "read")
+    #expect(fixture.currentPluginViewTitle == originalView)
+
+    let actionCountBeforeWrite = fixture.axActions.value.count
+    var writeParams = parameterReadParams(param)
+    writeParams.merge([
+        "mode": "duplicate_applyback",
+        "value": String(raw),
+        "unit": "raw_ax_value",
+    ]) { _, new in new }
+    let write = await AccessibilityChannel.defaultSetParamVerified(
+        params: writeParams,
+        runtime: parameterReadRuntime(fixture),
+        frontDocumentPath: { expectedPath }
+    )
+    let writeObject = try #require(sharedJSONObject(write.message))
+    #expect(writeObject["state"] as? String == "C", "\(writeObject)")
+    #expect(writeObject["error"] as? String == "unsupported_param_readback")
+    #expect(writeObject["what_was_observed"] as? String == "actuation_unmeasured")
+    #expect(!(try #require(writeObject["write_attempted"] as? Bool)))
+    #expect(fixture.axActions.value.count == actionCountBeforeWrite)
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+@Test(arguments: [false, true])
+func testIssue299CompressorCircuitReadsCurrentValueWithoutOpeningOrWriting(_ controls: Bool) async throws {
+    let fixture = compressorCircuitReadFixture(controls: controls)
+    let originalView = fixture.currentPluginViewTitle
+    let read = await AccessibilityChannel.defaultGetParamVerified(
+        params: parameterReadParams("circuit_type"),
+        runtime: parameterReadRuntime(fixture)
+    )
+    let readObject = try #require(sharedJSONObject(read.message))
+    #expect(readObject["state"] as? String == "A", "\(readObject)")
+    #expect(readObject["observed_raw"] as? String == "Platinum Digital")
+    #expect(readObject["observed_display"] as? String == "Platinum Digital")
+    #expect(readObject["raw_unit"] as? String == "string")
+    #expect(readObject["parameter_read_status"] as? String == "read")
+    #expect(fixture.currentPluginViewTitle == originalView)
+    #expect(!fixture.axActions.value.contains { $0.element == 299_701 })
+
+    let actionCountBeforeWrite = fixture.axActions.value.count
+    var writeParams = parameterReadParams("circuit_type")
+    writeParams.merge([
+        "mode": "duplicate_applyback",
+        "value": "0",
+        "unit": "string",
+    ]) { _, new in new }
+    let write = await AccessibilityChannel.defaultSetParamVerified(
+        params: writeParams,
+        runtime: parameterReadRuntime(fixture),
+        frontDocumentPath: { expectedPath }
+    )
+    let writeObject = try #require(sharedJSONObject(write.message))
+    #expect(writeObject["state"] as? String == "C", "\(writeObject)")
+    #expect(writeObject["error"] as? String == "unsupported_param_readback")
+    #expect(writeObject["what_was_observed"] as? String == "actuation_unmeasured")
+    #expect(!(try #require(writeObject["write_attempted"] as? Bool)))
+    #expect(fixture.axActions.value.count == actionCountBeforeWrite)
+    #expect(fixture.sliderWriteCount.value == 0)
+    #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+@Test func testIssue299CompressorCircuitProtocolOracleChecksCurrentStringAndUnit() async throws {
+    let fixture = compressorCircuitReadFixture(controls: true)
+    let result = await AccessibilityChannel.defaultGetParamVerified(
+        params: parameterReadParams("circuit_type"),
+        runtime: parameterReadRuntime(fixture)
+    )
+    var object = try #require(sharedJSONObject(result.message))
+    // Synthetic transport binding for protocol validation, not native evidence.
+    object["target_ref"] = "ins_compressor_fixture"
+    object["target_fingerprint"] = "compressor_fixture_fingerprint"
+    let oracle = try #require(SemanticOracleTable.byOperationID[.pluginsGetParamVerified])
+    let valid = try #require(oracle.evaluate(
+        responseData: JSONSerialization.data(withJSONObject: object),
+        readbackData: Data()
+    ))
+    #expect(valid)
+    let corruptions: [[String: Any]] = [
+        ["observed_raw": true],
+        ["observed_raw": ""],
+        ["observed_raw": "Platinum Digital", "observed_display": "Studio VCA"],
+        ["raw_unit": "enumerated"],
+    ]
+    for corruption in corruptions {
+        var corrupted = object
+        corrupted.merge(corruption) { _, new in new }
+        let verdict = try #require(oracle.evaluate(
+            responseData: JSONSerialization.data(withJSONObject: corrupted),
+            readbackData: Data()
+        ))
+        #expect(!verdict)
+    }
+}
+
+@Test(arguments: ["empty", "whitespace", "absent", "malformed", "unreadable", "drift", "duplicate", "wrong_role"])
+func testIssue299CompressorCircuitUncertainCurrentValueRemainsUnknown(_ kind: String) async throws {
+    let fixture = compressorCircuitReadFixture(controls: true)
+    let builder = fixture.builder
+    let popup = builder.element(299_701)
+    switch kind {
+    case "empty": builder.setAttribute(popup, kAXValueAttribute as String, "")
+    case "whitespace": builder.setAttribute(popup, kAXValueAttribute as String, "  \n")
+    case "absent": builder.setAttribute(popup, kAXValueAttribute as String, NSNull())
+    case "malformed": builder.setAttribute(popup, kAXValueAttribute as String, NSNumber(value: true))
+    case "wrong_role": builder.setRole(popup, kAXTextFieldRole as String)
+    case "duplicate":
+        let other = builder.element(299_702)
+        builder.setRole(other, kAXPopUpButtonRole as String)
+        builder.setAttribute(other, kAXValueAttribute as String, "Studio VCA")
+        builder.setChildren(builder.element(100_905), [builder.element(100_907), popup, other])
+    default: break
+    }
+    let reads = MutableBox(0)
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        guard CFEqual(element, popup), attribute == kAXValueAttribute as String else { return nil }
+        if kind == "unreadable" {
+            return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+        }
+        if kind == "drift" {
+            reads.value += 1
+            return .success((reads.value == 1 ? "Platinum Digital" : "Studio VCA") as NSString)
+        }
+        return nil
+    })
+    let read = await AccessibilityChannel.defaultGetParamVerified(
+        params: parameterReadParams("circuit_type"),
+        runtime: runtime
+    )
+    let object = try #require(sharedJSONObject(read.message))
+    #expect(object["state"] as? String == "B", "\(kind): \(object)")
+    #expect(object["observed_raw"] == nil)
+    #expect(object["observed_display"] == nil)
+    #expect(!fixture.axActions.value.contains { (299_701...299_702).contains($0.element) })
 }
 
 // #1396: measured Gain Controls view has a display-bearing slider, a raw-only
