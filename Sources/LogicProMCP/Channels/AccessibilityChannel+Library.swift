@@ -611,6 +611,15 @@ extension AccessibilityChannel {
 
     static let setInstrumentLibraryNavigationDeadlineSeconds: Double = 30
 
+    static var setInstrumentLibraryNavigationTimeoutHint: String {
+        "set_instrument Library navigation exceeded "
+            + "\(Int(Self.setInstrumentLibraryNavigationDeadlineSeconds))s and terminated. "
+            + "Bounded panel restaging was attempted and its observed result is reported in "
+            + "panel_open_after_failure and panel_restaged_after_failure; no further navigation "
+            + "was issued. A later request can use scan_library so an unknown path terminates as "
+            + "path_not_in_library before live navigation."
+    }
+
     /// Run a blocking Library-navigation closure under a hard wall-clock
     /// deadline. Returns the closure's result, or `nil` if the deadline elapsed
     /// first. The closure runs on a global queue (never the cooperative pool) so
@@ -930,7 +939,7 @@ extension AccessibilityChannel {
             let restaged = await Self.restageLibraryPanelAfterFailure(staging: staging, runtime: runtime)
             return .error(HonestContract.encodeStateC(
                 error: .readbackUnavailable,
-                hint: "set_instrument Library navigation exceeded \(Int(Self.setInstrumentLibraryNavigationDeadlineSeconds))s and was abandoned — the Library panel's AX surface is unresponsive (a prior invalid-path attempt can leave it wedged). Re-open the Library (Y) and retry; restart Logic if it persists. Run scan_library first so an unknown path fails fast as path_not_in_library instead of navigating live.",
+                hint: Self.setInstrumentLibraryNavigationTimeoutHint,
                 extras: setInstrumentBaseExtras(
                     requestedPath: resolvedPath,
                     category: category,
