@@ -28,9 +28,10 @@
     "Sources/LogicProMCP/Channels/AccessibilityChannel+VerifiedPlugins.swift:defaultGetParamVerified"
   ],
   "evidence": [
-    "evidence/2026-10-30-299-compressor-rms-mode-exact-head-read.json"
+    "evidence/2026-10-30-299-compressor-rms-mode-exact-head-read.json",
+    "evidence/2026-10-30-299-compressor-rms-mode-post-main-exact-head-read.json"
   ],
-  "method": "Built debug product LogicProMCP from product candidate 79f0229c084c12b3cbe94ddc1bf7b8ec79346de0 (tree db3ad991bf25bd7d57bde84860165788bf53eecd; binary SHA-256 38d99aba5b890e25631c798aaa78499b17130647f0771a5694d60a3d5afcc447). Native UI automation first identified the exact Logic Pro app and protected project, one standard window, stopped playback and recording, Audio 13 selected, the Mixer visible, and no open menu or plug-in editor. The bounded stdio sequence refreshed cache, bound the current project, issued the exact Compressor insert reference, read rms_mode, repeated the inventory, and stopped the server by closing stdin. Independent UI readback afterward again found the same sole project window with no menu or plug-in editor. No parameter setter, save, project close, key input or direct UI click was used by the qualification controller.",
+  "method": "Built debug product LogicProMCP from product candidate 79f0229c084c12b3cbe94ddc1bf7b8ec79346de0 (tree db3ad991bf25bd7d57bde84860165788bf53eecd; binary SHA-256 38d99aba5b890e25631c798aaa78499b17130647f0771a5694d60a3d5afcc447), then repeated the same bounded read on post-main integrated head b80b8ba592b397bf75c2e538048efba51e836af9 (tree 90d084a1bd7048dd83a5c92e760d5d6104875fcd; binary SHA-256 a3a1b709ceb8f5165ff9db12c3ab5b452e24e95ea3691eb865ca6abc1ab0e29c). Native UI automation identified the exact Logic Pro app and protected project, one standard window, stopped playback and recording, Audio 13 selected, the Mixer visible, and no open menu or plug-in editor before and after the final run. The bounded stdio sequence refreshed cache, bound the current project, issued the exact Compressor insert reference, read rms_mode, repeated the inventory, and stopped the server by closing stdin. No parameter setter, save, project close, key input or direct UI click was used by the qualification controller.",
   "observations": [
     {
       "what": "candidate and host identity",
@@ -89,14 +90,28 @@
       "plugin_editor_window_detected": false,
       "key_input_sent": false,
       "click_input_sent": false
+    },
+    {
+      "what": "post-main exact-head recheck",
+      "candidate_head": "b80b8ba592b397bf75c2e538048efba51e836af9",
+      "candidate_tree": "90d084a1bd7048dd83a5c92e760d5d6104875fcd",
+      "binary_sha256": "a3a1b709ceb8f5165ff9db12c3ab5b452e24e95ea3691eb865ca6abc1ab0e29c",
+      "state": "A",
+      "observed_raw": true,
+      "observed_display": "RMS",
+      "write_attempted": false,
+      "before_after_target_unchanged": true,
+      "server_pid_gone": true,
+      "post_run_open_menu_detected": false,
+      "post_run_plugin_editor_window_detected": false
     }
   ],
-  "conclusion": "The exact product candidate read the named Peak/RMS pair as boolean true and display RMS in State A, called no setter, observed view restoration and new-editor close, retained the same complete target inventory, and left only the protected project window with no open menu.",
+  "conclusion": "The exact product candidate and the post-main integrated head both read the named Peak/RMS pair as boolean true and display RMS in State A, called no setter, observed view restoration and new-editor close, retained the same complete target inventory, and left only the protected project window with no open menu.",
   "limits": [
     "One protected fixture, one Compressor instance, one host, and ko-KR only.",
     "The native receipt observed the RMS-selected state. Focused tests cover both Peak and RMS plus both/neither selected, wrong title, duplicate, unreadable and drifting evidence, but those test fixtures are not additional native observations.",
     "This read-only observation establishes neither Peak/RMS actuation nor write support, inverse behavior, idempotency, cross-model availability, or a physical-unit mapping.",
-    "The measured binary was built from product source at candidate 79f0229c084c12b3cbe94ddc1bf7b8ec79346de0. The later harness, receipt and CI-guard repair commits change no product source under measurement.",
+    "The first measured binary was built from product source at candidate 79f0229c084c12b3cbe94ddc1bf7b8ec79346de0; the post-main measurement repeated the same result at integrated head b80b8ba592b397bf75c2e538048efba51e836af9. The six product, test and original evidence blobs are byte-identical across the integration.",
     "This extends the read-only C1 workflow; it does not satisfy #299's C2 physical-unit write, C3 snapshot/compensation, C4 recommendation/application, or full Compressor closure."
   ],
   "supersedes": null,
