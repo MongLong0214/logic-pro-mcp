@@ -93,20 +93,14 @@ extension AccessibilityChannel {
             var extras: [String: Any] = [
                 "operation": "project.new",
                 "write_attempted": false,
-                "safe_to_retry": true,
+                "safe_to_retry": false,
                 "failure_stage": "precondition_open_document",
+                "automatic_precondition_attempts_exhausted": true,
+                "terminal": true,
+                "human_intervention_required": false,
                 // Both numbers, so a reader can see that a chooser on screen was NOT the reason
                 // (#590). When they differ, the difference is chooser windows.
                 "observed_all_window_count": windows?.count ?? NSNull(),
-                // Driven end to end on 2026-08-17 before being written down. `project.close` alone
-                // answers `confirmation_required` (it is L3-gated), so a recovery action naming the
-                // bare command would send the operator into a second refusal. With the confirmation
-                // supplied the chain does work: close -> zero windows -> project.new creates
-                // `Untitled 56 - Tracks`.
-                "recovery_action": "Close the open project with "
-                    + "logic_project(\"close\", {confirmed: true}) — the bare close is refused as "
-                    + "confirmation_required — so Logic has no document window, then retry "
-                    + "project.new.",
             ]
             if let count { extras["observed_window_count"] = count }
             return .error(HonestContract.encodeStateC(
