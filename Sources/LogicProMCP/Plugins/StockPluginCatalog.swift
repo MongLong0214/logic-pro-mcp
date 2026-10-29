@@ -1597,6 +1597,36 @@ enum StockPluginCatalog {
                 ]
             )
         ),
+        // Logic's Compressor Controls view exposes Peak/RMS as a named,
+        // one-hot radio pair. This entry observes that current selection only:
+        // no actuation was attempted or inferred from radio readability.
+        StockPluginParameterMetadata(
+            id: "rms_mode",
+            displayName: "RMS Mode",
+            unit: "boolean",
+            valueRange: nil,
+            writeMethod: nil,
+            readbackMethod: "ax_controls_view_radio_pair",
+            readbackOffTitle: "Peak",
+            readbackOnTitle: "RMS",
+            controlsViewRowLabel: "Peak/RMS",
+            controlsViewControlRole: "AXRadioButton",
+            controlsViewActuationState: .unmeasured,
+            availabilityState: .observed,
+            provenance: .observed(
+                method: "controls_view_radio_pair_read_only_observation",
+                observedAt: "2026-10-30T10:54:00+09:00",
+                logicVersion: "12.3 (6674)",
+                locale: "ko-KR",
+                evidence: [
+                    "parameter_readback",
+                    "Audio 13 Compressor Controls row Peak/RMS: exposes Peak=0 and RMS=1",
+                    "The named pair was observed without pressing either radio button",
+                    "The native editor view was restored and the plug-in window was closed",
+                    "No Peak/RMS write or actuation behavior was measured",
+                ]
+            )
+        ),
         // The measured Controls table associates this value with the Attack
         // row and exposes both a raw AXValue and Logic's engineering display.
         // No Attack actuation was measured, so the raw value stays opaque and
