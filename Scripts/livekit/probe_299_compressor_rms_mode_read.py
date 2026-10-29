@@ -24,6 +24,9 @@ from Scripts.livekit.probe_299_compressor_knee_read import compressor_target, di
 from Scripts.verify.live.mcp import Server
 
 
+READ_STATUS = "read"
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("binary")
@@ -91,7 +94,7 @@ def main() -> int:
         "raw_is_boolean": isinstance(observed_raw, bool),
         "raw_unit_is_boolean": read.get("raw_unit") == "boolean",
         "display_matches_boolean": observed_display == ("RMS" if observed_raw is True else "Peak"),
-        "parameter_read_status": read.get("parameter_read_status") == "read",
+        "parameter_read_status": read.get("parameter_read_status") == READ_STATUS,
         "write_not_attempted": read.get("write_attempted") is False,
         "view_restored": read.get("plugin_view_restore_observed") is True,
         "new_editor_closed": read.get("editor_close_observed") is True,

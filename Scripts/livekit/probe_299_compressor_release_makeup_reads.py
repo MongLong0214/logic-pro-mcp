@@ -25,6 +25,7 @@ from Scripts.livekit.probe_299_compressor_knee_read import compressor_target, di
 from Scripts.verify.live.mcp import Server
 
 
+READ_STATUS = "read"
 PARAMETERS = ("release", "makeup")
 
 
@@ -106,7 +107,7 @@ def main() -> int:
             f"{parameter}_raw_unit_is_opaque": read.get("raw_unit") == "raw_ax_value",
             f"{parameter}_display_is_nonempty": isinstance(read.get("observed_display"), str)
             and bool(read.get("observed_display", "").strip()),
-            f"{parameter}_parameter_read_status": read.get("parameter_read_status") == "read",
+            f"{parameter}_parameter_read_status": read.get("parameter_read_status") == READ_STATUS,
             f"{parameter}_write_not_attempted": read.get("write_attempted") is False,
             f"{parameter}_view_restored": read.get("plugin_view_restore_observed") is True,
             f"{parameter}_new_editor_closed": read.get("editor_close_observed") is True,
