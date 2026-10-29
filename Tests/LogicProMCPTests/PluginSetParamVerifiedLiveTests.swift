@@ -113,6 +113,10 @@ private final class LiveFixture: @unchecked Sendable {
         // AXWindows. The close must be judged by the observed window list, not
         // by the press returning true.
         pluginCloseControlFailsToClose: Bool = false,
+        // This fixture replaces the editor's close control after the first
+        // accepted press. Only the freshly acquired control closes the exact
+        // editor window.
+        pluginCloseControlRenewsAfterFirstAttempt: Bool = false,
         controlsViewRowLabel: String? = nil,
         controlsViewControlRole: String = kAXCheckBoxRole as String,
         controlsCheckboxBefore: Bool = false,
@@ -151,6 +155,7 @@ private final class LiveFixture: @unchecked Sendable {
         let pluginWindow = b.element(1004)
         let slider = b.element(1005)
         let pluginClose = b.element(1006)
+        let renewedPluginClose = b.element(100_915)
         let pluginBypass = b.element(1007)
         let pluginLink = b.element(1008)
         let controlsViewSwitcher = b.element(1009)
@@ -283,6 +288,7 @@ private final class LiveFixture: @unchecked Sendable {
         }
         b.setAttribute(slider, kAXValueDescriptionAttribute as String, formatSliderDisplay(beforeValue))
         b.setAttribute(pluginClose, kAXRoleAttribute as String, kAXButtonRole as String)
+        b.setAttribute(renewedPluginClose, kAXRoleAttribute as String, kAXButtonRole as String)
         b.setAttribute(pluginBypass, kAXRoleAttribute as String, kAXCheckBoxRole as String)
         b.setAttribute(pluginBypass, kAXDescriptionAttribute as String, "bypass")
         b.setAttribute(pluginLink, kAXRoleAttribute as String, kAXCheckBoxRole as String)
@@ -389,6 +395,7 @@ private final class LiveFixture: @unchecked Sendable {
         let targetSlotForViewMutation = targetSlot
         let targetOpenButtonKey = targetOpenButton.map { b.elementID($0) }
         let pluginCloseKey = b.elementID(pluginClose)
+        let renewedPluginCloseKey = b.elementID(renewedPluginClose)
         let controlsCheckboxKey = b.elementID(controlsCheckbox)
         let controlsViewMenuItemKey = b.elementID(controlsViewMenuItem)
         let editorViewMenuItemKey = b.elementID(editorViewMenuItem)
@@ -629,6 +636,21 @@ private final class LiveFixture: @unchecked Sendable {
                 guard action == (kAXPressAction as String) else { return true }
                 if key == pluginCloseKey {
                     pluginCloseControlPressCount.value += 1
+                    if pluginCloseControlRenewsAfterFirstAttempt {
+                        b.setAttribute(
+                            pluginWindow,
+                            kAXCloseButtonAttribute as String,
+                            renewedPluginClose
+                        )
+                        return true
+                    }
+                    if !pluginCloseControlFailsToClose {
+                        b.setAttribute(app, kAXWindowsAttribute as String, [arrangeWindow])
+                    }
+                    return true
+                }
+                if key == renewedPluginCloseKey {
+                    pluginCloseControlPressCount.value += 1
                     if !pluginCloseControlFailsToClose {
                         b.setAttribute(app, kAXWindowsAttribute as String, [arrangeWindow])
                     }
@@ -756,7 +778,12 @@ private func runLive(
 
 private func reportsFailedPluginViewRestoration(_ envelope: [String: Any]) -> Bool {
     guard let attempted = envelope["plugin_view_restore_attempted"] as? Bool,
-          let observed = envelope["plugin_view_restore_observed"] as? Bool else {
+          let observed = envelope["plugin_view_restore_observed"] as? Bool,
+          let recovery = envelope["plugin_view_restore_recovery_hint"] as? String,
+          recovery.contains("Automatic plug-in view restoration"),
+          !recovery.lowercased().contains("manually"),
+          !recovery.contains("Select the prior view"),
+          !recovery.contains("Verify the prior view") else {
         return false
     }
     if let leftChanged = envelope["plugin_view_left_changed"] as? Bool {
@@ -4163,6 +4190,26 @@ private final class Counter: @unchecked Sendable {
     #expect(constructedEditorWasClosed)
 }
 
+@Test func testOwnedEditorCloseReacquiresAReplacedCloseControl() async throws {
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginWindowPresent: false,
+        openWindowOnSlotPress: true,
+        pluginSlotNamesByTrack: [0: [0: "Compressor", 6: "Compressor"]],
+        pluginCloseControlRenewsAfterFirstAttempt: true
+    )
+    let obj = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(obj["state"] as? String == "A")
+    #expect(fixture.currentSliderValue == 60)
+    #expect(try #require(obj["editor_close_observed"] as? Bool))
+    #expect(fixture.pluginCloseControlPressCount.value == 2)
+    let remainingWindows = try #require(
+        fixture.builder.attributeValue(fixture.app, kAXWindowsAttribute as String) as? [AXUIElement]
+    )
+    #expect(remainingWindows.count == 1)
+}
+
 @Test func testReusedEditorIsNotClosedByTheOperation() async {
     // The single-instance path reuses an editor the caller already had open.
     // Closing it would destroy state this operation never created — a worse
@@ -4206,7 +4253,9 @@ private final class Counter: @unchecked Sendable {
     #expect(!closeObserved)
     #expect(editorStillOpen)
     let recoveryHint = try #require(obj["recovery_hint"] as? String)
-    #expect(recoveryHint.contains("Close it before another duplicate-instance write"))
+    #expect(recoveryHint.contains("Automatic editor cleanup failed"))
+    #expect(recoveryHint.contains("later duplicate-instance writes refuse"))
+    #expect(!recoveryHint.lowercased().contains("close it"))
     // Tried, and retried, rather than giving up after one press.
     #expect(fixture.pluginCloseControlPressCount.value == 3)
 }
@@ -4220,7 +4269,10 @@ private final class Counter: @unchecked Sendable {
 
     #expect(obj["error"] as? String == "duplicate_plugin_editor_already_open")
     let hint = try #require(obj["recovery_hint"] as? String)
-    #expect(hint.contains("Close the open"))
+    #expect(hint.contains("pre-existing"))
+    #expect(hint.contains("terminated before plug-in parameter or editor mutation"))
+    #expect(!hint.contains("terminated before mutation"))
+    #expect(!hint.lowercased().contains("close the open"))
 }
 
 // #955 B0: use the actual channel entry point, not a requested-value echo or
@@ -6249,6 +6301,10 @@ func testIssue955ReadDoesNotCloseAnEditorAfterOwnershipEnds(_ changed: String) a
     #expect(!(try #require(object["editor_close_observed"] as? Bool)))
     #expect(try #require(object["editor_cleanup_unobserved"] as? Bool))
     #expect(object["editor_still_open"] == nil, "Lost custody cannot establish the original editor's residual state")
+    let recoveryHint = try #require(object["recovery_hint"] as? String)
+    #expect(recoveryHint.contains("Automatic editor cleanup lost target custody"))
+    #expect(recoveryHint.contains("terminal"))
+    #expect(!recoveryHint.lowercased().contains("manually"))
     #expect(fixture.pluginCloseControlPressCount.value == 0, "Do not close a window through lost ownership")
     #expect(fixture.sliderWriteCount.value == 0)
     #expect(fixture.controlsCheckboxPressCount.value == 0)

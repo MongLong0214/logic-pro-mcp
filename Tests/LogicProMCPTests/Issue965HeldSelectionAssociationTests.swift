@@ -1675,6 +1675,11 @@ struct Issue965HeldSelectionAssociationTests {
         try await assertCanonicalPhysicalOutput(mode: mode)
     }
 
+    @Test("Final physical-output popup custody loss is a terminal automatic-cleanup refusal")
+    func finalPhysicalOutputPopupCustodyLossIsTerminal() async throws {
+        try await assertCanonicalPhysicalOutput(mode: "terminal_late_project")
+    }
+
     @Test("An existing checked Bus output may depart only through a singleton local output goal",
           arguments: ["physical", "stereo", "physical_input", "misleading_input", "mixed_name", "mixed_input", "no_output", "no_receiver", "own_bus_input"])
     func canonicalBusDeparturePreviewRetainsItsNarrowContract(destination: String) async throws {
@@ -2799,8 +2804,10 @@ struct Issue965HeldSelectionAssociationTests {
                                             lateCheckedReceiverInputChange: Bool,
                                             lateCheckedOutputChange: Bool,
                                             lateUnreadablePeerRouting: Bool) async throws {
-        let survivingSource = requestedMode.hasPrefix("surviving_")
-        let profile = survivingSource ? String(requestedMode.dropFirst("surviving_".count)) : requestedMode
+        let terminalCustodyDiagnostic = requestedMode == "terminal_late_project"
+        let normalizedMode = terminalCustodyDiagnostic ? "forward" : requestedMode
+        let survivingSource = normalizedMode.hasPrefix("surviving_")
+        let profile = survivingSource ? String(normalizedMode.dropFirst("surviving_".count)) : normalizedMode
         let busDeparture = profile.hasPrefix("bus_departure_")
             ? String(profile.dropFirst("bus_departure_".count)) : nil
         let executingBusDeparture = busDeparture?.hasPrefix("execute_") == true
@@ -3294,6 +3301,14 @@ struct Issue965HeldSelectionAssociationTests {
                     }
                     if outputs.contains(where: { CFEqual($0, element) }), attribute == kAXHelpAttribute as String {
                         f.routingClassifierHelpReads += 1
+                    }
+                    if terminalCustodyDiagnostic,
+                       CFEqual(element, f.window), attribute == kAXDocumentAttribute as String,
+                       f.routingOpenedOutputIndex == 1, !f.routingLateScopeInjected,
+                       Thread.callStackSymbols.contains(where: { $0.contains("sourceStillCurrent") }) {
+                        f.routingLateScopeInjected = true
+                        f.builder.setAttribute(f.window, kAXDocumentAttribute as String,
+                            "file:///tmp/Foreign.logicx")
                     }
                     if mode == "late_peer", CFEqual(element, noOutputReturn ? stereo : busArrival ? busTwo : physical), attribute == kAXEnabledAttribute as String,
                        !busArrival || ApprovedSessionRepair.outputLeafPermission != nil,
@@ -4051,7 +4066,7 @@ struct Issue965HeldSelectionAssociationTests {
                     }))
                 } else if mode == "coupled_second_failure" || mode == "coupled_menu_overlay_second_failure" {
                     await router.register(SelectedOutputSagaResultBoundary(f.channel()))
-                } else if noOutput || executingBusDeparture {
+                } else if noOutput || executingBusDeparture || terminalCustodyDiagnostic {
                     await router.register(SelectedOutputSagaResultBoundary(f.channel(), shouldFail: false, observed: { response in
                         f.routingOutputChannelStates.append(response.message)
                     }))
@@ -4184,6 +4199,19 @@ struct Issue965HeldSelectionAssociationTests {
                     return
                 }
                 let result = try #require(sharedJSONObject(sharedToolText(await run())))
+                if terminalCustodyDiagnostic {
+                    let message = try #require(f.routingOutputChannelStates.last)
+                    let direct = try #require(sharedJSONObject(message))
+                    #expect(direct["state"] as? String == "C")
+                    #expect(direct["error"] as? String == HonestContract.FailureError.staleTargetReference.rawValue)
+                    #expect(direct["popup_menu_state"] as? String == "custody_lost")
+                    #expect(direct["recovery_hint"] as? String
+                        == "Original popup custody was lost, so automatic cleanup was not authorized. This result is terminal; preserve the observed project state.")
+                    let attempted = try #require(direct["write_attempted"] as? Bool)
+                    #expect(!attempted && f.routingDestinationPresses == 0)
+                    #expect(result["saga_state"] as? String != "completed")
+                    return
+                }
                 if delayedReceiverCensus, delayedReceiverFocusFault != nil {
                     #expect(f.routingDelayedReceiverRedrawInjected,
                         "Reach both exact all-strip redraws before refusing the handoff")

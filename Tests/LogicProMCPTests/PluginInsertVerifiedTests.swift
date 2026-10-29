@@ -330,7 +330,7 @@ private func insertParams(
     #expect((obj["write_attempted"] as? Bool)!)
 }
 
-@Test func testInsertVerifiedRollbackFailedAbortsStateC() async {
+@Test func testInsertVerifiedRollbackFailedAbortsStateC() async throws {
     let b = FakeAXRuntimeBuilder()
     let runtime = makeMixerFixture(b) { b in [addEmptySlot(b, 942)] }
     // A stray mount that cannot be rolled back is terminal: the driver must not
@@ -357,7 +357,12 @@ private func insertParams(
     #expect(!((obj["rollback_succeeded"] as? Bool)!))
     #expect(obj["rollback_retries"] as? Int == 2)
     #expect((obj["write_attempted"] as? Bool)!)
-    #expect(obj["recovery_action"] != nil)
+    let recoveryAction = try #require(obj["recovery_action"] as? String)
+    #expect(recoveryAction.contains("automatic rollback exhausted"))
+    #expect(recoveryAction.contains("removal of the partial effect was not confirmed"))
+    #expect(!recoveryAction.contains("observed partial effect remains"))
+    #expect(recoveryAction.contains("operation terminated with no further writes"))
+    #expect(!recoveryAction.lowercased().contains("manually"))
 }
 
 // MARK: - State C: every strategy ran, requested plugin never mounted
@@ -707,6 +712,8 @@ func testInsertVerifiedRefusesUnreadChildrenAsUnread(mixerUnread: Bool, mixerByI
     #expect(observed.contains("no enumerable insert slots"))
     let hint = (obj["recovery_hint"] as? String) ?? ""
     #expect(hint.contains("Master"))
+    #expect(hint.contains("No automatic recovery established"))
+    #expect(!hint.contains("Mixer reveal did not"))
 }
 
 @Test func testLegacyInsertPluginZeroSlotsHint() async {
@@ -1332,7 +1339,14 @@ func testPlugin1108WrongSlotRollbackVerifiesOriginalMixerDespiteGlobalSwitch(_ u
     let remaining = try #require(AXLogicProElements.audioPluginInsertSlots(in: originalStrip, runtime: fixture.runtime.ax))
     let stillMounted = remaining.contains { $0.name == "Gain" }
     if undoRemovesOriginal { #expect(!stillMounted) } else { #expect(stillMounted) }
-    if !undoRemovesOriginal { #expect(obj["recovery_action"] as? String != nil) }
+    if !undoRemovesOriginal {
+        let recoveryAction = try #require(obj["recovery_action"] as? String)
+        #expect(recoveryAction.contains("automatic rollback exhausted"))
+        #expect(recoveryAction.contains("removal of the partial effect was not confirmed"))
+        #expect(!recoveryAction.contains("observed partial effect remains"))
+        #expect(recoveryAction.contains("operation terminated with no further writes"))
+        #expect(!recoveryAction.lowercased().contains("manually"))
+    }
 }
 
 // R1108-03: every mode changes only after the actual custom opener dispatch.

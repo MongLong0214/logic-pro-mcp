@@ -187,7 +187,9 @@ func issue1016RefusalReportsAMenuThatStayedOpenWithItsCount(_ refusal: Issue1016
     #expect(remaining == 1)
     #expect(server.escapeCount == 1)
     let hint = try #require(run.envelope["recovery_hint"] as? String)
-    #expect(hint.contains("Escape"))
+    #expect(hint.contains("Automatic popup cleanup"))
+    #expect(hint.contains("operation terminated"))
+    #expect(!hint.contains("Escape before retrying"))
 }
 
 @Test(arguments: Issue1016Refusal.allCases)
@@ -205,7 +207,9 @@ func issue1016RefusalDoesNotReadAnUnreadableWindowListAsClean(_ refusal: Issue10
     // Unknown is not a reason to type: no reading counted a popup, and an Escape goes to focus.
     #expect(server.escapeCount == 0)
     let hint = try #require(run.envelope["recovery_hint"] as? String)
-    #expect(hint.contains("Escape"))
+    #expect(hint.contains("Automatic popup cleanup"))
+    #expect(hint.contains("operation terminated"))
+    #expect(!hint.contains("Escape before retrying"))
 }
 
 @Test(arguments: Issue1016Refusal.allCases)
