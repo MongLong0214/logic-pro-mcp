@@ -470,7 +470,7 @@ extension AccessibilityChannel {
                 return refusal(.staleTargetReference,
                     "Original source/project custody changed during the final popup reads; no destination was selected.",
                     ["popup_menu_state": "custody_lost",
-                     "recovery_hint": "Re-read the current project and Mixer before retrying; popup cleanup was not authorized."])
+                     "recovery_hint": "Original popup custody was lost, so automatic cleanup was not authorized. This result is terminal; preserve the observed project state."])
             }
         }
 
