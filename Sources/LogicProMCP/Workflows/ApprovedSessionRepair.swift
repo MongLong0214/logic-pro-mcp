@@ -2720,12 +2720,11 @@ final class ApprovedSessionRepair: @unchecked Sendable {
               retained.effect.current.track.matches(task.pair.track),
               await projectIsCurrent(allowPendingCancellation: true) else { return nil }
         if outputInverseConsumed {
-            // `retainCheckedOutputEffect(restored: true)` has just refreshed the
-            // public state and independently reopened this exact Output popup
-            // before publishing the inverse result. Carry that exact checked
-            // effect across the immediately following Saga compensation read;
-            // the ownership comparison and inverse writer have already kept
-            // their separate fresh Bus-prerequisite checks.
+            // The verified inverse scalar has just read back this exact changed
+            // source and published its request-local native receipt. Carry that
+            // checked effect across only the immediately following Saga
+            // compensation read; the ownership comparison and inverse writer
+            // have already kept their separate fresh Bus-prerequisite checks.
             guard retained.effect.permits(runtime: retained.effect.current.track.runtime),
                   let proof = outputProof, proof.permitsRead(),
                   outputPair?.strip.matches(retained.effect.current.strip) == true,
@@ -2899,11 +2898,12 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         return .init(read: evidence)
     }
 
-    /// Finish the scalar's typed native effect with the Saga's independent
-    /// checked menu read and one post-write protected-footprint census. Later
-    /// ownership/readback calls may revalidate this exact effect without
-    /// reopening the popup that produced it; the inverse writer still performs
-    /// its own full deciding footprint check at the leaf.
+    /// Finish the scalar's typed native effect with a post-write protected-
+    /// footprint census. Forward Bus output uses its immediately following
+    /// prerequisite check as the Saga receipt. A verified inverse scalar already
+    /// owns an exact checked native effect, so its immediately following
+    /// compensation read may retain that receipt without opening Output again.
+    /// The inverse writer still performs its own full deciding footprint check.
     private func retainCheckedOutputEffect(
         _ effect: AccessibilityChannel.ChangedOutputObservation,
         assignment: OutputAssignment,
@@ -2921,7 +2921,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         }
         let forwardBusReceiptChecksOutput = !restored
             && outputTask?.prerequisiteBuses.isEmpty == false
-        if !forwardBusReceiptChecksOutput {
+        if !forwardBusReceiptChecksOutput && !restored {
             let checked = await AXMixerStripBinding.$current.withValue(pair.strip) {
                 await AXMixerStripBinding.$outputAssociation.withValue(pair) {
                     await AccessibilityChannel.getOutputObservation(runtime: runtime)
@@ -2934,7 +2934,15 @@ final class ApprovedSessionRepair: @unchecked Sendable {
               outputProof?.permitsRead() == true,
               await projectIsCurrent(allowPendingCancellation: true) else { return false }
         let retained: CheckedOutputEffect
-        if forwardBusReceiptChecksOutput {
+        if restored {
+            // State A is emitted only after the scalar has checked the changed
+            // destination and `recordOutputEffect` has retained this exact
+            // source/control/population/focus receipt. State B never reaches
+            // this branch. Reuse the scalar's own readback timestamp rather than
+            // adding a consecutive Output-popup cycle to compensation.
+            retained = CheckedOutputEffect(effect: effect, assignment: assignment,
+                sampledAt: effect.sampledAt)
+        } else if forwardBusReceiptChecksOutput {
             // Complete the post-write Bus checks before the child writer publishes
             // State A. A public cancellation can arrive as soon as that result is
             // visible. This exact check ends with its own Output-popup read, so it

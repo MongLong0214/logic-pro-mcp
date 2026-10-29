@@ -2491,10 +2491,10 @@ struct Issue965HeldSelectionAssociationTests {
         f.measureForwardOutputSampleTime = true
         try await assertCanonicalPhysicalOutput(mode: "bus_departure_execute_cancel", fixture: f)
         #expect(f.routingDestinationPresses == 2)
-        #expect(f.inputMenuPresses == 14,
-                "The immediate forward and restored Saga reads may reuse each writer's exact checked effect while compensation ownership and the inverse writer retain their fresh routing checks")
-        #expect(f.outputMenuPresses == 9,
-                "Effect retention must reuse the forward Bus-prerequisite check's exact Output popup instead of opening one consecutive duplicate popup")
+        #expect(f.inputMenuPresses == 13,
+                "The immediate forward read may reuse its Bus receipt and the restored read may reuse the verified inverse scalar receipt while both fresh inverse routing checks remain")
+        #expect(f.outputMenuPresses == 8,
+                "Effect retention must not reopen Output after either the forward Bus receipt or the verified inverse scalar has already checked the exact destination")
         let forwardOutputSampledAt = try #require(f.forwardOutputSampledAt)
         let firstOutputMenuOpenAfterForwardWriteAt = try #require(f.firstOutputMenuOpenAfterForwardWriteAt)
         #expect(forwardOutputSampledAt >= firstOutputMenuOpenAfterForwardWriteAt,
