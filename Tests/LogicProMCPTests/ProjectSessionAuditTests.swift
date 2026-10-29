@@ -17,6 +17,7 @@ private func makeAuditSnapshot(
     regionsComplete: Bool = true,
     markers: [MarkerState] = [],
     channelStrips: [ChannelStripState] = [],
+    mixerFetchedAt: Date? = nil,
     fileTrackCount: Int? = nil,
     blockingDialogButtons: [String]? = nil
 ) -> ProjectSessionAudit.Snapshot {
@@ -47,7 +48,7 @@ private func makeAuditSnapshot(
         markers: markers,
         markersFetchedAt: now,
         channelStrips: channelStrips,
-        mixerFetchedAt: now,
+        mixerFetchedAt: mixerFetchedAt ?? now,
         fileTrackCount: fileTrackCount,
         blockingDialogButtons: blockingDialogButtons
     )
@@ -103,6 +104,38 @@ private func makeAuditSnapshot(
     ].joined(separator: " ").lowercased()
     #expect(!terminalText.contains("manual"))
     #expect(!terminalText.contains("review"))
+}
+
+@Test func testAuditRecoveryFieldsTerminateWithoutHumanInstructions() throws {
+    let now = Date(timeIntervalSince1970: 1_730_000_000)
+    let report = ProjectSessionAudit.buildAudit(snapshot: makeAuditSnapshot(
+        now: now,
+        tracks: [TrackState(id: 0, name: "Audio", type: .audio)],
+        markers: [],
+        mixerFetchedAt: now.addingTimeInterval(-3_600)
+    ))
+
+    let marker = try #require(report.cleanupPlan.first { $0.id == "plan_marker_structure" })
+    #expect(marker.rollbackOrRecovery == "A failed marker write terminates with observed marker state; this plan issues no automatic deletion.")
+
+    let mixer = try #require(report.cleanupPlan.first { $0.id == "refresh_mixer_inventory" })
+    #expect(mixer.proposedOperation == "No mixer-dependent cleanup mutation is proposed while mixer inventory is not fresh.")
+    #expect(mixer.requiredConfirmation == "none; terminal read-only result")
+    #expect(mixer.expectedReadback == "not applicable; this step performs no project mutation")
+    #expect(!mixer.supportedByCurrentTools)
+    #expect(mixer.tool == nil)
+    #expect(mixer.command == nil)
+
+    let terminalText = [
+        marker.rollbackOrRecovery,
+        mixer.proposedOperation,
+        mixer.requiredConfirmation,
+        mixer.expectedReadback,
+        mixer.stopCondition,
+    ].joined(separator: " ").lowercased()
+    #expect(!terminalText.contains("manual"))
+    #expect(!terminalText.contains("re-run"))
+    #expect(!terminalText.contains("make the mixer visible"))
 }
 
 private func messySnapshot(
