@@ -2486,8 +2486,8 @@ struct Issue965HeldSelectionAssociationTests {
         let f = try Fixture()
         try await assertCanonicalPhysicalOutput(mode: "bus_departure_execute_cancel", fixture: f)
         #expect(f.routingDestinationPresses == 2)
-        #expect(f.inputMenuPresses == 16,
-                "The Saga after-state read may reuse the writer's exact effect receipt; compensation ownership and the inverse writer still perform fresh source/receiver checks")
+        #expect(f.inputMenuPresses == 15,
+                "The immediate forward and restored Saga reads may reuse each writer's exact checked effect; compensation ownership and the inverse writer still perform fresh source/receiver checks")
     }
 
     @Test("Canonical output cancellation revalidates the exact Bus receipt after its source is renewed")

@@ -2719,6 +2719,23 @@ final class ApprovedSessionRepair: @unchecked Sendable {
               retained.effect.original.track.matches(task.pair.track),
               retained.effect.current.track.matches(task.pair.track),
               await projectIsCurrent(allowPendingCancellation: true) else { return nil }
+        if outputInverseConsumed {
+            // `retainCheckedOutputEffect(restored: true)` has just refreshed the
+            // public state and independently reopened this exact Output popup
+            // before publishing the inverse result. Carry that exact checked
+            // effect across the immediately following Saga compensation read;
+            // the ownership comparison and inverse writer have already kept
+            // their separate fresh Bus-prerequisite checks.
+            guard retained.effect.permits(runtime: retained.effect.current.track.runtime),
+                  let proof = outputProof, proof.permitsRead(),
+                  outputPair?.strip.matches(retained.effect.current.strip) == true,
+                  outputRenewal.map({ $0.pair.strip.matches(retained.effect.current.strip)
+                      && $0.permits(runtime: retained.effect.current.track.runtime) })
+                      ?? retained.effect.current.strip.matches(retained.effect.original.strip),
+                  outputFootprintHeld(pair: retained.effect.current,
+                    assignment: retained.assignment) else { return nil }
+            return retained.assignment
+        }
         if !task.prerequisiteBuses.isEmpty, !outputInverseConsumed {
             if let receipt = checkedOutputPrerequisites,
                sameCheckedOutputEffect(receipt.retained, retained) {
