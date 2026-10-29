@@ -1615,7 +1615,7 @@ enum StockPluginCatalog {
             availabilityState: .observed,
             provenance: .observed(
                 method: "controls_view_radio_pair_read_only_observation",
-                observedAt: "2026-10-30T10:54:00+09:00",
+                observedAt: "2026-10-29T16:07:03.668599Z",
                 logicVersion: "12.3 (6674)",
                 locale: "ko-KR",
                 evidence: [
