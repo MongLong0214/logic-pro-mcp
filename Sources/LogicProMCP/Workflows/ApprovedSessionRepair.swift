@@ -2919,23 +2919,28 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             guard let proof = heldOutputProof(pair) else { return false }
             outputProof = proof
         }
-        let checked = await AXMixerStripBinding.$current.withValue(pair.strip) {
-            await AXMixerStripBinding.$outputAssociation.withValue(pair) {
-                await AccessibilityChannel.getOutputObservation(runtime: runtime)
+        let forwardBusReceiptChecksOutput = !restored
+            && outputTask?.prerequisiteBuses.isEmpty == false
+        if !forwardBusReceiptChecksOutput {
+            let checked = await AXMixerStripBinding.$current.withValue(pair.strip) {
+                await AXMixerStripBinding.$outputAssociation.withValue(pair) {
+                    await AccessibilityChannel.getOutputObservation(runtime: runtime)
+                }
             }
+            guard checked.assignment == assignment else { return false }
         }
-        guard checked.assignment == assignment else { return false }
         let sampledAt = ISO8601DateFormatter.cacheFormatter.string(from: Date())
         guard outputFootprintHeld(pair: pair, assignment: assignment),
               effect.permits(runtime: runtime),
               outputProof?.permitsRead() == true,
               await projectIsCurrent(allowPendingCancellation: true) else { return false }
         let retained = CheckedOutputEffect(effect: effect, assignment: assignment, sampledAt: sampledAt)
-        if !restored, outputTask?.prerequisiteBuses.isEmpty == false {
+        if forwardBusReceiptChecksOutput {
             // Complete the post-write Bus checks before the child writer publishes
             // State A. A public cancellation can arrive as soon as that result is
-            // visible; deferring this work to the Saga read would let it consume
-            // the compensation allowance before the inverse is even dispatched.
+            // visible. This exact check ends with its own Output-popup read, so it
+            // is also the retained checked effect; opening the same Output popup
+            // immediately before it would add latency without adding authority.
             guard await retainedOutputReading(retained) == assignment,
                   checkedOutputPrerequisites.map({ sameCheckedOutputEffect($0.retained, retained) }) == true
             else { return false }

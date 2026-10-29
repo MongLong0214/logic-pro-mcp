@@ -897,6 +897,7 @@ struct Issue965HeldSelectionAssociationTests {
         var lateAssociationFocusSampled = false
         var lateAssociationFocusLanded = false
         var inputMenuPresses = 0
+        var outputMenuPresses = 0
         var matchingGoalContextID: ObjectIdentifier?
         var matchingAfterNameReads: Int?
         var matchingNameCancelTask: Task<CallTool.Result, Never>?
@@ -2486,8 +2487,10 @@ struct Issue965HeldSelectionAssociationTests {
         let f = try Fixture()
         try await assertCanonicalPhysicalOutput(mode: "bus_departure_execute_cancel", fixture: f)
         #expect(f.routingDestinationPresses == 2)
-        #expect(f.inputMenuPresses == 15,
-                "The immediate forward and restored Saga reads may reuse each writer's exact checked effect; compensation ownership and the inverse writer still perform fresh source/receiver checks")
+        #expect(f.inputMenuPresses == 14,
+                "The immediate forward and restored Saga reads may reuse each writer's exact checked effect while compensation ownership and the inverse writer retain their fresh routing checks")
+        #expect(f.outputMenuPresses == 9,
+                "Effect retention must reuse the forward Bus-prerequisite check's exact Output popup instead of opening one consecutive duplicate popup")
     }
 
     @Test("Canonical output cancellation revalidates the exact Bus receipt after its source is renewed")
@@ -3573,6 +3576,7 @@ struct Issue965HeldSelectionAssociationTests {
                     }
                     if action == kAXPressAction as String,
                        let index = outputs.firstIndex(where: { CFEqual($0, element) }) {
+                        f.outputMenuPresses += 1
                         let label = f.builder.attributeValue(outputs[index], kAXDescriptionAttribute as String) as? String
                         f.builder.setAttribute(echo, kAXTitleAttribute as String, label)
                         if busDeparture != nil { f.builder.setChildren(root, [echo, parent, busParent]) }
@@ -11482,6 +11486,7 @@ struct Issue965HeldSelectionAssociationTests {
                 if action == kAXPressAction as String, CFEqual(element, input) || CFEqual(element, replacementInput) || CFEqual(element, output) {
                     let inputPressed = !CFEqual(element, output)
                     if inputPressed { f.inputMenuPresses += 1 }
+                    else { f.outputMenuPresses += 1 }
                     if outcome.hasPrefix("composed_name_execution_caption_"), inputPressed, f.routingNameConfirms == 2 {
                         b.setAttribute(source, kAXDescriptionAttribute as String, "Duplicate")
                     }
