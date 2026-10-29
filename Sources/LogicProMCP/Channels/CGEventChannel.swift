@@ -866,10 +866,10 @@ actor CGEventChannel: Channel {
         return .error(HonestContract.encodeStateC(error: .notSupported, hint: hint, extras: extras))
     }
 
-    /// State C for a refused preparation. `write_attempted` is false and
-    /// `events_posted` is zero because nothing was created. The bounded
-    /// automatic ownership attempt is terminal rather than a request for a
-    /// person to foreground Logic and retry.
+    /// State C for a refused posting-permission preflight. `write_attempted`
+    /// is false and `events_posted` is zero because nothing was created. An
+    /// unavailable OS capability terminates without requesting a person to
+    /// grant it and retry.
     /// #1092 review R1, R1092-01: a keystroke this process is not authorized to post is discarded by
     /// macOS, and the State B success after it would report a key Logic never received. Asked before
     /// Logic is brought forward, so a refusal moves nothing.
@@ -884,11 +884,16 @@ actor CGEventChannel: Channel {
                 "method": "cgevent",
                 "events_posted": 0,
                 "write_attempted": false,
-                "safe_to_retry": true,
+                "safe_to_retry": false,
+                "automatic_permission_attempts_exhausted": true,
+                "terminal": true,
+                "human_intervention_required": false,
             ]
         ))
     }
 
+    /// Terminal State C after the bounded automatic frontmost preparation
+    /// cannot prove that Logic owns the keyboard. No event has been created.
     static func frontmostRefusal(
         operation: String, preparation: FrontmostPreparation,
         observation: ProcessUtils.KeyboardOwnershipObservation? = nil
