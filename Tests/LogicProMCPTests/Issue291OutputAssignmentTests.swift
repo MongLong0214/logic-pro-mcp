@@ -613,6 +613,10 @@ func outputAssignmentTerminatesOnAForeignPopup() async throws {
     #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
     #expect(try #require(envelope["automatic_precondition_attempts_exhausted"] as? Bool))
     let hint = try #require(envelope["hint"] as? String)
+    #expect(hint.localizedCaseInsensitiveContains("observed at the pre-write popup guard"))
+    for unsupportedTemporalClaim in ["already open before this request", "pre-existing", "predates"] {
+        #expect(!hint.localizedCaseInsensitiveContains(unsupportedTemporalClaim))
+    }
     #expect(!hint.localizedCaseInsensitiveContains("close it"))
     #expect(!hint.localizedCaseInsensitiveContains("retry"))
     #expect(fixture.presses.isEmpty)

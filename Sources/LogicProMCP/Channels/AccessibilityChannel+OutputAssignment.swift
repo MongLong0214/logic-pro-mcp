@@ -228,7 +228,8 @@ extension AccessibilityChannel {
             }
         }
 
-        // A menu already open is somebody else's, and the cleanup below would close it too.
+        // A menu observed before this operation's opener is not owned by this
+        // operation, and the cleanup below would close it too.
         guard let logicPID = runtime.logicProPID(), let windows = runtime.onScreenWindowList() else {
             return refusal(.unsupportedState, "Logic's on-screen windows did not read, so an open popup "
                 + "menu cannot be ruled out; nothing was pressed.")
@@ -236,8 +237,8 @@ extension AccessibilityChannel {
         let openBefore = LogicOnScreenWindows.popupMenuCount(windows, logicPID: logicPID)
         guard openBefore == 0 else {
             return refusal(.unsupportedState,
-                "A Logic popup menu was already open before this request; this operation does not own or "
-                    + "dismiss it and terminated before pressing anything.", [
+                "A Logic popup menu was observed at the pre-write popup guard; this operation had not "
+                    + "opened it, did not dismiss it, and terminated before pressing anything.", [
                         "open_popup_menu_windows": openBefore,
                         "write_attempted": false,
                         "safe_to_retry": false,
