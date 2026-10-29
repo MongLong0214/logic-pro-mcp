@@ -4,8 +4,8 @@ import Testing
 
 @Suite("ADR-018 host parameters")
 struct HostParameterTests {
-    @Test func onlyLogicHostedPlanesCanVerifyWrites() {
-        #expect(PluginParameterProvider.mcuC4PluginEdit.canHostVerifiedWrite)
+    @Test func onlyCurrentlyTargetBoundLogicHostedPlanesCanVerifyWrites() {
+        #expect(!PluginParameterProvider.mcuC4PluginEdit.canHostVerifiedWrite)
         #expect(PluginParameterProvider.controlsViewAX.canHostVerifiedWrite)
         #expect(!PluginParameterProvider.separateAUInstance.canHostVerifiedWrite)
         #expect(!PluginParameterProvider.pixelGUI.canHostVerifiedWrite)
@@ -19,14 +19,15 @@ struct HostParameterTests {
         )
         #expect(
             preferredHostPlane(available: [.pixelGUI, .mcuC4PluginEdit, .controlsViewAX])
-                == .mcuC4PluginEdit
+                == .controlsViewAX
         )
+        #expect(preferredHostPlane(available: [.mcuC4PluginEdit]) == nil)
     }
 
     @Test func fingerprintChangesInvalidateManifestAndHideParameters() {
         let parameter = makeParameter("ins_gain", .exactWriteReadback)
         let subject = makeManifest(
-            provider: .mcuC4PluginEdit,
+            provider: .controlsViewAX,
             approved: true,
             parameters: [parameter]
         )
@@ -71,7 +72,7 @@ struct HostParameterTests {
     @Test func unapprovedManifestFailsClosed() {
         let parameter = makeParameter("ins_gain", .exactWriteReadback)
         let subject = makeManifest(
-            provider: .mcuC4PluginEdit,
+            provider: .controlsViewAX,
             approved: false,
             parameters: [parameter]
         )
@@ -169,10 +170,33 @@ struct HostParameterTests {
         )
     }
 
-    @Test func approvedValidHostVerifiedParameterPasses() {
+    @Test func approvedMCUManifestFailsClosedUntilItsStripIdentityIsBound() {
         let parameter = makeParameter("ins_gain", .exactWriteReadback)
         let subject = makeManifest(
             provider: .mcuC4PluginEdit,
+            approved: true,
+            parameters: [parameter]
+        )
+
+        #expect(publicParameters(
+            subject,
+            currentBuildFingerprint: "build-1",
+            currentUISignature: "ui-1"
+        ).isEmpty)
+        #expect(
+            validateHostWrite(
+                manifest: subject,
+                parameterRef: parameter.parameterRef,
+                currentBuildFingerprint: "build-1",
+                currentUISignature: "ui-1"
+            ) == [.providerNotHostVerified]
+        )
+    }
+
+    @Test func approvedValidHostVerifiedParameterPasses() {
+        let parameter = makeParameter("ins_gain", .exactWriteReadback)
+        let subject = makeManifest(
+            provider: .controlsViewAX,
             approved: true,
             parameters: [parameter]
         )
@@ -197,7 +221,7 @@ struct HostParameterTests {
     @Test func invalidWriteReportsDeterministicFingerprintReasons() {
         let parameter = makeParameter("ins_gain", .exactWriteReadback)
         let subject = makeManifest(
-            provider: .mcuC4PluginEdit,
+            provider: .controlsViewAX,
             approved: true,
             parameters: [parameter]
         )
