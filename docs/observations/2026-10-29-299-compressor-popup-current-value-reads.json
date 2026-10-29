@@ -1,0 +1,117 @@
+{
+  "schema": 3,
+  "id": "2026-10-29-299-compressor-popup-current-value-reads",
+  "date": "2026-10-29",
+  "subject": "the Compressor Auto Gain and Distortion Controls rows through the verified read-only parameter path",
+  "question": "On the protected fixture, does the exact candidate read each named popup's current value, restore the view and close its newly opened editor without opening either popup or calling a setter?",
+  "verdict": "works",
+  "issues": [
+    299
+  ],
+  "surface": "plugin.controls_view",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "python3 Scripts/livekit/probe_299_compressor_popup_reads.py <candidate-binary> <out.json> --project /Users/isaac/lpm-evidence/965-flat-native-20261013.logicx --track 13 --insert 1",
+    "expected": "exits 0 and writes a receipt whose checks are all true: both popup values return State A strings with write_attempted false, both view restores and new-editor closes are observed, before and after inventories identify the same target, and stdin close removes the server process",
+    "cost": "about thirty seconds on the protected fixture with stopped playback"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Plugins/StockPluginCatalog.swift:compressorParameters",
+    "Sources/LogicProMCP/HostParameters/ControlsViewParameterReader.swift:ControlsViewParameterReader.observe",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+VerifiedPlugins.swift:defaultGetParamVerified"
+  ],
+  "evidence": [
+    "evidence/2026-10-29-299-compressor-popup-current-value-exact-head-read.json"
+  ],
+  "method": "Built debug product LogicProMCP at candidate b77eff0df2681873b8181de68e83323ffbb83983 (tree 74b7d9d756c9c6d17b89521bb74c29f3b2096bd4; binary SHA-256 2b0f20352f1ee8d0054b2ebf674bda038c25d03992a68b4c84d885baa991b1d3). Before the read-only sequence, native UI automation found one protected project window, stopped playback and recording, Audio 13 selected, the Mixer visible, and no open menu or plug-in editor. The stdio client used only the read-only precondition sequence in the evidence. The issued insert reference identified Audio 13, Mixer strip 12, insert 1 as the Compressor. Each read sampled the already-selected AXValue without a menu action. The same inventory was read again, the server exited from stdin close, and independent UI readback again found only the protected project window. No setter, save, project close, key input or click input was used.",
+  "observations": [
+    {
+      "what": "candidate and host identity",
+      "candidate_head": "b77eff0df2681873b8181de68e83323ffbb83983",
+      "candidate_tree": "74b7d9d756c9c6d17b89521bb74c29f3b2096bd4",
+      "binary_sha256": "2b0f20352f1ee8d0054b2ebf674bda038c25d03992a68b4c84d885baa991b1d3",
+      "logic_version": "12.3",
+      "logic_build": "6674",
+      "locale": "ko-KR"
+    },
+    {
+      "what": "protected fixture and issued target",
+      "project_path": "/Users/isaac/lpm-evidence/965-flat-native-20261013.logicx",
+      "playback_stopped": true,
+      "recording_stopped": true,
+      "track_index": 13,
+      "track_name": "Audio 13",
+      "mixer_strip_index": 12,
+      "insert_index": 1,
+      "plugin_id": "logic.stock.effect.compressor",
+      "before_inventory_state": "A",
+      "before_inventory_complete": true
+    },
+    {
+      "what": "Auto Gain current-value read",
+      "state": "A",
+      "success": true,
+      "verified": true,
+      "observed_raw": "-12 dB",
+      "raw_unit": "string",
+      "observed_display": "-12 dB",
+      "parameter_read_status": "read",
+      "display_read_status": "read",
+      "write_attempted": false,
+      "plugin_view_restore_observed": true,
+      "editor_close_observed": true
+    },
+    {
+      "what": "Distortion current-value read",
+      "state": "A",
+      "success": true,
+      "verified": true,
+      "observed_raw": "Off",
+      "raw_unit": "string",
+      "observed_display": "Off",
+      "parameter_read_status": "read",
+      "display_read_status": "read",
+      "write_attempted": false,
+      "plugin_view_restore_observed": true,
+      "editor_close_observed": true
+    },
+    {
+      "what": "post-read target and process cleanup",
+      "after_inventory_state": "A",
+      "after_inventory_complete": true,
+      "before_after_target_unchanged": true,
+      "server_stopped_by": "stdin_close",
+      "server_returncode": 0,
+      "server_pid_gone": true
+    },
+    {
+      "what": "independent native UI readback after the server stopped",
+      "standard_window_count": 1,
+      "window_title": "965-flat-native-20261013 - 트랙",
+      "selected_track": "Audio 13",
+      "mixer_visible": true,
+      "open_menu_detected": false,
+      "plugin_editor_window_detected": false,
+      "key_input_sent": false,
+      "click_input_sent": false
+    }
+  ],
+  "conclusion": "The exact candidate read Auto Gain as -12 dB and Distortion as Off in State A, opened neither popup, called no setter, observed each view restoration and new-editor close, and left the same complete target inventory before and after.",
+  "limits": [
+    "One protected fixture, one Compressor instance, one host, and ko-KR only.",
+    "These current-value reads establish neither a complete choice list nor popup selection, ordinal identity, write support, inverse behavior, range, idempotency, or cross-model availability.",
+    "The measured binary was built from product source at candidate b77eff0df2681873b8181de68e83323ffbb83983. A later receipt-only renewal may change documentation bytes but not the product or test source under measurement.",
+    "This extends the read-only C1 workflow; it does not satisfy #299's C2 physical-unit write, C3 snapshot/compensation, C4 recommendation/application, or full Compressor closure."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record measures runtime AX values, lifecycle receipts and window cleanup. It does not claim that a quoted label is shipped in Apple's canonical string corpus."
+  }
+}

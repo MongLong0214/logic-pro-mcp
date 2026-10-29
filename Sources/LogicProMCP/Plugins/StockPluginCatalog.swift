@@ -29,6 +29,7 @@ enum StockPluginSafeWriteCapability: String, Codable, Sendable {
 /// non-actuation is useful safety evidence, but it is never a write capability.
 enum ControlsViewActuationState: String, Codable, Sendable, Equatable {
     case measuredNotActuable = "measured_not_actuable"
+    case measuredNotAddressableByName = "measured_not_addressable_by_name"
     case unmeasured
 }
 
@@ -1673,9 +1674,10 @@ enum StockPluginCatalog {
                 ]
             )
         ),
-        // This records readability only. No popup menu actuation was measured,
-        // so it contains no write method and exists solely to refuse by that
-        // missing measurement.
+        // These rows record readability only. The 2026-09-04 popup census
+        // measured that the already-selected value is readable, while the
+        // opened menus expose only the current choice or indistinguishable
+        // titles. No entry grants a write method or ordinal selection.
         StockPluginParameterMetadata(
             id: "circuit_type",
             displayName: "Circuit Type",
@@ -1685,20 +1687,66 @@ enum StockPluginCatalog {
             readbackMethod: "ax_controls_view_popup_current_value",
             controlsViewRowLabel: "Circuit Type",
             controlsViewControlRole: "AXPopUpButton",
-            controlsViewActuationState: .unmeasured,
+            controlsViewActuationState: .measuredNotAddressableByName,
             availabilityState: .observed,
             provenance: .observed(
                 method: "controls_view_axpopup_read_measurement",
-                observedAt: "2026-09-02T11:30:17+09:00",
-                logicVersion: nil,
+                observedAt: "2026-09-04",
+                logicVersion: "12.3 (6674)",
                 locale: "ko-KR",
                 evidence: [
-                    // Evidence from the observed Controls-view probe. The catalog
-                    // validator requires corroborating write/readback evidence;
-                    // this token alone is not sufficient to verify a parameter.
                     "parameter_readback",
-                    "controls-view-write-20260902-113017",
-                    "Circuit Type AXValue Platinum Digital observed; popup selection and a complete choice list were not measured",
+                    "docs/observations/2026-09-04-controls-view-popup-selection.json",
+                    "Circuit Type current AXValue Platinum Digital observed",
+                    "Popup selection was measured not addressable by name",
+                ]
+            )
+        ),
+        StockPluginParameterMetadata(
+            id: "auto_gain",
+            displayName: "Auto Gain",
+            unit: "string",
+            valueRange: nil,
+            writeMethod: nil,
+            readbackMethod: "ax_controls_view_popup_current_value",
+            controlsViewRowLabel: "Auto Gain",
+            controlsViewControlRole: "AXPopUpButton",
+            controlsViewActuationState: .measuredNotAddressableByName,
+            availabilityState: .observed,
+            provenance: .observed(
+                method: "controls_view_axpopup_read_measurement",
+                observedAt: "2026-09-04",
+                logicVersion: "12.3 (6674)",
+                locale: "ko-KR",
+                evidence: [
+                    "parameter_readback",
+                    "docs/observations/2026-09-04-controls-view-popup-selection.json",
+                    "Auto Gain current AXValue -12 dB observed",
+                    "Three enabled popup items exposed the same -12 dB title; no choice was addressable by name",
+                ]
+            )
+        ),
+        StockPluginParameterMetadata(
+            id: "distortion",
+            displayName: "Distortion",
+            unit: "string",
+            valueRange: nil,
+            writeMethod: nil,
+            readbackMethod: "ax_controls_view_popup_current_value",
+            controlsViewRowLabel: "Distortion",
+            controlsViewControlRole: "AXPopUpButton",
+            controlsViewActuationState: .measuredNotAddressableByName,
+            availabilityState: .observed,
+            provenance: .observed(
+                method: "controls_view_axpopup_read_measurement",
+                observedAt: "2026-09-04",
+                logicVersion: "12.3 (6674)",
+                locale: "ko-KR",
+                evidence: [
+                    "parameter_readback",
+                    "docs/observations/2026-09-04-controls-view-popup-selection.json",
+                    "Distortion current AXValue Off observed",
+                    "The opened popup exposed no separately named alternative choice",
                 ]
             )
         ),

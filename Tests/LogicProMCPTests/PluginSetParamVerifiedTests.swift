@@ -175,7 +175,7 @@ private func validGainParams(
     #expect(didNotAttemptWrite)
 }
 
-@Test func testControlsViewPopupRefusesWithCatalogDeclaredUnmeasuredReason() async throws {
+@Test func testControlsViewPopupRefusesWithMeasuredNameAddressabilityReason() async throws {
     let obj = await runSetParam([
         "track": "0", "insert": "2", "plugin": "Compressor", "param": "circuit_type",
         "value": "0", "unit": "enumerated", "mode": "duplicate_applyback",
@@ -184,9 +184,10 @@ private func validGainParams(
     let error = try #require(obj["error"] as? String)
     let observation = try #require(obj["what_was_observed"] as? String)
     let writeAttempted = try #require(obj["write_attempted"] as? Bool)
-    let namesTheUnmeasuredWall = observation == "actuation_unmeasured"
+    let namesTheMeasuredWall = observation
+        == ControlsViewBooleanParameterWriter.LocatorFailure.popupNotAddressableByName.observation
     let didNotAttemptWrite = !writeAttempted
     #expect(error == "unsupported_param_readback")
-    #expect(namesTheUnmeasuredWall)
+    #expect(namesTheMeasuredWall)
     #expect(didNotAttemptWrite)
 }
