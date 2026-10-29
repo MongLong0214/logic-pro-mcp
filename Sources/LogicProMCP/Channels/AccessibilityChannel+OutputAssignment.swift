@@ -235,8 +235,16 @@ extension AccessibilityChannel {
         }
         let openBefore = LogicOnScreenWindows.popupMenuCount(windows, logicPID: logicPID)
         guard openBefore == 0 else {
-            return refusal(.unsupportedState, "A Logic popup menu is already open. Close it and retry; "
-                + "nothing was pressed.", ["open_popup_menu_windows": openBefore])
+            return refusal(.unsupportedState,
+                "A Logic popup menu was already open before this request; this operation does not own or "
+                    + "dismiss it and terminated before pressing anything.", [
+                        "open_popup_menu_windows": openBefore,
+                        "write_attempted": false,
+                        "safe_to_retry": false,
+                        "automatic_precondition_attempts_exhausted": true,
+                        "terminal": true,
+                        "human_intervention_required": false,
+                    ])
         }
         guard let slotButton = AXLogicProElements.outputSlotButton(in: strip, runtime: runtime.ax) else {
             return refusal(.elementNotFound, "The strip's output slot button was not found; nothing was pressed.")
