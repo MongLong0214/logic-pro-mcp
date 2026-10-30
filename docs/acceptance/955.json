@@ -1,0 +1,58 @@
+{
+ "format": "lpm-acceptance/1",
+ "issue": 955,
+ "surface": "plugin.controls_view",
+ "sources": [
+  {
+   "doc": "issue:955",
+   "sha": null,
+   "quote": "B1 planning/diff performs no audio mutation and reports unsupported/missing/extra fields without false completeness."
+  }
+ ],
+ "fixture": {
+  "id": "lpm-locale-campaign-mixer",
+  "note": "The 19-track locale-campaign project with every track flag clear and the Mixer shown. Absolute Zero is Arrange track 0 and carries a Compressor at physical insert 0. The lifecycle verifies the declared fixture before each row."
+ },
+ "locales": "all",
+ "rows": [
+  {
+   "id": "unsupported-ratio-refuses-without-false-completeness",
+   "criterion": 0,
+   "steps": [
+    {"as": "as_found", "probe": {"name": "track_armed", "args": {"index": 0}}},
+    {"as": "setup", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": true}}},
+    {"as": "inventory", "call": {"tool": "logic_plugins", "command": "get_inventory", "params": {"track": 0, "reveal_mixer": false}}},
+    {"as": "pre", "probe": {"name": "track_armed", "args": {"index": 0}}},
+    {"as": "reject", "call": {"tool": "logic_plugins", "command": "plan_parameter_changes", "params": {"target_ref": {"$observation": "inventory.plugins[insert=0].plugin_insert_ref"}, "changes": [{"param": "ratio", "value": 2, "unit": "raw_ax_value"}]}}},
+    {"as": "post", "probe": {"name": "track_armed", "args": {"index": 0}}}
+   ],
+   "operation": "reject",
+   "expect": [
+    {"path": "as_found.armed", "op": "eq", "value": false, "invariant": true},
+    {"path": "pre.armed", "op": "eq", "value": true, "invariant": true},
+    {"path": "reject.state", "op": "eq", "value": "C"},
+    {"path": "reject.complete", "op": "eq", "value": false},
+    {"path": "reject.write_attempted", "op": "eq", "value": false},
+    {"path": "reject.application_authorized", "op": "eq", "value": false},
+    {"path": "reject.atomic_snapshot", "op": "eq", "value": false},
+    {"path": "reject.entries", "op": "count_eq", "value": 1},
+    {"path": "reject.entries[param=ratio].status", "op": "eq", "value": "unsupported"},
+    {"path": "reject.entries[param=ratio].read_observations", "op": "count_eq", "value": 0},
+    {"path": "reject.entries[param=ratio].requested.param", "op": "eq", "value": "ratio"},
+    {"path": "reject.target_identity.plugin_id", "op": "eq", "value": "logic.stock.effect.compressor"},
+    {"path": "post.armed", "op": "unchanged", "ref": {"obs": "pre.armed"}}
+   ],
+   "counterexample": [
+    {"observation": "as_found", "replaces": "post", "must_fail": [12]}
+   ],
+   "restore": [
+    {"as": "undo", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": false}}},
+    {"as": "restored", "probe": {"name": "track_armed", "args": {"index": 0}}}
+   ],
+   "restore_expect": [
+    {"path": "restored.armed", "op": "eq", "ref": {"obs": "as_found.armed"}}
+   ],
+   "independence": ["as_found", "pre", "post"]
+  }
+ ]
+}
