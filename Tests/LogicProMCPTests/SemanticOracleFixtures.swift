@@ -764,6 +764,8 @@ enum SemanticOracleFixtures {
                         + "\"selected_region_observation\":{\"name\":\"Selected MIDI\",\"track_index\":3,"
                         + "\"start_bar\":12,\"end_bar\":9,\"kind\":\"midi\"},"
                         + "\"raw_rows\":[],\"live_header_titles\":[],"
+                        + "\"event_list_item_count_text\":\"0 Events\","
+                        + "\"event_list_region_path\":\"Selected MIDI\","
                         + "\"event_list_owner_proven\":false,\"canonical_notes_complete\":false,"
                         + "\"write_attempted\":false}"
                 ),
@@ -775,7 +777,10 @@ enum SemanticOracleFixtures {
                         + "\"selected_region_observation\":{\"name\":\"Selected MIDI\",\"track_index\":3,"
                         + "\"start_bar\":9,\"end_bar\":12,\"kind\":\"midi\"},"
                         + "\"raw_rows\":[{\"Num\":{\"slider_value\":true}}],"
-                        + "\"live_header_titles\":[\"Num\"],\"event_list_owner_proven\":false,"
+                        + "\"live_header_titles\":[\"Num\"],"
+                        + "\"event_list_item_count_text\":\"1 Event\","
+                        + "\"event_list_region_path\":\"Selected MIDI\","
+                        + "\"event_list_owner_proven\":false,"
                         + "\"canonical_notes_complete\":false,\"write_attempted\":false}"
                 ),
                 .init(
@@ -786,6 +791,8 @@ enum SemanticOracleFixtures {
                         + "\"selected_region_observation\":{\"name\":\"Selected MIDI\",\"track_index\":3,"
                         + "\"start_bar\":9,\"end_bar\":12,\"kind\":\"midi\"},"
                         + "\"raw_rows\":[{\"Num\":{}}],\"live_header_titles\":[\"Num\"],"
+                        + "\"event_list_item_count_text\":\"1 Event\","
+                        + "\"event_list_region_path\":\"Selected MIDI\","
                         + "\"event_list_owner_proven\":false,\"canonical_notes_complete\":false,"
                         + "\"write_attempted\":false}"
                 ),
