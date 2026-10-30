@@ -691,11 +691,20 @@ private func recordSequenceJSONObject(_ result: CallTool.Result) -> [String: Any
             "osascript_stderr": stderr,
             "file_open_dialog_seen": false,
             "tempo_dialog_seen": false,
+            "write_attempted": false,
         ])
     )
 
     let router = ChannelRouter()
-    let ax = RecordingMockChannel(id: .accessibility, importResult: .error(importEnvelope))
+    let ax = RecordingMockChannel(
+        id: .accessibility,
+        importResult: .error(importEnvelope),
+        gotoResult: .success(HonestContract.encodeStateA()),
+        transportReadbacks: [
+            try recordSequencePosition("2.1.1.1"),
+            try recordSequencePosition("1.1.1.1"),
+        ]
+    )
     await router.register(ax)
 
     let result = await TrackDispatcher.handleRecordSequenceSMF(
@@ -721,6 +730,8 @@ private func recordSequenceJSONObject(_ result: CallTool.Result) -> [String: Any
     #expect(object["human_intervention_requests"] as? Int == 0)
     #expect(object["human_dependent_transitions"] as? Int == 0)
     #expect(terminal)
+    let writeAttempted = try #require(object["write_attempted"] as? Bool)
+    #expect(writeAttempted, "the outer result must retain its completed playhead write")
 }
 
 @Test func testRecordSequenceFailsClosedOnGMDeviceImportDowngrade() async throws {
