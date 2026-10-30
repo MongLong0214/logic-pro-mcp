@@ -323,7 +323,7 @@ A real (redacted) run on a box mid-setup:
 }
 ```
 
-The same run in a terminal prints a grouped, color-coded report with per-check remediation anchors into [docs/SETUP.md](docs/SETUP.md). Full flag reference and every check's remediation live in [docs/SETUP.md](docs/SETUP.md#setup-doctor); the `--json` bytes are a stable contract you can assert against in your own onboarding automation.
+The same run in a terminal prints a grouped, color-coded report with per-check explanations and any concrete remediation anchors in [docs/SETUP.md](docs/SETUP.md). The full flag reference, every check explanation, and actionable remediations live in [docs/SETUP.md](docs/SETUP.md#setup-doctor); the `--json` bytes are a stable contract you can assert against in your own onboarding automation.
 
 ## Architecture at a Glance
 

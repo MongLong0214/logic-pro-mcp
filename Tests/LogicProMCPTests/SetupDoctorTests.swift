@@ -110,6 +110,14 @@ private func issue26RepositoryRootURL() -> URL {
     #expect(!readme.contains("\"fix_plan\": [\"permissions.accessibility\""))
     #expect(setup.contains("an outcome headline"))
     #expect(setup.contains("Terminal and unresolved checks without a concrete remediation are excluded"))
+
+    let permissionStart = try #require(setup.range(of: "<a id=\"doctor-permissionsaccessibility\"></a>"))
+    let permissionEnd = try #require(setup.range(of: "<a id=\"doctor-systemmacos-version\"></a>"))
+    let permissionAnchors = String(setup[permissionStart.lowerBound..<permissionEnd.lowerBound])
+    for staleContinuation in ["Grant ", "grant ", "launch Logic", "rerun doctor", "re-run doctor", "manual"] {
+        #expect(!permissionAnchors.contains(staleContinuation))
+    }
+    #expect(permissionAnchors.contains("terminal observation"))
 }
 
 @Test func testSetupDoctorJSONContractStableCheckIDsAndOKAggregation() throws {
