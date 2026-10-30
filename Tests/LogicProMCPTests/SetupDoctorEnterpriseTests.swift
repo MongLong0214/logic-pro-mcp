@@ -468,8 +468,23 @@ private struct FrozenV1Report: Codable {
 @Test func test_t3_headline_render_nonpass() {
     let report = makeReport(permission: granted(systemEvents: .notGranted))
     let out = SetupDoctor.renderHuman(report, mode: .default, useColor: false)
-    #expect(out.contains("Next action"))
-    #expect(out.contains("permissions.automation_system_events"))
+    #expect(report.headline == "Terminal outcome [permissions.automation_system_events]: Automation permission for System Events is not granted for the responsible process that launched this server; this is a launcher-permission gap, and Logic Pro automation is separate.")
+    #expect(report.fixPlan == [])
+    #expect(out.contains(report.headline))
+    #expect(!(out.contains("Next action")))
+    #expect(!(out.contains("Fix plan:")))
+}
+
+@Test func test_t3_informational_permission_warning_is_not_an_action_plan() {
+    var runtime = enterpriseRuntime()
+    runtime.tccCrossContextProbe = { .denied("terminal:accessibility=denied") }
+    let report = makeReport(runtime: runtime)
+    let out = SetupDoctor.renderHuman(report, mode: .default, useColor: false)
+    #expect(report.headline == "Unresolved outcome [permissions.tcc_cross_context]: TCC database shows a known MCP host explicitly denied a required permission.")
+    #expect(report.fixPlan == [])
+    #expect(out.contains(report.headline))
+    #expect(!(out.contains("Next action")))
+    #expect(!(out.contains("Fix plan:")))
 }
 
 // MARK: - T3/T4 entrypoint flag routing
@@ -754,32 +769,33 @@ private func runEntrypoint(
 }
 
 // Case 5
-@Test func test_t1v3_fix_plan_includes_fail_warn_manual() {
-    // Force a fail (accessibility), a warn (update behind), and a manual (channels).
+@Test func test_t1v3_fix_plan_excludes_terminal_fail_and_includes_remediable_warn_manual() {
+    // Force a terminal fail (accessibility), a remediable warn (update behind),
+    // and a remediable manual check (channels).
     let report = makeReport(
         arguments: ["LogicProMCP", "doctor", "--json", "--client", "claude-code", "--profile", "full"],
         runtime: enterpriseRuntime(latestReleaseLookup: { .found(version: "v99.0.0") }),
         permission: granted(accessibility: false),
         approvals: [:]
     )
-    #expect(report.fixPlan.contains("permissions.accessibility"))   // fail → error
+    #expect(!report.fixPlan.contains("permissions.accessibility"))  // terminal, no action
     #expect(report.fixPlan.contains("updates.latest_release"))      // warn → warning
     #expect(report.fixPlan.contains("channels.manual_validation"))  // manual → warning (INCLUDED)
 }
 
 // Case 6
 @Test func test_t1v3_fix_plan_order_two_tier_and_headline_agree() {
-    // (a) fail present ⇒ fail-ids first, then warn/manual in declared order (co-equal tier).
+    // (a) A terminal fail is excluded; remediable warn/manual checks retain
+    // declared order within their co-equal tier.
     let mixed = makeReport(
         arguments: ["LogicProMCP", "doctor", "--json", "--client", "claude-code", "--profile", "full"],
         runtime: enterpriseRuntime(latestReleaseLookup: { .found(version: "v99.0.0") }),
         permission: granted(accessibility: false),
         approvals: [:]
     )
-    // Declared order: permissions.accessibility(#8,fail) < channels.manual_validation(#13,manual)
-    // < updates.latest_release(#14,warn). Errors tier first, then warning tier declared-order.
+    // permissions.accessibility is terminal and absent. The two remediable
+    // warnings remain in declared order.
     #expect(mixed.fixPlan == [
-        "permissions.accessibility",
         "channels.manual_validation",
         "updates.latest_release",
     ])
@@ -798,9 +814,19 @@ private func runEntrypoint(
 // Case 7
 @Test func test_t1v3_headline_id_equals_fix_plan_first() {
     // AC-4: the id EMBEDDED in headline equals fix_plan[0] (id-extraction, never literal ==).
-    let report = makeReport(permission: granted(accessibility: false))
-    #expect(report.fixPlan.first == "permissions.accessibility")
+    let report = makeReport(
+        arguments: ["LogicProMCP", "doctor", "--json", "--client", "claude-code", "--profile", "full"],
+        approvals: [:]
+    )
+    #expect(report.fixPlan.first == "channels.manual_validation")
     #expect(report.headline.contains("[\(report.fixPlan[0])]"))
+}
+
+@Test func test_t1v3_terminal_failure_is_not_healthy_when_fix_plan_is_empty() {
+    let report = makeReport(permission: granted(accessibility: false))
+    #expect(report.status == .failed)
+    #expect(report.fixPlan == [])
+    #expect(report.headline == "Terminal outcome [permissions.accessibility]: Accessibility permission is not granted.")
 }
 
 // Case 8
