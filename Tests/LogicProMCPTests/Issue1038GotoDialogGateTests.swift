@@ -186,6 +186,13 @@ struct Issue1038GotoDialogGateTests {
         #expect(!(try #require(envelope["write_attempted"] as? Bool)))
         #expect(try #require(envelope["fallback_unsafe"] as? Bool))
         #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+        #expect(try #require(envelope["terminal"] as? Bool))
+        #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+        #expect(try #require(envelope["automatic_dialog_attempts_exhausted"] as? Bool))
+        let hint = try #require(envelope["hint"] as? String)
+        for request in ["retry", "close a", "read Logic", "manually"] {
+            #expect(!hint.localizedCaseInsensitiveContains(request))
+        }
         // The wait is bounded by the poll count, not by a clock this test would have to read.
         #expect(posts.dialogPollWaits == CGEventChannel.gotoDialogObservationPolls)
     }
@@ -204,8 +211,13 @@ struct Issue1038GotoDialogGateTests {
         let envelope = try #require(issue1038Envelope(result))
         #expect(try #require(envelope["reason"] as? String) == "window_list_unreadable")
         #expect(try #require(envelope["events_posted"] as? Int) == 0)
-        #expect(try #require(envelope["safe_to_retry"] as? Bool))
+        #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
         #expect(!(try #require(envelope["fallback_unsafe"] as? Bool)))
+        #expect(try #require(envelope["terminal"] as? Bool))
+        #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+        #expect(try #require(envelope["automatic_dialog_attempts_exhausted"] as? Bool))
+        let hint = try #require(envelope["hint"] as? String)
+        #expect(!hint.localizedCaseInsensitiveContains("retry"))
     }
 
     /// Mutation this kills: take any window that appeared after the opener for the dialog (drop the

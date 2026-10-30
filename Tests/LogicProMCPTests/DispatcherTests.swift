@@ -587,8 +587,8 @@ private func liveTransportJSON(
 
 @Test func testBlockingLogicDialogResultEnrichesDiagnosticWithDialogIdentity() throws {
     // #190: when a blocking dialog is identified, the refusal envelope must carry
-    // its title, role, owning window, buttons, and a safe recovery action — not
-    // just a generic blocking_dialog_present.
+    // its title, role, owning window, and buttons — without converting that
+    // observation into a person-owned dismissal/retry step.
     let info = AXLogicProElements.BlockingDialogInfo(
         title: "Save",
         role: "AXDialog",
@@ -609,8 +609,19 @@ private func liveTransportJSON(
     #expect(object["dialog_role"] as? String == "AXDialog")
     #expect(object["owning_window"] as? String == "Demo - Tracks")
     #expect((object["dialog_buttons"] as? [String])!.contains("Cancel"))
-    #expect(object["recovery_action"] as? String == info.recoveryAction)
-    #expect((object["hint"] as? String)!.contains("Cancel"))
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+    #expect(try #require(object["automatic_precondition_attempts_exhausted"] as? Bool))
+    let recoveryAction = try #require(object["recovery_action"] as? String)
+    let hint = try #require(object["hint"] as? String)
+    for request in [
+        "press", "dismiss", "close", "escape", "retry", "manual",
+        "predates", "pre-existing", "does not own",
+    ] {
+        #expect(!recoveryAction.localizedCaseInsensitiveContains(request))
+        #expect(!hint.localizedCaseInsensitiveContains(request))
+    }
 }
 
 @Test func testBlockingLogicDialogResultWithoutInfoStaysGenericButHonest() throws {
@@ -625,6 +636,14 @@ private func liveTransportJSON(
     #expect(object["dialog_title"] == nil)
     #expect(object["dialog_role"] == nil)
     #expect(object["recovery_action"] == nil)
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+    #expect(try #require(object["automatic_precondition_attempts_exhausted"] as? Bool))
+    let hint = try #require(object["hint"] as? String)
+    for request in ["dismiss", "retry", "check that", "manual"] {
+        #expect(!hint.localizedCaseInsensitiveContains(request))
+    }
 }
 
 @Test func testTransportDispatcherToggleMetronomeVerifiesViaTransportStateReadback() async throws {
@@ -1043,6 +1062,42 @@ private let stillnessPreWriteRefusals: [(command: String, write: String, failure
     ("play", "transport.resume", "position_unread"),
 ]
 
+@Test func testTransportPauseInitialReadFailureTerminatesWithoutHumanRecovery() async throws {
+    let router = ChannelRouter()
+    let keyWrite = FixedResultChannel(id: .cgEvent, result: .success("pause key sent"))
+    let readback = SequencedTransportReadbackChannel(
+        id: .accessibility,
+        observedTempo: 120.0,
+        transportStates: []
+    )
+    await router.register(keyWrite)
+    await router.register(readback)
+
+    let result = await TransportDispatcher.handle(
+        command: "pause",
+        params: [:],
+        router: router,
+        cache: StateCache(),
+        sleep: { _ in }
+    )
+
+    #expect(result.isError!)
+    #expect(await keyWrite.executedOps.isEmpty)
+    let object = try #require(parseDispatcherObject(dispatcherText(result)))
+    #expect(object["state"] as? String == "C")
+    let writeAttempted = try #require(object["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+    let terminal = try #require(object["terminal"] as? Bool)
+    #expect(terminal)
+    let humanInterventionRequired = try #require(object["human_intervention_required"] as? Bool)
+    #expect(!humanInterventionRequired)
+    let hint = try #require(object["hint"] as? String)
+    #expect(hint.contains("terminated before the toggle"))
+    for request in ["focus", "dismiss", "retry", "click", "run "] {
+        #expect(!hint.lowercased().contains(request))
+    }
+}
+
 @Test(arguments: stillnessPreWriteRefusals)
 func testTransportDispatcherStillnessRefusalsBeforeTheKeyAreStateC(
     command: String, write: String, failure: String
@@ -1086,6 +1141,14 @@ func testTransportDispatcherStillnessRefusalsBeforeTheKeyAreStateC(
     #expect(object["error"] as? String == "readback_unavailable")
     let writeAttempted = try #require(object["write_attempted"] as? Bool)
     #expect(!writeAttempted)
+    let terminal = try #require(object["terminal"] as? Bool)
+    #expect(terminal)
+    let humanInterventionRequired = try #require(object["human_intervention_required"] as? Bool)
+    #expect(!humanInterventionRequired)
+    let hint = try #require(object["hint"] as? String)
+    for request in ["focus", "dismiss", "retry", "click", "run "] {
+        #expect(!hint.lowercased().contains(request))
+    }
 }
 
 @Test func testTransportDispatcherPauseAtAnObservedTempoStillDecides() async throws {
@@ -2577,7 +2640,7 @@ private actor TrackInsertingMockChannel: Channel {
     #expect(dispatcherText(result).contains("playhead"))
 }
 
-@Test func testRecordSequenceFailsWhenTrackDoesNotAppear() async {
+@Test func testRecordSequenceFailsWhenTrackDoesNotAppear() async throws {
     // v3.1.2 P0-2 — if live AX shows no new track header after import claims
     // success, we must surface that as a verification failure rather than
     // fabricate a `created_track` index. (Pre-v3.1.2 this used the cache
@@ -2601,10 +2664,15 @@ private actor TrackInsertingMockChannel: Channel {
 
     #expect(result.isError!)
     let text = dispatcherText(result)
+    let object = try #require(sharedJSONObject(text))
     #expect(
-        text.contains("live AX still shows"),
+        text.contains("bounded live AX census still shows 1 tracks"),
         "expected new live-AX failure wording, got: \(text)"
     )
+    #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(try #require(object["automatic_precondition_attempts_exhausted"] as? Bool))
 }
 
 @Test func testRecordSequenceCleansUpTempFileOnError() async {
@@ -4640,7 +4708,7 @@ private actor TransportStateSequenceChannel: Channel {
     #expect(await cgEvent.executedOps.map(\.0) == ["transport.stop"])
 }
 
-@Test func testTransportDispatcherStopFailsClosedWhenLiveReadbackUnavailable() async {
+@Test func testTransportDispatcherStopFailsClosedWhenLiveReadbackUnavailable() async throws {
     let router = ChannelRouter()
     let ax = ScriptedTransportChannel(id: .accessibility, results: [
         "transport.stop": .success(HonestContract.encodeStateB(
@@ -4675,7 +4743,18 @@ private actor TransportStateSequenceChannel: Channel {
     #expect(json["refresh_error"] as? String == "element_not_found")
     #expect(json["cached_source"] as? String == "cache")
     #expect((json["cache_age_sec"] as? Double ?? 0) > 0)
-    #expect(((json["hint"] as? String)?.contains("refresh_cache"))!)
+    let terminal = try #require(json["terminal"] as? Bool)
+    #expect(terminal)
+    let humanInterventionRequired = try #require(json["human_intervention_required"] as? Bool)
+    #expect(!humanInterventionRequired)
+    let attemptsExhausted = try #require(json["automatic_read_attempts_exhausted"] as? Bool)
+    #expect(attemptsExhausted)
+    let hint = json["hint"] as? String ?? ""
+    #expect(hint.contains("12 automatic live readback attempts"))
+    #expect(hint.contains("terminated"))
+    for request in ["focus", "dismiss", "retry", "click", "run "] {
+        #expect(!hint.lowercased().contains(request))
+    }
 }
 
 @Test func testTransportDispatcherStopFailsClosedWhenLiveStateStillReportsPlayback() async {

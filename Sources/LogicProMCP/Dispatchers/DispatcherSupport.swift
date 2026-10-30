@@ -220,16 +220,19 @@ func blockingLogicDialogResult(
         // that does not pass it gets an honest "this was measured later", not a silent substitution.
         "dialog_presence_reason_source": decision == nil ? "re_read_at_refusal" : "decision_at_refusal_time",
         "write_attempted": false,
-        "safe_to_retry": true,
+        "safe_to_retry": false,
+        "automatic_precondition_attempts_exhausted": true,
+        "terminal": true,
+        "human_intervention_required": false,
     ]
     var hint = sawADialog
-        ? "Refusing \(operation) while a blocking Logic dialog/sheet is present. Dismiss crash, save, bounce, import, or other modal dialogs, then retry."
+        ? "Refusing \(operation) because a blocking Logic dialog/sheet was observed at the "
+            + "pre-write guard. This refusal actuated no dialog control and terminated before any write."
         : "Refusing \(operation): the blocking-dialog preflight could not establish whether a dialog "
-            + "is present (\(reason.rawValue)), so it fails closed. Nothing was touched. No modal was "
-            + "identified — do not go looking for one to dismiss; retry in a moment, and if it "
-            + "persists check that Logic is running and that this process has Accessibility access."
-    // #190: identify the dialog so the demo/product workflow can recover
-    // deterministically instead of guessing at a generic blocking-dialog refusal.
+            + "is present (\(reason.rawValue)), so it terminated before any write. No modal identity "
+            + "or cleanup authority was inferred."
+    // #190: preserve the observed dialog identity without fabricating when it appeared or turning
+    // the observation into cleanup authority.
     if info == nil {
         // #606: refusing without an identity is refusing on something nobody can name. Say what the
         // guard saw so the caller is not sent hunting for a dialog that is not there.
@@ -240,9 +243,11 @@ func blockingLogicDialogResult(
         extras["dialog_role"] = info.role
         extras["owning_window"] = info.owningWindow
         extras["dialog_buttons"] = info.buttonTitles
-        extras["recovery_action"] = info.recoveryAction
+        let terminalOutcome = "none: the pre-write guard actuated no dialog control and inferred no cleanup authority"
+        extras["recovery_action"] = terminalOutcome
         let label = info.title.isEmpty ? info.role : info.title
-        hint = "Refusing \(operation): a blocking Logic dialog/sheet is present (\(label)). \(info.recoveryAction)"
+        hint = "Refusing \(operation): a blocking Logic dialog/sheet was observed at the pre-write "
+            + "guard (\(label)). This refusal actuated no dialog control and terminated before any write."
     }
     return toolTextResult(
         HonestContract.encodeStateC(error: .unsupportedState, hint: hint, extras: extras),

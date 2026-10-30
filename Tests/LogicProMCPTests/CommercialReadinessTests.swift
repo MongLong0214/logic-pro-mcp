@@ -117,15 +117,14 @@ private let toolText = sharedToolText
     #expect(gotoPositionOps.first?.1 == ["position": "9.1.1.1"])
 }
 
-@Test func testNavigateDispatcherGotoMarkerColdCacheReturnsElementNotFound() async {
+@Test func testNavigateDispatcherGotoMarkerColdCacheReturnsElementNotFound() async throws {
     // H-2 (2026-05-08 enterprise review): pre-v3.4.0 the cold-cache
     // index path fell back to `nav.goto_marker` (CC 38 keycmd), which
     // is Logic's "go to next marker" hotkey — it ignored the requested
     // index and silently advanced to whatever marker comes next.
     // BREAKING since v3.4.0: cold-cache index returns State C
     // `element_not_found` so callers learn the cache was cold instead
-    // of getting wrong-target navigation. Caller should refresh cache
-    // and retry, or supply `name` instead.
+    // of getting wrong-target navigation.
     let router = ChannelRouter()
     let keyCmd = MockChannel(id: .midiKeyCommands)
     await router.register(keyCmd)
@@ -139,15 +138,23 @@ private let toolText = sharedToolText
 
     #expect(result.isError!)
     let text = toolText(result)
+    let body = try #require(sharedJSONObject(text))
     #expect(text.contains("\"error\":\"element_not_found\""))
     #expect(text.contains("not found in cached marker list"))
-    #expect(text.contains("system.refresh_cache"))
+    let terminal = try #require(body["terminal"] as? Bool)
+    let humanRequired = try #require(body["human_intervention_required"] as? Bool)
+    let writeAttempted = try #require(body["write_attempted"] as? Bool)
+    #expect(terminal)
+    #expect(!humanRequired)
+    #expect(!writeAttempted)
+    #expect(!text.localizedCaseInsensitiveContains("refresh_cache"))
+    #expect(!text.localizedCaseInsensitiveContains("retry"))
     // Critical: the legacy CC 38 keycmd must NOT have been invoked.
     let ops = await keyCmd.executedOps
     #expect(ops.isEmpty, "Cold-cache index must not advance the marker pointer via CC 38")
 }
 
-@Test func testNavigateDispatcherGotoMarkerColdCacheNameReturnsElementNotFound() async {
+@Test func testNavigateDispatcherGotoMarkerColdCacheNameReturnsElementNotFound() async throws {
     // H-2 — name-based cold-cache also returns the structured State C
     // envelope so the caller can programmatically detect the cache-cold
     // condition (was a free-form "No marker found matching" string).
@@ -164,9 +171,17 @@ private let toolText = sharedToolText
 
     #expect(result.isError!)
     let text = toolText(result)
+    let body = try #require(sharedJSONObject(text))
     #expect(text.contains("\"error\":\"element_not_found\""))
     #expect(text.contains("no marker matching name 'Verse'"))
-    #expect(text.contains("system.refresh_cache"))
+    let terminal = try #require(body["terminal"] as? Bool)
+    let humanRequired = try #require(body["human_intervention_required"] as? Bool)
+    let writeAttempted = try #require(body["write_attempted"] as? Bool)
+    #expect(terminal)
+    #expect(!humanRequired)
+    #expect(!writeAttempted)
+    #expect(!text.localizedCaseInsensitiveContains("refresh_cache"))
+    #expect(!text.localizedCaseInsensitiveContains("retry"))
 }
 
 @Test func testNavigateDispatcherRenameMarkerUsesAccessibilityChannel() async {
