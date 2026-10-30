@@ -1755,6 +1755,7 @@ enum SemanticOracleTable {
               object["scope"] as? String == "selected_region_and_unbound_event_list_observation",
               nonEmptyString(object["event_list_item_count_text"]) != nil,
               nonEmptyString(object["event_list_region_path"]) != nil,
+              exactBoolean(object["observed_rows_content_stable"], true),
               exactBoolean(object["event_list_owner_proven"], false),
               exactBoolean(object["canonical_notes_complete"], false),
               exactBoolean(object["write_attempted"], false),
