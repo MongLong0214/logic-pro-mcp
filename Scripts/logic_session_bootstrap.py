@@ -1451,8 +1451,7 @@ def bootstrap_fresh_logic_session(
             health=health,
         )
 
-    permission_ui = collect_ui_snapshot()
-    if permission_ui.system_events_error:
+    if permissions.get("automation_system_events") is False:
         return blocked(
             "system_events_unavailable",
             "System Events automation is unavailable; fresh-session bootstrap terminated before UI mutation.",
@@ -1460,7 +1459,6 @@ def bootstrap_fresh_logic_session(
             human_intervention_required=False,
             human_intervention_requests=0,
             health=health,
-            ui=permission_ui,
         )
 
     if health.get("logic_pro_running") is not True:

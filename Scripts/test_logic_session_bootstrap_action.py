@@ -49,7 +49,11 @@ def make_health(has_document):
         "logic_pro_running": True,
         "logic_pro_has_window": True,
         "logic_pro_has_document": has_document,
-        "permissions": {"accessibility": True, "post_event_access": True},
+        "permissions": {
+            "accessibility": True,
+            "automation_system_events": True,
+            "post_event_access": True,
+        },
         "cache": {
             "project": "Untitled 1 - Tracks" if has_document else "",
             "track_count": 1 if has_document else 0,
@@ -148,40 +152,71 @@ class BootstrapFreshSessionActionTests(unittest.TestCase):
         self.assertIs(payload["human_intervention_required"], False)
         self.assertEqual(payload["human_intervention_requests"], 0)
 
-    def test_system_events_error_stops_before_any_ui_mutation(self):
+    def test_system_events_denial_stops_before_any_ui_mutation(self):
         calls = []
 
         def call_tool(tool, command, params=None, timeout=None):
             calls.append((tool, command))
             if tool == "logic_system" and command == "health":
-                return make_tool_response(json.dumps(make_health(True)))
+                health = make_health(True)
+                health["permissions"]["automation_system_events"] = False
+                return make_tool_response(json.dumps(health))
             return make_tool_response("{}")
 
-        unavailable_ui = bootstrap_module.UISnapshot(
-            frontmost_app=None,
-            logic_window_names=[],
-            logic_menu_items=[],
-            detected_language=None,
-            system_events_error="automation denied",
-            project_picker_visible=False,
-            new_track_dialog_visible=False,
-            blocking_dialog_present=False,
-        )
         result = run_force_new_bootstrap(
             call_tool=call_tool,
             document_probe=lambda timeout_sec: self.fail("document probe must not run"),
-            ui_snapshot_factory=lambda: unavailable_ui,
+            ui_snapshot_factory=lambda: self.fail("UI snapshot must not run after measured denial"),
         )
 
         self.assertFalse(result.ok)
         self.assertEqual(result.reason, "system_events_unavailable")
         self.assertEqual(result.actions, [])
         self.assertEqual(calls, [("logic_system", "health")])
-        self.assertEqual(result.ui["system_events_error"], "automation denied")
+        self.assertIs(result.health["permissions"]["automation_system_events"], False)
         payload = result.as_dict()
         self.assertIs(payload["terminal"], True)
         self.assertIs(payload["human_intervention_required"], False)
         self.assertEqual(payload["human_intervention_requests"], 0)
+
+    def test_logic_not_running_snapshot_error_does_not_preempt_auto_launch(self):
+        state = {"running": False, "ui_reads": 0}
+
+        def call_tool(tool, command, params=None, timeout=None):
+            if tool == "logic_system" and command == "health":
+                health = make_health(True)
+                health["logic_pro_running"] = state["running"]
+                return make_tool_response(json.dumps(health))
+            if tool == "logic_project" and command == "launch":
+                state["running"] = True
+                return make_tool_response('{"success":true}')
+            return make_tool_response("{}")
+
+        def ui_snapshot():
+            state["ui_reads"] += 1
+            if not state["running"]:
+                return bootstrap_module.UISnapshot(
+                    frontmost_app=None,
+                    logic_window_names=[],
+                    logic_menu_items=[],
+                    detected_language=None,
+                    system_events_error="logic_not_running",
+                    project_picker_visible=False,
+                    new_track_dialog_visible=False,
+                    blocking_dialog_present=False,
+                )
+            return make_ui()
+
+        result = run_force_new_bootstrap(
+            call_tool=call_tool,
+            document_probe=lambda timeout_sec: (True, None),
+            ui_snapshot_factory=ui_snapshot,
+            env_overrides={"LOGIC_PRO_MCP_BOOTSTRAP_FORCE_NEW": "0"},
+        )
+
+        self.assertTrue(result.ok, result.as_dict())
+        self.assertIn("logic_project.launch", result.actions)
+        self.assertGreater(state["ui_reads"], 0)
 
     def test_close_error_is_accepted_when_health_confirms_no_document(self):
         state = {"closed": False, "created": False}

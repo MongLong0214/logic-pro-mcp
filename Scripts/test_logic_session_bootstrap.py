@@ -55,6 +55,7 @@ def make_health(**overrides):
         "logic_pro_has_document": True,
         "permissions": {
             "accessibility": True,
+            "automation_system_events": True,
             "post_event_access": True,
         },
     }
