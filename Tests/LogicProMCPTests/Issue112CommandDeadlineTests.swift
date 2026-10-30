@@ -230,6 +230,16 @@ struct Issue112CommandDeadlineTests {
         #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_midi", command: "play_sequence") == 90)
     }
 
+    @Test("Library navigation timeout reports bounded recovery without human instructions")
+    func libraryNavigationTimeoutIsTerminalWithoutHumanRecovery() {
+        let hint = AccessibilityChannel.setInstrumentLibraryNavigationTimeoutHint.lowercased()
+        #expect(hint.contains("terminated"))
+        #expect(hint.contains("bounded panel restaging"))
+        for request in ["re-open", "restart logic", " manually", "ask the", "click "] {
+            #expect(!hint.contains(request), "Library timeout requested human recovery through: \(request)")
+        }
+    }
+
     @Test("all mutating transport commands hold the timeout mutation gate")
     func mutatingTransportCommandsAreGated() {
         let mutatingTransportCommands = [

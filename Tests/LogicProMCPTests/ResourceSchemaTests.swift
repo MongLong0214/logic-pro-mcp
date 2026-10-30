@@ -219,7 +219,7 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     #expect(cached.isCycleEnabled)
 }
 
-@Test func testTransportStateResourceMarksCachedFallbackAsUnverifiedWhenLiveRefreshFails() async {
+@Test func testTransportStateResourceMarksCachedFallbackAsUnverifiedWhenLiveRefreshFails() async throws {
     let cache = StateCache()
     var staleTransport = TransportState()
     staleTransport.isPlaying = true
@@ -245,7 +245,14 @@ private func normalizedHealthJSON(_ text: String) throws -> [String: Any] {
     #expect((envelope["unverified"] as? Bool)!)
     #expect((envelope["stale"] as? Bool)!)
     #expect(envelope["refresh_error"] as? String == "element_not_found")
-    #expect(((envelope["recovery_hint"] as? String)?.contains("refresh_cache"))!)
+    #expect(try #require(envelope["terminal"] as? Bool))
+    #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+    #expect(try #require(envelope["automatic_refresh_attempts_exhausted"] as? Bool))
+    let recoveryHint = try #require(envelope["recovery_hint"] as? String)
+    #expect(recoveryHint.contains("automatic live transport refresh terminated"))
+    for request in ["focus", "dismiss", "retry", "refresh_cache", "manually"] {
+        #expect(!recoveryHint.localizedCaseInsensitiveContains(request))
+    }
     #expect((envelope["cache_age_sec"] as? Double ?? 0) > 0)
     #expect((state["isPlaying"] as? Bool)!)
     #expect((state["isRecording"] as? Bool)!)

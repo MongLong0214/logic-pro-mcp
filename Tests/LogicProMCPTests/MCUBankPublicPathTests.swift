@@ -160,8 +160,15 @@ struct MCUBankPublicPathTests {
         #expect(obj["verify_source"] as? String == "mcu_lcd_upper_row")
         let writeAttempted = try #require(obj["write_attempted"] as? Bool)
         #expect(!writeAttempted)
+        #expect(try #require(obj["terminal"] as? Bool))
+        #expect(!(try #require(obj["human_intervention_required"] as? Bool)))
+        #expect(!(try #require(obj["safe_to_retry"] as? Bool)))
+        #expect(try #require(obj["automatic_precondition_attempts_exhausted"] as? Bool))
         let hint = try #require(obj["hint"] as? String)
         #expect(hint.contains("never been received"))
+        for request in ["install", "confirm", "retry", "manual"] {
+            #expect(!hint.localizedCaseInsensitiveContains(request))
+        }
         #expect(obj["bank_presses_sent"] as? Int == 0)
         #expect(obj["banks_moved"] as? Int == 0)
         #expect(obj["banks_requested"] as? Int == 2)

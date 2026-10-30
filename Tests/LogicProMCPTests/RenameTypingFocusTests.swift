@@ -132,6 +132,14 @@ private func stateOf(_ result: ChannelResult) -> (state: String?, json: [String:
     #expect(json["sent_code_units"] as? Int == 0)
     let notAttempted = try #require(json["write_attempted"] as? Bool)
     #expect(!notAttempted)
+    #expect(try #require(json["terminal"] as? Bool))
+    #expect(!(try #require(json["human_intervention_required"] as? Bool)))
+    #expect(try #require(json["automatic_focus_attempts_exhausted"] as? Bool))
+    let hint = try #require(json["hint"] as? String)
+    #expect(hint.contains("terminated after the bounded focus wait"))
+    for request in ["click", "retry", "manually"] {
+        #expect(!hint.localizedCaseInsensitiveContains(request))
+    }
 }
 
 @Test func renameTypingWaitsForTheFieldThenTypesTheWholeNameAndOneReturn() {

@@ -994,6 +994,46 @@ struct Issue448TrackSortVerifiedTests {
         #expect(collapsedScopeWasRejected)
     }
 
+    @Test("#1403 sort preflight refusals terminate without human recovery instructions")
+    func sortPreflightRefusalsTerminateWithoutHumanRecovery() throws {
+        let collapsed = TrackSortAXFixture(orderAfterPress: [2, 1, 0], collapsedStackAt: 1)
+        let collapsedResult = AccessibilityChannel.defaultSortTracks(
+            params: [
+                "criterion": "track_name",
+                "expected_order_json": collapsed.expectedOrderJSON,
+            ],
+            runtime: collapsed.runtime
+        )
+
+        let duplicates = TrackSortAXFixture(
+            orderAfterPress: [1, 0, 2], names: ["Studio Grand", "Studio Grand", "Piano"]
+        )
+        let duplicateResult = AccessibilityChannel.defaultSortTracks(
+            params: [
+                "criterion": "track_name",
+                "expected_order_json": duplicates.expectedOrderJSON,
+            ],
+            runtime: duplicates.runtime
+        )
+
+        for result in [collapsedResult, duplicateResult] {
+            let body = try #require(sharedJSONObject(result.message))
+            let terminal = try #require(body["terminal"] as? Bool)
+            let humanRequired = try #require(body["human_intervention_required"] as? Bool)
+            let writeAttempted = try #require(body["write_attempted"] as? Bool)
+            #expect(terminal)
+            #expect(!humanRequired)
+            #expect(!writeAttempted)
+
+            let hint = try #require(body["hint"] as? String)
+            for instruction in ["expand it", "rename duplicates", "re-read", "retry"] {
+                #expect(!hint.localizedCaseInsensitiveContains(instruction))
+            }
+        }
+        #expect(collapsed.actionProbe.pressCount == 0)
+        #expect(duplicates.actionProbe.pressCount == 0)
+    }
+
     @Test("a failed AXPress still reads back and reports a verified observed order")
     func failedPressStillReadsBack() throws {
         let fixture = TrackSortAXFixture(orderAfterPress: [2, 1, 0], pressReturnsSuccess: false)
@@ -1195,12 +1235,21 @@ struct Issue448TrackSortVerifiedTests {
         let body = try #require(sharedJSONObject(sharedToolText(result)))
         let missingReferences = try #require(body["missing_track_refs"] as? [String])
         let noWriteWasRouted = await stateBChannel.calls.isEmpty
+        let terminal = try #require(body["terminal"] as? Bool)
+        let humanRequired = try #require(body["human_intervention_required"] as? Bool)
+        let writeAttempted = try #require(body["write_attempted"] as? Bool)
         let namedAbsentReference = result.isError == true
             && body["reason"] as? String == "expected_order_unknown_track_refs"
             && missingReferences == [absentReference]
             && noWriteWasRouted
 
         #expect(namedAbsentReference)
+        #expect(terminal)
+        #expect(!humanRequired)
+        #expect(!writeAttempted)
+        let hint = try #require(body["hint"] as? String)
+        #expect(!hint.localizedCaseInsensitiveContains("re-read"))
+        #expect(!hint.localizedCaseInsensitiveContains("retry"))
     }
 
     @Test("an AXWindows read failure refuses instead of falling through a legacy empty list")

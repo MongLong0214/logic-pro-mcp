@@ -525,11 +525,11 @@ def swift_containment(repo=REPO):
     """LabelSet names the product demonstrably reads by CONTAINMENT, read from the Swift.
 
     Derived, not guessed. An earlier cut inferred the mode from the label's NAME — `*Keyword` and
-    `*Hint` meant containment — and it was wrong in both directions against the real call sites:
-    `cancelButton` and `audioPluginSlotLabel` are read with `containsAny` while `inputSlotHelpKeyword`
-    is not read at any call site at all, because it is PASSED to a helper that does the matching.
+    `*Hint` meant containment — and it was wrong against the real call sites. The current tree reads
+    `trackSoloButton`, `audioPluginSlotLabel`, and `inputSlotHelpKeyword` with `containsAny`, while
+    `cancelButton` is consumed through exact matching helpers. The call shape is authoritative.
 
-    That last shape is why this returns only what it can see. A name absent from this set is not
+    That direct-call rule is why this returns only what it can see. A name absent from this set is not
     known to be exact; it is not derivable here, and the caller says so rather than assuming.
     """
     names = set()

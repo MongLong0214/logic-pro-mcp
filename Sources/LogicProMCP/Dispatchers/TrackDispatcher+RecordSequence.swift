@@ -594,7 +594,11 @@ extension TrackDispatcher {
                 "method": "smf_import",
                 "track_count_before": tracksBefore,
                 "track_count_after": tracksAfter,
-                "hint": "record_sequence: import handler reported success but live AX still shows \(tracksBefore) tracks (no delta within 500ms). Check Logic Pro UI and retry.",
+                "terminal": true,
+                "human_intervention_required": false,
+                "safe_to_retry": false,
+                "automatic_precondition_attempts_exhausted": true,
+                "hint": "record_sequence: import handler reported success but the bounded live AX census still shows \(tracksBefore) tracks. No further write was issued; the import effect remains unverified.",
             ]
             failure.merge(displayModeFields) { current, _ in current }
             return jsonToolTextResult(failure, isError: true)
@@ -720,6 +724,10 @@ extension TrackDispatcher {
             payload["verified"] = false
             payload["error"] = error
             payload["failure_stage"] = stage
+            payload["terminal"] = true
+            payload["human_intervention_required"] = false
+            payload["safe_to_retry"] = false
+            payload["automatic_precondition_attempts_exhausted"] = true
             payload["hint"] = hint + " The imported take is still on GM Device lane \(gmLane) ('\(gmLaneName)')."
             return jsonToolTextResult(payload, isError: true)
         }
@@ -852,7 +860,7 @@ extension TrackDispatcher {
             }
         ) else {
             return failure("paste_unverified", stage: "relocation_verify",
-                           hint: "Paste did not produce exactly one new region on target track \(target.index) while preserving every prior region; check all selected tracks before retrying.")
+                           hint: "The bounded readback did not prove exactly one new region on target track \(target.index) while preserving every prior region; no further write was issued.")
         }
         guard pasted.startBar == sourceRegion.startBar, pasted.endBar == sourceRegion.endBar,
               pasted.startBar == 1, pasted.endBar == expectedEndBar else {

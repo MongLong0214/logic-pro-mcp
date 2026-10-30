@@ -117,8 +117,8 @@ def main():
              "AXMenuItem", "AXMenuBar/AXMenuBarItem[F]/AXMenu/AXMenuItem[내보내기]"),
             # An AXButton, because the proposer gates `*Button` labels on button-shaped roles and
             # would rightly refuse this string on a menu item.
-            ("cancelButton",   "Cancel", "취소",     "취소 하시겠습니까", "contains",
-             "AXButton", "AXWindow/AXButton[취소]")):
+            ("trackSoloButton", "Solo", "솔로", "솔로 설정", "contains",
+             "AXButton", "AXWindow/AXButton[솔로]")):
         obs = Path(tempfile.mkdtemp())
         rid = "2026-09-05-ko-KR-arrange-menus-census"
         json.dump({"id": rid, "date": "2026-09-05", "host": dict(HOST, locale="ko-KR"),
