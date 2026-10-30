@@ -26,6 +26,14 @@ PARAMETERS = {
     "limiter_on": {"raw_unit": "boolean", "requested_unit": "boolean", "requested_value": 0.0},
     "threshold": {"raw_unit": "normalized", "requested_unit": "percent", "requested_value": 38.0},
 }
+EXPECTED_STAGES = {
+    "refresh_cache",
+    "project_info",
+    "inspect_session",
+    "before_inventory",
+    "plan",
+    "after_inventory",
+}
 
 
 def digest(value: object) -> str:
@@ -83,7 +91,7 @@ def response_matches(
         and response.get("verify_source") == "ax_plugin_window"
         and response.get("write_attempted") is False
         and response.get("plugin_view_restore_observed") is True
-        and isinstance(response.get("editor_close_observed"), bool)
+        and response.get("editor_close_observed") is True
         and response.get("param") == param
         and response.get("raw_unit") == unit
         and scalar(response.get("observed_raw")) is not None
@@ -170,6 +178,46 @@ def evaluate_plan(body: object, target_ref: str, track: int, insert: int) -> dic
     return {"checks": checks, "pass": all(checks.values())}
 
 
+def evaluate_run(
+    failure: object,
+    plan_verdict: dict,
+    project_matches: bool,
+    before_inventory_state_a: bool,
+    same_target_after: bool,
+    timeouts: dict[str, object],
+    stop: dict,
+) -> dict:
+    close_steps = [
+        step
+        for step in stop.get("steps", [])
+        if isinstance(step, dict) and step.get("step") == "close_stdin"
+    ]
+    checks = {
+        "project_matches": project_matches,
+        "before_inventory_state_a": before_inventory_state_a,
+        "plan": plan_verdict,
+        "same_target_after": same_target_after,
+        "all_stages_bounded_without_timeout": set(timeouts) == EXPECTED_STAGES
+        and all(value is False for value in timeouts.values()),
+        "server_stopped_cleanly": stop.get("returncode") == 0
+        and stop.get("pid_gone") is True
+        and stop.get("reader_finished") is True
+        and len(close_steps) == 1
+        and close_steps[0].get("exited") is True
+        and close_steps[0].get("returncode") == 0,
+    }
+    passed = (
+        failure is None
+        and project_matches
+        and before_inventory_state_a
+        and plan_verdict.get("pass") is True
+        and same_target_after
+        and checks["all_stages_bounded_without_timeout"]
+        and checks["server_stopped_cleanly"]
+    )
+    return {"checks": checks, "pass": passed}
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("binary")
@@ -241,24 +289,19 @@ def main() -> int:
     bodies = {name: call.get("body") for name, call in calls.items()}
     after_ref, after_row = compressor_target(bodies.get("after_inventory"), args.insert)
     plan_verdict = evaluate_plan(bodies.get("plan"), target_ref or "", args.track, args.insert)
-    checks = {
-        "project_matches": isinstance(observed_project, str)
+    timeouts = {name: call.get("timed_out") for name, call in calls.items()}
+    verdict = evaluate_run(
+        failure,
+        plan_verdict,
+        isinstance(observed_project, str)
         and os.path.realpath(observed_project) == expected_project,
-        "before_inventory_state_a": (bodies.get("before_inventory") or {}).get("state") == "A",
-        "plan": plan_verdict,
-        "same_target_after": target_ref is not None
-        and after_ref == target_ref
-        and after_row == target_row,
-        "server_pid_gone": stop.get("pid_gone") is True,
-    }
-    passed = (
-        failure is None
-        and checks["project_matches"]
-        and checks["before_inventory_state_a"]
-        and plan_verdict["pass"]
-        and checks["same_target_after"]
-        and checks["server_pid_gone"]
+        (bodies.get("before_inventory") or {}).get("state") == "A",
+        target_ref is not None and after_ref == target_ref and after_row == target_row,
+        timeouts,
+        stop,
     )
+    checks = verdict["checks"]
+    passed = verdict["pass"]
     record = {
         "format": "logic-pro-mcp/native-parameter-plan-receipt-v1",
         "binary": binary,
@@ -272,7 +315,7 @@ def main() -> int:
         "pass": passed,
         "bodies": bodies,
         "sorted_json_sha256": {name: digest(body) for name, body in bodies.items()},
-        "timeouts": {name: call.get("timed_out") for name, call in calls.items()},
+        "timeouts": timeouts,
         "server_start": {"spawned": start.get("spawned"), "pid": start.get("pid")},
         "server_stop": stop,
     }

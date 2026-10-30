@@ -6,7 +6,7 @@ from __future__ import annotations
 import copy
 import unittest
 
-from probe_955_compressor_parameter_plan import evaluate_plan
+from probe_955_compressor_parameter_plan import evaluate_plan, evaluate_run
 
 
 TARGET_REF = "ins_00000000-0000-0000-0000-000000000955"
@@ -107,6 +107,37 @@ class ParameterPlanReceiptTests(unittest.TestCase):
         body = plan_body()
         body["entries"][0]["read_observations"][0]["response"]["target_identity"]["insert"] = 2
         self.assertFalse(evaluate_plan(body, TARGET_REF, 13, 1)["pass"])
+
+    def test_rejects_unobserved_editor_cleanup(self) -> None:
+        body = plan_body()
+        for entry in body["entries"]:
+            for observation in entry["read_observations"]:
+                observation["response"]["editor_close_observed"] = False
+        self.assertFalse(evaluate_plan(body, TARGET_REF, 13, 1)["pass"])
+
+    def test_run_requires_bounded_calls_and_clean_server_shutdown(self) -> None:
+        plan = evaluate_plan(plan_body(), TARGET_REF, 13, 1)
+        timeouts = {
+            "refresh_cache": False,
+            "project_info": False,
+            "inspect_session": False,
+            "before_inventory": False,
+            "plan": False,
+            "after_inventory": False,
+        }
+        stop = {
+            "returncode": 0,
+            "pid_gone": True,
+            "reader_finished": True,
+            "steps": [{"step": "close_stdin", "exited": True, "returncode": 0}],
+        }
+        self.assertTrue(evaluate_run(None, plan, True, True, True, timeouts, stop)["pass"])
+        timed_out = dict(timeouts, plan=True)
+        self.assertFalse(evaluate_run(None, plan, True, True, True, timed_out, stop)["pass"])
+        crashed = dict(stop, returncode=1)
+        self.assertFalse(evaluate_run(None, plan, True, True, True, timeouts, crashed)["pass"])
+        unfinished = dict(stop, reader_finished=False)
+        self.assertFalse(evaluate_run(None, plan, True, True, True, timeouts, unfinished)["pass"])
 
 
 if __name__ == "__main__":

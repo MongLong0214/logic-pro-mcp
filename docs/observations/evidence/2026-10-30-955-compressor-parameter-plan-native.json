@@ -6,7 +6,8 @@
     "tree": "a34c577602d1cd4682c5720f1fa825dc26e0f6eb",
     "binary_sha256": "a72cfae441f5bfee106abd2e25c85cd1c7ea36a46b9a5c3eab200d82318c7e91"
   },
-  "external_receipt_sha256": "c09410369783c422038e0477571e7f81fd6bacf1e663921f4562fc30380a0616",
+  "initial_external_receipt_sha256": "c09410369783c422038e0477571e7f81fd6bacf1e663921f4562fc30380a0616",
+  "final_external_receipt_sha256": "95b1ad32d633826f2bc251058f977ec52ef11f2b5c39a4f8f572f37672a6d66f",
   "host": {
     "app": "Logic Pro",
     "version": "12.3",
@@ -66,6 +67,7 @@
     "all_stages_bounded_without_timeout": true,
     "server_stopped_by_stdin_close": true,
     "server_returncode": 0,
+    "server_reader_finished": true,
     "server_pid_gone": true
   },
   "privacy": {
