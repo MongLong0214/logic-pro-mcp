@@ -40,6 +40,13 @@ PROBES = {
                  "count, a track it does not carry, or a checkbox missing, doubled or unread is "
                  "UNREADABLE, never armed:false. The reading cites the walk by walk_sha256.",
     },
+    "track_muted": {
+        "args": {"index": "int"},
+        "returns": '{"track": <int>, "muted": <bool | null>}',
+        "reads": "the same independent AX walk as track_armed, using Apple's Mute row for the "
+                 "index-th arrange track. A missing, doubled or unread checkbox is UNREADABLE, "
+                 "never muted:false. The reading cites the walk by walk_sha256.",
+    },
     "armed_set": {
         "args": {},
         "returns": '{"armed": [<int>, ...]}',

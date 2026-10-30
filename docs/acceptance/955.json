@@ -20,21 +20,32 @@
    "criterion": 0,
    "steps": [
     {"as": "as_found_arm", "probe": {"name": "track_armed", "args": {"index": 0}}},
-    {"as": "as_found_undo", "probe": {"name": "undo_entry", "args": {}}},
+    {"as": "as_found_mute", "probe": {"name": "track_muted", "args": {"index": 0}}},
+    {"as": "seed_mute", "call": {"tool": "logic_tracks", "command": "mute", "params": {"index": 0, "enabled": true}}},
+    {"as": "seed_mute_read", "probe": {"name": "track_muted", "args": {"index": 0}}},
+    {"as": "counterexample_undo", "probe": {"name": "undo_entry", "args": {}}},
+    {"as": "unseed_mute", "call": {"tool": "logic_tracks", "command": "mute", "params": {"index": 0, "enabled": false}}},
+    {"as": "unseed_mute_read", "probe": {"name": "track_muted", "args": {"index": 0}}},
     {"as": "setup", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": true}}},
     {"as": "refresh", "call": {"tool": "logic_system", "command": "refresh_cache", "params": {}}},
     {"as": "project_info", "read": {"uri": "logic://project/info"}},
     {"as": "inventory", "call": {"tool": "logic_plugins", "command": "get_inventory", "params": {"track": 0, "reveal_mixer": false}}},
     {"as": "pre_arm", "probe": {"name": "track_armed", "args": {"index": 0}}},
+    {"as": "pre_mute", "probe": {"name": "track_muted", "args": {"index": 0}}},
     {"as": "pre_undo", "probe": {"name": "undo_entry", "args": {}}},
     {"as": "plan", "call": {"tool": "logic_plugins", "command": "plan_parameter_changes", "params": {"target_ref": {"$observation": "inventory.plugins[insert=0].plugin_insert_ref"}, "changes": [{"param": "threshold", "value": 38, "unit": "percent"}, {"param": "limiter_on", "value": false, "unit": "boolean"}]}}},
     {"as": "post_arm", "probe": {"name": "track_armed", "args": {"index": 0}}},
+    {"as": "post_mute", "probe": {"name": "track_muted", "args": {"index": 0}}},
     {"as": "post_undo", "probe": {"name": "undo_entry", "args": {}}}
    ],
    "operation": "plan",
    "expect": [
     {"path": "as_found_arm.armed", "op": "eq", "value": false, "invariant": true},
+    {"path": "as_found_mute.muted", "op": "eq", "value": false, "invariant": true},
+    {"path": "seed_mute_read.muted", "op": "eq", "value": true, "invariant": true},
+    {"path": "unseed_mute_read.muted", "op": "eq", "value": false, "invariant": true},
     {"path": "pre_arm.armed", "op": "eq", "value": true, "invariant": true},
+    {"path": "pre_mute.muted", "op": "eq", "value": false, "invariant": true},
     {"path": "plan.state", "op": "eq", "value": "A"},
     {"path": "plan.complete", "op": "eq", "value": true},
     {"path": "plan.write_attempted", "op": "eq", "value": false},
@@ -47,41 +58,56 @@
     {"path": "plan.entries[param=limiter_on].read_observations", "op": "count_eq", "value": 2},
     {"path": "plan.target_identity.plugin_id", "op": "eq", "value": "logic.stock.effect.compressor"},
     {"path": "post_arm.armed", "op": "unchanged", "ref": {"obs": "pre_arm.armed"}},
+    {"path": "post_mute.muted", "op": "unchanged", "ref": {"obs": "pre_mute.muted"}},
     {"path": "post_undo.title", "op": "unchanged", "ref": {"obs": "pre_undo.title"}}
    ],
    "counterexample": [
-    {"observation": "as_found_arm", "replaces": "post_arm", "must_fail": [13]},
-    {"observation": "as_found_undo", "replaces": "post_undo", "must_fail": [14]}
+    {"observation": "as_found_arm", "replaces": "post_arm", "must_fail": [17]},
+    {"observation": "seed_mute_read", "replaces": "post_mute", "must_fail": [18]},
+    {"observation": "counterexample_undo", "replaces": "post_undo", "must_fail": [19]}
    ],
    "restore": [
     {"as": "undo_setup", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": false}}},
-    {"as": "restored", "probe": {"name": "track_armed", "args": {"index": 0}}}
+    {"as": "restored_arm", "probe": {"name": "track_armed", "args": {"index": 0}}},
+    {"as": "restored_mute", "probe": {"name": "track_muted", "args": {"index": 0}}}
    ],
    "restore_expect": [
-    {"path": "restored.armed", "op": "eq", "ref": {"obs": "as_found_arm.armed"}}
+    {"path": "restored_arm.armed", "op": "eq", "ref": {"obs": "as_found_arm.armed"}},
+    {"path": "restored_mute.muted", "op": "eq", "ref": {"obs": "as_found_mute.muted"}}
    ],
-   "independence": ["as_found_arm", "as_found_undo", "pre_arm", "pre_undo", "post_arm", "post_undo"]
+   "independence": ["as_found_arm", "as_found_mute", "seed_mute_read", "counterexample_undo", "unseed_mute_read", "pre_arm", "pre_mute", "pre_undo", "post_arm", "post_mute", "post_undo"]
   },
   {
    "id": "unsupported-field-refuses-without-false-completeness",
    "criterion": 0,
    "steps": [
     {"as": "as_found_arm", "probe": {"name": "track_armed", "args": {"index": 0}}},
-    {"as": "as_found_undo", "probe": {"name": "undo_entry", "args": {}}},
+    {"as": "as_found_mute", "probe": {"name": "track_muted", "args": {"index": 0}}},
+    {"as": "seed_mute", "call": {"tool": "logic_tracks", "command": "mute", "params": {"index": 0, "enabled": true}}},
+    {"as": "seed_mute_read", "probe": {"name": "track_muted", "args": {"index": 0}}},
+    {"as": "counterexample_undo", "probe": {"name": "undo_entry", "args": {}}},
+    {"as": "unseed_mute", "call": {"tool": "logic_tracks", "command": "mute", "params": {"index": 0, "enabled": false}}},
+    {"as": "unseed_mute_read", "probe": {"name": "track_muted", "args": {"index": 0}}},
     {"as": "setup", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": true}}},
     {"as": "refresh", "call": {"tool": "logic_system", "command": "refresh_cache", "params": {}}},
     {"as": "project_info", "read": {"uri": "logic://project/info"}},
     {"as": "inventory", "call": {"tool": "logic_plugins", "command": "get_inventory", "params": {"track": 0, "reveal_mixer": false}}},
     {"as": "pre_arm", "probe": {"name": "track_armed", "args": {"index": 0}}},
+    {"as": "pre_mute", "probe": {"name": "track_muted", "args": {"index": 0}}},
     {"as": "pre_undo", "probe": {"name": "undo_entry", "args": {}}},
     {"as": "reject", "call": {"tool": "logic_plugins", "command": "plan_parameter_changes", "params": {"target_ref": {"$observation": "inventory.plugins[insert=0].plugin_insert_ref"}, "changes": [{"param": "ratio", "value": 2, "unit": "raw_ax_value"}]}}},
     {"as": "post_arm", "probe": {"name": "track_armed", "args": {"index": 0}}},
+    {"as": "post_mute", "probe": {"name": "track_muted", "args": {"index": 0}}},
     {"as": "post_undo", "probe": {"name": "undo_entry", "args": {}}}
    ],
    "operation": "reject",
    "expect": [
     {"path": "as_found_arm.armed", "op": "eq", "value": false, "invariant": true},
+    {"path": "as_found_mute.muted", "op": "eq", "value": false, "invariant": true},
+    {"path": "seed_mute_read.muted", "op": "eq", "value": true, "invariant": true},
+    {"path": "unseed_mute_read.muted", "op": "eq", "value": false, "invariant": true},
     {"path": "pre_arm.armed", "op": "eq", "value": true, "invariant": true},
+    {"path": "pre_mute.muted", "op": "eq", "value": false, "invariant": true},
     {"path": "reject.state", "op": "eq", "value": "C"},
     {"path": "reject.complete", "op": "eq", "value": false},
     {"path": "reject.write_attempted", "op": "eq", "value": false},
@@ -93,41 +119,56 @@
     {"path": "reject.entries[param=ratio].requested", "op": "eq", "value": {"param": "ratio", "value": 2, "unit": "raw_ax_value"}},
     {"path": "reject.target_identity.plugin_id", "op": "eq", "value": "logic.stock.effect.compressor"},
     {"path": "post_arm.armed", "op": "unchanged", "ref": {"obs": "pre_arm.armed"}},
+    {"path": "post_mute.muted", "op": "unchanged", "ref": {"obs": "pre_mute.muted"}},
     {"path": "post_undo.title", "op": "unchanged", "ref": {"obs": "pre_undo.title"}}
    ],
    "counterexample": [
-    {"observation": "as_found_arm", "replaces": "post_arm", "must_fail": [12]},
-    {"observation": "as_found_undo", "replaces": "post_undo", "must_fail": [13]}
+    {"observation": "as_found_arm", "replaces": "post_arm", "must_fail": [16]},
+    {"observation": "seed_mute_read", "replaces": "post_mute", "must_fail": [17]},
+    {"observation": "counterexample_undo", "replaces": "post_undo", "must_fail": [18]}
    ],
    "restore": [
     {"as": "undo_setup", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": false}}},
-    {"as": "restored", "probe": {"name": "track_armed", "args": {"index": 0}}}
+    {"as": "restored_arm", "probe": {"name": "track_armed", "args": {"index": 0}}},
+    {"as": "restored_mute", "probe": {"name": "track_muted", "args": {"index": 0}}}
    ],
    "restore_expect": [
-    {"path": "restored.armed", "op": "eq", "ref": {"obs": "as_found_arm.armed"}}
+    {"path": "restored_arm.armed", "op": "eq", "ref": {"obs": "as_found_arm.armed"}},
+    {"path": "restored_mute.muted", "op": "eq", "ref": {"obs": "as_found_mute.muted"}}
    ],
-   "independence": ["as_found_arm", "as_found_undo", "pre_arm", "pre_undo", "post_arm", "post_undo"]
+   "independence": ["as_found_arm", "as_found_mute", "seed_mute_read", "counterexample_undo", "unseed_mute_read", "pre_arm", "pre_mute", "pre_undo", "post_arm", "post_mute", "post_undo"]
   },
   {
    "id": "missing-field-refuses-without-false-completeness",
    "criterion": 0,
    "steps": [
     {"as": "as_found_arm", "probe": {"name": "track_armed", "args": {"index": 0}}},
-    {"as": "as_found_undo", "probe": {"name": "undo_entry", "args": {}}},
+    {"as": "as_found_mute", "probe": {"name": "track_muted", "args": {"index": 0}}},
+    {"as": "seed_mute", "call": {"tool": "logic_tracks", "command": "mute", "params": {"index": 0, "enabled": true}}},
+    {"as": "seed_mute_read", "probe": {"name": "track_muted", "args": {"index": 0}}},
+    {"as": "counterexample_undo", "probe": {"name": "undo_entry", "args": {}}},
+    {"as": "unseed_mute", "call": {"tool": "logic_tracks", "command": "mute", "params": {"index": 0, "enabled": false}}},
+    {"as": "unseed_mute_read", "probe": {"name": "track_muted", "args": {"index": 0}}},
     {"as": "setup", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": true}}},
     {"as": "refresh", "call": {"tool": "logic_system", "command": "refresh_cache", "params": {}}},
     {"as": "project_info", "read": {"uri": "logic://project/info"}},
     {"as": "inventory", "call": {"tool": "logic_plugins", "command": "get_inventory", "params": {"track": 0, "reveal_mixer": false}}},
     {"as": "pre_arm", "probe": {"name": "track_armed", "args": {"index": 0}}},
+    {"as": "pre_mute", "probe": {"name": "track_muted", "args": {"index": 0}}},
     {"as": "pre_undo", "probe": {"name": "undo_entry", "args": {}}},
     {"as": "reject", "call": {"tool": "logic_plugins", "command": "plan_parameter_changes", "params": {"target_ref": {"$observation": "inventory.plugins[insert=0].plugin_insert_ref"}, "changes": [{"value": 1, "unit": "boolean"}]}}},
     {"as": "post_arm", "probe": {"name": "track_armed", "args": {"index": 0}}},
+    {"as": "post_mute", "probe": {"name": "track_muted", "args": {"index": 0}}},
     {"as": "post_undo", "probe": {"name": "undo_entry", "args": {}}}
    ],
    "operation": "reject",
    "expect": [
     {"path": "as_found_arm.armed", "op": "eq", "value": false, "invariant": true},
+    {"path": "as_found_mute.muted", "op": "eq", "value": false, "invariant": true},
+    {"path": "seed_mute_read.muted", "op": "eq", "value": true, "invariant": true},
+    {"path": "unseed_mute_read.muted", "op": "eq", "value": false, "invariant": true},
     {"path": "pre_arm.armed", "op": "eq", "value": true, "invariant": true},
+    {"path": "pre_mute.muted", "op": "eq", "value": false, "invariant": true},
     {"path": "reject.state", "op": "eq", "value": "C"},
     {"path": "reject.complete", "op": "eq", "value": false},
     {"path": "reject.write_attempted", "op": "eq", "value": false},
@@ -139,41 +180,56 @@
     {"path": "reject.entries[status=invalid_request].requested", "op": "eq", "value": {"value": 1, "unit": "boolean"}},
     {"path": "reject.target_identity.plugin_id", "op": "eq", "value": "logic.stock.effect.compressor"},
     {"path": "post_arm.armed", "op": "unchanged", "ref": {"obs": "pre_arm.armed"}},
+    {"path": "post_mute.muted", "op": "unchanged", "ref": {"obs": "pre_mute.muted"}},
     {"path": "post_undo.title", "op": "unchanged", "ref": {"obs": "pre_undo.title"}}
    ],
    "counterexample": [
-    {"observation": "as_found_arm", "replaces": "post_arm", "must_fail": [12]},
-    {"observation": "as_found_undo", "replaces": "post_undo", "must_fail": [13]}
+    {"observation": "as_found_arm", "replaces": "post_arm", "must_fail": [16]},
+    {"observation": "seed_mute_read", "replaces": "post_mute", "must_fail": [17]},
+    {"observation": "counterexample_undo", "replaces": "post_undo", "must_fail": [18]}
    ],
    "restore": [
     {"as": "undo_setup", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": false}}},
-    {"as": "restored", "probe": {"name": "track_armed", "args": {"index": 0}}}
+    {"as": "restored_arm", "probe": {"name": "track_armed", "args": {"index": 0}}},
+    {"as": "restored_mute", "probe": {"name": "track_muted", "args": {"index": 0}}}
    ],
    "restore_expect": [
-    {"path": "restored.armed", "op": "eq", "ref": {"obs": "as_found_arm.armed"}}
+    {"path": "restored_arm.armed", "op": "eq", "ref": {"obs": "as_found_arm.armed"}},
+    {"path": "restored_mute.muted", "op": "eq", "ref": {"obs": "as_found_mute.muted"}}
    ],
-   "independence": ["as_found_arm", "as_found_undo", "pre_arm", "pre_undo", "post_arm", "post_undo"]
+   "independence": ["as_found_arm", "as_found_mute", "seed_mute_read", "counterexample_undo", "unseed_mute_read", "pre_arm", "pre_mute", "pre_undo", "post_arm", "post_mute", "post_undo"]
   },
   {
    "id": "extra-field-refuses-without-false-completeness",
    "criterion": 0,
    "steps": [
     {"as": "as_found_arm", "probe": {"name": "track_armed", "args": {"index": 0}}},
-    {"as": "as_found_undo", "probe": {"name": "undo_entry", "args": {}}},
+    {"as": "as_found_mute", "probe": {"name": "track_muted", "args": {"index": 0}}},
+    {"as": "seed_mute", "call": {"tool": "logic_tracks", "command": "mute", "params": {"index": 0, "enabled": true}}},
+    {"as": "seed_mute_read", "probe": {"name": "track_muted", "args": {"index": 0}}},
+    {"as": "counterexample_undo", "probe": {"name": "undo_entry", "args": {}}},
+    {"as": "unseed_mute", "call": {"tool": "logic_tracks", "command": "mute", "params": {"index": 0, "enabled": false}}},
+    {"as": "unseed_mute_read", "probe": {"name": "track_muted", "args": {"index": 0}}},
     {"as": "setup", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": true}}},
     {"as": "refresh", "call": {"tool": "logic_system", "command": "refresh_cache", "params": {}}},
     {"as": "project_info", "read": {"uri": "logic://project/info"}},
     {"as": "inventory", "call": {"tool": "logic_plugins", "command": "get_inventory", "params": {"track": 0, "reveal_mixer": false}}},
     {"as": "pre_arm", "probe": {"name": "track_armed", "args": {"index": 0}}},
+    {"as": "pre_mute", "probe": {"name": "track_muted", "args": {"index": 0}}},
     {"as": "pre_undo", "probe": {"name": "undo_entry", "args": {}}},
     {"as": "reject", "call": {"tool": "logic_plugins", "command": "plan_parameter_changes", "params": {"target_ref": {"$observation": "inventory.plugins[insert=0].plugin_insert_ref"}, "changes": [{"param": "limiter_on", "value": false, "unit": "boolean", "apply": true}]}}},
     {"as": "post_arm", "probe": {"name": "track_armed", "args": {"index": 0}}},
+    {"as": "post_mute", "probe": {"name": "track_muted", "args": {"index": 0}}},
     {"as": "post_undo", "probe": {"name": "undo_entry", "args": {}}}
    ],
    "operation": "reject",
    "expect": [
     {"path": "as_found_arm.armed", "op": "eq", "value": false, "invariant": true},
+    {"path": "as_found_mute.muted", "op": "eq", "value": false, "invariant": true},
+    {"path": "seed_mute_read.muted", "op": "eq", "value": true, "invariant": true},
+    {"path": "unseed_mute_read.muted", "op": "eq", "value": false, "invariant": true},
     {"path": "pre_arm.armed", "op": "eq", "value": true, "invariant": true},
+    {"path": "pre_mute.muted", "op": "eq", "value": false, "invariant": true},
     {"path": "reject.state", "op": "eq", "value": "C"},
     {"path": "reject.complete", "op": "eq", "value": false},
     {"path": "reject.write_attempted", "op": "eq", "value": false},
@@ -185,20 +241,24 @@
     {"path": "reject.entries[status=invalid_request].requested", "op": "eq", "value": {"param": "limiter_on", "value": false, "unit": "boolean", "apply": true}},
     {"path": "reject.target_identity.plugin_id", "op": "eq", "value": "logic.stock.effect.compressor"},
     {"path": "post_arm.armed", "op": "unchanged", "ref": {"obs": "pre_arm.armed"}},
+    {"path": "post_mute.muted", "op": "unchanged", "ref": {"obs": "pre_mute.muted"}},
     {"path": "post_undo.title", "op": "unchanged", "ref": {"obs": "pre_undo.title"}}
    ],
    "counterexample": [
-    {"observation": "as_found_arm", "replaces": "post_arm", "must_fail": [12]},
-    {"observation": "as_found_undo", "replaces": "post_undo", "must_fail": [13]}
+    {"observation": "as_found_arm", "replaces": "post_arm", "must_fail": [16]},
+    {"observation": "seed_mute_read", "replaces": "post_mute", "must_fail": [17]},
+    {"observation": "counterexample_undo", "replaces": "post_undo", "must_fail": [18]}
    ],
    "restore": [
     {"as": "undo_setup", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": false}}},
-    {"as": "restored", "probe": {"name": "track_armed", "args": {"index": 0}}}
+    {"as": "restored_arm", "probe": {"name": "track_armed", "args": {"index": 0}}},
+    {"as": "restored_mute", "probe": {"name": "track_muted", "args": {"index": 0}}}
    ],
    "restore_expect": [
-    {"path": "restored.armed", "op": "eq", "ref": {"obs": "as_found_arm.armed"}}
+    {"path": "restored_arm.armed", "op": "eq", "ref": {"obs": "as_found_arm.armed"}},
+    {"path": "restored_mute.muted", "op": "eq", "ref": {"obs": "as_found_mute.muted"}}
    ],
-   "independence": ["as_found_arm", "as_found_undo", "pre_arm", "pre_undo", "post_arm", "post_undo"]
+   "independence": ["as_found_arm", "as_found_mute", "seed_mute_read", "counterexample_undo", "unseed_mute_read", "pre_arm", "pre_mute", "pre_undo", "post_arm", "post_mute", "post_undo"]
   }
  ]
 }

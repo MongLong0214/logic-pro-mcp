@@ -1,8 +1,8 @@
 """The probes Scripts/verify/probes.py declares, implemented (ADR-027 P0b-2).
 
     track_armed(ctx, index)  the verifier's own AX walk, live/probes.py track_flags_ax, whose labels
-    armed_set(ctx)           come from Apple's rows (D1), not the product's logic://tracks: a product
-                             label defect would read wrong on both sides. The walk is kept as a
+    track_muted(ctx, index)  come from Apple's rows (D1), not the product's logic://tracks: a product
+    armed_set(ctx)           label defect would read wrong on both sides. The walk is kept as a
                              sidecar and the reading cites it by `walk_sha256`.
     mcu_upper_row(ctx)       logic://mcu/state, the PRODUCT's reading of the Mackie Control LCD:
                              nothing else reads the LCD. The resource text is embedded whole.
@@ -29,6 +29,7 @@ from . import controls, fixture
 from . import locale as live_locale
 from . import probes as live_probes
 
+MUTE_FLAG = live_probes.FLAGS[1]
 MCU_STATE = "logic://mcu/state"
 MIXER_STATE = "logic://mixer"
 # The refresh receipt uses the resource path component as its section token.
@@ -77,6 +78,16 @@ def _armed(row: dict):
     return row["arm"] == 1, None
 
 
+def _muted(row: dict):
+    """(muted, why) for one track row: its one Mute checkbox read 0 or 1, or why not."""
+    matched = row["matches"][MUTE_FLAG]
+    if matched != 1 or MUTE_FLAG in row["value_errors"] or row[MUTE_FLAG] not in (0, 1):
+        return None, (f"track {row['index']}: Mute matched {matched} checkbox(es), "
+                      f"value {row[MUTE_FLAG]!r}, "
+                      f"read error {row['value_errors'].get(MUTE_FLAG)!r}")
+    return row[MUTE_FLAG] == 1, None
+
+
 def track_armed_of(flags: dict, declared: int, index: int) -> dict:
     rows, why = _rows(flags, declared)
     if why is None and not 0 <= index < len(rows):
@@ -85,6 +96,16 @@ def track_armed_of(flags: dict, declared: int, index: int) -> dict:
     if why:
         raise Unreadable(f"track_armed: {why}")
     return {"track": index, "armed": armed, "name": rows[index]["name"]}
+
+
+def track_muted_of(flags: dict, declared: int, index: int) -> dict:
+    rows, why = _rows(flags, declared)
+    if why is None and not 0 <= index < len(rows):
+        why = f"track {index} is not among the {len(rows)} tracks read"
+    muted, why = (None, why) if why else _muted(rows[index])
+    if why:
+        raise Unreadable(f"track_muted: {why}")
+    return {"track": index, "muted": muted, "name": rows[index]["name"]}
 
 
 def armed_set_of(flags: dict, declared: int) -> dict:
@@ -142,6 +163,11 @@ def _walk(ctx: dict):
 def track_armed(ctx: dict, index: int) -> str:
     flags, sha, declared = _walk(ctx)
     return _text({**track_armed_of(flags, declared, index), "walk_sha256": sha})
+
+
+def track_muted(ctx: dict, index: int) -> str:
+    flags, sha, declared = _walk(ctx)
+    return _text({**track_muted_of(flags, declared, index), "walk_sha256": sha})
 
 
 def armed_set(ctx: dict) -> str:
