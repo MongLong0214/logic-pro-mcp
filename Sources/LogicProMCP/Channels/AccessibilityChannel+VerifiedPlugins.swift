@@ -2832,7 +2832,8 @@ extension AccessibilityChannel {
            let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
             for (key, value) in object where key.hasPrefix("plugin_view_")
                 || key == "editor_close_observed" || key == "editor_close_attempted"
-                || key == "editor_cleanup_unobserved" || key == "editor_still_open" || key == "recovery_hint"
+                || key == "editor_cleanup_diagnostics" || key == "editor_cleanup_unobserved"
+                || key == "editor_still_open" || key == "recovery_hint"
                 || key == "opener_action_attempted" {
                 extras[key] = value
             }
@@ -3250,7 +3251,7 @@ extension AccessibilityChannel {
             guard !constructedWindowsNeedingCleanup.isEmpty else { return }
             let windows = constructedWindowsNeedingCleanup
             var closeAttempted = false
-            let closeObserved = closePluginEditorsOpenedByThisOperation(
+            let closeOutcomes = closePluginEditorsOpenedByThisOperation(
                 windows,
                 trackName: trackName,
                 pluginID: pluginID,
@@ -3261,11 +3262,15 @@ extension AccessibilityChannel {
                     return true
                 }
             )
+            let closeObserved = closeOutcomes.allSatisfy(\.observed)
             // This explicit attempt owns cleanup on success and refusal alike.
             constructedWindowsNeedingCleanup.removeAll()
             extras["editor_close_observed"] = closeObserved
             if access.isRead { extras["editor_close_attempted"] = closeAttempted }
             if !closeObserved {
+                extras["editor_cleanup_diagnostics"] = closeOutcomes
+                    .filter { !$0.observed }
+                    .map(\.diagnostics)
                 if access.isRead, readContextEnded {
                     extras["editor_cleanup_unobserved"] = true
                     extras["recovery_hint"] = "Automatic editor cleanup lost target custody before cleanup could be confirmed; this outcome is terminal and does not authorize another editor mutation."
@@ -5640,33 +5645,117 @@ extension AccessibilityChannel {
     /// presses that did work, so the exact window element's absence from
     /// `AXWindows` decides — the same observed-state rule used for acquisition.
     ///
-    /// Returns whether the close was OBSERVED. A false return leaves the write
-    /// verdict alone, but successful verified-write envelopes disclose the
-    /// leftover editor and tell the caller how to recover.
-    @discardableResult
+    /// A failed close leaves the operation verdict alone. Its outcome retains
+    /// the exact editor's typed AX reads, bounded press count and final observed
+    /// membership so a caller can distinguish an absent close control, an AX
+    /// read failure, a press that left the window present and an unreadable
+    /// window list without authorizing another action.
+    private struct OwnedEditorCloseOutcome {
+        var observed = false
+        var attemptCount = 0
+        var subrole: String?
+        var subroleReadStatus = "unreadable"
+        var subroleReadError: String?
+        var closeButtonReadStatus = "not_read"
+        var closeButtonReadError: String?
+        var windowMembership = "unreadable"
+        var windowMembershipReadError: String?
+
+        var diagnostics: [String: Any] {
+            var result: [String: Any] = [
+                "subrole": subrole ?? NSNull(),
+                "subrole_read_status": subroleReadStatus,
+                "close_button_read_status": closeButtonReadStatus,
+                "attempt_count": attemptCount,
+                "window_membership": windowMembership,
+            ]
+            if let subroleReadError { result["subrole_read_error"] = subroleReadError }
+            if let closeButtonReadError { result["close_button_read_error"] = closeButtonReadError }
+            if let windowMembershipReadError {
+                result["window_membership_read_error"] = windowMembershipReadError
+            }
+            return result
+        }
+    }
+
     private static func closePluginEditorOpenedByThisOperation(
         _ window: AXUIElement,
         trackName: String,
         pluginID: String,
         runtime: AXLogicProElements.Runtime,
         allowingChanges: (AXUIElement) -> Bool = { _ in true }
-    ) -> Bool {
-        for attempt in 0..<3 {
-            guard let closeButton: AXUIElement = AXHelpers.getAttribute(
-                window, kAXCloseButtonAttribute, runtime: runtime.ax
-            ) else {
-                return false
+    ) -> OwnedEditorCloseOutcome {
+        var outcome = OwnedEditorCloseOutcome()
+        switch AXHelpers.getAttributeResult(
+            window, kAXSubroleAttribute as String, runtime: runtime.ax
+        ) as Result<String?, AXHelpers.AXStatusError> {
+        case let .success(subrole):
+            outcome.subrole = subrole
+            outcome.subroleReadStatus = subrole == nil ? "absent" : "read"
+        case let .failure(error):
+            outcome.subroleReadStatus = "unreadable"
+            outcome.subroleReadError = error.diagnosticLabel
+        }
+
+        func retainWindowMembership() {
+            guard let app = AXLogicProElements.appRoot(runtime: runtime) else {
+                outcome.windowMembership = "unreadable"
+                outcome.windowMembershipReadError = "application_unavailable"
+                return
             }
-            guard allowingChanges(window) else { return false }
+            switch AXHelpers.getAttributeResult(
+                app, kAXWindowsAttribute as String, runtime: runtime.ax
+            ) as Result<[AXUIElement]?, AXHelpers.AXStatusError> {
+            case let .success(.some(windows)):
+                outcome.windowMembership = windows.contains { CFEqual($0, window) }
+                    ? "present" : "absent"
+                outcome.windowMembershipReadError = nil
+            case .success(nil):
+                outcome.windowMembership = "unreadable"
+                outcome.windowMembershipReadError = "attribute_absent_or_malformed"
+            case let .failure(error):
+                outcome.windowMembership = "unreadable"
+                outcome.windowMembershipReadError = error.diagnosticLabel
+            }
+        }
+
+        for attempt in 0..<3 {
+            let closeButtonRead = AXHelpers.getAttributeResult(
+                window, kAXCloseButtonAttribute, runtime: runtime.ax
+            ) as Result<AXUIElement?, AXHelpers.AXStatusError>
+            let closeButton: AXUIElement
+            switch closeButtonRead {
+            case let .success(.some(button)):
+                outcome.closeButtonReadStatus = "available"
+                outcome.closeButtonReadError = nil
+                closeButton = button
+            case .success(nil):
+                outcome.closeButtonReadStatus = "absent"
+                outcome.closeButtonReadError = nil
+                retainWindowMembership()
+                return outcome
+            case let .failure(error):
+                outcome.closeButtonReadStatus = "unreadable"
+                outcome.closeButtonReadError = error.diagnosticLabel
+                retainWindowMembership()
+                return outcome
+            }
+            guard allowingChanges(window) else {
+                retainWindowMembership()
+                return outcome
+            }
+            outcome.attemptCount += 1
             _ = pressElement(closeButton, runtime: runtime.ax)
-            if AXLogicProElements.pluginEditorWindowIsOpen(window, runtime: runtime) == false {
-                return true
+            retainWindowMembership()
+            if outcome.windowMembership == "absent" {
+                outcome.observed = true
+                return outcome
             }
             if attempt < 2 {
                 Thread.sleep(forTimeInterval: 0.15)
             }
         }
-        return false
+        return outcome
     }
 
     /// Best-effort cleanup for every editor element newly observed after this
@@ -5680,20 +5769,16 @@ extension AccessibilityChannel {
         pluginID: String,
         runtime: AXLogicProElements.Runtime,
         allowingChanges: (AXUIElement) -> Bool = { _ in true }
-    ) -> Bool {
-        var everyCloseObserved = true
-        for window in windows {
-            if !closePluginEditorOpenedByThisOperation(
+    ) -> [OwnedEditorCloseOutcome] {
+        windows.map { window in
+            closePluginEditorOpenedByThisOperation(
                 window,
                 trackName: trackName,
                 pluginID: pluginID,
                 runtime: runtime,
                 allowingChanges: allowingChanges
-            ) {
-                everyCloseObserved = false
-            }
+            )
         }
-        return everyCloseObserved
     }
 
     private static func pluginWindowAcquisitionDiagnostics(
