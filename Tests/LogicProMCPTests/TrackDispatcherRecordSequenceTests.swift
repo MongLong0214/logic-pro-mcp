@@ -476,6 +476,13 @@ func testRecordSequenceWithholdsImportWhenTheAnchorIsNotTickExact(_ mode: String
     let object = recordSequenceJSONObject(result)
     #expect(object["failure_stage"] as? String == "track_creation")
     #expect(object["display_mode_switched_from"] as? String == "Beats & Project")
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+    #expect(try #require(object["automatic_precondition_attempts_exhausted"] as? Bool))
+    let hint = try #require(object["hint"] as? String)
+    #expect(!hint.localizedCaseInsensitiveContains("check Logic"))
+    #expect(!hint.localizedCaseInsensitiveContains("retry"))
     let restored = try #require(object["display_mode_restored"] as? Bool)
     #expect(restored)
 }
@@ -1692,6 +1699,13 @@ func testRecordSequenceRelocationRequiresPositiveSoftwareInstrumentType(_ type: 
     let object = recordSequenceJSONObject(result)
     #expect(object["error"] as? String == "paste_unverified")
     #expect(object["failure_stage"] as? String == "relocation_verify")
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+    #expect(try #require(object["automatic_precondition_attempts_exhausted"] as? Bool))
+    let hint = try #require(object["hint"] as? String)
+    #expect(!hint.localizedCaseInsensitiveContains("check all selected tracks"))
+    #expect(!hint.localizedCaseInsensitiveContains("retry"))
     #expect(await keys.operations == ["edit.copy", "edit.paste"])
 }
 

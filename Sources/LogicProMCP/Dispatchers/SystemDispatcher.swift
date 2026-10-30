@@ -767,6 +767,8 @@ struct SystemDispatcher: OperationTraceDispatching {
                     extras: evidence.extras.merging([
                         "stage": stage,
                         "write_attempted": evidence.configurationWriteAttempted,
+                        "terminal": true,
+                        "human_intervention_required": false,
                     ]) { _, new in new }
                 ), isError: true)
             }

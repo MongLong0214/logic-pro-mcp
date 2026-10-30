@@ -228,15 +228,24 @@ extension AccessibilityChannel {
             }
         }
 
-        // A menu already open is somebody else's, and the cleanup below would close it too.
+        // A menu observed before this operation's opener is not owned by this
+        // operation, and the cleanup below would close it too.
         guard let logicPID = runtime.logicProPID(), let windows = runtime.onScreenWindowList() else {
             return refusal(.unsupportedState, "Logic's on-screen windows did not read, so an open popup "
                 + "menu cannot be ruled out; nothing was pressed.")
         }
         let openBefore = LogicOnScreenWindows.popupMenuCount(windows, logicPID: logicPID)
         guard openBefore == 0 else {
-            return refusal(.unsupportedState, "A Logic popup menu is already open. Close it and retry; "
-                + "nothing was pressed.", ["open_popup_menu_windows": openBefore])
+            return refusal(.unsupportedState,
+                "A Logic popup menu was observed at the pre-write popup guard; this operation had not "
+                    + "opened it, did not dismiss it, and terminated before pressing anything.", [
+                        "open_popup_menu_windows": openBefore,
+                        "write_attempted": false,
+                        "safe_to_retry": false,
+                        "automatic_precondition_attempts_exhausted": true,
+                        "terminal": true,
+                        "human_intervention_required": false,
+                    ])
         }
         guard let slotButton = AXLogicProElements.outputSlotButton(in: strip, runtime: runtime.ax) else {
             return refusal(.elementNotFound, "The strip's output slot button was not found; nothing was pressed.")

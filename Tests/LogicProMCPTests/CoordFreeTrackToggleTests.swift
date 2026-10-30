@@ -378,6 +378,93 @@ struct CoordFreeTrackToggleTests {
 
     // MARK: - Arm: user-assigned "Toggle Track Record Enable" key command
 
+    private func expectTerminalWithoutHumanRecovery(
+        _ result: ChannelResult,
+        bannedInstructions: [String] = []
+    ) throws {
+        #expect(!result.isSuccess)
+        let obj = try #require(object(result.message))
+        let terminal = try #require(obj["terminal"] as? Bool)
+        let humanRequired = try #require(obj["human_intervention_required"] as? Bool)
+        #expect(terminal)
+        #expect(!humanRequired)
+
+        let hint = try #require(obj["hint"] as? String)
+        for instruction in bannedInstructions {
+            #expect(!hint.localizedCaseInsensitiveContains(instruction))
+        }
+    }
+
+    @Test("#1403 arm failure diagnostics terminate without human recovery instructions")
+    func armFailureDiagnosticsTerminateWithoutHumanRecovery() async throws {
+        do {
+            let f = makeToggleFixture()
+            let channel = makeChannel(f, keyRuntime: KeyMouseRecorder().runtime())
+            let result = await channel.execute(
+                operation: "track.set_arm", params: ["index": "0", "enabled": "true"]
+            )
+            try expectTerminalWithoutHumanRecovery(
+                result,
+                bannedInstructions: ["assign it", "set LOGIC_PRO", "switch to", "retry"]
+            )
+        }
+
+        do {
+            let f = makeToggleFixture()
+            let textField = f.builder.element(9501)
+            f.builder.setAttribute(textField, kAXRoleAttribute as String, kAXTextFieldRole as String)
+            f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, textField)
+            let channel = makeChannel(f, keyRuntime: KeyMouseRecorder().runtime())
+            let result = await channel.execute(
+                operation: "track.set_arm", params: ["index": "0", "enabled": "true"]
+            )
+            try expectTerminalWithoutHumanRecovery(
+                result,
+                bannedInstructions: ["click", "dismiss", "retry"]
+            )
+        }
+
+        do {
+            let f = makeToggleFixture()
+            let result = AccessibilityChannel.defaultSetTrackToggle(
+                params: ["index": "0", "enabled": "true"],
+                button: "Record",
+                runtime: f.builder.makeLogicRuntime(
+                    appElement: f.app, setAttributeHandler: nil, performActionHandler: nil
+                ),
+                keyRuntime: KeyMouseRecorder().runtime(),
+                processRuntime: noopProcessRuntime(),
+                environment: ["LOGIC_PRO_MCP_ARM_KEYCODE": "not-a-number"]
+            )
+            try expectTerminalWithoutHumanRecovery(
+                result,
+                bannedInstructions: ["fix ", "unset", "retry"]
+            )
+        }
+
+        do {
+            let f = makeToggleFixture()
+            guard case let .resolved(armCode, _) = AccessibilityChannel.resolveArmChord() else {
+                Issue.record("default arm chord must resolve")
+                return
+            }
+            let key = KeyMouseRecorder()
+            key.onFlaggedKey = { code, _ in
+                if code == armCode {
+                    f.builder.setAttribute(f.recordCheckbox, kAXValueAttribute as String, 1)
+                }
+            }
+            let channel = makeChannel(f, keyRuntime: key.runtime())
+            let result = await channel.execute(
+                operation: "track.set_arm", params: ["index": "0", "enabled": "true"]
+            )
+            try expectTerminalWithoutHumanRecovery(
+                result,
+                bannedInstructions: ["stop the recording", "assign that command", "retry"]
+            )
+        }
+    }
+
     @Test("arm: exclusive-select + configurable Ctrl+Shift+E chord flips → State A keyboard-arm, ZERO mouse")
     func armKeyboardActuatorFlipsStateA() async throws {
         let f = makeToggleFixture()
@@ -413,7 +500,7 @@ struct CoordFreeTrackToggleTests {
         #expect(!v2)
     }
 
-    @Test("arm fails closed (State C) with the exact 'Toggle Track Record Enable' key-command hint")
+    @Test("arm fails closed (State C) with a terminal readback diagnostic")
     func armFailClosedWithKeyCommandHint() async throws {
         let f = makeToggleFixture()
         let key = KeyMouseRecorder() // records the chord but never flips arm
@@ -425,14 +512,9 @@ struct CoordFreeTrackToggleTests {
         let obj = object(result.message)
         #expect(obj?["state"] as? String == "C")
         #expect(obj?["error"] as? String == "ax_write_failed")
-        // Must OPEN with exactly the operator-facing key-command guidance. Equality was the
-        // assertion until 2026-09-14, when a suffix naming a composing macOS input source was
-        // appended to synthetic-key failures — and equality then made this test pass or fail by the
-        // input source of the machine running it, which is not a property of the product. The body
-        // is pinned verbatim here; what may follow it is pinned by its own tests.
-        let body = "arm requires the Logic key command 'Toggle Track Record Enable' assigned to "
-            + "the configured key (default Ctrl+Shift+E); assign it in Logic ▸ Key Commands, or "
-            + "set LOGIC_PRO_MCP_ARM_KEYCODE/_MODIFIERS to your chosen key."
+        // The body is terminal and preserves the input-source suffix as diagnostics only.
+        let body = "record-arm readback never matched after the configured key chord; the invocation "
+            + "terminated without posting another key and no verified arm change is claimed."
         let hint = try #require(obj?["hint"] as? String)
         #expect(hint.hasPrefix(body))
         // Whatever follows the body is the input-source explanation or nothing at all — never
@@ -468,7 +550,8 @@ struct CoordFreeTrackToggleTests {
         #expect(v1)
         let hint = obj?["hint"] as? String ?? ""
         #expect(hint.contains("transport recording"))
-        #expect(hint.contains("Toggle Track Record Enable"))
+        #expect(hint.contains("effect is preserved"))
+        #expect(hint.contains("terminated without posting a recovery key"))
         // The arm checkbox was never (falsely) claimed armed.
         let v2 = try #require(boolValue(f, f.arm[0]))
         #expect(!v2)

@@ -545,7 +545,7 @@ actor CGEventChannel: Channel {
                         + "\(switched.originalID) again."
                     : ". The input source was switched to \(switched.layoutID) for the key and could not "
                         + "be selected back: it reads \(restore.after?.id ?? "unreadable"), not "
-                        + "\(switched.originalID). Select \(switched.originalID) again."
+                        + "\(switched.originalID). No further selection was attempted."
             }
             return Self.retainingFrontmostError(message, from: observedPreparation)
         }
@@ -648,8 +648,13 @@ actor CGEventChannel: Channel {
         ]
         if !restore.restored {
             extras["hint"] = "The key went out under \(layoutID), selected in place of \(originalID) "
-                + "because \(originalID) is not ASCII-capable. Selecting \(originalID) again did not read "
-                + "back: the input source reads \(restore.after?.id ?? "unreadable"). Select \(originalID) again."
+                + "because \(originalID) is not ASCII-capable. Automatic restoration to \(originalID) did not "
+                + "read back: the input source reads \(restore.after?.id ?? "unreadable"). No further selection "
+                + "was attempted."
+            extras["safe_to_retry"] = false
+            extras["automatic_input_source_restore_attempts_exhausted"] = true
+            extras["terminal"] = true
+            extras["human_intervention_required"] = false
         }
         return extras
     }
@@ -796,10 +801,10 @@ actor CGEventChannel: Channel {
     }
 
     /// State C for a plain letter under an input source that is not ASCII-capable and could not be
-    /// switched away from for the key (`switchFailure`), or that did not read (`source` nil). Not
-    /// terminal, so the router tries the next rung, and when there is none the caller gets this
-    /// refusal rather than a send-only success for a key that could not act. `restore` is the
-    /// reading after a selection that did not read back was undone.
+    /// switched away from for the key (`switchFailure`), or that did not read (`source` nil).
+    /// Terminal after the bounded automatic input-source preparation; when there is no other
+    /// route the caller gets this refusal rather than a send-only success for a key that could not
+    /// act. `restore` is the reading after a selection that did not read back was undone.
     static func inputSourceRefusal(
         operation: String,
         source: InputSourceReading?,
@@ -812,7 +817,10 @@ actor CGEventChannel: Channel {
             "reason": source == nil ? "input_source_unreadable" : "input_source_blocks_plain_letters",
             "events_posted": 0,
             "write_attempted": false,
-            "safe_to_retry": true,
+            "safe_to_retry": false,
+            "automatic_input_source_attempts_exhausted": true,
+            "terminal": true,
+            "human_intervention_required": false,
         ]
         if let id = source?.id {
             extras["input_source_id"] = id
@@ -848,24 +856,25 @@ actor CGEventChannel: Channel {
             if let restore {
                 restored = restore.restored
                     ? " The input source reads \(restore.originalID) again."
-                    : " Selecting \(restore.originalID) back did not read back either: the input source reads "
-                        + "\(restore.after?.id ?? "unreadable"). Select \(restore.originalID) again."
+                    : " Automatic restoration to \(restore.originalID) did not read back either: the input "
+                        + "source reads \(restore.after?.id ?? "unreadable"). No further selection was attempted."
             }
             hint = "The active input source (\(name)) is not ASCII-capable, so a plain letter key reaches "
                 + "Logic as that source's character and runs no key command (measured under 2-Set "
-                + "Korean: Q, N and X ran nothing).\(why) No event was posted.\(restored) Switch to an "
-                + "ASCII-capable input source such as ABC and retry."
+                + "Korean: Q, N and X ran nothing).\(why) No event was posted.\(restored) The bounded "
+                + "automatic input-source preparation terminated."
         } else {
             hint = "The active input source did not read, so whether a plain letter key would reach "
                 + "Logic as a letter is unknown (under 2-Set Korean, Q, N and X ran nothing). No event "
-                + "was posted. Retry, or select an ASCII-capable input source such as ABC."
+                + "was posted. The bounded automatic input-source preparation terminated."
         }
         return .error(HonestContract.encodeStateC(error: .notSupported, hint: hint, extras: extras))
     }
 
-    /// State C for a refused preparation. `write_attempted` is false and
-    /// `events_posted` is zero because nothing was created: the caller can
-    /// retry without wondering whether a partial keystroke landed.
+    /// State C for a refused posting-permission preflight. `write_attempted`
+    /// is false and `events_posted` is zero because nothing was created. An
+    /// unavailable OS capability terminates without requesting a person to
+    /// grant it and retry.
     /// #1092 review R1, R1092-01: a keystroke this process is not authorized to post is discarded by
     /// macOS, and the State B success after it would report a key Logic never received. Asked before
     /// Logic is brought forward, so a refusal moves nothing.
@@ -880,11 +889,16 @@ actor CGEventChannel: Channel {
                 "method": "cgevent",
                 "events_posted": 0,
                 "write_attempted": false,
-                "safe_to_retry": true,
+                "safe_to_retry": false,
+                "automatic_permission_attempts_exhausted": true,
+                "terminal": true,
+                "human_intervention_required": false,
             ]
         ))
     }
 
+    /// Terminal State C after the bounded automatic frontmost preparation
+    /// cannot prove that Logic owns the keyboard. No event has been created.
     static func frontmostRefusal(
         operation: String, preparation: FrontmostPreparation,
         observation: ProcessUtils.KeyboardOwnershipObservation? = nil
@@ -895,14 +909,17 @@ actor CGEventChannel: Channel {
             "frontmost_preparation": preparation.rawValue,
             "events_posted": 0,
             "write_attempted": false,
-            "safe_to_retry": true,
+            "safe_to_retry": false,
+            "automatic_frontmost_attempts_exhausted": true,
+            "terminal": true,
+            "human_intervention_required": false,
         ]
         if let observation { extras["frontmost_observation"] = observation.diagnostic }
         return .error(HonestContract.encodeStateC(
             error: .axWriteFailed,
             hint: "CGEvent keystrokes are delivered to the frontmost application; Logic Pro did not own the "
-                + "keyboard, so no event was posted. Bring Logic Pro to the front and retry. "
-                + "The fixed ownership reason is in frontmost_observation.reason when observed.",
+                + "keyboard after the bounded automatic ownership attempt, so no event was posted. "
+                + "The fixed terminal reason is in frontmost_observation.reason when observed.",
             extras: extras
         ))
     }
@@ -970,8 +987,8 @@ actor CGEventChannel: Channel {
 
     /// State C for a goto_position whose dialog was not observed. No position character and no
     /// Return was posted, so `write_attempted` is false. When the opener went out, whatever it did
-    /// is unknown -- a dialog can still appear after the bound -- so the caller is told to read the
-    /// screen before retrying and no other channel may take the operation over.
+    /// is unknown -- a dialog can still appear after the bound -- so the operation terminates with
+    /// that effect preserved and no other channel may take the operation over.
     static func gotoDialogRefusal(
         position: String,
         preparation: FrontmostPreparation,
@@ -981,10 +998,10 @@ actor CGEventChannel: Channel {
     ) -> ChannelResult {
         let hint = openerPosted
             ? "The Go To Position key was posted, but the dialog was not read on screen (\(reason)), so the "
-                + "position and Return were not typed. Whatever the key did is unobserved: read Logic's windows "
-                + "before retrying, and close a Go To Position dialog that appeared late."
+                + "position and Return were not typed. Whatever the key did remains unobserved; the bounded "
+                + "dialog observation terminated without another key or cleanup action."
             : "The window list did not read before the Go To Position key, so a dialog could not have been "
-                + "told apart from what was already on screen. Nothing was posted; retry."
+                + "told apart from what was already on screen. The operation terminated before posting anything."
         return .error(HonestContract.encodeStateC(
             error: .dialogNotFound,
             hint: hint,
@@ -998,8 +1015,11 @@ actor CGEventChannel: Channel {
                 "dialog_opener_posted": openerPosted,
                 "dialog_observation": reading as Any? ?? NSNull(),
                 "write_attempted": false,
-                "safe_to_retry": !openerPosted,
+                "safe_to_retry": false,
                 "fallback_unsafe": openerPosted,
+                "automatic_dialog_attempts_exhausted": true,
+                "terminal": true,
+                "human_intervention_required": false,
             ]
         ))
     }

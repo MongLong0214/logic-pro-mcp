@@ -671,7 +671,7 @@ enum WorkflowSkillCatalog {
             title: "Project Audit And Cleanup Plan",
             intent: "Inspect a messy Logic session, identify deterministic risks, and produce a serializable cleanup plan before any mutation.",
             scope: "Read-only audit and planning; no cleanup step is executed by this workflow.",
-            prerequisites: ["Open project when available", "Project/tracks/resources readable", "Caller reviews cleanup plan before any mutation"],
+            prerequisites: ["Open project when available", "Project/tracks/resources readable", "Any mutation requires a separately bound confirmation and verified readback"],
             allowedTools: ["logic_project"],
             allowedResources: [
                 "logic://project/audit",
@@ -720,7 +720,7 @@ enum WorkflowSkillCatalog {
             title: "MIDI Idea Sketch",
             intent: "Create or import a small MIDI idea only after the target track and project state are explicit.",
             scope: "May write MIDI to a caller-specified target after confirmation; never guesses track 0.",
-            prerequisites: ["Open project", "Explicit target track", "User confirmation for MIDI mutation"],
+            prerequisites: ["Open project", "Explicit target track", "Bound L1 confirmation for MIDI mutation"],
             allowedTools: ["logic_tracks", "logic_midi"],
             allowedResources: ["logic://tracks", "logic://tracks/{index}/regions", "logic://project/info"],
             requiredConfirmations: [
@@ -737,7 +737,7 @@ enum WorkflowSkillCatalog {
             ],
             verification: WorkflowVerification(evidence: ["before_regions", "after_regions", "tool_envelope"], successFields: ["region_count_delta", "verified"], liveEvidenceFile: nil),
             failureModes: ["target track missing", "selection unverified", "MIDI import rejected", "post-write region readback unavailable"],
-            rollbackOrRecovery: "Manual recovery: undo in Logic if write succeeded but follow-up verification is inconclusive.",
+            rollbackOrRecovery: "Terminal outcome: if a write succeeds but follow-up verification remains inconclusive, preserve the observed effects and stop without another mutation.",
             evidenceLevel: .deterministic,
             productionReady: false,
             dependsOn: [],
@@ -768,12 +768,12 @@ enum WorkflowSkillCatalog {
             ],
             verification: WorkflowVerification(evidence: ["marker_resource_before_after"], successFields: ["canonical_position", "verified"], liveEvidenceFile: nil),
             failureModes: ["marker resource unavailable", "position parser rejects input", "post-write readback unavailable"],
-            rollbackOrRecovery: "Manual recovery in Logic marker list.",
+            rollbackOrRecovery: "Terminal outcome: if marker readback is inconclusive after a write, preserve the observed effects and stop without another mutation.",
             evidenceLevel: .deterministic,
             productionReady: false,
             dependsOn: [],
             limitations: [
-                "delete_marker uses the Marker List's exact Edit > Delete menu when its localized controls are available; otherwise it refuses without issuing a deletion, and reports success only from settled Marker List survivor readback. Indexed goto_marker remains keycmd-only (manual MIDI Learn required; see the key-command section of SETUP.md).",
+                "delete_marker uses the Marker List's exact Edit > Delete menu when its localized controls are available; otherwise it refuses without issuing a deletion, and reports success only from settled Marker List survivor readback. Indexed goto_marker remains keycmd-only and terminates unsupported when a verified binding is unavailable.",
             ],
             mutationKind: .guardedMutation
         )
@@ -785,7 +785,7 @@ enum WorkflowSkillCatalog {
             title: "Gain Staging And Mixer Prep",
             intent: "Prepare safe gain-staging recommendations using mixer provenance and explicit target verification.",
             scope: "May call mixer writes only when target and readback conditions are explicit.",
-            prerequisites: ["Mixer resource readable", "Explicit track list", "User confirmation for mixer mutations"],
+            prerequisites: ["Mixer resource readable", "Explicit track list", "Bound L1 confirmation for mixer mutations"],
             allowedTools: ["logic_mixer"],
             allowedResources: ["logic://mixer", "logic://mixer/{strip}", "logic://tracks"],
             requiredConfirmations: [
@@ -802,7 +802,7 @@ enum WorkflowSkillCatalog {
             ],
             verification: WorkflowVerification(evidence: ["mixer_before_after", "honest_contract_envelope"], successFields: ["verified", "data_source"], liveEvidenceFile: nil),
             failureModes: ["mixer_not_visible", "cache_stale", "track selection unverified", "echo timeout"],
-            rollbackOrRecovery: "Manual recovery: restore previous fader/pan value from before evidence.",
+            rollbackOrRecovery: "Terminal outcome: if verified fader or pan restoration is unavailable, preserve before/after evidence and stop without another mutation.",
             evidenceLevel: .deterministic,
             productionReady: false,
             dependsOn: [],
@@ -820,7 +820,7 @@ enum WorkflowSkillCatalog {
             title: "Planning-Only Composition Session Plan",
             intent: "Turn a natural-language musical prompt into a structured, non-mutating Logic session plan.",
             scope: "Dry-run resource read only; proposes later MCP steps but never executes tools.",
-            prerequisites: ["Natural-language musical prompt", "Client reviews plan before any mutation"],
+            prerequisites: ["Natural-language musical prompt", "Any later mutation requires a separate bound confirmation and verified readback"],
             allowedTools: [],
             allowedResources: ["logic://workflow-plans/session?prompt={prompt}"],
             requiredConfirmations: [],
@@ -847,7 +847,7 @@ enum WorkflowSkillCatalog {
             dependsOn: [],
             limitations: [
                 "Does not create projects, tracks, regions, MIDI files, or audio.",
-                "Instrument suggestions are catalog-backed when the stock-instruments/session-players resources are served (default in this build); some roles (e.g. guitar) have no catalog-backed stock patch and fall back to a manual Library suggestion.",
+                "Instrument suggestions are catalog-backed when the stock-instruments/session-players resources are served (default in this build); roles without a catalog-backed stock patch are reported as unsupported.",
                 "Musical choices are heuristic planning aids, not verified musical truth.",
             ],
             mutationKind: .readOnly
@@ -942,7 +942,7 @@ enum WorkflowSkillCatalog {
                 "plugin menu selection failed",
                 "AX slot readback unavailable",
             ],
-            rollbackOrRecovery: "If readback fails after a write attempt, production insert_plugin attempts Logic undo and returns rollback evidence; otherwise manual undo in Logic is the recovery path.",
+            rollbackOrRecovery: "Automated recovery: insert_plugin attempts Logic undo and reports rollback evidence after a readback failure. If restoration cannot be verified, the operation returns rollback-uncertain evidence and terminates without another mutation.",
             evidenceLevel: .liveVerified,
             productionReady: true,
             dependsOn: ["logic://stock-plugins"],
@@ -958,8 +958,8 @@ enum WorkflowSkillCatalog {
         makeWorkflow(
             id: "logic.workflow.bounce.readiness",
             title: "Bounce Readiness Checklist",
-            intent: "Check project state before manual bounce/export.",
-            scope: "Read-only checklist; export remains manual unless a future tool explicitly supports it.",
+            intent: "Check project state before an unsupported bounce/export request.",
+            scope: "Read-only checklist; unsupported export mutation terminates before any write.",
             prerequisites: ["Open project", "Project info readable"],
             allowedTools: ["logic_project", "logic_transport"],
             allowedResources: ["logic://project/info", "logic://transport/state", "logic://tracks", "logic://mixer"],

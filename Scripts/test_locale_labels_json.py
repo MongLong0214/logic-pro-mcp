@@ -184,22 +184,22 @@ def main():
     case("a block may not declare a mode the label contradicts",
          any("one label, one rule" in x for x in pp(e)), pp(e))
 
-    # `cancelButton` IS read with containsAny at a call site, so the Swift can contradict the claim.
+    # `trackSoloButton` IS read with containsAny at a call site, so the Swift can contradict the claim.
     # A set that is only passed to a helper (`outputSlotHelpKeyword`) cannot be derived, which is why
     # the block declares the mode rather than the guard inferring it everywhere.
-    guard.OBS = _ledger({"2026-09-05-c": ("ko-KR", [_row("AXButton", help="취소 하시겠습니까")])})
-    cancel = _entry(["취소"], {"취소": _prov(record="2026-09-05-c", observed="취소 하시겠습니까",
-                                            role="AXButton", attribute="help", match="exact")}, ko_measured,
-                    declared=("AXButton",), match="exact")
+    guard.OBS = _ledger({"2026-09-05-s": ("ko-KR", [_row("AXButton", help="솔로 설정")])})
+    solo = _entry(["솔로"], {"솔로": _prov(record="2026-09-05-s", observed="솔로 설정",
+                                          role="AXButton", attribute="help", match="exact")}, ko_measured,
+                  canonical="Solo", declared=("AXButton",), match="exact")
     case("claiming exact for a containsAny set is refused",
          any("reads this set with `containsAny`" in x
-             for x in guard.provenance_problems("cancelButton", cancel)),
-         guard.provenance_problems("cancelButton", cancel))
-    cancel["match"] = "contains"
-    cancel["provenance"]["취소"]["match"] = "contains"
+             for x in guard.provenance_problems("trackSoloButton", solo)),
+         guard.provenance_problems("trackSoloButton", solo))
+    solo["match"] = "contains"
+    solo["provenance"]["솔로"]["match"] = "contains"
     case("...and declaring it correctly is accepted",
-         guard.provenance_problems("cancelButton", cancel) == [],
-         guard.provenance_problems("cancelButton", cancel))
+         guard.provenance_problems("trackSoloButton", solo) == [],
+         guard.provenance_problems("trackSoloButton", solo))
 
     # ...and an exact-matched set really is checked exactly: a menu title that merely CONTAINS the
     # variant is a different command, which is the attack this mode exists to stop.
@@ -490,7 +490,7 @@ def main():
     # ...and a label the product STILL READS cannot be retired. Any nonempty reason used to skip
     # every other check, and since the projection then marks all three locales `retired` and the
     # ratchets count only literal `unmeasured`, a live label could be dropped from every ceiling by
-    # asserting it was gone. `cancelButton` is read at two call sites.
+    # asserting it was gone. `trackSoloButton` is still read by the product.
     # The audit reads Swift, so it must read it the way Swift is written: a use split across lines
     # was missed, and a label named only in a comment blocked an honest retirement.
     labels_mod = guard._module()

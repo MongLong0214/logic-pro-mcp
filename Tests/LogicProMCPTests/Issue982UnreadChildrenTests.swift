@@ -241,6 +241,9 @@ struct Issue982UnreadChildrenTests {
         let result = AccessibilityChannel.defaultGetMixerState(runtime: Self.runtime(f, failing: failing))
         #expect(!result.isSuccess)
         #expect(result.message == AccessibilityChannel.mixerChildrenUnreadMessage)
+        #expect(result.message.localizedCaseInsensitiveContains("automatic mixer read terminated"))
+        #expect(!result.message.localizedCaseInsensitiveContains("retry"))
+        #expect(!result.message.localizedCaseInsensitiveContains("manually"))
     }
 
     @Test(arguments: UnreadMixer.all)

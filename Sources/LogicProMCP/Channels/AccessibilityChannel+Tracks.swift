@@ -1479,7 +1479,7 @@ extension AccessibilityChannel {
                 .invalidParams,
                 criterion: criterion.rawValue,
                 reason: "collapsed_track_stack",
-                hint: "sort_verified refused before the menu action because track \(index) ('\(name)') is a collapsed stack; expand it and re-read logic://tracks so the complete track order can be checked.",
+                hint: "sort_verified terminated before the menu action because track \(index) ('\(name)') is a collapsed stack and the complete track order is not observable.",
                 extras: ["collapsed_stack": ["index": index, "name": name]]
             )
         }
@@ -1495,7 +1495,7 @@ extension AccessibilityChannel {
                     .staleTargetReference,
                     criterion: criterion.rawValue,
                     reason: "expected_order_track_refs_not_in_before_order",
-                    hint: "sort_verified expected_order names track references that are not in the current pre-sort order: \(missing.joined(separator: ", ")). Re-read logic://tracks and retry with its current track_ref values.",
+                    hint: "sort_verified terminated before the menu action because expected_order names references outside the current pre-sort order: \(missing.joined(separator: ", ")).",
                     extras: ["missing_track_refs": missing]
                 )
             case .ambiguous(let references):
@@ -1503,7 +1503,7 @@ extension AccessibilityChannel {
                     .staleTargetReference,
                     criterion: criterion.rawValue,
                     reason: "duplicate_name_reference_identity_unprovable",
-                    hint: "sort_verified refused before the menu action because duplicate track names have no issued per-track identity beyond index and name. Rename duplicates and re-read logic://tracks before sorting.",
+                    hint: "sort_verified terminated before the menu action because duplicate track names have no issued per-track identity beyond index and name.",
                     extras: ["ambiguous_track_refs": references]
                 )
             case .matched:
@@ -1891,6 +1891,8 @@ extension AccessibilityChannel {
         details["criterion"] = criterion ?? NSNull()
         details["reason"] = reason
         details["write_attempted"] = false
+        details["terminal"] = true
+        details["human_intervention_required"] = false
         return .error(HonestContract.encodeStateC(error: error, hint: hint, extras: details))
     }
 
@@ -1929,7 +1931,7 @@ extension AccessibilityChannel {
                 .elementNotFound,
                 criterion: criterion.rawValue,
                 reason: "unmeasured_locale_missing_sort_menu_measurement",
-                hint: "sort_verified has no measured Track > Sort Tracks By labels for Logic UI locale '\(locale)'; measure that locale before enabling this command.",
+                hint: "sort_verified terminated because Track > Sort Tracks By has no qualified labels for Logic UI locale '\(locale)'.",
                 extras: extras
             )
         case .criterionLabelMissing(let label):
@@ -2224,7 +2226,9 @@ extension AccessibilityChannel {
                     return .error(HonestContract.encodeStateC(
                         error: .transportStateUnknown,
                         hint: armTransportUnknownHint(index: index),
-                        extras: baseExtras.merging(["transport_state": "unknown"]) { _, new in new }
+                        extras: baseExtras.merging(terminalNoHumanExtras([
+                            "transport_state": "unknown"
+                        ])) { _, new in new }
                     ))
                 }
                 if post, recordingBaselineState != true {
@@ -2233,14 +2237,18 @@ extension AccessibilityChannel {
                     return .error(HonestContract.encodeStateC(
                         error: .axWriteFailed,
                         hint: armRecordingStartedHint(index: index),
-                        extras: baseExtras.merging(["recording_started": true]) { _, new in new }
+                        extras: baseExtras.merging(terminalNoHumanExtras([
+                            "recording_started": true
+                        ])) { _, new in new }
                     ))
                 }
                 if recordingBaselineState == true, !post {
                     return .error(HonestContract.encodeStateC(
                         error: .readbackMismatch,
                         hint: armRecordingStoppedHint(index: index),
-                        extras: baseExtras.merging(["recording_stopped": true]) { _, new in new }
+                        extras: baseExtras.merging(terminalNoHumanExtras([
+                            "recording_stopped": true
+                        ])) { _, new in new }
                     ))
                 }
             }
@@ -2258,14 +2266,16 @@ extension AccessibilityChannel {
                 return .error(HonestContract.encodeStateC(
                     error: .axWriteFailed,
                     hint: armRecordingStartedHint(index: index),
-                    extras: baseExtras.merging(["recording_started": true]) { _, new in new }
+                    extras: baseExtras.merging(terminalNoHumanExtras([
+                        "recording_started": true
+                    ])) { _, new in new }
                 ))
             }
             // Fail closed — NEVER a coordinate fallback.
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
                 hint: trackToggleFailHint(buttonName: buttonName, index: index, desired: desired),
-                extras: baseExtras
+                extras: baseExtras.merging(terminalNoHumanExtras()) { _, new in new }
             ))
         }
     }
@@ -2286,6 +2296,15 @@ extension AccessibilityChannel {
         let error: HonestContract.FailureError
         let hint: String
         let extras: [String: Any]
+    }
+
+    private static func terminalNoHumanExtras(
+        _ extras: [String: Any] = [:]
+    ) -> [String: Any] {
+        extras.merging([
+            "terminal": true,
+            "human_intervention_required": false
+        ]) { _, terminalValue in terminalValue }
     }
 
     /// Terminal result of running the actuator ladder.
@@ -3044,8 +3063,8 @@ extension AccessibilityChannel {
         guard let id, !inputSourceDeliversLatinKeys(id) else { return "" }
         return " The active macOS input source is '\(id)', which composes characters: a synthetic "
             + "key carrying a letter reaches Logic as that source's character (Ctrl+Shift+E arrives "
-            + "as ⌃⇧ㄷ under 2-set Korean) and matches no key command. Switch to a Latin keyboard "
-            + "layout and retry."
+            + "as ⌃⇧ㄷ under 2-set Korean) and matches no key command. This invocation terminated "
+            + "without posting another key."
     }
 
     /// Fail-closed hint (read-back never flipped). Arm points the operator at
@@ -3061,9 +3080,8 @@ extension AccessibilityChannel {
     ) -> String {
         switch buttonName {
         case "Record":
-            return "arm requires the Logic key command 'Toggle Track Record Enable' assigned to the "
-                + "configured key (default Ctrl+Shift+E); assign it in Logic ▸ Key Commands, or set "
-                + "LOGIC_PRO_MCP_ARM_KEYCODE/_MODIFIERS to your chosen key."
+            return "record-arm readback never matched after the configured key chord; the invocation "
+                + "terminated without posting another key and no verified arm change is claimed."
         case "Mute":
             return "track \(index) Mute=\(desired): read-back never matched after AXPress + "
                 + "exclusive-select then key 'm' (coordinate-free actuators only)."
@@ -3080,16 +3098,14 @@ extension AccessibilityChannel {
     /// started transport RECORDING instead of toggling record-enable.
     static func armRecordingStartedHint(index: Int) -> String {
         "arm aborted: the configured key started transport recording instead of arming track "
-            + "\(index) — it is not assigned to 'Toggle Track Record Enable'. Stop the recording, then "
-            + "assign that command (default Ctrl+Shift+E) in Logic ▸ Key Commands, or set "
-            + "LOGIC_PRO_MCP_ARM_KEYCODE/_MODIFIERS to your chosen key."
+            + "\(index). The observed recording effect is preserved; the invocation terminated "
+            + "without posting a recovery key."
     }
 
     static func armRecordingStoppedHint(index: Int) -> String {
         "arm aborted: the configured key stopped active transport recording instead of only arming track "
-            + "\(index) — it is not assigned to 'Toggle Track Record Enable'. Restore recording as needed, then "
-            + "assign that command (default Ctrl+Shift+E) in Logic ▸ Key Commands, or set "
-            + "LOGIC_PRO_MCP_ARM_KEYCODE/_MODIFIERS to your chosen key."
+            + "\(index). The observed stopped-recording effect is preserved; the invocation terminated "
+            + "without posting a recovery key."
     }
 
     /// #2 — arm fail-closed hint when the transport Record state is UNREADABLE at
@@ -3097,7 +3113,7 @@ extension AccessibilityChannel {
     static func armTransportUnknownHint(index: Int) -> String {
         "arm could not be confirmed for track \(index): the transport Record state was UNREADABLE, so "
             + "the server cannot prove the arm key did not instead start transport recording. Fail-closed "
-            + "(no State A) — make Logic's control bar (with the Record button) visible, then retry."
+            + "(no State A); the invocation terminated without posting another key."
     }
 
     /// #5/#9 — fail closed when exclusive selection cannot be proven.
@@ -3106,8 +3122,8 @@ extension AccessibilityChannel {
             error: .selectionNotExclusive,
             hint: "track \(index) could not be exclusively selected before the key command "
                 + "(another track is selected, or a header's selection state was unreadable). "
-                + "Deselect other tracks and retry — the key was NOT posted.",
-            extras: ["selection_error": "selection_not_exclusive"]
+                + "The key was not posted and the invocation terminated.",
+            extras: terminalNoHumanExtras(["selection_error": "selection_not_exclusive"])
         )
     }
 
@@ -3115,8 +3131,8 @@ extension AccessibilityChannel {
         RungRefusal(
             error: .logicNotFrontmost,
             hint: "track \(index) is exclusively selected, but Logic could not be confirmed frontmost. "
-                + "Bring Logic frontmost and retry — the key was NOT posted.",
-            extras: ["frontmost_error": "logic_not_frontmost"]
+                + "The key was not posted and the invocation terminated after bounded acquisition.",
+            extras: terminalNoHumanExtras(["frontmost_error": "logic_not_frontmost"])
         )
     }
 
@@ -3125,9 +3141,9 @@ extension AccessibilityChannel {
     static func unsafeFocusRefusal(reason: String, focus: String) -> RungRefusal {
         RungRefusal(
             error: .unsafeFocusForSyntheticKey,
-            hint: "refused to post the track key command: \(reason). Click the arrange/tracks area "
-                + "(or dismiss the dialog) so keyboard focus is safe, then retry — the key was NOT posted.",
-            extras: ["focus_guard": focus]
+            hint: "refused to post the track key command: \(reason). The key was not posted and the "
+                + "invocation terminated with the observed unsafe focus preserved.",
+            extras: terminalNoHumanExtras(["focus_guard": focus])
         )
     }
 
@@ -3137,10 +3153,9 @@ extension AccessibilityChannel {
     static func armConfigInvalidRefusal(reason: String) -> RungRefusal {
         RungRefusal(
             error: .armKeyConfigInvalid,
-            hint: "record-arm key configuration is invalid: \(reason). Fix "
-                + "\(armKeyCodeEnvVar)/\(armKeyModifiersEnvVar) (or unset them to use the default "
-                + "Ctrl+Shift+E) — the key was NOT posted.",
-            extras: ["arm_key_config": "invalid"]
+            hint: "record-arm key configuration is invalid: \(reason). The key was not posted and "
+                + "the invocation terminated without changing the configuration.",
+            extras: terminalNoHumanExtras(["arm_key_config": "invalid"])
         )
     }
 
@@ -3175,7 +3190,8 @@ extension AccessibilityChannel {
             return .success(HonestContract.encodeStateA(
                 extras: baseExtras.merging([
                     "observed": observed,
-                    "via": via
+                    "via": via,
+                    "write_attempted": true,
                 ]) { _, new in new }
             ))
         }
@@ -3184,7 +3200,8 @@ extension AccessibilityChannel {
             return .success(HonestContract.encodeStateA(
                 extras: baseExtras.merging([
                     "observed": currentName,
-                    "via": "no-op"
+                    "via": "no-op",
+                    "write_attempted": false,
                 ]) { _, new in new }
             ))
         }
@@ -3216,11 +3233,13 @@ extension AccessibilityChannel {
                 return .error(HonestContract.encodeStateC(
                     error: .selectionNotExclusive,
                     hint: "track \(index) could not be made the only selected track, and Logic renames every "
-                        + "selected track. Nothing was renamed. Deselect the other tracks and retry.",
+                        + "selected track. Rename terminated before any name write.",
                     extras: baseExtras.merging([
                         "also_selected": states.enumerated().compactMap { $0.offset != index && $0.element == true ? $0.offset : nil },
                         "selection_unreadable": states.enumerated().compactMap { $0.offset != index && $0.element == nil ? $0.offset : nil },
                         "write_attempted": false,
+                        "terminal": true,
+                        "human_intervention_required": false,
                     ]) { _, new in new }
                 ))
             }
@@ -3280,7 +3299,8 @@ extension AccessibilityChannel {
             reason: observed == nil ? .readbackUnavailable : .readbackMismatch,
             extras: baseExtras.merging([
                 "observed": observed as Any? ?? NSNull(),
-                "via": "track_menu"
+                "via": "track_menu",
+                "write_attempted": true,
             ]) { _, new in new }
         ))
     }
@@ -3752,8 +3772,8 @@ extension AccessibilityChannel {
             precondition = "text_focus_not_reached"
             sent = 0
             reading = focus
-            hint = "the rename field never took Logic's keyboard focus — no character, Return or "
-                + "Escape was posted. Click the track area so Logic has the keyboard, then retry."
+            hint = "track.rename terminated after the bounded focus wait because the rename field "
+                + "did not take Logic's keyboard focus; no character, Return or Escape was posted."
         case .textFocusLost(let count, let focus):
             precondition = "text_focus_lost"
             sent = count
@@ -3780,7 +3800,10 @@ extension AccessibilityChannel {
                 "sent_code_units": sent,
                 "keyboard_focus": reading.map(describe) as Any? ?? NSNull(),
                 "observed": observed as Any? ?? NSNull(),
-                "write_attempted": sent > 0
+                "write_attempted": sent > 0,
+                "automatic_focus_attempts_exhausted": precondition == "text_focus_not_reached",
+                "terminal": true,
+                "human_intervention_required": false,
             ]) { _, new in new }
         ))
     }

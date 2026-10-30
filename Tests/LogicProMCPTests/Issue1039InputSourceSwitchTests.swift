@@ -409,7 +409,7 @@ enum FailedRestore: String, CaseIterable, Sendable {
 
     /// (d) The key went out under ABC and 2-Set Korean did not read back: the reply is still the
     /// send-only State B (the key was posted, so no other rung may press it again), and it says the
-    /// source was not restored, where it was left, and in a hint what to select.
+    /// source was not restored and where it was left without handing restoration to a person.
     /// Kills: `input_source_restored` taken from TIS's return instead of the reading (the silent
     /// case reports true), a restore that is never read back, and a reply that omits the failure.
     @Test("a restore that does not read back is named in the reply", arguments: FailedRestore.allCases)
@@ -433,8 +433,14 @@ enum FailedRestore: String, CaseIterable, Sendable {
         } else {
             #expect(object["input_source_after"] is NSNull, "\(scenario): \(object)")
         }
+        #expect(try #require(object["terminal"] as? Bool))
+        #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+        #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+        #expect(try #require(object["automatic_input_source_restore_attempts_exhausted"] as? Bool))
         let hint = try #require(object["hint"] as? String)
-        #expect(hint.contains("Select \(koreanID) again"), "\(hint)")
+        for request in ["Select \(koreanID) again", "retry", "manually"] {
+            #expect(!hint.localizedCaseInsensitiveContains(request), "\(hint)")
+        }
     }
 
     /// (e) A source that does not read is refused as before, and no layout is asked for and
