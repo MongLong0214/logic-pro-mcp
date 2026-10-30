@@ -172,7 +172,7 @@ From your MCP client:
 Fully configured hosts should show Accessibility, AppleScript, CoreMIDI, MCU, MIDIKeyCommands, Scripter, and CGEvent as available. Skipping Key Commands or Scripter is valid when you do not need those paths.
 
 <a id="setup-doctor"></a>
-## Doctor (`logic_pro_mcp_doctor.v4`)
+## Doctor (`logic_pro_mcp_doctor.v5`)
 
 `doctor` is read-only and safe to run before starting the server.
 
@@ -184,7 +184,7 @@ Flags:
 
 | Flag | Effect |
 |------|--------|
-| (none) | Human report: a "next action" headline, a `summary:` counts line, and one line per check. |
+| (none) | Human report: an outcome headline, a `summary:` counts line, and one line per check. |
 | `--verbose` | Adds each check's evidence and `duration_ms`. |
 | `--quiet` | Headline + summary + failing/non-pass checks only. |
 | `--json` | Machine report. Identical bytes regardless of `--verbose`/`--quiet`/color. |
@@ -195,7 +195,7 @@ Flags:
 
 Color and unicode symbols are emitted only when stdout is a TTY and `NO_COLOR` is unset; otherwise output is plain ASCII (`[pass]`-style), so pipes and CI logs stay clean.
 
-The `v4` report is a **field-superset** of `v1`/`v2`/`v3`: every prior key keeps its name, semantics, and value. Additive fields include top-level `fix_plan`, `doctor_profile`, `doctor_profile_basis`, `client_profile`, `client_profile_basis`, `capabilities`, per-check `optional`, optional per-check `blocked_by`, optional per-check `skip_reason`, and per-check/report timing (`duration_ms`). Consumers should prefix-match `logic_pro_mcp_doctor.`, not exact-equal a version. Default exit code is unchanged: `failed` → 1, otherwise 0.
+The `v5` report retains all `v4` fields. It changes one operation-readiness enum value: `capabilities.<id>.operations[].readiness` now emits `prerequisite_unavailable` instead of `manual_setup_required` when a route has no autonomous prerequisite-acquisition path. This is a semantic enum migration, so strict-enum consumers must accept the v5 token before decoding v5 reports. Older v1/v2/v3 field subsets still decode because their fields and values are unchanged. Consumers should prefix-match `logic_pro_mcp_doctor.`, then dispatch on the parsed version for enum migrations. Default exit code is unchanged: `failed` → 1, otherwise 0.
 
 Strict exit codes `2` and `3` are doctor status codes, not usage errors, and intentionally sit below the `sysexits.h` 64-78 range. Required capability-gap skips still degrade to code `3`; optional skips such as an absent non-selected client config remain counted as skipped but do not degrade the aggregate status. For a boolean gate, test non-zero; for routing, branch on the exact code. With `set -e`, capture the code before branching:
 
@@ -218,11 +218,14 @@ Consumer compatibility notes:
 
 | Consumer type | Upgrade note |
 |---------------|--------------|
+| Strict v4 operation-readiness enums | Add `prerequisite_unavailable`, remove assumptions that `manual_setup_required` asks a person to act, and select that decoder for `logic_pro_mcp_doctor.v5`. |
 | Exact 13-check arrays | Switch to ID-based lookup; Doctor v4 emits 26 base checks and 27 with `--check-updates`. |
 | Strict schema validators | Allow additive top-level `fix_plan`, profile/client/capability fields, per-check `optional` / `blocked_by` / `skip_reason`, and timing. |
 | Skipped-count alarms | Expect a higher baseline; v4 reports diagnostic-capability gaps instead of hiding them. Optional skips do not imply degraded status. |
 | UIs unaware of `fix_plan` | Continue rendering checks normally; `fix_plan` only orders the next actions. |
 | Readiness dashboards | Prefer `capabilities.<id>.status` for profile-aware readiness over hand-rolled check groups. |
+
+`fix_plan` contains only non-pass checks that have a concrete remediation. Terminal and unresolved checks without a concrete remediation are excluded from that action list but remain visible in `headline` and `checks`. A `fail` without remediation uses `Terminal outcome`; a `warn` or `manual` result without remediation uses `Unresolved outcome`. `Next action` is reserved for a result whose remediation can actually be carried out.
 
 ## Doctor Remediation Anchors
 
@@ -270,27 +273,27 @@ Optional Claude Desktop registration. An absent config is an optional skip and d
 
 <a id="doctor-permissionsaccessibility"></a>
 ### `permissions.accessibility`
-Grant Accessibility to the launcher app in System Settings.
+Reports the launcher app's current Accessibility authorization. A non-pass result is a terminal observation for this unattended run; doctor emits no remediation for this check.
 
 <a id="doctor-permissionsautomation-logic-pro"></a>
 ### `permissions.automation_logic_pro`
-Grant Automation access for Logic Pro. If status is `not_verifiable`, launch Logic Pro once and rerun doctor.
+Reports the responsible process's current Automation authorization for Logic Pro. Denied, consent-required, and unverifiable results are terminal observations for this unattended run and carry no remediation.
 
 <a id="doctor-permissionsautomation-system-events"></a>
 ### `permissions.automation_system_events`
-Grant Automation access for **System Events** (System Settings > Privacy & Security > Automation → System Events). This is a separate TCC target from Logic Pro automation and is required by MIDI import / tempo-dialog / project-state paths (#188). If status is `manual` (`not_verifiable`), the probe could not run — rerun doctor.
+Reports the responsible process's current Automation authorization for **System Events**. This is a separate TCC target from Logic Pro automation and is required by MIDI import / tempo-dialog / project-state paths (#188). Denied, consent-required, and unverifiable results are terminal observations for this unattended run and carry no remediation.
 
 <a id="doctor-permissionspost-event-access"></a>
 ### `permissions.post_event_access`
-Grant Accessibility/PostEvent access to the app that launches LogicProMCP; CGEvent fallback operations need it.
+Reports whether the responsible launcher can use the native PostEvent path required by CGEvent operations. A non-pass result is a terminal observation for this unattended run; doctor emits no remediation for this check.
 
 <a id="doctor-permissionslaunch-context"></a>
 ### `permissions.launch_context`
-Informational. If the launch context is unknown, re-run doctor from the same app that will launch the server when cross-context TCC is in doubt.
+Identifies which responsible process context the permission observations describe. Unknown context remains an informational observation and does not create a continuation action.
 
 <a id="doctor-permissionstcc-cross-context"></a>
 ### `permissions.tcc_cross_context`
-Cross-context TCC enrichment. If skipped, live permission probes remain authoritative.
+Cross-context TCC enrichment. If unavailable, the live permission probes remain authoritative; a non-pass enrichment result does not create a continuation action.
 
 <a id="doctor-systemmacos-version"></a>
 ### `system.macos_version`

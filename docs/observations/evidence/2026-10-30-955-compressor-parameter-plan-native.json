@@ -1,0 +1,78 @@
+{
+  "format": "logic-pro-mcp/native-parameter-plan-evidence-v1",
+  "issue": 955,
+  "candidate": {
+    "head": "444c9b797a34a5bc79445f1201ff92a7ba9b4f7a",
+    "tree": "a34c577602d1cd4682c5720f1fa825dc26e0f6eb",
+    "binary_sha256": "a72cfae441f5bfee106abd2e25c85cd1c7ea36a46b9a5c3eab200d82318c7e91"
+  },
+  "initial_external_receipt_sha256": "c09410369783c422038e0477571e7f81fd6bacf1e663921f4562fc30380a0616",
+  "final_external_receipt_sha256": "95b1ad32d633826f2bc251058f977ec52ef11f2b5c39a4f8f572f37672a6d66f",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR"
+  },
+  "fixture": {
+    "id": "965-flat-native-20261013",
+    "track_index": 13,
+    "insert": 1,
+    "plugin_id": "logic.stock.effect.compressor"
+  },
+  "plan": {
+    "state": "A",
+    "verified": true,
+    "complete": true,
+    "observation_scope": "requested_supported_subset",
+    "atomic_snapshot": false,
+    "application_authorized": false,
+    "write_attempted": false,
+    "entries": [
+      {
+        "param": "limiter_on",
+        "raw_unit": "boolean",
+        "requested_value": 0,
+        "observed_before": false,
+        "delta": 0,
+        "status": "unchanged",
+        "initial_raw": false,
+        "final_raw": false
+      },
+      {
+        "param": "threshold",
+        "raw_unit": "normalized",
+        "requested_unit": "percent",
+        "requested_value": 38,
+        "observed_before": 60,
+        "delta": -22,
+        "status": "change",
+        "initial_raw": 60,
+        "final_raw": 60
+      }
+    ]
+  },
+  "checks": {
+    "project_matches": true,
+    "before_inventory_state_a": true,
+    "state_a_verified": true,
+    "read_only_scope": true,
+    "exact_target": true,
+    "exact_parameter_set": true,
+    "stable_bookends": true,
+    "same_target_after": true,
+    "all_parameter_reads_write_attempted_false": true,
+    "all_parameter_reads_restored_view": true,
+    "all_new_editors_closed": true,
+    "all_stages_bounded_without_timeout": true,
+    "server_stopped_by_stdin_close": true,
+    "server_returncode": 0,
+    "server_reader_finished": true,
+    "server_pid_gone": true
+  },
+  "privacy": {
+    "raw_project_path_omitted": true,
+    "session_target_reference_omitted": true,
+    "process_id_omitted": true
+  }
+}

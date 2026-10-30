@@ -109,7 +109,7 @@ enum OperationCapabilityRegistry {
     enum CandidateBlock: String, Sendable {
         case missingPrerequisite = "missing_prerequisite"
         case prerequisiteUnknown = "prerequisite_unknown"
-        case awaitingManualSetup = "awaiting_manual_setup"
+        case prerequisiteUnavailable = "prerequisite_unavailable"
     }
 
     struct CandidatePlan: Sendable, Equatable {
@@ -123,7 +123,7 @@ enum OperationCapabilityRegistry {
 
     /// Operation-level readiness. Distinguishing these is the point: a single
     /// ready/not-ready bit cannot say "this will run but cannot be verified" or
-    /// "this needs a manual step you have not done", and collapsing them is how
+    /// "this prerequisite is unavailable", and collapsing them is how
     /// a group came to be published as ready.
     enum OperationReadiness: String, Sendable {
         /// A verified-strength candidate is executable.
@@ -134,8 +134,8 @@ enum OperationCapabilityRegistry {
         /// Executable, but the only candidates need live confirmation that no
         /// environment check can supply.
         case unknownLiveVerifyRequired = "unknown_live_verify_required"
-        /// Every candidate is blocked by a manual step the operator has not done.
-        case manualSetupRequired = "manual_setup_required"
+        /// Every candidate depends on a prerequisite unavailable for this run.
+        case prerequisiteUnavailable = "prerequisite_unavailable"
         /// No candidate can run.
         case notReady = "not_ready"
     }
@@ -155,12 +155,12 @@ enum OperationCapabilityRegistry {
     /// `false`, because "we did not look" must not read as "it works".
     struct HealthSnapshot: Sendable {
         let satisfied: [String: Bool]
-        /// Checks awaiting an operator action rather than failing outright.
-        let awaitingManual: Set<String>
+        /// Checks that have no autonomous acquisition path for this run.
+        let unavailable: Set<String>
 
-        init(satisfied: [String: Bool], awaitingManual: Set<String> = []) {
+        init(satisfied: [String: Bool], unavailable: Set<String> = []) {
             self.satisfied = satisfied
-            self.awaitingManual = awaitingManual
+            self.unavailable = unavailable
         }
     }
 
@@ -170,8 +170,8 @@ enum OperationCapabilityRegistry {
         let candidates = routeCandidates(for: operation).map { channel -> CandidatePlan in
             let prerequisites = channelPrerequisites[channel] ?? []
             for check in prerequisites {
-                if health.awaitingManual.contains(check) {
-                    return CandidatePlan(channel: channel, block: .awaitingManualSetup, blockingCheck: check)
+                if health.unavailable.contains(check) {
+                    return CandidatePlan(channel: channel, block: .prerequisiteUnavailable, blockingCheck: check)
                 }
                 guard let satisfied = health.satisfied[check] else {
                     return CandidatePlan(channel: channel, block: .prerequisiteUnknown, blockingCheck: check)
@@ -195,8 +195,8 @@ enum OperationCapabilityRegistry {
         guard !executable.isEmpty else {
             // An operation with NO declared route is not ready either. Reporting
             // it as ready-by-vacuity is the shape of the original defect.
-            if candidates.contains(where: { $0.block == .awaitingManualSetup }) {
-                return .manualSetupRequired
+            if candidates.contains(where: { $0.block == .prerequisiteUnavailable }) {
+                return .prerequisiteUnavailable
             }
             return .notReady
         }
@@ -223,7 +223,7 @@ enum OperationCapabilityRegistry {
     static func aggregate(_ plans: [OperationPlan]) -> OperationReadiness? {
         guard !plans.isEmpty else { return nil }
         let order: [OperationReadiness] = [
-            .notReady, .manualSetupRequired, .unknownLiveVerifyRequired, .readyDegraded, .readyVerified,
+            .notReady, .prerequisiteUnavailable, .unknownLiveVerifyRequired, .readyDegraded, .readyVerified,
         ]
         return plans
             .map(\.readiness)

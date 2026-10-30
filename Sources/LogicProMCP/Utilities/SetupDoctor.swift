@@ -365,7 +365,7 @@ enum SetupDoctor {
         case timeout
     }
 
-    static let schema = "logic_pro_mcp_doctor.v4"
+    static let schema = "logic_pro_mcp_doctor.v5"
 
     static let remediationAnchorsByCheckID: [String: String] = Dictionary(
         uniqueKeysWithValues: checkDefinitions.compactMap { definition in
@@ -568,8 +568,10 @@ enum SetupDoctor {
         )
     }
 
-    /// The "next action" one-liner (AC-4.2/4.3): names the single highest-priority
-    /// remediation — errors before warnings, then stable check order. `info`
+    /// The outcome one-liner (AC-4.2/4.3): names the single highest-priority
+    /// non-pass check — errors before warnings, then stable check order. Checks with
+    /// a real remediation are actions; terminal/unresolved checks remain visible but
+    /// must not pretend that the operator has an action to take. `info`
     /// (pass/skipped) is never headlined. All-pass → healthy message.
     static func computeHeadline(checks: [Check], status: ReportStatus) -> String {
         let priority: (Severity) -> Int = { severity in
@@ -592,8 +594,16 @@ enum SetupDoctor {
                 ? "Logic Pro MCP install is healthy."
                 : "Logic Pro MCP install is usable; some checks could not be verified."
         }
-        let remediationHint = lead.remediation.type == .none ? "" : " — \(lead.remediation.value)"
+        guard hasActionableRemediation(lead) else {
+            let prefix = lead.status == .fail ? "Terminal outcome" : "Unresolved outcome"
+            return "\(prefix) [\(lead.id)]: \(lead.summary)"
+        }
+        let remediationHint = " — \(lead.remediation.value)"
         return "Next action [\(lead.id)]: \(lead.summary)\(remediationHint)"
+    }
+
+    static func hasActionableRemediation(_ check: Check) -> Bool {
+        check.remediation.type != .none && !check.remediation.value.isEmpty
     }
 
     static func computeFixPlan(_ checks: [Check]) -> [String] {
@@ -612,6 +622,7 @@ enum SetupDoctor {
             .enumerated()
             .filter { $0.element.blockedBy == nil }
             .filter { tier($0.element.status) < 2 }
+            .filter { hasActionableRemediation($0.element) }
             .sorted {
                 let leftTier = tier($0.element.status)
                 let rightTier = tier($1.element.status)

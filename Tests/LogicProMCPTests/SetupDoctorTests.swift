@@ -88,6 +88,38 @@ private func issue26RepositoryRootURL() -> URL {
         .deletingLastPathComponent()
 }
 
+@Test func testReadmeDoctorSchemaMatchesProductContract() throws {
+    let readme = try String(
+        contentsOf: issue26RepositoryRootURL().appendingPathComponent("README.md"),
+        encoding: .utf8
+    )
+
+    #expect(readme.contains("schema \(SetupDoctor.schema)"))
+    #expect(readme.contains("\"schema\": \"\(SetupDoctor.schema)\""))
+    #expect(!readme.contains("logic_pro_mcp_doctor.v4"))
+}
+
+@Test func testDoctorDocsDescribeOnlyActionableFixPlanEntries() throws {
+    let root = issue26RepositoryRootURL()
+    let readme = try String(contentsOf: root.appendingPathComponent("README.md"), encoding: .utf8)
+    let setup = try String(contentsOf: root.appendingPathComponent("docs/SETUP.md"), encoding: .utf8)
+
+    #expect(readme.contains("Only non-pass checks with a concrete remediation are ordered into `fix_plan`"))
+    #expect(readme.contains("\"headline\": \"Terminal outcome [permissions.accessibility]: Accessibility permission is not granted.\""))
+    #expect(readme.contains("\"fix_plan\": [\"install.binary_inventory\"]"))
+    #expect(!readme.contains("\"fix_plan\": [\"permissions.accessibility\""))
+    #expect(setup.contains("an outcome headline"))
+    #expect(setup.contains("Terminal and unresolved checks without a concrete remediation are excluded"))
+
+    let permissionStart = try #require(setup.range(of: "<a id=\"doctor-permissionsaccessibility\"></a>"))
+    let permissionEnd = try #require(setup.range(of: "<a id=\"doctor-systemmacos-version\"></a>"))
+    let permissionAnchors = String(setup[permissionStart.lowerBound..<permissionEnd.lowerBound])
+    for staleContinuation in ["Grant ", "grant ", "launch Logic", "rerun doctor", "re-run doctor", "manual"] {
+        #expect(!permissionAnchors.contains(staleContinuation))
+    }
+    #expect(permissionAnchors.contains("terminal observation"))
+}
+
 @Test func testSetupDoctorJSONContractStableCheckIDsAndOKAggregation() throws {
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json", "--client", "claude-code"],
@@ -96,7 +128,7 @@ private func issue26RepositoryRootURL() -> URL {
         runtime: doctorRuntime()
     )
 
-    #expect(report.schema == "logic_pro_mcp_doctor.v4")
+    #expect(report.schema == "logic_pro_mcp_doctor.v5")
     #expect(report.status == .ok)
     #expect(report.installSource == .homebrew)
 
@@ -136,7 +168,7 @@ private func issue26RepositoryRootURL() -> URL {
 
     let json = encodeJSON(report)
     let object = try #require(sharedJSONObject(json))
-    #expect(object["schema"] as? String == "logic_pro_mcp_doctor.v4")
+    #expect(object["schema"] as? String == "logic_pro_mcp_doctor.v5")
     #expect(object["status"] as? String == "ok")
     #expect(object["install_source"] as? String == "homebrew")
     #expect(object["version"] as? String == ServerConfig.serverVersion)
@@ -158,7 +190,7 @@ private func issue26RepositoryRootURL() -> URL {
     #expect(remediation["value"] as? String != nil)
 }
 
-@Test func testSetupDoctorReportsActionableRemediationForNonPassStates() {
+@Test func testSetupDoctorReportsRemediationOrTerminalPermissionOutcomeForNonPassStates() {
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json", "--profile", "full", "--client", "claude-code"],
         permissionStatus: .init(accessibilityState: .notGranted, automationState: .notVerifiable),
@@ -174,9 +206,21 @@ private func issue26RepositoryRootURL() -> URL {
     )
 
     #expect(report.status == .failed)
+    let terminalPermissionIDs: Set<String> = [
+        "permissions.accessibility",
+        "permissions.automation_logic_pro",
+        "permissions.automation_system_events",
+        "permissions.post_event_access",
+    ]
     for check in report.checks where check.status != .pass && !check.optional {
-        #expect(check.remediation.type != .none, "\(check.id) has no remediation type")
-        #expect(!check.remediation.value.isEmpty, "\(check.id) has no remediation value")
+        if terminalPermissionIDs.contains(check.id) {
+            #expect(check.status == .fail, "\(check.id) must terminate as a failure")
+            #expect(check.remediation.type == .none, "\(check.id) must not request human remediation")
+            #expect(check.remediation.value == "", "\(check.id) must not carry human remediation text")
+        } else {
+            #expect(check.remediation.type != .none, "\(check.id) has no remediation type")
+            #expect(!check.remediation.value.isEmpty, "\(check.id) has no remediation value")
+        }
     }
 }
 
@@ -207,7 +251,7 @@ private func issue26RepositoryRootURL() -> URL {
     #expect(exitCode == 0)
     #expect(stderr.isEmpty)
     let json = try #require(sharedJSONObject(stdout))
-    #expect(json["schema"] as? String == "logic_pro_mcp_doctor.v4")
+    #expect(json["schema"] as? String == "logic_pro_mcp_doctor.v5")
     #expect(json["status"] as? String == "ok")
 }
 
@@ -633,10 +677,10 @@ private func issue26RepositoryRootURL() -> URL {
     let launch = try #require(report.checks.first { $0.id == "permissions.launch_context" })
     #expect(report.status == .ok)
     #expect(launch.status == .pass)
-    #expect(launch.summary.localizedCaseInsensitiveContains("unknown"))
-    #expect(launch.summary.localizedCaseInsensitiveContains("responsible process"))
-    #expect(launch.summary.localizedCaseInsensitiveContains("Terminal"))
-    #expect(SetupDoctor.renderHuman(report, useColor: false).contains("Launch context is unknown"))
+    #expect(launch.summary == "This report could not identify the responsible process; permission results remain bound to the unresolved launch context.")
+    #expect(launch.remediation.type == .none)
+    #expect(launch.remediation.value == "")
+    #expect(!(SetupDoctor.renderHuman(report, useColor: false).contains("run under Terminal")))
 }
 
 // MARK: - Claude registration (config-based, read-only)
