@@ -224,6 +224,110 @@ struct SpectrumComparisonTests {
         }
     }
 
+    @Test func spectralTiltFitsRawBandDeltaPerOctaveWithoutCallingItEQ() throws {
+        func analysis(after: Bool) -> SpectralAnalysisResult {
+            let centers = [100.0, 200.0, 400.0, 800.0]
+            let bands = centers.enumerated().map { index, center in
+                let delta = 3.0 + 2.0 * Double(index)
+                return SpectralBand(centerHz: center, energyDb: -40 + (after ? delta : 0))
+            } + [
+                SpectralBand(centerHz: 1_600, energyDb: after ? -20 : -80),
+                SpectralBand(centerHz: 3_200, energyDb: after ? -10 : -40, measured: after),
+            ]
+            return SpectralAnalysisResult(
+                analysisRef: "tilt-fixture", bands: bands, resonances: [], classification: .unknown,
+                levelConfidence: 0, complete: true, partialReason: nil,
+                artifactFingerprint: "sha256:" + String(repeating: after ? "b" : "a", count: 64),
+                sampleRate: 48_000, channelCount: 1, durationSeconds: 1, windowsAnalyzed: 2,
+                analysisPolicy: SpectralAnalysisPolicy(config: .default, removesDC: true)
+            )
+        }
+
+        let result = try SpectralComparisonResult(
+            before: analysis(after: false), after: analysis(after: true), mode: .spectralTilt
+        )
+        let tilt = try #require(result.tiltComparison)
+        #expect(tilt.method == "least_squares_raw_band_delta_vs_log2_hz.v1")
+        #expect(tilt.referenceBandCount == 4)
+        #expect(abs(try #require(tilt.slopeDbPerOctave) - 2) < 1e-12)
+        #expect(abs(try #require(tilt.pivotHz) - 282.842712474619) < 1e-9)
+        #expect(abs(try #require(tilt.pivotDeltaDb) - 6) < 1e-12)
+        #expect(!tilt.complete)
+        #expect(tilt.limitations.contains("linear_fit_not_eq_curve"))
+        #expect(tilt.limitations.contains("some_bands_unavailable"))
+        #expect(result.shapeComparison == nil)
+    }
+
+    @Test func spectralTiltNeedsTwoSharedUncensoredBands() throws {
+        func analysis(after: Bool) -> SpectralAnalysisResult {
+            SpectralAnalysisResult(
+                analysisRef: "tilt-insufficient", bands: [
+                    SpectralBand(centerHz: 100, energyDb: after ? -35 : -40),
+                    SpectralBand(centerHz: 200, energyDb: after ? -20 : -80),
+                ], resonances: [], classification: .unknown, levelConfidence: 0,
+                complete: true, partialReason: nil,
+                artifactFingerprint: "sha256:" + String(repeating: after ? "b" : "a", count: 64),
+                sampleRate: 48_000, channelCount: 1, durationSeconds: 1, windowsAnalyzed: 2,
+                analysisPolicy: SpectralAnalysisPolicy(config: .default, removesDC: true)
+            )
+        }
+
+        let result = try SpectralComparisonResult(
+            before: analysis(after: false), after: analysis(after: true), mode: .spectralTilt
+        )
+        let tilt = try #require(result.tiltComparison)
+        #expect(tilt.referenceBandCount == 1)
+        #expect(tilt.slopeDbPerOctave == nil)
+        #expect(tilt.pivotHz == nil)
+        #expect(tilt.pivotDeltaDb == nil)
+        #expect(!tilt.complete)
+        #expect(tilt.limitations.contains("insufficient_shared_uncensored_bands"))
+    }
+
+    @Test func spectralTiltDoesNotRelabelUniformGainAsFrequencyTilt() throws {
+        func analysis(after: Bool) -> SpectralAnalysisResult {
+            SpectralAnalysisResult(
+                analysisRef: "tilt-uniform", bands: [100.0, 200.0, 400.0].map {
+                    SpectralBand(centerHz: $0, energyDb: -40 + (after ? 6 : 0))
+                }, resonances: [], classification: .unknown, levelConfidence: 0,
+                complete: true, partialReason: nil,
+                artifactFingerprint: "sha256:" + String(repeating: after ? "b" : "a", count: 64),
+                sampleRate: 48_000, channelCount: 1, durationSeconds: 1, windowsAnalyzed: 2,
+                analysisPolicy: SpectralAnalysisPolicy(config: .default, removesDC: true)
+            )
+        }
+
+        let result = try SpectralComparisonResult(
+            before: analysis(after: false), after: analysis(after: true), mode: .spectralTilt
+        )
+        let tilt = try #require(result.tiltComparison)
+        #expect(abs(try #require(tilt.slopeDbPerOctave)) < 1e-12)
+        #expect(abs(try #require(tilt.pivotDeltaDb) - 6) < 1e-12)
+        #expect(tilt.complete)
+        #expect(result.shapeComparison == nil)
+    }
+
+    @Test func dispatchedSpectralTiltRetainsRawBandsAndReportsTheExpectedDirection() throws {
+        try withDirectory { directory in
+            let before = try writeTone(directory, "tilt-dispatch-before", amplitude: 0.2, highAmplitude: 0.2)
+            let after = try writeTone(directory, "tilt-dispatch-after", amplitude: 0.4, highAmplitude: 0.1)
+            let result = AudioDispatcher.handle(command: "compare_spectra", params: [
+                "before_path": .string(before.path), "after_path": .string(after.path),
+                "comparison_mode": .string("spectral_tilt"),
+            ])
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            let rawBands = try #require(body["bands"] as? [[String: Any]])
+            let tilt = try #require(body["tiltComparison"] as? [String: Any])
+            let referenceCount = try #require(tilt["referenceBandCount"] as? Int)
+            let slope = try #require(tilt["slopeDbPerOctave"] as? Double)
+            #expect(!rawBands.isEmpty)
+            #expect(referenceCount >= 2)
+            #expect(slope < 0)
+            #expect(body["shapeComparison"] == nil)
+            #expect(tilt["method"] as? String == "least_squares_raw_band_delta_vs_log2_hz.v1")
+        }
+    }
+
     @Test func explicitAbsoluteModePreservesTheDefaultResponseAndItsLegacyDecode() throws {
         try withDirectory { directory in
             let path = try writeTone(directory, "absolute", amplitude: 0.2)
@@ -240,7 +344,7 @@ struct SpectrumComparisonTests {
             let spec = try #require(OperationRegistry.spec(tool: "logic_audio", command: "compare_spectra"))
             let rule = try #require(OperationRegistry.parameterContracts[spec.id]?.params["comparison_mode"])
             #expect(rule.kind == .string)
-            #expect(rule.allowed == ["absolute", "spectral_shape"])
+            #expect(rule.allowed == ["absolute", "spectral_shape", "spectral_tilt"])
         }
     }
 
