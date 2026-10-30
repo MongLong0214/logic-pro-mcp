@@ -171,7 +171,9 @@ extension OperationTraceTests {
             #expect(object["error"] as? String == "dialog_not_found")
             #expect(object["events_posted"] as? Int == 0)
             #expect(!(try #require(object["write_attempted"] as? Bool)))
-            #expect(try #require(object["safe_to_retry"] as? Bool))
+            #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+            #expect(try #require(object["terminal"] as? Bool))
+            #expect(!(try #require(object["human_intervention_required"] as? Bool)))
         } else {
             // The legacy error makes no claim about partial delivery or retry safety.
             let object = try #require(sharedJSONObject(result.message))
@@ -239,7 +241,10 @@ extension OperationTraceTests {
         #expect(object["error"] as? String == "not_supported")
         #expect(object["events_posted"] as? Int == 0)
         #expect(!(try #require(object["write_attempted"] as? Bool)))
-        #expect(try #require(object["safe_to_retry"] as? Bool))
+        #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+        #expect(try #require(object["automatic_input_source_attempts_exhausted"] as? Bool))
+        #expect(try #require(object["terminal"] as? Bool))
+        #expect(!(try #require(object["human_intervention_required"] as? Bool)))
         let failures = ["source_id_unread": "source_id_unreadable", "no_layout": "no_ascii_capable_layout",
                         "wrong_letter": "layout_types_another_letter", "letter_unread": "layout_types_another_letter",
                         "select_failed": "select_failed", "switch_unread": "switch_not_verified",

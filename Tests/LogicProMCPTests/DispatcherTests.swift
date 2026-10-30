@@ -2640,7 +2640,7 @@ private actor TrackInsertingMockChannel: Channel {
     #expect(dispatcherText(result).contains("playhead"))
 }
 
-@Test func testRecordSequenceFailsWhenTrackDoesNotAppear() async {
+@Test func testRecordSequenceFailsWhenTrackDoesNotAppear() async throws {
     // v3.1.2 P0-2 — if live AX shows no new track header after import claims
     // success, we must surface that as a verification failure rather than
     // fabricate a `created_track` index. (Pre-v3.1.2 this used the cache
@@ -2664,10 +2664,15 @@ private actor TrackInsertingMockChannel: Channel {
 
     #expect(result.isError!)
     let text = dispatcherText(result)
+    let object = try #require(sharedJSONObject(text))
     #expect(
-        text.contains("live AX still shows"),
+        text.contains("bounded live AX census still shows 1 tracks"),
         "expected new live-AX failure wording, got: \(text)"
     )
+    #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(try #require(object["automatic_precondition_attempts_exhausted"] as? Bool))
 }
 
 @Test func testRecordSequenceCleansUpTempFileOnError() async {

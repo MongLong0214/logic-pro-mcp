@@ -2341,7 +2341,7 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     #expect(object["recovery_hint"] == nil)
 }
 
-@Test func testAccessibilityChannelAXBackedTransportErrorPaths() async {
+@Test func testAccessibilityChannelAXBackedTransportErrorPaths() async throws {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(150)
     let window = builder.element(151)
@@ -2374,7 +2374,11 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     let missingTempoField = await missingTransportChannel.execute(operation: "transport.set_tempo", params: ["tempo": "126"])
     #expect(!missingTempoField.isSuccess)
     #expect(missingTempoField.message.contains("\"error\":\"element_not_found\""))
-    #expect(missingTempoField.message.contains("tempo slider not located"))
+    #expect(missingTempoField.message.contains("automatic tempo lookup terminated"))
+    let missingTempoObject = try #require(sharedJSONObject(missingTempoField.message))
+    #expect(try #require(missingTempoObject["terminal"] as? Bool))
+    #expect(!(try #require(missingTempoObject["human_intervention_required"] as? Bool)))
+    #expect(try #require(missingTempoObject["automatic_tempo_lookup_exhausted"] as? Bool))
 
     let metronome = builder.element(153)
     builder.setChildren(transport, [metronome])
