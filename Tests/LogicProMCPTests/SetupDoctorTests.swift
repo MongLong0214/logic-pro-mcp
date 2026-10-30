@@ -88,6 +88,17 @@ private func issue26RepositoryRootURL() -> URL {
         .deletingLastPathComponent()
 }
 
+@Test func testReadmeDoctorSchemaMatchesProductContract() throws {
+    let readme = try String(
+        contentsOf: issue26RepositoryRootURL().appendingPathComponent("README.md"),
+        encoding: .utf8
+    )
+
+    #expect(readme.contains("schema \(SetupDoctor.schema)"))
+    #expect(readme.contains("\"schema\": \"\(SetupDoctor.schema)\""))
+    #expect(!readme.contains("logic_pro_mcp_doctor.v4"))
+}
+
 @Test func testSetupDoctorJSONContractStableCheckIDsAndOKAggregation() throws {
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json", "--client", "claude-code"],
