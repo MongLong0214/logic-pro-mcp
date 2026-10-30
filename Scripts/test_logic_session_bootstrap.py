@@ -8,6 +8,7 @@ from unittest import mock
 
 from logic_session_bootstrap import (
     BootstrapConfig,
+    BootstrapResult,
     FreshSessionAssessment,
     UISnapshot,
     bootstrap_fresh_logic_session,
@@ -54,6 +55,7 @@ def make_health(**overrides):
         "logic_pro_has_document": True,
         "permissions": {
             "accessibility": True,
+            "automation_system_events": True,
             "post_event_access": True,
         },
     }
@@ -260,8 +262,30 @@ class EvaluateFreshSessionTests(unittest.TestCase):
             config=make_config(),
         )
         self.assert_reason(assessment, "system_events_unavailable")
-        self.assertIn("System Events", assessment.hint or "")
+        self.assertEqual(
+            assessment.hint,
+            "System Events became unavailable before final fresh-session validation; bootstrap stopped.",
+        )
 
+    def test_missing_accessibility_terminates_without_requesting_a_permission_change(self):
+        health = make_health()
+        health["permissions"]["accessibility"] = False
+
+        assessment = evaluate_fresh_session(
+            ui=make_ui(),
+            health=health,
+            project_payload=make_project(track_count=1),
+            tracks_payload=make_tracks(count=1),
+            region_count=0,
+            config=make_config(),
+        )
+
+        self.assert_reason(assessment, "missing_accessibility")
+        self.assertEqual(
+            assessment.hint,
+            "Accessibility became unavailable before final fresh-session validation; bootstrap stopped.",
+        )
+        self.assertNotIn("grant", (assessment.hint or "").lower())
     def test_native_ui_snapshot_payload_maps_language_and_modal_markers(self):
         snapshot = _ui_snapshot_from_native_payload(
             {
@@ -339,6 +363,33 @@ class EvaluateFreshSessionTests(unittest.TestCase):
         self.assertIsNotNone(snapshot)
         assert snapshot is not None
         self.assertEqual(snapshot.frontmost_app, "Logic Pro Creator Studio")
+
+
+class BootstrapResultTests(unittest.TestCase):
+    def test_failed_result_serializes_terminal_no_human_outcome(self):
+        payload = BootstrapResult(
+            ok=False,
+            reason="missing_accessibility",
+            hint="Accessibility is unavailable.",
+            terminal=True,
+            human_intervention_required=False,
+            human_intervention_requests=0,
+        ).as_dict()
+
+        self.assertIs(payload["terminal"], True)
+        self.assertIs(payload["human_intervention_required"], False)
+        self.assertEqual(payload["human_intervention_requests"], 0)
+
+    def test_unclassified_failure_does_not_claim_a_no_human_outcome(self):
+        payload = BootstrapResult(
+            ok=False,
+            reason="logic_window_not_visible",
+            hint="Bring a Logic Pro document window on-screen before continuing.",
+        ).as_dict()
+
+        self.assertIsNone(payload["terminal"])
+        self.assertIsNone(payload["human_intervention_required"])
+        self.assertIsNone(payload["human_intervention_requests"])
 
 
 class ActivationHelperTests(unittest.TestCase):
