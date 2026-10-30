@@ -537,6 +537,130 @@ struct QualificationRunnerTests {
             "the scalar recipe captures and restores this exact track, not a separately hidden Mixer")
     }
 
+    @Test(arguments: [OperationID.mixerSetPan, .mixerSetVolume])
+    func mixerScalarCyclesAddressAndRestoreTheHeldTrack(operation: OperationID) throws {
+        let fixture = try SlowHandshakeFixture(valueCycle: operation)
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
+        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+
+        let observed = try #require(result.operationResults[operation.rawValue])
+        #expect(observed.status == .passed)
+        #expect(try #require(observed.mutationRestore).verifiedCycleShape)
+        let writes = try scalarWriteArguments(in: result)
+        #expect(writes.count == 2)
+        #expect(writes.allSatisfy { $0["target_ref"] as? String == "held-track" })
+        #expect(writes.allSatisfy { $0["index"] == nil })
+        let field = try #require(QualificationTransport.valueRestoreReadbackField[operation])
+        #expect(writes.last?[field] as? Double == 0.4)
+        #expect(try scalarValue(in: fixture) == 0.4)
+    }
+
+    @Test(arguments: [OperationID.mixerSetPan, .mixerSetVolume],
+          ["wrong_target_after", "malformed_after"])
+    func mixerScalarCyclesCompensateEveryIndeterminateWrite(
+        operation: OperationID, fault: String
+    ) throws {
+        let fixture = try SlowHandshakeFixture(valueCycle: operation, valueFault: fault)
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
+        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 0.2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+
+        #expect(FileManager.default.fileExists(
+            atPath: fixture.directory.appendingPathComponent("value-fault-consumed").path))
+        let observed = try #require(result.operationResults[operation.rawValue])
+        #expect(observed.status == .notQualified)
+        #expect(observed.mutationRestore == nil)
+        let writes = try scalarWriteArguments(in: result)
+        #expect(writes.count == 2, "one attempted mutation requires one owned compensation")
+        #expect(writes.allSatisfy { $0["target_ref"] as? String == "held-track" })
+        #expect(writes.allSatisfy { $0["index"] == nil })
+        let field = try #require(QualificationTransport.valueRestoreReadbackField[operation])
+        #expect(writes.last?[field] as? Double == 0.4)
+        #expect(result.wireFrames.contains {
+            $0.direction == .request && $0.operationID == "phase_b.compensate_readback"
+        })
+        #expect(try scalarValue(in: fixture) == 0.4)
+    }
+
+    @Test func mixerScalarTimeoutStillCompensatesTheHeldTrack() throws {
+        let fixture = try SlowHandshakeFixture(
+            valueCycle: .mixerSetVolume, valueFault: "lost_mutation_reply")
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .mixerSetVolume })
+        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 0.2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+
+        let observed = try #require(result.operationResults[spec.id.rawValue])
+        #expect(observed.status == .notQualified)
+        let writes = try scalarWriteArguments(in: result)
+        #expect(writes.count == 2)
+        #expect(writes.allSatisfy { $0["target_ref"] as? String == "held-track" && $0["index"] == nil })
+        #expect(writes.last?["volume"] as? Double == 0.4)
+        #expect(try scalarValue(in: fixture) == 0.4)
+    }
+
+    @Test(arguments: [OperationID.mixerSetPan, .mixerSetVolume])
+    func mixerScalarCompensationRequiresObservedLanding(operation: OperationID) throws {
+        let fixture = try SlowHandshakeFixture(
+            valueCycle: operation, valueFault: "malformed_after_compensation_noop")
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
+        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+
+        let observed = try #require(result.operationResults[operation.rawValue])
+        #expect(observed.status == .notQualified)
+        #expect(observed.mutationRestore == nil)
+        #expect(try #require(observed.mutationRestoreRefusal).contains("SENT BUT NOT LANDED"))
+        #expect(try scalarValue(in: fixture) == 0.5,
+            "the fixture must prove that a successful compensation reply is not enough")
+    }
+
+    @Test(arguments: [OperationID.mixerSetPan, .mixerSetVolume])
+    func mixerScalarZeroWriteRefusalDoesNotApplyAStaleCompensation(operation: OperationID) throws {
+        let fixture = try SlowHandshakeFixture(valueCycle: operation, valueFault: "refused_forward")
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
+        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+
+        let observed = try #require(result.operationResults[operation.rawValue])
+        #expect(observed.status == .notQualified)
+        #expect(observed.mutationRestore == nil)
+        #expect(try scalarWriteArguments(in: result).count == 1)
+        #expect(!result.wireFrames.contains {
+            $0.direction == .request && $0.operationID == "phase_b.compensate"
+        })
+        #expect(try scalarValue(in: fixture) == 0.4)
+    }
+
+    private func scalarWriteArguments(in result: QualificationDriveResult) throws -> [[String: Any]] {
+        try result.wireFrames.compactMap { frame in
+            guard frame.direction == .request,
+                  ["phase_b.mutation", "phase_b.restore", "phase_b.compensate"].contains(frame.operationID)
+            else { return nil }
+            let request = try #require(sharedJSONObject(frame.payload))
+            let params = try #require(request["params"] as? [String: Any])
+            let arguments = try #require(params["arguments"] as? [String: Any])
+            return try #require(arguments["params"] as? [String: Any])
+        }
+    }
+
+    private func scalarValue(in fixture: SlowHandshakeFixture) throws -> Double {
+        let text = try String(
+            contentsOf: fixture.directory.appendingPathComponent("scalar-value"), encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return try #require(Double(text))
+    }
+
     @Test(arguments: [OperationID.mixerGetInputBusVerified, .mixerGetOutputVerified,
                       .mixerGetSendDestinationVerified, .pluginsGetInventory])
     func neighboringMixerAndPluginRecipesKeepTheirMixerReadback(operation: OperationID) throws {
@@ -7385,7 +7509,8 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
              nameRecipe: OperationID? = nil, nameIdentityFault: String = "none",
              countInCycle: String? = nil, autopunchCycle: String? = nil,
              playheadStep: OperationID? = nil, playheadFault: String = "none", playheadAtBoundary: Bool = false,
-             playheadOrigin: String? = nil) throws {
+             playheadOrigin: String? = nil, valueCycle: OperationID? = nil,
+             valueFault: String = "none") throws {
             directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("qualification-slow-handshake-\(UUID().uuidString)", isDirectory: true)
             executableURL = directory.appendingPathComponent("server.sh")
@@ -7420,7 +7545,8 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             IFS= read -r request_line || exit 0
             IFS= read -r request_line || exit 0
             """#
-            if transportRefusal || transportNativePause || nameRecipe != nil || countInCycle != nil || autopunchCycle != nil || playheadStep != nil {
+            if transportRefusal || transportNativePause || nameRecipe != nil || countInCycle != nil
+                || autopunchCycle != nil || playheadStep != nil || valueCycle != nil {
                 script = try #require(script.components(separatedBy: "# AFTER SEED").first) + #"""
                 cd "$(dirname "$0")" || exit 1
                 initial_playing=false
@@ -7446,6 +7572,12 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                 step_project_reads=0
                 step_project_ref=prj_step
                 step_restore_attempts=0
+                value_cycle=none
+                value_fault=none
+                value_reads=0
+                value_writes=0
+                scalar_value=0.4
+                printf '%s\n' "$scalar_value" > scalar-value
                 printf '%s\n' "$step_position" > step-position
                 track_name='Before'
                 track_ref=held-track
@@ -7472,6 +7604,23 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                         esac
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://project/info","text":"{\\"source\\":\\"ax_live\\",\\"cache_age_sec\\":0,\\"identity_source\\":\\"current_document_project_file\\",\\"identity_fetched_at\\":\\"%s\\",\\"data\\":{\\"project_ref\\":\\"%s\\",\\"filePath\\":\\"/tmp/qualification-step.logicx\\"}}"}]}}\n' "$id" "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" "$step_project_ref" ;;
                       *'"uri":"logic://tracks"'*)
+                        if [ "$value_cycle" != none ]; then
+                            value_reads=$((value_reads + 1))
+                            if [ "$value_reads" = 2 ]; then
+                                case "$value_fault" in
+                                  malformed_after|malformed_after_compensation_noop)
+                                    touch value-fault-consumed
+                                    printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://tracks","text":"not-json"}]}}\n' "$id"
+                                    continue ;;
+                                  wrong_target_after)
+                                    touch value-fault-consumed
+                                    printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://tracks","text":"{\\"source\\":\\"ax_live\\",\\"cache_age_sec\\":0,\\"readable\\":true,\\"ax_occluded\\":false,\\"data\\":[{\\"name\\":\\"Before\\",\\"track_ref\\":\\"foreign-track\\",\\"volume\\":%s,\\"pan\\":%s}]}"}]}}\n' "$id" "$scalar_value" "$scalar_value"
+                                    continue ;;
+                                esac
+                            fi
+                            printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://tracks","text":"{\\"source\\":\\"ax_live\\",\\"cache_age_sec\\":0,\\"readable\\":true,\\"ax_occluded\\":false,\\"data\\":[{\\"name\\":\\"Before\\",\\"track_ref\\":\\"held-track\\",\\"volume\\":%s,\\"pan\\":%s}]}"}]}}\n' "$id" "$scalar_value" "$scalar_value"
+                            continue
+                        fi
                         if [ "$fault_pending" = true ]; then
                             fault_pending=false
                             fault_consumed=true
@@ -7549,6 +7698,31 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"logic_pro_running\\":true,\\"logic_pro_version\\":\\"11.2\\",\\"logic_pro_bundle_id\\":\\"com.apple.logic10\\",\\"logic_pro_variant\\":\\"desktop\\",\\"logic_pro_ui_locale\\":\\"en-US\\",\\"process_metadata_resolved\\":true,\\"logic_pro_variants\\":[{\\"variant\\":\\"desktop\\",\\"bundle_id\\":\\"com.apple.logic10\\",\\"installed\\":true,\\"running\\":true},{\\"variant\\":\\"creator_studio\\",\\"bundle_id\\":\\"com.apple.mobilelogic\\",\\"installed\\":false,\\"running\\":false}]}"}]}}\n' "$id" ;;
                       *'__adr001b_no_write_probe'*)
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"invalid_params\\",\\"write_attempted\\":false}"}]}}\n' "$id" ;;
+                      *'"command":"set_volume"'*|*'"command":"set_pan"'*)
+                        value_writes=$((value_writes + 1))
+                        if ! printf '%s' "$request" | grep -q '"target_ref":"held-track"'; then
+                            printf '%s\n' "$request" >> unsafe-writes
+                            printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"stale_target_reference\\",\\"write_attempted\\":false}"}]}}\n' "$id"
+                            continue
+                        fi
+                        if [ "$value_fault" = refused_forward ] && [ "$value_writes" = 1 ]; then
+                            touch value-fault-consumed
+                            printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"refused\\",\\"write_attempted\\":false}"}]}}\n' "$id"
+                            continue
+                        fi
+                        requested_value=0.5
+                        if [ "$value_writes" -gt 1 ]; then requested_value=0.4; fi
+                        if [ "$value_fault" = malformed_after_compensation_noop ] && [ "$value_writes" = 2 ]; then
+                            :
+                        else
+                            scalar_value=$requested_value
+                            printf '%s\n' "$scalar_value" > scalar-value
+                        fi
+                        if [ "$value_fault" = lost_mutation_reply ] && [ "$value_writes" = 1 ]; then
+                            touch value-fault-consumed
+                            continue
+                        fi
+                        printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true,\\"write_attempted\\":true}"}]}}\n' "$id" ;;
                       *'"command":"fast_forward"'*|*'"command":"rewind"'*)
                         if [ "$step_fault" = stage_lost_step_reply ]; then
                             touch step-fault-consumed
@@ -7746,6 +7920,11 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                 if let nameRecipe {
                     script = script.replacingOccurrences(of: "name_recipe=none", with: "name_recipe=\(nameRecipe.rawValue)")
                         .replacingOccurrences(of: "name_fault=none", with: "name_fault=\(nameIdentityFault)")
+                }
+                if let valueCycle {
+                    script = script.replacingOccurrences(
+                        of: "value_cycle=none", with: "value_cycle=\(valueCycle.rawValue)")
+                        .replacingOccurrences(of: "value_fault=none", with: "value_fault=\(valueFault)")
                 }
                 if cachedTransport {
                     script = script.replacingOccurrences(of: "resource_source=ax_live", with: "resource_source=cache")
