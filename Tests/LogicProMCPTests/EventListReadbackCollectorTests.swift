@@ -488,6 +488,68 @@ import Testing
         #expect(Set(counter.selectedIndices).isSuperset(of: [0, 32, 64]))
     }
 
+    @Test func unreadableOriginalRowSelectionRefusesBeforeAnyActuation() throws {
+        let fixture = Self.fixture(rowCount: 3, hollowRows: [1, 2])
+        let selectionCounter = SelectionCounter()
+        let actionCounter = MenuActionCounter()
+        let runtime = fixture.builder.makeLogicRuntime(
+            appElement: fixture.app,
+            attributeValueResultHandler: { element, attribute in
+                if element == fixture.table,
+                   attribute == (kAXSelectedRowsAttribute as String) {
+                    return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                }
+                return nil
+            },
+            setAttributeHandler: { _, _, _ in
+                selectionCounter.writes += 1
+                return true
+            },
+            performActionHandler: { _, action in
+                actionCounter.actions.append(action)
+                return true
+            }
+        )
+
+        #expect(throws: EventListReadbackCollectorError.rowSelectionBaselineUnavailable(
+            status: AXError.cannotComplete.rawValue
+        )) {
+            try Self.collect(fixture, runtime: runtime)
+        }
+        #expect(selectionCounter.writes == 0)
+        #expect(actionCounter.actions.isEmpty)
+    }
+
+    @Test func malformedOriginalRowSelectionRefusesBeforeAnyActuation() throws {
+        let fixture = Self.fixture(rowCount: 3, hollowRows: [1, 2])
+        let selectionCounter = SelectionCounter()
+        let actionCounter = MenuActionCounter()
+        let runtime = fixture.builder.makeLogicRuntime(
+            appElement: fixture.app,
+            attributeValueResultHandler: { element, attribute in
+                if element == fixture.table,
+                   attribute == (kAXSelectedRowsAttribute as String) {
+                    return .success("not rows" as NSString)
+                }
+                return nil
+            },
+            setAttributeHandler: { _, _, _ in
+                selectionCounter.writes += 1
+                return true
+            },
+            performActionHandler: { _, action in
+                actionCounter.actions.append(action)
+                return true
+            }
+        )
+
+        #expect(throws: EventListReadbackCollectorError.rowSelectionBaselineMalformed) {
+            try Self.collect(fixture, runtime: runtime)
+        }
+        #expect(selectionCounter.writes == 0)
+        #expect(actionCounter.actions.isEmpty)
+    }
+
     @Test func successfulHarvestRefusesWhenOriginalRowSelectionCannotBeRestored() throws {
         let fixture = Self.fixture(rowCount: 3, hollowRows: [1, 2])
         let builder = fixture.builder

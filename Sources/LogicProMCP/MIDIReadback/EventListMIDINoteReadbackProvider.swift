@@ -73,6 +73,8 @@ enum EventListMIDINoteReadbackProviderError: Error, Equatable, Sendable {
     case itemCountMissing
     case regionPathMissing
     case rowsUnavailable
+    case rowSelectionBaselineUnavailable(status: Int32)
+    case rowSelectionBaselineMalformed
     case rowSelectionFailed(index: Int)
     indirect case rowSelectionRestorationFailed(primary: EventListMIDINoteReadbackProviderError?)
     case rowCellCountMismatch(row: Int, expected: Int, actual: Int)
@@ -115,6 +117,10 @@ enum EventListMIDINoteReadbackProviderError: Error, Equatable, Sendable {
             self = .regionPathMissing
         case .rowsUnavailable:
             self = .rowsUnavailable
+        case let .rowSelectionBaselineUnavailable(status):
+            self = .rowSelectionBaselineUnavailable(status: status)
+        case .rowSelectionBaselineMalformed:
+            self = .rowSelectionBaselineMalformed
         case let .rowSelectionFailed(index):
             self = .rowSelectionFailed(index: index)
         case let .rowSelectionRestorationFailed(primary):

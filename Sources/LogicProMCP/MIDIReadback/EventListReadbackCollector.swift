@@ -337,11 +337,24 @@ enum EventListReadbackCollector {
             in: mainWindow,
             runtime: runtime.ax
         )
-        let originalRows: [AXUIElement] = AXHelpers.getAttribute(
-            paneAndTable.table,
-            kAXSelectedRowsAttribute,
-            runtime: runtime.ax
-        ) ?? []
+        let originalRows: [AXUIElement]
+        let originalSelectionRead: Result<AnyObject?, AXHelpers.AXStatusError> =
+            AXHelpers.getAttributeResult(
+                paneAndTable.table,
+                kAXSelectedRowsAttribute,
+                runtime: runtime.ax
+            )
+        switch originalSelectionRead {
+        case .success(nil):
+            originalRows = []
+        case .success(let value):
+            guard let rows = value as? [AXUIElement] else {
+                throw EventListReadbackCollectorError.rowSelectionBaselineMalformed
+            }
+            originalRows = rows
+        case .failure(let error):
+            throw EventListReadbackCollectorError.rowSelectionBaselineUnavailable(status: error.raw)
+        }
         let result = Result<EventListReadbackEvidence, Error> {
             try selectEventTabIfNeeded(eventTab, wasSelected: eventTabWasSelected, runtime: runtime.ax)
 
@@ -1199,6 +1212,8 @@ enum EventListReadbackCollectorError: Error, Equatable, Sendable, CustomStringCo
     case itemCountMissing
     case regionPathMissing
     case rowsUnavailable
+    case rowSelectionBaselineUnavailable(status: Int32)
+    case rowSelectionBaselineMalformed
     case rowSelectionFailed(index: Int)
     indirect case rowSelectionRestorationFailed(primary: EventListReadbackCollectorError?)
     case rowCellCountMismatch(row: Int, expected: Int, actual: Int)
@@ -1236,6 +1251,10 @@ enum EventListReadbackCollectorError: Error, Equatable, Sendable, CustomStringCo
         case .itemCountMissing: return "Event List Number of Items text is unavailable."
         case .regionPathMissing: return "Event List Region Path text is unavailable."
         case .rowsUnavailable: return "Event List AXRows is unavailable."
+        case let .rowSelectionBaselineUnavailable(status):
+            return "The original Event List row selection is unreadable (AX status \(status))."
+        case .rowSelectionBaselineMalformed:
+            return "The original Event List row selection has an unexpected value shape."
         case let .rowSelectionFailed(index): return "Could not select Event List row \(index) to materialize it."
         case let .rowSelectionRestorationFailed(primary):
             return [primary?.description, "The original Event List row selection could not be restored and verified."]

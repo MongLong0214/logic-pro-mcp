@@ -1,3 +1,4 @@
+import ApplicationServices
 import Foundation
 import Testing
 @testable import LogicProMCP
@@ -214,6 +215,8 @@ import Testing
             .itemCountMissing,
             .regionPathMissing,
             .rowsUnavailable,
+            .rowSelectionBaselineUnavailable(status: AXError.cannotComplete.rawValue),
+            .rowSelectionBaselineMalformed,
             .rowSelectionFailed(index: 3),
             .rowSelectionRestorationFailed(primary: .timeDisplayEnabled),
             .rowCellCountMismatch(row: 3, expected: 8, actual: 7),
@@ -240,6 +243,8 @@ import Testing
             .itemCountMissing,
             .regionPathMissing,
             .rowsUnavailable,
+            .rowSelectionBaselineUnavailable(status: AXError.cannotComplete.rawValue),
+            .rowSelectionBaselineMalformed,
             .rowSelectionFailed(index: 3),
             .rowSelectionRestorationFailed(primary: .timeDisplayEnabled),
             .rowCellCountMismatch(row: 3, expected: 8, actual: 7),
