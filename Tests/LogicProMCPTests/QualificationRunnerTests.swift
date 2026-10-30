@@ -1905,7 +1905,7 @@ struct QualificationRunnerTests {
         let unsigned = try JSONDecoder().decode(ReleaseQualificationAttestation.self,
             from: Data(contentsOf: fixture.attestationURL))
         #expect(unsigned.logicVersion == "11.2")
-        #expect(unsigned.provenance?.schema == "qualification-provenance/v2")
+        #expect(unsigned.provenance?.schema == "qualification-provenance/v3")
         #expect(unsigned.provenance?.logicVersion == "11.2")
         #expect(unsigned.cases.filter { $0.id == "atlas.drift_diff" } == [atlas.qualificationCase])
         let signing = QualificationRunner.signTrusted(candidateURL: fixture.executableURL,
@@ -1971,7 +1971,7 @@ struct QualificationRunnerTests {
         let resealed = try JSONDecoder().decode(ReleaseQualificationAttestation.self,
             from: Data(contentsOf: fixture.attestationURL))
         #expect(resealed.logicVersion == "11.2")
-        #expect(resealed.provenance?.schema == "qualification-provenance/v2")
+        #expect(resealed.provenance?.schema == "qualification-provenance/v3")
         #expect(resealed.provenance?.logicVersion == "11.2")
         #expect(resealed.evidenceManifestSHA256 == changedManifestSHA)
         #expect(resealed.provenance?.evidenceManifestSHA256 == changedManifestSHA)
@@ -4029,7 +4029,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(try Self.controlledPublicationFiles(copy.bundle) == originalFiles)
     }
 
-    /// Historical v1 bytes remain readable, never silently upgraded to v2.
+    /// Historical v1 bytes remain readable, never silently upgraded to the current schema.
     @Test func legacyV1ProvenanceRemainsDecodableWithoutInventedLogicVersion() async throws {
         let fixture = try await signedTrustedFixture()
         defer { fixture.remove() }
@@ -4072,13 +4072,13 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
 
     /// Re-signed counterexamples isolate binding, not signature damage or missing trust.
     @Test(arguments: ["missing", "different"])
-    func signedV2ProvenanceRequiresExactLogicVersionBinding(_ mutation: String) async throws {
+    func signedCurrentProvenanceRequiresExactLogicVersionBinding(_ mutation: String) async throws {
         let fixture = try await signedTrustedFixture()
         defer { fixture.remove() }
         let original = try Data(contentsOf: fixture.attestationURL)
         try Self.mutateJSONObject(at: fixture.attestationURL) { object in
             var provenance = try #require(object["provenance"] as? [String: Any])
-            try #require(provenance["schema"] as? String == "qualification-provenance/v2")
+            try #require(provenance["schema"] as? String == "qualification-provenance/v3")
             if mutation == "missing" {
                 provenance.removeValue(forKey: "logicVersion")
             } else {
@@ -4209,7 +4209,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(attestation.provenance != nil)
         #expect(attestation.provenanceSignature == nil)
         let provenance = try #require(attestation.provenance)
-        #expect(provenance.schema == "qualification-provenance/v2")
+        #expect(provenance.schema == "qualification-provenance/v3")
         #expect(provenance.logicVersion == attestation.logicVersion)
         #expect(provenance.logicVersion == "11.2")
     }
@@ -5705,6 +5705,126 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(Self.rejectionReasons(json).isEmpty)
     }
 
+    @Test func trustedVerifierUsesTheCandidatesSignedOperationCatalog() async throws {
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
+        let fixture = try trustedFixture(specs: [spec])
+        defer { fixture.remove() }
+
+        let qualification = await fixture.runQualification(waiversURL: fixture.waiversURL)
+        #expect(qualification.exitCode == 0)
+        fixture.sign()
+
+        let result = QualificationRunner.verifyTrusted(
+            candidateURL: fixture.executableURL,
+            bundleURL: fixture.directory,
+            releaseVersion: "1.2.3",
+            expectedCommitSHA: fixture.commitSHA,
+            trustedPublicKeyData: fixture.trustedPublicKeyData
+        )
+        let json = try Self.resultObject(result)
+
+        #expect(result.exitCode == 0)
+        #expect(try #require(json["promotable"] as? Bool))
+        #expect(Self.rejectionReasons(json).isEmpty)
+    }
+
+    @Test func trustedSignerRejectsACatalogMissingItsExpectedRegistry() async throws {
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
+        let fixture = try trustedFixture(specs: [spec])
+        defer { fixture.remove() }
+        let qualification = await fixture.runQualification(waiversURL: fixture.waiversURL)
+        #expect(qualification.exitCode == 0)
+
+        let result = QualificationRunner.signTrusted(
+            candidateURL: fixture.executableURL,
+            bundleURL: fixture.directory,
+            releaseVersion: "1.2.3",
+            expectedCommitSHA: fixture.commitSHA,
+            signingPrivateKeyData: fixture.signingKeyData
+        )
+
+        #expect(result.exitCode != 0)
+        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains(
+            "evidenceBindingMismatch"
+        ))
+    }
+
+    @Test func operationCatalogRejectsDuplicateMissingAndPolicyDigestMutants() async throws {
+        let specs = try [OperationID.systemHealth, .systemPermissions].map { operation in
+            try #require(OperationRegistry.specs.first { $0.id == operation })
+        }
+        let fixture = try trustedFixture(specs: specs, includeRequiredAtlas: false)
+        defer { fixture.remove() }
+        let attestation = try await fixture.qualify(waiversURL: fixture.waiversURL)
+        let catalog = try JSONDecoder().decode(
+            QualificationOperationCatalog.self,
+            from: Data(contentsOf: fixture.directory.appendingPathComponent(
+                "operation-catalog.json"
+            ))
+        )
+        #expect(QualificationRunner.operationCatalogContentIssue(
+            catalog, attestation: attestation
+        ) == nil)
+
+        let duplicate = QualificationOperationCatalog(
+            schema: catalog.schema,
+            binarySHA256: catalog.binarySHA256,
+            semanticPolicySHA256: catalog.semanticPolicySHA256,
+            operations: [catalog.operations[0], catalog.operations[0], catalog.operations[1]]
+        )
+        #expect(QualificationRunner.operationCatalogContentIssue(
+            duplicate, attestation: attestation
+        ) == "operation catalog contains missing, duplicate, or non-bijective IDs")
+
+        let missing = QualificationOperationCatalog(
+            schema: catalog.schema,
+            binarySHA256: catalog.binarySHA256,
+            semanticPolicySHA256: try QualificationRunner.operationCatalogPolicyDigest(
+                Array(catalog.operations.dropLast())
+            ),
+            operations: Array(catalog.operations.dropLast())
+        )
+        #expect(QualificationRunner.operationCatalogContentIssue(
+            missing, attestation: attestation
+        ) == "operation catalog does not bijectively bind the attested operation cases")
+
+        let changedPolicyDigest = QualificationOperationCatalog(
+            schema: catalog.schema,
+            binarySHA256: catalog.binarySHA256,
+            semanticPolicySHA256: String(repeating: "0", count: 64),
+            operations: catalog.operations
+        )
+        #expect(QualificationRunner.operationCatalogContentIssue(
+            changedPolicyDigest, attestation: attestation
+        ) == "operation catalog semantic policy digest mismatch")
+    }
+
+    @Test func trustedVerifierRejectsCatalogBytesChangedAfterSigning() async throws {
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
+        let fixture = try trustedFixture(specs: [spec])
+        defer { fixture.remove() }
+        let qualification = await fixture.runQualification(waiversURL: fixture.waiversURL)
+        #expect(qualification.exitCode == 0)
+        fixture.sign()
+        let catalogURL = fixture.directory.appendingPathComponent("operation-catalog.json")
+        var catalogData = try Data(contentsOf: catalogURL)
+        catalogData.append(0x20)
+        try catalogData.write(to: catalogURL)
+
+        let result = QualificationRunner.verifyTrusted(
+            candidateURL: fixture.executableURL,
+            bundleURL: fixture.directory,
+            releaseVersion: "1.2.3",
+            expectedCommitSHA: fixture.commitSHA,
+            trustedPublicKeyData: fixture.trustedPublicKeyData
+        )
+
+        #expect(result.exitCode != 0)
+        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains(
+            "evidenceBindingMismatch"
+        ))
+    }
+
     @Test func qualifyEmitsRequiredReleaseArtifactsAndManifestDigests() async throws {
         let fixture = try promotableFixture()
         defer { fixture.remove() }
@@ -5720,6 +5840,21 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             JSONSerialization.jsonObject(with: manifestData) as? [String: Any]
         )
         let entries = try #require(manifest["files"] as? [[String: Any]])
+        let catalogData = try Data(contentsOf: fixture.directory.appendingPathComponent(
+            "operation-catalog.json"
+        ))
+        let catalogDigest = SupportBundleBuilder.sha256(catalogData)
+        let catalog = try JSONDecoder().decode(
+            QualificationOperationCatalog.self,
+            from: catalogData
+        )
+        #expect(catalog.schema == "qualification-operation-catalog/v1")
+        #expect(catalog.binarySHA256 == attestation.binarySHA256)
+        #expect(catalog.operations.map(\.operationID) == [OperationID.systemHealth.rawValue])
+        #expect(manifest["operation_catalog_path"] as? String == "operation-catalog.json")
+        #expect(manifest["operation_catalog_sha256"] as? String == catalogDigest)
+        #expect(attestation.operationCatalogSHA256 == catalogDigest)
+        #expect(attestation.provenance?.operationCatalogSHA256 == catalogDigest)
 
         for (filename, expected) in artifacts {
             let data = try #require(try? Data(
@@ -5861,7 +5996,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
 
         #expect(attestation == roundTripped)
-        #expect(attestation.schema == "release-qualification-attestation/v2")
+        #expect(attestation.schema == "release-qualification-attestation/v3")
         #expect(attestation.serverVersion == "1.2.3")
         #expect(attestation.commitSHA == fixture.commitSHA)
         #expect(attestation.binarySHA256 == SupportBundleBuilder.sha256(fixture.executableData))
@@ -5870,7 +6005,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(attestation.locale == .koKR)
         #expect(attestation.profile == .full)
         let provenance = try #require(attestation.provenance)
-        #expect(provenance.schema == "qualification-provenance/v2")
+        #expect(provenance.schema == "qualification-provenance/v3")
         #expect(provenance.logicVersion == attestation.logicVersion)
         #expect(attestation.cache == .warm)
         #expect(attestation.fixture == .empty)
@@ -6801,6 +6936,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         for filename in [
             "evidence-manifest.json", "EVIDENCE-MANIFEST.JSON",
             "case-manifest.json", "CASE-MANIFEST.JSON",
+            "operation-catalog.json", "OPERATION-CATALOG.JSON",
         ] {
             let outputURL = fixture.directory.appendingPathComponent(filename)
             let result = await fixture.runner.run(arguments: [
@@ -6985,10 +7121,10 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
     }
 
     private func trustedFixture(
+        specs: [OperationSpec] = OperationRegistry.specs,
         candidateExecutionSentinelURL: URL? = nil,
         includeRequiredAtlas: Bool = true
     ) throws -> Fixture {
-        let specs = OperationRegistry.specs
         let driveResult = Self.driveResult(
             specs: specs,
             mutationRestoreRecords: [Self.recipeShapedRecord()]
@@ -8186,6 +8322,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                 cases: copiedCases,
                 waivers: waivers ?? original.waivers,
                 evidenceManifestSHA256: original.evidenceManifestSHA256,
+                operationCatalogSHA256: original.operationCatalogSHA256,
                 provenance: original.provenance,
                 provenanceSignature: provenanceSignature ?? original.provenanceSignature
             )

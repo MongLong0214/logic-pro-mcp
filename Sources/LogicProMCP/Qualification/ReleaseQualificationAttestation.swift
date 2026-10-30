@@ -445,6 +445,38 @@ struct QualificationCaseManifest: Codable, Equatable, Sendable {
     }
 }
 
+struct QualificationOperationCatalog: Codable, Equatable, Sendable {
+    enum OracleDisposition: String, Codable, Equatable, Sendable {
+        case bespokeHealth = "bespoke_health"
+        case semanticOracle = "semantic_oracle"
+        case noSemanticOracle = "no_semantic_oracle"
+    }
+
+    struct Entry: Codable, Equatable, Sendable {
+        let operationID: String
+        let caseID: String
+        let oracleDisposition: OracleDisposition
+
+        enum CodingKeys: String, CodingKey {
+            case operationID = "operation_id"
+            case caseID = "case_id"
+            case oracleDisposition = "oracle_disposition"
+        }
+    }
+
+    let schema: String
+    let binarySHA256: String
+    let semanticPolicySHA256: String
+    let operations: [Entry]
+
+    enum CodingKeys: String, CodingKey {
+        case schema
+        case binarySHA256 = "binary_sha256"
+        case semanticPolicySHA256 = "semantic_policy_sha256"
+        case operations
+    }
+}
+
 struct QualificationWaiver: Codable, Equatable, Sendable {
     static let hostAxisAvailabilityCapability = "ADR-001-a host-axis availability"
 
@@ -536,6 +568,7 @@ struct QualificationProvenanceRecord: Codable, Equatable, Sendable {
     let startedAt: Date
     let completedAt: Date
     let evidenceManifestSHA256: String
+    let operationCatalogSHA256: String?
     // Optional only so historical v1 records remain decodable; v2 qualification
     // requires this signed observation and never fills it from the attestation.
     let logicVersion: String?
@@ -567,6 +600,7 @@ struct ReleaseQualificationAttestation: Codable, Equatable, Sendable {
     let cases: [QualificationCase]
     let waivers: [QualificationWaiver]
     let evidenceManifestSHA256: String
+    let operationCatalogSHA256: String?
     let provenance: QualificationProvenanceRecord?
     let provenanceSignature: QualificationProvenanceSignature?
 
@@ -590,6 +624,7 @@ struct ReleaseQualificationAttestation: Codable, Equatable, Sendable {
         cases: [QualificationCase],
         waivers: [QualificationWaiver],
         evidenceManifestSHA256: String,
+        operationCatalogSHA256: String? = nil,
         provenance: QualificationProvenanceRecord? = nil,
         provenanceSignature: QualificationProvenanceSignature? = nil
     ) {
@@ -612,6 +647,7 @@ struct ReleaseQualificationAttestation: Codable, Equatable, Sendable {
         self.cases = cases
         self.waivers = waivers
         self.evidenceManifestSHA256 = evidenceManifestSHA256
+        self.operationCatalogSHA256 = operationCatalogSHA256
         self.provenance = provenance
         self.provenanceSignature = provenanceSignature
     }

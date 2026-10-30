@@ -123,6 +123,8 @@ package struct QualificationRunner: Sendable {
         let binarySHA256: String
         let caseManifestPath: String
         let caseManifestSHA256: String
+        let operationCatalogPath: String
+        let operationCatalogSHA256: String
         let waiversSHA256: String
         let files: [Entry]
 
@@ -131,6 +133,8 @@ package struct QualificationRunner: Sendable {
             case binarySHA256 = "binary_sha256"
             case caseManifestPath = "case_manifest_path"
             case caseManifestSHA256 = "case_manifest_sha256"
+            case operationCatalogPath = "operation_catalog_path"
+            case operationCatalogSHA256 = "operation_catalog_sha256"
             case waiversSHA256 = "waivers_sha256"
             case files
         }
@@ -258,6 +262,8 @@ package struct QualificationRunner: Sendable {
         guard options.outputURL.lastPathComponent.caseInsensitiveCompare(Self.manifestFilename)
             != .orderedSame,
             options.outputURL.lastPathComponent.caseInsensitiveCompare(Self.caseManifestFilename)
+            != .orderedSame,
+            options.outputURL.lastPathComponent.caseInsensitiveCompare(Self.operationCatalogFilename)
             != .orderedSame
         else {
             throw RunnerError.invalidOption("--out", options.outputURL.path)
@@ -903,12 +909,31 @@ package struct QualificationRunner: Sendable {
             to: outputDirectory.appendingPathComponent(Self.caseManifestFilename),
             options: .atomic
         )
+        let operationCatalogEntries = allSpecs
+            .sorted { $0.id.rawValue < $1.id.rawValue }
+            .map(Self.operationCatalogEntry)
+        let operationCatalog = QualificationOperationCatalog(
+            schema: "qualification-operation-catalog/v1",
+            binarySHA256: binarySHA256,
+            semanticPolicySHA256: try Self.operationCatalogPolicyDigest(
+                operationCatalogEntries
+            ),
+            operations: operationCatalogEntries
+        )
+        let operationCatalogData = try Self.encoded(operationCatalog)
+        try operationCatalogData.write(
+            to: outputDirectory.appendingPathComponent(Self.operationCatalogFilename),
+            options: .atomic
+        )
+        let operationCatalogSHA256 = SupportBundleBuilder.sha256(operationCatalogData)
         manifestEntries.sort { $0.path < $1.path }
         let manifest = EvidenceManifest(
-            schema: "qualification-evidence-manifest/v3",
+            schema: "qualification-evidence-manifest/v4",
             binarySHA256: binarySHA256,
             caseManifestPath: Self.caseManifestFilename,
             caseManifestSHA256: SupportBundleBuilder.sha256(caseManifestData),
+            operationCatalogPath: Self.operationCatalogFilename,
+            operationCatalogSHA256: operationCatalogSHA256,
             waiversSHA256: SupportBundleBuilder.sha256(try Self.encoded(waivers)),
             files: manifestEntries
         )
@@ -920,7 +945,7 @@ package struct QualificationRunner: Sendable {
         let completedAt = runtime.now()
         let manifestSHA256 = SupportBundleBuilder.sha256(manifestData)
         let provenance = QualificationProvenanceRecord(
-            schema: "qualification-provenance/v2",
+            schema: "qualification-provenance/v3",
             binarySHA256: binarySHA256,
             commitSHA: commitSHA,
             releaseVersion: options.releaseVersion,
@@ -929,11 +954,12 @@ package struct QualificationRunner: Sendable {
             startedAt: startedAt,
             completedAt: completedAt,
             evidenceManifestSHA256: manifestSHA256,
+            operationCatalogSHA256: operationCatalogSHA256,
             logicVersion: driveResult.logicProVersion
         )
         let counts = QualificationSummaryCounts(cases: cases)
         let attestation = ReleaseQualificationAttestation(
-            schema: "release-qualification-attestation/v2",
+            schema: "release-qualification-attestation/v3",
             serverVersion: options.releaseVersion,
             commitSHA: commitSHA,
             binarySHA256: binarySHA256,
@@ -952,6 +978,7 @@ package struct QualificationRunner: Sendable {
             cases: cases,
             waivers: waivers,
             evidenceManifestSHA256: manifestSHA256,
+            operationCatalogSHA256: operationCatalogSHA256,
             provenance: provenance,
             provenanceSignature: nil
         )
@@ -1011,7 +1038,7 @@ package struct QualificationRunner: Sendable {
             releaseVersion: options.releaseVersion,
             expectedCommitSHA: options.expectedCommitSHA,
             requiredArtifacts: options.requiredArtifacts,
-            requiredOperationIDs: Set(runtime.specs().map { $0.id.rawValue }),
+            requiredOperationIDs: nil,
             beforeEvidenceRead: runtime.beforeEvidenceRead,
             signatureRequirement: .required(trustedPublicKeyData: trustedKeyData)
         )
@@ -1026,7 +1053,7 @@ package struct QualificationRunner: Sendable {
         releaseVersion: String,
         expectedCommitSHA: String,
         requiredArtifacts requestedArtifacts: Set<String>,
-        requiredOperationIDs: Set<String>,
+        requiredOperationIDs expectedOperationIDs: Set<String>?,
         beforeEvidenceRead: @Sendable (URL) -> Void,
         signatureRequirement: SignatureRequirement
     ) throws -> [PromotionRejectionReason] {
@@ -1037,6 +1064,23 @@ package struct QualificationRunner: Sendable {
             directory: directory,
             beforeRead: beforeEvidenceRead
         )).flatMap { try? JSONDecoder().decode(EvidenceManifest.self, from: $0) }
+        let operationCatalogData = try? Self.readNoFollow(
+            relativePath: Self.operationCatalogFilename,
+            directory: directory,
+            beforeRead: beforeEvidenceRead
+        )
+        let operationCatalog = operationCatalogData.flatMap {
+            try? JSONDecoder().decode(QualificationOperationCatalog.self, from: $0)
+        }
+        let operationCatalogIssue = Self.operationCatalogBindingIssue(
+            catalog: operationCatalog,
+            catalogData: operationCatalogData,
+            manifest: manifest,
+            attestation: attestation
+        )
+        let requiredOperationIDs = operationCatalogIssue == nil
+            ? Set(operationCatalog?.operations.map(\.operationID) ?? [])
+            : []
         let manifestPaths = Set(manifest?.files.map(\.path) ?? [])
         let executableName = candidateURL.lastPathComponent
         let presentArtifacts = Set(requiredArtifacts.filter { artifact in
@@ -1045,6 +1089,7 @@ package struct QualificationRunner: Sendable {
                 : directory.appendingPathComponent(artifact)
             let digestBound = artifact == manifestArtifact
                 || artifact == executableName
+                || artifact == manifest?.operationCatalogPath
                 || manifestPaths.contains(artifact)
             return digestBound && Self.isReadableRegularFile(url)
         })
@@ -1069,6 +1114,14 @@ package struct QualificationRunner: Sendable {
             requiredOperationIDs: requiredOperationIDs
         )
         var rejections = decision.rejections
+        if let operationCatalogIssue {
+            rejections.append(.evidenceBindingMismatch(detail: operationCatalogIssue))
+        } else if let expectedOperationIDs,
+                  expectedOperationIDs != requiredOperationIDs {
+            rejections.append(.evidenceBindingMismatch(
+                detail: "operation catalog does not match the signing registry"
+            ))
+        }
         if requestedArtifacts.contains("evidence/atlas-drift-diff.json") {
             let atlasCases = attestation.cases.filter { $0.id == "atlas.drift_diff" }
             let hostAxis = QualificationAxis(
@@ -1308,13 +1361,21 @@ package struct QualificationRunner: Sendable {
         }
         let rejections = try evaluateBundle(attestation: attestation, directory: bundle, candidateURL: candidate,
             releaseVersion: version, expectedCommitSHA: commit, requiredArtifacts: trustedRequiredArtifacts,
-            requiredOperationIDs: Set(OperationRegistry.specs.map { $0.id.rawValue }), beforeEvidenceRead: { _ in },
+            requiredOperationIDs: nil, beforeEvidenceRead: { _ in },
             signatureRequirement: .required(trustedPublicKeyData: key.publicKey.rawRepresentation))
         guard rejections.isEmpty else { return try typedFailure("privateQualificationRejected") }
         let manifest = try JSONDecoder().decode(EvidenceManifest.self, from: manifestData)
+        let operationCatalog = try JSONDecoder().decode(
+            QualificationOperationCatalog.self,
+            from: readNoFollow(
+                relativePath: operationCatalogFilename,
+                directory: bundle,
+                beforeRead: { _ in }
+            )
+        )
         guard let provenance = attestation.provenance else { return try typedFailure("provenanceMissing") }
         let artifacts = try publicArtifacts(directory, binarySHA256: attestation.binarySHA256, inspectArchives: true)
-        let registered = Set(OperationRegistry.specs.map { $0.id.rawValue })
+        let registered = Set(operationCatalog.operations.map(\.operationID))
         func hash(_ value: String) -> String { SupportBundleBuilder.sha256(Data(value.utf8)) }
         let cases = attestation.cases.map { item in
             QualificationPublicEvidence.Case(caseIDHash: hash(item.id),
@@ -1516,7 +1577,7 @@ package struct QualificationRunner: Sendable {
                 releaseVersion: releaseVersion,
                 expectedCommitSHA: expectedCommitSHA,
                 requiredArtifacts: trustedRequiredArtifacts,
-                requiredOperationIDs: Set(OperationRegistry.specs.map { $0.id.rawValue }),
+                requiredOperationIDs: nil,
                 beforeEvidenceRead: { _ in },
                 signatureRequirement: .required(trustedPublicKeyData: trustedPublicKeyData)
             )
@@ -1563,6 +1624,7 @@ package struct QualificationRunner: Sendable {
             cases: attestation.cases,
             waivers: attestation.waivers,
             evidenceManifestSHA256: attestation.evidenceManifestSHA256,
+            operationCatalogSHA256: attestation.operationCatalogSHA256,
             provenance: attestation.provenance,
             provenanceSignature: signature
         )
@@ -1769,6 +1831,7 @@ package struct QualificationRunner: Sendable {
     private static let manifestFilename = "evidence-manifest.json"
     private static let attestationFilename = "release-qualification-attestation.json"
     private static let caseManifestFilename = "case-manifest.json"
+    private static let operationCatalogFilename = "operation-catalog.json"
     private static let rawTranscriptFilename = "raw-transcript.json"
     private static let publicTranscriptFilename = "public-transcript.json"
     private static let mutationRestoreCompensationFilename =
@@ -1778,11 +1841,36 @@ package struct QualificationRunner: Sendable {
     private static let trustedPublicKeyEnvironmentKey =
         "LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY"
     private static let trustedRequiredArtifacts: Set<String> = [
+        operationCatalogFilename,
         rawTranscriptFilename,
         publicTranscriptFilename,
         mutationRestoreCompensationFilename,
         "evidence/atlas-drift-diff.json",
     ]
+
+    private static func operationCatalogEntry(
+        _ spec: OperationSpec
+    ) -> QualificationOperationCatalog.Entry {
+        let disposition: QualificationOperationCatalog.OracleDisposition
+        if spec.id == .systemHealth {
+            disposition = .bespokeHealth
+        } else if SemanticOracleTable.byOperationID[spec.id] != nil {
+            disposition = .semanticOracle
+        } else {
+            disposition = .noSemanticOracle
+        }
+        return QualificationOperationCatalog.Entry(
+            operationID: spec.id.rawValue,
+            caseID: "in-process/\(spec.id.rawValue)",
+            oracleDisposition: disposition
+        )
+    }
+
+    static func operationCatalogPolicyDigest(
+        _ entries: [QualificationOperationCatalog.Entry]
+    ) throws -> String {
+        SupportBundleBuilder.sha256(try encoded(entries))
+    }
 
     private static func loadWaivers(
         from url: URL?,
@@ -1855,6 +1943,67 @@ package struct QualificationRunner: Sendable {
         )
     }
 
+    private static func operationCatalogBindingIssue(
+        catalog: QualificationOperationCatalog?,
+        catalogData: Data?,
+        manifest: EvidenceManifest?,
+        attestation: ReleaseQualificationAttestation
+    ) -> String? {
+        guard let catalog, let catalogData, let manifest else {
+            return "operation catalog is missing or malformed"
+        }
+        let digest = SupportBundleBuilder.sha256(catalogData)
+        guard manifest.schema == "qualification-evidence-manifest/v4",
+              manifest.operationCatalogPath == operationCatalogFilename,
+              manifest.operationCatalogSHA256 == digest,
+              attestation.schema == "release-qualification-attestation/v3",
+              attestation.operationCatalogSHA256 == digest else {
+            return "operation catalog digest, schema, or binary binding"
+        }
+        return operationCatalogContentIssue(catalog, attestation: attestation)
+    }
+
+    static func operationCatalogContentIssue(
+        _ catalog: QualificationOperationCatalog,
+        attestation: ReleaseQualificationAttestation
+    ) -> String? {
+        guard catalog.schema == "qualification-operation-catalog/v1",
+              catalog.binarySHA256 == attestation.binarySHA256,
+              !catalog.operations.isEmpty else {
+            return "operation catalog schema, binary, or empty operation set"
+        }
+        guard catalog.operations == catalog.operations.sorted(by: {
+            $0.operationID < $1.operationID
+        }) else {
+            return "operation catalog entries are not canonically ordered"
+        }
+        let operationIDs = catalog.operations.map(\.operationID)
+        let caseIDs = catalog.operations.map(\.caseID)
+        guard operationIDs.allSatisfy({ !$0.isEmpty }),
+              Set(operationIDs).count == operationIDs.count,
+              Set(caseIDs).count == caseIDs.count,
+              zip(operationIDs, caseIDs).allSatisfy({ pair in
+                  pair.1 == "in-process/\(pair.0)"
+              }) else {
+            return "operation catalog contains missing, duplicate, or non-bijective IDs"
+        }
+        guard let recomputedPolicy = try? operationCatalogPolicyDigest(catalog.operations),
+              recomputedPolicy == catalog.semanticPolicySHA256 else {
+            return "operation catalog semantic policy digest mismatch"
+        }
+        let attestedOperationCases = attestation.cases.filter {
+            $0.id.hasPrefix("in-process/")
+        }
+        guard Set(attestedOperationCases.map(\.id)) == Set(caseIDs),
+              Set(attestedOperationCases.map(\.operationID)) == Set(operationIDs),
+              attestedOperationCases.allSatisfy({ operationCase in
+                  operationCase.id == "in-process/\(operationCase.operationID)"
+              }) else {
+            return "operation catalog does not bijectively bind the attested operation cases"
+        }
+        return nil
+    }
+
     private static func evidenceBindingIssue(
         attestation: ReleaseQualificationAttestation,
         directory: URL,
@@ -1869,9 +2018,11 @@ package struct QualificationRunner: Sendable {
         }
         guard SupportBundleBuilder.sha256(manifestData) == attestation.evidenceManifestSHA256,
               let manifest = try? JSONDecoder().decode(EvidenceManifest.self, from: manifestData),
-              manifest.schema == "qualification-evidence-manifest/v3",
+              manifest.schema == "qualification-evidence-manifest/v4",
               manifest.binarySHA256 == attestation.binarySHA256,
               manifest.caseManifestPath == caseManifestFilename,
+              manifest.operationCatalogPath == operationCatalogFilename,
+              manifest.operationCatalogSHA256 == attestation.operationCatalogSHA256,
               manifest.waiversSHA256 == SupportBundleBuilder.sha256(
                   (try? encoded(attestation.waivers)) ?? Data()
               )
@@ -2423,7 +2574,8 @@ package struct QualificationRunner: Sendable {
               !relativePath.hasPrefix("/"),
               !relativePath.split(separator: "/", omittingEmptySubsequences: false).contains(".."),
               relativePath.caseInsensitiveCompare(manifestFilename) != .orderedSame,
-              relativePath.caseInsensitiveCompare(caseManifestFilename) != .orderedSame
+              relativePath.caseInsensitiveCompare(caseManifestFilename) != .orderedSame,
+              relativePath.caseInsensitiveCompare(operationCatalogFilename) != .orderedSame
         else {
             return nil
         }
@@ -2639,7 +2791,7 @@ package struct QualificationRunner: Sendable {
         )
         // v1 remains readable historical evidence, but it never signed the Logic
         // version. Do not upgrade or qualify it by copying unsigned host metadata.
-        guard provenance.schema == "qualification-provenance/v2",
+        guard provenance.schema == "qualification-provenance/v3",
               let signedLogicVersion = provenance.logicVersion,
               signedLogicVersion == attestation.logicVersion,
               provenance.binarySHA256 == attestation.binarySHA256,
@@ -2650,7 +2802,9 @@ package struct QualificationRunner: Sendable {
               provenance.startedAt == attestation.startedAt,
               provenance.completedAt == attestation.completedAt,
               provenance.completedAt >= provenance.startedAt,
-              provenance.evidenceManifestSHA256 == attestation.evidenceManifestSHA256 else {
+              provenance.evidenceManifestSHA256 == attestation.evidenceManifestSHA256,
+              let catalogSHA256 = attestation.operationCatalogSHA256,
+              provenance.operationCatalogSHA256 == catalogSHA256 else {
             return .provenanceSignatureInvalid
         }
         return nil
