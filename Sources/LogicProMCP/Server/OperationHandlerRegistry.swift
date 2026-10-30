@@ -28,6 +28,9 @@ struct HandlerDependencies: Sendable {
     /// path; a headless census that drives every registered operation through
     /// this registry injects `.unavailable` so no unit test reaches Logic (#866).
     let projectFileReader: LogicProjectFileReader.Runtime
+    /// Observation-only selected-region Event List reader. Tests inject a sealed result so the
+    /// executable dispatch census never touches the live Logic UI; production leaves this nil.
+    let selectedRegionEventRead: (@Sendable () throws -> SelectedRegionEventListReader.PartialRead)?
     /// #412: the shared absolute saga lifecycle deadline, computed once at the
     /// server dispatch entry and threaded to `SystemDispatcher.saga_execute` so
     /// its in-closure abandon race and the outer transport timer derive from ONE
@@ -48,6 +51,7 @@ struct HandlerDependencies: Sendable {
         projectLifecycleExecute: (@Sendable (String) async -> ProjectDispatcher.LifecycleExecution)? = nil,
         liveTrackNames: (@Sendable () -> [Int: String]?)? = nil,
         projectFileReader: LogicProjectFileReader.Runtime = .production,
+        selectedRegionEventRead: (@Sendable () throws -> SelectedRegionEventListReader.PartialRead)? = nil,
         sagaLifecycleDeadline: ContinuousClock.Instant? = nil
     ) {
         self.router = router
@@ -61,6 +65,7 @@ struct HandlerDependencies: Sendable {
         self.projectLifecycleExecute = projectLifecycleExecute
         self.liveTrackNames = liveTrackNames
         self.projectFileReader = projectFileReader
+        self.selectedRegionEventRead = selectedRegionEventRead
         self.sagaLifecycleDeadline = sagaLifecycleDeadline
     }
 
@@ -86,6 +91,7 @@ struct HandlerDependencies: Sendable {
             projectLifecycleExecute: projectLifecycleExecute,
             liveTrackNames: liveTrackNames,
             projectFileReader: projectFileReader,
+            selectedRegionEventRead: selectedRegionEventRead,
             sagaLifecycleDeadline: deadline
         )
     }
@@ -388,7 +394,8 @@ enum OperationHandlerRegistry {
                         return try await MIDITrackFileExport.run(projectReference: project, targetReference: track,
                             destination: path, allowTemporaryTrackRename: allowTemporaryRename,
                             runtime: runtime)
-                    }
+                    },
+                    selectedRegionEventRead: dependencies.selectedRegionEventRead
                 )
                 if command == "import_file",
                    FeatureFlags.adr002TargetRef,

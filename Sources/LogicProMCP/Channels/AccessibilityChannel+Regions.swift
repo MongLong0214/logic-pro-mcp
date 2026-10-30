@@ -332,6 +332,49 @@ extension AccessibilityChannel {
         return selected
     }
 
+    /// Read the exact selected-region set together with the measured scope that bounded it.
+    ///
+    /// `selectedRegionInfos` predates scope-aware consumers and therefore cannot distinguish a
+    /// complete single selection from one visible member of a larger offscreen selection. The
+    /// Event List reader must preserve that distinction so it can refuse before collecting rows.
+    static func selectedRegionObservation(
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> SelectedRegionEventListReader.SelectionObservation? {
+        guard case .success(let result) = enumerateRegionItems(runtime: runtime) else {
+            return nil
+        }
+        return selectedRegionObservation(from: result, runtime: runtime.ax)
+    }
+
+    static func selectedRegionObservation(
+        from result: RegionEnumerationResult,
+        runtime: AXHelpers.Runtime
+    ) -> SelectedRegionEventListReader.SelectionObservation? {
+        var selected: [SelectedRegionEventListReader.RegionIdentity] = []
+        for entry in result.regions {
+            let read: Result<NSNumber?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+                entry.item, kAXSelectedAttribute, runtime: runtime
+            )
+            switch read {
+            case .success(.some(let flag)) where flag.boolValue:
+                selected.append(.init(
+                    name: entry.info.name,
+                    trackIndex: entry.info.trackIndex,
+                    startBar: entry.info.startBar,
+                    endBar: entry.info.endBar,
+                    kind: entry.info.kind
+                ))
+            case .success:
+                continue
+            case .failure(let error) where error.isDefinitiveAbsence:
+                continue
+            case .failure:
+                return nil
+            }
+        }
+        return .init(scopeComplete: result.coversWholeArrangement, selected: selected)
+    }
+
     /// Currently selected region (AXLayoutItem with AXSelected=true) inside
     /// the arrange area. Returns nil when no AXLayoutItem reports
     /// `kAXSelectedAttribute = true`. Used by `region.move_to_playhead` for
