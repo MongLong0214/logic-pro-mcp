@@ -172,7 +172,7 @@ From your MCP client:
 Fully configured hosts should show Accessibility, AppleScript, CoreMIDI, MCU, MIDIKeyCommands, Scripter, and CGEvent as available. Skipping Key Commands or Scripter is valid when you do not need those paths.
 
 <a id="setup-doctor"></a>
-## Doctor (`logic_pro_mcp_doctor.v4`)
+## Doctor (`logic_pro_mcp_doctor.v5`)
 
 `doctor` is read-only and safe to run before starting the server.
 
@@ -195,7 +195,7 @@ Flags:
 
 Color and unicode symbols are emitted only when stdout is a TTY and `NO_COLOR` is unset; otherwise output is plain ASCII (`[pass]`-style), so pipes and CI logs stay clean.
 
-The `v4` report is a **field-superset** of `v1`/`v2`/`v3`: every prior key keeps its name, semantics, and value. Additive fields include top-level `fix_plan`, `doctor_profile`, `doctor_profile_basis`, `client_profile`, `client_profile_basis`, `capabilities`, per-check `optional`, optional per-check `blocked_by`, optional per-check `skip_reason`, and per-check/report timing (`duration_ms`). Consumers should prefix-match `logic_pro_mcp_doctor.`, not exact-equal a version. Default exit code is unchanged: `failed` → 1, otherwise 0.
+The `v5` report retains all `v4` fields. It changes one operation-readiness enum value: `capabilities.<id>.operations[].readiness` now emits `prerequisite_unavailable` instead of `manual_setup_required` when a route has no autonomous prerequisite-acquisition path. This is a semantic enum migration, so strict-enum consumers must accept the v5 token before decoding v5 reports. Older v1/v2/v3 field subsets still decode because their fields and values are unchanged. Consumers should prefix-match `logic_pro_mcp_doctor.`, then dispatch on the parsed version for enum migrations. Default exit code is unchanged: `failed` → 1, otherwise 0.
 
 Strict exit codes `2` and `3` are doctor status codes, not usage errors, and intentionally sit below the `sysexits.h` 64-78 range. Required capability-gap skips still degrade to code `3`; optional skips such as an absent non-selected client config remain counted as skipped but do not degrade the aggregate status. For a boolean gate, test non-zero; for routing, branch on the exact code. With `set -e`, capture the code before branching:
 
@@ -218,6 +218,7 @@ Consumer compatibility notes:
 
 | Consumer type | Upgrade note |
 |---------------|--------------|
+| Strict v4 operation-readiness enums | Add `prerequisite_unavailable`, remove assumptions that `manual_setup_required` asks a person to act, and select that decoder for `logic_pro_mcp_doctor.v5`. |
 | Exact 13-check arrays | Switch to ID-based lookup; Doctor v4 emits 26 base checks and 27 with `--check-updates`. |
 | Strict schema validators | Allow additive top-level `fix_plan`, profile/client/capability fields, per-check `optional` / `blocked_by` / `skip_reason`, and timing. |
 | Skipped-count alarms | Expect a higher baseline; v4 reports diagnostic-capability gaps instead of hiding them. Optional skips do not imply degraded status. |

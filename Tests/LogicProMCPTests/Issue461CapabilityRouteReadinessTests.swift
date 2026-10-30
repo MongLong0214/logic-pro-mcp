@@ -21,8 +21,8 @@ import Testing
 //   2. The regression: static checks all pass, AX is unavailable, and the group
 //      must NOT be ready.
 //   3. The release path, and the distinction between "will work", "will be
-//      attempted", and "needs a manual step" — a planner that only ever said
-//      not-ready would be as useless as the one that only ever said ready.
+//      attempted", and "has an unavailable prerequisite" — a planner that only
+//      ever said not-ready would be as useless as the one that only ever said ready.
 
 private let allChecksPassing = SetupDoctor.CheckStatus.pass
 
@@ -39,16 +39,16 @@ private func snapshot(
         "permissions.automation_logic_pro": automation,
         "logic.application_state": logicRunning,
     ]
-    var awaiting: Set<String> = []
+    var unavailable: Set<String> = []
     switch keycmdStaged {
     case .some(true):
         satisfied["channels.keycmd_reference"] = true
     case .some(false):
         satisfied["channels.keycmd_reference"] = false
     case nil:
-        awaiting.insert("channels.keycmd_reference")
+        unavailable.insert("channels.keycmd_reference")
     }
-    return OperationCapabilityRegistry.HealthSnapshot(satisfied: satisfied, awaitingManual: awaiting)
+    return OperationCapabilityRegistry.HealthSnapshot(satisfied: satisfied, unavailable: unavailable)
 }
 
 @Suite("Issue #461 — capability readiness is derived from operation routes")
@@ -174,8 +174,8 @@ struct Issue461CapabilityRouteReadinessTests {
         // would assert nothing about a capability the fixture failed to produce.
         let rows = try #require(capability?.operations, "core_transport must publish operation rows")
         #expect(
-            rows.contains { $0.operation == "transport.set_tempo" && $0.readiness == "manual_setup_required" },
-            "the blocked operation must be named, not just folded into the group verdict"
+            rows.contains { $0.operation == "transport.set_tempo" && $0.readiness == "prerequisite_unavailable" },
+            "the terminally unavailable operation must be named without requesting human setup"
         )
         #expect(
             rows.contains { $0.blockedBy == "permissions.accessibility" },
@@ -210,11 +210,11 @@ struct Issue461CapabilityRouteReadinessTests {
         #expect(ready["core_transport"]?.status == .ready)
     }
 
-    /// A held manual step is not a broken machine. It must read as
-    /// manual-setup-required, so the user is told what to do rather than that
-    /// something is wrong — and it must still not read as ready.
-    @Test("an operation whose only route awaits manual setup is distinguished from a failure")
-    func awaitingManualIsItsOwnStatus() {
+    /// A prerequisite that has no autonomous acquisition path is unavailable for
+    /// this run. The plan must terminate honestly without turning that condition
+    /// into a request for a person.
+    @Test("an unavailable prerequisite terminates without requesting human setup")
+    func unavailablePrerequisiteIsItsOwnStatus() {
         // capture_recording routes only through Key Commands and CGEvent, so
         // holding the keycmd staging check plus removing post-event access
         // leaves nothing executable and nothing broken.
@@ -222,8 +222,9 @@ struct Issue461CapabilityRouteReadinessTests {
             operation: "transport.capture_recording",
             health: snapshot(postEvent: false, keycmdStaged: nil)
         )
-        #expect(plan.readiness == .manualSetupRequired)
-        #expect(plan.readiness != .notReady, "an unfinished setup step is not a failure")
+        #expect(plan.readiness.rawValue == "prerequisite_unavailable")
+        #expect(!plan.readiness.rawValue.contains("manual"))
+        #expect(plan.candidates.contains { $0.block?.rawValue == "prerequisite_unavailable" })
     }
 
     /// A send-only route must never be promoted to verified readiness. This is

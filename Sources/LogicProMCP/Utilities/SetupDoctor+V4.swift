@@ -366,10 +366,10 @@ extension SetupDoctor {
 
     /// #461: translate the doctor check set into the pure planner's input.
     ///
-    /// `manual` and `skipped` become AWAITING rather than false. A held approval
-    /// (#457) or an unstaged preset is not a broken environment — it is a step
-    /// the operator has not taken — and reporting it as a hard failure would tell
-    /// users something is wrong with their machine when nothing is.
+    /// `manual` and `skipped` become UNAVAILABLE rather than false. A held approval
+    /// (#457) or an unstaged preset is not a broken environment. It is an
+    /// unavailable prerequisite for this run, not a request for a person to
+    /// intervene, and reporting it as a hard failure would misstate the machine.
     ///
     /// A check that did not run is absent from `satisfied` rather than recorded
     /// as false, so the planner can distinguish "we did not look" from "it does
@@ -377,7 +377,7 @@ extension SetupDoctor {
     /// one.
     static func healthSnapshot(from checks: [Check]) -> OperationCapabilityRegistry.HealthSnapshot {
         var satisfied: [String: Bool] = [:]
-        var awaiting: Set<String> = []
+        var unavailable: Set<String> = []
         for check in checks {
             switch check.status {
             case .pass:
@@ -385,10 +385,10 @@ extension SetupDoctor {
             case .fail, .warn:
                 satisfied[check.id] = false
             case .manual, .skipped:
-                awaiting.insert(check.id)
+                unavailable.insert(check.id)
             }
         }
-        return OperationCapabilityRegistry.HealthSnapshot(satisfied: satisfied, awaitingManual: awaiting)
+        return OperationCapabilityRegistry.HealthSnapshot(satisfied: satisfied, unavailable: unavailable)
     }
 
     private static func capabilityStatus(
@@ -402,7 +402,7 @@ extension SetupDoctor {
         // Honest Contract forbids elsewhere.
         case .readyDegraded, .unknownLiveVerifyRequired:
             return .unknownLiveVerifyRequired
-        case .manualSetupRequired, .notReady:
+        case .prerequisiteUnavailable, .notReady:
             return .notReady
         case nil:
             return .notReady

@@ -365,7 +365,7 @@ enum SetupDoctor {
         case timeout
     }
 
-    static let schema = "logic_pro_mcp_doctor.v4"
+    static let schema = "logic_pro_mcp_doctor.v5"
 
     static let remediationAnchorsByCheckID: [String: String] = Dictionary(
         uniqueKeysWithValues: checkDefinitions.compactMap { definition in
