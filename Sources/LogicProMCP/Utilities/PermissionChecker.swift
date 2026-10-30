@@ -82,9 +82,15 @@ enum PermissionChecker {
                 return AXIsProcessTrustedWithOptions(options)
             },
             isLogicProRunning: { ProcessUtils.isLogicProRunning },
-            runAutomationProbe: { runAutomationProbeViaShell().isGranted },
-            runSystemEventsAutomationProbe: { runSystemEventsAutomationProbeViaShell() },
-            runAutomationProbeState: { runAutomationProbeViaShell() },
+            runAutomationProbe: {
+                nonPromptingAutomationState(bundleID: LogicProTarget.current.bundleID).isGranted
+            },
+            runSystemEventsAutomationProbe: {
+                nonPromptingAutomationState(bundleID: "com.apple.systemevents")
+            },
+            runAutomationProbeState: {
+                nonPromptingAutomationState(bundleID: LogicProTarget.current.bundleID)
+            },
             postEventPreflight: { CGPreflightPostEventAccess() }
         )
     }
@@ -287,6 +293,50 @@ enum PermissionChecker {
                 outputLimitBytes: 4 * 1024
             ),
             expectedName: "System Events"
+        )
+    }
+
+    /// Query Automation consent without sending an AppleEvent or displaying a
+    /// TCC prompt. `errAEEventWouldRequireUserConsent` is an unavailable
+    /// prerequisite for this run, not permission to ask the user mid-health
+    /// check. The target must already be running; absence and unexpected OS
+    /// failures remain not-verifiable rather than fabricated denials.
+    static func nonPromptingAutomationState(
+        bundleID: String,
+        determinePermission: (String, Bool) -> Int32 = determineAutomationPermission
+    ) -> CheckState {
+        let status = determinePermission(bundleID, false)
+        switch status {
+        case Int32(noErr):
+            return .granted
+        case Int32(errAEEventNotPermitted), Int32(errAEEventWouldRequireUserConsent):
+            return .notGranted
+        default:
+            return .notVerifiable
+        }
+    }
+
+    private static func determineAutomationPermission(
+        bundleID: String,
+        askUserIfNeeded: Bool
+    ) -> Int32 {
+        let bytes = Array(bundleID.utf8)
+        var target = AEAddressDesc()
+        let createStatus: Int16 = bytes.withUnsafeBytes { rawBuffer in
+            AECreateDesc(
+                typeApplicationBundleID,
+                rawBuffer.baseAddress,
+                rawBuffer.count,
+                &target
+            )
+        }
+        guard createStatus == noErr else { return Int32(createStatus) }
+        defer { AEDisposeDesc(&target) }
+        return AEDeterminePermissionToAutomateTarget(
+            &target,
+            typeWildCard,
+            typeWildCard,
+            askUserIfNeeded
         )
     }
 
