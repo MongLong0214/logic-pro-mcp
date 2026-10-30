@@ -750,53 +750,80 @@ enum EventListReadbackCollector {
         guard let rows: [AXUIElement] = AXHelpers.getAttribute(table, "AXRows", runtime: runtime) else {
             throw EventListReadbackCollectorError.rowsUnavailable
         }
-        let keys = rows.indices.map { RowKey(index: $0) }
-        var observations = try readRows(rows, headers: headers, runtime: runtime)
-        var passes = 0
+        let passA = try harvestVirtualWindowPass(
+            rows: rows,
+            table: table,
+            headers: headers,
+            runtime: runtime
+        )
+        let passB = try harvestVirtualWindowPass(
+            rows: rows,
+            table: table,
+            headers: headers,
+            runtime: runtime
+        )
+        return try stitchVirtualWindows([passA, passB])
+    }
 
-        while let firstUnpopulated = observations.firstIndex(where: { !isPopulated($0, headers: headers) }),
-              passes < maximumMaterializationPasses {
+    private static func harvestVirtualWindowPass(
+        rows: [AXUIElement],
+        table: AXUIElement,
+        headers: HeaderBinding,
+        runtime: AXHelpers.Runtime
+    ) throws -> [VirtualWindowObservation] {
+        var windows: [VirtualWindowObservation] = []
+        var observedKeys: Set<RowKey> = []
+        var selections = 0
+
+        while true {
+            let window = readVirtualWindow(rows, headers: headers, runtime: runtime)
+            windows.append(window)
+            observedKeys.formUnion(window.rows.map(\.key))
+            if observedKeys.count == rows.count { return windows }
+
+            guard selections < maximumMaterializationPasses else {
+                throw EventListReadbackCollectorError.harvestIncomplete(
+                    populated: observedKeys.count,
+                    total: rows.count,
+                    passes: selections
+                )
+            }
+            guard let nextIndex = rows.indices.first(where: {
+                !observedKeys.contains(RowKey(index: $0))
+            }) else {
+                throw EventListReadbackCollectorError.harvestIncomplete(
+                    populated: observedKeys.count,
+                    total: rows.count,
+                    passes: selections
+                )
+            }
             guard AXHelpers.setAttribute(
                 table,
                 kAXSelectedRowsAttribute,
-                [rows[firstUnpopulated]] as CFArray,
+                [rows[nextIndex]] as CFArray,
                 runtime: runtime
             ) else {
-                throw EventListReadbackCollectorError.rowSelectionFailed(index: firstUnpopulated)
+                throw EventListReadbackCollectorError.rowSelectionFailed(index: nextIndex)
             }
-            observations = try readRows(rows, headers: headers, runtime: runtime)
-            passes += 1
+            selections += 1
         }
-
-        let populated = observations.filter { isPopulated($0, headers: headers) }.count
-        guard populated == rows.count else {
-            throw EventListReadbackCollectorError.harvestIncomplete(
-                populated: populated,
-                total: rows.count,
-                passes: passes
-            )
-        }
-
-        let passA = dictionary(rows: observations, keys: keys)
-        let secondPass = try readRows(rows, headers: headers, runtime: runtime)
-        let secondPopulated = secondPass.filter { isPopulated($0, headers: headers) }.count
-        guard secondPopulated == rows.count else {
-            throw EventListReadbackCollectorError.harvestIncomplete(
-                populated: secondPopulated,
-                total: rows.count,
-                passes: passes
-            )
-        }
-        return RowHarvest(
-            orderedRowKeys: keys,
-            passA: passA,
-            passB: dictionary(rows: secondPass, keys: keys),
-            exhaustion: .unproven
-        )
     }
 
-    private static func dictionary(rows: [RawEventRow], keys: [RowKey]) -> [RowKey: RawEventRow] {
-        Dictionary(uniqueKeysWithValues: zip(keys, rows))
+    private static func readVirtualWindow(
+        _ rows: [AXUIElement],
+        headers: HeaderBinding,
+        runtime: AXHelpers.Runtime
+    ) -> VirtualWindowObservation {
+        let observations = rows.indices.compactMap { index -> VirtualWindowRow? in
+            guard let row = try? readRow(
+                rows[index],
+                index: index,
+                headers: headers,
+                runtime: runtime
+            ), isPopulated(row, headers: headers) else { return nil }
+            return VirtualWindowRow(key: RowKey(index: index), row: row)
+        }
+        return VirtualWindowObservation(totalRows: rows.count, rows: observations)
     }
 
     private static func readRows(

@@ -424,6 +424,70 @@ import Testing
         #expect(counter.selectedIndices.first == 1)
     }
 
+    @Test func virtualizedWindowsAreAccumulatedAcrossTwoIndependentPasses() throws {
+        let fixture = Self.fixture(rowCount: 96, hollowRows: Set(32..<96))
+        let counter = SelectionCounter()
+        let builder = fixture.builder
+        let table = fixture.table
+        let rows = fixture.rows
+        let fields = fixture.rowFields
+        let eventTab = fixture.eventTab
+
+        for rowIndex in 0..<32 {
+            builder.setAttribute(fields[rowIndex].position, kAXDescriptionAttribute as String, "1 1 1 \(rowIndex + 1)")
+            builder.setAttribute(fields[rowIndex].number, kAXValueAttribute as String, 60 + (rowIndex % 12))
+            builder.setAttribute(fields[rowIndex].value, kAXValueDescriptionAttribute as String, "100")
+        }
+
+        let runtime = builder.makeLogicRuntime(
+            appElement: fixture.app,
+            setAttributeHandler: { element, attribute, value in
+                if element == table, attribute == (kAXSelectedRowsAttribute as String) {
+                    counter.writes += 1
+                    builder.setAttribute(element, attribute, value)
+                    let selected: [AXUIElement]? = builder.attributeValue(
+                        table,
+                        kAXSelectedRowsAttribute as String
+                    ) as? [AXUIElement]
+                    if let selectedRow = selected?.first,
+                       let index = rows.firstIndex(where: { $0 == selectedRow }) {
+                        counter.selectedIndices.append(index)
+                        let start = (index / 32) * 32
+                        let visible = start..<min(start + 32, rows.count)
+                        for rowIndex in rows.indices {
+                            if visible.contains(rowIndex) {
+                                builder.setAttribute(fields[rowIndex].position, kAXDescriptionAttribute as String, "1 1 1 \(rowIndex + 1)")
+                                builder.setAttribute(fields[rowIndex].number, kAXValueAttribute as String, 60 + (rowIndex % 12))
+                                builder.setAttribute(fields[rowIndex].value, kAXValueDescriptionAttribute as String, "100")
+                            } else {
+                                builder.removeAttribute(fields[rowIndex].position, kAXDescriptionAttribute as String)
+                                builder.removeAttribute(fields[rowIndex].number, kAXValueAttribute as String)
+                                builder.removeAttribute(fields[rowIndex].value, kAXValueDescriptionAttribute as String)
+                            }
+                        }
+                    }
+                    return true
+                }
+                builder.setAttribute(element, attribute, value)
+                return true
+            },
+            performActionHandler: { element, action in
+                guard element == eventTab, action == (kAXPressAction as String) else { return true }
+                let old = (builder.attributeValue(eventTab, kAXValueAttribute as String) as? Int) ?? 0
+                builder.setAttribute(eventTab, kAXValueAttribute as String, old == 0 ? 1 : 0)
+                return true
+            }
+        )
+
+        let evidence = try Self.collect(fixture, runtime: runtime)
+
+        #expect(evidence.harvest.orderedRowKeys.map(\.index) == Array(0..<96))
+        #expect(evidence.harvest.passA.count == 96)
+        #expect(evidence.harvest.passB.count == 96)
+        #expect(!evidence.harvest.exhaustion.isProven)
+        #expect(Set(counter.selectedIndices).isSuperset(of: [0, 32, 64]))
+    }
+
     @Test func materializationExhaustionIsIncomplete() throws {
         let fixture = Self.fixture(rowCount: 65, hollowRows: Set(0..<65))
         let builder = fixture.builder
