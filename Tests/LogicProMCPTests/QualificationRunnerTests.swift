@@ -1160,10 +1160,12 @@ struct QualificationRunnerTests {
         let response = try #require(
             JSONSerialization.jsonObject(with: responseData) as? [String: Any]
         )
+        let resultWriteAttempted = String(describing: result.writeAttempted)
+        let responseWriteAttempted = String(describing: response["write_attempted"] as? Bool)
 
         #expect(result.state == response["state"] as? String)
         #expect(result.error == response["error"] as? String)
-        #expect(result.writeAttempted == response["write_attempted"] as? Bool)
+        #expect(resultWriteAttempted == responseWriteAttempted)
     }
 
     @Test func qualificationFixtureResponseArtifactsBindRetainedEvidence() async throws {
@@ -1194,10 +1196,9 @@ struct QualificationRunnerTests {
             )
             #expect(payload["state"] as? String == evidence.operationState, "\(qualificationCase.id)")
             #expect(payload["error"] as? String == evidence.operationError, "\(qualificationCase.id)")
-            #expect(
-                payload["write_attempted"] as? Bool == evidence.operationWriteAttempted,
-                "\(qualificationCase.id)"
-            )
+            let payloadWriteAttempted = String(describing: payload["write_attempted"] as? Bool)
+            let evidenceWriteAttempted = String(describing: evidence.operationWriteAttempted)
+            #expect(payloadWriteAttempted == evidenceWriteAttempted, "\(qualificationCase.id)")
         }
     }
 
