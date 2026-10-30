@@ -196,6 +196,9 @@ class BootstrapResult:
     def as_dict(self) -> dict[str, Any]:
         return {
             "ok": self.ok,
+            "terminal": not self.ok,
+            "human_intervention_required": False,
+            "human_intervention_requests": 0,
             "reason": self.reason,
             "hint": self.hint,
             "actions": list(self.actions),
@@ -336,7 +339,7 @@ def evaluate_fresh_session(
         return FreshSessionAssessment(
             False,
             "missing_accessibility",
-            "Grant Accessibility access to this session before running live automation.",
+            "Accessibility is unavailable; fresh-session bootstrap terminated without UI mutation.",
         )
     if health.get("logic_pro_has_window") is not True:
         return FreshSessionAssessment(
@@ -348,7 +351,7 @@ def evaluate_fresh_session(
         return FreshSessionAssessment(
             False,
             "system_events_unavailable",
-            f"System Events UI probe failed; grant Automation access to this harness runner. {ui.system_events_error}",
+            "System Events automation is unavailable; fresh-session bootstrap terminated without UI mutation.",
         )
     if ui.blocking_dialog_present:
         return FreshSessionAssessment(
