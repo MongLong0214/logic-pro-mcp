@@ -1,0 +1,159 @@
+{
+  "format": "logic-pro-mcp/native-read-receipt-v1",
+  "observed_at_utc": "2026-10-29T21:16:04.928705+00:00",
+  "candidate": {
+    "head": "732fd1014cffda893d8971d37c30932868ab244f",
+    "tree": "793bcc45021f61f7eb3e8fad1fc301b70b734e79",
+    "binary_sha256": "a3a1b709ceb8f5165ff9db12c3ab5b452e24e95ea3691eb865ca6abc1ab0e29c"
+  },
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "fixture": {
+    "project_path": "/Users/isaac/lpm-evidence/965-flat-native-20261013.logicx",
+    "project_name": "965-flat-native-20261013",
+    "track_index": 13,
+    "track_name": "Audio 13",
+    "mixer_strip_index": 12,
+    "insert_index": 1,
+    "plugin_id": "logic.stock.effect.compressor",
+    "target_ref": "ins_9C760993-9C91-469A-ADBA-EBEC132C190D",
+    "target_fingerprint": "13:8:Audio 13|insert=1|plugin=logic.stock.effect.compressor"
+  },
+  "read_only_precondition_sequence": [
+    "logic_system.refresh_cache",
+    "logic://project/info",
+    "logic_plugins.get_inventory(track=13,reveal_mixer=false)",
+    "logic_plugins.get_param_verified(target_ref=<issued>,param=release)",
+    "logic_plugins.get_param_verified(target_ref=<issued>,param=makeup)",
+    "logic_plugins.get_inventory(track=13,reveal_mixer=false)"
+  ],
+  "observations": {
+    "project_info": {
+      "file_path": "/Users/isaac/lpm-evidence/965-flat-native-20261013.logicx",
+      "source": "ax_live",
+      "ax_occluded": false
+    },
+    "before_inventory": {
+      "state": "A",
+      "verified": true,
+      "complete": true,
+      "track": 13,
+      "track_name": "Audio 13",
+      "mixer_strip_index": 12,
+      "insert": 1,
+      "plugin_id": "logic.stock.effect.compressor",
+      "read_status": "ok"
+    },
+    "release_read": {
+      "state": "A",
+      "success": true,
+      "verified": true,
+      "param": "release",
+      "observed_raw": 40,
+      "raw_unit": "raw_ax_value",
+      "observed_display": "51.0 ms",
+      "parameter_read_status": "read",
+      "display_read_status": "read",
+      "write_attempted": false,
+      "verify_source": "ax_plugin_window",
+      "plugin_view_restore_attempted": true,
+      "plugin_view_restore_observed": true,
+      "editor_close_attempted": true,
+      "editor_close_observed": true
+    },
+    "makeup_read": {
+      "state": "A",
+      "success": true,
+      "verified": true,
+      "param": "makeup",
+      "observed_raw": 40,
+      "raw_unit": "raw_ax_value",
+      "observed_display": "0.0 dB",
+      "parameter_read_status": "read",
+      "display_read_status": "read",
+      "write_attempted": false,
+      "verify_source": "ax_plugin_window",
+      "plugin_view_restore_attempted": true,
+      "plugin_view_restore_observed": true,
+      "editor_close_attempted": true,
+      "editor_close_observed": true
+    },
+    "after_inventory": {
+      "state": "A",
+      "verified": true,
+      "complete": true,
+      "track": 13,
+      "track_name": "Audio 13",
+      "mixer_strip_index": 12,
+      "insert": 1,
+      "plugin_id": "logic.stock.effect.compressor",
+      "read_status": "ok"
+    },
+    "before_after_target_unchanged": true
+  },
+  "checks": {
+    "project_matches": true,
+    "before_inventory_state_a": true,
+    "same_target_after": true,
+    "no_timeout": true,
+    "server_pid_gone": true,
+    "release_state_a": true,
+    "release_verified": true,
+    "release_raw_is_finite_number": true,
+    "release_raw_unit_is_opaque": true,
+    "release_display_is_nonempty": true,
+    "release_parameter_read_status": true,
+    "release_write_not_attempted": true,
+    "release_view_restored": true,
+    "release_new_editor_closed": true,
+    "makeup_state_a": true,
+    "makeup_verified": true,
+    "makeup_raw_is_finite_number": true,
+    "makeup_raw_unit_is_opaque": true,
+    "makeup_display_is_nonempty": true,
+    "makeup_parameter_read_status": true,
+    "makeup_write_not_attempted": true,
+    "makeup_view_restored": true,
+    "makeup_new_editor_closed": true
+  },
+  "sorted_json_sha256": {
+    "refresh_cache": "81eb7eb9b93f9dbdb5d42e1c3a4fc42e9e8d0220867cecf0eab3640d76abb0b2",
+    "project_info": "5671427d24035b65f8335dcb239cdec0bac45e192e973568894b153bcdb6846e",
+    "before_inventory": "f4792316ac8e1b0b47cb9b6ca0b08b69b0447cc718ed7defc0c3060dde169d99",
+    "release_read": "1bdea732e398c63c1f8a1b4ff207802fe0880183f9e4693f005d884c639e89b1",
+    "makeup_read": "feff6a10bd2eba22444f32fed94dd3406c3fd0efbaf01c0852b65049ea14e000",
+    "after_inventory": "71c0293f3d98ce65f04a18d93d264803504083ff34a1e5427698830da3f70cc2"
+  },
+  "external_receipt_sha256": "a34ff54749825230e42a68d666044b0405c9fe5a60837e49db033da5f68bba98",
+  "server_shutdown": {
+    "pid": 36767,
+    "method": "stdin_close",
+    "returncode": 0,
+    "pid_gone": true,
+    "reader_finished": true
+  },
+  "independent_ui_readback": {
+    "method": "Logic Pro accessibility snapshot through native UI automation",
+    "window_title": "965-flat-native-20261013 - 트랙",
+    "standard_window_count": 1,
+    "selected_track": "Audio 13",
+    "playback_stopped": true,
+    "recording_stopped": true,
+    "mixer_visible": true,
+    "open_menu_detected": false,
+    "plugin_editor_window_detected": false,
+    "key_input_sent": false,
+    "click_input_sent": false
+  },
+  "mutation_boundary": {
+    "setter_called": false,
+    "save_called": false,
+    "project_close_called": false,
+    "logic_process_terminated": false
+  }
+}
