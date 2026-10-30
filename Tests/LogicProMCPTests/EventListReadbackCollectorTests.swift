@@ -485,7 +485,11 @@ import Testing
         #expect(evidence.harvest.passA.count == 96)
         #expect(evidence.harvest.passB.count == 96)
         #expect(!evidence.harvest.exhaustion.isProven)
-        #expect(Set(counter.selectedIndices).isSuperset(of: [0, 32, 64]))
+        // Pass A materializes 32 then 64. Pass B starts from the last visible window,
+        // independently wraps to 0 then 32, and restoration finally selects the original row 0.
+        // A collector that aliases pass B to pass A produces only [32, 64, 0].
+        #expect(counter.writes == 5)
+        #expect(counter.selectedIndices == [32, 64, 0, 32, 0])
     }
 
     @Test func unreadableOriginalRowSelectionRefusesBeforeAnyActuation() throws {
