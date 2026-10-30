@@ -456,11 +456,15 @@ struct QualificationOperationCatalog: Codable, Equatable, Sendable {
         let operationID: String
         let caseID: String
         let oracleDisposition: OracleDisposition
+        let semanticPolicy: QualificationSemanticPolicy
+        let mutationRestorePolicy: QualificationMutationRestorePolicy?
 
         enum CodingKeys: String, CodingKey {
             case operationID = "operation_id"
             case caseID = "case_id"
             case oracleDisposition = "oracle_disposition"
+            case semanticPolicy = "semantic_policy"
+            case mutationRestorePolicy = "mutation_restore_policy"
         }
     }
 

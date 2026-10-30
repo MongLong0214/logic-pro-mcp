@@ -2795,6 +2795,167 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(!FileManager.default.fileExists(atPath: directory.appendingPathComponent("qualification-public.json").path))
     }
 
+    @Test func publicEvidenceProjectsTheCatalogSnapshotThatPassedPrivateValidation() async throws {
+        let fixture = try await signedTrustedFixture()
+        defer { fixture.remove() }
+        let directory = try publicEvidenceDirectory(fixture)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let catalogURL = fixture.directory.appendingPathComponent("operation-catalog.json")
+        let original = try JSONDecoder().decode(
+            QualificationOperationCatalog.self,
+            from: Data(contentsOf: catalogURL)
+        )
+        let attestation = try JSONDecoder().decode(
+            ReleaseQualificationAttestation.self,
+            from: Data(contentsOf: fixture.attestationURL)
+        )
+        let unregistered = try #require(attestation.cases.first { candidateCase in
+            !candidateCase.id.hasPrefix("in-process/") && !original.operations.contains(where: {
+                $0.operationID == candidateCase.operationID
+            })
+        })
+        let replacementEntry = QualificationOperationCatalog.Entry(
+            operationID: unregistered.operationID,
+            caseID: "in-process/\(unregistered.operationID)",
+            oracleDisposition: .noSemanticOracle,
+            semanticPolicy: QualificationSemanticPolicy(
+                kind: .none,
+                strength: nil,
+                constraints: [],
+                independentlyCreditable: false
+            ),
+            mutationRestorePolicy: nil
+        )
+        let replacement = QualificationOperationCatalog(
+            schema: original.schema,
+            binarySHA256: original.binarySHA256,
+            semanticPolicySHA256: try QualificationRunner.operationCatalogPolicyDigest([
+                replacementEntry
+            ]),
+            operations: [replacementEntry]
+        )
+        let swapper = CatalogSecondReadReplacement(
+            replacement: try JSONEncoder().encode(replacement)
+        )
+        let result = try QualificationRunner.exportPublicEvidenceSnapshot(
+            attestation: attestation,
+            manifestData: Data(contentsOf: fixture.manifestURL),
+            candidate: fixture.executableURL,
+            bundle: fixture.directory,
+            directory: directory,
+            version: "1.2.3",
+            commit: fixture.commitSHA,
+            key: Curve25519.Signing.PrivateKey(rawRepresentation: fixture.signingKeyData),
+            beforeEvidenceRead: swapper.replaceOnSecondCatalogRead
+        )
+
+        #expect(result.exitCode == 0, "\(result.stdout)\(result.stderr)")
+        #expect(swapper.didReplace, "the counterexample must replace the on-disk catalog")
+        let publicData = try Data(contentsOf: directory.appendingPathComponent(
+            QualificationPublicEvidence.filename
+        ))
+        let payload = try QualificationPublicEvidence.verify(
+            publicData,
+            trustedKey: fixture.trustedPublicKeyData
+        )
+        #expect(Set(payload.cases.compactMap(\.operationID))
+                == Set(original.operations.map(\.operationID)))
+    }
+
+    @Test func unknownOperationCannotReceiveLiveSemanticCredit() {
+        let unknown = "future.operation"
+        let qualificationCase = QualificationCase(
+            id: "in-process/\(unknown)",
+            status: .passed,
+            tool: "logic_future",
+            command: "operation",
+            traceID: "future-trace",
+            verified: true,
+            evidenceFiles: ["future.json"],
+            binarySHA256: String(repeating: "a", count: 64),
+            operationID: unknown,
+            verificationKind: .semanticReadback,
+            readback: QualificationReadbackEvidence(
+                source: "logic://future",
+                requestID: "future-readback",
+                verified: true,
+                sha256: String(repeating: "b", count: 64)
+            )
+        )
+
+        #expect(!PromotionGate.operationIsLiveCredited(qualificationCase))
+    }
+
+    @Test func signedDeclarativePolicyReplaysWithoutVerifierRegistryMembership() throws {
+        let policy = QualificationSemanticPolicy(
+            kind: .declarative,
+            strength: .shapeAndDomain,
+            constraints: [
+                .valueEquals(key: "schema", expected: .string("future/v1")),
+                .crossCheck(responseKey: "value", readbackKey: "value"),
+            ],
+            independentlyCreditable: true
+        )
+        let encoded = try JSONEncoder().encode(policy)
+        let decoded = try JSONDecoder().decode(QualificationSemanticPolicy.self, from: encoded)
+        #expect(decoded == policy)
+        #expect(decoded.evaluate(
+            operationID: "future.operation",
+            responseData: Data(#"{"schema":"future/v1","value":7}"#.utf8),
+            readbackData: Data(#"{"value":7}"#.utf8)
+        ))
+        #expect(!decoded.evaluate(
+            operationID: "future.operation",
+            responseData: Data(#"{"schema":"future/v1","value":7}"#.utf8),
+            readbackData: Data(#"{"value":8}"#.utf8)
+        ))
+    }
+
+    @Test func signedMutationRestorePolicyReplaysWithoutVerifierRegistryMembership() throws {
+        let local = Self.recipeShapedRecord()
+        let record = QualificationMutationRestoreRecord(
+            operationID: "future.operation",
+            preState: local.preState,
+            mutation: local.mutation,
+            readback: local.readback,
+            restore: local.restore,
+            restoreReadback: local.restoreReadback
+        )
+        let policy = QualificationMutationRestorePolicy.trackName
+
+        #expect(!record.verifiedCycleShape)
+        #expect(record.verifiedCycleShape(using: policy))
+        let encoded = try JSONEncoder().encode(policy)
+        #expect(try JSONDecoder().decode(
+            QualificationMutationRestorePolicy.self,
+            from: encoded
+        ) == policy)
+    }
+
+    @Test func operationCatalogPoliciesCoverEveryMutationRestoreRecipe() {
+        var expected = Set(QualificationTransport.trackCreateRestoreOperations)
+        expected.formUnion(QualificationTransport.valueRestoreReadbackField.keys)
+        expected.formUnion(QualificationTransport.booleanToggleReadbackField.keys)
+        expected.formUnion(QualificationTransport.historyRestoreDirection.keys)
+        expected.formUnion(QualificationTransport.transportExpectedPlaying.keys)
+        expected.formUnion(QualificationTransport.parameterlessToggleField.keys)
+        expected.formUnion(QualificationTransport.playheadStepDirections.keys)
+        expected.formUnion(QualificationTransport.playheadRestoreOperations)
+        expected.formUnion(QualificationTransport.markerStagedRestoreMode.keys)
+        expected.formUnion([
+            .tracksRename, .tracksSelect, .tracksDelete, .transportSetTempo,
+            .navigateGotoMarker, .navigateCreateMarker,
+        ])
+        let catalogued = Set(OperationRegistry.specs.compactMap { spec in
+            QualificationTransport.mutationRestorePolicy(for: spec.id) == nil ? nil : spec.id
+        })
+
+        #expect(catalogued == expected)
+        #expect(expected.allSatisfy {
+            QualificationTransport.mutationRestorePolicy(for: $0)?.isValid == true
+        })
+    }
+
     @Test func publicEvidenceRefusalDoesNotDisclosePrivateVerifierDetails() async throws {
         let fixture = try await signedTrustedFixture()
         defer { fixture.remove() }
@@ -5728,7 +5889,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(Self.rejectionReasons(json).isEmpty)
     }
 
-    @Test func trustedSignerRejectsACatalogMissingItsExpectedRegistry() async throws {
+    @Test func trustedSignerSignsTheValidatedCandidateCatalogInsteadOfItsLocalRegistry() async throws {
         let spec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
         let fixture = try trustedFixture(specs: [spec])
         defer { fixture.remove() }
@@ -5743,10 +5904,8 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             signingPrivateKeyData: fixture.signingKeyData
         )
 
-        #expect(result.exitCode != 0)
-        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains(
-            "evidenceBindingMismatch"
-        ))
+        #expect(result.exitCode == 0, "\(result.stdout)\(result.stderr)")
+        #expect(try #require(try Self.resultObject(result)["promotable"] as? Bool))
     }
 
     @Test func operationCatalogRejectsDuplicateMissingAndPolicyDigestMutants() async throws {
@@ -5797,6 +5956,27 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(QualificationRunner.operationCatalogContentIssue(
             changedPolicyDigest, attestation: attestation
         ) == "operation catalog semantic policy digest mismatch")
+
+        let first = catalog.operations[0]
+        let invalidMutationEntry = QualificationOperationCatalog.Entry(
+            operationID: first.operationID,
+            caseID: first.caseID,
+            oracleDisposition: first.oracleDisposition,
+            semanticPolicy: first.semanticPolicy,
+            mutationRestorePolicy: .playheadStep(direction: 0)
+        )
+        let invalidMutationOperations = [invalidMutationEntry] + catalog.operations.dropFirst()
+        let invalidMutationPolicy = QualificationOperationCatalog(
+            schema: catalog.schema,
+            binarySHA256: catalog.binarySHA256,
+            semanticPolicySHA256: try QualificationRunner.operationCatalogPolicyDigest(
+                Array(invalidMutationOperations)
+            ),
+            operations: Array(invalidMutationOperations)
+        )
+        #expect(QualificationRunner.operationCatalogContentIssue(
+            invalidMutationPolicy, attestation: attestation
+        ) == "operation catalog mutation restore policy is invalid")
     }
 
     @Test func trustedVerifierRejectsCatalogBytesChangedAfterSigning() async throws {
@@ -5848,7 +6028,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             QualificationOperationCatalog.self,
             from: catalogData
         )
-        #expect(catalog.schema == "qualification-operation-catalog/v1")
+        #expect(catalog.schema == "qualification-operation-catalog/v2")
         #expect(catalog.binarySHA256 == attestation.binarySHA256)
         #expect(catalog.operations.map(\.operationID) == [OperationID.systemHealth.rawValue])
         #expect(manifest["operation_catalog_path"] as? String == "operation-catalog.json")
@@ -7266,6 +7446,35 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                     return
                 }
                 swapped = true
+            }
+        }
+    }
+
+    private final class CatalogSecondReadReplacement: @unchecked Sendable {
+        private let replacement: Data
+        private let lock = NSLock()
+        private var catalogURL: URL?
+        private var replaced = false
+
+        init(replacement: Data) {
+            self.replacement = replacement
+        }
+
+        var didReplace: Bool {
+            lock.withLock { replaced }
+        }
+
+        func replaceOnSecondCatalogRead(_ url: URL) {
+            lock.withLock {
+                if url.lastPathComponent == "operation-catalog.json" {
+                    catalogURL = catalogURL ?? url
+                    return
+                }
+                guard let catalogURL, !replaced,
+                      (try? replacement.write(to: catalogURL, options: .atomic)) != nil else {
+                    return
+                }
+                replaced = true
             }
         }
     }
