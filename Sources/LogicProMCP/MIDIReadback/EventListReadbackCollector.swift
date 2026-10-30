@@ -39,6 +39,7 @@ enum EventListReadbackCollector {
     struct ProbeObservation: Sendable {
         let liveHeaderTitles: [String]
         let rows: [RawEventRow]
+        let verificationRows: [RawEventRow]
         let firstRowCellChildren: [String: Int]
         let rawItemCountText: String
         let rawRegionPath: String
@@ -76,9 +77,11 @@ enum EventListReadbackCollector {
         let rowElements: [AXUIElement] = AXHelpers.getAttribute(
             paneAndTable.table, "AXRows", runtime: runtime.ax
         ) ?? []
+        let rows = try readRows(rowElements, headers: headers, runtime: runtime.ax)
         return ProbeObservation(
             liveHeaderTitles: sortButtonTitles(of: paneAndTable.table, runtime: runtime.ax),
-            rows: try readRows(rowElements, headers: headers, runtime: runtime.ax),
+            rows: rows,
+            verificationRows: try readRows(rowElements, headers: headers, runtime: runtime.ax),
             firstRowCellChildren: rowElements.first.map {
                 cellChildCounts(of: $0, headers: headers, runtime: runtime.ax)
             } ?? [:],

@@ -74,6 +74,7 @@ struct OperationDispatchCensusTests {
                     liveHeaderTitles: [],
                     rawItemCountText: "0 Events",
                     rawRegionPath: "Census MIDI",
+                    observedRowsContentStable: true,
                     canonicalNotesComplete: false,
                     partialReason: .identityTimingAndTraversalUnproven,
                     writeAttempted: false
