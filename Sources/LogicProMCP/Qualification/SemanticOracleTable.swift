@@ -545,6 +545,7 @@ enum SemanticOracleTable {
         mixerGetSendBypassVerified,
         mixerGetInputBusVerified,
         midiListPorts,
+        midiReadSelectedRegionEvents,
         tracksListLibrary,
         tracksScanLibrary,
         tracksResolvePath,
@@ -654,6 +655,10 @@ enum SemanticOracleTable {
         .systemHelp,
         .projectIsRunning,
         .midiListPorts,
+        // The partial Event List body has nested region/cell invariants and deliberately
+        // withholds ownership, timing and traversal credit. Flat constraints cannot express
+        // the cell union or the relationship between start_bar and end_bar.
+        .midiReadSelectedRegionEvents,
         .tracksListLibrary,
         .tracksResolvePath,
         // Entered deliberately, not to get past the guard that stopped this change. A flat
@@ -1709,6 +1714,86 @@ enum SemanticOracleTable {
         }
         return responseSources == readbackSources
             && responseDestinations == readbackDestinations
+    }
+
+    // SelectedRegionEventListReader.responseJSON intentionally reports only a stable Arrange
+    // selection plus unbound raw Event List observations. This validates that partial protocol;
+    // it must never turn those same-host observations into independent semantic credit.
+    static let midiReadSelectedRegionEvents = OperationOracle(
+        custom: .midiReadSelectedRegionEvents,
+        reason: "The State-B response contains nested region identity and per-cell union shapes, plus an end_bar >= start_bar relationship that flat constraints cannot express. This validates the partial observation protocol only.",
+        independentReadbackDeferral: QualificationDeferral(
+            code: .semanticValidatorUnavailable,
+            detail: "The selected Arrange observation and Event List rows do not independently prove pane ownership, timing/PPQ, or complete traversal"
+        )
+    ) { responseData, _ in
+        func exactBoolean(_ value: Any?, _ expected: Bool) -> Bool {
+            guard let value, JSONInspector.isBoolean(value) else { return false }
+            return (value as? NSNumber)?.boolValue == expected
+        }
+        func nonEmptyString(_ value: Any?) -> String? {
+            guard let value = value as? String else { return nil }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        func exactNonnegativeInt(_ value: Any?) -> Int? {
+            guard let value, let integer = JSONInspector.integer(of: value), integer >= 0 else {
+                return nil
+            }
+            return integer
+        }
+        func finiteNumber(_ value: Any?) -> Bool {
+            guard let value, let number = JSONInspector.number(of: value) else { return false }
+            return number.isFinite
+        }
+
+        guard let object = JSONInspector.parse(responseData) as? [String: Any],
+              exactBoolean(object["success"], true),
+              exactBoolean(object["verified"], false),
+              object["state"] as? String == "B",
+              object["reason"] as? String == "identity_timing_and_traversal_unproven",
+              object["scope"] as? String == "selected_region_and_unbound_event_list_observation",
+              exactBoolean(object["event_list_owner_proven"], false),
+              exactBoolean(object["canonical_notes_complete"], false),
+              exactBoolean(object["write_attempted"], false),
+              object["region"] == nil,
+              let region = object["selected_region_observation"] as? [String: Any],
+              nonEmptyString(region["name"]) != nil,
+              exactNonnegativeInt(region["track_index"]) != nil,
+              let startBar = exactNonnegativeInt(region["start_bar"]), startBar > 0,
+              let endBar = exactNonnegativeInt(region["end_bar"]), endBar >= startBar,
+              nonEmptyString(region["kind"]) != nil,
+              let rows = object["raw_rows"] as? [[String: Any]],
+              let headers = object["live_header_titles"] as? [String],
+              headers.allSatisfy({ nonEmptyString($0) != nil })
+        else { return false }
+
+        let allowedCellKeys: Set<String> = [
+            "slider_value", "value_description", "group_slider_values",
+        ]
+        for row in rows {
+            guard !row.isEmpty else { return false }
+            for (column, rawCell) in row {
+                guard nonEmptyString(column) != nil,
+                      let cell = rawCell as? [String: Any],
+                      !cell.isEmpty,
+                      Set(cell.keys).isSubset(of: allowedCellKeys)
+                else { return false }
+                if cell.keys.contains("slider_value"), !finiteNumber(cell["slider_value"]) {
+                    return false
+                }
+                if cell.keys.contains("value_description"), cell["value_description"] as? String == nil {
+                    return false
+                }
+                if cell.keys.contains("group_slider_values") {
+                    guard let values = cell["group_slider_values"] as? [Any],
+                          !values.isEmpty,
+                          values.allSatisfy({ finiteNumber($0) })
+                    else { return false }
+                }
+            }
+        }
+        return true
     }
 
     // MARK: - tracks
