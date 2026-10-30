@@ -70,6 +70,7 @@ struct TempoMapAXTests {
 
         #expect(refusedOutcome.failure == .didNotMove(previous: 118, observed: 118, target: 120))
         #expect(refusedOutcome.failure.description.contains("did not move"))
+        #expect(refusedOutcome.forward == .init(attempts: 1, acceptedWrites: 1, finalObserved: 118))
         #expect(refusedOutcome.rollback == .notNeeded(writes: 0, finalObserved: 118))
     }
 
@@ -363,6 +364,7 @@ struct TempoMapAXTests {
         let refusedOutcome = try #require(refusal(from: outcome))
 
         #expect(refusedOutcome.failure == .attemptBudgetExhausted(observed: 69, target: 999, budget: 64))
+        #expect(refusedOutcome.forward == .init(attempts: 64, acceptedWrites: 64, finalObserved: 69))
         #expect(refusedOutcome.rollback == .restored(writes: 64, finalObserved: 5))
         #expect(fixture.currentTempo == 5)
     }
@@ -384,7 +386,28 @@ struct TempoMapAXTests {
         var namedTheDeadline = false
         if case .deadlineExceeded = refusedOutcome.failure { namedTheDeadline = true }
         #expect(namedTheDeadline)
+        #expect(refusedOutcome.forward == .init(attempts: 0, acceptedWrites: 0, finalObserved: 5))
         #expect(fixture.currentTempo == 5)
+    }
+
+    @Test("a rejected AX write remains an attempted but unaccepted forward write")
+    func rejectedAXWritePreservesForwardReceipt() throws {
+        let fixture = TempoListFixture(tempo: 118, rejectWrites: true)
+
+        let outcome = TempoMapAX.setExistingTempo(
+            at: 0,
+            to: 119,
+            in: fixture.window,
+            localeIdentifier: "ko-KR",
+            runtime: fixture.runtime()
+        )
+        let refusedOutcome = try #require(refusal(from: outcome))
+
+        #expect(refusedOutcome.failure == .axWriteFailed)
+        #expect(refusedOutcome.forward == .init(attempts: 1, acceptedWrites: 0, finalObserved: 118))
+        #expect(refusedOutcome.rollback == .notNeeded(writes: 0, finalObserved: 118))
+        #expect(fixture.currentTempo == 118)
+        #expect(fixture.writeElementIDs.count == 1)
     }
 
     /// The short override must also bound the rollback. The fixture delays only its decreasing
@@ -469,6 +492,7 @@ struct TempoMapAXTests {
         let refusedOutcome = try #require(refusal(from: outcome))
 
         #expect(refusedOutcome.failure == .deadlineExceeded(observed: 118, target: 119))
+        #expect(refusedOutcome.forward == .init(attempts: 1, acceptedWrites: 1, finalObserved: 118))
         #expect(refusedOutcome.rollback == .failed(
             failure: .readFailed(.axReadFailed(
                 site: "Tempo List AXRows",
@@ -478,6 +502,52 @@ struct TempoMapAXTests {
             finalObserved: 118
         ))
         #expect(fixture.writeElementIDs.count == 1)
+    }
+
+    @Test("a settle deadline retains the last uncorroborated forward observation")
+    func settleDeadlinePreservesLastObservedTempo() throws {
+        let fixture = TempoListFixture(
+            tempo: 118,
+            postWriteAXRowsReadDelayAt: 2,
+            postWriteAXRowsReadDelay: 0.55
+        )
+
+        let outcome = TempoMapAX.setExistingTempo(
+            at: 0,
+            to: 119,
+            in: fixture.window,
+            localeIdentifier: "ko-KR",
+            runtime: fixture.runtime()
+        )
+        let refusedOutcome = try #require(refusal(from: outcome))
+
+        #expect(refusedOutcome.failure == .deadlineExceeded(observed: 119, target: 119))
+        #expect(refusedOutcome.forward == .init(attempts: 1, acceptedWrites: 1, finalObserved: 119))
+        #expect(refusedOutcome.rollback == .restored(writes: 1, finalObserved: 118))
+        #expect(fixture.currentTempo == 118)
+    }
+
+    @Test("a transient rebuild clears corroboration without erasing the last observation")
+    func transientRebuildPreservesLastObservedTempo() throws {
+        let fixture = TempoListFixture(
+            tempo: 118,
+            postWriteAXRowsReadFailureAt: 3,
+            postWriteAXRowsReadFailureDelay: 0.55
+        )
+
+        let outcome = TempoMapAX.setExistingTempo(
+            at: 0,
+            to: 119,
+            in: fixture.window,
+            localeIdentifier: "ko-KR",
+            runtime: fixture.runtime()
+        )
+        let refusedOutcome = try #require(refusal(from: outcome))
+
+        #expect(refusedOutcome.failure == .deadlineExceeded(observed: 119, target: 119))
+        #expect(refusedOutcome.forward == .init(attempts: 1, acceptedWrites: 1, finalObserved: 119))
+        #expect(refusedOutcome.rollback == .restored(writes: 1, finalObserved: 118))
+        #expect(fixture.currentTempo == 118)
     }
 
     @Test("a step that crosses the target refuses instead of becoming oscillating progress")
@@ -494,6 +564,7 @@ struct TempoMapAXTests {
         let refusedOutcome = try #require(refusal(from: outcome))
 
         #expect(refusedOutcome.failure == .crossedTarget(previous: 118, observed: 121, target: 120))
+        #expect(refusedOutcome.forward == .init(attempts: 1, acceptedWrites: 1, finalObserved: 121))
         #expect(refusedOutcome.rollback == .restored(writes: 3, finalObserved: 118))
         #expect(fixture.currentTempo == 118)
     }
@@ -522,9 +593,13 @@ struct TempoMapAXTests {
 
     private func refusal(
         from outcome: TempoMapAX.WriteOutcome
-    ) -> (failure: TempoMapAX.WriteFailure, rollback: TempoMapAX.RollbackOutcome)? {
-        guard case let .refused(failure, rollback) = outcome else { return nil }
-        return (failure, rollback)
+    ) -> (
+        failure: TempoMapAX.WriteFailure,
+        forward: TempoMapAX.ForwardWriteReceipt,
+        rollback: TempoMapAX.RollbackOutcome
+    )? {
+        guard case let .refused(failure, forward, rollback) = outcome else { return nil }
+        return (failure, forward, rollback)
     }
 }
 
@@ -574,6 +649,13 @@ private final class TempoListFixture: @unchecked Sendable {
     private var witnessPairIndex = 0
     private let postWriteRenderDelayAXRowsReads: Int
     private let decreasingWriteDelay: TimeInterval
+    private let rejectWrites: Bool
+    private let postWriteAXRowsReadDelayAt: Int?
+    private let postWriteAXRowsReadDelay: TimeInterval
+    private var postWriteAXRowsReads = 0
+    private let postWriteAXRowsReadFailureAt: Int?
+    private let postWriteAXRowsReadFailureDelay: TimeInterval
+    private var postWriteAXRowsResultReads = 0
     private var pendingRenderAXRowsReads = 0
     private var renderPending = false
     private(set) var currentTempo: Double
@@ -592,7 +674,12 @@ private final class TempoListFixture: @unchecked Sendable {
         postWriteAXRowsReadFailures: [Int32] = [],
         witnessPairs: [WitnessPair] = [],
         postWriteRenderDelayAXRowsReads: Int = 0,
-        decreasingWriteDelay: TimeInterval = 0
+        decreasingWriteDelay: TimeInterval = 0,
+        rejectWrites: Bool = false,
+        postWriteAXRowsReadDelayAt: Int? = nil,
+        postWriteAXRowsReadDelay: TimeInterval = 0,
+        postWriteAXRowsReadFailureAt: Int? = nil,
+        postWriteAXRowsReadFailureDelay: TimeInterval = 0
     ) {
         self.currentTempo = tempo
         self.steps = steps
@@ -602,6 +689,11 @@ private final class TempoListFixture: @unchecked Sendable {
         self.witnessPairs = witnessPairs
         self.postWriteRenderDelayAXRowsReads = postWriteRenderDelayAXRowsReads
         self.decreasingWriteDelay = decreasingWriteDelay
+        self.rejectWrites = rejectWrites
+        self.postWriteAXRowsReadDelayAt = postWriteAXRowsReadDelayAt
+        self.postWriteAXRowsReadDelay = postWriteAXRowsReadDelay
+        self.postWriteAXRowsReadFailureAt = postWriteAXRowsReadFailureAt
+        self.postWriteAXRowsReadFailureDelay = postWriteAXRowsReadFailureDelay
         app = builder.element(90_000)
         window = builder.element(90_001)
         table = builder.element(90_002)
@@ -643,6 +735,13 @@ private final class TempoListFixture: @unchecked Sendable {
             appElement: app,
             attributeValueHandler: { [self] element, attribute in
                 if attribute == "AXRows", CFEqual(element, table) {
+                    if !writeElementIDs.isEmpty {
+                        postWriteAXRowsReads += 1
+                        if postWriteAXRowsReads == postWriteAXRowsReadDelayAt,
+                           postWriteAXRowsReadDelay > 0 {
+                            Thread.sleep(forTimeInterval: postWriteAXRowsReadDelay)
+                        }
+                    }
                     advancePendingRenderIfNeeded()
                     if !witnessPairs.isEmpty {
                         let pair = witnessPairs[min(witnessPairIndex, witnessPairs.count - 1)]
@@ -686,6 +785,17 @@ private final class TempoListFixture: @unchecked Sendable {
                     }
                     return nil
                 }
+                if !writeElementIDs.isEmpty {
+                    postWriteAXRowsResultReads += 1
+                    if postWriteAXRowsResultReads == postWriteAXRowsReadFailureAt {
+                        if postWriteAXRowsReadFailureDelay > 0 {
+                            Thread.sleep(forTimeInterval: postWriteAXRowsReadFailureDelay)
+                        }
+                        return .failure(
+                            AXHelpers.AXStatusError(raw: AXError.invalidUIElement.rawValue)
+                        )
+                    }
+                }
                 if !axRowsReadFailures.isEmpty {
                     return .failure(AXHelpers.AXStatusError(raw: axRowsReadFailures.removeFirst()))
                 }
@@ -713,6 +823,7 @@ private final class TempoListFixture: @unchecked Sendable {
                     return false
                 }
                 writeElementIDs.append(builder.elementID(element))
+                if rejectWrites { return false }
                 let decreasingWrite = requested.doubleValue < currentTempo
                 let step = stepIndex < steps.count ? steps[stepIndex] : .toward
                 stepIndex += 1
