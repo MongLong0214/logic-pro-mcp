@@ -186,6 +186,12 @@ struct Issue971ApprovedMixerSagaTests {
             return response
         }
 
+        func sagaStatus(_ key: String) async throws -> [String: Any] {
+            let handler = try #require(OperationHandlerRegistry.handler(tool: "logic_system", command: "saga_status"))
+            let result = await handler(dependencies, ["idempotency_key": .string(key)])
+            return try #require(sharedJSONObject(sharedToolText(result)))
+        }
+
         func plan(desired: Bool) async throws -> [String: Any] {
             let report = try await call("inspect_session", params: ["domains": .array([.string("strips")])])
             let snapshot = try #require(report["snapshot_id"] as? String)
@@ -341,6 +347,7 @@ struct Issue971ApprovedMixerSagaTests {
                 }
                 let outcome = try await f.call("apply_session_repair", params: f.applyParameters(plan, key: "matching-names"))
                 #expect(outcome["saga_state"] as? String == "completed")
+                #expect(outcome["final_disposition"] as? String == "completed_verified")
                 let verified = outcome["verified"] as? Bool ?? false
                 #expect(verified)
                 for counter in reads { #expect(counter.originalDecidingReads > 0) }
@@ -362,7 +369,18 @@ struct Issue971ApprovedMixerSagaTests {
                     Issue.record("the verified zero-write result must use the existing journal")
                     return
                 }
-                #expect(sharedJSONObject(stored.body)?["saga_state"] as? String == "completed")
+                let storedBody = try #require(sharedJSONObject(stored.body))
+                #expect(storedBody["saga_state"] as? String == "completed")
+                #expect(storedBody["final_disposition"] as? String == "completed_verified")
+                let replay = try await f.call("apply_session_repair",
+                    params: f.applyParameters(plan, key: "matching-names"))
+                #expect(replay["final_disposition"] as? String == "completed_verified")
+                let duplicate = try #require(replay["duplicate"] as? Bool)
+                #expect(duplicate)
+                let status = try await f.sagaStatus("matching-names")
+                let record = try #require(status["record"] as? [String: Any])
+                let statusOutcome = try #require(record["outcome"] as? [String: Any])
+                #expect(statusOutcome["final_disposition"] as? String == "completed_verified")
             }
         }
     }
@@ -1489,6 +1507,7 @@ struct Issue971ApprovedMixerSagaTests {
                     #expect(hook.replaced)
                     #expect(await channel.verifiedForwards == 1)
                     #expect(outcome["saga_state"] as? String == "rollbackUncertain")
+                    #expect(outcome["final_disposition"] as? String == "stopped_with_residuals")
                     #expect(outcome["state"] as? String == "B")
                     #expect(f.view.showing)
                 }
@@ -2285,23 +2304,32 @@ struct Issue971ApprovedMixerSagaTests {
                     #expect(!f.view.showing)
                     #expect(f.view.events == ["open_view", "show_mixer", "open_view", "hide_mixer"])
                     #expect(outcome["saga_state"] as? String == "fullyCompensated")
+                    #expect(outcome["final_disposition"] as? String == "stopped_fully_compensated")
                     let compensation = try #require(outcome["compensation"] as? [String: Any])
                     #expect(compensation["status"] as? String == "fully_compensated")
                     let events = f.view.events
                     let replay = try await f.call("apply_session_repair", params: ["plan_id": .string(planID),
                         "digest": .string(digest), "confirmed": .bool(true), "idempotency_key": .string("cancel-approved-view")])
                     #expect(replay["saga_state"] as? String == "fullyCompensated")
+                    #expect(replay["final_disposition"] as? String == "stopped_fully_compensated")
                     let duplicate = try #require(replay["duplicate"] as? Bool)
                     #expect(duplicate)
                     #expect(f.view.events == events)
                     guard case .cancelled(let stored, verified: true)? = await f.journal.record(for: "cancel-approved-view") else {
                         Issue.record("owned inverse must be verified before cancellation terminalizes"); return
                     }
-                    #expect(sharedJSONObject(stored.body)?["saga_state"] as? String == "fullyCompensated")
+                    let storedBody = try #require(sharedJSONObject(stored.body))
+                    #expect(storedBody["saga_state"] as? String == "fullyCompensated")
+                    #expect(storedBody["final_disposition"] as? String == "stopped_fully_compensated")
+                    let status = try await f.sagaStatus("cancel-approved-view")
+                    let record = try #require(status["record"] as? [String: Any])
+                    let statusOutcome = try #require(record["outcome"] as? [String: Any])
+                    #expect(statusOutcome["final_disposition"] as? String == "stopped_fully_compensated")
                 } else {
                     #expect(await channel.cancelResult == nil)
                     #expect(f.view.showing)
                     #expect(outcome["saga_state"] as? String == "completed")
+                    #expect(outcome["final_disposition"] as? String == "completed_verified")
                     #expect(f.view.events == ["open_view", "show_mixer"])
                 }
             }
@@ -2371,6 +2399,7 @@ struct Issue971ApprovedMixerSagaTests {
                 #expect(blockedReasons.contains("mutation_saga_unavailable"))
                 let outcome = try await f.call("apply_session_repair", params: f.applyParameters(plan, key: "disabled-view"))
                 #expect(outcome["state"] as? String == "C")
+                #expect(outcome["final_disposition"] as? String == "refused_before_write")
                 #expect(f.view.events.isEmpty)
                 #expect(!f.view.showing)
             }
@@ -2703,6 +2732,7 @@ struct Issue971ApprovedMixerSagaTests {
                 #expect(!children.contains { CFEqual($0, f.view.mixer) })
                 #expect(outcome["state"] as? String == "B")
                 #expect(outcome["saga_state"] as? String == "compensationFailed")
+                #expect(outcome["final_disposition"] as? String == "stopped_with_residuals")
                 #expect(f.view.builder.attributeValue(f.view.window, kAXDocumentAttribute as String) as? String == f.bundle.absoluteString)
                 #expect(f.view.builder.attributeValue(f.view.window, kAXTitleAttribute as String) as? String == "Visibility fixture - Tracks")
                 #expect(f.view.logicPID == 4242)
