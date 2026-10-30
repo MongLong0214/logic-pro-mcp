@@ -3687,6 +3687,52 @@ private func makeTempoSliderFixture(
 
 // MARK: - #131/#135/#141 set_instrument hardening (deterministic guards)
 
+@Test func testSetInstrumentPermissionRefusalIsTerminalBeforeAnyUIAction() async throws {
+    let fixture = makeSetInstrumentFixture()
+    let activationCalls = CallCounter()
+    let openCalls = CallCounter()
+    let resolveCalls = CallCounter()
+
+    let result = await AccessibilityChannel.setTrackInstrument(
+        params: ["index": "1", "path": "Bass/Sub Bass"],
+        runtime: fixture.builder.makeLogicRuntime(appElement: fixture.app),
+        staging: AccessibilityChannel.LibraryPanelStaging(
+            isPanelOpen: { _ in true },
+            openPanel: { _ in openCalls.inc() },
+            resolvePath: { _ in resolveCalls.inc(); return true }
+        ),
+        canPostEvents: { false },
+        activateLogicPro: { activationCalls.inc(); return true }
+    )
+
+    #expect(!result.isSuccess)
+    let obj = decodeAccessibilityJSON(result.message)
+    #expect(obj["error"] as? String == "permission_denied")
+    #expect(obj["operation"] as? String == "track.set_instrument")
+    #expect(obj["precondition"] as? String == "event_post_permission_unavailable")
+    #expect(obj["target_track_index"] as? Int == 1)
+    #expect(obj["target_track_name"] as? String == "Bass Track")
+    #expect(obj["events_posted"] as? Int == 0)
+    let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+    let safeToRetry = try #require(obj["safe_to_retry"] as? Bool)
+    #expect(!safeToRetry)
+    let automaticAttemptsExhausted = try #require(obj["automatic_permission_attempts_exhausted"] as? Bool)
+    #expect(automaticAttemptsExhausted)
+    let terminal = try #require(obj["terminal"] as? Bool)
+    #expect(terminal)
+    let humanInterventionRequired = try #require(obj["human_intervention_required"] as? Bool)
+    #expect(!humanInterventionRequired)
+    #expect(obj["human_intervention_requests"] as? Int == 0)
+    let hint = try #require(obj["hint"] as? String)
+    #expect(!hint.localizedCaseInsensitiveContains("grant"))
+    #expect(!hint.localizedCaseInsensitiveContains("retry"))
+    #expect(activationCalls.count == 0)
+    #expect(fixture.builder.actionCalls.isEmpty)
+    #expect(openCalls.count == 0)
+    #expect(resolveCalls.count == 0)
+}
+
 /// Build a set_instrument fixture whose target track (index 1) carries a
 /// GM Device signal so `inferTrackType` classifies it as `.externalMIDI`.
 /// The library browser is present (panel "open") so the type guard — which
