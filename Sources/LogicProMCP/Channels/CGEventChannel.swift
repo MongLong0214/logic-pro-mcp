@@ -801,8 +801,8 @@ actor CGEventChannel: Channel {
     }
 
     /// State C for a plain letter under an input source that is not ASCII-capable and could not be
-    /// switched away from for the key (`switchFailure`), or that did not read (`source` nil). Not
-    /// terminal after the bounded automatic input-source preparation, and when there is no other
+    /// switched away from for the key (`switchFailure`), or that did not read (`source` nil).
+    /// Terminal after the bounded automatic input-source preparation; when there is no other
     /// route the caller gets this refusal rather than a send-only success for a key that could not
     /// act. `restore` is the reading after a selection that did not read back was undone.
     static func inputSourceRefusal(
