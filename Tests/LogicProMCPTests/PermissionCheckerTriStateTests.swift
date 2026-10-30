@@ -49,7 +49,8 @@ private func triStateRuntime(
     )
 
     #expect(observation.bundleID == "com.apple.systemevents")
-    #expect(observation.askUserIfNeeded == false)
+    let askedForConsent = observation.askUserIfNeeded ?? true
+    #expect(!askedForConsent)
     #expect(state == .notGranted)
 }
 
@@ -98,7 +99,7 @@ func testAutomationPermissionStatusMapping(status: Int32, expected: PermissionCh
         var launchCount = 0
         let state = PermissionChecker.nonPromptingSystemEventsAutomationState(
             determinePermission: { _, askUserIfNeeded in
-                #expect(askUserIfNeeded == false)
+                #expect(!askUserIfNeeded)
                 return status
             },
             launchWithoutActivation: { _ in
@@ -117,7 +118,7 @@ func testAutomationPermissionStatusMapping(status: Int32, expected: PermissionCh
     let state = PermissionChecker.nonPromptingSystemEventsAutomationState(
         determinePermission: { _, askUserIfNeeded in
             queryCount += 1
-            #expect(askUserIfNeeded == false)
+            #expect(!askUserIfNeeded)
             return Int32(procNotFound)
         },
         launchWithoutActivation: { _ in false }
