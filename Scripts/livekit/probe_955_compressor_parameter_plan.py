@@ -15,13 +15,15 @@ import os
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-if REPO not in sys.path:
-    sys.path.insert(0, REPO)
+SCRIPTS = os.path.join(REPO, "Scripts")
+if SCRIPTS not in sys.path:
+    sys.path.insert(0, SCRIPTS)
 
-from Scripts.verify.live.mcp import Server
+from verify.live.mcp import Server
 
 
 PLUGIN_ID = "logic.stock.effect.compressor"
+READ_STATUS = "read"
 PARAMETERS = {
     "limiter_on": {"raw_unit": "boolean", "requested_unit": "boolean", "requested_value": 0.0},
     "threshold": {"raw_unit": "normalized", "requested_unit": "percent", "requested_value": 38.0},
@@ -86,7 +88,7 @@ def response_matches(
         and response.get("verified") is True
         and response.get("hc_schema") == 2
         and response.get("operation") == "logic_plugins.get_param_verified"
-        and response.get("parameter_read_status") == "read"
+        and response.get("parameter_read_status") == READ_STATUS
         and response.get("observation_scope") == "current_insert_parameter"
         and response.get("verify_source") == "ax_plugin_window"
         and response.get("write_attempted") is False
