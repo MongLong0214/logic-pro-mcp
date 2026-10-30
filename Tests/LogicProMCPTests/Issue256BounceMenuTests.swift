@@ -55,6 +55,16 @@ struct Issue256BounceMenuTests {
         #expect(!result.isSuccess)
         #expect(json["error"] as? String == "system_events_automation_denied")
         #expect(!((json["write_attempted"] as? Bool)!))
+        let safeToRetry = try #require(json["safe_to_retry"] as? Bool)
+        let automaticAttemptsExhausted = try #require(json["automatic_permission_attempts_exhausted"] as? Bool)
+        let terminal = try #require(json["terminal"] as? Bool)
+        let humanInterventionRequired = try #require(json["human_intervention_required"] as? Bool)
+        #expect(!safeToRetry)
+        #expect(automaticAttemptsExhausted)
+        #expect(terminal)
+        #expect(!humanInterventionRequired)
+        #expect(json["human_intervention_requests"] as? Int == 0)
+        #expect(json["human_dependent_transitions"] as? Int == 0)
         #expect(!probe.called)
     }
 

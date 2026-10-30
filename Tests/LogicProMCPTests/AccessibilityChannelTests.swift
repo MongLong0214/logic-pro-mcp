@@ -2475,11 +2475,20 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     #expect(!((obj["write_attempted"] as? Bool)!))
     #expect(!((obj["safe_to_retry"] as? Bool)!))
     let hint = try #require(obj["hint"] as? String)
-    #expect(hint == "System Events Automation is denied for the process responsible for launching this server (a launcher-permission gap, not a Logic limitation). Grant it in System Settings > Privacy & Security > Automation, or run the server/harness under a responsible app that already has it (Terminal, iTerm, or your editor). Logic Pro automation being granted is separate and not sufficient.")
+    #expect(hint == "System Events Automation is unavailable for the process responsible for launching this server (a launcher-permission gap, not a Logic limitation). The current operation terminated before further action; Logic Pro automation being granted is separate and not sufficient.")
+    let humanInterventionRequired = try #require(obj["human_intervention_required"] as? Bool)
+    let automaticAttemptsExhausted = try #require(obj["automatic_permission_attempts_exhausted"] as? Bool)
+    let terminal = try #require(obj["terminal"] as? Bool)
+    #expect(!humanInterventionRequired)
+    #expect(obj["human_intervention_requests"] as? Int == 0)
+    #expect(obj["human_dependent_transitions"] as? Int == 0)
+    #expect(automaticAttemptsExhausted)
+    #expect(terminal)
+    #expect(obj["remediation"] == nil)
 }
 
 @Test func testImportMIDIFilePropagatesSystemEventsAutomationDeniedFromOsascript() async throws {
-    let expectedHint = "System Events Automation is denied for the process responsible for launching this server (a launcher-permission gap, not a Logic limitation). Grant it in System Settings > Privacy & Security > Automation, or run the server/harness under a responsible app that already has it (Terminal, iTerm, or your editor). Logic Pro automation being granted is separate and not sufficient."
+    let expectedHint = "System Events Automation is unavailable for the process responsible for launching this server (a launcher-permission gap, not a Logic limitation). The current operation terminated before further action; Logic Pro automation being granted is separate and not sufficient."
     let tempFile = FileManager.default.temporaryDirectory
         .appendingPathComponent("LogicProMCP-se-runtime-denied-\(UUID().uuidString).mid")
     try Data([0x4D, 0x54, 0x68, 0x64]).write(to: tempFile)
@@ -2489,7 +2498,9 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     let denied = HonestContract.encodeStateC(
         error: .systemEventsAutomationDenied,
         hint: expectedHint,
-        extras: ["osascript_stderr": stderr]
+        extras: AppleScriptErrorClassifier.systemEventsAutomationTerminalExtras([
+            "osascript_stderr": stderr,
+        ])
     )
 
     let result = await AccessibilityChannel.defaultImportMIDIFile(
@@ -2507,6 +2518,12 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     let hint = try #require(obj["hint"] as? String)
     #expect(hint == expectedHint)
     #expect(obj["osascript_stderr"] as? String == stderr)
+    let humanInterventionRequired = try #require(obj["human_intervention_required"] as? Bool)
+    let terminal = try #require(obj["terminal"] as? Bool)
+    #expect(!humanInterventionRequired)
+    #expect(obj["human_intervention_requests"] as? Int == 0)
+    #expect(obj["human_dependent_transitions"] as? Int == 0)
+    #expect(terminal)
     #expect(!(hint.contains("midi.import_file osascript failed")))
 }
 

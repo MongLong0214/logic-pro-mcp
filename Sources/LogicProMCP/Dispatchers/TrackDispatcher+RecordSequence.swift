@@ -506,7 +506,13 @@ extension TrackDispatcher {
                 "hint": "record_sequence failed at midi.import_file: \(importResult.message)",
             ]
             if let inner = importMessageJSON(importResult.message) {
-                for key in ["file_open_dialog_seen", "tempo_dialog_seen", "missing_element", "osascript_stderr"] {
+                for key in [
+                    "file_open_dialog_seen", "tempo_dialog_seen", "missing_element", "osascript_stderr",
+                    "permission", "write_attempted", "safe_to_retry",
+                    "automatic_permission_attempts_exhausted", "terminal",
+                    "human_intervention_required", "human_intervention_requests",
+                    "human_dependent_transitions",
+                ] {
                     if let value = inner[key] { failure[key] = value }
                 }
                 if let innerError = inner["error"] as? String {

@@ -1370,12 +1370,11 @@ extension AccessibilityChannel {
             return .error(HonestContract.encodeStateC(
                 error: .systemEventsAutomationDenied,
                 hint: AppleScriptErrorClassifier.systemEventsAutomationDeniedHint,
-                extras: [
+                extras: AppleScriptErrorClassifier.systemEventsAutomationTerminalExtras([
                     "operation": "project.bounce",
                     "failure_stage": "preflight_system_events_permission",
                     "write_attempted": false,
-                    "safe_to_retry": false,
-                ]
+                ])
             ))
         }
 

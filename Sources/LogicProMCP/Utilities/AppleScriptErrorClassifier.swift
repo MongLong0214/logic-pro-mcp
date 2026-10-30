@@ -2,7 +2,20 @@ import Foundation
 
 enum AppleScriptErrorClassifier {
     static let systemEventsAutomationDeniedHint =
-        "System Events Automation is denied for the process responsible for launching this server (a launcher-permission gap, not a Logic limitation). Grant it in System Settings > Privacy & Security > Automation, or run the server/harness under a responsible app that already has it (Terminal, iTerm, or your editor). Logic Pro automation being granted is separate and not sufficient."
+        "System Events Automation is unavailable for the process responsible for launching this server (a launcher-permission gap, not a Logic limitation). The current operation terminated before further action; Logic Pro automation being granted is separate and not sufficient."
+
+    static func systemEventsAutomationTerminalExtras(
+        _ extras: [String: Any] = [:]
+    ) -> [String: Any] {
+        extras.merging([
+            "safe_to_retry": false,
+            "automatic_permission_attempts_exhausted": true,
+            "terminal": true,
+            "human_intervention_required": false,
+            "human_intervention_requests": 0,
+            "human_dependent_transitions": 0,
+        ]) { _, terminalValue in terminalValue }
+    }
 
     static let systemEventsAutomationDeniedCoreMatchTokens = ["-1743", "errAEEventNotPermitted", "not authorized to send Apple events to System Events", "not allowed to send Apple events to System Events", "System Events", "systemevents"]
 
