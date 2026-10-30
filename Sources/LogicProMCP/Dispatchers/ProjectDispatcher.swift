@@ -846,7 +846,13 @@ struct ProjectDispatcher: OperationTraceDispatching {
             return cleanupApplyStateC(
                 .staleSnapshot,
                 stepID: stepID,
-                hint: blockingHint
+                hint: blockingHint,
+                extras: [
+                    "write_attempted": false,
+                    "automatic_read_attempts_exhausted": true,
+                    "terminal": true,
+                    "human_intervention_required": false,
+                ]
             )
         }
 
@@ -972,6 +978,8 @@ struct ProjectDispatcher: OperationTraceDispatching {
         }
 
         var renamed: [[String: Any]] = []
+        var anyRenameWriteAttempted = false
+        var allRenameWriteAttemptsKnown = true
         // #389: cleanup_apply reaches the router only through nested
         // TrackDispatcher.handle calls, each of which arms and commits its OWN
         // child boundary — the parent trace would otherwise show none. Keep the
@@ -987,6 +995,23 @@ struct ProjectDispatcher: OperationTraceDispatching {
                 cache: cache
             )
             let body = cleanupApplyResultText(result)
+            let proof = cleanupApplyResultJSONObject(body)
+            let childWriteAttempted: Bool?
+            if let explicit = proof?["write_attempted"] as? Bool {
+                childWriteAttempted = explicit
+            } else if proof?["state"] as? String == "B" {
+                // Honest Contract State B means the child write landed but its
+                // readback could not establish a verified outcome.
+                childWriteAttempted = true
+            } else if proof?["state"] as? String == "A", proof?["via"] as? String == "no-op" {
+                childWriteAttempted = false
+            } else {
+                childWriteAttempted = nil
+            }
+            if childWriteAttempted == true {
+                anyRenameWriteAttempted = true
+            }
+            if childWriteAttempted == nil { allRenameWriteAttemptsKnown = false }
             renamed.append([
                 "track_index": target,
                 "new_name": newName,
@@ -997,17 +1022,28 @@ struct ProjectDispatcher: OperationTraceDispatching {
             // underlying HC envelope as State C — do NOT report State A for a
             // batch where a later track could not be confirmed.
             if result.isError == true {
+                var failureExtras: [String: Any] = [
+                    "tool": "logic_tracks",
+                    "command": "rename",
+                    "failed_track_index": target,
+                    "applied": renamed,
+                    "underlying": body,
+                    "terminal": true,
+                    "human_intervention_required": false,
+                ]
+                if anyRenameWriteAttempted {
+                    failureExtras["write_attempted"] = true
+                } else if allRenameWriteAttemptsKnown {
+                    failureExtras["write_attempted"] = anyRenameWriteAttempted
+                } else {
+                    failureExtras["write_attempted_known"] = false
+                }
                 return cleanupApplyStateC(
                     .readbackMismatch,
                     stepID: step.id,
-                    hint: "cleanup_apply: rename step '\(step.id)' stopped at track \(target) — the track.rename path did not confirm a verified rename (State B/C). Re-read logic://tracks and retry.",
-                    extras: [
-                        "tool": "logic_tracks",
-                        "command": "rename",
-                        "failed_track_index": target,
-                        "applied": renamed,
-                        "underlying": body,
-                    ]
+                    hint: "cleanup_apply: rename step '\(step.id)' terminated at track \(target) because "
+                        + "the track.rename path did not confirm a verified rename (State B/C).",
+                    extras: failureExtras
                 )
             }
         }
@@ -1033,17 +1069,22 @@ struct ProjectDispatcher: OperationTraceDispatching {
     /// readback gap), else nil. Keeps the stale/occluded/gap gate in one place.
     private static func cleanupApplyInventoryBlocker(_ report: ProjectSessionAudit.AuditReport) -> String? {
         if !report.evidence.hasDocument {
-            return "cleanup_apply: no open Logic document is confirmed; refusing to mutate."
+            return "cleanup_apply terminated before mutation: the current automatic audit did not "
+                + "confirm an open Logic document."
         }
         if report.evidence.axOccluded {
-            return "cleanup_apply: Accessibility readback is occluded (modal/floating window); the plan's targets cannot be trusted. Dismiss the dialog, re-run the audit, and retry."
+            return "cleanup_apply terminated before mutation: the bounded automatic audit found "
+                + "occluded Accessibility readback, so the plan's targets cannot be trusted."
         }
         let tracksFreshness = report.evidence.tracks.freshness
         if !tracksFreshness.available || tracksFreshness.stale {
-            return "cleanup_apply: track inventory is unread or stale (available=\(tracksFreshness.available), stale=\(tracksFreshness.stale)); re-read logic://tracks before applying a step."
+            return "cleanup_apply terminated before mutation: the bounded automatic track inventory "
+                + "read was unavailable or stale (available=\(tracksFreshness.available), "
+                + "stale=\(tracksFreshness.stale))."
         }
         if report.findings.contains(where: { $0.id == "track_readback_gap" }) {
-            return "cleanup_apply: the project file reports more tracks than Accessibility surfaced (track_readback_gap); plan target indices may not match the live arrange. Bring the arrange window forward, re-run the audit, and retry."
+            return "cleanup_apply terminated before mutation: the automatic audit found a "
+                + "track_readback_gap, so plan target indices cannot be bound to the live arrange."
         }
         return nil
     }
@@ -1212,6 +1253,11 @@ struct ProjectDispatcher: OperationTraceDispatching {
         guard let first = result.content.first else { return "" }
         if case .text(let text, _, _) = first { return text }
         return ""
+    }
+
+    private static func cleanupApplyResultJSONObject(_ text: String) -> [String: Any]? {
+        guard let data = text.data(using: .utf8) else { return nil }
+        return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     }
 
     /// Build a State C (hard-failure) Honest Contract envelope for cleanup_apply

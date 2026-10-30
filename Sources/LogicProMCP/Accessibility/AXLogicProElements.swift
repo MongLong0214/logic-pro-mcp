@@ -739,20 +739,16 @@ enum AXLogicProElements {
         blockingDialogTarget(runtime: runtime)?.info
     }
 
-    /// A safe, non-destructive recovery action for a blocking dialog. Prefers a
-    /// Cancel-style button (which never saves or discards), then Escape; only
-    /// names a different button when no cancel/escape path is exposed.
+    /// A non-mutating terminal diagnostic for a blocking dialog. The dialog's
+    /// controls remain separately observable, but their presence alone does not
+    /// establish temporal provenance or cleanup authority.
     private static func blockingDialogRecoveryAction(title: String, buttons: [String]) -> String {
-        // Cancel-marker tokens centralized in AXLocalePolicy.cancelButton
-        // (round-1 #8); `containsAny` is case-insensitive + diacritic-sensitive,
-        // matching the original lowercased substring scan.
-        if let cancel = buttons.first(where: { AXLocalePolicy.cancelButton.containsAny(in: $0) }) {
-            return "Press \"\(cancel)\" to dismiss this dialog, then retry."
-        }
-        if !title.isEmpty {
-            return "Dismiss the \"\(title)\" dialog (press Escape or its Cancel/close control), then retry."
-        }
-        return "Dismiss the blocking dialog (press Escape), then retry. Check logic_system.health for the current dialog state."
+        let identity = title.isEmpty ? "blocking Logic dialog" : "\"\(title)\" Logic dialog"
+        let census = buttons.isEmpty
+            ? "No dialog controls were enumerated."
+            : "\(buttons.count) dialog control(s) were observed and are reported separately."
+        return "The observed \(identity) was present at the blocking-dialog census. \(census) "
+            + "No dialog control was actuated, and no cleanup authority was inferred."
     }
 
     /// True when `window` carries an AXSubrole indicating a modal dialog/sheet.

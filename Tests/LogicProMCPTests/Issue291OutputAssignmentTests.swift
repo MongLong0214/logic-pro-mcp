@@ -105,6 +105,8 @@ private final class R2Fixture: @unchecked Sendable {
         var stripAddedWhilePopupOpen = false
         /// Synthetic source drift during the opener, before any terminal entry is selected.
         var sourceDriftWhilePopupOpen: R2SourcePopupDrift?
+        /// A foreign popup already exists before this request owns or presses an output slot.
+        var preexistingPopupOpen = false
     }
 
     let options: Options
@@ -169,6 +171,7 @@ private final class R2Fixture: @unchecked Sendable {
         b.setChildren(mixer, strips)
         b.setChildren(window, [controlBar, mixer])
         buildPopup(current: current)
+        if options.preexistingPopupOpen { menuOpen = true }
         switch options.failingRead {
         case .sourceInputRole: failingAttribute[id(stripChildren[id(audio)]![0])] = kAXRoleAttribute as String
         case .thirdStripChildren: failingChildren.insert(id(stereoOut))
@@ -595,6 +598,29 @@ func outputAssignmentRefusesAStaleExpectation() async throws {
     #expect(dictionary(envelope["before"]) == json(.stereoOutput))
     #expect(dictionary(envelope["expected_current"]) == json(.physical(3, 4)))
     #expect(fixture.presses.isEmpty)
+}
+
+@Test("a pre-existing popup terminates without a person, press, or cleanup")
+func outputAssignmentTerminatesOnAForeignPopup() async throws {
+    let fixture = R2Fixture(.init(preexistingPopupOpen: true))
+    let envelope = try await runChannel(fixture, destination: .bus(1))
+
+    #expect(envelope["state"] as? String == "C")
+    #expect(envelope["error"] as? String == "unsupported_state")
+    #expect(envelope["open_popup_menu_windows"] as? Int == 1)
+    #expect(try #require(envelope["terminal"] as? Bool))
+    #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+    #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+    #expect(try #require(envelope["automatic_precondition_attempts_exhausted"] as? Bool))
+    let hint = try #require(envelope["hint"] as? String)
+    #expect(hint.localizedCaseInsensitiveContains("observed at the pre-write popup guard"))
+    for unsupportedTemporalClaim in ["already open before this request", "pre-existing", "predates"] {
+        #expect(!hint.localizedCaseInsensitiveContains(unsupportedTemporalClaim))
+    }
+    #expect(!hint.localizedCaseInsensitiveContains("close it"))
+    #expect(!hint.localizedCaseInsensitiveContains("retry"))
+    #expect(fixture.presses.isEmpty)
+    #expect(fixture.escapeCount == 0)
 }
 
 /// Kills M09: dropping the receiver check. The press then lands on a bus nothing receives, the

@@ -130,6 +130,14 @@ private let plainNonLetterOps = ["transport.play", "transport.pause", "transport
         #expect(object["events_posted"] as? Int == 0)
         let writeAttempted = try #require(object["write_attempted"] as? Bool)
         #expect(!writeAttempted)
+        #expect(try #require(object["terminal"] as? Bool))
+        #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+        #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+        #expect(try #require(object["automatic_input_source_attempts_exhausted"] as? Bool))
+        let hint = try #require(object["hint"] as? String)
+        for request in ["retry", "switch to an ASCII-capable", "select it again", "manually"] {
+            #expect(!hint.localizedCaseInsensitiveContains(request), "\(operation): \(hint)")
+        }
     }
 
     /// Kills: refusing whatever the source reads (the `!source.isASCIICapable` clause dropped).

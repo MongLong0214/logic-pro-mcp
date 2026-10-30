@@ -213,8 +213,29 @@ struct SessionPlanSafetyTests {
     func unsupportedThirdPartyReported() {
         let plan = SessionPlanGenerator.plan(prompt: "8-bar house track in A minor with Serum bass")
 
-        #expect(plan.unsupportedOrRiskySteps.contains { $0.operation == "third_party_plugin_or_instrument" })
+        let unsupported = plan.unsupportedOrRiskySteps.first { $0.operation == "third_party_plugin_or_instrument" }
+        #expect(unsupported != nil)
+        #expect(unsupported?.safeAlternative == "Only stock instruments present in the provenance-backed catalog are available; other requests terminate unsupported.")
         #expect(plan.unsupportedOrRiskySteps.contains { $0.operation == "execute_plan" })
+    }
+
+    @Test("missing instrument catalog is a terminal limitation, not a human fallback")
+    func missingCatalogTerminatesWithoutHumanFallback() throws {
+        let intent = SessionPlanGenerator.parseIntent(prompt: "8-bar funk with guitar")
+        let catalog = SessionInstrumentCatalogStatus(
+            status: "degraded_unavailable",
+            availableResources: [],
+            missingResources: ["logic://stock-instruments"],
+            message: "fixture"
+        )
+
+        let track = try #require(SessionPlanGenerator.trackPlan(
+            for: "8-bar funk with guitar",
+            intent: intent,
+            catalog: catalog
+        ).first)
+        #expect(track.limitations.contains("Instrument catalog #31 is unavailable in this build; automatic patch assignment is unavailable."))
+        #expect(!track.limitations.joined(separator: " ").lowercased().contains("manual"))
     }
 
     @Test("empty and whitespace prompts return the unsupported planning-only contract")

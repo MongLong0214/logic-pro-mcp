@@ -199,10 +199,10 @@ enum ControlSurfaceSetup {
         guard let setup = openSetupWindow(runtime: runtime, evidence: &evidence) else {
             return .failed(
                 stage: "open_setup_window",
-                hint: "Could not open Logic Pro > Control Surfaces > Setup…. "
+                hint: "Automatic Setup-window discovery exhausted every measured Logic Pro > "
+                    + "Control Surfaces > Setup… candidate. "
                     + wrongWindowHint(evidence)
-                    + "Open it by hand, then choose New > Install…, add \"\(model)\", and set both "
-                    + "Output Port and Input Port to \"\(portName)\".",
+                    + "Setup terminated before any control-surface configuration write.",
                 evidence)
         }
         evidence.setupWindowOpened = true
@@ -226,8 +226,8 @@ enum ControlSurfaceSetup {
             return .failed(
                 stage: "foreign_device_installed",
                 hint: "Logic already has the control surface \"\(installedModel)\" installed. "
-                    + "This server will not replace it. Add \"\(model)\" yourself via "
-                    + "New > Install… and bind its ports to \"\(portName)\".",
+                    + "This server will not replace it; setup terminated without changing that "
+                    + "configuration.",
                 evidence)
         }
 
@@ -266,8 +266,8 @@ enum ControlSurfaceSetup {
                 return .failed(
                     stage: "bind_port",
                     hint: "The \"\(label.canonical)\" popup still reads \(landed.map { "\"\($0)\"" } ?? "nothing") "
-                        + "after choosing \"\(portName)\". This server's virtual ports exist only while it "
-                        + "runs, so the port is offered only to a live server; bind it by hand if this repeats.",
+                        + "after the automatic \"\(portName)\" choice. Setup terminated after the bounded "
+                        + "readback failed; no further configuration step was attempted.",
                     evidence)
             }
         }
@@ -299,8 +299,8 @@ enum ControlSurfaceSetup {
                 return .failed(
                     stage: "verify_mcu_effect",
                     hint: "Both ports now read \"\(portName)\" but Logic still sends this server no MCU "
-                        + "feedback, so the surface is configured and not working. Check that Logic Pro > "
-                        + "Control Surfaces > Bypass All Control Surfaces is off.",
+                        + "feedback, so the surface is configured but unverified. Setup terminated without "
+                        + "claiming a working binding.",
                     evidence)
             case .couldNotAttempt(let why):
                 evidence.mcuEffectObserved = nil

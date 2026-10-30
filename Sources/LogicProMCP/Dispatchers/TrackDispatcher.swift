@@ -264,16 +264,20 @@ struct TrackDispatcher: OperationTraceDispatching {
             // with `track.delete` is unsafe: the previously-selected track
             // (whatever it was) gets deleted instead of the requested target,
             // an irrecoverable data-loss scenario. Refuse the delete and
-            // require the caller to re-issue selection (or accept that the
-            // selection is uncertain and abort).
+            // terminate with the selection uncertainty preserved.
             guard channelResultIsVerified(selectResult) else {
                 return await finalizeTrace(toolStateCResult(
                     .readbackMismatch,
-                    hint: "track.delete refused: track \(index) selection unverified (State B). Cannot safely delete unverified target — re-select or fix Logic Pro AX state and retry.",
+                    hint: "track.delete refused and terminated because track \(index) selection remained unverified (State B); the destructive action was not sent.",
                     extras: [
                         "operation": "track.delete",
                         "requested_index": index,
                         "select_response": selectResult.message,
+                        "write_attempted": true,
+                        "selection_write_attempted": true,
+                        "target_mutation_attempted": false,
+                        "terminal": true,
+                        "human_intervention_required": false,
                     ]
                 ), traceID: traceID)
             }
@@ -342,16 +346,21 @@ struct TrackDispatcher: OperationTraceDispatching {
             // `.success`. Following State B with `track.duplicate` would
             // duplicate whatever track is currently selected (which can
             // differ from the requested index), creating a phantom track
-            // and confusing the caller's mental model. Refuse and require
-            // the caller to re-issue selection.
+            // and confusing the caller's mental model. Terminate with the
+            // selection uncertainty preserved.
             guard channelResultIsVerified(selectResult) else {
                 return await finalizeTrace(toolStateCResult(
                     .readbackMismatch,
-                    hint: "track.duplicate refused: track \(index) selection unverified (State B). Cannot safely duplicate unverified target — re-select or fix Logic Pro AX state and retry.",
+                    hint: "track.duplicate refused and terminated because track \(index) selection remained unverified (State B); the duplicate action was not sent.",
                     extras: [
                         "operation": "track.duplicate",
                         "requested_index": index,
                         "select_response": selectResult.message,
+                        "write_attempted": true,
+                        "selection_write_attempted": true,
+                        "target_mutation_attempted": false,
+                        "terminal": true,
+                        "human_intervention_required": false,
                     ]
                 ), traceID: traceID)
             }
@@ -807,12 +816,14 @@ struct TrackDispatcher: OperationTraceDispatching {
             case .missing(let references):
                 return toolStateCResult(
                     .staleTargetReference,
-                    hint: "sort_verified expected_order names track references that are unavailable or stale: \(references.joined(separator: ", ")). Re-read logic://tracks and retry with its current track_ref values.",
+                    hint: "sort_verified terminated before routing because expected_order names unavailable or stale track references: \(references.joined(separator: ", ")).",
                     extras: [
                         "operation": "track.sort_verified",
                         "reason": "expected_order_unknown_track_refs",
                         "missing_track_refs": references,
                         "write_attempted": false,
+                        "terminal": true,
+                        "human_intervention_required": false,
                     ]
                 )
             }

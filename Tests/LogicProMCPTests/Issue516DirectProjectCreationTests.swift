@@ -190,18 +190,20 @@ struct ProjectNewOpenDocumentRefusalTests {
         #expect(envelope["failure_stage"] as? String == "precondition_open_document")
     }
 
-    @Test("nothing was attempted, and it says so")
-    func refusalIsPreWrite() async throws {
+    @Test("open-document refusal terminates without a human recovery request")
+    func refusalIsPreWriteAndTerminal() async throws {
         let envelope = try await refusalEnvelope(windowCount: 1)
         let writeAttempted = try #require(envelope["write_attempted"] as? Bool)
         #expect(!writeAttempted)
         let retryable = try #require(envelope["safe_to_retry"] as? Bool)
-        #expect(retryable)
-        // The recovery action was driven end to end before being written down. `project.close`
-        // on its own answers `confirmation_required`, so naming the bare command would have sent
-        // the operator into a second refusal — the confirmation has to be in the instruction.
-        let recovery = try #require(envelope["recovery_action"] as? String)
-        #expect(recovery.contains("close"))
-        #expect(recovery.contains("confirmed: true"))
+        #expect(!retryable)
+        #expect(try #require(envelope["terminal"] as? Bool))
+        #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+        #expect(try #require(envelope["automatic_precondition_attempts_exhausted"] as? Bool))
+        #expect(envelope["recovery_action"] == nil)
+        let hint = try #require(envelope["hint"] as? String)
+        for request in ["close", "retry", "manually"] {
+            #expect(!hint.localizedCaseInsensitiveContains(request))
+        }
     }
 }
