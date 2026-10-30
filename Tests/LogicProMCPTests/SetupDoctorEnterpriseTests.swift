@@ -69,12 +69,13 @@ private func enterpriseApprovals() -> [ManualValidationChannel: ManualValidation
 
 private func makeReport(
     arguments: [String] = ["LogicProMCP", "doctor", "--json", "--client", "claude-code"],
+    additionalArguments: [String] = [],
     runtime: SetupDoctor.Runtime = enterpriseRuntime(),
     permission: PermissionChecker.PermissionStatus = granted(),
     approvals: [ManualValidationChannel: ManualValidationApproval]? = nil
 ) -> SetupDoctor.Report {
     SetupDoctor.generate(
-        arguments: arguments,
+        arguments: arguments + additionalArguments,
         permissionStatus: permission,
         approvals: approvals ?? enterpriseApprovals(),
         runtime: runtime
@@ -815,7 +816,7 @@ private func runEntrypoint(
 @Test func test_t1v3_headline_id_equals_fix_plan_first() {
     // AC-4: the id EMBEDDED in headline equals fix_plan[0] (id-extraction, never literal ==).
     let report = makeReport(
-        arguments: ["LogicProMCP", "doctor", "--json", "--client", "claude-code", "--profile", "full"],
+        additionalArguments: ["--profile", "full"],
         approvals: [:]
     )
     #expect(report.fixPlan.first == "channels.manual_validation")
