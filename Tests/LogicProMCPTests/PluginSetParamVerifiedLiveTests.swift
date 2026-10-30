@@ -4203,11 +4203,154 @@ private final class Counter: @unchecked Sendable {
     #expect(obj["state"] as? String == "A")
     #expect(fixture.currentSliderValue == 60)
     #expect(try #require(obj["editor_close_observed"] as? Bool))
+    #expect(obj["editor_cleanup_diagnostics"] == nil)
     #expect(fixture.pluginCloseControlPressCount.value == 2)
     let remainingWindows = try #require(
         fixture.builder.attributeValue(fixture.app, kAXWindowsAttribute as String) as? [AXUIElement]
     )
     #expect(remainingWindows.count == 1)
+}
+
+@Test(arguments: ["nil", "no_value", "attribute_unsupported", "unreadable"])
+func testIssue1417OwnedEditorCleanupPreservesCloseButtonReadFailure(_ kind: String) async throws {
+    let fixture = LiveFixture(pluginWindowPresent: false, openWindowOnSlotPress: true)
+    let b = fixture.builder
+    let editor = b.element(1004)
+    let sampled = MutableBox(false)
+    b.setAttribute(b.element(1001), kAXDocumentAttribute as String, URL(fileURLWithPath: expectedPath).absoluteString)
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        if CFEqual(element, b.element(1005)), attribute == kAXValueAttribute as String {
+            sampled.value = true
+        }
+        guard sampled.value, CFEqual(element, editor),
+              attribute == kAXCloseButtonAttribute as String else { return nil }
+        switch kind {
+        case "nil": return .success(nil)
+        case "no_value": return .failure(AXHelpers.AXStatusError(raw: AXError.noValue.rawValue))
+        case "attribute_unsupported":
+            return .failure(AXHelpers.AXStatusError(raw: AXError.attributeUnsupported.rawValue))
+        default: return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+        }
+    })
+
+    let result = await AccessibilityChannel.defaultGetParamVerified(params: parameterReadParams(), runtime: runtime)
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(!(try #require(object["editor_close_observed"] as? Bool)))
+    let diagnostics = try #require(object["editor_cleanup_diagnostics"] as? [[String: Any]])
+    let diagnostic = try #require(diagnostics.first)
+    #expect(diagnostics.count == 1)
+    #expect(diagnostic["subrole"] as? String == kAXDialogSubrole as String)
+    #expect(diagnostic["subrole_read_status"] as? String == "read")
+    let expectedStatus = kind == "unreadable" ? "unreadable" : "absent"
+    #expect(diagnostic["close_button_read_status"] as? String == expectedStatus)
+    #expect(diagnostic["attempt_count"] as? Int == 0)
+    #expect(diagnostic["window_membership"] as? String == "present")
+    let expectedError: String? = switch kind {
+    case "no_value": String(AXError.noValue.rawValue)
+    case "attribute_unsupported": String(AXError.attributeUnsupported.rawValue)
+    case "unreadable": String(AXError.cannotComplete.rawValue)
+    default: nil
+    }
+    if let expectedError {
+        #expect(diagnostic["close_button_read_error"] as? String == expectedError)
+    } else {
+        #expect(diagnostic["close_button_read_error"] == nil)
+    }
+    #expect(fixture.pluginCloseControlPressCount.value == 0)
+}
+
+@Test(arguments: ["no_value", "attribute_unsupported"])
+func testIssue1417OwnedEditorCleanupClassifiesDefinitiveSubroleAbsence(_ kind: String) async throws {
+    let fixture = LiveFixture(pluginWindowPresent: false, openWindowOnSlotPress: true)
+    let b = fixture.builder
+    let editor = b.element(1004)
+    let sampled = MutableBox(false)
+    b.setAttribute(b.element(1001), kAXDocumentAttribute as String, URL(fileURLWithPath: expectedPath).absoluteString)
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        if CFEqual(element, b.element(1005)), attribute == kAXValueAttribute as String {
+            sampled.value = true
+        }
+        guard sampled.value, CFEqual(element, editor) else { return nil }
+        if attribute == kAXSubroleAttribute as String {
+            let status = kind == "no_value" ? AXError.noValue : AXError.attributeUnsupported
+            return .failure(AXHelpers.AXStatusError(raw: status.rawValue))
+        }
+        if attribute == kAXCloseButtonAttribute as String { return .success(nil) }
+        return nil
+    })
+
+    let result = await AccessibilityChannel.defaultGetParamVerified(params: parameterReadParams(), runtime: runtime)
+    let object = try #require(sharedJSONObject(result.message))
+    let diagnostics = try #require(object["editor_cleanup_diagnostics"] as? [[String: Any]])
+    let diagnostic = try #require(diagnostics.first)
+    #expect(diagnostic["subrole"] is NSNull)
+    #expect(diagnostic["subrole_read_status"] as? String == "absent")
+    let expectedError = kind == "no_value"
+        ? String(AXError.noValue.rawValue)
+        : String(AXError.attributeUnsupported.rawValue)
+    #expect(diagnostic["subrole_read_error"] as? String == expectedError)
+    #expect(diagnostic["close_button_read_status"] as? String == "absent")
+    #expect(diagnostic["attempt_count"] as? Int == 0)
+    #expect(fixture.pluginCloseControlPressCount.value == 0)
+}
+
+@Test func testIssue1417OwnedEditorCleanupPreservesPresentWindowAfterBoundedAttempts() async throws {
+    let fixture = LiveFixture(
+        pluginWindowPresent: false,
+        openWindowOnSlotPress: true,
+        pluginCloseControlFailsToClose: true
+    )
+    let b = fixture.builder
+    b.setAttribute(b.element(1001), kAXDocumentAttribute as String, URL(fileURLWithPath: expectedPath).absoluteString)
+
+    let result = await AccessibilityChannel.defaultGetParamVerified(
+        params: parameterReadParams(), runtime: parameterReadRuntime(fixture)
+    )
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(!(try #require(object["editor_close_observed"] as? Bool)))
+    let diagnostics = try #require(object["editor_cleanup_diagnostics"] as? [[String: Any]])
+    let diagnostic = try #require(diagnostics.first)
+    #expect(diagnostic["subrole"] as? String == kAXDialogSubrole as String)
+    #expect(diagnostic["subrole_read_status"] as? String == "read")
+    #expect(diagnostic["close_button_read_status"] as? String == "available")
+    #expect(diagnostic["attempt_count"] as? Int == 3)
+    #expect(diagnostic["window_membership"] as? String == "present")
+    #expect(fixture.pluginCloseControlPressCount.value == 3)
+}
+
+@Test func testIssue1417OwnedEditorCleanupPreservesUnreadableMembershipAfterPress() async throws {
+    let fixture = LiveFixture(
+        pluginWindowPresent: false,
+        openWindowOnSlotPress: true,
+        pluginCloseControlFailsToClose: true
+    )
+    let b = fixture.builder
+    let sampled = MutableBox(false)
+    b.setAttribute(b.element(1001), kAXDocumentAttribute as String, URL(fileURLWithPath: expectedPath).absoluteString)
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        if CFEqual(element, b.element(1005)), attribute == kAXValueAttribute as String {
+            sampled.value = true
+        }
+        if sampled.value, fixture.pluginCloseControlPressCount.value > 0,
+           CFEqual(element, fixture.app), attribute == kAXWindowsAttribute as String {
+            return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+        }
+        return nil
+    })
+
+    let result = await AccessibilityChannel.defaultGetParamVerified(params: parameterReadParams(), runtime: runtime)
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(!(try #require(object["editor_close_observed"] as? Bool)))
+    let diagnostics = try #require(object["editor_cleanup_diagnostics"] as? [[String: Any]])
+    let diagnostic = try #require(diagnostics.first)
+    #expect(diagnostic["close_button_read_status"] as? String == "available")
+    #expect(diagnostic["attempt_count"] as? Int == 1)
+    #expect(diagnostic["window_membership"] as? String == "unreadable")
+    #expect(
+        diagnostic["window_membership_read_error"] as? String
+            == String(AXError.cannotComplete.rawValue)
+    )
+    #expect(fixture.pluginCloseControlPressCount.value == 1)
 }
 
 @Test func testReusedEditorIsNotClosedByTheOperation() async {
@@ -6442,6 +6585,11 @@ func testIssue955ReadDoesNotCloseAnEditorAfterOwnershipEnds(_ changed: String) a
     #expect(recoveryHint.contains("Automatic editor cleanup lost target custody"))
     #expect(recoveryHint.contains("terminal"))
     #expect(!recoveryHint.lowercased().contains("manually"))
+    let diagnostics = try #require(object["editor_cleanup_diagnostics"] as? [[String: Any]])
+    let diagnostic = try #require(diagnostics.first)
+    #expect(diagnostic["close_button_read_status"] as? String == "available")
+    #expect(diagnostic["attempt_count"] as? Int == 0)
+    #expect(diagnostic["window_membership"] as? String == "present")
     #expect(fixture.pluginCloseControlPressCount.value == 0, "Do not close a window through lost ownership")
     #expect(fixture.sliderWriteCount.value == 0)
     #expect(fixture.controlsCheckboxPressCount.value == 0)

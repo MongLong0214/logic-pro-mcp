@@ -143,6 +143,8 @@ struct SpectrumComparisonTests {
         )
         let invalid: [Value] = [.null, .int(1), .bool(true), .object([:]), .array([]),
                                 .string(""), .string(" spectral_shape"), .string("SPECTRAL_SHAPE"),
+                                .string("spectral-centroid"), .string("SPECTRAL_CENTROID"),
+                                .string("dominant-peak"), .string("DOMINANT_PEAK"),
                                 .string("loudness")]
         for mode in invalid {
             let result = AudioDispatcher.handle(command: "compare_spectra", params: [
@@ -224,6 +226,309 @@ struct SpectrumComparisonTests {
         }
     }
 
+    @Test func spectralTiltFitsRawBandDeltaPerOctaveWithoutCallingItEQ() throws {
+        func analysis(after: Bool) -> SpectralAnalysisResult {
+            let centers = [100.0, 200.0, 400.0, 800.0]
+            let bands = centers.enumerated().map { index, center in
+                let delta = 3.0 + 2.0 * Double(index)
+                return SpectralBand(centerHz: center, energyDb: -40 + (after ? delta : 0))
+            } + [
+                SpectralBand(centerHz: 1_600, energyDb: after ? -20 : -80),
+                SpectralBand(centerHz: 3_200, energyDb: after ? -10 : -40, measured: after),
+            ]
+            return SpectralAnalysisResult(
+                analysisRef: "tilt-fixture", bands: bands, resonances: [], classification: .unknown,
+                levelConfidence: 0, complete: true, partialReason: nil,
+                artifactFingerprint: "sha256:" + String(repeating: after ? "b" : "a", count: 64),
+                sampleRate: 48_000, channelCount: 1, durationSeconds: 1, windowsAnalyzed: 2,
+                analysisPolicy: SpectralAnalysisPolicy(config: .default, removesDC: true)
+            )
+        }
+
+        let result = try SpectralComparisonResult(
+            before: analysis(after: false), after: analysis(after: true), mode: .spectralTilt
+        )
+        let tilt = try #require(result.tiltComparison)
+        #expect(tilt.method == "least_squares_raw_band_delta_vs_log2_hz.v1")
+        #expect(tilt.referenceBandCount == 4)
+        #expect(abs(try #require(tilt.slopeDbPerOctave) - 2) < 1e-12)
+        #expect(abs(try #require(tilt.pivotHz) - 282.842712474619) < 1e-9)
+        #expect(abs(try #require(tilt.pivotDeltaDb) - 6) < 1e-12)
+        #expect(!tilt.complete)
+        #expect(tilt.limitations.contains("linear_fit_not_eq_curve"))
+        #expect(tilt.limitations.contains("some_bands_unavailable"))
+        #expect(result.shapeComparison == nil)
+    }
+
+    @Test func spectralTiltNeedsTwoSharedUncensoredBands() throws {
+        func analysis(after: Bool) -> SpectralAnalysisResult {
+            SpectralAnalysisResult(
+                analysisRef: "tilt-insufficient", bands: [
+                    SpectralBand(centerHz: 100, energyDb: after ? -35 : -40),
+                    SpectralBand(centerHz: 200, energyDb: after ? -20 : -80),
+                ], resonances: [], classification: .unknown, levelConfidence: 0,
+                complete: true, partialReason: nil,
+                artifactFingerprint: "sha256:" + String(repeating: after ? "b" : "a", count: 64),
+                sampleRate: 48_000, channelCount: 1, durationSeconds: 1, windowsAnalyzed: 2,
+                analysisPolicy: SpectralAnalysisPolicy(config: .default, removesDC: true)
+            )
+        }
+
+        let result = try SpectralComparisonResult(
+            before: analysis(after: false), after: analysis(after: true), mode: .spectralTilt
+        )
+        let tilt = try #require(result.tiltComparison)
+        #expect(tilt.referenceBandCount == 1)
+        #expect(tilt.slopeDbPerOctave == nil)
+        #expect(tilt.pivotHz == nil)
+        #expect(tilt.pivotDeltaDb == nil)
+        #expect(!tilt.complete)
+        #expect(tilt.limitations.contains("insufficient_shared_uncensored_bands"))
+    }
+
+    @Test func spectralTiltDoesNotRelabelUniformGainAsFrequencyTilt() throws {
+        func analysis(after: Bool) -> SpectralAnalysisResult {
+            SpectralAnalysisResult(
+                analysisRef: "tilt-uniform", bands: [100.0, 200.0, 400.0].map {
+                    SpectralBand(centerHz: $0, energyDb: -40 + (after ? 6 : 0))
+                }, resonances: [], classification: .unknown, levelConfidence: 0,
+                complete: true, partialReason: nil,
+                artifactFingerprint: "sha256:" + String(repeating: after ? "b" : "a", count: 64),
+                sampleRate: 48_000, channelCount: 1, durationSeconds: 1, windowsAnalyzed: 2,
+                analysisPolicy: SpectralAnalysisPolicy(config: .default, removesDC: true)
+            )
+        }
+
+        let result = try SpectralComparisonResult(
+            before: analysis(after: false), after: analysis(after: true), mode: .spectralTilt
+        )
+        let tilt = try #require(result.tiltComparison)
+        #expect(abs(try #require(tilt.slopeDbPerOctave)) < 1e-12)
+        #expect(abs(try #require(tilt.pivotDeltaDb) - 6) < 1e-12)
+        #expect(tilt.complete)
+        #expect(result.shapeComparison == nil)
+    }
+
+    @Test func dispatchedSpectralTiltRetainsRawBandsAndReportsTheExpectedDirection() throws {
+        try withDirectory { directory in
+            let before = try writeTone(directory, "tilt-dispatch-before", amplitude: 0.2, highAmplitude: 0.2)
+            let after = try writeTone(directory, "tilt-dispatch-after", amplitude: 0.4, highAmplitude: 0.1)
+            let result = AudioDispatcher.handle(command: "compare_spectra", params: [
+                "before_path": .string(before.path), "after_path": .string(after.path),
+                "comparison_mode": .string("spectral_tilt"),
+            ])
+            let body = try #require(sharedJSONObject(sharedToolText(result)))
+            let rawBands = try #require(body["bands"] as? [[String: Any]])
+            let tilt = try #require(body["tiltComparison"] as? [String: Any])
+            let referenceCount = try #require(tilt["referenceBandCount"] as? Int)
+            let slope = try #require(tilt["slopeDbPerOctave"] as? Double)
+            #expect(!rawBands.isEmpty)
+            #expect(referenceCount >= 2)
+            #expect(slope < 0)
+            #expect(body["shapeComparison"] == nil)
+            #expect(tilt["method"] as? String == "least_squares_raw_band_delta_vs_log2_hz.v1")
+        }
+    }
+
+    @Test func spectralCentroidUsesPublishedValuesAndRetainsRawBands() throws {
+        func analysis(after: Bool) -> SpectralAnalysisResult {
+            SpectralAnalysisResult(
+                analysisRef: "centroid-fixture",
+                bands: [SpectralBand(centerHz: 1_000, energyDb: after ? -35 : -40)],
+                resonances: [], classification: .unknown, levelConfidence: 0,
+                complete: true, partialReason: nil,
+                artifactFingerprint: "sha256:" + String(repeating: after ? "b" : "a", count: 64),
+                sampleRate: 48_000, channelCount: 1, durationSeconds: 1, windowsAnalyzed: 2,
+                spectralCentroidHz: after ? 5_000 : 1_000,
+                analysisPolicy: SpectralAnalysisPolicy(config: .default, removesDC: true)
+            )
+        }
+
+        let result = try SpectralComparisonResult(
+            before: analysis(after: false), after: analysis(after: true), mode: .spectralCentroid
+        )
+        let centroid = try #require(result.centroidComparison)
+        #expect(centroid.method == "difference_of_published_energy_weighted_centroids_hz.v1")
+        #expect(centroid.beforeHz == 1_000)
+        #expect(centroid.afterHz == 5_000)
+        #expect(centroid.deltaHz == 4_000)
+        #expect(centroid.complete)
+        #expect(centroid.limitations.contains("published_centroid_difference_not_brightness_or_quality"))
+        #expect(result.bands.map { $0.deltaDb } == [5])
+        #expect(result.shapeComparison == nil)
+        #expect(result.tiltComparison == nil)
+        #expect(try JSONDecoder().decode(
+            SpectralComparisonResult.self, from: JSONEncoder().encode(result)
+        ) == result)
+    }
+
+    @Test func dominantPeakUsesPublishedStrongestPeaksWithoutClaimingPitchTracking() throws {
+        func analysis(after: Bool) -> SpectralAnalysisResult {
+            SpectralAnalysisResult(
+                analysisRef: "dominant-peak-fixture",
+                bands: [SpectralBand(centerHz: 1_000, energyDb: after ? -35 : -40)],
+                resonances: [], classification: .unknown, levelConfidence: 0,
+                complete: true, partialReason: nil,
+                artifactFingerprint: "sha256:" + String(repeating: after ? "b" : "a", count: 64),
+                sampleRate: 48_000, channelCount: 1, durationSeconds: 1, windowsAnalyzed: 2,
+                frequencyPeaks: [AudioAnalyzer.FrequencyPeak(
+                    frequencyHz: after ? 5_000 : 1_000,
+                    magnitude: after ? 0.2 : 0.4
+                )],
+                analysisPolicy: SpectralAnalysisPolicy(config: .default, removesDC: true)
+            )
+        }
+
+        let result = try SpectralComparisonResult(
+            before: analysis(after: false), after: analysis(after: true), mode: .dominantPeak
+        )
+        let peak = try #require(result.dominantPeakComparison)
+        #expect(peak.method == "difference_of_published_strongest_frequency_peaks_hz.v1")
+        #expect(peak.beforeHz == 1_000)
+        #expect(peak.afterHz == 5_000)
+        #expect(peak.deltaHz == 4_000)
+        #expect(peak.complete)
+        #expect(peak.limitations.contains("published_dominant_band_peak_not_pitch_or_fundamental"))
+        #expect(peak.limitations.contains("no_cross_artifact_peak_identity_or_tracking_claim"))
+        #expect(result.bands.map(\.deltaDb) == [5])
+        #expect(result.shapeComparison == nil)
+        #expect(result.tiltComparison == nil)
+        #expect(result.centroidComparison == nil)
+        let toolDescription = try #require(AudioDispatcher.tool.description)
+        #expect(toolDescription.contains("dominant_peak"))
+    }
+
+    @Test func dominantPeakDoesNotManufactureZeroFromMissingOrInvalidPeaks() throws {
+        let valid = AudioAnalyzer.FrequencyPeak(frequencyHz: 5_000, magnitude: 0.2)
+        func analysis(_ peak: AudioAnalyzer.FrequencyPeak?, after: Bool) -> SpectralAnalysisResult {
+            SpectralAnalysisResult(
+                analysisRef: "dominant-peak-unavailable",
+                bands: [SpectralBand(centerHz: 1_000, energyDb: -40)],
+                resonances: [], classification: .unknown, levelConfidence: 0,
+                complete: true, partialReason: nil,
+                artifactFingerprint: "sha256:" + String(repeating: after ? "b" : "a", count: 64),
+                sampleRate: 48_000, channelCount: 1, durationSeconds: 1, windowsAnalyzed: 2,
+                frequencyPeaks: peak.map { [$0] } ?? [],
+                analysisPolicy: SpectralAnalysisPolicy(config: .default, removesDC: true)
+            )
+        }
+
+        let cases: [(AudioAnalyzer.FrequencyPeak?, AudioAnalyzer.FrequencyPeak?, String)] = [
+            (nil, valid, "before_dominant_peak_unavailable"),
+            (.init(frequencyHz: .nan, magnitude: 0.2), valid, "before_dominant_peak_unavailable"),
+            (.init(frequencyHz: 0, magnitude: 0.2), valid, "before_dominant_peak_unavailable"),
+            (.init(frequencyHz: 1_000, magnitude: .infinity), valid, "before_dominant_peak_unavailable"),
+            (valid, nil, "after_dominant_peak_unavailable"),
+            (valid, .init(frequencyHz: 1_000, magnitude: 0), "after_dominant_peak_unavailable"),
+        ]
+        for (beforePeak, afterPeak, reason) in cases {
+            let result = try SpectralComparisonResult(
+                before: analysis(beforePeak, after: false),
+                after: analysis(afterPeak, after: true),
+                mode: .dominantPeak
+            )
+            let peak = try #require(result.dominantPeakComparison)
+            #expect(peak.deltaHz == nil)
+            #expect(!peak.complete)
+            #expect(peak.limitations.contains(reason))
+        }
+    }
+
+    @Test func dispatchedDominantPeakRetainsContentBindingAndRawBands() throws {
+        try withDirectory { directory in
+            let before = try writeTone(directory, "dominant-before", amplitude: 0.2)
+            let after = try writeTone(
+                directory, "dominant-after", amplitude: 0.2, frequency: 5_001.953125
+            )
+            let response = AudioDispatcher.handle(command: "compare_spectra", params: [
+                "before_path": .string(before.path), "after_path": .string(after.path),
+                "comparison_mode": .string("dominant_peak"),
+            ])
+            let comparison = try JSONDecoder().decode(
+                SpectralComparisonResult.self, from: Data(sharedToolText(response).utf8)
+            )
+            let peak = try #require(comparison.dominantPeakComparison)
+            #expect(peak.beforeHz == comparison.before.frequencyPeaks.first?.frequencyHz)
+            #expect(peak.afterHz == comparison.after.frequencyPeaks.first?.frequencyHz)
+            #expect(try #require(peak.deltaHz) > 0)
+            #expect(peak.complete)
+            #expect(comparison.before.artifactFingerprint != comparison.after.artifactFingerprint)
+            #expect(!comparison.bands.isEmpty)
+            #expect(comparison.shapeComparison == nil)
+            #expect(comparison.tiltComparison == nil)
+            #expect(comparison.centroidComparison == nil)
+        }
+    }
+
+    @Test func spectralCentroidDoesNotManufactureZeroFromMissingOrInvalidValues() throws {
+        func analysis(_ centroid: Double?, after: Bool) -> SpectralAnalysisResult {
+            SpectralAnalysisResult(
+                analysisRef: "centroid-unavailable",
+                bands: [SpectralBand(centerHz: 1_000, energyDb: -40)],
+                resonances: [], classification: .unknown, levelConfidence: 0,
+                complete: true, partialReason: nil,
+                artifactFingerprint: "sha256:" + String(repeating: after ? "b" : "a", count: 64),
+                sampleRate: 48_000, channelCount: 1, durationSeconds: 1, windowsAnalyzed: 2,
+                spectralCentroidHz: centroid,
+                analysisPolicy: SpectralAnalysisPolicy(config: .default, removesDC: true)
+            )
+        }
+
+        let cases: [(Double?, Double?, String)] = [
+            (nil, 5_000, "before_spectral_centroid_unavailable"),
+            (.nan, 5_000, "before_spectral_centroid_unavailable"),
+            (0, 5_000, "before_spectral_centroid_unavailable"),
+            (1_000, nil, "after_spectral_centroid_unavailable"),
+            (1_000, .infinity, "after_spectral_centroid_unavailable"),
+            (1_000, -1, "after_spectral_centroid_unavailable"),
+        ]
+        for (beforeValue, afterValue, reason) in cases {
+            let result = try SpectralComparisonResult(
+                before: analysis(beforeValue, after: false),
+                after: analysis(afterValue, after: true),
+                mode: .spectralCentroid
+            )
+            let centroid = try #require(result.centroidComparison)
+            #expect(centroid.deltaHz == nil)
+            #expect(!centroid.complete)
+            #expect(centroid.limitations.contains(reason))
+            #expect(centroid.beforeHz == beforeValue.flatMap { $0.isFinite && $0 > 0 ? $0 : nil })
+            #expect(centroid.afterHz == afterValue.flatMap { $0.isFinite && $0 > 0 ? $0 : nil })
+        }
+    }
+
+    @Test func dispatchedSpectralCentroidRetainsContentBindingAndDoesNotRelabelUniformGain() throws {
+        try withDirectory { directory in
+            let before = try writeTone(directory, "centroid-before", amplitude: 0.2)
+            let shifted = try writeTone(
+                directory, "centroid-shifted", amplitude: 0.2, frequency: 5_001.953125
+            )
+            let shiftedResult = AudioDispatcher.handle(command: "compare_spectra", params: [
+                "before_path": .string(before.path), "after_path": .string(shifted.path),
+                "comparison_mode": .string("spectral_centroid"),
+            ])
+            let comparison = try JSONDecoder().decode(
+                SpectralComparisonResult.self, from: Data(sharedToolText(shiftedResult).utf8)
+            )
+            let centroid = try #require(comparison.centroidComparison)
+            #expect(centroid.beforeHz == comparison.before.spectralCentroidHz)
+            #expect(centroid.afterHz == comparison.after.spectralCentroidHz)
+            #expect(try #require(centroid.deltaHz) > 0)
+            #expect(comparison.before.artifactFingerprint != comparison.after.artifactFingerprint)
+            #expect(!comparison.bands.isEmpty)
+
+            let louder = try writeTone(directory, "centroid-louder", amplitude: 0.4)
+            let gainResult = AudioDispatcher.handle(command: "compare_spectra", params: [
+                "before_path": .string(before.path), "after_path": .string(louder.path),
+                "comparison_mode": .string("spectral_centroid"),
+            ])
+            let gain = try JSONDecoder().decode(
+                SpectralComparisonResult.self, from: Data(sharedToolText(gainResult).utf8)
+            )
+            #expect(abs(try #require(gain.centroidComparison?.deltaHz)) < 1)
+        }
+    }
+
     @Test func explicitAbsoluteModePreservesTheDefaultResponseAndItsLegacyDecode() throws {
         try withDirectory { directory in
             let path = try writeTone(directory, "absolute", amplitude: 0.2)
@@ -237,10 +542,15 @@ struct SpectrumComparisonTests {
             let body = try #require(sharedJSONObject(String(decoding: bytes, as: UTF8.self)))
             #expect(Set(body.keys) == ["before", "after", "bands", "complete", "limitations"])
             #expect(implicit.shapeComparison == nil)
+            #expect(implicit.tiltComparison == nil)
+            #expect(implicit.centroidComparison == nil)
+            #expect(implicit.dominantPeakComparison == nil)
             let spec = try #require(OperationRegistry.spec(tool: "logic_audio", command: "compare_spectra"))
             let rule = try #require(OperationRegistry.parameterContracts[spec.id]?.params["comparison_mode"])
             #expect(rule.kind == .string)
-            #expect(rule.allowed == ["absolute", "spectral_shape"])
+            #expect(rule.allowed == [
+                "absolute", "spectral_shape", "spectral_tilt", "spectral_centroid", "dominant_peak",
+            ])
         }
     }
 

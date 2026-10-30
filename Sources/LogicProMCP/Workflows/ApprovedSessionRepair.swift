@@ -3430,7 +3430,8 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                 hint: "The approved track order or its retained native footprint could not be independently verified.",
                 extras: ["idempotency_key": plan.idempotencyKey,
                     "goal_verification_failure": "approved_matching_sort_unverified",
-                    "write_attempted": false, "writes_performed": 0]))
+                    "write_attempted": false, "writes_performed": 0]),
+                finalDisposition: .refusedBeforeWrite)
         }
         guard verifiesMatchingSortOnly, let sort = sortTask, await projectIsCurrent(),
               let reading = sortReading(), reading.order == sort.policy.expectedOrder,
@@ -3470,7 +3471,8 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             extras: ["idempotency_key": plan.idempotencyKey,
                 "plan_id": plan.canonicalPlanID as Any, "digest": plan.canonicalDigest as Any,
                 "goal_verification_failure": "approved_name_set_unverified",
-                "write_attempted": false, "writes_performed": 0]))
+                "write_attempted": false, "writes_performed": 0]),
+            finalDisposition: .refusedBeforeWrite)
     }
 
     /// A read-only goal failure before the execution journal has applied any step.
@@ -3479,7 +3481,8 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             "idempotency_key": plan.idempotencyKey, "write_attempted": false, "writes_performed": 0]
         if let receipt = reader?.matchingReadReceipt.flatMap(decodedJSONObject) { extras["input_read_receipt"] = receipt }
         return SagaWire.storedOutcome(from: SagaWire.scopedStateC(.staleTargetReference,
-            hint: "The approved input's original native control, protected footprint or checked Bus no longer agrees.", extras: extras))
+            hint: "The approved input's original native control, protected footprint or checked Bus no longer agrees.",
+            extras: extras), finalDisposition: .refusedBeforeWrite)
     }
 
     /// Reuse the same actual reader across an owned name or verified output step. This returns
@@ -3566,7 +3569,8 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                 "idempotency_key": plan.idempotencyKey, "write_attempted": false, "writes_performed": 0]
             if let read, let receipt = decodedJSONObject(read.result.message) { extras["send_read_receipt"] = receipt }
             return SagaWire.storedOutcome(from: SagaWire.scopedStateC(.staleTargetReference,
-                hint: "The approved Send's original native control or independently checked destination no longer agrees.", extras: extras))
+                hint: "The approved Send's original native control or independently checked destination no longer agrees.",
+                extras: extras), finalDisposition: .refusedBeforeWrite)
         }
         guard verifiesMatchingSendOnly, let task = sendTask else { return refused() }
         func current() async -> Bool {
@@ -3648,7 +3652,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             }
             return SagaWire.storedOutcome(from: SagaWire.scopedStateC(.staleTargetReference,
                 hint: "The approved observed receiver's original type/input custody or checked Bus no longer agrees.",
-                extras: extras))
+                extras: extras), finalDisposition: .refusedBeforeWrite)
         }
         guard verifiesReceiverKeepsOnly else { return refused() }
         var evidence: [[String: Any]] = []
@@ -3757,9 +3761,14 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         }
         guard let approval = await retained(id: id, digest: digest, key: key, cache: dependencies.cache,
             registry: dependencies.targetRegistry, journal: dependencies.sagaJournal) else {
-            return toolStateCResult(.staleTargetReference,
+            let refused = toolStateCResult(.staleTargetReference,
                 hint: "The exact retained plan, required native goal evidence, or its original project is unavailable; no replacement plan was generated.",
                 extras: ["write_attempted": false, "verified": false])
+            let stored = SagaWire.storedOutcome(
+                from: refused,
+                finalDisposition: .refusedBeforeWrite
+            )
+            return toolTextResult(stored.body, isError: stored.isError)
         }
         return await SystemDispatcher.handle(command: "saga_execute", params: [:], router: dependencies.router,
             cache: dependencies.cache, targetRegistry: dependencies.targetRegistry,
