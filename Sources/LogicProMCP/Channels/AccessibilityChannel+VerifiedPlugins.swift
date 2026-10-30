@@ -5692,6 +5692,9 @@ extension AccessibilityChannel {
         case let .success(subrole):
             outcome.subrole = subrole
             outcome.subroleReadStatus = subrole == nil ? "absent" : "read"
+        case let .failure(error) where error.isDefinitiveAbsence:
+            outcome.subroleReadStatus = "absent"
+            outcome.subroleReadError = error.diagnosticLabel
         case let .failure(error):
             outcome.subroleReadStatus = "unreadable"
             outcome.subroleReadError = error.diagnosticLabel
@@ -5732,6 +5735,11 @@ extension AccessibilityChannel {
             case .success(nil):
                 outcome.closeButtonReadStatus = "absent"
                 outcome.closeButtonReadError = nil
+                retainWindowMembership()
+                return outcome
+            case let .failure(error) where error.isDefinitiveAbsence:
+                outcome.closeButtonReadStatus = "absent"
+                outcome.closeButtonReadError = error.diagnosticLabel
                 retainWindowMembership()
                 return outcome
             case let .failure(error):
