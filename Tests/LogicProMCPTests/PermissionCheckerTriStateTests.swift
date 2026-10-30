@@ -68,6 +68,65 @@ func testAutomationPermissionStatusMapping(status: Int32, expected: PermissionCh
     #expect(state == expected)
 }
 
+@Test func testSystemEventsPermissionProbeLaunchesWithoutActivationThenRetriesNonprompting() {
+    final class Observation: @unchecked Sendable {
+        var statuses = [Int32(procNotFound), Int32(noErr)]
+        var asks: [Bool] = []
+        var launchedBundleIDs: [String] = []
+    }
+    let observation = Observation()
+
+    let state = PermissionChecker.nonPromptingSystemEventsAutomationState(
+        determinePermission: { bundleID, askUserIfNeeded in
+            #expect(bundleID == "com.apple.systemevents")
+            observation.asks.append(askUserIfNeeded)
+            return observation.statuses.removeFirst()
+        },
+        launchWithoutActivation: { bundleID in
+            observation.launchedBundleIDs.append(bundleID)
+            return true
+        }
+    )
+
+    #expect(state == .granted)
+    #expect(observation.asks == [false, false])
+    #expect(observation.launchedBundleIDs == ["com.apple.systemevents"])
+}
+
+@Test func testSystemEventsPermissionProbeDoesNotLaunchForConsentOrDenial() {
+    for status in [Int32(errAEEventWouldRequireUserConsent), Int32(errAEEventNotPermitted)] {
+        var launchCount = 0
+        let state = PermissionChecker.nonPromptingSystemEventsAutomationState(
+            determinePermission: { _, askUserIfNeeded in
+                #expect(askUserIfNeeded == false)
+                return status
+            },
+            launchWithoutActivation: { _ in
+                launchCount += 1
+                return true
+            }
+        )
+
+        #expect(state == .notGranted)
+        #expect(launchCount == 0)
+    }
+}
+
+@Test func testSystemEventsPermissionProbeFailsClosedWhenBackgroundLaunchFails() {
+    var queryCount = 0
+    let state = PermissionChecker.nonPromptingSystemEventsAutomationState(
+        determinePermission: { _, askUserIfNeeded in
+            queryCount += 1
+            #expect(askUserIfNeeded == false)
+            return Int32(procNotFound)
+        },
+        launchWithoutActivation: { _ in false }
+    )
+
+    #expect(state == .notVerifiable)
+    #expect(queryCount == 1)
+}
+
 @Test func testProbeStateTimedOutIsNotVerifiableNotDenial() {
     #expect(PermissionChecker.probeState(from: .timedOut, expectedName: "Logic Pro") == .notVerifiable)
 }
