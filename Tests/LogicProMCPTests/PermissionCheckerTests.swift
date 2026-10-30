@@ -195,6 +195,24 @@ private final class PermissionRuntimeHarness: @unchecked Sendable {
     #expect(status.aggregateState == .notGranted)
 }
 
+@Test func testPermissionSummaryTerminatesUnavailableChecksWithoutRequestingManualSetup() {
+    let status = PermissionChecker.PermissionStatus(
+        accessibilityState: .notGranted,
+        automationState: .notVerifiable,
+        systemEventsAutomationState: .notGranted,
+        postEventAccessState: .notGranted
+    )
+
+    let summary = status.summary
+    #expect(summary.contains("terminal"))
+    for prohibited in [
+        "System Settings", "add your terminal app", "allow control", "grant PostEvent",
+        "Launch Logic Pro", "rerun --check-permissions",
+    ] {
+        #expect(!summary.contains(prohibited), "permission check requested a manual continuation: \(summary)")
+    }
+}
+
 @Test(processInspectionUnavailableInSandbox)
 func testPermissionCheckerProductionWrapperFunctionsReturnStatuses() {
     // The Bool returns are environment-dependent (real TCC state), so no value

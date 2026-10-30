@@ -193,7 +193,9 @@ private actor MockMainServer: ServerStarting {
 
     #expect(exitCode == 1)
     #expect(stderr.contains("Automation (System Events): NOT GRANTED"))
-    #expect(stderr.contains("allow control of System Events"))
+    #expect(stderr.contains("terminal"))
+    #expect(!stderr.contains("System Settings"))
+    #expect(!stderr.contains("allow control of System Events"))
 }
 
 @Test func testMainEntrypointReturnsFailureForMissingPermissions() async {

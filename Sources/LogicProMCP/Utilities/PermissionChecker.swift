@@ -265,25 +265,11 @@ enum PermissionChecker {
             }
             lines.append("Automation (System Events): \(systemEventsAutomationState.summaryLabel)")
             lines.append("PostEvent (CGEvent): \(postEventAccessState.summaryLabel)")
-            if accessibilityState == .notGranted {
-                lines.append("  → System Settings > Privacy & Security > Accessibility → add your terminal app")
-            }
-            switch automationState {
-            case .notGranted:
-                lines.append("  → System Settings > Privacy & Security > Automation → allow control of Logic Pro")
-            case .notVerifiable:
-                lines.append("  → Launch Logic Pro once, then rerun --check-permissions to verify Automation access")
-            case .granted:
-                break
-            }
-            // System Events automation is required by MIDI import / tempo-dialog
-            // paths; surface its own remediation so a green Logic-Pro automation
-            // line never hides a denied System Events target (#188).
-            if systemEventsAutomationState == .notGranted {
-                lines.append("  → System Settings > Privacy & Security > Automation → allow control of System Events")
-            }
-            if postEventAccessState == .notGranted {
-                lines.append("  → System Settings > Privacy & Security > Accessibility → grant PostEvent access to the host app")
+            if !allGranted {
+                lines.append(
+                    "Outcome: terminal; unavailable permissions were reported without requesting "
+                        + "a prompt, grant, application launch, or retry."
+                )
             }
             return lines.joined(separator: "\n")
         }
