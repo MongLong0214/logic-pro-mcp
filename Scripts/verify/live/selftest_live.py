@@ -184,7 +184,8 @@ def pred_positive_control(name):
 
 #: The steps every requested locale must have, each passed (PR #1033 review R4).
 PER_LOCALE_STEPS = ("switch", "fixture_reset", "screen_clean", "server",
-                    "positive_control/track_flags_ax", "must_fail", "server_stop",
+                    "positive_control/track_flags_ax", "positive_control/undo_entry_ax",
+                    "must_fail", "server_stop",
                     "positive_control/routing_slots_ax", "screen_clean_after")
 #: The steps a run must have once.
 RUN_STEPS = ("build", "exclusivity", "restore", "final")
@@ -207,6 +208,9 @@ def drive_locale(run, lproj, built):
         step("positive_control/track_flags_ax",
              {"screen": screen.sample(), **controls.drive("track_flags_ax", lproj, server)},
              pred_positive_control("track_flags_ax"))
+        step("positive_control/undo_entry_ax",
+             {"screen": screen.sample(), **controls.drive("undo_entry_ax", lproj, server)},
+             pred_positive_control("undo_entry_ax"))
         fp = fixture.read("locale_campaign_19", lproj, server) if start.get("spawned") else None
         pre = probes.run("track_flags_ax", {"lproj": lproj})
         arm = server.tool("logic_tracks", "arm", {"index": MUST_FAIL_TRACK, "enabled": True},
