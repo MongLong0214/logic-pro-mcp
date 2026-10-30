@@ -6,6 +6,23 @@ private enum MainEntrypointHarnessError: Error {
     case startFailed
 }
 
+@Test func testEventListProbeCellsRetainRawGroupSliderValues() throws {
+    let position = AXColumnID(id: "position")
+    let pitch = AXColumnID(id: "pitch")
+    let payload = MainEntrypoint.eventListProbeCells([
+        position: RawCell(valueDescription: "1 1 1 1", groupSliderValues: [1, 1, 1, 1]),
+        pitch: RawCell(sliderValue: 60, valueDescription: "C3"),
+    ])
+
+    let positionPayload = try #require(payload["position"] as? [String: Any])
+    #expect(positionPayload["groupSliderValues"] as? [Double] == [1, 1, 1, 1])
+    #expect(positionPayload["valueDescription"] as? String == "1 1 1 1")
+
+    let pitchPayload = try #require(payload["pitch"] as? [String: Any])
+    #expect(pitchPayload["sliderValue"] as? Double == 60)
+    #expect(pitchPayload["groupSliderValues"] == nil)
+}
+
 private actor MockMainServer: ServerStarting {
     private(set) var startCalls = 0
     private let failure: Error?

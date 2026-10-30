@@ -20,6 +20,9 @@ func editEligibility(
     if !snapshot.notes.allSatisfy({ $0.reference.analysisGeneration == snapshot.analysisGeneration }) {
         reasons.append("snapshot notes do not share its analysis generation")
     }
+    if !snapshot.notes.allSatisfy({ $0.cents.isFinite && $0.gainDb.isFinite }) {
+        reasons.append("snapshot note scalar is not finite")
+    }
     if snapshot.analysisGeneration != currentAnalysisGeneration {
         reasons.append("stale snapshot")
     }

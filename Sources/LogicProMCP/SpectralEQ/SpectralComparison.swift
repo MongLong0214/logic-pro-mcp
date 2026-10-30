@@ -31,6 +31,7 @@ struct SpectralComparisonResult: Codable, Equatable, Sendable {
         case absolute
         case spectralShape = "spectral_shape"
         case spectralTilt = "spectral_tilt"
+        case spectralCentroid = "spectral_centroid"
     }
 
     struct Band: Codable, Equatable, Sendable {
@@ -134,6 +135,36 @@ struct SpectralComparisonResult: Codable, Equatable, Sendable {
         }
     }
 
+    struct CentroidComparison: Codable, Equatable, Sendable {
+        let method: String
+        let beforeHz: Double?
+        let afterHz: Double?
+        let deltaHz: Double?
+        let complete: Bool
+        let limitations: [String]
+
+        init(before: Double?, after: Double?) {
+            func usable(_ value: Double?) -> Double? {
+                value.flatMap { $0.isFinite && $0 > 0 ? $0 : nil }
+            }
+
+            let usableBefore = usable(before)
+            let usableAfter = usable(after)
+            beforeHz = usableBefore
+            afterHz = usableAfter
+            deltaHz = usableBefore.flatMap { beforeHz in usableAfter.map { $0 - beforeHz } }
+            method = "difference_of_published_energy_weighted_centroids_hz.v1"
+            complete = deltaHz != nil
+            var limits = [
+                "published_centroid_difference_not_brightness_or_quality",
+                "no_peak_movement_eq_alignment_or_normalization_claim",
+            ]
+            if usableBefore == nil { limits.append("before_spectral_centroid_unavailable") }
+            if usableAfter == nil { limits.append("after_spectral_centroid_unavailable") }
+            limitations = limits
+        }
+    }
+
     let before: SpectralAnalysisResult
     let after: SpectralAnalysisResult
     let bands: [Band]
@@ -144,6 +175,8 @@ struct SpectralComparisonResult: Codable, Equatable, Sendable {
     let shapeComparison: ShapeComparison?
     /// Omitted outside spectral-tilt mode to preserve the existing serialized responses.
     let tiltComparison: TiltComparison?
+    /// Omitted outside spectral-centroid mode to preserve the existing serialized responses.
+    let centroidComparison: CentroidComparison?
 
     enum Failure: String, Error {
         case incompleteInput = "incomplete_input"
@@ -204,5 +237,8 @@ struct SpectralComparisonResult: Codable, Equatable, Sendable {
         limitations = limits
         shapeComparison = mode == .spectralShape ? try ShapeComparison(rawBands: bands) : nil
         tiltComparison = mode == .spectralTilt ? try TiltComparison(rawBands: bands) : nil
+        centroidComparison = mode == .spectralCentroid
+            ? CentroidComparison(before: before.spectralCentroidHz, after: after.spectralCentroidHz)
+            : nil
     }
 }
