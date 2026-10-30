@@ -74,18 +74,34 @@ struct PromotionGate {
     ///
     /// This is the ONE place the rule lives. `evaluate` (release) and `liveCreditedOperationIDs`
     /// (the R-SEM debt board) both call it, so widening it here moves both together.
-    static func operationIsLiveCredited(_ operationCase: QualificationCase) -> Bool {
+    static func operationIsLiveCredited(
+        _ operationCase: QualificationCase,
+        catalogEntry: QualificationOperationCatalog.Entry? = nil
+    ) -> Bool {
         guard operationCase.status == .passed,
               operationCase.verified,
               operationCase.readback?.verified == true else { return false }
         switch operationCase.verificationKind {
         case .semanticReadback:
+            if let catalogEntry {
+                return catalogEntry.operationID == operationCase.operationID
+                    && catalogEntry.semanticPolicy.independentlyCreditable
+                    && catalogEntry.semanticPolicy.kind != .none
+            }
             // Consult the same oracle declaration as the producer/verifier: coherent
             // legacy claims cannot turn known same-handler echo into independent credit.
-            return QualificationSemanticReadbackValidator.independentReadbackDeferral(
-                for: operationCase.operationID
-            ) == nil
+            guard let operationID = OperationID(rawValue: operationCase.operationID) else {
+                return false
+            }
+            if operationID == .systemHealth { return true }
+            guard let oracle = SemanticOracleTable.byOperationID[operationID] else { return false }
+            return oracle.independentReadbackDeferral == nil
         case .verifiedWriteCycle:
+            if let catalogEntry {
+                return catalogEntry.operationID == operationCase.operationID
+                    && catalogEntry.mutationRestorePolicy?.isValid == true
+                    && operationCase.restore?.verified == true
+            }
             return operationCase.restore?.verified == true
         case .atlasComparison, .readResponse, .independentReadback, .protocolSmoke, .typedDeferral:
             return false
@@ -141,7 +157,8 @@ struct PromotionGate {
         expectedBinarySHA256: String,
         presentArtifacts: Set<String>,
         requiredArtifacts: Set<String>,
-        requiredOperationIDs: Set<String>
+        requiredOperationIDs: Set<String>,
+        operationCatalogEntries: [String: QualificationOperationCatalog.Entry] = [:]
     ) -> PromotionDecision {
         var rejections: [PromotionRejectionReason] = []
 
@@ -242,7 +259,10 @@ struct PromotionGate {
                 rejections.append(.requiredOperationNotSatisfied(operationID: operationID))
                 continue
             }
-            let operationPassed = PromotionGate.operationIsLiveCredited(operationCase)
+            let operationPassed = PromotionGate.operationIsLiveCredited(
+                operationCase,
+                catalogEntry: operationCatalogEntries[operationID]
+            )
             let operationWaived = operationCase.status == .waived
                 && !operationCase.verified
                 && operationCase.verificationKind == .typedDeferral

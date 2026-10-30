@@ -1056,11 +1056,18 @@ struct SystemDispatcher: OperationTraceDispatching {
                                     "write_attempted": false,
                                 ]
                         )
+                        let proposed = SagaWire.storedOutcome(
+                            from: result,
+                            finalDisposition: approvedSessionRepair == nil ? nil : .refusedBeforeWrite
+                        )
                         await sagaJournal.finishGateRefusal(
                             journalClaim,
-                            cancellationOutcome: SagaWire.storedOutcome(from: result)
+                            cancellationOutcome: proposed
                         )
-                        return await finalizeTrace(result, traceID: traceID)
+                        return await finalizeTrace(
+                            toolTextResult(proposed.body, isError: proposed.isError),
+                            traceID: traceID
+                        )
                     }
                     mutationClaim = acquired
                 } else {
@@ -1169,7 +1176,8 @@ struct SystemDispatcher: OperationTraceDispatching {
                 let timeoutBody = SagaWire.sagaWedgeTimeout(
                     idempotencyKey: plan.idempotencyKey,
                     seconds: lifecycleBudgetSeconds,
-                    gateReclaimAfterSec: LogicProServer.mutationGateReclaimGraceSeconds
+                    gateReclaimAfterSec: LogicProServer.mutationGateReclaimGraceSeconds,
+                    finalDisposition: approvedSessionRepair == nil ? nil : .stoppedWithResiduals
                 )
 
                 // #412: the saga lifecycle runs in an UNSTRUCTURED work child
@@ -1283,7 +1291,11 @@ struct SystemDispatcher: OperationTraceDispatching {
                                     ]
                                 )
                                 let (winner, _) = await sagaJournal.finalizeReturningWinner(
-                                    journalClaim, proposed: SagaWire.storedOutcome(from: result),
+                                    journalClaim,
+                                    proposed: SagaWire.storedOutcome(
+                                        from: result,
+                                        finalDisposition: approvedSessionRepair == nil ? nil : .refusedBeforeWrite
+                                    ),
                                     verifiedIfCancelled: true
                                 )
                                 lease?.release()
