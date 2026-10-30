@@ -47,9 +47,9 @@ import Testing
         #expect(result.selectedRegionObservation == Self.region)
         #expect(result.rawRows == [Self.row()])
         #expect(result.liveHeaderTitles == observed.liveHeaderTitles)
-        #expect(result.canonicalNotesComplete == false)
+        #expect(!result.canonicalNotesComplete)
         #expect(result.partialReason == .identityTimingAndTraversalUnproven)
-        #expect(result.writeAttempted == false)
+        #expect(!result.writeAttempted)
     }
 
     @Test func incompleteSelectionScopeRefusesBeforeCollection() {
@@ -66,7 +66,7 @@ import Testing
                 }
             )
         }
-        #expect(collected == false)
+        #expect(!collected)
     }
 
     @Test func nonUniqueSelectionRefusesBeforeCollection() {
@@ -83,7 +83,7 @@ import Testing
                 }
             )
         }
-        #expect(collected == false)
+        #expect(!collected)
     }
 
     @Test func selectionDriftDuringCollectionRefuses() {
@@ -162,13 +162,17 @@ import Testing
             selectedRegionEventRead: { partial }
         )
 
-        #expect(result.isError == false)
+        let isError = try #require(result.isError as Bool?)
+        #expect(!isError)
         let body = try #require(sharedJSONObject(sharedToolText(result)))
         #expect(body["state"] as? String == "B")
         #expect(body["reason"] as? String == "identity_timing_and_traversal_unproven")
-        #expect(body["canonical_notes_complete"] as? Bool == false)
-        #expect(body["event_list_owner_proven"] as? Bool == false)
-        #expect(body["write_attempted"] as? Bool == false)
+        let canonicalNotesComplete = try #require(body["canonical_notes_complete"] as? Bool)
+        let eventListOwnerProven = try #require(body["event_list_owner_proven"] as? Bool)
+        let writeAttempted = try #require(body["write_attempted"] as? Bool)
+        #expect(!canonicalNotesComplete)
+        #expect(!eventListOwnerProven)
+        #expect(!writeAttempted)
         #expect(body["region"] == nil)
         let region = try #require(body["selected_region_observation"] as? [String: Any])
         #expect(region["name"] as? String == Self.region.name)
