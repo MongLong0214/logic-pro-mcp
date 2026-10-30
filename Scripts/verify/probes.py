@@ -40,6 +40,13 @@ PROBES = {
                  "count, a track it does not carry, or a checkbox missing, doubled or unread is "
                  "UNREADABLE, never armed:false. The reading cites the walk by walk_sha256.",
     },
+    "track_muted": {
+        "args": {"index": "int"},
+        "returns": '{"track": <int>, "muted": <bool | null>}',
+        "reads": "the same independent AX walk as track_armed, using Apple's Mute row for the "
+                 "index-th arrange track. A missing, doubled or unread checkbox is UNREADABLE, "
+                 "never muted:false. The reading cites the walk by walk_sha256.",
+    },
     "armed_set": {
         "args": {},
         "returns": '{"armed": [<int>, ...]}',
@@ -52,6 +59,14 @@ PROBES = {
         "reads": "logic://mcu/state, the PRODUCT's reading (nothing else reads the LCD): "
                  "display.upperRow, the Mackie Control LCD upper row as the server last received "
                  "it, with the resource text embedded whole.",
+    },
+    "undo_entry": {
+        "args": {},
+        "returns": '{"title": <str>, "enabled": <bool>, "shortcut": "cmd+z"}',
+        "reads": "the verifier's own AX read of Logic's state-dependent Edit-menu Cmd-Z row, "
+                 "identified by shortcut rather than localized title. The reader opens the "
+                 "localized Edit menu because Logic populates the current Undo title only while "
+                 "open, then requires screen.settle_to_clean to observe and close that menu.",
     },
     "routing_slots": {
         "args": {},

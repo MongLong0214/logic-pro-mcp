@@ -1,3 +1,5 @@
+import Foundation
+
 func compareSpectra(
     _ a: SpectralAnalysisResult,
     _ b: SpectralAnalysisResult
@@ -28,6 +30,7 @@ struct SpectralComparisonResult: Codable, Equatable, Sendable {
     enum Mode: String, CaseIterable, Sendable {
         case absolute
         case spectralShape = "spectral_shape"
+        case spectralTilt = "spectral_tilt"
     }
 
     struct Band: Codable, Equatable, Sendable {
@@ -78,6 +81,59 @@ struct SpectralComparisonResult: Codable, Equatable, Sendable {
         }
     }
 
+    struct TiltComparison: Codable, Equatable, Sendable {
+        let method: String
+        let referenceBandCount: Int
+        let pivotHz: Double?
+        let pivotDeltaDb: Double?
+        let slopeDbPerOctave: Double?
+        let complete: Bool
+        let limitations: [String]
+
+        init(rawBands: [SpectralComparisonResult.Band]) throws {
+            let eligible = rawBands.compactMap { band -> (logFrequency: Double, delta: Double)? in
+                guard let delta = band.deltaDb else { return nil }
+                return (log2(band.centerHz), delta)
+            }
+            method = "least_squares_raw_band_delta_vs_log2_hz.v1"
+            referenceBandCount = eligible.count
+
+            if eligible.count >= 2 {
+                let count = Double(eligible.count)
+                let meanX = eligible.reduce(0) { $0 + $1.logFrequency } / count
+                let meanY = eligible.reduce(0) { $0 + $1.delta } / count
+                let denominator = eligible.reduce(0) {
+                    $0 + ($1.logFrequency - meanX) * ($1.logFrequency - meanX)
+                }
+                let numerator = eligible.reduce(0) {
+                    $0 + ($1.logFrequency - meanX) * ($1.delta - meanY)
+                }
+                let slope = numerator / denominator
+                let pivot = exp2(meanX)
+                guard denominator > 0, slope.isFinite, pivot.isFinite, meanY.isFinite else {
+                    throw Failure.invalidBands
+                }
+                pivotHz = pivot
+                pivotDeltaDb = meanY
+                slopeDbPerOctave = slope
+            } else {
+                pivotHz = nil
+                pivotDeltaDb = nil
+                slopeDbPerOctave = nil
+            }
+
+            complete = slopeDbPerOctave != nil && eligible.count == rawBands.count
+            var limits = [
+                "raw_band_regression_not_perceived_loudness",
+                "linear_fit_not_eq_curve",
+                "no_signal_alignment_or_audio_normalization",
+            ]
+            if eligible.count < 2 { limits.append("insufficient_shared_uncensored_bands") }
+            if eligible.count != rawBands.count { limits.append("some_bands_unavailable") }
+            limitations = limits
+        }
+    }
+
     let before: SpectralAnalysisResult
     let after: SpectralAnalysisResult
     let bands: [Band]
@@ -86,6 +142,8 @@ struct SpectralComparisonResult: Codable, Equatable, Sendable {
     let limitations: [String]
     /// Omitted in absolute mode to preserve the existing serialized response.
     let shapeComparison: ShapeComparison?
+    /// Omitted outside spectral-tilt mode to preserve the existing serialized responses.
+    let tiltComparison: TiltComparison?
 
     enum Failure: String, Error {
         case incompleteInput = "incomplete_input"
@@ -145,5 +203,6 @@ struct SpectralComparisonResult: Codable, Equatable, Sendable {
         if !complete { limits.append("some_bands_unavailable") }
         limitations = limits
         shapeComparison = mode == .spectralShape ? try ShapeComparison(rawBands: bands) : nil
+        tiltComparison = mode == .spectralTilt ? try TiltComparison(rawBands: bands) : nil
     }
 }

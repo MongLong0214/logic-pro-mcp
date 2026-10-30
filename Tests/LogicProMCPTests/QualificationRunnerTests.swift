@@ -537,6 +537,130 @@ struct QualificationRunnerTests {
             "the scalar recipe captures and restores this exact track, not a separately hidden Mixer")
     }
 
+    @Test(arguments: [OperationID.mixerSetPan, .mixerSetVolume])
+    func mixerScalarCyclesAddressAndRestoreTheHeldTrack(operation: OperationID) throws {
+        let fixture = try SlowHandshakeFixture(valueCycle: operation)
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
+        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+
+        let observed = try #require(result.operationResults[operation.rawValue])
+        #expect(observed.status == .passed)
+        #expect(try #require(observed.mutationRestore).verifiedCycleShape)
+        let writes = try scalarWriteArguments(in: result)
+        #expect(writes.count == 2)
+        #expect(writes.allSatisfy { $0["target_ref"] as? String == "held-track" })
+        #expect(writes.allSatisfy { $0["index"] == nil })
+        let field = try #require(QualificationTransport.valueRestoreReadbackField[operation])
+        #expect(writes.last?[field] as? Double == 0.4)
+        #expect(try scalarValue(in: fixture) == 0.4)
+    }
+
+    @Test(arguments: [OperationID.mixerSetPan, .mixerSetVolume],
+          ["wrong_target_after", "malformed_after"])
+    func mixerScalarCyclesCompensateEveryIndeterminateWrite(
+        operation: OperationID, fault: String
+    ) throws {
+        let fixture = try SlowHandshakeFixture(valueCycle: operation, valueFault: fault)
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
+        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 0.2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+
+        #expect(FileManager.default.fileExists(
+            atPath: fixture.directory.appendingPathComponent("value-fault-consumed").path))
+        let observed = try #require(result.operationResults[operation.rawValue])
+        #expect(observed.status == .notQualified)
+        #expect(observed.mutationRestore == nil)
+        let writes = try scalarWriteArguments(in: result)
+        #expect(writes.count == 2, "one attempted mutation requires one owned compensation")
+        #expect(writes.allSatisfy { $0["target_ref"] as? String == "held-track" })
+        #expect(writes.allSatisfy { $0["index"] == nil })
+        let field = try #require(QualificationTransport.valueRestoreReadbackField[operation])
+        #expect(writes.last?[field] as? Double == 0.4)
+        #expect(result.wireFrames.contains {
+            $0.direction == .request && $0.operationID == "phase_b.compensate_readback"
+        })
+        #expect(try scalarValue(in: fixture) == 0.4)
+    }
+
+    @Test func mixerScalarTimeoutStillCompensatesTheHeldTrack() throws {
+        let fixture = try SlowHandshakeFixture(
+            valueCycle: .mixerSetVolume, valueFault: "lost_mutation_reply")
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .mixerSetVolume })
+        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 0.2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+
+        let observed = try #require(result.operationResults[spec.id.rawValue])
+        #expect(observed.status == .notQualified)
+        let writes = try scalarWriteArguments(in: result)
+        #expect(writes.count == 2)
+        #expect(writes.allSatisfy { $0["target_ref"] as? String == "held-track" && $0["index"] == nil })
+        #expect(writes.last?["volume"] as? Double == 0.4)
+        #expect(try scalarValue(in: fixture) == 0.4)
+    }
+
+    @Test(arguments: [OperationID.mixerSetPan, .mixerSetVolume])
+    func mixerScalarCompensationRequiresObservedLanding(operation: OperationID) throws {
+        let fixture = try SlowHandshakeFixture(
+            valueCycle: operation, valueFault: "malformed_after_compensation_noop")
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
+        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+
+        let observed = try #require(result.operationResults[operation.rawValue])
+        #expect(observed.status == .notQualified)
+        #expect(observed.mutationRestore == nil)
+        #expect(try #require(observed.mutationRestoreRefusal).contains("SENT BUT NOT LANDED"))
+        #expect(try scalarValue(in: fixture) == 0.5,
+            "the fixture must prove that a successful compensation reply is not enough")
+    }
+
+    @Test(arguments: [OperationID.mixerSetPan, .mixerSetVolume])
+    func mixerScalarZeroWriteRefusalDoesNotApplyAStaleCompensation(operation: OperationID) throws {
+        let fixture = try SlowHandshakeFixture(valueCycle: operation, valueFault: "refused_forward")
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
+        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+
+        let observed = try #require(result.operationResults[operation.rawValue])
+        #expect(observed.status == .notQualified)
+        #expect(observed.mutationRestore == nil)
+        #expect(try scalarWriteArguments(in: result).count == 1)
+        #expect(!result.wireFrames.contains {
+            $0.direction == .request && $0.operationID == "phase_b.compensate"
+        })
+        #expect(try scalarValue(in: fixture) == 0.4)
+    }
+
+    private func scalarWriteArguments(in result: QualificationDriveResult) throws -> [[String: Any]] {
+        try result.wireFrames.compactMap { frame in
+            guard frame.direction == .request,
+                  ["phase_b.mutation", "phase_b.restore", "phase_b.compensate"].contains(frame.operationID)
+            else { return nil }
+            let request = try #require(sharedJSONObject(frame.payload))
+            let params = try #require(request["params"] as? [String: Any])
+            let arguments = try #require(params["arguments"] as? [String: Any])
+            return try #require(arguments["params"] as? [String: Any])
+        }
+    }
+
+    private func scalarValue(in fixture: SlowHandshakeFixture) throws -> Double {
+        let text = try String(
+            contentsOf: fixture.directory.appendingPathComponent("scalar-value"), encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        return try #require(Double(text))
+    }
+
     @Test(arguments: [OperationID.mixerGetInputBusVerified, .mixerGetOutputVerified,
                       .mixerGetSendDestinationVerified, .pluginsGetInventory])
     func neighboringMixerAndPluginRecipesKeepTheirMixerReadback(operation: OperationID) throws {
@@ -1781,7 +1905,7 @@ struct QualificationRunnerTests {
         let unsigned = try JSONDecoder().decode(ReleaseQualificationAttestation.self,
             from: Data(contentsOf: fixture.attestationURL))
         #expect(unsigned.logicVersion == "11.2")
-        #expect(unsigned.provenance?.schema == "qualification-provenance/v2")
+        #expect(unsigned.provenance?.schema == "qualification-provenance/v3")
         #expect(unsigned.provenance?.logicVersion == "11.2")
         #expect(unsigned.cases.filter { $0.id == "atlas.drift_diff" } == [atlas.qualificationCase])
         let signing = QualificationRunner.signTrusted(candidateURL: fixture.executableURL,
@@ -1847,7 +1971,7 @@ struct QualificationRunnerTests {
         let resealed = try JSONDecoder().decode(ReleaseQualificationAttestation.self,
             from: Data(contentsOf: fixture.attestationURL))
         #expect(resealed.logicVersion == "11.2")
-        #expect(resealed.provenance?.schema == "qualification-provenance/v2")
+        #expect(resealed.provenance?.schema == "qualification-provenance/v3")
         #expect(resealed.provenance?.logicVersion == "11.2")
         #expect(resealed.evidenceManifestSHA256 == changedManifestSHA)
         #expect(resealed.provenance?.evidenceManifestSHA256 == changedManifestSHA)
@@ -2669,6 +2793,167 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                 commit: anotherCommit).exitCode != 0, "The public signature must not authenticate A's unverified source")
         }
         #expect(!FileManager.default.fileExists(atPath: directory.appendingPathComponent("qualification-public.json").path))
+    }
+
+    @Test func publicEvidenceProjectsTheCatalogSnapshotThatPassedPrivateValidation() async throws {
+        let fixture = try await signedTrustedFixture()
+        defer { fixture.remove() }
+        let directory = try publicEvidenceDirectory(fixture)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let catalogURL = fixture.directory.appendingPathComponent("operation-catalog.json")
+        let original = try JSONDecoder().decode(
+            QualificationOperationCatalog.self,
+            from: Data(contentsOf: catalogURL)
+        )
+        let attestation = try JSONDecoder().decode(
+            ReleaseQualificationAttestation.self,
+            from: Data(contentsOf: fixture.attestationURL)
+        )
+        let unregistered = try #require(attestation.cases.first { candidateCase in
+            !candidateCase.id.hasPrefix("in-process/") && !original.operations.contains(where: {
+                $0.operationID == candidateCase.operationID
+            })
+        })
+        let replacementEntry = QualificationOperationCatalog.Entry(
+            operationID: unregistered.operationID,
+            caseID: "in-process/\(unregistered.operationID)",
+            oracleDisposition: .noSemanticOracle,
+            semanticPolicy: QualificationSemanticPolicy(
+                kind: .none,
+                strength: nil,
+                constraints: [],
+                independentlyCreditable: false
+            ),
+            mutationRestorePolicy: nil
+        )
+        let replacement = QualificationOperationCatalog(
+            schema: original.schema,
+            binarySHA256: original.binarySHA256,
+            semanticPolicySHA256: try QualificationRunner.operationCatalogPolicyDigest([
+                replacementEntry
+            ]),
+            operations: [replacementEntry]
+        )
+        let swapper = CatalogSecondReadReplacement(
+            replacement: try JSONEncoder().encode(replacement)
+        )
+        let result = try QualificationRunner.exportPublicEvidenceSnapshot(
+            attestation: attestation,
+            manifestData: Data(contentsOf: fixture.manifestURL),
+            candidate: fixture.executableURL,
+            bundle: fixture.directory,
+            directory: directory,
+            version: "1.2.3",
+            commit: fixture.commitSHA,
+            key: Curve25519.Signing.PrivateKey(rawRepresentation: fixture.signingKeyData),
+            beforeEvidenceRead: swapper.replaceOnSecondCatalogRead
+        )
+
+        #expect(result.exitCode == 0, "\(result.stdout)\(result.stderr)")
+        #expect(swapper.didReplace, "the counterexample must replace the on-disk catalog")
+        let publicData = try Data(contentsOf: directory.appendingPathComponent(
+            QualificationPublicEvidence.filename
+        ))
+        let payload = try QualificationPublicEvidence.verify(
+            publicData,
+            trustedKey: fixture.trustedPublicKeyData
+        )
+        #expect(Set(payload.cases.compactMap(\.operationID))
+                == Set(original.operations.map(\.operationID)))
+    }
+
+    @Test func unknownOperationCannotReceiveLiveSemanticCredit() {
+        let unknown = "future.operation"
+        let qualificationCase = QualificationCase(
+            id: "in-process/\(unknown)",
+            status: .passed,
+            tool: "logic_future",
+            command: "operation",
+            traceID: "future-trace",
+            verified: true,
+            evidenceFiles: ["future.json"],
+            binarySHA256: String(repeating: "a", count: 64),
+            operationID: unknown,
+            verificationKind: .semanticReadback,
+            readback: QualificationReadbackEvidence(
+                source: "logic://future",
+                requestID: "future-readback",
+                verified: true,
+                sha256: String(repeating: "b", count: 64)
+            )
+        )
+
+        #expect(!PromotionGate.operationIsLiveCredited(qualificationCase))
+    }
+
+    @Test func signedDeclarativePolicyReplaysWithoutVerifierRegistryMembership() throws {
+        let policy = QualificationSemanticPolicy(
+            kind: .declarative,
+            strength: .shapeAndDomain,
+            constraints: [
+                .valueEquals(key: "schema", expected: .string("future/v1")),
+                .crossCheck(responseKey: "value", readbackKey: "value"),
+            ],
+            independentlyCreditable: true
+        )
+        let encoded = try JSONEncoder().encode(policy)
+        let decoded = try JSONDecoder().decode(QualificationSemanticPolicy.self, from: encoded)
+        #expect(decoded == policy)
+        #expect(decoded.evaluate(
+            operationID: "future.operation",
+            responseData: Data(#"{"schema":"future/v1","value":7}"#.utf8),
+            readbackData: Data(#"{"value":7}"#.utf8)
+        ))
+        #expect(!decoded.evaluate(
+            operationID: "future.operation",
+            responseData: Data(#"{"schema":"future/v1","value":7}"#.utf8),
+            readbackData: Data(#"{"value":8}"#.utf8)
+        ))
+    }
+
+    @Test func signedMutationRestorePolicyReplaysWithoutVerifierRegistryMembership() throws {
+        let local = Self.recipeShapedRecord()
+        let record = QualificationMutationRestoreRecord(
+            operationID: "future.operation",
+            preState: local.preState,
+            mutation: local.mutation,
+            readback: local.readback,
+            restore: local.restore,
+            restoreReadback: local.restoreReadback
+        )
+        let policy = QualificationMutationRestorePolicy.trackName
+
+        #expect(!record.verifiedCycleShape)
+        #expect(record.verifiedCycleShape(using: policy))
+        let encoded = try JSONEncoder().encode(policy)
+        #expect(try JSONDecoder().decode(
+            QualificationMutationRestorePolicy.self,
+            from: encoded
+        ) == policy)
+    }
+
+    @Test func operationCatalogPoliciesCoverEveryMutationRestoreRecipe() {
+        var expected = Set(QualificationTransport.trackCreateRestoreOperations)
+        expected.formUnion(QualificationTransport.valueRestoreReadbackField.keys)
+        expected.formUnion(QualificationTransport.booleanToggleReadbackField.keys)
+        expected.formUnion(QualificationTransport.historyRestoreDirection.keys)
+        expected.formUnion(QualificationTransport.transportExpectedPlaying.keys)
+        expected.formUnion(QualificationTransport.parameterlessToggleField.keys)
+        expected.formUnion(QualificationTransport.playheadStepDirections.keys)
+        expected.formUnion(QualificationTransport.playheadRestoreOperations)
+        expected.formUnion(QualificationTransport.markerStagedRestoreMode.keys)
+        expected.formUnion([
+            .tracksRename, .tracksSelect, .tracksDelete, .transportSetTempo,
+            .navigateGotoMarker, .navigateCreateMarker,
+        ])
+        let catalogued = Set(OperationRegistry.specs.compactMap { spec in
+            QualificationTransport.mutationRestorePolicy(for: spec.id) == nil ? nil : spec.id
+        })
+
+        #expect(catalogued == expected)
+        #expect(expected.allSatisfy {
+            QualificationTransport.mutationRestorePolicy(for: $0)?.isValid == true
+        })
     }
 
     @Test func publicEvidenceRefusalDoesNotDisclosePrivateVerifierDetails() async throws {
@@ -3905,7 +4190,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(try Self.controlledPublicationFiles(copy.bundle) == originalFiles)
     }
 
-    /// Historical v1 bytes remain readable, never silently upgraded to v2.
+    /// Historical v1 bytes remain readable, never silently upgraded to the current schema.
     @Test func legacyV1ProvenanceRemainsDecodableWithoutInventedLogicVersion() async throws {
         let fixture = try await signedTrustedFixture()
         defer { fixture.remove() }
@@ -3948,13 +4233,13 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
 
     /// Re-signed counterexamples isolate binding, not signature damage or missing trust.
     @Test(arguments: ["missing", "different"])
-    func signedV2ProvenanceRequiresExactLogicVersionBinding(_ mutation: String) async throws {
+    func signedCurrentProvenanceRequiresExactLogicVersionBinding(_ mutation: String) async throws {
         let fixture = try await signedTrustedFixture()
         defer { fixture.remove() }
         let original = try Data(contentsOf: fixture.attestationURL)
         try Self.mutateJSONObject(at: fixture.attestationURL) { object in
             var provenance = try #require(object["provenance"] as? [String: Any])
-            try #require(provenance["schema"] as? String == "qualification-provenance/v2")
+            try #require(provenance["schema"] as? String == "qualification-provenance/v3")
             if mutation == "missing" {
                 provenance.removeValue(forKey: "logicVersion")
             } else {
@@ -4085,7 +4370,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(attestation.provenance != nil)
         #expect(attestation.provenanceSignature == nil)
         let provenance = try #require(attestation.provenance)
-        #expect(provenance.schema == "qualification-provenance/v2")
+        #expect(provenance.schema == "qualification-provenance/v3")
         #expect(provenance.logicVersion == attestation.logicVersion)
         #expect(provenance.logicVersion == "11.2")
     }
@@ -5581,6 +5866,145 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(Self.rejectionReasons(json).isEmpty)
     }
 
+    @Test func trustedVerifierUsesTheCandidatesSignedOperationCatalog() async throws {
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
+        let fixture = try trustedFixture(specs: [spec])
+        defer { fixture.remove() }
+
+        let qualification = await fixture.runQualification(waiversURL: fixture.waiversURL)
+        #expect(qualification.exitCode == 0)
+        fixture.sign()
+
+        let result = QualificationRunner.verifyTrusted(
+            candidateURL: fixture.executableURL,
+            bundleURL: fixture.directory,
+            releaseVersion: "1.2.3",
+            expectedCommitSHA: fixture.commitSHA,
+            trustedPublicKeyData: fixture.trustedPublicKeyData
+        )
+        let json = try Self.resultObject(result)
+
+        #expect(result.exitCode == 0)
+        #expect(try #require(json["promotable"] as? Bool))
+        #expect(Self.rejectionReasons(json).isEmpty)
+    }
+
+    @Test func trustedSignerSignsTheValidatedCandidateCatalogInsteadOfItsLocalRegistry() async throws {
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
+        let fixture = try trustedFixture(specs: [spec])
+        defer { fixture.remove() }
+        let qualification = await fixture.runQualification(waiversURL: fixture.waiversURL)
+        #expect(qualification.exitCode == 0)
+
+        let result = QualificationRunner.signTrusted(
+            candidateURL: fixture.executableURL,
+            bundleURL: fixture.directory,
+            releaseVersion: "1.2.3",
+            expectedCommitSHA: fixture.commitSHA,
+            signingPrivateKeyData: fixture.signingKeyData
+        )
+
+        #expect(result.exitCode == 0, "\(result.stdout)\(result.stderr)")
+        #expect(try #require(try Self.resultObject(result)["promotable"] as? Bool))
+    }
+
+    @Test func operationCatalogRejectsDuplicateMissingAndPolicyDigestMutants() async throws {
+        let specs = try [OperationID.systemHealth, .systemPermissions].map { operation in
+            try #require(OperationRegistry.specs.first { $0.id == operation })
+        }
+        let fixture = try trustedFixture(specs: specs, includeRequiredAtlas: false)
+        defer { fixture.remove() }
+        let attestation = try await fixture.qualify(waiversURL: fixture.waiversURL)
+        let catalog = try JSONDecoder().decode(
+            QualificationOperationCatalog.self,
+            from: Data(contentsOf: fixture.directory.appendingPathComponent(
+                "operation-catalog.json"
+            ))
+        )
+        #expect(QualificationRunner.operationCatalogContentIssue(
+            catalog, attestation: attestation
+        ) == nil)
+
+        let duplicate = QualificationOperationCatalog(
+            schema: catalog.schema,
+            binarySHA256: catalog.binarySHA256,
+            semanticPolicySHA256: catalog.semanticPolicySHA256,
+            operations: [catalog.operations[0], catalog.operations[0], catalog.operations[1]]
+        )
+        #expect(QualificationRunner.operationCatalogContentIssue(
+            duplicate, attestation: attestation
+        ) == "operation catalog contains missing, duplicate, or non-bijective IDs")
+
+        let missing = QualificationOperationCatalog(
+            schema: catalog.schema,
+            binarySHA256: catalog.binarySHA256,
+            semanticPolicySHA256: try QualificationRunner.operationCatalogPolicyDigest(
+                Array(catalog.operations.dropLast())
+            ),
+            operations: Array(catalog.operations.dropLast())
+        )
+        #expect(QualificationRunner.operationCatalogContentIssue(
+            missing, attestation: attestation
+        ) == "operation catalog does not bijectively bind the attested operation cases")
+
+        let changedPolicyDigest = QualificationOperationCatalog(
+            schema: catalog.schema,
+            binarySHA256: catalog.binarySHA256,
+            semanticPolicySHA256: String(repeating: "0", count: 64),
+            operations: catalog.operations
+        )
+        #expect(QualificationRunner.operationCatalogContentIssue(
+            changedPolicyDigest, attestation: attestation
+        ) == "operation catalog semantic policy digest mismatch")
+
+        let first = catalog.operations[0]
+        let invalidMutationEntry = QualificationOperationCatalog.Entry(
+            operationID: first.operationID,
+            caseID: first.caseID,
+            oracleDisposition: first.oracleDisposition,
+            semanticPolicy: first.semanticPolicy,
+            mutationRestorePolicy: .playheadStep(direction: 0)
+        )
+        let invalidMutationOperations = [invalidMutationEntry] + catalog.operations.dropFirst()
+        let invalidMutationPolicy = QualificationOperationCatalog(
+            schema: catalog.schema,
+            binarySHA256: catalog.binarySHA256,
+            semanticPolicySHA256: try QualificationRunner.operationCatalogPolicyDigest(
+                Array(invalidMutationOperations)
+            ),
+            operations: Array(invalidMutationOperations)
+        )
+        #expect(QualificationRunner.operationCatalogContentIssue(
+            invalidMutationPolicy, attestation: attestation
+        ) == "operation catalog mutation restore policy is invalid")
+    }
+
+    @Test func trustedVerifierRejectsCatalogBytesChangedAfterSigning() async throws {
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
+        let fixture = try trustedFixture(specs: [spec])
+        defer { fixture.remove() }
+        let qualification = await fixture.runQualification(waiversURL: fixture.waiversURL)
+        #expect(qualification.exitCode == 0)
+        fixture.sign()
+        let catalogURL = fixture.directory.appendingPathComponent("operation-catalog.json")
+        var catalogData = try Data(contentsOf: catalogURL)
+        catalogData.append(0x20)
+        try catalogData.write(to: catalogURL)
+
+        let result = QualificationRunner.verifyTrusted(
+            candidateURL: fixture.executableURL,
+            bundleURL: fixture.directory,
+            releaseVersion: "1.2.3",
+            expectedCommitSHA: fixture.commitSHA,
+            trustedPublicKeyData: fixture.trustedPublicKeyData
+        )
+
+        #expect(result.exitCode != 0)
+        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains(
+            "evidenceBindingMismatch"
+        ))
+    }
+
     @Test func qualifyEmitsRequiredReleaseArtifactsAndManifestDigests() async throws {
         let fixture = try promotableFixture()
         defer { fixture.remove() }
@@ -5596,6 +6020,21 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             JSONSerialization.jsonObject(with: manifestData) as? [String: Any]
         )
         let entries = try #require(manifest["files"] as? [[String: Any]])
+        let catalogData = try Data(contentsOf: fixture.directory.appendingPathComponent(
+            "operation-catalog.json"
+        ))
+        let catalogDigest = SupportBundleBuilder.sha256(catalogData)
+        let catalog = try JSONDecoder().decode(
+            QualificationOperationCatalog.self,
+            from: catalogData
+        )
+        #expect(catalog.schema == "qualification-operation-catalog/v2")
+        #expect(catalog.binarySHA256 == attestation.binarySHA256)
+        #expect(catalog.operations.map(\.operationID) == [OperationID.systemHealth.rawValue])
+        #expect(manifest["operation_catalog_path"] as? String == "operation-catalog.json")
+        #expect(manifest["operation_catalog_sha256"] as? String == catalogDigest)
+        #expect(attestation.operationCatalogSHA256 == catalogDigest)
+        #expect(attestation.provenance?.operationCatalogSHA256 == catalogDigest)
 
         for (filename, expected) in artifacts {
             let data = try #require(try? Data(
@@ -5737,7 +6176,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         let json = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
 
         #expect(attestation == roundTripped)
-        #expect(attestation.schema == "release-qualification-attestation/v2")
+        #expect(attestation.schema == "release-qualification-attestation/v3")
         #expect(attestation.serverVersion == "1.2.3")
         #expect(attestation.commitSHA == fixture.commitSHA)
         #expect(attestation.binarySHA256 == SupportBundleBuilder.sha256(fixture.executableData))
@@ -5746,7 +6185,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(attestation.locale == .koKR)
         #expect(attestation.profile == .full)
         let provenance = try #require(attestation.provenance)
-        #expect(provenance.schema == "qualification-provenance/v2")
+        #expect(provenance.schema == "qualification-provenance/v3")
         #expect(provenance.logicVersion == attestation.logicVersion)
         #expect(attestation.cache == .warm)
         #expect(attestation.fixture == .empty)
@@ -6677,6 +7116,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         for filename in [
             "evidence-manifest.json", "EVIDENCE-MANIFEST.JSON",
             "case-manifest.json", "CASE-MANIFEST.JSON",
+            "operation-catalog.json", "OPERATION-CATALOG.JSON",
         ] {
             let outputURL = fixture.directory.appendingPathComponent(filename)
             let result = await fixture.runner.run(arguments: [
@@ -6861,10 +7301,10 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
     }
 
     private func trustedFixture(
+        specs: [OperationSpec] = OperationRegistry.specs,
         candidateExecutionSentinelURL: URL? = nil,
         includeRequiredAtlas: Bool = true
     ) throws -> Fixture {
-        let specs = OperationRegistry.specs
         let driveResult = Self.driveResult(
             specs: specs,
             mutationRestoreRecords: [Self.recipeShapedRecord()]
@@ -7006,6 +7446,35 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                     return
                 }
                 swapped = true
+            }
+        }
+    }
+
+    private final class CatalogSecondReadReplacement: @unchecked Sendable {
+        private let replacement: Data
+        private let lock = NSLock()
+        private var catalogURL: URL?
+        private var replaced = false
+
+        init(replacement: Data) {
+            self.replacement = replacement
+        }
+
+        var didReplace: Bool {
+            lock.withLock { replaced }
+        }
+
+        func replaceOnSecondCatalogRead(_ url: URL) {
+            lock.withLock {
+                if url.lastPathComponent == "operation-catalog.json" {
+                    catalogURL = catalogURL ?? url
+                    return
+                }
+                guard let catalogURL, !replaced,
+                      (try? replacement.write(to: catalogURL, options: .atomic)) != nil else {
+                    return
+                }
+                replaced = true
             }
         }
     }
@@ -7385,7 +7854,8 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
              nameRecipe: OperationID? = nil, nameIdentityFault: String = "none",
              countInCycle: String? = nil, autopunchCycle: String? = nil,
              playheadStep: OperationID? = nil, playheadFault: String = "none", playheadAtBoundary: Bool = false,
-             playheadOrigin: String? = nil) throws {
+             playheadOrigin: String? = nil, valueCycle: OperationID? = nil,
+             valueFault: String = "none") throws {
             directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("qualification-slow-handshake-\(UUID().uuidString)", isDirectory: true)
             executableURL = directory.appendingPathComponent("server.sh")
@@ -7420,7 +7890,8 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             IFS= read -r request_line || exit 0
             IFS= read -r request_line || exit 0
             """#
-            if transportRefusal || transportNativePause || nameRecipe != nil || countInCycle != nil || autopunchCycle != nil || playheadStep != nil {
+            if transportRefusal || transportNativePause || nameRecipe != nil || countInCycle != nil
+                || autopunchCycle != nil || playheadStep != nil || valueCycle != nil {
                 script = try #require(script.components(separatedBy: "# AFTER SEED").first) + #"""
                 cd "$(dirname "$0")" || exit 1
                 initial_playing=false
@@ -7446,6 +7917,12 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                 step_project_reads=0
                 step_project_ref=prj_step
                 step_restore_attempts=0
+                value_cycle=none
+                value_fault=none
+                value_reads=0
+                value_writes=0
+                scalar_value=0.4
+                printf '%s\n' "$scalar_value" > scalar-value
                 printf '%s\n' "$step_position" > step-position
                 track_name='Before'
                 track_ref=held-track
@@ -7472,6 +7949,23 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                         esac
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://project/info","text":"{\\"source\\":\\"ax_live\\",\\"cache_age_sec\\":0,\\"identity_source\\":\\"current_document_project_file\\",\\"identity_fetched_at\\":\\"%s\\",\\"data\\":{\\"project_ref\\":\\"%s\\",\\"filePath\\":\\"/tmp/qualification-step.logicx\\"}}"}]}}\n' "$id" "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" "$step_project_ref" ;;
                       *'"uri":"logic://tracks"'*)
+                        if [ "$value_cycle" != none ]; then
+                            value_reads=$((value_reads + 1))
+                            if [ "$value_reads" = 2 ]; then
+                                case "$value_fault" in
+                                  malformed_after|malformed_after_compensation_noop)
+                                    touch value-fault-consumed
+                                    printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://tracks","text":"not-json"}]}}\n' "$id"
+                                    continue ;;
+                                  wrong_target_after)
+                                    touch value-fault-consumed
+                                    printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://tracks","text":"{\\"source\\":\\"ax_live\\",\\"cache_age_sec\\":0,\\"readable\\":true,\\"ax_occluded\\":false,\\"data\\":[{\\"name\\":\\"Before\\",\\"track_ref\\":\\"foreign-track\\",\\"volume\\":%s,\\"pan\\":%s}]}"}]}}\n' "$id" "$scalar_value" "$scalar_value"
+                                    continue ;;
+                                esac
+                            fi
+                            printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://tracks","text":"{\\"source\\":\\"ax_live\\",\\"cache_age_sec\\":0,\\"readable\\":true,\\"ax_occluded\\":false,\\"data\\":[{\\"name\\":\\"Before\\",\\"track_ref\\":\\"held-track\\",\\"volume\\":%s,\\"pan\\":%s}]}"}]}}\n' "$id" "$scalar_value" "$scalar_value"
+                            continue
+                        fi
                         if [ "$fault_pending" = true ]; then
                             fault_pending=false
                             fault_consumed=true
@@ -7549,6 +8043,31 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"logic_pro_running\\":true,\\"logic_pro_version\\":\\"11.2\\",\\"logic_pro_bundle_id\\":\\"com.apple.logic10\\",\\"logic_pro_variant\\":\\"desktop\\",\\"logic_pro_ui_locale\\":\\"en-US\\",\\"process_metadata_resolved\\":true,\\"logic_pro_variants\\":[{\\"variant\\":\\"desktop\\",\\"bundle_id\\":\\"com.apple.logic10\\",\\"installed\\":true,\\"running\\":true},{\\"variant\\":\\"creator_studio\\",\\"bundle_id\\":\\"com.apple.mobilelogic\\",\\"installed\\":false,\\"running\\":false}]}"}]}}\n' "$id" ;;
                       *'__adr001b_no_write_probe'*)
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"invalid_params\\",\\"write_attempted\\":false}"}]}}\n' "$id" ;;
+                      *'"command":"set_volume"'*|*'"command":"set_pan"'*)
+                        value_writes=$((value_writes + 1))
+                        if ! printf '%s' "$request" | grep -q '"target_ref":"held-track"'; then
+                            printf '%s\n' "$request" >> unsafe-writes
+                            printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"stale_target_reference\\",\\"write_attempted\\":false}"}]}}\n' "$id"
+                            continue
+                        fi
+                        if [ "$value_fault" = refused_forward ] && [ "$value_writes" = 1 ]; then
+                            touch value-fault-consumed
+                            printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"refused\\",\\"write_attempted\\":false}"}]}}\n' "$id"
+                            continue
+                        fi
+                        requested_value=0.5
+                        if [ "$value_writes" -gt 1 ]; then requested_value=0.4; fi
+                        if [ "$value_fault" = malformed_after_compensation_noop ] && [ "$value_writes" = 2 ]; then
+                            :
+                        else
+                            scalar_value=$requested_value
+                            printf '%s\n' "$scalar_value" > scalar-value
+                        fi
+                        if [ "$value_fault" = lost_mutation_reply ] && [ "$value_writes" = 1 ]; then
+                            touch value-fault-consumed
+                            continue
+                        fi
+                        printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true,\\"write_attempted\\":true}"}]}}\n' "$id" ;;
                       *'"command":"fast_forward"'*|*'"command":"rewind"'*)
                         if [ "$step_fault" = stage_lost_step_reply ]; then
                             touch step-fault-consumed
@@ -7746,6 +8265,11 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                 if let nameRecipe {
                     script = script.replacingOccurrences(of: "name_recipe=none", with: "name_recipe=\(nameRecipe.rawValue)")
                         .replacingOccurrences(of: "name_fault=none", with: "name_fault=\(nameIdentityFault)")
+                }
+                if let valueCycle {
+                    script = script.replacingOccurrences(
+                        of: "value_cycle=none", with: "value_cycle=\(valueCycle.rawValue)")
+                        .replacingOccurrences(of: "value_fault=none", with: "value_fault=\(valueFault)")
                 }
                 if cachedTransport {
                     script = script.replacingOccurrences(of: "resource_source=ax_live", with: "resource_source=cache")
@@ -8007,6 +8531,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                 cases: copiedCases,
                 waivers: waivers ?? original.waivers,
                 evidenceManifestSHA256: original.evidenceManifestSHA256,
+                operationCatalogSHA256: original.operationCatalogSHA256,
                 provenance: original.provenance,
                 provenanceSignature: provenanceSignature ?? original.provenanceSignature
             )
