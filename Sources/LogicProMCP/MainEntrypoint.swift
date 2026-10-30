@@ -17,6 +17,19 @@ extension ServerStarting {
 extension LogicProServer: ServerStarting {}
 
 enum MainEntrypoint {
+    static func eventListProbeCells(_ row: RawEventRow) -> [String: Any] {
+        row.reduce(into: [String: Any]()) { out, pair in
+            var cell: [String: Any] = [
+                "sliderValue": pair.value.sliderValue as Any,
+                "valueDescription": pair.value.valueDescription as Any,
+            ]
+            if let groupSliderValues = pair.value.groupSliderValues {
+                cell["groupSliderValues"] = groupSliderValues
+            }
+            out[pair.key.id] = cell
+        }
+    }
+
     static func run(
         arguments: [String],
         permissionCheck: () -> PermissionChecker.PermissionStatus = PermissionChecker.check,
@@ -227,14 +240,6 @@ enum MainEntrypoint {
         if arguments.contains("--probe-event-list-window") {
             do {
                 let seen = try EventListReadbackCollector.observeVisibleWindow()
-                func cells(_ row: RawEventRow) -> [String: Any] {
-                    row.reduce(into: [String: Any]()) { out, pair in
-                        out[pair.key.id] = [
-                            "sliderValue": pair.value.sliderValue as Any,
-                            "valueDescription": pair.value.valueDescription as Any,
-                        ]
-                    }
-                }
                 let payload: [String: Any] = [
                     "ok": true,
                     "total_rows": seen.totalRows,
@@ -245,7 +250,7 @@ enum MainEntrypoint {
                     },
                     "live_columns": seen.liveHeaderTitles,
                     "rows": seen.readable.reduce(into: [String: Any]()) { out, index in
-                        if let row = seen.rows[index] { out["\(index)"] = cells(row) }
+                        if let row = seen.rows[index] { out["\(index)"] = eventListProbeCells(row) }
                     },
                 ]
                 let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
@@ -263,14 +268,6 @@ enum MainEntrypoint {
         if arguments.contains("--probe-event-list") {
             do {
                 let seen = try EventListReadbackCollector.observeNoteTable()
-                func cells(_ row: RawEventRow) -> [String: Any] {
-                    row.reduce(into: [String: Any]()) { out, pair in
-                        out[pair.key.id] = [
-                            "sliderValue": pair.value.sliderValue as Any,
-                            "valueDescription": pair.value.valueDescription as Any,
-                        ]
-                    }
-                }
                 let payload: [String: Any] = [
                     "ok": true,
                     "rows": seen.rows.count,
@@ -279,7 +276,7 @@ enum MainEntrypoint {
                     // same constants was comparing English to English and could not fail.
                     "live_columns": seen.liveHeaderTitles,
                     "first_row_cell_children": seen.firstRowCellChildren,
-                    "all_rows": seen.rows.map(cells),
+                    "all_rows": seen.rows.map(eventListProbeCells),
                 ]
                 let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
                 writeStdout(String(data: data, encoding: .utf8)! + "\n")
