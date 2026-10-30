@@ -306,23 +306,25 @@ private struct FrozenV1Report: Codable {
     #expect(c.category == .permissions)
 }
 
-@Test func test_t2_system_events_fail_and_remediation() throws {
+@Test func test_t2_system_events_fail_is_terminal_without_human_remediation() throws {
     let c = try #require(check(makeReport(permission: granted(systemEvents: .notGranted)), "permissions.automation_system_events"))
     #expect(c.status == .fail)
-    #expect(c.remediation.type == .systemSettings)
-    #expect(c.remediation.value.contains("System Events"))
+    #expect(c.remediation.type == .none)
+    #expect(c.remediation.value == "")
     #expect(c.summary.localizedCaseInsensitiveContains("responsible process"))
     #expect(c.summary.localizedCaseInsensitiveContains("Logic Pro automation is separate"))
     #expect(c.severity == .error)
 }
 
-@Test func test_t2_system_events_manual_on_not_verifiable() throws {
+@Test func test_t2_system_events_not_verifiable_fails_without_human_remediation() throws {
     let c = try #require(check(makeReport(permission: granted(systemEvents: .notVerifiable)), "permissions.automation_system_events"))
-    #expect(c.status == .manual)
+    #expect(c.status == .fail)
+    #expect(c.remediation.type == .none)
+    #expect(c.remediation.value == "")
 }
 
 @Test func test_t2_system_events_independent_of_logic_pro_automation() throws {
-    // Logic Pro automation notVerifiable (Logic not running → manual) but System
+    // Logic Pro automation notVerifiable (Logic not running → terminal failure) but System
     // Events independently granted → System Events passes (AC-1.6 independence).
     let permission = PermissionChecker.PermissionStatus(
         accessibilityState: .granted,
@@ -333,8 +335,63 @@ private struct FrozenV1Report: Codable {
     let report = makeReport(permission: permission)
     let logicAutomation = try #require(check(report, "permissions.automation_logic_pro"))
     let systemEvents = try #require(check(report, "permissions.automation_system_events"))
-    #expect(logicAutomation.status == .manual)
+    #expect(logicAutomation.status == .fail)
+    #expect(logicAutomation.remediation.type == .none)
+    #expect(logicAutomation.remediation.value == "")
     #expect(systemEvents.status == .pass)
+}
+
+@Test func test_t2_required_permission_failures_never_request_human_remediation() throws {
+    let cases: [(PermissionChecker.PermissionStatus, String)] = [
+        (.init(
+            accessibilityState: .notGranted,
+            automationState: .granted,
+            systemEventsAutomationState: .granted,
+            postEventAccessState: .granted
+        ), "permissions.accessibility"),
+        (.init(
+            accessibilityState: .granted,
+            automationState: .notGranted,
+            systemEventsAutomationState: .granted,
+            postEventAccessState: .granted
+        ), "permissions.automation_logic_pro"),
+        (.init(
+            accessibilityState: .granted,
+            automationState: .notVerifiable,
+            systemEventsAutomationState: .granted,
+            postEventAccessState: .granted
+        ), "permissions.automation_logic_pro"),
+        (.init(
+            accessibilityState: .granted,
+            automationState: .granted,
+            systemEventsAutomationState: .granted,
+            postEventAccessState: .notGranted
+        ), "permissions.post_event_access"),
+    ]
+
+    for (permission, id) in cases {
+        let c = try #require(check(makeReport(permission: permission), id))
+        #expect(c.status == .fail)
+        #expect(c.remediation.type == .none)
+        #expect(c.remediation.value == "")
+    }
+}
+
+@Test func test_t2_cross_context_denial_is_informational_without_human_remediation() throws {
+    var runtime = enterpriseRuntime()
+    runtime.tccCrossContextProbe = { .denied("terminal:accessibility=denied") }
+    let c = try #require(check(makeReport(runtime: runtime), "permissions.tcc_cross_context"))
+    #expect(c.status == .warn)
+    #expect(c.remediation.type == .none)
+    #expect(c.remediation.value == "")
+}
+
+@Test func test_t2_launch_context_reports_binding_without_rerun_instruction() throws {
+    let c = try #require(check(makeReport(), "permissions.launch_context"))
+    #expect(c.status == .pass)
+    #expect(c.summary == "This report measures TCC permissions for the responsible process terminal; permission results are bound to that launch context.")
+    #expect(c.remediation.type == .none)
+    #expect(c.remediation.value == "")
 }
 
 @Test func test_t2_system_events_fail_independent_of_logic_automation() throws {
