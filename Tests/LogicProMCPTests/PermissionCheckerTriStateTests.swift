@@ -1,4 +1,5 @@
 import ApplicationServices
+import Foundation
 import Testing
 @testable import LogicProMCP
 
@@ -30,6 +31,53 @@ private func triStateRuntime(
     )
 }
 
+private final class BlockingAutomationPermissionProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private let release = DispatchSemaphore(value: 0)
+    private let workerReturned = DispatchSemaphore(value: 0)
+    private var callCountStorage = 0
+    private var statesStorage: [PermissionChecker.CheckState] = []
+
+    var callCount: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return callCountStorage
+    }
+
+    var states: [PermissionChecker.CheckState] {
+        lock.lock()
+        defer { lock.unlock() }
+        return statesStorage
+    }
+
+    func determine(bundleID: String, askUserIfNeeded: Bool) -> Int32 {
+        #expect(bundleID == "com.example.blocked")
+        #expect(!askUserIfNeeded)
+        lock.lock()
+        callCountStorage += 1
+        lock.unlock()
+        release.wait()
+        workerReturned.signal()
+        return Int32(noErr)
+    }
+
+    func append(_ state: PermissionChecker.CheckState) {
+        lock.lock()
+        statesStorage.append(state)
+        lock.unlock()
+    }
+
+    func unblock(maximumWorkers: Int) {
+        for _ in 0..<maximumWorkers {
+            release.signal()
+        }
+    }
+
+    func waitForWorkerReturn(timeout: TimeInterval) -> Bool {
+        workerReturned.wait(timeout: .now() + timeout) == .success
+    }
+}
+
 // MARK: - probeState mapping (the honesty core)
 
 @Test func testAutomationPermissionProbeNeverAsksForConsent() {
@@ -52,6 +100,40 @@ private func triStateRuntime(
     let askedForConsent = observation.askUserIfNeeded ?? true
     #expect(!askedForConsent)
     #expect(state == .notGranted)
+}
+
+@Test func testBlockedAutomationPermissionQueryIsBoundedAndCoalesced() {
+    let probe = BlockingAutomationPermissionProbe()
+    let coordinator = AutomationPermissionQueryCoordinator()
+    let callers = DispatchGroup()
+
+    for _ in 0..<2 {
+        callers.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+            let state = PermissionChecker.nonPromptingAutomationState(
+                bundleID: "com.example.blocked",
+                coordinator: coordinator,
+                determinePermission: probe.determine
+            )
+            probe.append(state)
+            callers.leave()
+        }
+    }
+
+    let terminatedBeforeCleanup = callers.wait(timeout: .now() + 1.5) == .success
+    let callsBeforeCleanup = probe.callCount
+    let statesBeforeCleanup = probe.states
+
+    // The pre-fix direct calls are released after the bounded assertion so a
+    // RED run does not strand test threads. The corrected path has only one
+    // shared worker; the extra signal is harmless.
+    probe.unblock(maximumWorkers: 2)
+    _ = callers.wait(timeout: .now() + 1.0)
+    _ = probe.waitForWorkerReturn(timeout: 1.0)
+
+    #expect(terminatedBeforeCleanup)
+    #expect(callsBeforeCleanup == 1)
+    #expect(statesBeforeCleanup == [.notVerifiable, .notVerifiable])
 }
 
 @Test(arguments: [

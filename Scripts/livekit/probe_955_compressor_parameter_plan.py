@@ -15,11 +15,11 @@ import os
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-SCRIPTS = os.path.join(REPO, "Scripts")
-if SCRIPTS not in sys.path:
-    sys.path.insert(0, SCRIPTS)
+VERIFY = os.path.join(REPO, "Scripts", "verify")
+if VERIFY not in sys.path:
+    sys.path.insert(0, VERIFY)
 
-from verify.live.mcp import Server
+from live.mcp import Server
 
 
 PLUGIN_ID = "logic.stock.effect.compressor"
