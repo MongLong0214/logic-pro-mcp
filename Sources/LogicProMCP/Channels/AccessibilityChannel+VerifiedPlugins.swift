@@ -5769,8 +5769,8 @@ extension AccessibilityChannel {
     /// Best-effort cleanup for every editor element newly observed after this
     /// operation's duplicate-instance slot press. The normal success path has
     /// one element; the count-mismatch path can have the target plus a hidden
-    /// sibling restored by the same press. Return true only if each exact
-    /// element was observed to leave AXWindows.
+    /// sibling restored by the same press. Each result preserves whether its
+    /// exact element was observed to leave AXWindows.
     private static func closePluginEditorsOpenedByThisOperation(
         _ windows: [AXUIElement],
         trackName: String,
