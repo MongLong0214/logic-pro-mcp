@@ -2326,10 +2326,19 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     #expect(!v1)
     #expect(try #require(object["state"] as? String) == "C")
     #expect(try #require(object["error"] as? String) == "element_not_found")
+    let terminal = try #require(object["terminal"] as? Bool)
+    let humanRequired = try #require(object["human_intervention_required"] as? Bool)
+    let writeAttempted = try #require(object["write_attempted"] as? Bool)
+    #expect(terminal)
+    #expect(!humanRequired)
+    #expect(!writeAttempted)
     let hint = try #require(object["hint"] as? String)
     #expect(hint.contains("Control Bar"))
     #expect(hint.contains("Autopunch"))
-    #expect(hint.lowercased().contains("customize"))
+    #expect(hint.localizedCaseInsensitiveContains("terminated"))
+    #expect(!hint.localizedCaseInsensitiveContains("customize"))
+    #expect(!hint.localizedCaseInsensitiveContains("retry"))
+    #expect(object["recovery_hint"] == nil)
 }
 
 @Test func testAccessibilityChannelAXBackedTransportErrorPaths() async {
@@ -2387,7 +2396,7 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     #expect(!HonestContract.isTerminalStateC(pressFailure.message))
 }
 
-@Test func testAccessibilityChannelAXBackedTempoFallbackCanBeInjected() async {
+@Test func testAccessibilityChannelAXBackedTempoFallbackCanBeInjected() async throws {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(160)
     let window = builder.element(161)
@@ -2423,6 +2432,12 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     #expect(result.message.contains("\"track_header_count\":1"))
     #expect(result.message.contains("\"control_bar_found\":true"))
     #expect(result.message.contains("\"control_bar_slider_descriptions\":[\"Bar\"]"))
+    let object = decodeAccessibilityJSON(result.message)
+    #expect(try #require(object["write_attempted"] as? Bool))
+    #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(try #require(object["automatic_readback_attempts_exhausted"] as? Bool))
 }
 
 @Test func testImportMIDIFileFailsClosedWhenSystemEventsAutomationDenied() async throws {
@@ -2895,7 +2910,7 @@ private func makeTempoSliderFixture(
     #expect(AccessibilityChannel.validatedMIDIImportPath(tempFile.fileURL.path + "\n") == nil)
 }
 
-@Test func testAccessibilityChannelAXBackedTempoReturnsErrorWhenAXFieldMissing() async {
+@Test func testAccessibilityChannelAXBackedTempoReturnsErrorWhenAXFieldMissing() async throws {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(700)
     let window = builder.element(701)
@@ -2919,9 +2934,17 @@ private func makeTempoSliderFixture(
     let result = await channel.execute(operation: "transport.set_tempo", params: ["tempo": "126"])
     #expect(!result.isSuccess)
     #expect(result.message.contains("\"error\":\"element_not_found\""))
-    #expect(result.message.contains("tempo slider not located"))
-    #expect(result.message.contains("create a software instrument track first"))
+    #expect(result.message.contains("automatic tempo lookup terminated"))
     let object = decodeAccessibilityJSON(result.message)
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(try #require(object["automatic_tempo_lookup_exhausted"] as? Bool))
+    #expect(!(try #require(object["write_attempted"] as? Bool)))
+    let hint = object["hint"] as? String ?? ""
+    #expect(hint.contains("automatic tempo lookup terminated"))
+    for request in ["dismiss", "clear", "create", "ensure", "retry", "manually"] {
+        #expect(!hint.localizedCaseInsensitiveContains(request))
+    }
     #expect(object["track_header_count"] as? Int == 0)
     #expect((object["transport_bar_found"] as? Bool)!)
     #expect(!((object["control_bar_found"] as? Bool)!))
@@ -3265,6 +3288,20 @@ private func makeTempoSliderFixture(
     #expect(renameResult.isSuccess)
     #expect((builder.attributeValue(nameField, kAXValueAttribute as String) as? String) == "Lead")
     #expect(builder.actionCalls.contains { $0.elementID == builder.elementID(nameField) && $0.action == kAXConfirmAction as String })
+
+    let confirmCount = builder.actionCalls.filter {
+        $0.elementID == builder.elementID(nameField) && $0.action == kAXConfirmAction as String
+    }.count
+    let renameNoOp = await channel.execute(
+        operation: "track.rename", params: ["index": "0", "name": "Lead"]
+    )
+    #expect(renameNoOp.isSuccess)
+    let renameNoOpReceipt = decodeAccessibilityJSON(renameNoOp.message)
+    #expect(renameNoOpReceipt["via"] as? String == "no-op")
+    #expect(!(try #require(renameNoOpReceipt["write_attempted"] as? Bool)))
+    #expect(builder.actionCalls.filter {
+        $0.elementID == builder.elementID(nameField) && $0.action == kAXConfirmAction as String
+    }.count == confirmCount)
 }
 
 @Test func testAccessibilityChannelAXBackedTrackSelectVerifiesReadbackWhenSelectionMetadataExists() async throws {
@@ -3745,15 +3782,23 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
     let obj = decodeAccessibilityJSON(result.message)
     #expect(obj["error"] as? String == "library_panel_unavailable")
     #expect(obj["precondition"] as? String == "panel_closed")
+    #expect(obj["recovery_attempted"] as? String == "open_panel")
+    let humanInterventionRequired = try #require(obj["human_intervention_required"] as? Bool)
+    #expect(!humanInterventionRequired)
+    let terminal = try #require(obj["terminal"] as? Bool)
+    #expect(terminal)
     let hint = try #require(obj["hint"] as? String)
-    #expect(hint.contains("Y"))
+    #expect(hint.contains("automatic open"))
+    #expect(hint.contains("terminated"))
+    #expect(!hint.contains("Open Library"))
+    #expect(!hint.contains("retry"))
     // Auto-open must have been attempted before failing closed.
     #expect(openAttempted.value)
     // Must NOT be the misleading legacy error.
     #expect(obj["error"] as? String != "ax_write_failed")
 }
 
-@Test func testSetInstrumentPathNotInCacheReturnsPathNotInLibrary() async {
+@Test func testSetInstrumentPathNotInCacheReturnsPathNotInLibrary() async throws {
     // Panel open, target type OK, but the injected cache resolver reports the
     // path is ABSENT → terminal precondition `path_not_in_library` (NOT a nav
     // attempt, NOT ax_write_failed).
@@ -3790,6 +3835,15 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
     let obj = decodeAccessibilityJSON(result.message)
     #expect(obj["error"] as? String == "path_not_in_library")
     #expect(obj["precondition"] as? String == "missing_path")
+    #expect(obj["next_machine_action"] as? String == "logic_tracks.scan_library")
+    let humanInterventionRequired = try #require(obj["human_intervention_required"] as? Bool)
+    #expect(!humanInterventionRequired)
+    let terminal = try #require(obj["terminal"] as? Bool)
+    #expect(terminal)
+    let hint = obj["hint"] as? String ?? ""
+    #expect(hint.contains("terminated"))
+    #expect(!hint.contains("Run scan_library"))
+    #expect(!hint.contains("pick"))
     #expect(obj["error"] as? String != "ax_write_failed")
 }
 
@@ -3850,7 +3904,7 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
     #expect(presetWasNotNavigated)
 }
 
-@Test func testSetInstrumentFolderPathFailsClosedBeforeAXNav() async {
+@Test func testSetInstrumentFolderPathFailsClosedBeforeAXNav() async throws {
     let fixture = makeSetInstrumentFixture()
     fixture.builder.setAttribute(fixture.category, kAXValueAttribute as String, "Synthesizer")
     fixture.builder.setAttribute(fixture.preset, kAXValueAttribute as String, "Bass")
@@ -3888,6 +3942,14 @@ private func makeGMDeviceTargetFixture() -> (builder: FakeAXRuntimeBuilder, app:
     #expect(obj["error"] as? String == "folder_not_preset")
     #expect(obj["precondition"] as? String == "folder_path")
     #expect(obj["requested_path"] as? String == "Synthesizer/Bass")
+    #expect(obj["next_machine_action"] as? String == "logic_tracks.scan_library")
+    let humanInterventionRequired = try #require(obj["human_intervention_required"] as? Bool)
+    #expect(!humanInterventionRequired)
+    let terminal = try #require(obj["terminal"] as? Bool)
+    #expect(terminal)
+    let hint = obj["hint"] as? String ?? ""
+    #expect(hint.contains("terminated"))
+    #expect(!hint.contains("Pick"))
     #expect(!fixture.builder.actionCalls.map(\.elementID).contains(fixture.builder.elementID(fixture.category)))
     #expect(!fixture.builder.actionCalls.map(\.elementID).contains(fixture.builder.elementID(fixture.preset)))
 }
@@ -5687,12 +5749,22 @@ private struct Issue1097Rail {
     #expect(result.message.contains("\"verified\":true"), "\(result.message)")
 }
 
-@Test func issue1097RenameWritesNothingWhileAnotherTrackStaysSelected() async {
+@Test func issue1097RenameWritesNothingWhileAnotherTrackStaysSelected() async throws {
     let rail = Issue1097Rail(selected: [true, true], additive: true)
     let channel = makeAXBackedAccessibilityChannel(builder: rail.builder, app: rail.app, logicRuntime: rail.runtime)
     let result = await channel.execute(operation: "track.rename", params: ["index": "0", "name": "Lead"])
+    let body = decodeAccessibilityJSON(result.message)
     #expect(!result.isSuccess, "\(result.message)")
     #expect(result.message.contains("selection_not_exclusive"), "\(result.message)")
+    let terminal = try #require(body["terminal"] as? Bool)
+    let humanRequired = try #require(body["human_intervention_required"] as? Bool)
+    let writeAttempted = try #require(body["write_attempted"] as? Bool)
+    #expect(terminal)
+    #expect(!humanRequired)
+    #expect(!writeAttempted)
+    let hint = body["hint"] as? String ?? ""
+    #expect(!hint.localizedCaseInsensitiveContains("deselect"))
+    #expect(!hint.localizedCaseInsensitiveContains("retry"))
     let untouched = rail.name(0) == "Track 1"
     #expect(untouched, "the name field was written: \(String(describing: rail.name(0)))")
     let confirmed = rail.builder.actionCalls.contains {

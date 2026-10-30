@@ -611,6 +611,15 @@ extension AccessibilityChannel {
 
     static let setInstrumentLibraryNavigationDeadlineSeconds: Double = 30
 
+    static var setInstrumentLibraryNavigationTimeoutHint: String {
+        "set_instrument Library navigation exceeded "
+            + "\(Int(Self.setInstrumentLibraryNavigationDeadlineSeconds))s and terminated. "
+            + "Bounded panel restaging was attempted and its observed result is reported in "
+            + "panel_open_after_failure and panel_restaged_after_failure; no further navigation "
+            + "was issued. A later request can use scan_library so an unknown path terminates as "
+            + "path_not_in_library before live navigation."
+    }
+
     /// Run a blocking Library-navigation closure under a hard wall-clock
     /// deadline. Returns the closure's result, or `nil` if the deadline elapsed
     /// first. The closure runs on a global queue (never the cooperative pool) so
@@ -857,14 +866,19 @@ extension AccessibilityChannel {
             if !staging.isPanelOpen(runtime) {
                 return .error(HonestContract.encodeStateC(
                     error: .libraryPanelUnavailable,
-                    hint: "Library panel not found. Open Library (Y) in Logic Pro, then retry.",
+                    hint: "Library panel remained unavailable after the bounded automatic open attempt; set_instrument terminated before target selection.",
                     extras: setInstrumentBaseExtras(
                         requestedPath: resolvedPath,
                         category: category,
                         preset: preset,
                         targetTrackIndex: targetTrackIndex as Any? ?? NSNull(),
                         targetTrackName: targetTrackName
-                    ).merging(["precondition": "panel_closed"]) { _, new in new }
+                    ).merging([
+                        "precondition": "panel_closed",
+                        "recovery_attempted": "open_panel",
+                        "human_intervention_required": false,
+                        "terminal": true,
+                    ]) { _, new in new }
                 ))
             }
         }
@@ -878,7 +892,7 @@ extension AccessibilityChannel {
         if let pathKind = staging.resolvePathKind(resolvedPath), pathKind != .leaf {
             return .error(HonestContract.encodeStateC(
                 error: .folderNotPreset,
-                hint: "Library path '\(resolvedPath)' resolves to a \(pathKind.rawValue), not a loadable preset leaf. Pick a leaf path below it from scan_library.",
+                hint: "Library path '\(resolvedPath)' resolves to a \(pathKind.rawValue), not a loadable preset leaf; set_instrument terminated before Library navigation.",
                 extras: setInstrumentBaseExtras(
                     requestedPath: resolvedPath,
                     category: category,
@@ -888,20 +902,28 @@ extension AccessibilityChannel {
                 ).merging([
                     "precondition": "folder_path",
                     "path_kind": pathKind.rawValue,
+                    "next_machine_action": "logic_tracks.scan_library",
+                    "human_intervention_required": false,
+                    "terminal": true,
                 ]) { _, new in new }
             ))
         }
         if staging.resolvePath(resolvedPath) == false {
             return .error(HonestContract.encodeStateC(
                 error: .pathNotInLibrary,
-                hint: "Library path '\(resolvedPath)' was not found in the scanned inventory. Run scan_library and pick an existing path.",
+                hint: "Library path '\(resolvedPath)' was not found in the scanned inventory; set_instrument terminated before Library navigation.",
                 extras: setInstrumentBaseExtras(
                     requestedPath: resolvedPath,
                     category: category,
                     preset: preset,
                     targetTrackIndex: targetTrackIndex as Any? ?? NSNull(),
                     targetTrackName: targetTrackName
-                ).merging(["precondition": "missing_path"]) { _, new in new }
+                ).merging([
+                    "precondition": "missing_path",
+                    "next_machine_action": "logic_tracks.scan_library",
+                    "human_intervention_required": false,
+                    "terminal": true,
+                ]) { _, new in new }
             ))
         }
 
@@ -930,7 +952,7 @@ extension AccessibilityChannel {
             let restaged = await Self.restageLibraryPanelAfterFailure(staging: staging, runtime: runtime)
             return .error(HonestContract.encodeStateC(
                 error: .readbackUnavailable,
-                hint: "set_instrument Library navigation exceeded \(Int(Self.setInstrumentLibraryNavigationDeadlineSeconds))s and was abandoned — the Library panel's AX surface is unresponsive (a prior invalid-path attempt can leave it wedged). Re-open the Library (Y) and retry; restart Logic if it persists. Run scan_library first so an unknown path fails fast as path_not_in_library instead of navigating live.",
+                hint: Self.setInstrumentLibraryNavigationTimeoutHint,
                 extras: setInstrumentBaseExtras(
                     requestedPath: resolvedPath,
                     category: category,

@@ -179,5 +179,13 @@ struct Issue1042ToggleSecondPressTests {
         #expect(try #require(envelope["write_attempted"] as? Bool))
         #expect(try #require(envelope["fallback_unsafe"] as? Bool))
         #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+        #expect(try #require(envelope["terminal"] as? Bool))
+        #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+        #expect(try #require(envelope["automatic_read_attempts_exhausted"] as? Bool))
+        let hint = try #require(envelope["hint"] as? String)
+        #expect(hint.contains("terminated after the bounded readback"))
+        for request in ["read Logic", "retry", "manually"] {
+            #expect(!hint.lowercased().contains(request.lowercased()))
+        }
     }
 }

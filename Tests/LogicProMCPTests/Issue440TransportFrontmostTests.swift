@@ -82,7 +82,14 @@ struct Issue440TransportFrontmostTests {
         let obj = try #require(envelope(result))
         #expect(try #require(obj["frontmost_preparation"] as? String) == "activation_timed_out")
         #expect(!(try #require(obj["write_attempted"] as? Bool)))
-        #expect(try #require(obj["safe_to_retry"] as? Bool))
+        #expect(!(try #require(obj["safe_to_retry"] as? Bool)))
+        #expect(try #require(obj["terminal"] as? Bool))
+        #expect(!(try #require(obj["human_intervention_required"] as? Bool)))
+        #expect(try #require(obj["automatic_frontmost_attempts_exhausted"] as? Bool))
+        let hint = try #require(obj["hint"] as? String)
+        for request in ["bring Logic", "retry", "manually"] {
+            #expect(!hint.localizedCaseInsensitiveContains(request))
+        }
         #expect(activations.value == 1)
     }
 

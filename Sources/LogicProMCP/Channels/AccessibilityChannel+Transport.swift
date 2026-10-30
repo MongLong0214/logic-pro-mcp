@@ -507,13 +507,25 @@ extension AccessibilityChannel {
             return .error(HonestContract.encodeStateC(
                 error: .readbackUnavailable,
                 hint: "tempo fallback executed but no tempo readback was available",
-                extras: missingExtras.merging(["via": "keyboard-fallback"]) { _, new in new }
+                extras: missingExtras.merging([
+                    "via": "keyboard-fallback",
+                    "write_attempted": true,
+                    "safe_to_retry": false,
+                    "automatic_readback_attempts_exhausted": true,
+                    "terminal": true,
+                    "human_intervention_required": false,
+                ]) { _, new in new }
             ))
         }
         return .error(HonestContract.encodeStateC(
             error: .elementNotFound,
             hint: missingHint,
-            extras: missingExtras
+            extras: missingExtras.merging([
+                "write_attempted": false,
+                "automatic_tempo_lookup_exhausted": true,
+                "terminal": true,
+                "human_intervention_required": false,
+            ]) { _, new in new }
         ))
     }
 
@@ -554,18 +566,18 @@ extension AccessibilityChannel {
         let transportBarFound = landmarks["transport_bar_found"] as? Bool ?? false
 
         if dialogPresent {
-            return "tempo slider not located while a Logic dialog is present. Dismiss the dialog, clear the Create New Track prompt if visible, and retry."
+            return "automatic tempo lookup terminated because a Logic dialog prevented a trustworthy control census."
         }
         if trackHeaderCount == 0 {
-            return "tempo slider not located: no track headers are visible yet. Clear the Create New Track dialog or create a software instrument track first."
+            return "automatic tempo lookup terminated: no track headers were visible in the current Accessibility census."
         }
         if !controlBarFound && !transportBarFound {
-            return "tempo slider not located: Logic's Control Bar and transport UI were both absent from the AX tree. Ensure the project window is frontmost and fully loaded, then retry."
+            return "automatic tempo lookup terminated because neither Logic's Control Bar nor transport UI was present in the Accessibility tree."
         }
         if !controlBarFound {
-            return "tempo slider not located in Logic's Control Bar. Ensure the project window is frontmost and the Control Bar is visible, then retry."
+            return "automatic tempo lookup terminated because Logic's Control Bar was absent from the Accessibility tree."
         }
-        return "tempo slider not located in Logic control bar; ensure Logic Pro is frontmost with an open project"
+        return "automatic tempo lookup terminated because no eligible tempo control was found in the observed Logic controls."
     }
 
     private static func shouldAttemptTempoFallback(landmarks: [String: Any]) -> Bool {
@@ -1084,15 +1096,18 @@ extension AccessibilityChannel {
         guard preparation.isReady else {
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
-                hint: "goto_position drives Logic's own UI; from the background it moves the playhead "
-                    + "to the wrong bar, so nothing was touched. Bring Logic Pro to the front and retry. "
-                    + "The fixed ownership reason is in frontmost_observation.reason when observed.",
+                hint: "goto_position terminated before mutation because automatic Logic keyboard "
+                    + "ownership preparation failed; no UI action occurred. The fixed ownership "
+                    + "reason is in frontmost_observation.reason when observed.",
                 extras: baseExtras.merging([
                     "operation": "transport.goto_position",
                     "method": "ax_goto_position_dialog",
                     "frontmost_preparation": preparation.rawValue,
                     "write_attempted": false,
-                    "safe_to_retry": true,
+                    "safe_to_retry": false,
+                    "automatic_frontmost_attempts_exhausted": true,
+                    "terminal": true,
+                    "human_intervention_required": false,
                 ]) { _, new in new }
             ))
         }
@@ -3303,7 +3318,8 @@ extension AccessibilityChannel {
         guard let controlBar, let control = observedAutopunchControl(in: controlBar, runtime: runtime) else {
             return .error(HonestContract.encodeStateC(
                 error: .elementNotFound,
-                hint: "A unique readable Autopunch mode checkbox was not found directly in Logic Pro's Control Bar. Customize the Control Bar to show Autopunch, then retry.",
+                hint: "Autopunch toggle terminated because a unique readable mode checkbox was not "
+                    + "found directly in Logic Pro's Control Bar.",
                 extras: [
                     "button": "Autopunch",
                     "operation": "transport.toggle_autopunch",
@@ -3311,7 +3327,9 @@ extension AccessibilityChannel {
                     "control_bar_checkboxes": controlBar.map {
                         transportLandmarkLabels(root: $0, role: kAXCheckBoxRole, runtime: runtime)
                     } ?? [],
-                    "recovery_hint": "Customize Logic Pro's Control Bar and enable the Autopunch button."
+                    "write_attempted": false,
+                    "terminal": true,
+                    "human_intervention_required": false,
                 ]
             ))
         }

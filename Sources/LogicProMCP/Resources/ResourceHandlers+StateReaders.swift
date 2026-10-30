@@ -108,7 +108,11 @@ extension ResourceHandlers {
             "source": hasCachedState ? "cache" : "default",
             "unverified": true,
             "stale": hasCachedState,
-            "recovery_hint": "live transport refresh unavailable; focus Logic's Tracks window, dismiss modal or plugin dialogs, then retry or run logic_system refresh_cache."
+            "recovery_hint": "automatic live transport refresh terminated without a verified state; "
+                + "the cached or default state remains unverified.",
+            "automatic_refresh_attempts_exhausted": true,
+            "terminal": true,
+            "human_intervention_required": false,
         ]
         if let errorCode = liveRefresh.errorCode {
             extras["refresh_error"] = errorCode

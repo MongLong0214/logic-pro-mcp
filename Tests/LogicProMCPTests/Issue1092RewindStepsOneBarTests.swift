@@ -183,6 +183,10 @@ private func stateCObject(_ result: ChannelResult) -> [String: Any]? {
         #expect(!result.isSuccess, "\(step.operation): \(result.message)")
         let object = try #require(stateCObject(result), "\(step.operation): \(result.message)")
         #expect(object["error"] as? String == "permission_denied", "\(step.operation)")
+        #expect(try #require(object["terminal"] as? Bool), "\(step.operation)")
+        #expect(!(try #require(object["human_intervention_required"] as? Bool)), "\(step.operation)")
+        #expect(!(try #require(object["safe_to_retry"] as? Bool)), "\(step.operation)")
+        #expect(try #require(object["automatic_permission_attempts_exhausted"] as? Bool), "\(step.operation)")
         #expect(recorder.postedEvents.isEmpty, "\(step.operation)")
     }
 }

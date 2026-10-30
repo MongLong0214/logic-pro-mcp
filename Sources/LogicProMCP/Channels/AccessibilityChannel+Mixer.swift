@@ -9,7 +9,7 @@ extension AccessibilityChannel {
     /// #982: a Mixer whose children did not read has strips nobody saw. Reporting it as an empty
     /// strip list, or an index as out of range, would state an absence that was never observed.
     static let mixerChildrenUnreadMessage =
-        "The mixer's channel strips could not be read, so they are unknown, not absent. Retry the read."
+        "Automatic Mixer read terminated because its channel strips could not be read; they are unknown, not absent."
     /// The same for one strip's insert chain, carried in `plugins_read_error`.
     static let stripChildrenUnreadMessage = "the strip's children did not read"
     /// The children read, but the inserts could not be put in screen order or told apart from the

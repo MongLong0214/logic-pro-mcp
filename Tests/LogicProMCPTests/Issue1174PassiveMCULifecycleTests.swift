@@ -206,6 +206,30 @@ private actor PassiveMCUProbe: Channel {
     await router.stopAll()
 }
 
+@Test func issue1403ControlSurfaceDriveFailureIsPublishedAsTerminalAndNonHuman() async throws {
+    let router = ChannelRouter()
+    let mcu = PassiveMCUProbe(.mcu)
+    await router.register(mcu)
+    _ = await router.startAll()
+    let result = await SystemDispatcher.handle(
+        command: "setup_control_surface",
+        params: ["consent": .string("true")],
+        router: router,
+        cache: StateCache(),
+        controlSurfaceSetup: { _ in
+            .failed(stage: "open_setup_window", hint: "automatic setup terminated", .init())
+        }
+    )
+    let body = try #require(sharedJSONObject(sharedToolText(result)))
+    let terminal = try #require(body["terminal"] as? Bool)
+    let humanRequired = try #require(body["human_intervention_required"] as? Bool)
+    let writeAttempted = try #require(body["write_attempted"] as? Bool)
+    #expect(terminal)
+    #expect(!humanRequired)
+    #expect(!writeAttempted)
+    await router.stopAll()
+}
+
 @Test func issue1174MCUStartupDoesNotInventFeedbackReadiness() async throws {
     let router = ChannelRouter()
     let mcu = PassiveMCUProbe(.mcu, ready: false)

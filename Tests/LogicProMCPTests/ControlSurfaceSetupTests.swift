@@ -120,6 +120,30 @@ import Testing
         #expect(b.setCalls.isEmpty)
     }
 
+    @Test("#1403 setup-window exhaustion terminates without a human recovery procedure")
+    func setupWindowExhaustionIsTerminalWithoutHumanRecovery() {
+        let b = FakeAXRuntimeBuilder()
+        let ax = b.makeAXRuntime()
+        var runtime = ControlSurfaceSetup.Runtime(
+            ax: ax, elements: AXLogicProElements.Runtime(logicProPID: { 4242 }, ax: ax))
+        runtime.sleep = { _ in }
+
+        guard case .failed(let stage, let hint, let evidence) = ControlSurfaceSetup.drive(
+            consent: true, runtime: runtime
+        ) else {
+            Issue.record("an absent Setup window must fail")
+            return
+        }
+        #expect(stage == "open_setup_window")
+        #expect(hint.localizedCaseInsensitiveContains("terminated"))
+        for forbidden in ["by hand", "yourself", "then choose", "then retry", "check that"] {
+            #expect(!hint.localizedCaseInsensitiveContains(forbidden))
+        }
+        #expect(!evidence.configurationWriteAttempted)
+        #expect(b.actionCalls.isEmpty)
+        #expect(b.setCalls.isEmpty)
+    }
+
     // MARK: - The ko-KR menu collision
 
     @Test("both Korean 설정… items are returned, because only the window they open tells them apart")
