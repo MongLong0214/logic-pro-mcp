@@ -1,5 +1,6 @@
 import Foundation
 import ApplicationServices
+import AppKit
 import Darwin
 
 /// Checks macOS permissions required for the server to operate.
@@ -86,7 +87,7 @@ enum PermissionChecker {
                 nonPromptingAutomationState(bundleID: LogicProTarget.current.bundleID).isGranted
             },
             runSystemEventsAutomationProbe: {
-                nonPromptingAutomationState(bundleID: "com.apple.systemevents")
+                nonPromptingSystemEventsAutomationState()
             },
             runAutomationProbeState: {
                 nonPromptingAutomationState(bundleID: LogicProTarget.current.bundleID)
@@ -136,8 +137,9 @@ enum PermissionChecker {
         // `tell application "System Events"`. Excluding it let
         // `--check-permissions` exit 0 while those paths fail mid-mutation with
         // an Apple Events denial — the exact #188 false-green. The production
-        // probe is unconditional (System Events is always running), so a denied
-        // target is reported truthfully here rather than advertised as ready.
+        // probe is unconditional. If the lazily launched System Events agent is
+        // absent, it is started without activation before the nonprompting
+        // permission query is retried once.
         //
         // This is a plain Bool by design for callers that must fail closed on
         // anything short of a VERIFIED grant (`--check-permissions` exit code,
@@ -237,9 +239,10 @@ enum PermissionChecker {
 
     /// Check if Automation permission for System Events is granted. Required by
     /// the MIDI import / tempo-dialog / project-state paths that drive
-    /// `tell application "System Events"`. System Events is always running, so
-    /// (unlike Logic Pro) the probe is unconditional; a denied or undetermined
-    /// target returns `notGranted`.
+    /// `tell application "System Events"`. The probe is unconditional and may
+    /// start the lazily launched System Events agent without activation before
+    /// querying consent. A denied or undetermined target returns `notGranted`
+    /// through the legacy Bool API.
     static func checkSystemEventsAutomation() -> Bool {
         checkSystemEventsAutomation(runtime: .production)
     }
@@ -306,6 +309,30 @@ enum PermissionChecker {
         determinePermission: (String, Bool) -> Int32 = determineAutomationPermission
     ) -> CheckState {
         let status = determinePermission(bundleID, false)
+        return automationState(for: status)
+    }
+
+    /// System Events is an agent and may not exist until its first consumer.
+    /// `AEDeterminePermissionToAutomateTarget` reports that ordinary lazy state
+    /// as `procNotFound`. Start only that exact bundle without activation, then
+    /// retry the same nonprompting query once. A failed launch or retry remains
+    /// not-verifiable; denial and consent-required results never launch it.
+    static func nonPromptingSystemEventsAutomationState(
+        determinePermission: (String, Bool) -> Int32 = determineAutomationPermission,
+        launchWithoutActivation: (String) -> Bool = launchApplicationWithoutActivation
+    ) -> CheckState {
+        let bundleID = "com.apple.systemevents"
+        let firstStatus = determinePermission(bundleID, false)
+        guard firstStatus == Int32(procNotFound) else {
+            return automationState(for: firstStatus)
+        }
+        guard launchWithoutActivation(bundleID) else {
+            return .notVerifiable
+        }
+        return automationState(for: determinePermission(bundleID, false))
+    }
+
+    private static func automationState(for status: Int32) -> CheckState {
         switch status {
         case Int32(noErr):
             return .granted
@@ -313,6 +340,22 @@ enum PermissionChecker {
             return .notGranted
         default:
             return .notVerifiable
+        }
+    }
+
+    private static func launchApplicationWithoutActivation(bundleID: String) -> Bool {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            return false
+        }
+        do {
+            _ = try NSWorkspace.shared.launchApplication(
+                at: url,
+                options: [.withoutActivation],
+                configuration: [:]
+            )
+            return true
+        } catch {
+            return false
         }
     }
 
