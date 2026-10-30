@@ -1753,6 +1753,8 @@ enum SemanticOracleTable {
               object["state"] as? String == "B",
               object["reason"] as? String == "identity_timing_and_traversal_unproven",
               object["scope"] as? String == "selected_region_and_unbound_event_list_observation",
+              nonEmptyString(object["event_list_item_count_text"]) != nil,
+              nonEmptyString(object["event_list_region_path"]) != nil,
               exactBoolean(object["event_list_owner_proven"], false),
               exactBoolean(object["canonical_notes_complete"], false),
               exactBoolean(object["write_attempted"], false),

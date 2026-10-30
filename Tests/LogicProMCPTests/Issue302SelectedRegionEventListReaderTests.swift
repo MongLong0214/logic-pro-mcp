@@ -36,7 +36,9 @@ import Testing
         let observed = EventListReadbackCollector.ProbeObservation(
             liveHeaderTitles: ["L", "M", "Position", "Status", "Ch", "Num", "Val", "Length/Info"],
             rows: [Self.row()],
-            firstRowCellChildren: ["Position": 4, "Ch": 1, "Num": 1, "Val": 1, "Length/Info": 4]
+            firstRowCellChildren: ["Position": 4, "Ch": 1, "Num": 1, "Val": 1, "Length/Info": 4],
+            rawItemCountText: "1 Event",
+            rawRegionPath: "Selected MIDI"
         )
 
         let result = try SelectedRegionEventListReader.read(
@@ -47,6 +49,8 @@ import Testing
         #expect(result.selectedRegionObservation == Self.region)
         #expect(result.rawRows == [Self.row()])
         #expect(result.liveHeaderTitles == observed.liveHeaderTitles)
+        #expect(result.rawItemCountText == "1 Event")
+        #expect(result.rawRegionPath == "Selected MIDI")
         #expect(!result.canonicalNotesComplete)
         #expect(result.partialReason == .identityTimingAndTraversalUnproven)
         #expect(!result.writeAttempted)
@@ -62,7 +66,10 @@ import Testing
                 },
                 collect: {
                     collected = true
-                    return .init(liveHeaderTitles: [], rows: [], firstRowCellChildren: [:])
+                    return .init(
+                        liveHeaderTitles: [], rows: [], firstRowCellChildren: [:],
+                        rawItemCountText: "0 Events", rawRegionPath: "Selected MIDI"
+                    )
                 }
             )
         }
@@ -79,7 +86,10 @@ import Testing
                 },
                 collect: {
                     collected = true
-                    return .init(liveHeaderTitles: [], rows: [], firstRowCellChildren: [:])
+                    return .init(
+                        liveHeaderTitles: [], rows: [], firstRowCellChildren: [:],
+                        rawItemCountText: "0 Events", rawRegionPath: "Selected MIDI"
+                    )
                 }
             )
         }
@@ -106,7 +116,10 @@ import Testing
                     )
                 },
                 collect: {
-                    .init(liveHeaderTitles: [], rows: [], firstRowCellChildren: [:])
+                    .init(
+                        liveHeaderTitles: [], rows: [], firstRowCellChildren: [:],
+                        rawItemCountText: "0 Events", rawRegionPath: "Selected MIDI"
+                    )
                 }
             )
         }
@@ -149,6 +162,8 @@ import Testing
             selectedRegionObservation: Self.region,
             rawRows: [Self.row()],
             liveHeaderTitles: ["L", "M", "Position", "Status", "Ch", "Num", "Val", "Length/Info"],
+            rawItemCountText: "1 Event",
+            rawRegionPath: "Selected MIDI",
             canonicalNotesComplete: false,
             partialReason: .identityTimingAndTraversalUnproven,
             writeAttempted: false
@@ -173,6 +188,8 @@ import Testing
         #expect(!canonicalNotesComplete)
         #expect(!eventListOwnerProven)
         #expect(!writeAttempted)
+        #expect(body["event_list_item_count_text"] as? String == "1 Event")
+        #expect(body["event_list_region_path"] as? String == "Selected MIDI")
         #expect(body["region"] == nil)
         let region = try #require(body["selected_region_observation"] as? [String: Any])
         #expect(region["name"] as? String == Self.region.name)

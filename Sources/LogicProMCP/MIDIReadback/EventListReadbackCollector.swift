@@ -40,6 +40,8 @@ enum EventListReadbackCollector {
         let liveHeaderTitles: [String]
         let rows: [RawEventRow]
         let firstRowCellChildren: [String: Int]
+        let rawItemCountText: String
+        let rawRegionPath: String
     }
 
     static func observeNoteTable(
@@ -56,6 +58,19 @@ enum EventListReadbackCollector {
         let paneAndTable = try findEventPaneAndTable(
             for: eventTab, in: mainWindow, runtime: runtime.ax
         )
+        let rawItemCountText = try readStaticText(
+            label: AXLocalePolicy.eventListItemCountHelp,
+            in: paneAndTable.pane,
+            runtime: runtime.ax
+        )
+        let rawRegionPath = try readStaticText(
+            label: AXLocalePolicy.eventListRegionPathHelp,
+            in: paneAndTable.pane,
+            runtime: runtime.ax
+        )
+        guard !rawRegionPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw EventListReadbackCollectorError.regionPathMissing
+        }
 
         let headers = try readHeaders(of: paneAndTable.table, runtime: runtime.ax)
         let rowElements: [AXUIElement] = AXHelpers.getAttribute(
@@ -66,7 +81,9 @@ enum EventListReadbackCollector {
             rows: try readRows(rowElements, headers: headers, runtime: runtime.ax),
             firstRowCellChildren: rowElements.first.map {
                 cellChildCounts(of: $0, headers: headers, runtime: runtime.ax)
-            } ?? [:]
+            } ?? [:],
+            rawItemCountText: rawItemCountText,
+            rawRegionPath: rawRegionPath
         )
     }
 

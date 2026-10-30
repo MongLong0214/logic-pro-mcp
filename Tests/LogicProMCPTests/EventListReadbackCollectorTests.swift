@@ -346,6 +346,8 @@ import Testing
         // The titles it REPORTS are the ones the header carried, not the canonical constants the
         // row keys are minted from — otherwise a harness reading them compares English to English.
         #expect(seen.liveHeaderTitles == Self.headerTitles)
+        #expect(seen.rawItemCountText == "2 Events")
+        #expect(seen.rawRegionPath == "Region 1")
     }
 
     @Test func theProbeRefusesRatherThanSelectingTheEventTab() throws {

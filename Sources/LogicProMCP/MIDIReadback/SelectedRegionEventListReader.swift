@@ -27,6 +27,8 @@ enum SelectedRegionEventListReader {
         let selectedRegionObservation: RegionIdentity
         let rawRows: [RawEventRow]
         let liveHeaderTitles: [String]
+        let rawItemCountText: String
+        let rawRegionPath: String
         let canonicalNotesComplete: Bool
         let partialReason: PartialReason
         let writeAttempted: Bool
@@ -73,6 +75,8 @@ enum SelectedRegionEventListReader {
             selectedRegionObservation: region,
             rawRows: observation.rows,
             liveHeaderTitles: observation.liveHeaderTitles,
+            rawItemCountText: observation.rawItemCountText,
+            rawRegionPath: observation.rawRegionPath,
             canonicalNotesComplete: false,
             partialReason: .identityTimingAndTraversalUnproven,
             writeAttempted: false
@@ -108,6 +112,8 @@ enum SelectedRegionEventListReader {
             ],
             "raw_rows": rows,
             "live_header_titles": result.liveHeaderTitles,
+            "event_list_item_count_text": result.rawItemCountText,
+            "event_list_region_path": result.rawRegionPath,
             "event_list_owner_proven": false,
             "canonical_notes_complete": result.canonicalNotesComplete,
             "write_attempted": result.writeAttempted,

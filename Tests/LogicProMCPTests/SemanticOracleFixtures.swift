@@ -743,6 +743,7 @@ enum SemanticOracleFixtures {
                 "Num":{"slider_value":60},"Val":{"value_description":"100"},\
                 "Length/Info":{"group_slider_values":[0,1,0,0]}}],\
                 "live_header_titles":["L","M","Position","Status","Ch","Num","Val","Length/Info"],\
+                "event_list_item_count_text":"1 Event","event_list_region_path":"Selected MIDI",\
                 "event_list_owner_proven":false,"canonical_notes_complete":false,\
                 "write_attempted":false}
                 """,
