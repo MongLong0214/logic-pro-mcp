@@ -508,6 +508,19 @@ struct StockPluginCatalogTests {
         #expect(rmsMode.provenance.observedAt == "2026-10-29T16:07:03.668599Z")
     }
 
+    @Test("Compressor release and makeup provenance bind the current native receipt")
+    func compressorReleaseAndMakeupProvenanceUseCurrentReceipt() throws {
+        let entry = try #require(StockPluginCatalog.entry(id: "logic.stock.effect.compressor"))
+        for id in ["release", "makeup"] {
+            let parameter = try #require(entry.parameters.first { $0.id == id })
+            #expect(parameter.provenance.method == "exact_head_get_param_verified_read_only_observation")
+            #expect(parameter.provenance.logicVersion == "12.3 (6674)")
+            #expect(parameter.provenance.locale == "ko-KR")
+            #expect(parameter.provenance.evidence.contains(
+                "docs/observations/2026-10-30-299-compressor-release-makeup-read-only-state-a.json"))
+        }
+    }
+
     @Test("search matches id, name, category, and type case-insensitively")
     func searchSemantics() {
         let snapshot = StockPluginCatalog.defaultSnapshot(census: .deterministic())

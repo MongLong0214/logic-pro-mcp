@@ -1,0 +1,131 @@
+{
+  "schema": 3,
+  "id": "2026-10-30-299-compressor-release-makeup-read-only-state-a",
+  "date": "2026-10-30",
+  "subject": "the Compressor Release and Make Up Controls rows through the verified read-only parameter path",
+  "question": "On the protected fixture, does the exact product candidate read both named scalar rows, preserve their opaque raw values and Logic-rendered displays, restore the prior plug-in view and close each newly opened editor without calling a setter?",
+  "verdict": "works",
+  "issues": [
+    299
+  ],
+  "surface": "plugin.controls_view",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "python3 Scripts/livekit/probe_299_compressor_release_makeup_reads.py <candidate-binary> <out.json> --project /Users/isaac/lpm-evidence/965-flat-native-20261013.logicx --track 13 --insert 1",
+    "expected": "exits 0 and writes a receipt whose checks are all true: both State A reads return finite opaque raw values and non-empty verbatim displays with write_attempted false, view restoration and new-editor close are observed for both, before and after inventories identify the same target, and stdin close removes the server process",
+    "cost": "about twenty-five seconds on the protected fixture with stopped playback"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Plugins/StockPluginCatalog.swift:compressorParameters",
+    "Sources/LogicProMCP/HostParameters/ControlsViewParameterReader.swift:ControlsViewParameterReader.observe",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+VerifiedPlugins.swift:defaultGetParamVerified"
+  ],
+  "evidence": [
+    "evidence/2026-10-30-299-compressor-release-makeup-exact-head-read.json",
+    "evidence/2026-10-30-299-compressor-release-makeup-final-exact-head-read.json"
+  ],
+  "method": "Built debug product LogicProMCP from initial product candidate 732fd1014cffda893d8971d37c30932868ab244f (tree 793bcc45021f61f7eb3e8fad1fc301b70b734e79; binary SHA-256 a3a1b709ceb8f5165ff9db12c3ab5b452e24e95ea3691eb865ca6abc1ab0e29c), then repeated the bounded read after the provenance and locale-guard correction at exact product candidate 90663524bfdd22a2e06506900660b4d41c52d431 (tree e84e3739f61ed0ba88c8f29111f099d4d152ec48; binary SHA-256 5f87e52fde17e43d3bbbe5c8d4f9be9d10db477d20bccb7c567677dc8e4f1797). Native UI automation identified the exact Logic Pro app and protected project, one standard window, stopped playback and recording, Audio 13 selected, the Mixer visible, and no open menu or plug-in editor before and after the final run. The bounded stdio sequence refreshed cache, bound the current project, issued the exact Compressor insert reference, read release and makeup independently, repeated the inventory, and stopped the server by closing stdin. No parameter setter, save, project close, key input or direct UI click was used by the qualification controller.",
+  "observations": [
+    {
+      "what": "candidate and host identity",
+      "candidate_head": "732fd1014cffda893d8971d37c30932868ab244f",
+      "candidate_tree": "793bcc45021f61f7eb3e8fad1fc301b70b734e79",
+      "binary_sha256": "a3a1b709ceb8f5165ff9db12c3ab5b452e24e95ea3691eb865ca6abc1ab0e29c",
+      "logic_version": "12.3",
+      "logic_build": "6674",
+      "locale": "ko-KR"
+    },
+    {
+      "what": "protected fixture and issued target",
+      "project_path": "/Users/isaac/lpm-evidence/965-flat-native-20261013.logicx",
+      "playback_stopped": true,
+      "recording_stopped": true,
+      "track_index": 13,
+      "track_name": "Audio 13",
+      "mixer_strip_index": 12,
+      "insert_index": 1,
+      "plugin_id": "logic.stock.effect.compressor",
+      "before_inventory_state": "A",
+      "before_inventory_complete": true
+    },
+    {
+      "what": "Release read",
+      "state": "A",
+      "success": true,
+      "verified": true,
+      "observed_raw": 40,
+      "raw_unit": "raw_ax_value",
+      "observed_display": "51.0 ms",
+      "parameter_read_status": "read",
+      "display_read_status": "read",
+      "write_attempted": false,
+      "plugin_view_restore_observed": true,
+      "editor_close_observed": true
+    },
+    {
+      "what": "Make Up read",
+      "state": "A",
+      "success": true,
+      "verified": true,
+      "observed_raw": 40,
+      "raw_unit": "raw_ax_value",
+      "observed_display": "0.0 dB",
+      "parameter_read_status": "read",
+      "display_read_status": "read",
+      "write_attempted": false,
+      "plugin_view_restore_observed": true,
+      "editor_close_observed": true
+    },
+    {
+      "what": "post-read target, UI and process cleanup",
+      "after_inventory_state": "A",
+      "after_inventory_complete": true,
+      "before_after_target_unchanged": true,
+      "server_stopped_by": "stdin_close",
+      "server_returncode": 0,
+      "server_pid_gone": true,
+      "standard_window_count": 1,
+      "window_title": "965-flat-native-20261013 - 트랙",
+      "selected_track": "Audio 13",
+      "mixer_visible": true,
+      "open_menu_detected": false,
+      "plugin_editor_window_detected": false,
+      "key_input_sent": false,
+      "click_input_sent": false
+    },
+    {
+      "what": "final exact-head recheck",
+      "candidate_head": "90663524bfdd22a2e06506900660b4d41c52d431",
+      "candidate_tree": "e84e3739f61ed0ba88c8f29111f099d4d152ec48",
+      "binary_sha256": "5f87e52fde17e43d3bbbe5c8d4f9be9d10db477d20bccb7c567677dc8e4f1797",
+      "release_observed_raw": 40,
+      "release_observed_display": "51.0 ms",
+      "makeup_observed_raw": 40,
+      "makeup_observed_display": "0.0 dB",
+      "write_attempted": false,
+      "before_after_target_unchanged": true,
+      "server_pid_gone": true,
+      "post_run_open_menu_detected": false,
+      "post_run_plugin_editor_window_detected": false
+    }
+  ],
+  "conclusion": "The initial and final exact product candidates both read Release as raw 40 / 51.0 ms and Make Up as raw 40 / 0.0 dB in State A, called no setter, observed view restoration and new-editor close for both, retained the same complete target inventory, and left only the protected project window with no open menu.",
+  "limits": [
+    "One protected fixture, one Compressor instance, one host, and ko-KR only.",
+    "The observed raw values are opaque AX values; this receipt does not establish a raw-to-milliseconds or raw-to-decibels conversion.",
+    "This read-only observation establishes neither Release nor Make Up actuation, write support, inverse behavior, idempotency, cross-model availability, or a physical-unit mapping.",
+    "The first measured binary was built from product source at candidate 732fd1014cffda893d8971d37c30932868ab244f; the final measurement repeated the same result after the provenance and locale-guard commits at 90663524bfdd22a2e06506900660b4d41c52d431.",
+    "This extends the read-only C1 workflow; it does not satisfy #299's C2 physical-unit write, C3 snapshot/compensation, C4 recommendation/application, or full Compressor closure."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record measures runtime AX values, lifecycle receipts and window cleanup. It does not claim that a quoted label is shipped in Apple's canonical string corpus."
+  }
+}

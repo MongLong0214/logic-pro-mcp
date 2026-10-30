@@ -1670,14 +1670,15 @@ enum StockPluginCatalog {
             controlsViewActuationState: .unmeasured,
             availabilityState: .observed,
             provenance: .observed(
-                method: "controls_view_read_only_observation",
-                observedAt: "2026-08-30T04:02:24Z",
-                logicVersion: "12.x",
+                method: "exact_head_get_param_verified_read_only_observation",
+                observedAt: "2026-10-29T21:16:04.928705+00:00",
+                logicVersion: "12.3 (6674)",
                 locale: "ko-KR",
                 evidence: [
                     "parameter_readback",
                     "Release Controls row exposes a raw AX value and verbatim engineering display",
                     "No Release write or raw-to-milliseconds conversion was measured",
+                    "docs/observations/2026-10-30-299-compressor-release-makeup-read-only-state-a.json",
                 ]
             )
         ),
@@ -1693,14 +1694,15 @@ enum StockPluginCatalog {
             controlsViewActuationState: .unmeasured,
             availabilityState: .observed,
             provenance: .observed(
-                method: "controls_view_read_only_observation",
-                observedAt: "2026-08-30T04:02:24Z",
-                logicVersion: "12.x",
+                method: "exact_head_get_param_verified_read_only_observation",
+                observedAt: "2026-10-29T21:16:04.928705+00:00",
+                logicVersion: "12.3 (6674)",
                 locale: "ko-KR",
                 evidence: [
                     "parameter_readback",
                     "Make Up Controls row exposes a raw AX value and verbatim engineering display",
                     "No Make Up write or raw-to-decibels conversion was measured",
+                    "docs/observations/2026-10-30-299-compressor-release-makeup-read-only-state-a.json",
                 ]
             )
         ),
