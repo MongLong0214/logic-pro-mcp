@@ -1,3 +1,4 @@
+import ApplicationServices
 import Testing
 @testable import LogicProMCP
 
@@ -30,6 +31,42 @@ private func triStateRuntime(
 }
 
 // MARK: - probeState mapping (the honesty core)
+
+@Test func testAutomationPermissionProbeNeverAsksForConsent() {
+    final class Observation: @unchecked Sendable {
+        var bundleID: String?
+        var askUserIfNeeded: Bool?
+    }
+    let observation = Observation()
+
+    let state = PermissionChecker.nonPromptingAutomationState(
+        bundleID: "com.apple.systemevents",
+        determinePermission: { bundleID, askUserIfNeeded in
+            observation.bundleID = bundleID
+            observation.askUserIfNeeded = askUserIfNeeded
+            return Int32(errAEEventWouldRequireUserConsent)
+        }
+    )
+
+    #expect(observation.bundleID == "com.apple.systemevents")
+    #expect(observation.askUserIfNeeded == false)
+    #expect(state == .notGranted)
+}
+
+@Test(arguments: [
+    (Int32(noErr), PermissionChecker.CheckState.granted),
+    (Int32(errAEEventNotPermitted), PermissionChecker.CheckState.notGranted),
+    (Int32(errAEEventWouldRequireUserConsent), PermissionChecker.CheckState.notGranted),
+    (Int32(procNotFound), PermissionChecker.CheckState.notVerifiable),
+    (Int32(paramErr), PermissionChecker.CheckState.notVerifiable),
+])
+func testAutomationPermissionStatusMapping(status: Int32, expected: PermissionChecker.CheckState) {
+    let state = PermissionChecker.nonPromptingAutomationState(
+        bundleID: "com.example.target",
+        determinePermission: { _, _ in status }
+    )
+    #expect(state == expected)
+}
 
 @Test func testProbeStateTimedOutIsNotVerifiableNotDenial() {
     #expect(PermissionChecker.probeState(from: .timedOut, expectedName: "Logic Pro") == .notVerifiable)
