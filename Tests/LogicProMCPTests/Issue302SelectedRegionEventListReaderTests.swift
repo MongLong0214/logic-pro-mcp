@@ -36,6 +36,7 @@ import Testing
         let observed = EventListReadbackCollector.ProbeObservation(
             liveHeaderTitles: ["L", "M", "Position", "Status", "Ch", "Num", "Val", "Length/Info"],
             rows: [Self.row()],
+            verificationRows: [Self.row()],
             firstRowCellChildren: ["Position": 4, "Ch": 1, "Num": 1, "Val": 1, "Length/Info": 4],
             rawItemCountText: "1 Event",
             rawRegionPath: "Selected MIDI"
@@ -51,9 +52,36 @@ import Testing
         #expect(result.liveHeaderTitles == observed.liveHeaderTitles)
         #expect(result.rawItemCountText == "1 Event")
         #expect(result.rawRegionPath == "Selected MIDI")
+        #expect(result.observedRowsContentStable)
         #expect(!result.canonicalNotesComplete)
         #expect(result.partialReason == .identityTimingAndTraversalUnproven)
         #expect(!result.writeAttempted)
+    }
+
+    @Test func rowContentDriftDuringCollectionRefuses() {
+        let selection = SelectedRegionEventListReader.SelectionObservation(
+            scopeComplete: true,
+            selected: [Self.region]
+        )
+        let observed = EventListReadbackCollector.ProbeObservation(
+            liveHeaderTitles: ["L", "M", "Position", "Status", "Ch", "Num", "Val", "Length/Info"],
+            rows: [Self.row(pitch: 60)],
+            verificationRows: [Self.row(pitch: 61)],
+            firstRowCellChildren: ["Position": 4, "Ch": 1, "Num": 1, "Val": 1, "Length/Info": 4],
+            rawItemCountText: "1 Event",
+            rawRegionPath: "Selected MIDI"
+        )
+
+        #expect(throws: SelectedRegionEventListReader.Refusal.eventRowsChanged) {
+            _ = try SelectedRegionEventListReader.read(
+                selection: { selection },
+                collect: { observed }
+            )
+        }
+        let refusal = sharedJSONObject(SelectedRegionEventListReader.refusalJSON(
+            SelectedRegionEventListReader.Refusal.eventRowsChanged
+        ))
+        #expect(refusal?["reason"] as? String == "event_rows_changed_during_collection")
     }
 
     @Test func incompleteSelectionScopeRefusesBeforeCollection() {
@@ -67,7 +95,7 @@ import Testing
                 collect: {
                     collected = true
                     return .init(
-                        liveHeaderTitles: [], rows: [], firstRowCellChildren: [:],
+                        liveHeaderTitles: [], rows: [], verificationRows: [], firstRowCellChildren: [:],
                         rawItemCountText: "0 Events", rawRegionPath: "Selected MIDI"
                     )
                 }
@@ -87,7 +115,7 @@ import Testing
                 collect: {
                     collected = true
                     return .init(
-                        liveHeaderTitles: [], rows: [], firstRowCellChildren: [:],
+                        liveHeaderTitles: [], rows: [], verificationRows: [], firstRowCellChildren: [:],
                         rawItemCountText: "0 Events", rawRegionPath: "Selected MIDI"
                     )
                 }
@@ -117,7 +145,7 @@ import Testing
                 },
                 collect: {
                     .init(
-                        liveHeaderTitles: [], rows: [], firstRowCellChildren: [:],
+                        liveHeaderTitles: [], rows: [], verificationRows: [], firstRowCellChildren: [:],
                         rawItemCountText: "0 Events", rawRegionPath: "Selected MIDI"
                     )
                 }
@@ -164,6 +192,7 @@ import Testing
             liveHeaderTitles: ["L", "M", "Position", "Status", "Ch", "Num", "Val", "Length/Info"],
             rawItemCountText: "1 Event",
             rawRegionPath: "Selected MIDI",
+            observedRowsContentStable: true,
             canonicalNotesComplete: false,
             partialReason: .identityTimingAndTraversalUnproven,
             writeAttempted: false
@@ -190,6 +219,7 @@ import Testing
         #expect(!writeAttempted)
         #expect(body["event_list_item_count_text"] as? String == "1 Event")
         #expect(body["event_list_region_path"] as? String == "Selected MIDI")
+        #expect(body["observed_rows_content_stable"] as? Bool == true)
         #expect(body["region"] == nil)
         let region = try #require(body["selected_region_observation"] as? [String: Any])
         #expect(region["name"] as? String == Self.region.name)

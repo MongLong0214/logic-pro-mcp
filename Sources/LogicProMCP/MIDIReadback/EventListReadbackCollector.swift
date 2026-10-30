@@ -39,6 +39,7 @@ enum EventListReadbackCollector {
     struct ProbeObservation: Sendable {
         let liveHeaderTitles: [String]
         let rows: [RawEventRow]
+        let verificationRows: [RawEventRow]
         let firstRowCellChildren: [String: Int]
         let rawItemCountText: String
         let rawRegionPath: String
@@ -76,9 +77,11 @@ enum EventListReadbackCollector {
         let rowElements: [AXUIElement] = AXHelpers.getAttribute(
             paneAndTable.table, "AXRows", runtime: runtime.ax
         ) ?? []
+        let rows = try readRows(rowElements, headers: headers, runtime: runtime.ax)
         return ProbeObservation(
             liveHeaderTitles: sortButtonTitles(of: paneAndTable.table, runtime: runtime.ax),
-            rows: try readRows(rowElements, headers: headers, runtime: runtime.ax),
+            rows: rows,
+            verificationRows: try readRows(rowElements, headers: headers, runtime: runtime.ax),
             firstRowCellChildren: rowElements.first.map {
                 cellChildCounts(of: $0, headers: headers, runtime: runtime.ax)
             } ?? [:],
@@ -334,55 +337,60 @@ enum EventListReadbackCollector {
             in: mainWindow,
             runtime: runtime.ax
         )
-        let originalRows: [AXUIElement] = AXHelpers.getAttribute(
-            paneAndTable.table,
-            kAXSelectedRowsAttribute,
-            runtime: runtime.ax
-        ) ?? []
-        defer {
-            _ = AXHelpers.setAttribute(
+        let originalRows: [AXUIElement]
+        let originalSelectionRead: Result<AnyObject?, AXHelpers.AXStatusError> =
+            AXHelpers.getAttributeResult(
                 paneAndTable.table,
                 kAXSelectedRowsAttribute,
-                originalRows as CFArray,
                 runtime: runtime.ax
             )
+        switch originalSelectionRead {
+        case .success(nil):
+            originalRows = []
+        case .success(let value):
+            guard let rows = value as? [AXUIElement] else {
+                throw EventListReadbackCollectorError.rowSelectionBaselineMalformed
+            }
+            originalRows = rows
+        case .failure(let error):
+            throw EventListReadbackCollectorError.rowSelectionBaselineUnavailable(status: error.raw)
         }
+        let result = Result<EventListReadbackEvidence, Error> {
+            try selectEventTabIfNeeded(eventTab, wasSelected: eventTabWasSelected, runtime: runtime.ax)
 
-        try selectEventTabIfNeeded(eventTab, wasSelected: eventTabWasSelected, runtime: runtime.ax)
+            let headers = try readHeaders(of: paneAndTable.table, runtime: runtime.ax)
+            let filter = try readFilters(in: paneAndTable.pane, runtime: runtime.ax)
+            let itemCount = try readStaticText(
+                label: AXLocalePolicy.eventListItemCountHelp,
+                in: paneAndTable.pane,
+                runtime: runtime.ax
+            )
+            // `ObservedRegionIdentityProof` intentionally exposes no release
+            // constructible observed value. Still require the independent AX value
+            // to be present, rather than silently treating a missing Region Path as
+            // an observation.
+            let regionPath = try readStaticText(
+                label: AXLocalePolicy.eventListRegionPathHelp,
+                in: paneAndTable.pane,
+                runtime: runtime.ax
+            )
+            guard !regionPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw EventListReadbackCollectorError.regionPathMissing
+            }
 
-        let headers = try readHeaders(of: paneAndTable.table, runtime: runtime.ax)
-        let filter = try readFilters(in: paneAndTable.pane, runtime: runtime.ax)
-        let itemCount = try readStaticText(
-            label: AXLocalePolicy.eventListItemCountHelp,
-            in: paneAndTable.pane,
-            runtime: runtime.ax
-        )
-        // `ObservedRegionIdentityProof` intentionally exposes no release
-        // constructible observed value. Still require the independent AX value
-        // to be present, rather than silently treating a missing Region Path as
-        // an observation.
-        let regionPath = try readStaticText(
-            label: AXLocalePolicy.eventListRegionPathHelp,
-            in: paneAndTable.pane,
-            runtime: runtime.ax
-        )
-        guard !regionPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
-            throw EventListReadbackCollectorError.regionPathMissing
-        }
+            let harvest = try harvestRows(
+                from: paneAndTable.table,
+                headers: headers,
+                runtime: runtime.ax
+            )
+            try refuseTimeDisplayIfNeeded(
+                pane: paneAndTable.pane,
+                runtime: runtime,
+                rows: harvest.passA,
+                positionColumn: headers.positionID
+            )
 
-        let harvest = try harvestRows(
-            from: paneAndTable.table,
-            headers: headers,
-            runtime: runtime.ax
-        )
-        try refuseTimeDisplayIfNeeded(
-            pane: paneAndTable.pane,
-            runtime: runtime,
-            rows: harvest.passA,
-            positionColumn: headers.positionID
-        )
-
-        return EventListReadbackEvidence(
+            return EventListReadbackEvidence(
             // Resolved from the process actually being read, not from a build-time assumption. On an
             // unrecognised bundle identifier this is `.unknown`, which is the honest answer and keeps
             // the reading off a coverage axis it did not earn.
@@ -410,8 +418,24 @@ enum EventListReadbackCollector {
             itemCount: ItemCountEvidence(rawCountText: itemCount, semanticsProof: .unproven),
             harvest: harvest,
             timing: .unproven,
-            calibration: nil
-        )
+                calibration: nil
+            )
+        }
+
+        guard restoreRowSelection(
+            originalRows,
+            table: paneAndTable.table,
+            runtime: runtime.ax
+        ) else {
+            let primary: EventListReadbackCollectorError?
+            if case let .failure(error as EventListReadbackCollectorError) = result {
+                primary = error
+            } else {
+                primary = nil
+            }
+            throw EventListReadbackCollectorError.rowSelectionRestorationFailed(primary: primary)
+        }
+        return try result.get()
     }
 
     // MARK: - Event pane identity
@@ -628,6 +652,40 @@ enum EventListReadbackCollector {
         _ = AXHelpers.performAction(tab, kAXPressAction, runtime: runtime)
     }
 
+    private static func restoreRowSelection(
+        _ originalRows: [AXUIElement],
+        table: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        let currentRows: [AXUIElement]? = AXHelpers.getAttribute(
+            table,
+            kAXSelectedRowsAttribute,
+            runtime: runtime
+        )
+        if let currentRows, rowSelectionsMatch(currentRows, originalRows) {
+            return true
+        }
+        guard AXHelpers.setAttribute(
+            table,
+            kAXSelectedRowsAttribute,
+            originalRows as CFArray,
+            runtime: runtime
+        ) else { return false }
+        guard let restoredRows: [AXUIElement] = AXHelpers.getAttribute(
+            table,
+            kAXSelectedRowsAttribute,
+            runtime: runtime
+        ) else { return false }
+        return rowSelectionsMatch(restoredRows, originalRows)
+    }
+
+    private static func rowSelectionsMatch(
+        _ lhs: [AXUIElement],
+        _ rhs: [AXUIElement]
+    ) -> Bool {
+        lhs.count == rhs.count && zip(lhs, rhs).allSatisfy { CFEqual($0, $1) }
+    }
+
     // MARK: - Header and metadata
 
     private static func readHeaders(
@@ -747,53 +805,80 @@ enum EventListReadbackCollector {
         guard let rows: [AXUIElement] = AXHelpers.getAttribute(table, "AXRows", runtime: runtime) else {
             throw EventListReadbackCollectorError.rowsUnavailable
         }
-        let keys = rows.indices.map { RowKey(index: $0) }
-        var observations = try readRows(rows, headers: headers, runtime: runtime)
-        var passes = 0
+        let passA = try harvestVirtualWindowPass(
+            rows: rows,
+            table: table,
+            headers: headers,
+            runtime: runtime
+        )
+        let passB = try harvestVirtualWindowPass(
+            rows: rows,
+            table: table,
+            headers: headers,
+            runtime: runtime
+        )
+        return try stitchVirtualWindows([passA, passB])
+    }
 
-        while let firstUnpopulated = observations.firstIndex(where: { !isPopulated($0, headers: headers) }),
-              passes < maximumMaterializationPasses {
+    private static func harvestVirtualWindowPass(
+        rows: [AXUIElement],
+        table: AXUIElement,
+        headers: HeaderBinding,
+        runtime: AXHelpers.Runtime
+    ) throws -> [VirtualWindowObservation] {
+        var windows: [VirtualWindowObservation] = []
+        var observedKeys: Set<RowKey> = []
+        var selections = 0
+
+        while true {
+            let window = readVirtualWindow(rows, headers: headers, runtime: runtime)
+            windows.append(window)
+            observedKeys.formUnion(window.rows.map(\.key))
+            if observedKeys.count == rows.count { return windows }
+
+            guard selections < maximumMaterializationPasses else {
+                throw EventListReadbackCollectorError.harvestIncomplete(
+                    populated: observedKeys.count,
+                    total: rows.count,
+                    passes: selections
+                )
+            }
+            guard let nextIndex = rows.indices.first(where: {
+                !observedKeys.contains(RowKey(index: $0))
+            }) else {
+                throw EventListReadbackCollectorError.harvestIncomplete(
+                    populated: observedKeys.count,
+                    total: rows.count,
+                    passes: selections
+                )
+            }
             guard AXHelpers.setAttribute(
                 table,
                 kAXSelectedRowsAttribute,
-                [rows[firstUnpopulated]] as CFArray,
+                [rows[nextIndex]] as CFArray,
                 runtime: runtime
             ) else {
-                throw EventListReadbackCollectorError.rowSelectionFailed(index: firstUnpopulated)
+                throw EventListReadbackCollectorError.rowSelectionFailed(index: nextIndex)
             }
-            observations = try readRows(rows, headers: headers, runtime: runtime)
-            passes += 1
+            selections += 1
         }
-
-        let populated = observations.filter { isPopulated($0, headers: headers) }.count
-        guard populated == rows.count else {
-            throw EventListReadbackCollectorError.harvestIncomplete(
-                populated: populated,
-                total: rows.count,
-                passes: passes
-            )
-        }
-
-        let passA = dictionary(rows: observations, keys: keys)
-        let secondPass = try readRows(rows, headers: headers, runtime: runtime)
-        let secondPopulated = secondPass.filter { isPopulated($0, headers: headers) }.count
-        guard secondPopulated == rows.count else {
-            throw EventListReadbackCollectorError.harvestIncomplete(
-                populated: secondPopulated,
-                total: rows.count,
-                passes: passes
-            )
-        }
-        return RowHarvest(
-            orderedRowKeys: keys,
-            passA: passA,
-            passB: dictionary(rows: secondPass, keys: keys),
-            exhaustion: .unproven
-        )
     }
 
-    private static func dictionary(rows: [RawEventRow], keys: [RowKey]) -> [RowKey: RawEventRow] {
-        Dictionary(uniqueKeysWithValues: zip(keys, rows))
+    private static func readVirtualWindow(
+        _ rows: [AXUIElement],
+        headers: HeaderBinding,
+        runtime: AXHelpers.Runtime
+    ) -> VirtualWindowObservation {
+        let observations = rows.indices.compactMap { index -> VirtualWindowRow? in
+            guard let row = try? readRow(
+                rows[index],
+                index: index,
+                headers: headers,
+                runtime: runtime
+            ), isPopulated(row, headers: headers) else { return nil }
+            return VirtualWindowRow(key: RowKey(index: index), row: row)
+        }
+        return VirtualWindowObservation(totalRows: rows.count, rows: observations)
     }
 
     private static func readRows(
@@ -1127,7 +1212,10 @@ enum EventListReadbackCollectorError: Error, Equatable, Sendable, CustomStringCo
     case itemCountMissing
     case regionPathMissing
     case rowsUnavailable
+    case rowSelectionBaselineUnavailable(status: Int32)
+    case rowSelectionBaselineMalformed
     case rowSelectionFailed(index: Int)
+    indirect case rowSelectionRestorationFailed(primary: EventListReadbackCollectorError?)
     case rowCellCountMismatch(row: Int, expected: Int, actual: Int)
     case cellChildCountMismatch(row: Int, column: String, actual: Int)
     case harvestIncomplete(populated: Int, total: Int, passes: Int)
@@ -1163,7 +1251,15 @@ enum EventListReadbackCollectorError: Error, Equatable, Sendable, CustomStringCo
         case .itemCountMissing: return "Event List Number of Items text is unavailable."
         case .regionPathMissing: return "Event List Region Path text is unavailable."
         case .rowsUnavailable: return "Event List AXRows is unavailable."
+        case let .rowSelectionBaselineUnavailable(status):
+            return "The original Event List row selection is unreadable (AX status \(status))."
+        case .rowSelectionBaselineMalformed:
+            return "The original Event List row selection has an unexpected value shape."
         case let .rowSelectionFailed(index): return "Could not select Event List row \(index) to materialize it."
+        case let .rowSelectionRestorationFailed(primary):
+            return [primary?.description, "The original Event List row selection could not be restored and verified."]
+                .compactMap { $0 }
+                .joined(separator: " ")
         case let .rowCellCountMismatch(row, expected, actual):
             return "Event List row \(row) has \(actual) cells; expected \(expected)."
         case let .cellChildCountMismatch(row, column, actual):

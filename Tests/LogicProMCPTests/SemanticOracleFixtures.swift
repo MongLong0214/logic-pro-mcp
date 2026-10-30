@@ -731,8 +731,9 @@ enum SemanticOracleFixtures {
                 ),
             ]
         ),
-        .midiReadSelectedRegionEvents: SemanticOracleFixture(
-            response: """
+        .midiReadSelectedRegionEvents: {
+            let stabilityToken = ",\"observed_rows_content_stable\":true"
+            let response = """
                 {"state":"B","success":true,"verified":false,\
                 "reason":"identity_timing_and_traversal_unproven",\
                 "scope":"selected_region_and_unbound_event_list_observation",\
@@ -744,11 +745,25 @@ enum SemanticOracleFixtures {
                 "Length/Info":{"group_slider_values":[0,1,0,0]}}],\
                 "live_header_titles":["L","M","Position","Status","Ch","Num","Val","Length/Info"],\
                 "event_list_item_count_text":"1 Event","event_list_region_path":"Selected MIDI",\
+                "observed_rows_content_stable":true,\
                 "event_list_owner_proven":false,"canonical_notes_complete":false,\
                 "write_attempted":false}
-                """,
-            readback: "{}",
-            customMutants: [
+                """
+            return SemanticOracleFixture(
+                response: response,
+                readback: "{}",
+                customMutants: [
+                .init(
+                    .wellFormedButWrong,
+                    response.replacingOccurrences(of: stabilityToken, with: "")
+                ),
+                .init(
+                    .wellFormedButWrong,
+                    response.replacingOccurrences(
+                        of: stabilityToken,
+                        with: ",\"observed_rows_content_stable\":false"
+                    )
+                ),
                 .init(.malformed, "{}"),
                 .init(
                     .wellFormedButWrong,
@@ -796,8 +811,9 @@ enum SemanticOracleFixtures {
                         + "\"event_list_owner_proven\":false,\"canonical_notes_complete\":false,"
                         + "\"write_attempted\":false}"
                 ),
-            ]
-        ),
+                ]
+            )
+        }(),
         .tracksListLibrary: SemanticOracleFixture(
             response: """
                 {"categories":["Bass","Drum Kit"],\

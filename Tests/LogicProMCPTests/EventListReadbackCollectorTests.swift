@@ -424,6 +424,219 @@ import Testing
         #expect(counter.selectedIndices.first == 1)
     }
 
+    @Test func virtualizedWindowsAreAccumulatedAcrossTwoIndependentPasses() throws {
+        let fixture = Self.fixture(rowCount: 96, hollowRows: Set(32..<96))
+        let counter = SelectionCounter()
+        let builder = fixture.builder
+        let table = fixture.table
+        let rows = fixture.rows
+        let fields = fixture.rowFields
+        let eventTab = fixture.eventTab
+
+        for rowIndex in 0..<32 {
+            builder.setAttribute(fields[rowIndex].position, kAXDescriptionAttribute as String, "1 1 1 \(rowIndex + 1)")
+            builder.setAttribute(fields[rowIndex].number, kAXValueAttribute as String, 60 + (rowIndex % 12))
+            builder.setAttribute(fields[rowIndex].value, kAXValueDescriptionAttribute as String, "100")
+        }
+
+        let runtime = builder.makeLogicRuntime(
+            appElement: fixture.app,
+            setAttributeHandler: { element, attribute, value in
+                if element == table, attribute == (kAXSelectedRowsAttribute as String) {
+                    counter.writes += 1
+                    builder.setAttribute(element, attribute, value)
+                    let selected: [AXUIElement]? = builder.attributeValue(
+                        table,
+                        kAXSelectedRowsAttribute as String
+                    ) as? [AXUIElement]
+                    if let selectedRow = selected?.first,
+                       let index = rows.firstIndex(where: { $0 == selectedRow }) {
+                        counter.selectedIndices.append(index)
+                        let start = (index / 32) * 32
+                        let visible = start..<min(start + 32, rows.count)
+                        for rowIndex in rows.indices {
+                            if visible.contains(rowIndex) {
+                                builder.setAttribute(fields[rowIndex].position, kAXDescriptionAttribute as String, "1 1 1 \(rowIndex + 1)")
+                                builder.setAttribute(fields[rowIndex].number, kAXValueAttribute as String, 60 + (rowIndex % 12))
+                                builder.setAttribute(fields[rowIndex].value, kAXValueDescriptionAttribute as String, "100")
+                            } else {
+                                builder.removeAttribute(fields[rowIndex].position, kAXDescriptionAttribute as String)
+                                builder.removeAttribute(fields[rowIndex].number, kAXValueAttribute as String)
+                                builder.removeAttribute(fields[rowIndex].value, kAXValueDescriptionAttribute as String)
+                            }
+                        }
+                    }
+                    return true
+                }
+                builder.setAttribute(element, attribute, value)
+                return true
+            },
+            performActionHandler: { element, action in
+                guard element == eventTab, action == (kAXPressAction as String) else { return true }
+                let old = (builder.attributeValue(eventTab, kAXValueAttribute as String) as? Int) ?? 0
+                builder.setAttribute(eventTab, kAXValueAttribute as String, old == 0 ? 1 : 0)
+                return true
+            }
+        )
+
+        let evidence = try Self.collect(fixture, runtime: runtime)
+
+        #expect(evidence.harvest.orderedRowKeys.map(\.index) == Array(0..<96))
+        #expect(evidence.harvest.passA.count == 96)
+        #expect(evidence.harvest.passB.count == 96)
+        #expect(!evidence.harvest.exhaustion.isProven)
+        #expect(Set(counter.selectedIndices).isSuperset(of: [0, 32, 64]))
+    }
+
+    @Test func unreadableOriginalRowSelectionRefusesBeforeAnyActuation() throws {
+        let fixture = Self.fixture(rowCount: 3, hollowRows: [1, 2])
+        let selectionCounter = SelectionCounter()
+        let actionCounter = MenuActionCounter()
+        let runtime = fixture.builder.makeLogicRuntime(
+            appElement: fixture.app,
+            attributeValueResultHandler: { element, attribute in
+                if element == fixture.table,
+                   attribute == (kAXSelectedRowsAttribute as String) {
+                    return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                }
+                return nil
+            },
+            setAttributeHandler: { _, _, _ in
+                selectionCounter.writes += 1
+                return true
+            },
+            performActionHandler: { _, action in
+                actionCounter.actions.append(action)
+                return true
+            }
+        )
+
+        #expect(throws: EventListReadbackCollectorError.rowSelectionBaselineUnavailable(
+            status: AXError.cannotComplete.rawValue
+        )) {
+            try Self.collect(fixture, runtime: runtime)
+        }
+        #expect(selectionCounter.writes == 0)
+        #expect(actionCounter.actions.isEmpty)
+    }
+
+    @Test func malformedOriginalRowSelectionRefusesBeforeAnyActuation() throws {
+        let fixture = Self.fixture(rowCount: 3, hollowRows: [1, 2])
+        let selectionCounter = SelectionCounter()
+        let actionCounter = MenuActionCounter()
+        let runtime = fixture.builder.makeLogicRuntime(
+            appElement: fixture.app,
+            attributeValueResultHandler: { element, attribute in
+                if element == fixture.table,
+                   attribute == (kAXSelectedRowsAttribute as String) {
+                    return .success("not rows" as NSString)
+                }
+                return nil
+            },
+            setAttributeHandler: { _, _, _ in
+                selectionCounter.writes += 1
+                return true
+            },
+            performActionHandler: { _, action in
+                actionCounter.actions.append(action)
+                return true
+            }
+        )
+
+        #expect(throws: EventListReadbackCollectorError.rowSelectionBaselineMalformed) {
+            try Self.collect(fixture, runtime: runtime)
+        }
+        #expect(selectionCounter.writes == 0)
+        #expect(actionCounter.actions.isEmpty)
+    }
+
+    @Test func successfulHarvestRefusesWhenOriginalRowSelectionCannotBeRestored() throws {
+        let fixture = Self.fixture(rowCount: 3, hollowRows: [1, 2])
+        let builder = fixture.builder
+        let table = fixture.table
+        let rows = fixture.rows
+        let fields = fixture.rowFields
+        let eventTab = fixture.eventTab
+        let counter = SelectionCounter()
+        let runtime = builder.makeLogicRuntime(
+            appElement: fixture.app,
+            setAttributeHandler: { element, attribute, value in
+                if element == table, attribute == (kAXSelectedRowsAttribute as String) {
+                    counter.writes += 1
+                    // The host can report a successful AX write without changing the selection.
+                    // The collector must read back the exact original row instead of trusting it.
+                    guard counter.writes == 1 else { return true }
+                    builder.setAttribute(element, attribute, value)
+                    for field in fields {
+                        builder.setAttribute(field.position, kAXDescriptionAttribute as String, "1 1 1 1")
+                        builder.setAttribute(field.number, kAXValueAttribute as String, 60)
+                        builder.setAttribute(field.value, kAXValueDescriptionAttribute as String, "100")
+                    }
+                    return true
+                }
+                builder.setAttribute(element, attribute, value)
+                return true
+            },
+            performActionHandler: { element, action in
+                guard element == eventTab, action == (kAXPressAction as String) else { return true }
+                let old = (builder.attributeValue(eventTab, kAXValueAttribute as String) as? Int) ?? 0
+                builder.setAttribute(eventTab, kAXValueAttribute as String, old == 0 ? 1 : 0)
+                return true
+            }
+        )
+
+        #expect(throws: EventListReadbackCollectorError.rowSelectionRestorationFailed(primary: nil)) {
+            try Self.collect(fixture, runtime: runtime)
+        }
+        let selected: [AXUIElement]? = builder.attributeValue(
+            table,
+            kAXSelectedRowsAttribute as String
+        ) as? [AXUIElement]
+        #expect(selected?.first == rows[1])
+    }
+
+    @Test func rowSelectionRestorationFailurePreservesThePrimaryRefusal() throws {
+        let fixture = Self.fixture(
+            rowCount: 3,
+            hollowRows: [1, 2],
+            timeMark: "✓",
+            positionText: "01:00:00:00.00"
+        )
+        let builder = fixture.builder
+        let table = fixture.table
+        let fields = fixture.rowFields
+        let eventTab = fixture.eventTab
+        let counter = SelectionCounter()
+        let runtime = builder.makeLogicRuntime(
+            appElement: fixture.app,
+            setAttributeHandler: { element, attribute, value in
+                if element == table, attribute == (kAXSelectedRowsAttribute as String) {
+                    counter.writes += 1
+                    guard counter.writes == 1 else { return false }
+                    builder.setAttribute(element, attribute, value)
+                    for field in fields {
+                        builder.setAttribute(field.position, kAXDescriptionAttribute as String, "01:00:00:00.00")
+                        builder.setAttribute(field.number, kAXValueAttribute as String, 60)
+                        builder.setAttribute(field.value, kAXValueDescriptionAttribute as String, "100")
+                    }
+                    return true
+                }
+                builder.setAttribute(element, attribute, value)
+                return true
+            },
+            performActionHandler: { element, action in
+                guard element == eventTab, action == (kAXPressAction as String) else { return true }
+                let old = (builder.attributeValue(eventTab, kAXValueAttribute as String) as? Int) ?? 0
+                builder.setAttribute(eventTab, kAXValueAttribute as String, old == 0 ? 1 : 0)
+                return true
+            }
+        )
+
+        #expect(throws: EventListReadbackCollectorError.rowSelectionRestorationFailed(primary: .timeDisplayEnabled)) {
+            try Self.collect(fixture, runtime: runtime)
+        }
+    }
+
     @Test func materializationExhaustionIsIncomplete() throws {
         let fixture = Self.fixture(rowCount: 65, hollowRows: Set(0..<65))
         let builder = fixture.builder
