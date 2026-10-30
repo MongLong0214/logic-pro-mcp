@@ -27,6 +27,9 @@ enum SelectedRegionEventListReader {
         let selectedRegionObservation: RegionIdentity
         let rawRows: [RawEventRow]
         let liveHeaderTitles: [String]
+        let rawItemCountText: String
+        let rawRegionPath: String
+        let observedRowsContentStable: Bool
         let canonicalNotesComplete: Bool
         let partialReason: PartialReason
         let writeAttempted: Bool
@@ -37,6 +40,7 @@ enum SelectedRegionEventListReader {
         case selectionScopeIncomplete
         case selectedRegionCount(Int)
         case selectionChanged
+        case eventRowsChanged
     }
 
     static func readProduction(
@@ -68,11 +72,17 @@ enum SelectedRegionEventListReader {
         let after = try selection()
         guard after.scopeComplete else { throw Refusal.selectionScopeIncomplete }
         guard after.selected == [region] else { throw Refusal.selectionChanged }
+        guard observation.rows == observation.verificationRows else {
+            throw Refusal.eventRowsChanged
+        }
 
         return PartialRead(
             selectedRegionObservation: region,
             rawRows: observation.rows,
             liveHeaderTitles: observation.liveHeaderTitles,
+            rawItemCountText: observation.rawItemCountText,
+            rawRegionPath: observation.rawRegionPath,
+            observedRowsContentStable: true,
             canonicalNotesComplete: false,
             partialReason: .identityTimingAndTraversalUnproven,
             writeAttempted: false
@@ -108,6 +118,9 @@ enum SelectedRegionEventListReader {
             ],
             "raw_rows": rows,
             "live_header_titles": result.liveHeaderTitles,
+            "event_list_item_count_text": result.rawItemCountText,
+            "event_list_region_path": result.rawRegionPath,
+            "observed_rows_content_stable": result.observedRowsContentStable,
             "event_list_owner_proven": false,
             "canonical_notes_complete": result.canonicalNotesComplete,
             "write_attempted": result.writeAttempted,
@@ -125,6 +138,8 @@ enum SelectedRegionEventListReader {
             reason = "selected_region_count_not_one"
         case Refusal.selectionChanged:
             reason = "selection_changed_during_collection"
+        case Refusal.eventRowsChanged:
+            reason = "event_rows_changed_during_collection"
         default:
             reason = "event_list_observation_unavailable"
         }
