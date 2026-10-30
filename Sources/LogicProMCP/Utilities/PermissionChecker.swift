@@ -1,9 +1,93 @@
 import Foundation
 import ApplicationServices
+import AppKit
 import Darwin
+
+final class AutomationPermissionQueryCoordinator: @unchecked Sendable {
+    private final class PendingQuery: @unchecked Sendable {
+        private let completion = DispatchGroup()
+        private let lock = NSLock()
+        private var status: Int32?
+
+        init() {
+            completion.enter()
+        }
+
+        func finish(with status: Int32) {
+            lock.lock()
+            self.status = status
+            lock.unlock()
+            completion.leave()
+        }
+
+        func result(timeout: TimeInterval) -> Int32? {
+            guard completion.wait(timeout: .now() + timeout) == .success else {
+                return nil
+            }
+            lock.lock()
+            defer { lock.unlock() }
+            return status
+        }
+    }
+
+    private final class PermissionQuery: @unchecked Sendable {
+        let run: (String, Bool) -> Int32
+
+        init(_ run: @escaping (String, Bool) -> Int32) {
+            self.run = run
+        }
+    }
+
+    private let lock = NSLock()
+    private var pendingByBundleID: [String: PendingQuery] = [:]
+
+    func query(
+        bundleID: String,
+        timeout: TimeInterval,
+        determinePermission: @escaping (String, Bool) -> Int32
+    ) -> Int32? {
+        let pending: PendingQuery
+        let shouldStart: Bool
+
+        lock.lock()
+        if let existing = pendingByBundleID[bundleID] {
+            pending = existing
+            shouldStart = false
+        } else {
+            let created = PendingQuery()
+            pendingByBundleID[bundleID] = created
+            pending = created
+            shouldStart = true
+        }
+        lock.unlock()
+
+        if shouldStart {
+            let query = PermissionQuery(determinePermission)
+            DispatchQueue.global(qos: .utility).async {
+                let status = query.run(bundleID, false)
+
+                // Remove the completed operation before waking waiters. A
+                // System Events procNotFound retry must start a fresh query,
+                // not observe the just-completed first result again.
+                self.lock.lock()
+                if self.pendingByBundleID[bundleID] === pending {
+                    self.pendingByBundleID.removeValue(forKey: bundleID)
+                }
+                self.lock.unlock()
+
+                pending.finish(with: status)
+            }
+        }
+
+        return pending.result(timeout: timeout)
+    }
+}
 
 /// Checks macOS permissions required for the server to operate.
 enum PermissionChecker {
+    private static let automationPermissionQueries = AutomationPermissionQueryCoordinator()
+    private static let automationPermissionTimeout: TimeInterval = 1.0
+
     enum CheckState: String, Sendable {
         case granted = "granted"
         case notGranted = "not_granted"
@@ -82,9 +166,15 @@ enum PermissionChecker {
                 return AXIsProcessTrustedWithOptions(options)
             },
             isLogicProRunning: { ProcessUtils.isLogicProRunning },
-            runAutomationProbe: { runAutomationProbeViaShell().isGranted },
-            runSystemEventsAutomationProbe: { runSystemEventsAutomationProbeViaShell() },
-            runAutomationProbeState: { runAutomationProbeViaShell() },
+            runAutomationProbe: {
+                nonPromptingAutomationState(bundleID: LogicProTarget.current.bundleID).isGranted
+            },
+            runSystemEventsAutomationProbe: {
+                nonPromptingSystemEventsAutomationState()
+            },
+            runAutomationProbeState: {
+                nonPromptingAutomationState(bundleID: LogicProTarget.current.bundleID)
+            },
             postEventPreflight: { CGPreflightPostEventAccess() }
         )
     }
@@ -130,8 +220,9 @@ enum PermissionChecker {
         // `tell application "System Events"`. Excluding it let
         // `--check-permissions` exit 0 while those paths fail mid-mutation with
         // an Apple Events denial — the exact #188 false-green. The production
-        // probe is unconditional (System Events is always running), so a denied
-        // target is reported truthfully here rather than advertised as ready.
+        // probe is unconditional. If the lazily launched System Events agent is
+        // absent, it is started without activation before the nonprompting
+        // permission query is retried once.
         //
         // This is a plain Bool by design for callers that must fail closed on
         // anything short of a VERIFIED grant (`--check-permissions` exit code,
@@ -231,9 +322,10 @@ enum PermissionChecker {
 
     /// Check if Automation permission for System Events is granted. Required by
     /// the MIDI import / tempo-dialog / project-state paths that drive
-    /// `tell application "System Events"`. System Events is always running, so
-    /// (unlike Logic Pro) the probe is unconditional; a denied or undetermined
-    /// target returns `notGranted`.
+    /// `tell application "System Events"`. The probe is unconditional and may
+    /// start the lazily launched System Events agent without activation before
+    /// querying consent. A denied or undetermined target returns `notGranted`
+    /// through the legacy Bool API.
     static func checkSystemEventsAutomation() -> Bool {
         checkSystemEventsAutomation(runtime: .production)
     }
@@ -287,6 +379,151 @@ enum PermissionChecker {
                 outputLimitBytes: 4 * 1024
             ),
             expectedName: "System Events"
+        )
+    }
+
+    /// Query Automation consent without sending an AppleEvent or displaying a
+    /// TCC prompt. `errAEEventWouldRequireUserConsent` is an unavailable
+    /// prerequisite for this run, not permission to ask the user mid-health
+    /// check. The target must already be running; absence and unexpected OS
+    /// failures remain not-verifiable rather than fabricated denials.
+    static func nonPromptingAutomationState(
+        bundleID: String
+    ) -> CheckState {
+        nonPromptingAutomationState(
+            bundleID: bundleID,
+            coordinator: automationPermissionQueries,
+            determinePermission: determineAutomationPermission
+        )
+    }
+
+    static func nonPromptingAutomationState(
+        bundleID: String,
+        determinePermission: @escaping (String, Bool) -> Int32
+    ) -> CheckState {
+        nonPromptingAutomationState(
+            bundleID: bundleID,
+            coordinator: AutomationPermissionQueryCoordinator(),
+            determinePermission: determinePermission
+        )
+    }
+
+    static func nonPromptingAutomationState(
+        bundleID: String,
+        coordinator: AutomationPermissionQueryCoordinator,
+        determinePermission: @escaping (String, Bool) -> Int32
+    ) -> CheckState {
+        guard let status = coordinator.query(
+            bundleID: bundleID,
+            timeout: automationPermissionTimeout,
+            determinePermission: determinePermission
+        ) else {
+            return .notVerifiable
+        }
+        return automationState(for: status)
+    }
+
+    /// System Events is an agent and may not exist until its first consumer.
+    /// `AEDeterminePermissionToAutomateTarget` reports that ordinary lazy state
+    /// as `procNotFound`. Start only that exact bundle without activation, then
+    /// retry the same nonprompting query once. A failed launch or retry remains
+    /// not-verifiable; denial and consent-required results never launch it.
+    static func nonPromptingSystemEventsAutomationState() -> CheckState {
+        nonPromptingSystemEventsAutomationState(
+            coordinator: automationPermissionQueries,
+            determinePermission: determineAutomationPermission,
+            launchWithoutActivation: launchApplicationWithoutActivation
+        )
+    }
+
+    static func nonPromptingSystemEventsAutomationState(
+        determinePermission: @escaping (String, Bool) -> Int32,
+        launchWithoutActivation: (String) -> Bool
+    ) -> CheckState {
+        nonPromptingSystemEventsAutomationState(
+            coordinator: AutomationPermissionQueryCoordinator(),
+            determinePermission: determinePermission,
+            launchWithoutActivation: launchWithoutActivation
+        )
+    }
+
+    static func nonPromptingSystemEventsAutomationState(
+        coordinator: AutomationPermissionQueryCoordinator,
+        determinePermission: @escaping (String, Bool) -> Int32,
+        launchWithoutActivation: (String) -> Bool
+    ) -> CheckState {
+        let bundleID = "com.apple.systemevents"
+        guard let firstStatus = coordinator.query(
+            bundleID: bundleID,
+            timeout: automationPermissionTimeout,
+            determinePermission: determinePermission
+        ) else {
+            return .notVerifiable
+        }
+        guard firstStatus == Int32(procNotFound) else {
+            return automationState(for: firstStatus)
+        }
+        guard launchWithoutActivation(bundleID) else {
+            return .notVerifiable
+        }
+        guard let retryStatus = coordinator.query(
+            bundleID: bundleID,
+            timeout: automationPermissionTimeout,
+            determinePermission: determinePermission
+        ) else {
+            return .notVerifiable
+        }
+        return automationState(for: retryStatus)
+    }
+
+    private static func automationState(for status: Int32) -> CheckState {
+        switch status {
+        case Int32(noErr):
+            return .granted
+        case Int32(errAEEventNotPermitted), Int32(errAEEventWouldRequireUserConsent):
+            return .notGranted
+        default:
+            return .notVerifiable
+        }
+    }
+
+    private static func launchApplicationWithoutActivation(bundleID: String) -> Bool {
+        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
+            return false
+        }
+        do {
+            _ = try NSWorkspace.shared.launchApplication(
+                at: url,
+                options: [.withoutActivation],
+                configuration: [:]
+            )
+            return true
+        } catch {
+            return false
+        }
+    }
+
+    private static func determineAutomationPermission(
+        bundleID: String,
+        askUserIfNeeded: Bool
+    ) -> Int32 {
+        let bytes = Array(bundleID.utf8)
+        var target = AEAddressDesc()
+        let createStatus: Int16 = bytes.withUnsafeBytes { rawBuffer in
+            AECreateDesc(
+                typeApplicationBundleID,
+                rawBuffer.baseAddress,
+                rawBuffer.count,
+                &target
+            )
+        }
+        guard createStatus == noErr else { return Int32(createStatus) }
+        defer { AEDisposeDesc(&target) }
+        return AEDeterminePermissionToAutomateTarget(
+            &target,
+            typeWildCard,
+            typeWildCard,
+            askUserIfNeeded
         )
     }
 

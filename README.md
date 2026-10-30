@@ -293,7 +293,7 @@ Getting an agent to reliably drive Logic Pro is mostly a permissions-and-environ
 
 ```bash
 LogicProMCP doctor                 # human-readable report, color when a TTY
-LogicProMCP doctor --json          # stable machine contract (schema logic_pro_mcp_doctor.v4)
+LogicProMCP doctor --json          # stable machine contract (schema logic_pro_mcp_doctor.v5)
 LogicProMCP doctor --strict        # exit code encodes overall status (CI gate)
 LogicProMCP doctor --profile core --client claude-desktop
 LogicProMCP doctor --check-updates # opt-in: also checks for a newer release
@@ -313,7 +313,7 @@ A real (redacted) run on a box mid-setup:
 
 ```jsonc
 {
-  "schema": "logic_pro_mcp_doctor.v4",
+  "schema": "logic_pro_mcp_doctor.v5",
   "doctor_profile": "core",
   "status": "failed",
   "headline": "Next action [permissions.accessibility]: Accessibility permission is not granted",

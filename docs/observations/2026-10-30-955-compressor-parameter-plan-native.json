@@ -1,0 +1,105 @@
+{
+  "schema": 3,
+  "id": "2026-10-30-955-compressor-parameter-plan-native",
+  "date": "2026-10-30",
+  "subject": "the read-only Compressor supported-subset parameter plan",
+  "question": "On one exact protected Compressor insert, does the product return a complete, deterministic two-parameter before-state and diff under one public read-only plan without authorizing or attempting application?",
+  "verdict": "works",
+  "issues": [
+    955
+  ],
+  "surface": "plugin.controls_view",
+  "host": {
+    "app": "Logic Pro",
+    "version": "12.3",
+    "build": "6674",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "python3 Scripts/livekit/probe_955_compressor_parameter_plan.py <candidate-binary> <out.json> --project <protected-fixture.logicx> --track 13 --insert 1",
+    "expected": "exits 0 with State A for the requested threshold/limiter subset, two stable identity-checked read bookends per parameter, application_authorized false, atomic_snapshot false, write_attempted false, unchanged target inventory, no timeout, and a stopped owned server",
+    "cost": "about forty seconds on the protected fixture"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Dispatchers/PluginsDispatcher+ParameterPlan.swift:PluginsDispatcher.parameterPlan",
+    "Sources/LogicProMCP/Channels/AccessibilityChannel+VerifiedPlugins.swift:defaultGetParamVerified",
+    "Scripts/livekit/probe_955_compressor_parameter_plan.py:evaluate_plan"
+  ],
+  "evidence": [
+    "evidence/2026-10-30-955-compressor-parameter-plan-native.json"
+  ],
+  "method": "Built the release product from exact candidate 444c9b797a34a5bc79445f1201ff92a7ba9b4f7a (tree a34c577602d1cd4682c5720f1fa825dc26e0f6eb; binary SHA-256 a72cfae441f5bfee106abd2e25c85cd1c7ea36a46b9a5c3eab200d82318c7e91). The bounded stdio harness refreshed the exact project, issued the uniquely observed Compressor insert reference, requested a read-only threshold/limiter plan, repeated the inventory, and closed the owned server through stdin. It called no setter, supplied no mutation mode or confirmation, and did not save, close, or switch the project; the qualification controller sent no key input or direct UI click. The initial private raw receipt is retained at SHA-256 c09410369783c422038e0477571e7f81fd6bacf1e663921f4562fc30380a0616. After independent review made editor-close, timeout, return-code and reader-completion checks mandatory, the corrected harness produced a second PASS receipt at SHA-256 95b1ad32d633826f2bc251058f977ec52ef11f2b5c39a4f8f572f37672a6d66f. The committed evidence omits local paths, session-issued references, and process identifiers.",
+  "observations": [
+    {
+      "what": "exact candidate and bounded target",
+      "candidate_head": "444c9b797a34a5bc79445f1201ff92a7ba9b4f7a",
+      "candidate_tree": "a34c577602d1cd4682c5720f1fa825dc26e0f6eb",
+      "binary_sha256": "a72cfae441f5bfee106abd2e25c85cd1c7ea36a46b9a5c3eab200d82318c7e91",
+      "fixture_id": "965-flat-native-20261013",
+      "track_index": 13,
+      "insert": 1,
+      "plugin_id": "logic.stock.effect.compressor"
+    },
+    {
+      "what": "read-only plan contract",
+      "state": "A",
+      "verified": true,
+      "complete": true,
+      "observation_scope": "requested_supported_subset",
+      "atomic_snapshot": false,
+      "application_authorized": false,
+      "write_attempted": false,
+      "exact_parameter_set": true,
+      "stable_bookends": true
+    },
+    {
+      "what": "Limiter On requested diff",
+      "raw_unit": "boolean",
+      "requested_value": 0,
+      "observed_before": false,
+      "delta": 0,
+      "status": "unchanged",
+      "initial_raw": false,
+      "final_raw": false
+    },
+    {
+      "what": "Threshold requested diff",
+      "raw_unit": "normalized",
+      "requested_unit": "percent",
+      "requested_value": 38,
+      "observed_before": 60,
+      "delta": -22,
+      "status": "change",
+      "initial_raw": 60,
+      "final_raw": 60
+    },
+    {
+      "what": "restoration and cleanup",
+      "all_parameter_reads_write_attempted_false": true,
+      "all_parameter_reads_restored_view": true,
+      "all_new_editors_closed": true,
+      "before_after_target_unchanged": true,
+      "all_stages_bounded_without_timeout": true,
+      "server_stopped_by": "stdin_close",
+      "server_returncode": 0,
+      "server_reader_finished": true,
+      "server_pid_gone": true,
+      "key_input_sent": false,
+      "click_input_sent": false
+    }
+  ],
+  "conclusion": "The exact candidate returned one complete requested supported subset with deterministic threshold and limiter before-state/diff rows. Each parameter had matching initial/final identity-checked reads, no write or application authority was present, the prior view and target were retained, newly opened editors were closed, and the owned server exited cleanly.",
+  "limits": [
+    "One protected fixture, one Compressor instance, one host, and ko-KR only.",
+    "The plan covers only the requested threshold and limiter subset; it is not a whole-plug-in snapshot and does not account for extra fields outside that subset.",
+    "Two stable bookends are bounded observations, not an atomic host lock or proof that the state cannot change immediately afterward.",
+    "No application, confirmation, idempotency, inverse, compensation, reconciliation, recommendation, or audio-outcome path was exercised.",
+    "This advances #955 B1 read-only planning evidence; it does not establish B2-B4 or whole-issue completion."
+  ],
+  "supersedes": null,
+  "canon_not_applicable": {
+    "reason": "This record measures runtime plan/read receipts and cleanup. It does not claim that a quoted label is shipped in Apple's canonical string corpus."
+  }
+}
