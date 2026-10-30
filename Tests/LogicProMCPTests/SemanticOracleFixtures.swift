@@ -738,9 +738,11 @@ enum SemanticOracleFixtures {
                 "scope":"selected_region_and_unbound_event_list_observation",\
                 "selected_region_observation":{"name":"Selected MIDI","track_index":3,\
                 "start_bar":9,"end_bar":12,"kind":"midi"},\
-                "raw_rows":[{"Num":{"slider_value":60},"Val":{"value_description":"100"},\
-                "Position":{"group_slider_values":[9,1,1,1]}}],\
-                "live_header_titles":["Position","Num","Val"],\
+                "raw_rows":[{"L":{},"M":{},"Position":{"group_slider_values":[9,1,1,1]},\
+                "Status":{"value_description":"Note"},"Ch":{"slider_value":1},\
+                "Num":{"slider_value":60},"Val":{"value_description":"100"},\
+                "Length/Info":{"group_slider_values":[0,1,0,0]}}],\
+                "live_header_titles":["L","M","Position","Status","Ch","Num","Val","Length/Info"],\
                 "event_list_owner_proven":false,"canonical_notes_complete":false,\
                 "write_attempted":false}
                 """,
@@ -774,6 +776,17 @@ enum SemanticOracleFixtures {
                         + "\"raw_rows\":[{\"Num\":{\"slider_value\":true}}],"
                         + "\"live_header_titles\":[\"Num\"],\"event_list_owner_proven\":false,"
                         + "\"canonical_notes_complete\":false,\"write_attempted\":false}"
+                ),
+                .init(
+                    .wellFormedButWrong,
+                    "{\"state\":\"B\",\"success\":true,\"verified\":false,"
+                        + "\"reason\":\"identity_timing_and_traversal_unproven\","
+                        + "\"scope\":\"selected_region_and_unbound_event_list_observation\","
+                        + "\"selected_region_observation\":{\"name\":\"Selected MIDI\",\"track_index\":3,"
+                        + "\"start_bar\":9,\"end_bar\":12,\"kind\":\"midi\"},"
+                        + "\"raw_rows\":[{\"Num\":{}}],\"live_header_titles\":[\"Num\"],"
+                        + "\"event_list_owner_proven\":false,\"canonical_notes_complete\":false,"
+                        + "\"write_attempted\":false}"
                 ),
             ]
         ),

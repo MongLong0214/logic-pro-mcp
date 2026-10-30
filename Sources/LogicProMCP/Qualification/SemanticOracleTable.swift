@@ -1771,14 +1771,21 @@ enum SemanticOracleTable {
         let allowedCellKeys: Set<String> = [
             "slider_value", "value_description", "group_slider_values",
         ]
+        let emptyFlagCellColumns: Set<String> = ["L", "M"]
         for row in rows {
             guard !row.isEmpty else { return false }
             for (column, rawCell) in row {
                 guard nonEmptyString(column) != nil,
                       let cell = rawCell as? [String: Any],
-                      !cell.isEmpty,
                       Set(cell.keys).isSubset(of: allowedCellKeys)
                 else { return false }
+                // The live Event List represents unset Lock/Mute flags as cells with no
+                // value-bearing child. The serializer faithfully emits those two as `{}`;
+                // an empty data-column cell remains a malformed observation.
+                if cell.isEmpty {
+                    guard emptyFlagCellColumns.contains(column) else { return false }
+                    continue
+                }
                 if cell.keys.contains("slider_value"), !finiteNumber(cell["slider_value"]) {
                     return false
                 }
