@@ -27,7 +27,7 @@ import Foundation
 // only carries the reusable framework they build on (see `SafeMutationOracle`).
 
 /// A JSON leaf value an oracle can pin exactly.
-enum JSONPrimitive: Sendable, Equatable {
+enum JSONPrimitive: Codable, Sendable, Equatable {
     case string(String)
     case number(Double)
     case bool(Bool)
@@ -35,7 +35,7 @@ enum JSONPrimitive: Sendable, Equatable {
 }
 
 /// The JSON type an oracle can require of a field.
-enum JSONType: String, Sendable, Equatable {
+enum JSONType: String, Codable, Sendable, Equatable {
     case string
     case number
     case bool
@@ -53,7 +53,7 @@ enum JSONType: String, Sendable, Equatable {
 /// handler's tolerance is DATA-DRIVEN and unit-specific: `set_param_verified`
 /// carries a per-parameter `tolerance` in the parameter's own unit (0..1 for some
 /// controls, 0..100 for others), so no single constant could bound it soundly.
-enum NearnessBound: Sendable, Equatable {
+enum NearnessBound: Codable, Sendable, Equatable {
     case absolute(Double)
     case field(String)
 }
@@ -63,7 +63,7 @@ enum NearnessBound: Sendable, Equatable {
 /// `key` is a dotted key path resolved against the parsed response:
 /// `""` addresses the root value (used by operations whose whole body is a
 /// bare JSON scalar), `"a.b"` descends objects, and `"a.0"` indexes arrays.
-enum OracleConstraint: Sendable {
+enum OracleConstraint: Codable, Sendable, Equatable {
     /// Fixture-pinned exact value. The strongest form — use wherever the
     /// handler emits a literal constant (schema tags, hardcoded honesty flags).
     case valueEquals(key: String, expected: JSONPrimitive)
@@ -569,7 +569,7 @@ enum OracleConstraint: Sendable {
     }
 }
 
-enum OracleStrength: String, Sendable {
+enum OracleStrength: String, Codable, Sendable, Equatable {
     /// Every constraint is an exact fixture-pinned value.
     case value
     /// Mixes exact values with domain/shape constraints for the
@@ -580,6 +580,62 @@ enum OracleStrength: String, Sendable {
     /// express. Response↔readback cross-checks are NO LONGER a reason to reach
     /// for this — `.crossCheck` (Phase B0) expresses them declaratively.
     case custom
+}
+
+/// Candidate-carried semantic policy interpreted by the independently pinned verifier.
+/// Declarative policies are data only: the verifier never loads or executes candidate code.
+/// Custom closures remain explicitly local and therefore require a verifier that already knows
+/// the operation; this keeps the escape hatch from becoming a signed-code execution channel.
+struct QualificationSemanticPolicy: Codable, Equatable, Sendable {
+    enum Kind: String, Codable, Equatable, Sendable {
+        case bespokeHealth = "bespoke_health"
+        case declarative
+        case localCustom = "local_custom"
+        case none
+    }
+
+    let kind: Kind
+    let strength: OracleStrength?
+    let constraints: [OracleConstraint]
+    let independentlyCreditable: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case kind
+        case strength
+        case constraints
+        case independentlyCreditable = "independently_creditable"
+    }
+
+    func evaluate(operationID: String, responseData: Data, readbackData: Data) -> Bool {
+        switch kind {
+        case .bespokeHealth:
+            guard operationID == OperationID.systemHealth.rawValue else { return false }
+            return QualificationSemanticReadbackValidator.validate(
+                operationID: operationID,
+                responseData: responseData,
+                readbackData: readbackData
+            ) == true
+        case .declarative:
+            guard strength != nil,
+                  strength != .custom,
+                  !constraints.isEmpty,
+                  constraints.contains(where: \.isValueConstraint),
+                  let response = JSONInspector.parse(responseData) else { return false }
+            let readback = JSONInspector.parse(readbackData)
+            return constraints.allSatisfy {
+                $0.isSatisfied(by: response, readback: readback)
+            }
+        case .localCustom:
+            guard strength == .custom, constraints.isEmpty else { return false }
+            return QualificationSemanticReadbackValidator.validate(
+                operationID: operationID,
+                responseData: responseData,
+                readbackData: readbackData
+            ) == true
+        case .none:
+            return false
+        }
+    }
 }
 
 struct OperationOracle: Sendable {

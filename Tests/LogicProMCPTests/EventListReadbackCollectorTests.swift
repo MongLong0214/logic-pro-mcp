@@ -601,5 +601,164 @@ import Testing
         #expect(restored?.count == 1)
         #expect(restored?.first == fixture.rows.first)
     }
+
+    private static func stitchRow(_ value: Int) -> RawEventRow {
+        [AXColumnID(id: "value"): RawCell(sliderValue: Double(value))]
+    }
+
+    private static func stitchWindow(
+        total: Int,
+        keys: [Int],
+        value: (Int) -> Int = { $0 }
+    ) -> EventListReadbackCollector.VirtualWindowObservation {
+        EventListReadbackCollector.VirtualWindowObservation(
+            totalRows: total,
+            rows: keys.map {
+                EventListReadbackCollector.VirtualWindowRow(
+                    key: RowKey(index: $0),
+                    row: Self.stitchRow(value($0))
+                )
+            }
+        )
+    }
+
+    @Test func twoIndependentCompleteWindowPassesStitchWithoutMintingExhaustion() throws {
+        let pass = [
+            Self.stitchWindow(total: 5, keys: [0, 1, 2]),
+            Self.stitchWindow(total: 5, keys: [2, 3, 4]),
+        ]
+
+        let harvest = try EventListReadbackCollector.stitchVirtualWindows([pass, pass])
+
+        #expect(harvest.orderedRowKeys.map(\.index) == [0, 1, 2, 3, 4])
+        #expect(harvest.passA.count == 5)
+        #expect(harvest.passB.count == 5)
+        #expect(!harvest.exhaustion.isProven)
+    }
+
+    @Test func oneCompleteWindowPassIsStillInsufficient() {
+        let pass = [Self.stitchWindow(total: 2, keys: [0, 1])]
+
+        #expect(throws: EventListReadbackCollector.WindowStitchRefusal.passCount(expected: 2, actual: 1)) {
+            _ = try EventListReadbackCollector.stitchVirtualWindows([pass])
+        }
+    }
+
+    @Test func oneVisibleWindowNeverClaimsACompleteFortyRowTable() {
+        let visible = [Self.stitchWindow(total: 40, keys: Array(0..<32))]
+
+        #expect(
+            throws: EventListReadbackCollector.WindowStitchRefusal.incomplete(
+                pass: 0,
+                missing: Array(32..<40)
+            )
+        ) {
+            _ = try EventListReadbackCollector.stitchVirtualWindows([visible, visible])
+        }
+    }
+
+    @Test func overlappingWindowsMustAgreeOnTheSharedRow() {
+        let changedOverlap = [
+            Self.stitchWindow(total: 4, keys: [0, 1, 2]),
+            Self.stitchWindow(total: 4, keys: [2, 3], value: { $0 == 2 ? 99 : $0 }),
+        ]
+
+        #expect(throws: EventListReadbackCollector.WindowStitchRefusal.overlapChanged(pass: 0, key: 2)) {
+            _ = try EventListReadbackCollector.stitchVirtualWindows([changedOverlap, changedOverlap])
+        }
+    }
+
+    @Test func duplicateRowKeyInsideOneWindowIsRefused() {
+        let duplicate = EventListReadbackCollector.VirtualWindowObservation(
+            totalRows: 2,
+            rows: [
+                .init(key: RowKey(index: 0), row: Self.stitchRow(0)),
+                .init(key: RowKey(index: 0), row: Self.stitchRow(0)),
+            ]
+        )
+
+        #expect(throws: EventListReadbackCollector.WindowStitchRefusal.duplicateKey(pass: 0, window: 0, key: 0)) {
+            _ = try EventListReadbackCollector.stitchVirtualWindows([[duplicate], [duplicate]])
+        }
+    }
+
+    @Test func totalDriftAndDisplacedRowsAreRefused() {
+        let totalDrift = [
+            Self.stitchWindow(total: 2, keys: [0]),
+            Self.stitchWindow(total: 3, keys: [1, 2]),
+        ]
+        #expect(
+            throws: EventListReadbackCollector.WindowStitchRefusal.totalChanged(
+                pass: 0,
+                window: 1,
+                expected: 2,
+                actual: 3
+            )
+        ) {
+            _ = try EventListReadbackCollector.stitchVirtualWindows([totalDrift, totalDrift])
+        }
+
+        let displaced = [Self.stitchWindow(total: 2, keys: [0, 2])]
+        #expect(
+            throws: EventListReadbackCollector.WindowStitchRefusal.rowOutOfRange(
+                pass: 0,
+                window: 0,
+                key: 2,
+                total: 2
+            )
+        ) {
+            _ = try EventListReadbackCollector.stitchVirtualWindows([displaced, displaced])
+        }
+    }
+
+    @Test func completePassesMustAgreeOnEveryRow() {
+        let first = [Self.stitchWindow(total: 3, keys: [0, 1, 2])]
+        let second = [Self.stitchWindow(total: 3, keys: [0, 1, 2], value: { $0 == 1 ? 9 : $0 })]
+
+        #expect(throws: EventListReadbackCollector.WindowStitchRefusal.passDrift(key: 1)) {
+            _ = try EventListReadbackCollector.stitchVirtualWindows([first, second])
+        }
+    }
+
+    @Test func thousandRowsStitchWithoutLossButWrongCardinalityRefuses() throws {
+        let complete = stride(from: 0, to: 1_000, by: 125).map { start in
+            Self.stitchWindow(total: 1_000, keys: Array(start..<min(start + 125, 1_000)))
+        }
+        let harvest = try EventListReadbackCollector.stitchVirtualWindows([complete, complete])
+        #expect(harvest.orderedRowKeys.count == 1_000)
+        #expect(harvest.orderedRowKeys.first?.index == 0)
+        #expect(harvest.orderedRowKeys.last?.index == 999)
+
+        let missingLast = [Self.stitchWindow(total: 1_000, keys: Array(0..<999))]
+        #expect(throws: EventListReadbackCollector.WindowStitchRefusal.incomplete(pass: 0, missing: [999])) {
+            _ = try EventListReadbackCollector.stitchVirtualWindows([missingLast, missingLast])
+        }
+
+        let missingFirst = [Self.stitchWindow(total: 1_000, keys: Array(1..<1_000))]
+        #expect(throws: EventListReadbackCollector.WindowStitchRefusal.incomplete(pass: 0, missing: [0])) {
+            _ = try EventListReadbackCollector.stitchVirtualWindows([missingFirst, missingFirst])
+        }
+
+        let extra = [Self.stitchWindow(total: 1_000, keys: Array(0...1_000))]
+        #expect(
+            throws: EventListReadbackCollector.WindowStitchRefusal.rowOutOfRange(
+                pass: 0,
+                window: 0,
+                key: 1_000,
+                total: 1_000
+            )
+        ) {
+            _ = try EventListReadbackCollector.stitchVirtualWindows([extra, extra])
+        }
+    }
+
+    @Test func identicalPayloadAtDifferentKeysRemainsTwoRows() throws {
+        let pass = [Self.stitchWindow(total: 2, keys: [0, 1], value: { _ in 7 })]
+
+        let harvest = try EventListReadbackCollector.stitchVirtualWindows([pass, pass])
+
+        #expect(harvest.orderedRowKeys.map(\.index) == [0, 1])
+        #expect(harvest.passA[RowKey(index: 0)] == harvest.passA[RowKey(index: 1)])
+    }
 }
 #endif

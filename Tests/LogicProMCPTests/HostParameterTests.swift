@@ -4,6 +4,107 @@ import Testing
 
 @Suite("ADR-018 host parameters")
 struct HostParameterTests {
+    @Test func mcuStripIdentityDecisionIsNegativeOnlyForEveryTruthTableRow() {
+        struct Row {
+            let name: String
+            let independentlyObservedIdentity: String?
+            let finalWindow: [String]
+            let requestedStrip: Int
+            let windowIsFresh: Bool
+            let expected: MCUStripIdentityDecision
+        }
+
+        let window = ["Kick", "Snare", "HiHat", "Bass", "Keys", "Gtr L", "Gtr R", "Vox"]
+        let rows = [
+            Row(
+                name: "independent identity unavailable",
+                independentlyObservedIdentity: nil,
+                finalWindow: window,
+                requestedStrip: 3,
+                windowIsFresh: true,
+                expected: .refused(.independentIdentityUnavailable)
+            ),
+            Row(
+                name: "independent identity empty",
+                independentlyObservedIdentity: "",
+                finalWindow: window,
+                requestedStrip: 3,
+                windowIsFresh: true,
+                expected: .refused(.independentIdentityUnavailable)
+            ),
+            Row(
+                name: "window stale",
+                independentlyObservedIdentity: "Bass",
+                finalWindow: window,
+                requestedStrip: 3,
+                windowIsFresh: false,
+                expected: .refused(.windowNotFresh)
+            ),
+            Row(
+                name: "window does not have eight cells",
+                independentlyObservedIdentity: "Bass",
+                finalWindow: Array(window.dropLast()),
+                requestedStrip: 3,
+                windowIsFresh: true,
+                expected: .refused(.windowShapeInvalid)
+            ),
+            Row(
+                name: "requested strip outside window",
+                independentlyObservedIdentity: "Bass",
+                finalWindow: window,
+                requestedStrip: 8,
+                windowIsFresh: true,
+                expected: .refused(.requestedStripOutOfRange)
+            ),
+            Row(
+                name: "identity absent",
+                independentlyObservedIdentity: "Piano",
+                finalWindow: window,
+                requestedStrip: 3,
+                windowIsFresh: true,
+                expected: .refused(.identityMissing)
+            ),
+            Row(
+                name: "identity belongs to another strip",
+                independentlyObservedIdentity: "Bass",
+                finalWindow: window,
+                requestedStrip: 2,
+                windowIsFresh: true,
+                expected: .refused(.identityMismatch)
+            ),
+            Row(
+                name: "identity is duplicated",
+                independentlyObservedIdentity: "Bass",
+                finalWindow: ["Kick", "Bass", "HiHat", "Bass", "Keys", "Gtr L", "Gtr R", "Vox"],
+                requestedStrip: 3,
+                windowIsFresh: true,
+                expected: .refused(.identityAmbiguous)
+            ),
+            Row(
+                name: "unique exact identity is only a candidate",
+                independentlyObservedIdentity: "Bass",
+                finalWindow: window,
+                requestedStrip: 3,
+                windowIsFresh: true,
+                expected: .candidate(identity: "Bass", strip: 3)
+            ),
+        ]
+
+        for row in rows {
+            let decision = MCUStripIdentityDecision.evaluate(
+                independentlyObservedIdentity: row.independentlyObservedIdentity,
+                finalWindow: row.finalWindow,
+                requestedStrip: row.requestedStrip,
+                windowIsFresh: row.windowIsFresh
+            )
+            #expect(decision == row.expected, "\(row.name): \(decision)")
+            #expect(!decision.isVerified, "\(row.name) must not verify MCU identity")
+            #expect(!decision.authorizesWrite, "\(row.name) must not authorize an MCU write")
+            #expect(!PluginParameterProvider.mcuC4PluginEdit.canHostVerifiedWrite)
+            #expect(preferredHostPlane(available: [.mcuC4PluginEdit]) == nil)
+        }
+    }
+
     @Test func onlyCurrentlyTargetBoundLogicHostedPlanesCanVerifyWrites() {
         #expect(!PluginParameterProvider.mcuC4PluginEdit.canHostVerifiedWrite)
         #expect(PluginParameterProvider.controlsViewAX.canHostVerifiedWrite)

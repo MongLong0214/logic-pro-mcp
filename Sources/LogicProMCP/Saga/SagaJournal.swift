@@ -514,6 +514,16 @@ enum SagaWireError: Error, Equatable, Sendable {
 }
 
 enum SagaWire {
+    /// Aggregate terminal labels for the canonical session-repair facade. These
+    /// summarize existing Saga evidence; they never replace `state`,
+    /// `saga_state`, or any per-step write/compensation receipt.
+    enum FinalDisposition: String {
+        case completedVerified = "completed_verified"
+        case refusedBeforeWrite = "refused_before_write"
+        case stoppedFullyCompensated = "stopped_fully_compensated"
+        case stoppedWithResiduals = "stopped_with_residuals"
+    }
+
     static let maxIdempotencyKeyBytes = 256
     static let maxPlanSteps = 16
     static let maxTargetRefBytes = 256
@@ -750,6 +760,9 @@ enum SagaWire {
         ]) { _, new in new }
         if let id = plan.canonicalPlanID { extras["plan_id"] = id }
         if let digest = plan.canonicalDigest { extras["digest"] = digest }
+        if let disposition = finalDisposition(plan: plan, outcome: outcome) {
+            extras["final_disposition"] = disposition.rawValue
+        }
         if CompressorParameterSaga.containsPluginSteps(plan) || SelectedEQParameterSaga.contains(plan) {
             extras["plan_hash"] = SagaJournal.planHash(plan)
             extras["parameters"] = plan.steps.enumerated().map { index, step -> [String: Any] in
@@ -822,6 +835,29 @@ enum SagaWire {
         return SagaJournal.StoredOutcome(body: body, isError: isError)
     }
 
+    /// Derive only from terminal Saga evidence already retained in this body.
+    /// In particular, `stopped_fully_compensated` means a forward write boundary
+    /// was crossed and the existing Saga verified every owned compensation; it
+    /// does not claim global project or viewport restoration.
+    private static func finalDisposition(
+        plan: SagaPlan,
+        outcome: SagaOutcome
+    ) -> FinalDisposition? {
+        guard plan.canonicalPlanID != nil, plan.canonicalDigest != nil else { return nil }
+        let forwardWriteAttempted = outcome.journal.contains { $0.writeBoundaryCrossed }
+        switch outcome.state {
+        case .completed:
+            return outcome.complete ? .completedVerified : .stoppedWithResiduals
+        case .fullyCompensated:
+            return forwardWriteAttempted ? .stoppedFullyCompensated : .refusedBeforeWrite
+        case .partiallyApplied, .cancelled, .draft, .validated, .awaitingConfirmation, .running:
+            return forwardWriteAttempted ? .stoppedWithResiduals : .refusedBeforeWrite
+        case .partiallyCompensated, .compensationFailed, .rollbackUncertain,
+             .reconciling, .compensating:
+            return .stoppedWithResiduals
+        }
+    }
+
     static func cancellationVerified(_ outcome: SagaOutcome) -> Bool {
         outcome.state == .cancelled || outcome.state == .fullyCompensated
     }
@@ -848,7 +884,8 @@ enum SagaWire {
     static func sagaWedgeTimeout(
         idempotencyKey: String,
         seconds: Double,
-        gateReclaimAfterSec: Double
+        gateReclaimAfterSec: Double,
+        finalDisposition: FinalDisposition? = nil
     ) -> SagaJournal.StoredOutcome {
         // Hoisted for the same reason as the import hint (#749): a multi-way `+` chain inside a
         // dictionary literal passed to `merging` with a trailing closure is one expression to the
@@ -857,7 +894,7 @@ enum SagaWire {
             + "stdio loop stays responsive. A dispatch may have crossed the write boundary with "
             + "an unknown outcome; do NOT blindly retry. Reconcile with a live read "
             + "(system.saga_status, or the relevant read operations)."
-        let extras = sessionFields.merging([
+        var extras = sessionFields.merging([
             "idempotency_key": idempotencyKey,
             "duplicate": false,
             "operation": "system.saga_execute",
@@ -872,6 +909,9 @@ enum SagaWire {
             "gate_reclaim_after_sec": gateReclaimAfterSec,
             "recovery_hint": recoveryHint,
         ]) { _, new in new }
+        if let finalDisposition {
+            extras["final_disposition"] = finalDisposition.rawValue
+        }
         let body = HonestContract.encodeStateC(
             error: .operationTimeout,
             hint: "system.saga_execute exceeded its \(Int(seconds))s lifecycle deadline and was "
@@ -881,14 +921,25 @@ enum SagaWire {
         return SagaJournal.StoredOutcome(body: body, isError: true)
     }
 
-    static func storedOutcome(from result: CallTool.Result) -> SagaJournal.StoredOutcome {
+    static func storedOutcome(
+        from result: CallTool.Result,
+        finalDisposition: FinalDisposition? = nil
+    ) -> SagaJournal.StoredOutcome {
         guard case .text(let body, _, _) = result.content.first else {
             return SagaJournal.StoredOutcome(
                 body: HonestContract.encodeStateC(error: .sagaExecutionFailed),
                 isError: true
             )
         }
-        return SagaJournal.StoredOutcome(body: body, isError: result.isError ?? false)
+        var stored = SagaJournal.StoredOutcome(body: body, isError: result.isError ?? false)
+        if let finalDisposition, var object = jsonObject(stored.body) as? [String: Any] {
+            object["final_disposition"] = finalDisposition.rawValue
+            stored = SagaJournal.StoredOutcome(
+                body: HonestContract.jsonString(object),
+                isError: stored.isError
+            )
+        }
+        return stored
     }
 
     private static func step(from object: [String: Value], index: Int) throws -> SagaStep {

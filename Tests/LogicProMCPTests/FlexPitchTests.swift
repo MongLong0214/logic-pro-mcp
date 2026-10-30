@@ -226,6 +226,47 @@ struct FlexPitchTests {
         )
     }
 
+    @Test func nonFiniteNoteScalarsCannotAuthorizeAnyReference() {
+        let finiteReference = makeFlexReference()
+        let nonFiniteReference = makeFlexReference(ordinal: 1)
+
+        for nonFinite in [Double.nan, -.infinity, .infinity] {
+            for nonFiniteNote in [
+                FlexPitchNote(reference: nonFiniteReference, cents: nonFinite, gainDb: -1),
+                FlexPitchNote(reference: nonFiniteReference, cents: 12.5, gainDb: nonFinite),
+            ] {
+                let snapshot = FlexPitchSnapshot(
+                    regionRef: finiteReference.regionRef,
+                    analysisGeneration: 7,
+                    monophonicConfidence: 0.95,
+                    notes: [
+                        FlexPitchNote(reference: finiteReference, cents: 12.5, gainDb: -1),
+                        nonFiniteNote,
+                    ],
+                    provenance: .midiTrackFromFlexPlusReadback,
+                    complete: true,
+                    partialReason: nil
+                )
+
+                #expect(
+                    editEligibility(
+                        snapshot: snapshot,
+                        ref: finiteReference,
+                        currentAnalysisGeneration: 7,
+                        dualEvidenceCount: 2
+                    ) == .experimental(reasons: ["snapshot note scalar is not finite"])
+                )
+                #expect(
+                    publicEditableReferences(
+                        snapshot: snapshot,
+                        currentAnalysisGeneration: 7,
+                        dualEvidenceCount: 2
+                    ).isEmpty
+                )
+            }
+        }
+    }
+
     @Test func fullyQualifiedSyntheticReferenceIsPublicEligible() {
         let snapshot = makeFlexSnapshot()
 
