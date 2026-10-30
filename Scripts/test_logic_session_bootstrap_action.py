@@ -121,6 +121,68 @@ def run_force_new_bootstrap(
 
 
 class BootstrapFreshSessionActionTests(unittest.TestCase):
+    def test_missing_accessibility_stops_before_launch_or_other_ui_mutation(self):
+        calls = []
+
+        def call_tool(tool, command, params=None, timeout=None):
+            calls.append((tool, command))
+            if tool == "logic_system" and command == "health":
+                health = make_health(False)
+                health["logic_pro_running"] = False
+                health["permissions"]["accessibility"] = False
+                return make_tool_response(json.dumps(health))
+            return make_tool_response("{}")
+
+        result = run_force_new_bootstrap(
+            call_tool=call_tool,
+            document_probe=lambda timeout_sec: self.fail("document probe must not run"),
+            ui_snapshot_factory=lambda: self.fail("UI snapshot must not run without Accessibility"),
+        )
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.reason, "missing_accessibility")
+        self.assertEqual(result.actions, [])
+        self.assertEqual(calls, [("logic_system", "health")])
+        payload = result.as_dict()
+        self.assertIs(payload["terminal"], True)
+        self.assertIs(payload["human_intervention_required"], False)
+        self.assertEqual(payload["human_intervention_requests"], 0)
+
+    def test_system_events_error_stops_before_any_ui_mutation(self):
+        calls = []
+
+        def call_tool(tool, command, params=None, timeout=None):
+            calls.append((tool, command))
+            if tool == "logic_system" and command == "health":
+                return make_tool_response(json.dumps(make_health(True)))
+            return make_tool_response("{}")
+
+        unavailable_ui = bootstrap_module.UISnapshot(
+            frontmost_app=None,
+            logic_window_names=[],
+            logic_menu_items=[],
+            detected_language=None,
+            system_events_error="automation denied",
+            project_picker_visible=False,
+            new_track_dialog_visible=False,
+            blocking_dialog_present=False,
+        )
+        result = run_force_new_bootstrap(
+            call_tool=call_tool,
+            document_probe=lambda timeout_sec: self.fail("document probe must not run"),
+            ui_snapshot_factory=lambda: unavailable_ui,
+        )
+
+        self.assertFalse(result.ok)
+        self.assertEqual(result.reason, "system_events_unavailable")
+        self.assertEqual(result.actions, [])
+        self.assertEqual(calls, [("logic_system", "health")])
+        self.assertEqual(result.ui["system_events_error"], "automation denied")
+        payload = result.as_dict()
+        self.assertIs(payload["terminal"], True)
+        self.assertIs(payload["human_intervention_required"], False)
+        self.assertEqual(payload["human_intervention_requests"], 0)
+
     def test_close_error_is_accepted_when_health_confirms_no_document(self):
         state = {"closed": False, "created": False}
 

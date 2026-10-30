@@ -263,7 +263,7 @@ class EvaluateFreshSessionTests(unittest.TestCase):
         self.assert_reason(assessment, "system_events_unavailable")
         self.assertEqual(
             assessment.hint,
-            "System Events automation is unavailable; fresh-session bootstrap terminated without UI mutation.",
+            "System Events became unavailable before final fresh-session validation; bootstrap stopped.",
         )
 
     def test_missing_accessibility_terminates_without_requesting_a_permission_change(self):
@@ -282,7 +282,7 @@ class EvaluateFreshSessionTests(unittest.TestCase):
         self.assert_reason(assessment, "missing_accessibility")
         self.assertEqual(
             assessment.hint,
-            "Accessibility is unavailable; fresh-session bootstrap terminated without UI mutation.",
+            "Accessibility became unavailable before final fresh-session validation; bootstrap stopped.",
         )
         self.assertNotIn("grant", (assessment.hint or "").lower())
     def test_native_ui_snapshot_payload_maps_language_and_modal_markers(self):
@@ -370,11 +370,25 @@ class BootstrapResultTests(unittest.TestCase):
             ok=False,
             reason="missing_accessibility",
             hint="Accessibility is unavailable.",
+            terminal=True,
+            human_intervention_required=False,
+            human_intervention_requests=0,
         ).as_dict()
 
         self.assertIs(payload["terminal"], True)
         self.assertIs(payload["human_intervention_required"], False)
         self.assertEqual(payload["human_intervention_requests"], 0)
+
+    def test_unclassified_failure_does_not_claim_a_no_human_outcome(self):
+        payload = BootstrapResult(
+            ok=False,
+            reason="logic_window_not_visible",
+            hint="Bring a Logic Pro document window on-screen before continuing.",
+        ).as_dict()
+
+        self.assertIsNone(payload["terminal"])
+        self.assertIsNone(payload["human_intervention_required"])
+        self.assertIsNone(payload["human_intervention_requests"])
 
 
 class ActivationHelperTests(unittest.TestCase):

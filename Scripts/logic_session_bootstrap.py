@@ -186,6 +186,9 @@ class BootstrapResult:
     ok: bool
     reason: str | None = None
     hint: str | None = None
+    terminal: bool | None = None
+    human_intervention_required: bool | None = None
+    human_intervention_requests: int | None = None
     actions: list[str] = field(default_factory=list)
     ui: dict[str, Any] = field(default_factory=dict)
     health: dict[str, Any] = field(default_factory=dict)
@@ -196,9 +199,17 @@ class BootstrapResult:
     def as_dict(self) -> dict[str, Any]:
         return {
             "ok": self.ok,
-            "terminal": not self.ok,
-            "human_intervention_required": False,
-            "human_intervention_requests": 0,
+            "terminal": self.terminal if self.terminal is not None else (False if self.ok else None),
+            "human_intervention_required": (
+                self.human_intervention_required
+                if self.human_intervention_required is not None
+                else (False if self.ok else None)
+            ),
+            "human_intervention_requests": (
+                self.human_intervention_requests
+                if self.human_intervention_requests is not None
+                else (0 if self.ok else None)
+            ),
             "reason": self.reason,
             "hint": self.hint,
             "actions": list(self.actions),
@@ -339,7 +350,7 @@ def evaluate_fresh_session(
         return FreshSessionAssessment(
             False,
             "missing_accessibility",
-            "Accessibility is unavailable; fresh-session bootstrap terminated without UI mutation.",
+            "Accessibility became unavailable before final fresh-session validation; bootstrap stopped.",
         )
     if health.get("logic_pro_has_window") is not True:
         return FreshSessionAssessment(
@@ -351,7 +362,7 @@ def evaluate_fresh_session(
         return FreshSessionAssessment(
             False,
             "system_events_unavailable",
-            "System Events automation is unavailable; fresh-session bootstrap terminated without UI mutation.",
+            "System Events became unavailable before final fresh-session validation; bootstrap stopped.",
         )
     if ui.blocking_dialog_present:
         return FreshSessionAssessment(
@@ -904,6 +915,9 @@ def bootstrap_fresh_logic_session(
         reason: str,
         hint: str,
         *,
+        terminal: bool | None = None,
+        human_intervention_required: bool | None = None,
+        human_intervention_requests: int | None = None,
         health: dict[str, Any] | None = None,
         project: dict[str, Any] | None = None,
         tracks: dict[str, Any] | None = None,
@@ -914,6 +928,9 @@ def bootstrap_fresh_logic_session(
             ok=False,
             reason=reason,
             hint=hint,
+            terminal=terminal,
+            human_intervention_required=human_intervention_required,
+            human_intervention_requests=human_intervention_requests,
             actions=actions,
             ui=asdict(ui) if ui else {},
             health=health or {},
@@ -1422,6 +1439,29 @@ def bootstrap_fresh_logic_session(
     _, health = fetch_health()
     if health is None:
         return blocked("health_unavailable", "Could not read logic_system.health from the MCP server.")
+
+    permissions = health.get("permissions", {}) if isinstance(health, dict) else {}
+    if permissions.get("accessibility") is not True:
+        return blocked(
+            "missing_accessibility",
+            "Accessibility is unavailable; fresh-session bootstrap terminated before UI mutation.",
+            terminal=True,
+            human_intervention_required=False,
+            human_intervention_requests=0,
+            health=health,
+        )
+
+    permission_ui = collect_ui_snapshot()
+    if permission_ui.system_events_error:
+        return blocked(
+            "system_events_unavailable",
+            "System Events automation is unavailable; fresh-session bootstrap terminated before UI mutation.",
+            terminal=True,
+            human_intervention_required=False,
+            human_intervention_requests=0,
+            health=health,
+            ui=permission_ui,
+        )
 
     if health.get("logic_pro_running") is not True:
         if not config.allow_launch:
