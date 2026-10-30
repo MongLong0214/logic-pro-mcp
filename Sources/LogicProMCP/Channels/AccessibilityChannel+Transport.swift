@@ -1126,12 +1126,17 @@ extension AccessibilityChannel {
         guard executeDialogScript != nil || dialogExecutionLock != nil else {
             return .error(HonestContract.encodeStateC(
                 error: .mutatingOperationInProgress,
-                hint: "Another Go To Position request is resolving Logic's modal dialog; retry after it completes.",
+                hint: "goto_position terminated before mutation because another request owns the "
+                    + "modal-dialog protocol; no UI action occurred in this request. The active "
+                    + "request remains the automatic owner of dialog resolution.",
                 extras: baseExtras.merging([
                     "operation": "transport.goto_position",
                     "method": "dialog",
                     "write_attempted": false,
                     "safe_to_retry": true,
+                    "automatic_recovery_owner": "active_goto_position_request",
+                    "terminal": true,
+                    "human_intervention_required": false,
                 ]) { _, new in new }
             ))
         }

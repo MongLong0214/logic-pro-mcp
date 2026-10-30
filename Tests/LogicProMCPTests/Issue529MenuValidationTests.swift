@@ -2337,6 +2337,13 @@ struct Issue529MenuValidationTests {
         let contenderEnvelope = try #require(issue529Envelope(contender))
         #expect(!contender.isSuccess)
         #expect(try #require(contenderEnvelope["error"] as? String) == "mutating_operation_in_progress")
+        let terminal = try #require(contenderEnvelope["terminal"] as? Bool)
+        let humanInterventionRequired = try #require(contenderEnvelope["human_intervention_required"] as? Bool)
+        #expect(terminal)
+        #expect(!humanInterventionRequired)
+        let hint = try #require(contenderEnvelope["hint"] as? String)
+        #expect(hint.contains("terminated before mutation"))
+        #expect(!hint.lowercased().contains("retry"))
         #expect(firstScriptCalls.value == 1)
         #expect(contenderScriptCalls.value == 0)
     }
