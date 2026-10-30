@@ -32,6 +32,7 @@ struct SpectralComparisonResult: Codable, Equatable, Sendable {
         case spectralShape = "spectral_shape"
         case spectralTilt = "spectral_tilt"
         case spectralCentroid = "spectral_centroid"
+        case dominantPeak = "dominant_peak"
     }
 
     struct Band: Codable, Equatable, Sendable {
@@ -165,6 +166,42 @@ struct SpectralComparisonResult: Codable, Equatable, Sendable {
         }
     }
 
+    struct DominantPeakComparison: Codable, Equatable, Sendable {
+        let method: String
+        let beforeHz: Double?
+        let afterHz: Double?
+        let deltaHz: Double?
+        let complete: Bool
+        let limitations: [String]
+
+        init(
+            before: [AudioAnalyzer.FrequencyPeak],
+            after: [AudioAnalyzer.FrequencyPeak]
+        ) {
+            func usable(_ peaks: [AudioAnalyzer.FrequencyPeak]) -> Double? {
+                guard let peak = peaks.first,
+                      peak.frequencyHz.isFinite, peak.frequencyHz > 0,
+                      peak.magnitude.isFinite, peak.magnitude > 0 else { return nil }
+                return peak.frequencyHz
+            }
+
+            let usableBefore = usable(before)
+            let usableAfter = usable(after)
+            beforeHz = usableBefore
+            afterHz = usableAfter
+            deltaHz = usableBefore.flatMap { beforeHz in usableAfter.map { $0 - beforeHz } }
+            method = "difference_of_published_strongest_frequency_peaks_hz.v1"
+            complete = deltaHz != nil
+            var limits = [
+                "published_dominant_band_peak_not_pitch_or_fundamental",
+                "no_cross_artifact_peak_identity_or_tracking_claim",
+            ]
+            if usableBefore == nil { limits.append("before_dominant_peak_unavailable") }
+            if usableAfter == nil { limits.append("after_dominant_peak_unavailable") }
+            limitations = limits
+        }
+    }
+
     let before: SpectralAnalysisResult
     let after: SpectralAnalysisResult
     let bands: [Band]
@@ -177,6 +214,8 @@ struct SpectralComparisonResult: Codable, Equatable, Sendable {
     let tiltComparison: TiltComparison?
     /// Omitted outside spectral-centroid mode to preserve the existing serialized responses.
     let centroidComparison: CentroidComparison?
+    /// Omitted outside dominant-peak mode to preserve the existing serialized responses.
+    let dominantPeakComparison: DominantPeakComparison?
 
     enum Failure: String, Error {
         case incompleteInput = "incomplete_input"
@@ -239,6 +278,9 @@ struct SpectralComparisonResult: Codable, Equatable, Sendable {
         tiltComparison = mode == .spectralTilt ? try TiltComparison(rawBands: bands) : nil
         centroidComparison = mode == .spectralCentroid
             ? CentroidComparison(before: before.spectralCentroidHz, after: after.spectralCentroidHz)
+            : nil
+        dominantPeakComparison = mode == .dominantPeak
+            ? DominantPeakComparison(before: before.frequencyPeaks, after: after.frequencyPeaks)
             : nil
     }
 }
