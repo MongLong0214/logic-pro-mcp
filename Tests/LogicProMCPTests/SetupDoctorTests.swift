@@ -96,7 +96,7 @@ private func issue26RepositoryRootURL() -> URL {
         runtime: doctorRuntime()
     )
 
-    #expect(report.schema == "logic_pro_mcp_doctor.v4")
+    #expect(report.schema == "logic_pro_mcp_doctor.v5")
     #expect(report.status == .ok)
     #expect(report.installSource == .homebrew)
 
@@ -136,7 +136,7 @@ private func issue26RepositoryRootURL() -> URL {
 
     let json = encodeJSON(report)
     let object = try #require(sharedJSONObject(json))
-    #expect(object["schema"] as? String == "logic_pro_mcp_doctor.v4")
+    #expect(object["schema"] as? String == "logic_pro_mcp_doctor.v5")
     #expect(object["status"] as? String == "ok")
     #expect(object["install_source"] as? String == "homebrew")
     #expect(object["version"] as? String == ServerConfig.serverVersion)
@@ -207,7 +207,7 @@ private func issue26RepositoryRootURL() -> URL {
     #expect(exitCode == 0)
     #expect(stderr.isEmpty)
     let json = try #require(sharedJSONObject(stdout))
-    #expect(json["schema"] as? String == "logic_pro_mcp_doctor.v4")
+    #expect(json["schema"] as? String == "logic_pro_mcp_doctor.v5")
     #expect(json["status"] as? String == "ok")
 }
 

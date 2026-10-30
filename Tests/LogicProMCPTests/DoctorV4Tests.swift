@@ -109,9 +109,9 @@ private func doctorV4Report(
     #expect(Set(SetupDoctor.DoctorSkipReason.allCases.map(\.rawValue)) == expected)
 }
 
-@Test func doctorV4SchemaProfilesAndCapabilitiesAreInJSON() throws {
+@Test func doctorV5SchemaProfilesAndCapabilitiesAreInJSON() throws {
     let report = doctorV4Report()
-    #expect(report.schema == "logic_pro_mcp_doctor.v4")
+    #expect(report.schema == "logic_pro_mcp_doctor.v5")
     #expect(report.doctorProfile == .full)
     #expect(report.clientProfile == .claudeCode)
     #expect(Set(report.capabilities.keys) == Set([
@@ -131,6 +131,59 @@ private func doctorV4Report(
     #expect(object["client_profile"] as? String == "claude-code")
     #expect(object["client_profile_basis"] as? String == "registration_config")
     #expect(object["capabilities"] as? [String: Any] != nil)
+}
+
+private enum FrozenDoctorV4OperationReadiness: String, Decodable {
+    case readyVerified = "ready_verified"
+    case readyDegraded = "ready_degraded"
+    case unknownLiveVerifyRequired = "unknown_live_verify_required"
+    case manualSetupRequired = "manual_setup_required"
+    case notReady = "not_ready"
+}
+
+private struct FrozenDoctorV4OperationRow: Decodable {
+    let readiness: FrozenDoctorV4OperationReadiness
+}
+
+private struct FrozenDoctorV4Capability: Decodable {
+    let operations: [FrozenDoctorV4OperationRow]
+}
+
+private struct FrozenDoctorV4Report: Decodable {
+    let schema: String
+    let capabilities: [String: FrozenDoctorV4Capability]
+}
+
+private struct DoctorCapabilityEnvelope: Encodable {
+    let schema: String
+    let capabilities: [String: SetupDoctor.CapabilityReadiness]
+}
+
+@Test func doctorV5SignalsReadinessEnumMigrationToStrictV4Consumers() throws {
+    let unavailableAccessibility = SetupDoctor.check(
+        id: "permissions.accessibility",
+        domain: "permissions",
+        status: .manual,
+        summary: "unavailable",
+        evidence: [:],
+        remediationType: .none
+    )
+    let envelope = DoctorCapabilityEnvelope(
+        schema: SetupDoctor.schema,
+        capabilities: SetupDoctor.capabilities(for: [unavailableAccessibility], profile: .core)
+    )
+    let data = try JSONEncoder().encode(envelope)
+    let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let capabilities = try #require(object["capabilities"] as? [String: Any])
+    let rows = capabilities.values.compactMap { capability -> [[String: Any]]? in
+        (capability as? [String: Any])?["operations"] as? [[String: Any]]
+    }.flatMap { $0 }
+
+    #expect(object["schema"] as? String == "logic_pro_mcp_doctor.v5")
+    #expect(rows.contains { $0["readiness"] as? String == "prerequisite_unavailable" })
+    #expect(throws: DecodingError.self) {
+        try JSONDecoder().decode(FrozenDoctorV4Report.self, from: data)
+    }
 }
 
 @Test func doctorV4TerminalInfersClaudeCodeFromRegistrationConfig() throws {
