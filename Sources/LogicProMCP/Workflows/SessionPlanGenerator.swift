@@ -725,7 +725,7 @@ enum SessionPlanGenerator {
             catalogResource: spec.resource,
             proposedTrackType: spec.type,
             reason: "Matched role '\(role)' from prompt or genre heuristic.",
-            limitations: spec.limitations + (catalog.status == "available" ? [] : ["Instrument catalog #31 is unavailable in this build; verify manually before assigning patches."])
+            limitations: spec.limitations + (catalog.status == "available" ? [] : ["Instrument catalog #31 is unavailable in this build; automatic patch assignment is unavailable."])
         )
     }
 
@@ -751,7 +751,7 @@ enum SessionPlanGenerator {
             SessionUnsupportedStep(
                 operation: "third_party_plugin_or_instrument",
                 reason: "This planner only references current Logic Pro MCP public surfaces and does not recommend third-party plugins without catalog provenance.",
-                safeAlternative: "Use stock or manually verified instruments, or add a provenance-backed catalog first."
+                safeAlternative: "Only stock instruments present in the provenance-backed catalog are available; other requests terminate unsupported."
             ),
         ]
     }

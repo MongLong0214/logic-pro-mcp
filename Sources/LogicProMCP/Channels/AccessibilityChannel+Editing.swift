@@ -62,9 +62,9 @@ extension AccessibilityChannel {
         // would close what the first opened. No other channel may press it.
         return .error(HonestContract.encodeStateC(
             error: .readbackMismatch,
-            hint: "Step Input Keyboard window state did not change after the menu action. The item was "
-                + "pressed and may have landed with the window list lagging, so no other channel may press "
-                + "it: read Logic's windows before retrying.",
+            hint: "Step Input Keyboard window state remained unchanged after the bounded readback. "
+                + "The press may already have landed; automatic handling terminated after the bounded "
+                + "readback without another write.",
             extras: [
                 "operation": "edit.toggle_step_input",
                 "previous_open": previousOpen,
@@ -72,6 +72,9 @@ extension AccessibilityChannel {
                 "write_attempted": true,
                 "safe_to_retry": false,
                 "fallback_unsafe": true,
+                "automatic_read_attempts_exhausted": true,
+                "terminal": true,
+                "human_intervention_required": false,
             ]
         ))
     }

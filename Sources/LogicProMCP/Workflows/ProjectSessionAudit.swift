@@ -637,7 +637,7 @@ enum ProjectSessionAudit {
                 "empty_tracks_detected",
                 .info,
                 "tracks",
-                "Tracks with no cached regions were detected; review manually before deleting or hiding anything.",
+                "Tracks with no cached regions were detected; this read-only audit makes no delete or hide decision.",
                 "logic://tracks/{index}/regions",
                 emptyTracks.map(String.init).joined(separator: ","),
                 ["indices=\(emptyTracks.map(String.init).joined(separator: ","))"],
@@ -901,11 +901,11 @@ enum ProjectSessionAudit {
             steps.append(CleanupPlanStep(
                 id: "review_empty_tracks_no_delete",
                 targetIdentifier: "tracks:\(emptyTrackIndices.map(String.init).joined(separator: ","))",
-                proposedOperation: "Review empty tracks; do not delete by default.",
+                proposedOperation: "No deletion or hiding is proposed for tracks with no cached regions.",
                 rationale: "Empty-track detection is deterministic only for cached regions and may miss hidden or unfetched content.",
                 riskLevel: .low,
-                requiredConfirmation: "manual review; deletion intentionally not proposed",
-                expectedReadback: "caller records keep/hide/delete intent outside this read-only milestone",
+                requiredConfirmation: "none; terminal read-only result",
+                expectedReadback: "not applicable; this step performs no project mutation",
                 rollbackOrRecovery: "No project mutation is performed by this step.",
                 stopCondition: "Stop if region inventory is stale or unavailable.",
                 supportedByCurrentTools: false,
@@ -948,7 +948,7 @@ enum ProjectSessionAudit {
                 riskLevel: .medium,
                 requiredConfirmation: "L1 + marker name and position per marker",
                 expectedReadback: "logic://markers shows created markers with canonical positions",
-                rollbackOrRecovery: "Manual recovery in Logic marker list; no automatic deletion in this milestone.",
+                rollbackOrRecovery: "A failed marker write terminates with observed marker state; this plan issues no automatic deletion.",
                 stopCondition: "Stop if marker readback is stale, non-canonical, or unavailable.",
                 supportedByCurrentTools: true,
                 mutatesProject: true,
@@ -961,17 +961,17 @@ enum ProjectSessionAudit {
             steps.append(CleanupPlanStep(
                 id: "refresh_mixer_inventory",
                 targetIdentifier: "mixer",
-                proposedOperation: "Refresh cache after making the Mixer visible, then re-run audit.",
+                proposedOperation: "No mixer-dependent cleanup mutation is proposed while mixer inventory is not fresh.",
                 rationale: "Mixer/plugin cleanup decisions require fresh slot provenance.",
                 riskLevel: .low,
-                requiredConfirmation: "none",
-                expectedReadback: "logic://mixer data_source becomes ax_poll",
-                rollbackOrRecovery: "No rollback required; read-only/cache refresh.",
-                stopCondition: "Stop if data_source remains mixer_not_visible or cache_stale.",
-                supportedByCurrentTools: true,
+                requiredConfirmation: "none; terminal read-only result",
+                expectedReadback: "not applicable; this step performs no project mutation",
+                rollbackOrRecovery: "No project mutation is performed by this step.",
+                stopCondition: "Terminal result: mixer inventory remains unavailable for cleanup planning.",
+                supportedByCurrentTools: false,
                 mutatesProject: false,
-                tool: "logic_system",
-                command: "refresh_cache"
+                tool: nil,
+                command: nil
             ))
         }
 
