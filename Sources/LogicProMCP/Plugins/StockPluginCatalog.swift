@@ -1557,15 +1557,16 @@ enum StockPluginCatalog {
             controlsViewActuationState: .measuredNotActuable,
             availabilityState: .observed,
             provenance: .observed(
-                method: "controls_view_axslider_read_and_nonactuation_measurement",
-                observedAt: "2026-09-02T11:30:17+09:00",
-                logicVersion: nil,
+                method: "exact_head_get_param_verified_read_only_observation",
+                observedAt: "2026-10-29T21:41:32.922880+00:00",
+                logicVersion: "12.3 (6674)",
                 locale: "ko-KR",
                 evidence: [
                     "parameter_readback",
                     "controls-view-write-20260902-113017",
-                    "Ratio Controls row exposes a stable raw value and verbatim ratio display",
+                    "State A observed raw 18 and verbatim display 2.1:1 on the protected fixture",
                     "Ratio AXSlider direct AXValue set and AXIncrement were observed non-actuating",
+                    "docs/observations/2026-10-30-299-compressor-ratio-attack-read-only-state-a.json",
                 ]
             )
         ),
@@ -1643,14 +1644,15 @@ enum StockPluginCatalog {
             controlsViewActuationState: .unmeasured,
             availabilityState: .observed,
             provenance: .observed(
-                method: "controls_view_read_only_observation",
-                observedAt: "2026-08-30T04:02:24Z",
-                logicVersion: "12.x",
+                method: "exact_head_get_param_verified_read_only_observation",
+                observedAt: "2026-10-29T21:41:32.922880+00:00",
+                logicVersion: "12.3 (6674)",
                 locale: "ko-KR",
                 evidence: [
                     "parameter_readback",
-                    "Attack Controls row exposes a raw AX value and verbatim engineering display",
+                    "State A observed raw 30 and verbatim display 15.0 ms on the protected fixture",
                     "No Attack write or raw-to-milliseconds conversion was measured",
+                    "docs/observations/2026-10-30-299-compressor-ratio-attack-read-only-state-a.json",
                 ]
             )
         ),
