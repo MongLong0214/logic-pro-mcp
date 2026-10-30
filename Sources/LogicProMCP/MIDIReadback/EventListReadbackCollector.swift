@@ -94,6 +94,139 @@ enum EventListReadbackCollector {
         let liveHeaderTitles: [String]
     }
 
+    /// One row captured from a viewport-materialized Event List window. The key is the table row
+    /// ordinal, not a persistent note identity.
+    struct VirtualWindowRow: Sendable {
+        let key: RowKey
+        let row: RawEventRow
+    }
+
+    /// A pure input to the window-stitching boundary. `totalRows` is only the count reported by the
+    /// same observed table; accepting all of its rows does not prove count semantics or exhaustion.
+    struct VirtualWindowObservation: Sendable {
+        let totalRows: Int
+        let rows: [VirtualWindowRow]
+    }
+
+    enum WindowStitchRefusal: Error, Equatable, Sendable {
+        case passCount(expected: Int, actual: Int)
+        case emptyPass(pass: Int)
+        case invalidTotal(pass: Int, window: Int, total: Int)
+        case totalChanged(pass: Int, window: Int, expected: Int, actual: Int)
+        case passTotalChanged(expected: Int, actual: Int)
+        case duplicateKey(pass: Int, window: Int, key: Int)
+        case rowOutOfRange(pass: Int, window: Int, key: Int, total: Int)
+        case overlapChanged(pass: Int, key: Int)
+        case incomplete(pass: Int, missing: [Int])
+        case passDrift(key: Int)
+    }
+
+    /// Reconciles two independently captured sequences of virtualized windows.
+    ///
+    /// This is deliberately a pure, preparatory boundary. It rejects gaps, duplicate rows, changed
+    /// overlaps, total drift and cross-pass content drift, but it always returns `.unproven`
+    /// exhaustion. A live adapter still has to establish how windows were traversed and stopped;
+    /// this helper cannot qualify the provider or mint a release-constructible proof.
+    static func stitchVirtualWindows(
+        _ passes: [[VirtualWindowObservation]]
+    ) throws -> RowHarvest {
+        guard passes.count == 2 else {
+            throw WindowStitchRefusal.passCount(expected: 2, actual: passes.count)
+        }
+
+        let first = try stitchVirtualWindowPass(passes[0], passIndex: 0)
+        let second = try stitchVirtualWindowPass(passes[1], passIndex: 1)
+        guard first.totalRows == second.totalRows else {
+            throw WindowStitchRefusal.passTotalChanged(
+                expected: first.totalRows,
+                actual: second.totalRows
+            )
+        }
+
+        let orderedKeys = (0..<first.totalRows).map(RowKey.init(index:))
+        for key in orderedKeys where first.rows[key] != second.rows[key] {
+            throw WindowStitchRefusal.passDrift(key: key.index)
+        }
+
+        return RowHarvest(
+            orderedRowKeys: orderedKeys,
+            passA: first.rows,
+            passB: second.rows,
+            exhaustion: .unproven
+        )
+    }
+
+    private static func stitchVirtualWindowPass(
+        _ windows: [VirtualWindowObservation],
+        passIndex: Int
+    ) throws -> (totalRows: Int, rows: [RowKey: RawEventRow]) {
+        guard let firstWindow = windows.first else {
+            throw WindowStitchRefusal.emptyPass(pass: passIndex)
+        }
+        guard firstWindow.totalRows >= 0 else {
+            throw WindowStitchRefusal.invalidTotal(
+                pass: passIndex,
+                window: 0,
+                total: firstWindow.totalRows
+            )
+        }
+
+        let expectedTotal = firstWindow.totalRows
+        var stitched: [RowKey: RawEventRow] = [:]
+        for (windowIndex, window) in windows.enumerated() {
+            guard window.totalRows >= 0 else {
+                throw WindowStitchRefusal.invalidTotal(
+                    pass: passIndex,
+                    window: windowIndex,
+                    total: window.totalRows
+                )
+            }
+            guard window.totalRows == expectedTotal else {
+                throw WindowStitchRefusal.totalChanged(
+                    pass: passIndex,
+                    window: windowIndex,
+                    expected: expectedTotal,
+                    actual: window.totalRows
+                )
+            }
+
+            var keysInWindow: Set<RowKey> = []
+            for observation in window.rows {
+                guard keysInWindow.insert(observation.key).inserted else {
+                    throw WindowStitchRefusal.duplicateKey(
+                        pass: passIndex,
+                        window: windowIndex,
+                        key: observation.key.index
+                    )
+                }
+                guard (0..<expectedTotal).contains(observation.key.index) else {
+                    throw WindowStitchRefusal.rowOutOfRange(
+                        pass: passIndex,
+                        window: windowIndex,
+                        key: observation.key.index,
+                        total: expectedTotal
+                    )
+                }
+                if let existing = stitched[observation.key] {
+                    guard existing == observation.row else {
+                        throw WindowStitchRefusal.overlapChanged(
+                            pass: passIndex,
+                            key: observation.key.index
+                        )
+                    }
+                } else {
+                    stitched[observation.key] = observation.row
+                }
+            }
+        }
+
+        let missing = (0..<expectedTotal).filter { stitched[RowKey(index: $0)] == nil }
+        guard missing.isEmpty else {
+            throw WindowStitchRefusal.incomplete(pass: passIndex, missing: missing)
+        }
+        return (expectedTotal, stitched)
+    }
+
     static func observeVisibleWindow(
         runtime: AXLogicProElements.Runtime = .production
     ) throws -> WindowObservation {
