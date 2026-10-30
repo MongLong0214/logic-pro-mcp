@@ -73,14 +73,14 @@ jobs:
       - name: Checkout authenticated trusted verifier
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: 119da60a105de7401d39181347017ed48f57d13b
+          ref: fa7d4430b4e42e15902ab82ca2b7e67380ca56ff
           path: trusted-verifier-src
 
       - name: Resolve and build trusted verifier without changing pins
         working-directory: trusted-verifier-src
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = 119da60a105de7401d39181347017ed48f57d13b
+          test "$(git rev-parse HEAD)" = fa7d4430b4e42e15902ab82ca2b7e67380ca56ff
           test -z "$(git status --porcelain)"
           swift package resolve --force-resolved-versions
           git diff --exit-code Package.resolved
@@ -204,14 +204,14 @@ jobs:
       - name: Checkout authenticated trusted verifier
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
         with:
-          ref: 119da60a105de7401d39181347017ed48f57d13b
+          ref: fa7d4430b4e42e15902ab82ca2b7e67380ca56ff
           path: trusted-verifier-src
 
       - name: Resolve and build trusted verifier without changing pins
         working-directory: trusted-verifier-src
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = 119da60a105de7401d39181347017ed48f57d13b
+          test "$(git rev-parse HEAD)" = fa7d4430b4e42e15902ab82ca2b7e67380ca56ff
           test -z "$(git status --porcelain)"
           swift package resolve --force-resolved-versions
           git diff --exit-code Package.resolved
