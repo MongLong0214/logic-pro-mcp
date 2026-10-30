@@ -154,12 +154,31 @@ enum TempoMapAX {
         case failed(failure: WriteFailure, writes: Int, finalObserved: Double?)
     }
 
+    /// What the forward convergence walk actually attempted before it stopped. This remains
+    /// separate from `RollbackOutcome` so a successful restore cannot erase whether the original
+    /// operation crossed the AX write boundary.
+    struct ForwardWriteReceipt: Equatable, Sendable {
+        let attempts: Int
+        let acceptedWrites: Int
+        let finalObserved: Double?
+
+        static let none = ForwardWriteReceipt(
+            attempts: 0,
+            acceptedWrites: 0,
+            finalObserved: nil
+        )
+    }
+
     enum WriteOutcome: Equatable, Sendable {
         /// A successful no-op. This is deliberately different from `.converged(writes: 0)` so a
         /// caller can tell that no AX mutation was attempted because the event was already correct.
         case alreadyAtTarget(observed: Double)
         case converged(initial: Double, observed: Double, writes: Int)
-        case refused(failure: WriteFailure, rollback: RollbackOutcome)
+        case refused(
+            failure: WriteFailure,
+            forward: ForwardWriteReceipt,
+            rollback: RollbackOutcome
+        )
     }
 
     /// The measured writer has only observed whole-BPM steps. Fractional target values therefore
@@ -259,11 +278,13 @@ enum TempoMapAX {
         } catch let refusal as ReadRefusal {
             return .refused(
                 failure: .readFailed(refusal),
+                forward: .none,
                 rollback: .notNeeded(writes: 0, finalObserved: nil)
             )
         } catch {
             return .refused(
                 failure: .readFailed(.unmeasuredLocale(localeIdentifier ?? "unknown")),
+                forward: .none,
                 rollback: .notNeeded(writes: 0, finalObserved: nil)
             )
         }
@@ -271,6 +292,7 @@ enum TempoMapAX {
         guard isSupportedTempoTarget(target) else {
             return .refused(
                 failure: .invalidTarget(target),
+                forward: .none,
                 rollback: .notNeeded(writes: 0, finalObserved: nil)
             )
         }
@@ -281,6 +303,7 @@ enum TempoMapAX {
             guard snapshot.events.indices.contains(index) else {
                 return .refused(
                     failure: .eventIndexOutOfRange(index: index, count: snapshot.events.count),
+                    forward: .none,
                     rollback: .notNeeded(writes: 0, finalObserved: nil)
                 )
             }
@@ -288,11 +311,13 @@ enum TempoMapAX {
         } catch let refusal as ReadRefusal {
             return .refused(
                 failure: .readFailed(refusal),
+                forward: .none,
                 rollback: .notNeeded(writes: 0, finalObserved: nil)
             )
         } catch {
             return .refused(
                 failure: .readFailed(.tempoListWindowUnavailable),
+                forward: .none,
                 rollback: .notNeeded(writes: 0, finalObserved: nil)
             )
         }
@@ -313,10 +338,10 @@ enum TempoMapAX {
         switch forward {
         case let .success(observed, writes):
             return .converged(initial: initial.tempo, observed: observed, writes: writes)
-        case let .failure(failure, writes, finalObserved):
+        case let .failure(failure, receipt):
             let rollback: RollbackOutcome
-            if writes == 0 {
-                rollback = .notNeeded(writes: 0, finalObserved: finalObserved)
+            if receipt.acceptedWrites == 0 {
+                rollback = .notNeeded(writes: 0, finalObserved: receipt.finalObserved)
             } else {
                 rollback = rollbackToInitialTempo(
                     at: index,
@@ -325,10 +350,10 @@ enum TempoMapAX {
                     localeIdentifier: localeIdentifier,
                     runtime: runtime,
                     convergenceDeadlineOverride: convergenceDeadlineOverride,
-                    fallbackObserved: finalObserved
+                    fallbackObserved: receipt.finalObserved
                 )
             }
-            return .refused(failure: failure, rollback: rollback)
+            return .refused(failure: failure, forward: receipt, rollback: rollback)
         }
     }
 
@@ -657,7 +682,7 @@ enum TempoMapAX {
 
     private enum Convergence {
         case success(observed: Double, writes: Int)
-        case failure(WriteFailure, writes: Int, finalObserved: Double?)
+        case failure(WriteFailure, receipt: ForwardWriteReceipt)
     }
 
     private static func converge(
@@ -670,17 +695,32 @@ enum TempoMapAX {
         deadline: Date
     ) -> Convergence {
         guard let budget = attemptBudget(from: initial.tempo, to: target) else {
-            return .failure(.invalidTarget(target), writes: 0, finalObserved: initial.tempo)
+            return .failure(
+                .invalidTarget(target),
+                receipt: ForwardWriteReceipt(
+                    attempts: 0,
+                    acceptedWrites: 0,
+                    finalObserved: initial.tempo
+                )
+            )
         }
         var current = initial
-        var writes = 0
+        var attempts = 0
+        var acceptedWrites = 0
+
+        func receipt(finalObserved: Double?) -> ForwardWriteReceipt {
+            ForwardWriteReceipt(
+                attempts: attempts,
+                acceptedWrites: acceptedWrites,
+                finalObserved: finalObserved
+            )
+        }
 
         for _ in 0..<budget {
             guard Date() < deadline else {
                 return .failure(
                     .deadlineExceeded(observed: current.tempo, target: target),
-                    writes: writes,
-                    finalObserved: current.tempo
+                    receipt: receipt(finalObserved: current.tempo)
                 )
             }
             // Resolve the table, row, and value group anew immediately before every write. This is
@@ -690,43 +730,47 @@ enum TempoMapAX {
             do {
                 fresh = try inventory(in: window, runtime: runtime.ax)
             } catch let refusal as ReadRefusal {
-                return .failure(.readFailed(refusal), writes: writes, finalObserved: current.tempo)
+                return .failure(
+                    .readFailed(refusal),
+                    receipt: receipt(finalObserved: current.tempo)
+                )
             } catch {
                 return .failure(
                     .readFailed(.tempoListWindowUnavailable),
-                    writes: writes,
-                    finalObserved: current.tempo
+                    receipt: receipt(finalObserved: current.tempo)
                 )
             }
             guard fresh.snapshot.events.indices.contains(index) else {
                 return .failure(
                     .eventIndexOutOfRange(index: index, count: fresh.snapshot.events.count),
-                    writes: writes,
-                    finalObserved: current.tempo
+                    receipt: receipt(finalObserved: current.tempo)
                 )
             }
             let freshEvent = fresh.snapshot.events[index]
             guard freshEvent.position == initial.position else {
                 return .failure(
                     .positionChanged(expected: initial.position, observed: freshEvent.position),
-                    writes: writes,
-                    finalObserved: freshEvent.tempo
+                    receipt: receipt(finalObserved: freshEvent.tempo)
                 )
             }
             current = freshEvent
             if current.tempo == target {
-                return .success(observed: current.tempo, writes: writes)
+                return .success(observed: current.tempo, writes: acceptedWrites)
             }
 
+            attempts += 1
             guard AXHelpers.setAttribute(
                 fresh.tempoGroups[index],
                 kAXValueAttribute,
                 NSNumber(value: target),
                 runtime: runtime.ax
             ) else {
-                return .failure(.axWriteFailed, writes: writes, finalObserved: current.tempo)
+                return .failure(
+                    .axWriteFailed,
+                    receipt: receipt(finalObserved: current.tempo)
+                )
             }
-            writes += 1
+            acceptedWrites += 1
 
             // Re-enter through `read`, which resolves from `window` and deliberately retains no
             // reference from `fresh`. Two consecutive fresh observations must agree before this
@@ -744,31 +788,28 @@ enum TempoMapAX {
             ) {
             case let .success(observed):
                 next = observed
-            case let .failure(failure):
-                return .failure(failure, writes: writes, finalObserved: current.tempo)
+            case let .failure(failure, lastObserved):
+                return .failure(failure, receipt: receipt(finalObserved: lastObserved))
             }
             if next.tempo == target {
-                return .success(observed: next.tempo, writes: writes)
+                return .success(observed: next.tempo, writes: acceptedWrites)
             }
             if next.tempo == current.tempo {
                 return .failure(
                     .didNotMove(previous: current.tempo, observed: next.tempo, target: target),
-                    writes: writes,
-                    finalObserved: next.tempo
+                    receipt: receipt(finalObserved: next.tempo)
                 )
             }
             if crossedTarget(from: current.tempo, to: next.tempo, target: target) {
                 return .failure(
                     .crossedTarget(previous: current.tempo, observed: next.tempo, target: target),
-                    writes: writes,
-                    finalObserved: next.tempo
+                    receipt: receipt(finalObserved: next.tempo)
                 )
             }
             guard movesTowardTarget(from: current.tempo, to: next.tempo, target: target) else {
                 return .failure(
                     .movedAway(previous: current.tempo, observed: next.tempo, target: target),
-                    writes: writes,
-                    finalObserved: next.tempo
+                    receipt: receipt(finalObserved: next.tempo)
                 )
             }
             current = next
@@ -776,9 +817,13 @@ enum TempoMapAX {
 
         return .failure(
             .attemptBudgetExhausted(observed: current.tempo, target: target, budget: budget),
-            writes: writes,
-            finalObserved: current.tempo
+            receipt: receipt(finalObserved: current.tempo)
         )
+    }
+
+    private enum SettleOutcome {
+        case success(Event)
+        case failure(WriteFailure, lastObserved: Double)
     }
 
     private static func settleEvent(
@@ -790,8 +835,9 @@ enum TempoMapAX {
         localeIdentifier: String?,
         runtime: AXLogicProElements.Runtime,
         deadline: Date
-    ) -> Result<Event, WriteFailure> {
-        var previous: Event?
+    ) -> SettleOutcome {
+        var corroborationCandidate: Event?
+        var lastObservedTempo = current.tempo
         while Date() < deadline {
             do {
                 let reread = try read(
@@ -800,29 +846,43 @@ enum TempoMapAX {
                     runtime: runtime
                 )
                 guard reread.events.indices.contains(index) else {
-                    return .failure(.eventIndexOutOfRange(index: index, count: reread.events.count))
-                }
-                let observed = reread.events[index]
-                guard observed.position == expectedPosition else {
                     return .failure(
-                        .positionChanged(expected: expectedPosition, observed: observed.position)
+                        .eventIndexOutOfRange(index: index, count: reread.events.count),
+                        lastObserved: lastObservedTempo
                     )
                 }
-                if previous == observed {
+                let observed = reread.events[index]
+                lastObservedTempo = observed.tempo
+                guard observed.position == expectedPosition else {
+                    return .failure(
+                        .positionChanged(expected: expectedPosition, observed: observed.position),
+                        lastObserved: observed.tempo
+                    )
+                }
+                if corroborationCandidate == observed {
                     return .success(observed)
                 }
-                previous = observed
+                corroborationCandidate = observed
             } catch let refusal as ReadRefusal where refusal.isTransientDuringRebuild {
                 // A rebuild invalidates the pair; the next observation must be fresh again.
-                previous = nil
+                corroborationCandidate = nil
             } catch let refusal as ReadRefusal {
-                return .failure(.readFailed(refusal))
+                return .failure(
+                    .readFailed(refusal),
+                    lastObserved: lastObservedTempo
+                )
             } catch {
-                return .failure(.readFailed(.tempoListWindowUnavailable))
+                return .failure(
+                    .readFailed(.tempoListWindowUnavailable),
+                    lastObserved: lastObservedTempo
+                )
             }
             if Date() < deadline { usleep(postWriteSettlePollMicros) }
         }
-        return .failure(.deadlineExceeded(observed: previous?.tempo ?? current.tempo, target: target))
+        return .failure(
+            .deadlineExceeded(observed: lastObservedTempo, target: target),
+            lastObserved: lastObservedTempo
+        )
     }
 
     private static func rollbackToInitialTempo(
@@ -881,8 +941,12 @@ enum TempoMapAX {
         ) {
         case let .success(observed, writes):
             return .restored(writes: writes, finalObserved: observed)
-        case let .failure(failure, writes, finalObserved):
-            return .failed(failure: failure, writes: writes, finalObserved: finalObserved)
+        case let .failure(failure, receipt):
+            return .failed(
+                failure: failure,
+                writes: receipt.acceptedWrites,
+                finalObserved: receipt.finalObserved
+            )
         }
     }
 

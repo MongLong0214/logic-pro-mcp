@@ -43,9 +43,13 @@ AX_BUTTON = "AXButton"
 AX_SLIDER = "AXSlider"
 AX_GROUP = "AXGroup"
 AX_TEXT_FIELD = "AXTextField"
+AX_MENU_BAR_ITEM = "AXMenuBarItem"
+AX_MENU = "AXMenu"
+AX_MENU_ITEM = "AXMenuItem"
 
 TRACK_WALK_DEPTH = 14
 MIXER_WALK_DEPTH = 20  # f291r1 live_291:165 WITNESS_DEPTH
+UNDO_MENU_WAIT_S = 2.0
 
 FLAG_ROWS = {"arm": "Record Enable", "mute": "Mute", "solo": "Solo"}
 SLOT_ROWS = {"output": "INS_014_OutputSlot", "input": "INS_012_InputSlot",
@@ -392,6 +396,145 @@ def routing_slots_known(spec, control):
 
 
 # ---------------------------------------------------------------------------------------------
+# undo_entry_ax (#955 independent no-write witness)
+# ---------------------------------------------------------------------------------------------
+
+def undo_entry_command(args):
+    """Read Logic's current Cmd-Z entry by shortcut, opening only the measured Edit menu.
+
+    Logic populates the state-dependent Undo title only while the menu is open. Cleanup delegates
+    to screen.settle_to_clean, whose only action is Escape while a Logic menu is measured open.
+    """
+    edit_row = live_locale.apple_row(args["lproj"], "Edit#mti")
+    raw = {"edit_row": edit_row, "menu_bar_matches": 0, "menu_opened": False,
+           "entries": [], "cleanup": None}
+    pid = _single_logic_pid(args.get("pid"))
+    raw["pid"] = pid
+    if not edit_row.get("readable") or not pid.get("readable"):
+        raw["cause"] = "Apple's Edit row or the single Logic pid did not resolve"
+        return raw
+    raw["activation"] = obs.run(
+        ["/usr/bin/osascript", "-e", 'tell application "Logic Pro" to activate'], 8)
+    ax = None
+    try:
+        ax = cfbridge.AX(pid["value"])
+        status, menu_bar = ax.copy(ax.app, "AXMenuBar")
+        raw["menu_bar_status"] = status
+        if menu_bar is None:
+            raw["cause"] = "Logic's AXMenuBar did not read"
+            return raw
+        children = ax.elements(menu_bar, "AXChildren")
+        if children["elements"] is None:
+            raw["cause"] = "Logic's AXMenuBar children did not read"
+            raw["menu_bar_children_status"] = children["status"]
+            return raw
+        matches = []
+        for child in children["elements"]:
+            role, role_error = cfbridge.text_of(ax.value(child, "AXRole"))
+            title, title_error = cfbridge.text_of(ax.value(child, "AXTitle"))
+            if role_error is None and title_error is None \
+                    and role == AX_MENU_BAR_ITEM and title == edit_row["value"]:
+                matches.append(child)
+        raw["menu_bar_matches"] = len(matches)
+        if len(matches) != 1:
+            raw["cause"] = "the localized Edit menu-bar item was not unique"
+            return raw
+        item = matches[0]
+
+        def opened_menu():
+            found = []
+            listed = ax.elements(item, "AXChildren")
+            for child in listed["elements"] or []:
+                role, error = cfbridge.text_of(ax.value(child, "AXRole"))
+                if error is None and role == AX_MENU:
+                    found.append(child)
+            return found[0] if len(found) == 1 else None
+
+        # This host exposes the AXMenu child even while the menu is closed. That child is not an
+        # open-state witness: press the exact localized bar item and require the screen reader to
+        # observe a Logic menu-level window before trusting the state-dependent title.
+        raw["press_status"] = ax.perform(item, "AXPress")
+        waited = obs.wait_until(
+            lambda: screen.clean_state(pid["value"]), UNDO_MENU_WAIT_S, interval_s=0.1,
+            done=lambda state: any(dirt.get("kind") == "menu_open"
+                                   for dirt in state.get("dirt") or []))
+        raw["menu_wait"] = {k: waited[k] for k in ("timed_out", "elapsed_s", "polls")}
+        raw["menu_open_dirt"] = (waited.get("last") or {}).get("dirt")
+        raw["menu_opened"] = any(dirt.get("kind") == "menu_open"
+                                 for dirt in raw["menu_open_dirt"] or [])
+        menu = opened_menu() if raw["menu_opened"] else None
+        if menu is None:
+            raw["cause"] = "the Edit menu was not measured open with exactly one AXMenu child"
+            return raw
+        listed = ax.elements(menu, "AXChildren")
+        raw["menu_children_status"] = listed["status"]
+        for child in listed["elements"] or []:
+            role, role_error = cfbridge.text_of(ax.value(child, "AXRole"))
+            if role_error is not None or role != AX_MENU_ITEM:
+                continue
+            title, title_error = cfbridge.text_of(ax.value(child, "AXTitle"))
+            char, char_error = cfbridge.text_of(ax.value(child, "AXMenuItemCmdChar"))
+            enabled = ax.value(child, "AXEnabled")
+            modifiers = ax.value(child, "AXMenuItemCmdModifiers")
+            raw["entries"].append({
+                "title": title if title_error is None else None,
+                "title_error": title_error,
+                "enabled": enabled["value"] if enabled["status"] == 0 else None,
+                "enabled_status": enabled["status"],
+                "cmd_char": char if char_error is None else None,
+                "cmd_char_error": char_error,
+                "cmd_modifiers": modifiers["value"] if modifiers["status"] == 0 else None,
+                "cmd_modifiers_status": modifiers["status"],
+            })
+        return raw
+    finally:
+        if ax is not None:
+            ax.close()
+        settled = screen.settle_to_clean(timeout_s=5.0, pid=pid.get("value"))
+        raw["cleanup"] = {
+            "clean": not (settled.get("final") or {}).get("dirt"),
+            "sent_escape": settled.get("escapes_sent", 0) > 0,
+            "record": settled,
+        }
+
+
+def undo_entry_parse(raw):
+    """One exact Cmd-Z row after measured menu cleanup, or an explicit unreadable result."""
+    matches = [entry for entry in raw.get("entries") or []
+               if isinstance(entry, dict)
+               and isinstance(entry.get("cmd_char"), str)
+               and entry["cmd_char"].upper() == "Z"
+               and entry.get("cmd_modifiers") == 0]
+    cleanup = raw.get("cleanup") or {}
+    if (raw.get("menu_bar_matches") != 1 or raw.get("menu_opened") is not True
+            or cleanup.get("clean") is not True or cleanup.get("sent_escape") is not True
+            or len(matches) != 1):
+        return {"readable": False, "cause": raw.get("cause") or
+                "the localized Edit menu, exact Cmd-Z entry, or measured cleanup was not unique",
+                "raw": raw}
+    entry = matches[0]
+    if not isinstance(entry.get("title"), str) or not entry["title"] \
+            or not isinstance(entry.get("enabled"), bool):
+        return {"readable": False, "cause": "the Cmd-Z title or enabled state did not read",
+                "raw": raw}
+    return {"readable": True, "title": entry["title"], "enabled": entry["enabled"],
+            "shortcut": "cmd+z", "raw": raw}
+
+
+def undo_entry_known(spec, control):
+    """A different verified mutation must move the entry; a constant probe cannot pass."""
+    observations = [(control.get(name) or {}).get("observation") or {}
+                    for name in ("pre", "post", "after")]
+    if any(not item.get("readable") for item in observations):
+        return False
+    pre, post, after = observations
+    return (pre.get("title") != post.get("title")
+            and post.get("enabled") is True and after.get("enabled") is True
+            and flags_show(spec, (control.get("set") or {}).get("last"), "mute")
+            and flags_show(spec, (control.get("unset") or {}).get("last"), None))
+
+
+# ---------------------------------------------------------------------------------------------
 # the registry
 # ---------------------------------------------------------------------------------------------
 
@@ -423,6 +566,18 @@ REGISTRY = {
                                         "input_strip alone occupied after a bus is chosen in its "
                                         "send slot, then none after the reset (controls.py)"},
         "pilot": "#291",
+    },
+    "undo_entry_ax": {
+        "name": "undo_entry_ax",
+        "schema": {"lproj": {"type": "str", "required": True, "doc": "one of locale.LOCALES"},
+                   "pid": {"type": "int", "required": False, "doc": "Logic pid; else pgrep"}},
+        "command": undo_entry_command,
+        "parse": undo_entry_parse,
+        "positive_control": {"fixture": "locale_campaign_19", "state": "reset, then changed",
+                             "known": undo_entry_known,
+                             "reading": "the exact Cmd-Z entry changes after a different verified "
+                                        "track mutation and remains readable after restoration"},
+        "pilot": "#955",
     },
 }
 

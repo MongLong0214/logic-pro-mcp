@@ -753,16 +753,16 @@ struct QualificationGateTests {
 
         let credited = PromotionGate.liveCreditedOperationIDs(in: attestation(
             cases: [
-                operationCase("op.credited"),
-                operationCase("op.not_passed", status: .notQualified),
-                operationCase("op.unverified", verified: false),
-                operationCase("op.smoke_kind", kind: .protocolSmoke),
-                operationCase("op.readback_says_no", readbackVerified: false),
-                operationCase("op.readback_absent", readbackVerified: nil),
+                operationCase(OperationID.systemHealth.rawValue),
+                operationCase(OperationID.systemPermissions.rawValue, status: .notQualified),
+                operationCase(OperationID.systemRefreshCache.rawValue, verified: false),
+                operationCase(OperationID.systemHelp.rawValue, kind: .protocolSmoke),
+                operationCase(OperationID.projectIsRunning.rawValue, readbackVerified: false),
+                operationCase(OperationID.midiListPorts.rawValue, readbackVerified: nil),
             ],
             waivers: []
         ))
-        #expect(credited == ["op.credited"])
+        #expect(credited == [OperationID.systemHealth.rawValue])
     }
 
     /// A case whose id does not match `in-process/<operationID>` credits nothing, because the
