@@ -117,6 +117,16 @@ def mcu_upper_row_of(text: str) -> dict:
     return {"upper_row": row["value"], "resource_text": text}
 
 
+def undo_entry_of(run: dict) -> dict:
+    observation = (run or {}).get("observation") or {}
+    if not observation.get("readable"):
+        raise Unreadable(f"undo_entry: {observation.get('cause') or 'the Edit menu did not read'}")
+    title, enabled = observation.get("title"), observation.get("enabled")
+    if not isinstance(title, str) or not title or not isinstance(enabled, bool):
+        raise Unreadable("undo_entry: the Cmd-Z title or enabled state is malformed")
+    return {"title": title, "enabled": enabled, "shortcut": "cmd+z"}
+
+
 # ---------------------------------------------------------------------------------------------
 # the live readers: ctx is the runner's (lproj, decl, session, life)
 # ---------------------------------------------------------------------------------------------
@@ -148,6 +158,12 @@ def mcu_upper_row(ctx: dict) -> str:
     except Exception as exc:  # noqa: BLE001 - any failed read is this probe's unreadable
         raise Unreadable(f"mcu_upper_row: {exc}") from exc
     return _text(mcu_upper_row_of(text))
+
+
+def undo_entry(ctx: dict) -> str:
+    run = live_probes.run("undo_entry_ax", {"lproj": ctx["lproj"]})
+    data = json.dumps(run, ensure_ascii=False, sort_keys=True, default=repr).encode("utf-8")
+    return _text({**undo_entry_of(run), "walk_sha256": ctx["life"].sidecar(data)})
 
 
 # ---------------------------------------------------------------------------------------------

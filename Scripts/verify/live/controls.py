@@ -212,9 +212,24 @@ def routing_slots_control(lproj, server, spec):
     return record
 
 
+# ---------------------------------------------------------------------------------------------
+# undo_entry_ax
+# ---------------------------------------------------------------------------------------------
+
+def undo_entry_control(lproj, server, spec):
+    """A different verified mutation moves the Cmd-Z row; then restore the track flag."""
+    record = {"pre": probes.run("undo_entry_ax", {"lproj": lproj})}
+    record["set"] = set_track_flag(server, lproj, spec, "mute", 1)
+    record["post"] = probes.run("undo_entry_ax", {"lproj": lproj})
+    record["unset"] = set_track_flag(server, lproj, spec, "mute", 0)
+    record["after"] = probes.run("undo_entry_ax", {"lproj": lproj})
+    return record
+
+
 CONTROLS = {
     "track_flags_ax": track_flags_control,
     "routing_slots_ax": routing_slots_control,
+    "undo_entry_ax": undo_entry_control,
 }
 
 

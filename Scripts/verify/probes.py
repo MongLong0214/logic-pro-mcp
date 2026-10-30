@@ -53,6 +53,14 @@ PROBES = {
                  "display.upperRow, the Mackie Control LCD upper row as the server last received "
                  "it, with the resource text embedded whole.",
     },
+    "undo_entry": {
+        "args": {},
+        "returns": '{"title": <str>, "enabled": <bool>, "shortcut": "cmd+z"}',
+        "reads": "the verifier's own AX read of Logic's state-dependent Edit-menu Cmd-Z row, "
+                 "identified by shortcut rather than localized title. The reader opens the "
+                 "localized Edit menu because Logic populates the current Undo title only while "
+                 "open, then requires screen.settle_to_clean to observe and close that menu.",
+    },
     "routing_slots": {
         "args": {},
         "returns": '{"strip_count": <int>, "occupied_strips": [<int>, ...], '
