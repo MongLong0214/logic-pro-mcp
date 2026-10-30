@@ -10,7 +10,7 @@ struct MIDIDispatcher: OperationTraceDispatching {
 
     static let tool = commandTool(
         name: "logic_midi",
-        description: "MIDI operations in Logic Pro. Commands: send_note, send_chord, send_cc, send_program_change, send_pitch_bend, send_aftertouch, send_sysex, play_sequence, import_file, export_track_midi, read_track_notes, list_ports, create_virtual_port, step_input, mmc_play, mmc_stop, mmc_record, mmc_locate. Params: send_note/send_chord -> MIDI note payloads; send_cc/program_change/pitch_bend/aftertouch -> controller payloads; send_sysex -> { bytes: [Int] } or { data: String } (≤1024 bytes); play_sequence -> { notes: \"pitch,offsetMs,durMs[,vel[,ch]];...\" } (≤256 events, tight server-side timing); import_file -> { path: server-managed LogicProMCP temp .mid } and wait for verified:true before issuing the next import; export_track_midi -> { project_ref: String, target_ref: track reference, path: absolute new .mid file, allow_temporary_track_rename?: Bool }; read_track_notes -> { project_ref: String, target_ref: track reference, allow_temporary_track_rename?: Bool }. Both native file operations require a complete fresh track namespace and original physical bindings, use no caller-prepared region selection, never overwrite a destination, and return SMF tick/PPQ facts, not project-relative or previous-import equivalence. Repeated target names report every colliding Arrange index and remain nonmutating unless allow_temporary_track_rename is explicitly true; that opt-in uses one verified temporary rename and requires verified restoration before success. Hidden/incomplete namespaces and unqualified export layouts refuse. list_ports -> {} (same data as logic://midi/ports; prefer the resource for polling); mmc_locate -> { bar: Int } or { time: \"HH:MM:SS:FF\" }; create_virtual_port -> { name: String }. The 7 send-style ops (send_note, send_chord, send_cc, send_program_change, send_pitch_bend, send_aftertouch, play_sequence) accept an optional { port: \"midi\"|\"keycmd\" } selector — default \"midi\" routes to the CoreMIDI virtual port; \"keycmd\" routes to the MIDIKeyCommands KeyCmd virtual port (requires one-time MIDI Learn in Logic). Channel is 1-based (1..16). All other ops reject `port` with invalid_params.",
+        description: "MIDI operations in Logic Pro. Commands: send_note, send_chord, send_cc, send_program_change, send_pitch_bend, send_aftertouch, send_sysex, play_sequence, import_file, export_track_midi, read_track_notes, read_selected_region_events, list_ports, create_virtual_port, step_input, mmc_play, mmc_stop, mmc_record, mmc_locate. Params: send_note/send_chord -> MIDI note payloads; send_cc/program_change/pitch_bend/aftertouch -> controller payloads; send_sysex -> { bytes: [Int] } or { data: String } (≤1024 bytes); play_sequence -> { notes: \"pitch,offsetMs,durMs[,vel[,ch]];...\" } (≤256 events, tight server-side timing); import_file -> { path: server-managed LogicProMCP temp .mid } and wait for verified:true before issuing the next import; export_track_midi -> { project_ref: String, target_ref: track reference, path: absolute new .mid file, allow_temporary_track_rename?: Bool }; read_track_notes -> { project_ref: String, target_ref: track reference, allow_temporary_track_rename?: Bool }; read_selected_region_events -> {} and returns State B with a stable selected-region observation plus unbound raw Event List rows; event_list_owner_proven and canonical_notes_complete remain false until identity, timing, and complete traversal are proved. Both native file operations require a complete fresh track namespace and original physical bindings, use no caller-prepared region selection, never overwrite a destination, and return SMF tick/PPQ facts, not project-relative or previous-import equivalence. Repeated target names report every colliding Arrange index and remain nonmutating unless allow_temporary_track_rename is explicitly true; that opt-in uses one verified temporary rename and requires verified restoration before success. Hidden/incomplete namespaces and unqualified export layouts refuse. list_ports -> {} (same data as logic://midi/ports; prefer the resource for polling); mmc_locate -> { bar: Int } or { time: \"HH:MM:SS:FF\" }; create_virtual_port -> { name: String }. The 7 send-style ops (send_note, send_chord, send_cc, send_program_change, send_pitch_bend, send_aftertouch, play_sequence) accept an optional { port: \"midi\"|\"keycmd\" } selector — default \"midi\" routes to the CoreMIDI virtual port; \"keycmd\" routes to the MIDIKeyCommands KeyCmd virtual port (requires one-time MIDI Learn in Logic). Channel is 1-based (1..16). All other ops reject `port` with invalid_params.",
         commandDescription: "MIDI command to execute"
     )
 
@@ -21,7 +21,8 @@ struct MIDIDispatcher: OperationTraceDispatching {
         cache: StateCache,
         trackFileExport: (@Sendable (
             String, String, String?, Bool
-        ) async throws -> MIDITrackFileExport.Result)? = nil
+        ) async throws -> MIDITrackFileExport.Result)? = nil,
+        selectedRegionEventRead: (@Sendable () throws -> SelectedRegionEventListReader.PartialRead)? = nil
     ) async -> CallTool.Result {
         switch command {
         case "export_track_midi", "read_track_notes":
@@ -245,6 +246,20 @@ struct MIDIDispatcher: OperationTraceDispatching {
                 return reject
             }
             return await routedTextResult(router, operation: "midi.list_ports")
+
+        case "read_selected_region_events":
+            guard params.isEmpty else {
+                return toolInvalidParamsResult("read_selected_region_events accepts no parameters")
+            }
+            do {
+                let read = try selectedRegionEventRead?() ?? SelectedRegionEventListReader.readProduction()
+                return toolTextResult(SelectedRegionEventListReader.responseJSON(read))
+            } catch {
+                return toolTextResult(
+                    SelectedRegionEventListReader.refusalJSON(error),
+                    isError: true
+                )
+            }
 
         case "mmc_play":
             if let reject = rejectIfPortPresent(params, command: command) {

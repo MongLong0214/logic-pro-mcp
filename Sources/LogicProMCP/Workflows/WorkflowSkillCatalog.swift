@@ -528,7 +528,7 @@ enum WorkflowSkillCatalog {
             "send_note", "send_chord", "play_sequence", "send_cc",
             "send_program_change", "send_pitch_bend", "send_aftertouch",
             "send_sysex", "import_file", "list_ports", "create_virtual_port",
-            "export_track_midi", "read_track_notes",
+            "export_track_midi", "read_track_notes", "read_selected_region_events",
             "mmc_play", "mmc_stop", "mmc_record", "mmc_locate", "step_input",
         ],
         "logic_edit": [
