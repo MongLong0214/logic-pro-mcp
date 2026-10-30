@@ -46,6 +46,7 @@ Each command's accepted parameters and the registry's policy words for it. "Clos
 | `mmc_record` | none | none | closed | mutating | none | none | none | never_automatic | default_install |
 | `mmc_stop` | none | none | closed | mutating | none | none | none | never_automatic | default_install |
 | `play_sequence` | `notes`: string, `port`: string (keycmd, midi) | `notes` | closed | mutating | none | none | none | never_automatic | default_install |
+| `read_selected_region_events` | none | none | closed | read_only | none | none | none | never_automatic | default_install |
 | `read_track_notes` | `allow_temporary_track_rename`: boolean, `project_ref`: string, `target_ref`: string | `project_ref`; `target_ref` | closed | mutating | none | accepts_stable_target | readback_required | never_automatic | default_install |
 | `send_aftertouch` | `channel`: integer, `port`: string (keycmd, midi), `value`: integer | `value` | closed | mutating | none | none | none | never_automatic | default_install |
 | `send_cc` | `channel`: integer, `controller`: integer, `port`: string (keycmd, midi), `value`: integer | `controller`; `value` | closed | mutating | none | none | none | never_automatic | default_install |
