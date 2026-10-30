@@ -184,7 +184,7 @@ Flags:
 
 | Flag | Effect |
 |------|--------|
-| (none) | Human report: a "next action" headline, a `summary:` counts line, and one line per check. |
+| (none) | Human report: an outcome headline, a `summary:` counts line, and one line per check. |
 | `--verbose` | Adds each check's evidence and `duration_ms`. |
 | `--quiet` | Headline + summary + failing/non-pass checks only. |
 | `--json` | Machine report. Identical bytes regardless of `--verbose`/`--quiet`/color. |
@@ -224,6 +224,8 @@ Consumer compatibility notes:
 | Skipped-count alarms | Expect a higher baseline; v4 reports diagnostic-capability gaps instead of hiding them. Optional skips do not imply degraded status. |
 | UIs unaware of `fix_plan` | Continue rendering checks normally; `fix_plan` only orders the next actions. |
 | Readiness dashboards | Prefer `capabilities.<id>.status` for profile-aware readiness over hand-rolled check groups. |
+
+`fix_plan` contains only non-pass checks that have a concrete remediation. Terminal and unresolved checks without a concrete remediation are excluded from that action list but remain visible in `headline` and `checks`. A `fail` without remediation uses `Terminal outcome`; a `warn` or `manual` result without remediation uses `Unresolved outcome`. `Next action` is reserved for a result whose remediation can actually be carried out.
 
 ## Doctor Remediation Anchors
 

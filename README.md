@@ -303,7 +303,7 @@ LogicProMCP doctor --check-updates # opt-in: also checks for a newer release
 
 **Capability readiness, not just check pass/fail.** Every check is mapped to the capabilities it gates (`track_management`, `midi_import`, `mixer_ax`, `mixer_mcu`, `keycmd_only_ops`, `verified_plugin_applyback`, `project_lifecycle`, …). The report tells you *"MIDI import is ready; verified-plugin apply-back is blocked by PostEvent"* — the language an agent (or an operator) can act on directly.
 
-**Causal chain — `fix_plan` and `blocked_by`.** Failures are ordered into a `fix_plan` (the next actions, most-unblocking first), and each downstream check names the upstream check that `blocked_by` it — so you fix the root, not the symptom. The `headline` restates the single next action.
+**Causal chain — `fix_plan` and `blocked_by`.** Only non-pass checks with a concrete remediation are ordered into `fix_plan` (the next actions, most-unblocking first), and each downstream check names the upstream check that `blocked_by` it — so you fix the root, not the symptom. When the highest-priority outcome has a concrete remediation, the `headline` restates that next action. A non-remediable failure remains visible as a `Terminal outcome`; a non-remediable warning or manual result remains visible as an `Unresolved outcome`, but neither invents an action or appears in `fix_plan`.
 
 **Honesty is the whole point.** A check that could not run (missing capability, unreadable TCC db) is reported as an explicit `skipped` with a reason — it is never silently folded into a pass. Intentional skips (`--skip-channel <MIDIKeyCommands|Scripter>` with an optional `--skip-note`, e.g. you deliberately didn't register Scripter) are recorded and excluded from readiness without faking green. TCC findings are redacted to service/principal/state summaries — no raw local paths in the report.
 
@@ -316,8 +316,8 @@ A real (redacted) run on a box mid-setup:
   "schema": "logic_pro_mcp_doctor.v5",
   "doctor_profile": "core",
   "status": "failed",
-  "headline": "Next action [permissions.accessibility]: Accessibility permission is not granted",
-  "fix_plan": ["permissions.accessibility", "permissions.post_event_access", "install.binary_inventory"],
+  "headline": "Terminal outcome [permissions.accessibility]: Accessibility permission is not granted.",
+  "fix_plan": ["install.binary_inventory"],
   "summary": { "total": 26, "passed": 15, "warnings": 1, "failed": 2, "skipped": 8, "manual": 0, "duration_ms": 333 },
   "checks": [ { "id": "binary.path", "status": "pass", "category": "installation", "severity": "info" } /* … */ ]
 }

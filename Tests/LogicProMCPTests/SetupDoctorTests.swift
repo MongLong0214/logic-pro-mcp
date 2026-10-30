@@ -99,6 +99,19 @@ private func issue26RepositoryRootURL() -> URL {
     #expect(!readme.contains("logic_pro_mcp_doctor.v4"))
 }
 
+@Test func testDoctorDocsDescribeOnlyActionableFixPlanEntries() throws {
+    let root = issue26RepositoryRootURL()
+    let readme = try String(contentsOf: root.appendingPathComponent("README.md"), encoding: .utf8)
+    let setup = try String(contentsOf: root.appendingPathComponent("docs/SETUP.md"), encoding: .utf8)
+
+    #expect(readme.contains("Only non-pass checks with a concrete remediation are ordered into `fix_plan`"))
+    #expect(readme.contains("\"headline\": \"Terminal outcome [permissions.accessibility]: Accessibility permission is not granted.\""))
+    #expect(readme.contains("\"fix_plan\": [\"install.binary_inventory\"]"))
+    #expect(!readme.contains("\"fix_plan\": [\"permissions.accessibility\""))
+    #expect(setup.contains("an outcome headline"))
+    #expect(setup.contains("Terminal and unresolved checks without a concrete remediation are excluded"))
+}
+
 @Test func testSetupDoctorJSONContractStableCheckIDsAndOKAggregation() throws {
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json", "--client", "claude-code"],
