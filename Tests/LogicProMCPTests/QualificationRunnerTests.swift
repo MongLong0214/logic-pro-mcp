@@ -1107,7 +1107,7 @@ struct QualificationRunnerTests {
         let readOnlyCount = OperationRegistry.specs.filter { $0.mutability == .readOnly }.count
         let marked = Set(SemanticOracleTable.all
             .filter { $0.independentReadbackDeferral != nil }.map(\.operationID))
-        #expect(marked == Set<OperationID>([.midiListPorts, .mixerGetOutputVerified, .mixerGetSendDestinationVerified,
+        #expect(marked == Set<OperationID>([.midiListPorts, .midiReadSelectedRegionEvents, .mixerGetOutputVerified, .mixerGetSendDestinationVerified,
             .mixerGetInputBusVerified, .mixerGetSendBypassVerified, .pluginsPlanParameterChanges,
             .pluginsGetHostParameterManifest, .pluginsGetParamVerified, .pluginsGetChannelEQStateVerified]))
         let readOnlyIDs = Set(OperationRegistry.specs.filter { $0.mutability == .readOnly }.map(\.id.rawValue))
@@ -1148,6 +1148,58 @@ struct QualificationRunnerTests {
                 && $0.deferral?.detail.contains("ADR-001-c") == true
                 && $0.readback != nil
         })
+    }
+
+    @Test func qualificationFixtureMetadataMatchesSelectedRegionResponseEnvelope() throws {
+        let spec = try #require(OperationRegistry.specs.first {
+            $0.id == .midiReadSelectedRegionEvents
+        })
+        let result = try #require(Self.driveResult(specs: [spec])
+            .operationResults[spec.id.rawValue])
+        let responseData = try #require(result.responseData)
+        let response = try #require(
+            JSONSerialization.jsonObject(with: responseData) as? [String: Any]
+        )
+        let resultWriteAttempted = String(describing: result.writeAttempted)
+        let responseWriteAttempted = String(describing: response["write_attempted"] as? Bool)
+
+        #expect(result.state == response["state"] as? String)
+        #expect(result.error == response["error"] as? String)
+        #expect(resultWriteAttempted == responseWriteAttempted)
+    }
+
+    @Test func qualificationFixtureResponseArtifactsBindRetainedEvidence() async throws {
+        let fixture = try trustedFixture(includeRequiredAtlas: false)
+        defer { fixture.remove() }
+        let attestation = try await fixture.qualify(waiversURL: fixture.waiversURL)
+
+        for qualificationCase in attestation.cases where qualificationCase.id.hasPrefix("in-process/") {
+            let artifacts = try qualificationCase.evidenceFiles.map {
+                try Data(contentsOf: fixture.directory.appendingPathComponent($0))
+            }
+            let evidence = try #require(artifacts.compactMap {
+                try? JSONDecoder().decode(CaseEvidence.self, from: $0)
+            }.first, "\(qualificationCase.id)")
+            let response = try #require(artifacts.compactMap {
+                try? JSONDecoder().decode(QualificationOperationResponseArtifact.self, from: $0)
+            }.first, "\(qualificationCase.id)")
+
+            #expect(response.operationID == evidence.operationID, "\(qualificationCase.id)")
+            #expect(response.tool == evidence.tool, "\(qualificationCase.id)")
+            #expect(response.command == evidence.command, "\(qualificationCase.id)")
+            #expect(response.requestID == evidence.operationRequestID, "\(qualificationCase.id)")
+            #expect(response.isError == evidence.operationIsError, "\(qualificationCase.id)")
+            guard evidence.verificationKind != .semanticReadback else { continue }
+            let payload = try #require(
+                JSONSerialization.jsonObject(with: Data(response.payload.utf8)) as? [String: Any],
+                "\(qualificationCase.id)"
+            )
+            #expect(payload["state"] as? String == evidence.operationState, "\(qualificationCase.id)")
+            #expect(payload["error"] as? String == evidence.operationError, "\(qualificationCase.id)")
+            let payloadWriteAttempted = String(describing: payload["write_attempted"] as? Bool)
+            let evidenceWriteAttempted = String(describing: evidence.operationWriteAttempted)
+            #expect(payloadWriteAttempted == evidenceWriteAttempted, "\(qualificationCase.id)")
+        }
     }
 
     /// #882. THE CASE NOBODY HAD WRITTEN, and its absence is why the whole mutating class was
@@ -6253,7 +6305,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         let readOnlyCount = OperationRegistry.specs.filter { $0.mutability == .readOnly }.count
         let marked = Set(SemanticOracleTable.all
             .filter { $0.independentReadbackDeferral != nil }.map(\.operationID))
-        #expect(marked == Set<OperationID>([.midiListPorts, .mixerGetOutputVerified, .mixerGetSendDestinationVerified,
+        #expect(marked == Set<OperationID>([.midiListPorts, .midiReadSelectedRegionEvents, .mixerGetOutputVerified, .mixerGetSendDestinationVerified,
             .mixerGetInputBusVerified, .mixerGetSendBypassVerified, .pluginsPlanParameterChanges,
             .pluginsGetHostParameterManifest, .pluginsGetParamVerified, .pluginsGetChannelEQStateVerified]))
         let markedIDs = Set(marked.map(\.rawValue))
@@ -7738,11 +7790,11 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                 ? stableHealth
                 : oracleFixture.map(\.readbackData)
                 ?? Data("{\"operation_readback\":\"\(spec.id.rawValue)\"}".utf8)
-            // MIDI ports returns raw inventory, without a typed state/write envelope.
-            // Preserve its actual scalar fields rather than fabricating response metadata.
-            let midiResponse = spec.id == .midiListPorts
-                ? (try? JSONSerialization.jsonObject(with: response)) as? [String: Any]
-                : nil
+            // Preserve the same envelope metadata the signed response artifact carries. A
+            // response-only oracle may deliberately return State B; stamping every read fixture
+            // as State A makes the producer's evidence disagree with its retained payload.
+            let responseEnvelope = (try? JSONSerialization.jsonObject(with: response))
+                as? [String: Any]
             return (
                 spec.id.rawValue,
                 QualificationOperationResult(
@@ -7753,12 +7805,14 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                     requestID: "fake-operation-\(spec.id.rawValue)",
                     responseData: response,
                     isError: isMutation || !readIsQualified,
-                    state: spec.id == .midiListPorts ? midiResponse?["state"] as? String
-                        : spec.id == nonObjectResponseOperationID ? nil : isMutation ? "C" : "A",
-                    error: spec.id == .midiListPorts ? midiResponse?["error"] as? String
-                        : isMutation ? "invalid_params" : nil,
+                    state: spec.id == nonObjectResponseOperationID ? nil
+                        : isMutation ? "C"
+                        : responseEnvelope?["state"] as? String
+                            ?? (spec.id == .midiListPorts ? nil : "A"),
+                    error: isMutation ? "invalid_params" : responseEnvelope?["error"] as? String,
                     hint: nil,
-                    writeAttempted: spec.id == .midiListPorts ? midiResponse?["write_attempted"] as? Bool : false,
+                    writeAttempted: responseEnvelope?["write_attempted"] as? Bool
+                        ?? (spec.id == .midiListPorts ? nil : false),
                     readbackSource: spec.tool == .logicTransport
                         ? "logic://transport/state"
                         : spec.tool == .logicMixer

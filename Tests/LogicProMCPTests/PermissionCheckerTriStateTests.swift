@@ -1,3 +1,4 @@
+import ApplicationServices
 import Testing
 @testable import LogicProMCP
 
@@ -30,6 +31,102 @@ private func triStateRuntime(
 }
 
 // MARK: - probeState mapping (the honesty core)
+
+@Test func testAutomationPermissionProbeNeverAsksForConsent() {
+    final class Observation: @unchecked Sendable {
+        var bundleID: String?
+        var askUserIfNeeded: Bool?
+    }
+    let observation = Observation()
+
+    let state = PermissionChecker.nonPromptingAutomationState(
+        bundleID: "com.apple.systemevents",
+        determinePermission: { bundleID, askUserIfNeeded in
+            observation.bundleID = bundleID
+            observation.askUserIfNeeded = askUserIfNeeded
+            return Int32(errAEEventWouldRequireUserConsent)
+        }
+    )
+
+    #expect(observation.bundleID == "com.apple.systemevents")
+    let askedForConsent = observation.askUserIfNeeded ?? true
+    #expect(!askedForConsent)
+    #expect(state == .notGranted)
+}
+
+@Test(arguments: [
+    (Int32(noErr), PermissionChecker.CheckState.granted),
+    (Int32(errAEEventNotPermitted), PermissionChecker.CheckState.notGranted),
+    (Int32(errAEEventWouldRequireUserConsent), PermissionChecker.CheckState.notGranted),
+    (Int32(procNotFound), PermissionChecker.CheckState.notVerifiable),
+    (Int32(paramErr), PermissionChecker.CheckState.notVerifiable),
+])
+func testAutomationPermissionStatusMapping(status: Int32, expected: PermissionChecker.CheckState) {
+    let state = PermissionChecker.nonPromptingAutomationState(
+        bundleID: "com.example.target",
+        determinePermission: { _, _ in status }
+    )
+    #expect(state == expected)
+}
+
+@Test func testSystemEventsPermissionProbeLaunchesWithoutActivationThenRetriesNonprompting() {
+    final class Observation: @unchecked Sendable {
+        var statuses = [Int32(procNotFound), Int32(noErr)]
+        var asks: [Bool] = []
+        var launchedBundleIDs: [String] = []
+    }
+    let observation = Observation()
+
+    let state = PermissionChecker.nonPromptingSystemEventsAutomationState(
+        determinePermission: { bundleID, askUserIfNeeded in
+            #expect(bundleID == "com.apple.systemevents")
+            observation.asks.append(askUserIfNeeded)
+            return observation.statuses.removeFirst()
+        },
+        launchWithoutActivation: { bundleID in
+            observation.launchedBundleIDs.append(bundleID)
+            return true
+        }
+    )
+
+    #expect(state == .granted)
+    #expect(observation.asks == [false, false])
+    #expect(observation.launchedBundleIDs == ["com.apple.systemevents"])
+}
+
+@Test func testSystemEventsPermissionProbeDoesNotLaunchForConsentOrDenial() {
+    for status in [Int32(errAEEventWouldRequireUserConsent), Int32(errAEEventNotPermitted)] {
+        var launchCount = 0
+        let state = PermissionChecker.nonPromptingSystemEventsAutomationState(
+            determinePermission: { _, askUserIfNeeded in
+                #expect(!askUserIfNeeded)
+                return status
+            },
+            launchWithoutActivation: { _ in
+                launchCount += 1
+                return true
+            }
+        )
+
+        #expect(state == .notGranted)
+        #expect(launchCount == 0)
+    }
+}
+
+@Test func testSystemEventsPermissionProbeFailsClosedWhenBackgroundLaunchFails() {
+    var queryCount = 0
+    let state = PermissionChecker.nonPromptingSystemEventsAutomationState(
+        determinePermission: { _, askUserIfNeeded in
+            queryCount += 1
+            #expect(!askUserIfNeeded)
+            return Int32(procNotFound)
+        },
+        launchWithoutActivation: { _ in false }
+    )
+
+    #expect(state == .notVerifiable)
+    #expect(queryCount == 1)
+}
 
 @Test func testProbeStateTimedOutIsNotVerifiableNotDenial() {
     #expect(PermissionChecker.probeState(from: .timedOut, expectedName: "Logic Pro") == .notVerifiable)

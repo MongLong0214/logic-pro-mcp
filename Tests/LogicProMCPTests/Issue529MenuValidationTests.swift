@@ -2286,6 +2286,8 @@ struct Issue529MenuValidationTests {
         let gate = Issue529DialogLockGate()
         let firstScriptCalls = Issue529Counter()
         let contenderScriptCalls = Issue529Counter()
+        let contenderFrontmostReads = Issue529Counter()
+        let contenderActivationCalls = Issue529Counter()
         let firstRuntime = issue529SliderRuntime(
             sliderWrites: Issue529Counter(),
             executeAppleScript: { _ in
@@ -2326,7 +2328,15 @@ struct Issue529MenuValidationTests {
         }
         let contender = await AccessibilityChannel.gotoPositionViaBarSlider(
             params: ["bar": "530"], runtime: contenderRuntime,
-            isFrontmost: { true }, activateLogic: { true }, sleepMicros: { _ in },
+            isFrontmost: {
+                contenderFrontmostReads.bump()
+                return contenderFrontmostReads.value >= 2
+            },
+            activateLogic: {
+                contenderActivationCalls.bump()
+                return true
+            },
+            sleepMicros: { _ in },
             dialogExecutionLockPath: lockPath
         )
         await gate.release()
@@ -2337,6 +2347,17 @@ struct Issue529MenuValidationTests {
         let contenderEnvelope = try #require(issue529Envelope(contender))
         #expect(!contender.isSuccess)
         #expect(try #require(contenderEnvelope["error"] as? String) == "mutating_operation_in_progress")
+        let terminal = try #require(contenderEnvelope["terminal"] as? Bool)
+        let humanInterventionRequired = try #require(contenderEnvelope["human_intervention_required"] as? Bool)
+        #expect(terminal)
+        #expect(!humanInterventionRequired)
+        #expect(try #require(contenderEnvelope["frontmost_preparation"] as? String) == "activated")
+        #expect(contenderActivationCalls.value == 1)
+        let hint = try #require(contenderEnvelope["hint"] as? String)
+        #expect(hint.contains("terminated before mutation"))
+        #expect(hint.contains("no dialog or position mutation occurred"))
+        #expect(!hint.contains("no UI action occurred"))
+        #expect(!hint.lowercased().contains("retry"))
         #expect(firstScriptCalls.value == 1)
         #expect(contenderScriptCalls.value == 0)
     }

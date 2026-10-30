@@ -66,7 +66,17 @@ struct OperationDispatchCensusTests {
             // #965/#866: `project.inspect_session` reads the project file for an
             // expected track count; the inert reader keeps this census off
             // AppleScript.
-            projectFileReader: .unavailable
+            projectFileReader: .unavailable,
+            selectedRegionEventRead: {
+                SelectedRegionEventListReader.PartialRead(
+                    selectedRegionObservation: .init(name: "Census MIDI", trackIndex: 0, startBar: 1, endBar: 2, kind: "midi"),
+                    rawRows: [],
+                    liveHeaderTitles: [],
+                    canonicalNotesComplete: false,
+                    partialReason: .identityTimingAndTraversalUnproven,
+                    writeAttempted: false
+                )
+            }
         )
 
         for spec in OperationRegistry.specs {

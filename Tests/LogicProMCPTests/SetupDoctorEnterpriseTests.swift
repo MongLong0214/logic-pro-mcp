@@ -87,8 +87,8 @@ private func check(_ report: SetupDoctor.Report, _ id: String) -> SetupDoctor.Ch
 
 // MARK: - T1: v2 model framework
 
-@Test func test_t1_schema_is_v4() {
-    #expect(makeReport().schema == "logic_pro_mcp_doctor.v4")
+@Test func test_t1_schema_is_v5() {
+    #expect(makeReport().schema == "logic_pro_mcp_doctor.v5")
 }
 
 @Test func test_t1_each_check_has_category_severity_duration() throws {
@@ -281,7 +281,7 @@ private struct FrozenV1Report: Codable {
 @Test func test_t1_e10b_v2_decodes_with_frozen_v1_struct() throws {
     let json = encodeJSON(makeReport())
     let frozen: FrozenV1Report = try decodeJSON(json)
-    #expect(frozen.schema == "logic_pro_mcp_doctor.v4")
+    #expect(frozen.schema == "logic_pro_mcp_doctor.v5")
     let ids = Set(frozen.checks.map(\.id))
     // Every original v1 check id must survive (a dropped v1 check would fail this).
     let v1Ids = [
@@ -657,8 +657,8 @@ private func runEntrypoint(
 // MARK: - T1 (doctor-v3): data-spine — blocked_by / fix_plan / schema v3 / dep-table
 
 // Case 1
-@Test func test_t1v3_schema_is_v4() {
-    #expect(makeReport().schema == "logic_pro_mcp_doctor.v4")
+@Test func test_t1v3_schema_is_v5() {
+    #expect(makeReport().schema == "logic_pro_mcp_doctor.v5")
 }
 
 // Case 2
@@ -791,10 +791,10 @@ private func runEntrypoint(
 }
 
 // Case 14
-@Test func test_t1v3_frozen_v1_still_decodes_from_v4() throws {
+@Test func test_t1v3_frozen_v1_still_decodes_from_v5() throws {
     let json = encodeJSON(makeReport())
     let frozen: FrozenV1Report = try decodeJSON(json)
-    #expect(frozen.schema == "logic_pro_mcp_doctor.v4")
+    #expect(frozen.schema == "logic_pro_mcp_doctor.v5")
     let ids = Set(frozen.checks.map(\.id))
     let v1Ids = [
         "binary.path", "binary.executable", "binary.version", "install.source",
@@ -803,15 +803,15 @@ private func runEntrypoint(
         "logic.application_state", "channels.manual_validation",
     ]
     for id in v1Ids {
-        #expect(ids.contains(id), "v1 check id \(id) missing from v4 output")
+        #expect(ids.contains(id), "v1 check id \(id) missing from v5 output")
     }
 }
 
 // Case 15
-@Test func test_t1v3_frozen_v2_decodes_from_v4() throws {
+@Test func test_t1v3_frozen_v2_decodes_from_v5() throws {
     let json = encodeJSON(makeReport(permission: granted(accessibility: false)))
     let frozen: FrozenV2Report = try decodeJSON(json)
-    #expect(frozen.schema == "logic_pro_mcp_doctor.v4")
+    #expect(frozen.schema == "logic_pro_mcp_doctor.v5")
     let accessibility = try #require(frozen.checks.first { $0.id == "permissions.accessibility" })
     #expect(accessibility.status == "fail")
     #expect(accessibility.category == "permissions")
