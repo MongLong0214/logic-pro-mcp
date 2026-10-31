@@ -6,7 +6,7 @@ enum DestructivePolicy {
     enum Level: Int, Sendable, Comparable {
         case l0 = 0  // Safe — play, stop, set_volume
         case l1 = 1  // Normal — save, new, launch (audit log)
-        case l2 = 2  // High — save_as, bounce, open (warning)
+        case l2 = 2  // High — save_as, open (warning)
         case l3 = 3  // Critical — quit, close (confirmation required)
 
         static func < (lhs: Level, rhs: Level) -> Bool { lhs.rawValue < rhs.rawValue }

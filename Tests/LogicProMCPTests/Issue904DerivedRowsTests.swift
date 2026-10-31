@@ -3,20 +3,14 @@ import Foundation
 import Testing
 @testable import LogicProMCP
 
-/// Captures the AppleScript a menu route generates, the way Issue519MenuLocaleGeneratorTests does.
-private final class BounceScriptProbe: @unchecked Sendable {
-    private(set) var script = ""
-    func capture(_ script: String) { self.script = script }
-}
-
 /// #904: thirteen LabelSets whose Apple row is the control's own word now name that row in
 /// `derivedFrom` and carry its ten-locale values beside the readings they already held.
 ///
 /// `Scripts/check-labelsets-are-derived.py` proves, offline, that the members ARE the row's values.
-/// What it cannot prove is that the row reaches the consumer: each set is matched in one of five
+/// What it cannot prove is that the row reaches the consumer: each active set is matched in one of four
 /// ways -- `.exactStrict` on a checkbox, `.exactStrict` on a lowercased slider description,
-/// `containsAny` over a lowercased aggregate, a literal spliced into AppleScript, and `containsAny`
-/// on an Undo title -- and a value can be Apple's and still never match if it lands in a set the
+/// `containsAny` over a lowercased aggregate, and `containsAny` on an Undo title -- and a value can
+/// be Apple's and still never match if it lands in a set the
 /// consumer reads differently. So every test here drives one consumer class with a value that ONLY
 /// the derived row supplies, and names the mutation that turns it red.
 @Suite("#904 thirteen LabelSets derive from the row that is the control's own word")
@@ -232,26 +226,6 @@ struct Issue904DerivedRowsTests {
 
         #expect(track.name == "Sine Lead")
         #expect(track.type == .softwareInstrument)
-    }
-
-    // MARK: - Class 4: literals spliced into AppleScript
-
-    /// Mutation that turns this red: remove `Proyecto o sección…` from projectOrSectionMenuItem's
-    /// variants. The Bounce route renders every label as a quoted AppleScript literal, so a value
-    /// the set does not hold is a leaf the script never names.
-    @Test("the Bounce script names the Spanish Project or Section leaf")
-    func appleScriptSplicedClass() async {
-        let probe = BounceScriptProbe()
-        _ = await AccessibilityChannel.openBounceDialogViaMenu(
-            systemEventsAuthorized: { true },
-            executeScript: { script in
-                probe.capture(script)
-                return .success(#"{"result":"BOUNCE_MENU_ITEM_NOT_FOUND"}"#)
-            }
-        )
-        #expect(probe.script.contains("\"Proyecto o sección…\""))
-        #expect(probe.script.contains("\"项目或部分…\""))
-        #expect(probe.script.contains("\"計畫案或段落⋯\""))
     }
 
     /// Mutation that turns this red: remove `テンポ` from midiImportTempoAlertText's variants. The
