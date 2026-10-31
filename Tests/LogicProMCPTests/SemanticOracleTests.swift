@@ -1247,6 +1247,30 @@ struct SemanticOracleMutationTests {
         #expect(verdict, "\(operationID.rawValue) rejected its own realistic fixture")
     }
 
+    @Test func projectExportPlanOraclePinsEachStatusToItsOnlySafeContinuation() throws {
+        let oracle = try #require(SemanticOracleTable.byOperationID[.projectExportPlan])
+        let common = #""schema":"logic_pro_mcp_export_manifest.v1","execution_mode":"dry_run_only","project_count":1,"projects":[{}]"#
+        let cases: [(status: String, action: String, accepted: Bool)] = [
+            ("planned", "execute_export_run", true),
+            ("degraded", "none_terminal", true),
+            ("planned", "none_terminal", false),
+            ("degraded", "execute_export_run", false),
+        ]
+
+        for testCase in cases {
+            let response = Data("{\(common),\"status\":\"\(testCase.status)\",\"next_safe_action\":\"\(testCase.action)\"}".utf8)
+            let verdict = try #require(oracle.evaluate(
+                responseData: response,
+                readbackData: Data("{}".utf8)
+            ))
+            if testCase.accepted {
+                #expect(verdict, "rejected valid pair \(testCase.status) + \(testCase.action)")
+            } else {
+                #expect(!verdict, "accepted crossed pair \(testCase.status) + \(testCase.action)")
+            }
+        }
+    }
+
     @Test("Solo keyboard State A passes qualification")
     func soloKeyboardStateAPassesQualification() throws {
         let oracle = try #require(SemanticOracleTable.byOperationID[.tracksSolo])
