@@ -13,6 +13,7 @@ terminal_receipt() {
     echo "terminal=true"
     echo "human_intervention_required=false"
     echo "human_intervention_requests=0"
+    echo "human_dependent_transitions=0"
 }
 
 fail_keycmd_uninstall() {

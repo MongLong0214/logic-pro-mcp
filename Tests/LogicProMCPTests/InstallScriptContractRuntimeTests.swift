@@ -724,6 +724,7 @@ private func makeUninstallLaunchAgentFixture(
     #expect(result.combinedOutput.contains("terminal=true"))
     #expect(result.combinedOutput.contains("human_intervention_required=false"))
     #expect(result.combinedOutput.contains("human_intervention_requests=0"))
+    #expect(result.combinedOutput.contains("human_dependent_transitions=0"))
     #expect(!result.combinedOutput.localizedCaseInsensitiveContains("re-run"))
     #expect(!result.combinedOutput.localizedCaseInsensitiveContains("manually"))
     #expect(!result.combinedOutput.localizedCaseInsensitiveContains("restart Logic"))
@@ -756,6 +757,7 @@ private func makeUninstallLaunchAgentFixture(
     #expect(result.combinedOutput.contains("terminal=true"))
     #expect(result.combinedOutput.contains("human_intervention_required=false"))
     #expect(result.combinedOutput.contains("human_intervention_requests=0"))
+    #expect(result.combinedOutput.contains("human_dependent_transitions=0"))
     #expect(result.combinedOutput.contains("reference removal failed"))
 }
 
@@ -786,6 +788,7 @@ private func makeUninstallLaunchAgentFixture(
     #expect(!FileManager.default.fileExists(atPath: stagedReference.path))
     #expect(result.combinedOutput.contains("terminal=true"))
     #expect(result.combinedOutput.contains("human_intervention_requests=0"))
+    #expect(result.combinedOutput.contains("human_dependent_transitions=0"))
 }
 
 @Test func testUninstallScriptRestoresPlistWhenReloadedServiceCannotStop() throws {
