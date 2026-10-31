@@ -185,7 +185,7 @@ Generic MCP client config (Claude Desktop, Cursor, VS Code, Codex CLI, Codex Des
 
 If you built from source, point the command at `.build/release/LogicProMCP`.
 
-### 3. Complete Logic Pro setup
+### 3. Inspect readiness
 
 Run the local checks:
 
@@ -193,12 +193,11 @@ Run the local checks:
 LogicProMCP --check-permissions
 ```
 
-Then complete the two Logic-side setup steps in [docs/SETUP.md](docs/SETUP.md):
-
-- Register the `LogicProMCP-MCU-Internal` MCU control surface.
-- Add the bundled Scripter insert if you need plugin-parameter writes.
-
-Logic 12.2+ does not auto-import the legacy Key Commands plist; the bundled preset is staged as a Manual MIDI Learn reference.
+The installer also performs its bounded permission check. Missing capabilities terminate explicitly;
+it does not ask for a manual grant or attestation. The bundled Key Commands mapping and Scripter
+assets remain references, but mapped send-only operations report `unattended_unavailable` because
+their Logic-side setup and outcomes cannot be established programmatically. Raw MIDI bypass calls
+remain available when their virtual transport is ready.
 
 ### 4. Test from your agent
 
@@ -206,7 +205,8 @@ Ask the client:
 
 > Check Logic Pro MCP health and show all ready channels.
 
-Expected: all 7 channels `ready` after full setup, or 5 if you intentionally skipped Key Commands and Scripter.
+Expected: only programmatically qualified channels report `ready`; Key Commands and Scripter mapped
+operations remain `unattended_unavailable` rather than becoming ready from an operator assertion.
 
 ### Pinned shell installer
 
@@ -305,7 +305,7 @@ LogicProMCP doctor --check-updates # opt-in: also checks for a newer release
 
 **Causal chain — `fix_plan` and `blocked_by`.** Only non-pass checks with a concrete remediation are ordered into `fix_plan` (the next actions, most-unblocking first), and each downstream check names the upstream check that `blocked_by` it — so you fix the root, not the symptom. When the highest-priority outcome has a concrete remediation, the `headline` restates that next action. A non-remediable failure remains visible as a `Terminal outcome`; a non-remediable warning or manual result remains visible as an `Unresolved outcome`, but neither invents an action or appears in `fix_plan`.
 
-**Honesty is the whole point.** A check that could not run (missing capability, unreadable TCC db) is reported as an explicit `skipped` with a reason — it is never silently folded into a pass. Intentional skips (`--skip-channel <MIDIKeyCommands|Scripter>` with an optional `--skip-note`, e.g. you deliberately didn't register Scripter) are recorded and excluded from readiness without faking green. TCC findings are redacted to service/principal/state summaries — no raw local paths in the report.
+**Honesty is the whole point.** A check that could not run (missing capability, unreadable TCC db) is reported as an explicit `skipped` with a reason — it is never silently folded into a pass. Legacy manual-channel assertion/skip records remain readable for compatibility, but never qualify unattended readiness or change the selected doctor profile. TCC findings are redacted to service/principal/state summaries — no raw local paths in the report.
 
 **Strict exit codes** (`--strict`, for CI/agent gating): `0` ok · `1` failed · `2` manual_action_required · `3` degraded. Codes `2`/`3` are status codes, not usage errors, and sit below the `sysexits.h` range.
 
@@ -385,7 +385,7 @@ The repository ships `server.json` for the official MCP Registry metadata path. 
 - **Tempo typing**: `transport.set_tempo` uses bounded coarse and exact AX slider fallbacks when Logic's inline tempo input does not commit, and fails closed if exact readback still cannot be verified.
 - **MIDI region padding**: `record_sequence` regions start at bar 1 and extend to the target bar using inaudible padding; note timing inside the region is exact, but the region can look longer than the phrase.
 - **External MIDI bounce readiness**: MIDI regions on GM Device / External MIDI tracks are not accepted as audible-bounce evidence by project audit or `logic_project.bounce`. Move or recreate the material on Software Instrument tracks before claiming a verified Logic Bounce.
-- **MIDI Key Commands**: Logic 12.2+ does not accept the legacy `.plist` Key Commands import; manual MIDI Learn remains required for keycmd-only operations. The automated record-arm key-command setup (`system.setup_arm_key`) refuses for `it-IT`, `pt-BR`, and `zh-TW` until their Key Commands spelling is proven from Apple's data or measured live (see CHANGELOG v3.18.0).
+- **MIDI Key Commands**: Logic 12.2+ does not accept the legacy `.plist` Key Commands import. The reference cannot establish or read back Logic-side bindings, so keycmd-only mapped operations remain `unattended_unavailable`. The automated record-arm key-command setup (`system.setup_arm_key`) refuses for `it-IT`, `pt-BR`, and `zh-TW` until their Key Commands spelling is proven from Apple's data or measured live (see CHANGELOG v3.18.0).
 - **Markers**: marker creation uses Logic's native Navigate menu and verifies the Marker List when it is readable. A closed/unreadable Marker List is reported as unreadable or served from the last readable cache instead of being promoted to a verified empty list. `rename_marker` remains `not_implemented`.
 - **Plugin parameter readback**: `logic_plugins.set_param_verified` opens the target insert's plugin window when needed and live-verifies Compressor `threshold` through that window; arbitrary plugin parameters remain future work and fail closed with `unsupported_param_readback`.
 - **Locale coverage is mostly derived, not measured**: outside `en-US`, `ko-KR`, `ja-JP`, and `de-DE`, most canon UI labels are `derived` from Apple's `.strings` tables rather than read from a live Logic window in that language (see the Locales table above).

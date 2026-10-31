@@ -81,11 +81,15 @@ private func decodeScripterJSON(_ s: String) -> [String: Any] {
     try await channel.start()
     let afterStart = await channel.healthCheck()
     #expect(afterStart.available)
-    #expect(afterStart.verificationStatus == .manualValidationRequired)
-    #expect(afterStart.detail.contains("not verifiable"))
+    #expect(afterStart.verificationStatus == .unattendedUnavailable)
+    #expect(!(afterStart.ready))
+    #expect(afterStart.detail.contains("unattended execution unavailable"))
+    #expect(!(afterStart.detail.lowercased().contains("manual")))
+    #expect(!(afterStart.detail.lowercased().contains("operator")))
+    #expect(!(afterStart.detail.contains("--approve-channel")))
 }
 
-@Test func testScripterHealthBecomesRuntimeReadyAfterApproval() async throws {
+@Test func testScripterApprovalDoesNotQualifyUnattendedExecution() async throws {
     let store = ManualValidationStore(fileURL: scripterApprovalStoreURL())
     let transport = MockScripterTransport()
     let channel = ScripterChannel(transport: transport, approvalStore: store)
@@ -97,9 +101,10 @@ private func decodeScripterJSON(_ s: String) -> [String: Any] {
     try await store.approve(ManualValidationChannel.scripter, note: "validated in Logic Pro")
 
     let afterApproval = await channel.healthCheck()
-    #expect(afterApproval.ready)
-    #expect(afterApproval.verificationStatus == ChannelVerificationStatus.runtimeReady)
-    #expect(afterApproval.detail.contains("approved by operator"))
+    #expect(!(afterApproval.ready))
+    #expect(afterApproval.verificationStatus == .unattendedUnavailable)
+    #expect(afterApproval.detail.contains("unattended execution unavailable"))
+    #expect(!(afterApproval.detail.lowercased().contains("operator")))
 }
 
 @Test func testScripterRejectsUnsupportedOperation() async {

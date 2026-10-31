@@ -538,25 +538,23 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel {
     }
 
     func healthCheck() async -> ChannelHealth {
-        // Honest health detail: virtual port status, manual MIDI Learn
-        // requirement, audited coverage matrix pointer, effectively keycmd-only
-        // ops, and orphan ops in mappingTable. Total length must stay < 1 KB.
-        await manualValidationHealth(
-            approval: .midiKeyCommands,
-            approvedDetail: { "\($0.detail). Logic Key Commands preset approved by operator" },
-            unapprovedDetail: { "Port: LogicProMCP-KeyCmd-Internal — \($0.detail). \(Self.manualValidationDetailSuffix)" }
-        )
+        // The port remains usable by raw-MIDI bypass operations. Mapped Logic
+        // commands have no programmatic setup/readback and never become ready
+        // from a stored assertion.
+        await unattendedSendOnlyHealth {
+            "Port: LogicProMCP-KeyCmd-Internal — \($0.detail). \(Self.manualValidationDetailSuffix)"
+        }
     }
 
     /// Internal (not private) so `RoutingAuditInvariantTests` can assert it
     /// enumerates the same op set as `expectedKeycmdOnlyOps` — the runtime
     /// health string and the docs SETUP.md §4.1 matrix must agree.
     static let manualValidationDetailSuffix =
-        "Manual MIDI Learn required — see docs/SETUP.md §4. " +
+        "Mapped Logic key-command unattended execution unavailable: bindings have no programmatic setup or outcome readback. " +
         "Effectively keycmd-only (no working non-keycmd fallback on Logic 12.2): " +
         "edit.delete, edit.duplicate, edit.normalize, " +
         "nav.goto_marker, transport.capture_recording, view.toggle_inspector, view.toggle_step_editor. " +
-        "Other preset ops have an AX/MCU/AppleScript/CGEvent fallback and do not require keycmd binding. " +
+        "Other preset ops have an AX/MCU/AppleScript/CGEvent fallback and do not use this unverified path. " +
         "Orphans (in mappingTable + routingTable but no MCP tool exposes a call path): " +
         "automation.set_mode, note.up_semitone, note.up_octave, note.down_semitone, note.down_octave, " +
             "view.toggle_smart_controls, view.toggle_plugin_windows, view.toggle_automation (CC 57; distinct from automation.toggle_view CC 85), " +

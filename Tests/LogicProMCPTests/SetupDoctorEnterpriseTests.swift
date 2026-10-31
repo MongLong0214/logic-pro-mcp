@@ -154,7 +154,7 @@ private func check(_ report: SetupDoctor.Report, _ id: String) -> SetupDoctor.Ch
     #expect(report.summary.failed == 0)
     #expect(report.summary.manual == 0)
     #expect(report.summary.warnings == 0)
-    #expect(report.summary.skipped == 1)
+    #expect(report.summary.skipped == 4)
 }
 
 @Test func test_t1_optional_skip_does_not_degrade_aggregate() {
@@ -186,7 +186,7 @@ private func check(_ report: SetupDoctor.Report, _ id: String) -> SetupDoctor.Ch
     let c = try #require(check(report, "mcp.claude_desktop_registration"))
     #expect(c.status == .skipped)
     #expect(c.optional)
-    #expect(report.summary.skipped == 1)
+    #expect(report.summary.skipped == 4)
     #expect(report.status == .ok)
 }
 
@@ -770,9 +770,9 @@ private func runEntrypoint(
 }
 
 // Case 5
-@Test func test_t1v3_fix_plan_excludes_terminal_fail_and_includes_remediable_warn_manual() {
+@Test func test_t1v3_fix_plan_excludes_terminal_fail_and_includes_remediable_warn() {
     // Force a terminal fail (accessibility), a remediable warn (update behind),
-    // and a remediable manual check (channels).
+    // while send-only channel qualification is also terminal.
     let report = makeReport(
         arguments: ["LogicProMCP", "doctor", "--json", "--client", "claude-code", "--profile", "full"],
         runtime: enterpriseRuntime(latestReleaseLookup: { .found(version: "v99.0.0") }),
@@ -781,46 +781,40 @@ private func runEntrypoint(
     )
     #expect(!report.fixPlan.contains("permissions.accessibility"))  // terminal, no action
     #expect(report.fixPlan.contains("updates.latest_release"))      // warn → warning
-    #expect(report.fixPlan.contains("channels.manual_validation"))  // manual → warning (INCLUDED)
+    #expect(!report.fixPlan.contains("channels.manual_validation")) // terminal, no action
 }
 
 // Case 6
-@Test func test_t1v3_fix_plan_order_two_tier_and_headline_agree() {
-    // (a) A terminal fail is excluded; remediable warn/manual checks retain
-    // declared order within their co-equal tier.
+@Test func test_t1v3_fix_plan_excludes_terminal_checks_and_headline_remains_terminal() {
+    // (a) Terminal failures are excluded; the remediable update warning remains.
     let mixed = makeReport(
         arguments: ["LogicProMCP", "doctor", "--json", "--client", "claude-code", "--profile", "full"],
         runtime: enterpriseRuntime(latestReleaseLookup: { .found(version: "v99.0.0") }),
         permission: granted(accessibility: false),
         approvals: [:]
     )
-    // permissions.accessibility is terminal and absent. The two remediable
-    // warnings remain in declared order.
-    #expect(mixed.fixPlan == [
-        "channels.manual_validation",
-        "updates.latest_release",
-    ])
-    // (b) OBJ-A counterexample: a MANUAL declared BEFORE a WARN, no fail. 2-tier keeps them
-    // co-equal so declared order wins ⇒ the earlier manual leads, and headline embeds it.
+    // Both terminal checks are absent from the plan.
+    #expect(mixed.fixPlan == ["updates.latest_release"])
+    // (b) With permissions granted, send-only qualification remains terminal;
+    // the update warning leads the actionable plan while the headline remains
+    // honest about the higher-severity terminal outcome.
     let counter = makeReport(
         arguments: ["LogicProMCP", "doctor", "--json", "--client", "claude-code", "--profile", "full"],
         runtime: enterpriseRuntime(latestReleaseLookup: { .found(version: "v99.0.0") }),
         approvals: [:]
     )
-    // channels.manual_validation(#13,manual) declared before updates.latest_release(#14,warn).
-    #expect(counter.fixPlan == ["channels.manual_validation", "updates.latest_release"])
-    #expect(counter.headline.contains("[channels.manual_validation]"))
+    #expect(counter.fixPlan == ["updates.latest_release"])
+    #expect(counter.headline.contains("Terminal outcome [channels.manual_validation]"))
 }
 
 // Case 7
-@Test func test_t1v3_headline_id_equals_fix_plan_first() {
-    // AC-4: the id EMBEDDED in headline equals fix_plan[0] (id-extraction, never literal ==).
+@Test func test_t1v3_terminal_channel_failure_does_not_create_fix_plan() {
     let report = makeReport(
         additionalArguments: ["--profile", "full"],
         approvals: [:]
     )
-    #expect(report.fixPlan.first == "channels.manual_validation")
-    #expect(report.headline.contains("[\(report.fixPlan[0])]"))
+    #expect(report.fixPlan.isEmpty)
+    #expect(report.headline.contains("Terminal outcome [channels.manual_validation]"))
 }
 
 @Test func test_t1v3_terminal_failure_is_not_healthy_when_fix_plan_is_empty() {

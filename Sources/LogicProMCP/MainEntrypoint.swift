@@ -176,7 +176,10 @@ enum MainEntrypoint {
             }
             do {
                 try await approvalStore.approve(channel, note: optionValue("--approval-note", in: arguments))
-                writeStderr("Approved \(channel.rawValue) for runtime use.\n")
+                writeStderr(
+                    "Recorded legacy \(channel.rawValue) compatibility assertion; "
+                        + "this does not qualify unattended execution.\n"
+                )
                 return 0
             } catch {
                 writeStderr("Failed to persist approval for \(channel.rawValue): \(error)\n")
@@ -191,7 +194,10 @@ enum MainEntrypoint {
             }
             do {
                 try await approvalStore.skip(channel, note: optionValue("--skip-note", in: arguments))
-                writeStderr("Intentionally skipped \(channel.rawValue) for doctor readiness.\n")
+                writeStderr(
+                    "Recorded legacy \(channel.rawValue) compatibility skip; "
+                        + "this does not qualify unattended execution.\n"
+                )
                 return 0
             } catch {
                 writeStderr("Failed to persist skip decision for \(channel.rawValue): \(error)\n")
@@ -206,7 +212,7 @@ enum MainEntrypoint {
             }
             do {
                 try await approvalStore.revoke(channel)
-                writeStderr("Revoked approval for \(channel.rawValue).\n")
+                writeStderr("Removed legacy compatibility record for \(channel.rawValue).\n")
                 return 0
             } catch {
                 writeStderr("Failed to revoke approval for \(channel.rawValue): \(error)\n")
@@ -779,13 +785,13 @@ enum MainEntrypoint {
                                                it every mutating operation is withheld and reported live_mutation_not_run.
           LogicProMCP --verify-promotion --attestation <attestation.json> --release-version <version> --expected-binary-sha256 <hex> --expected-commit <sha> [--required-artifacts <path,...>]
                                                non-authoritative local diagnostic; emits a JSON decision with no promotion authority
-          LogicProMCP --list-approvals         List manual channel approvals and exit
+          LogicProMCP --list-approvals         List legacy manual-channel compatibility records and exit
           LogicProMCP --approve-channel <MIDIKeyCommands|Scripter> [--approval-note <note>]
-                                               Record a manual channel approval and exit
+                                               Record a legacy compatibility assertion; does not qualify unattended execution
           LogicProMCP --skip-channel <MIDIKeyCommands|Scripter> [--skip-note <note>]
-                                               Record an intentional doctor skip decision and exit
+                                               Record a legacy compatibility skip; does not qualify unattended execution
           LogicProMCP --revoke-channel <MIDIKeyCommands|Scripter>
-                                               Revoke a manual channel approval and exit
+                                               Remove a legacy compatibility record and exit
 
         With no arguments the binary runs as an MCP stdio server. See docs/SETUP.md for setup.
         """

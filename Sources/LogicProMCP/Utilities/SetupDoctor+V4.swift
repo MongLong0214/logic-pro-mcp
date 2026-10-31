@@ -165,23 +165,10 @@ extension SetupDoctor {
         runtime: Runtime,
         approvals: [ManualValidationChannel: ManualValidationApproval]
     ) -> (DoctorProfile, String) {
-        let approvedChannels = Set(
-            approvals.compactMap { channel, approval -> ManualValidationChannel? in
-                switch approval.kind {
-                case .approved, .intentionallySkipped:
-                    return channel
-                }
-            }
-        )
-        if approvedChannels == Set(ManualValidationChannel.allCases) {
-            return (.full, "manual_store_all_channels")
-        }
-        if approvedChannels == [.midiKeyCommands] {
-            return (.keycmd, "manual_store_midi_key_commands")
-        }
-        if approvedChannels == [.scripter] {
-            return (.legacyScripter, "manual_store_scripter")
-        }
+        // Legacy approval records are retained for compatibility and readback,
+        // but a stored assertion is neither programmatic setup nor outcome
+        // verification. It must not silently expand an unattended doctor run.
+        _ = approvals
         let context = runtime.launchContext().context
         if context == "claude_code" || context == "claude_desktop" || context == "cursor" || context == "vscode" {
             return (.core, "launch_context_default_core")

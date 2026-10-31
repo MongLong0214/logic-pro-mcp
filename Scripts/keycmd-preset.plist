@@ -7,21 +7,13 @@
 
   ⚠ Logic Pro 12.2+ does NOT import this .plist (Import menu is gray on 12.2;
   Logic 12 expects a different binary schema). This file is retained ONLY as
-  a CC→Command mapping reference for manual MIDI Learn.
-
-  Workflow on Logic 12.2+:
-    1. Logic Pro > Key Commands > Edit (⌥K)
-    2. Search for the target command (e.g. "Capture Recording")
-    3. Click [Learn New Assignment]
-    4. Send the matching CC on Channel 16 from your MCP client
-       (use port:"keycmd" — the CC arrives on LogicProMCP-KeyCmd-Internal)
-    5. [Save Assignments]
+  a CC→Command mapping reference. Staging it does not establish or verify
+  Logic-side bindings; mapped operations remain unattended_unavailable.
 
   Most preset ops are now routed via logic_edit / logic_project /
   logic_navigate / logic_tracks / logic_transport without any binding.
-  Manual MIDI Learn is only required for channel-only ops like
-  transport.capture_recording. See docs/SETUP.md §MIDIKeyCommands for
-  the audited coverage matrix.
+  Channel-only mapped operations are not qualified by this reference. See
+  docs/SETUP.md §MIDIKeyCommands for the audited coverage matrix.
 
   Reference: PRD-issue1-keycmd-port-routing §3 (v3.1.6)
 -->

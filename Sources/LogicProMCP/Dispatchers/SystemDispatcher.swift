@@ -2383,11 +2383,8 @@ struct SystemDispatcher: OperationTraceDispatching {
 
                 Read health via resource: logic://system/health
 
-                Manual channel approval CLI:
-                  LogicProMCP --approve-channel MIDIKeyCommands
-                  LogicProMCP --approve-channel Scripter
-                  LogicProMCP --list-approvals
-                  LogicProMCP --revoke-channel <channel>
+                Legacy manual-channel records do not qualify unattended execution.
+                List/revoke compatibility records with the standalone CLI only for readback or cleanup.
                 """
 
         default:

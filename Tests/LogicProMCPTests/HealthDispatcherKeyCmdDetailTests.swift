@@ -6,7 +6,7 @@ import Testing
 // Verifies the MIDIKeyCommands channel `healthCheck()` detail string carries
 // every contract piece required by PRD-issue1-keycmd-port-routing §3 AC-5.
 // All tests use a started channel (available=true, ready=false) to inspect
-// the post-start manualValidationRequired branch where the new copy lives.
+// the post-start unattendedUnavailable branch where the new copy lives.
 
 private func t7StoreURL(_ tag: String) -> URL {
     FileManager.default.temporaryDirectory
@@ -27,19 +27,17 @@ private func t7StartedChannel(tag: String) async throws -> ChannelHealth {
     #expect(health.detail.contains("LogicProMCP-KeyCmd-Internal"))
 }
 
-@Test func testKeyCmdChannelDetailIncludesManualLearnHint() async throws {
-    let health = try await t7StartedChannel(tag: "manual-learn")
-    #expect(health.detail.contains("Manual MIDI Learn required"))
-    #expect(health.detail.contains("docs/SETUP.md"))
+@Test func testKeyCmdChannelDetailExplainsUnattendedUnavailability() async throws {
+    let health = try await t7StartedChannel(tag: "unattended-unavailable")
+    #expect(health.detail.contains("unattended execution unavailable"))
+    #expect(health.detail.contains("no programmatic setup or outcome readback"))
+    #expect(!health.detail.contains("Manual MIDI Learn required"))
 }
 
 @Test func testKeyCmdChannelDetailMentionsCoverageMatrix() async throws {
     let health = try await t7StartedChannel(tag: "coverage")
-    // v3.1.7: detail now points at SETUP.md §4 (the matrix lives there) and
-    // names the actual fallback channels rather than the dispatcher prefix
-    // strings. Both forms answer the same caller question — "where do I
-    // look to figure out which ops require a manual binding?"
-    #expect(health.detail.contains("docs/SETUP.md"))
+    // The runtime detail names the actual fallback channels and the bounded
+    // key-command-only set without offering a manual continuation.
     #expect(health.detail.contains("AX/MCU/AppleScript/CGEvent fallback"))
 }
 
@@ -82,9 +80,9 @@ private func t7StartedChannel(tag: String) async throws -> ChannelHealth {
     #expect(byteCount < 1024, "detail length \(byteCount) bytes exceeds 1024 budget")
 }
 
-@Test func testKeyCmdChannelVerificationStatusUnchanged() async throws {
+@Test func testKeyCmdChannelVerificationStatusIsUnattendedUnavailable() async throws {
     let health = try await t7StartedChannel(tag: "vstatus")
-    #expect(health.verificationStatus == .manualValidationRequired)
+    #expect(health.verificationStatus == .unattendedUnavailable)
 }
 
 @Test func testKeyCmdChannelAvailableReadyUnchanged() async throws {

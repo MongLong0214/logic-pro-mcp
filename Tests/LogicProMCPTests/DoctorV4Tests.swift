@@ -112,7 +112,8 @@ private func doctorV4Report(
 @Test func doctorV5SchemaProfilesAndCapabilitiesAreInJSON() throws {
     let report = doctorV4Report()
     #expect(report.schema == "logic_pro_mcp_doctor.v5")
-    #expect(report.doctorProfile == .full)
+    #expect(report.doctorProfile == .core)
+    #expect(report.doctorProfileBasis == "default_core")
     #expect(report.clientProfile == .claudeCode)
     #expect(Set(report.capabilities.keys) == Set([
         "core_transport",
@@ -127,7 +128,7 @@ private func doctorV4Report(
     ]))
 
     let object = try #require(sharedJSONObject(encodeJSON(report)))
-    #expect(object["doctor_profile"] as? String == "full")
+    #expect(object["doctor_profile"] as? String == "core")
     #expect(object["client_profile"] as? String == "claude-code")
     #expect(object["client_profile_basis"] as? String == "registration_config")
     #expect(object["capabilities"] as? [String: Any] != nil)
@@ -368,18 +369,41 @@ private struct DoctorCapabilityEnvelope: Encodable {
     #expect(report.status == .ok)
 }
 
-@Test func doctorV4FullProfileRequiresManualChannels() throws {
+@Test func doctorV4MissingKeycmdReferenceDoesNotRequestStagingBeforeTerminalOutcome() throws {
+    var runtime = doctorV4Runtime()
+    runtime.keyCommandsPresetStaged = { false }
+    let report = doctorV4Report(
+        arguments: ["LogicProMCP", "doctor", "--json", "--profile", "keycmd"],
+        runtime: runtime,
+        approvals: [:]
+    )
+    let reference = try #require(report.checks.first { $0.id == "channels.keycmd_reference" })
+    let manual = try #require(report.checks.first { $0.id == "channels.manual_validation" })
+    #expect(reference.status == .warn)
+    #expect(reference.remediation.type == .none)
+    #expect(reference.remediation.value.isEmpty)
+    #expect(manual.status == .fail)
+    #expect(manual.blockedBy == nil)
+    #expect(!report.fixPlan.contains("channels.keycmd_reference"))
+    #expect(!report.fixPlan.contains("channels.manual_validation"))
+}
+
+@Test func doctorV4FullProfileTerminatesUnavailableSendOnlyChannels() throws {
     let report = doctorV4Report(
         arguments: ["LogicProMCP", "doctor", "--json", "--profile", "full"],
         approvals: [:]
     )
     let manual = try #require(report.checks.first { $0.id == "channels.manual_validation" })
-    #expect(manual.status == .manual)
+    #expect(manual.status == .fail)
     #expect(manual.skipReason == nil)
-    #expect(report.status == .manualActionRequired)
+    #expect(manual.remediation.type == .none)
+    #expect(manual.evidence["terminal"] == "true")
+    #expect(manual.evidence["human_intervention_required"] == "false")
+    #expect(manual.evidence["human_intervention_requests"] == "0")
+    #expect(report.status == .failed)
 }
 
-@Test func doctorV4IntentionalSkipDoesNotClaimCapabilityReady() throws {
+@Test func doctorV4IntentionalSkipDoesNotQualifyUnattendedExecution() throws {
     let report = doctorV4Report(
         arguments: ["LogicProMCP", "doctor", "--json", "--profile", "keycmd"],
         approvals: [
@@ -392,11 +416,12 @@ private struct DoctorCapabilityEnvelope: Encodable {
     )
 
     let manual = try #require(report.checks.first { $0.id == "channels.manual_validation" })
-    #expect(manual.status == .skipped)
-    #expect(manual.skipReason == .intentionallySkipped)
+    #expect(manual.status == .fail)
+    #expect(manual.skipReason == nil)
     #expect(!manual.optional)
-    #expect(report.status == .degraded)
-    #expect(report.capabilities["keycmd_only_ops"]?.status == .unknownLiveVerifyRequired)
+    #expect(manual.evidence["legacy_skips_ignored"] == "MIDIKeyCommands")
+    #expect(report.status == .failed)
+    #expect(report.capabilities["keycmd_only_ops"]?.status == .notReady)
 }
 
 @Test func doctorV4CursorClientDoesNotRequireClaudeRegistration() throws {
@@ -469,11 +494,16 @@ private struct DoctorCapabilityEnvelope: Encodable {
     #expect(!(await store.isApproved(.scripter)))
 }
 
-@Test func doctorV4ManualStoreCorruptionWarnsDoctor() {
-    let report = doctorV4Report(storeHealth: .corrupt("json_decode_failed"))
+@Test func doctorV4ManualStoreCorruptionRemainsEvidenceOnTerminalCheck() {
+    let report = doctorV4Report(
+        arguments: ["LogicProMCP", "doctor", "--json", "--profile", "full"],
+        storeHealth: .corrupt("json_decode_failed")
+    )
     let manual = report.checks.first { $0.id == "channels.manual_validation" }
-    #expect(manual?.status == .warn)
-    #expect(manual?.evidence["store_health"] == "corrupt")
+    #expect(manual?.status == .fail)
+    #expect(manual?.remediation.type.rawValue == "none")
+    #expect(manual?.evidence["store_health"] == "corrupt:json_decode_failed")
+    #expect(manual?.evidence["terminal"] == "true")
 }
 
 @Test func doctorV4SemanticVersionAndMarkerSniff() throws {

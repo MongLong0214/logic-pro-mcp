@@ -177,18 +177,17 @@ MIDI imports are constrained to safe locations. Prefer `record_sequence`, which 
 
 ## MIDI Key Commands and Scripter
 
-### `manual_validation_required`
+### `unattended_unavailable`
 
-The server will not claim Key Commands or Scripter are ready until you approve them after manual Logic-side setup:
-
-```bash
-LogicProMCP --approve-channel MIDIKeyCommands --approval-note "Manual MIDI Learn completed"
-LogicProMCP --approve-channel Scripter --approval-note "Scripter inserted on intended tracks"
-```
+Key Commands and Scripter mapped operations cannot establish Logic-side setup or outcome readback
+programmatically. The server leaves them unavailable for unattended routing and does not request an
+operator assertion. Legacy approval records may still be listed for compatibility, but do not make
+either channel ready. Raw MIDI bypass calls remain separate and may use a ready virtual transport.
 
 ### Key Commands do not trigger
 
-Logic 12.2+ does not reliably import the legacy `.plist`. Use manual MIDI Learn only for the remaining keycmd-only paths listed in [SETUP.md](SETUP.md).
+Logic 12.2+ does not reliably import the legacy `.plist`. The remaining keycmd-only paths listed in
+[SETUP.md](SETUP.md) therefore terminate as unavailable instead of requesting manual MIDI Learn.
 
 ## Verified Plugin Apply-Back
 

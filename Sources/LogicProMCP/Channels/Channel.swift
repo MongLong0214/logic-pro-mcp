@@ -22,6 +22,7 @@ enum ChannelResult: Sendable {
 enum ChannelVerificationStatus: String, Sendable {
     case runtimeReady = "runtime_ready"
     case manualValidationRequired = "manual_validation_required"
+    case unattendedUnavailable = "unattended_unavailable"
     case unavailable = "unavailable"
 }
 
@@ -93,10 +94,11 @@ protocol Channel: Actor {
 
 /// Shared surface for the two send-only "MIDI CC on channel 16" channels
 /// (`ScripterChannel` + `MIDIKeyCommandsChannel`). Both push bytes through a
-/// `KeyCmdTransportProtocol` and gate `runtime_ready` health behind an operator
-/// approval. The channel-specific Log / health *strings* stay in the concrete
-/// channels (RoutingAuditInvariantTests + the health tests pin them); only the
-/// channel-agnostic skeleton lives here.
+/// `KeyCmdTransportProtocol`. Their mapped Logic operations have neither
+/// programmatic setup nor outcome readback, so transport readiness alone never
+/// becomes unattended execution readiness. The channel-specific Log / health
+/// *strings* stay in the concrete channels; only the channel-agnostic skeleton
+/// lives here.
 protocol KeyCmdCCChannel: Channel {
     nonisolated var transport: any KeyCmdTransportProtocol { get }
     nonisolated var approvalStore: any ManualValidationStoring { get }
@@ -114,21 +116,19 @@ extension KeyCmdCCChannel {
         return await transport.readiness()
     }
 
-    /// Shared readiness-guard → approval-branch health skeleton. The concrete
-    /// channel injects its pinned approved / unapproved detail strings and the
-    /// approval identity, so the wire/health text stays byte-identical.
-    func manualValidationHealth(
-        approval channel: ManualValidationChannel,
-        approvedDetail: @Sendable (KeyCmdTransportReadiness) -> String,
-        unapprovedDetail: @Sendable (KeyCmdTransportReadiness) -> String
+    /// A published virtual port remains available to the raw-MIDI bypass, but
+    /// mapped Logic operations stay unroutable. A legacy approval file is not
+    /// programmatic setup or readback and therefore cannot change this result.
+    func unattendedSendOnlyHealth(
+        detail: @Sendable (KeyCmdTransportReadiness) -> String
     ) async -> ChannelHealth {
         let readiness = await transport.readiness()
         guard readiness.available else {
             return .unavailable(readiness.detail)
         }
-        if await approvalStore.isApproved(channel) {
-            return .healthy(detail: approvedDetail(readiness), verificationStatus: .runtimeReady)
-        }
-        return .healthy(detail: unapprovedDetail(readiness), verificationStatus: .manualValidationRequired)
+        return .healthy(
+            detail: detail(readiness),
+            verificationStatus: .unattendedUnavailable
+        )
     }
 }

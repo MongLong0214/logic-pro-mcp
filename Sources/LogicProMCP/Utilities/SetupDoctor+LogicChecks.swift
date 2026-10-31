@@ -200,7 +200,7 @@ extension SetupDoctor {
         if running {
             return "Logic Pro is running, but no visible project window was detected."
         }
-        return "Logic Pro is not running; live setup checks need manual validation."
+        return "Logic Pro is not running; live setup checks are unavailable."
     }
 
 

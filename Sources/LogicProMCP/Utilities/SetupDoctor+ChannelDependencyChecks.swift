@@ -7,17 +7,6 @@ extension SetupDoctor {
         storeHealth: ManualValidationStoreHealth,
         checks: [Check] = []
     ) -> Check {
-        if case let .corrupt(reason) = storeHealth {
-            return check(
-                id: "channels.manual_validation",
-                domain: "channels",
-                status: .warn,
-                summary: "Manual-validation store could not be read; existing operator decisions were not trusted.",
-                evidence: ["store_health": "corrupt", "reason": reason],
-                remediationType: .manual
-            )
-        }
-
         let requiredChannels = manualValidationChannelsRequired(for: profile)
         guard !requiredChannels.isEmpty else {
             return check(
@@ -32,53 +21,37 @@ extension SetupDoctor {
             )
         }
 
-        // #457: hold the approval prompt until the setup it attests exists. The fix
-        // plan drops blocked checks, so a user is never told to assert readiness for
-        // a channel whose staging has not happened — the approval would be a durable
-        // false attestation that no later file check can repair.
-        if let cause = blockingCause(for: "channels.manual_validation", checks: checks) {
-            return check(
-                id: "channels.manual_validation",
-                domain: "channels",
-                status: .skipped,
-                summary: "Operator approval is held until Key Commands staging completes; approving first would attest setup that has not happened.",
-                evidence: ["blocked_by": cause],
-                remediationType: .docs,
-                blockedBy: cause
-            )
-        }
-
-        let missing = requiredChannels
-            .filter { approvals[$0]?.kind != .approved && approvals[$0]?.kind != .intentionallySkipped }
+        let legacyApprovals = requiredChannels
+            .filter { approvals[$0]?.kind == .approved }
             .map(\.rawValue)
-        let intentionallySkipped = requiredChannels
+            .sorted()
+        let legacySkips = requiredChannels
             .filter { approvals[$0]?.kind == .intentionallySkipped }
             .map(\.rawValue)
-        var evidence = ["missing": missing.joined(separator: ","), "profile": profile.rawValue]
-        if !intentionallySkipped.isEmpty {
-            evidence["intentionally_skipped"] = intentionallySkipped.joined(separator: ",")
-        }
-        if missing.isEmpty && !intentionallySkipped.isEmpty {
-            return check(
-                id: "channels.manual_validation",
-                domain: "channels",
-                status: .skipped,
-                summary: "Manual-validation channels were explicitly skipped by the operator; live readiness is not claimed for those channels.",
-                evidence: evidence,
-                remediationType: .none,
-                skipReason: .intentionallySkipped
-            )
+            .sorted()
+        let storeEvidence: String
+        switch storeHealth {
+        case .ok:
+            storeEvidence = "ok"
+        case let .corrupt(reason):
+            storeEvidence = "corrupt:\(reason)"
         }
         return check(
             id: "channels.manual_validation",
             domain: "channels",
-            status: missing.isEmpty ? .pass : .manual,
-            summary: missing.isEmpty
-                ? "Manual-validation channels have operator approvals or explicit skip decisions."
-                : "Manual-validation channels need operator approval or an explicit decision to skip.",
-            evidence: evidence,
-            remediationType: missing.isEmpty ? .none : .command,
-            remediationValueOverride: missing.isEmpty ? nil : "LogicProMCP --approve-channel MIDIKeyCommands && LogicProMCP --approve-channel Scripter"
+            status: .fail,
+            summary: "Required send-only channels are unavailable for unattended execution because setup and outcome readback are not programmatically verified.",
+            evidence: [
+                "profile": profile.rawValue,
+                "required_channels": requiredChannels.map(\.rawValue).sorted().joined(separator: ","),
+                "legacy_approvals_ignored": legacyApprovals.joined(separator: ","),
+                "legacy_skips_ignored": legacySkips.joined(separator: ","),
+                "store_health": storeEvidence,
+                "terminal": "true",
+                "human_intervention_required": "false",
+                "human_intervention_requests": "0",
+            ],
+            remediationType: .none
         )
     }
 
@@ -100,29 +73,18 @@ extension SetupDoctor {
         return check(
             id: "channels.keycmd_reference",
             domain: "channels",
-            status: staged ? .pass : .manual,
+            status: staged ? .pass : .warn,
             summary: staged
-                ? "Key Commands preset is staged."
-                : "Key Commands preset is not staged; ignore this if MIDIKeyCommands-only ops are unused.",
-            evidence: ["preset_staged": String(staged)],
-            remediationType: staged ? .none : .command,
-            remediationValueOverride: staged ? nil : keyCommandsRemediation(runtime: runtime)
+                ? "Key Commands mapping reference is staged; it does not qualify mapped Logic execution."
+                : "Key Commands mapping reference is absent; staging cannot qualify mapped Logic execution.",
+            evidence: [
+                "preset_staged": String(staged),
+                "unattended_qualification": "unaffected",
+                "human_intervention_required": "false",
+                "human_intervention_requests": "0",
+            ],
+            remediationType: .none
         )
-    }
-
-    // #456: Homebrew installs install-keycmds.sh into the formula pkgshare, not on
-    // PATH, so printing the bare script name hands the user a command they cannot
-    // run — and fetching the script alone fails on its sibling keycmd-preset.plist.
-    // The share dir is already resolved for the install checks, so the remediation
-    // is derived from that same probe and stays runnable wherever the package put
-    // it. Only an unresolved share dir falls back to the bare name, and it says so.
-    static func keyCommandsRemediation(runtime: Runtime) -> String {
-        switch runtime.shareDirProbe() {
-        case let .complete(path, _), let .missing(path, _, _), let .invalid(path, _):
-            return "\(path)/install-keycmds.sh"
-        case .unresolved:
-            return "install-keycmds.sh (share dir unresolved; set LOGIC_PRO_MCP_SHARE_DIR or reinstall)"
-        }
     }
 
 

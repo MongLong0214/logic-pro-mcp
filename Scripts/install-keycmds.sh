@@ -4,15 +4,12 @@
 # Backs up existing key commands and stages the legacy MCP preset reference.
 #
 # IMPORTANT: Logic Pro 12.2+ no longer accepts plist-based Key Commands
-# Import (the Import menu is gray on 12.2). The .plist file is retained
-# only as a CC→command MAPPING REFERENCE — copy values from it during
-# manual MIDI Learn in Logic. See docs/SETUP.md §MIDIKeyCommands for the
-# step-by-step manual MIDI Learn flow.
+# Import. The .plist file is retained only as a CC→command mapping reference.
+# Staging it cannot establish or verify Logic-side bindings.
 #
 # Most preset operations are now covered by logic_edit / logic_project /
 # logic_navigate / logic_tracks / logic_transport without any binding.
-# Manual MIDI Learn is only required for channel-only ops such as
-# transport.capture_recording.
+# Channel-only mapped operations remain unattended_unavailable.
 #
 # Reference: PRD §6.3 (legacy) + PRD-issue1-keycmd-port-routing §3
 
@@ -40,7 +37,7 @@ mkdir -p "$BACKUP_DIR"
 # RB-6 (2026-05-08 enterprise review) closed in v3.4.0: pre-fix this glob
 # matched only `*.plist` and `*.logickeycommands` and silently skipped
 # `*.logikcs` (Logic 12.2+ binary format), so the v3.1.6 SETUP rewrite
-# claimed manual-learn safety while the underlying installer could still
+# claimed binding-reference safety while the underlying installer could still
 # clobber a Logic 12.2 user's bindings without backing them up. The
 # `.logikcs` extension is now included so backup coverage matches the
 # user-facing claim.
@@ -60,30 +57,20 @@ fi
 echo ""
 echo "Checking for MIDI CC conflicts..."
 # Logic Pro stores key commands in binary/proprietary format.
-# We can only warn — actual conflict detection requires Logic Pro to be running.
+# We cannot establish live conflict state from this reference-only script.
 echo "  Note: Logic 12.2+ does not import this .plist. Use it only as a"
-echo "  CC→Command mapping reference. Use 'MIDI Learn' in Logic Pro >"
-echo "  Key Commands > Edit (⌥K) to bind any commands you actually need."
+echo "  CC→Command mapping reference. It does not qualify mapped execution."
 
 # Stage preset reference (NOT importable on Logic 12.2+)
 cp "$PRESET_SRC" "$KEYCMD_DIR/LogicProMCP-KeyCommands.plist"
 echo ""
 echo "✓ Mapping reference staged: $KEYCMD_DIR/LogicProMCP-KeyCommands.plist"
 echo ""
-echo "=== Next Steps ==="
+echo "=== Result ==="
 echo "Logic Pro 12.2+ does NOT accept this .plist via Import (the menu is gray)."
 echo "The file is staged only as a CC→Command mapping reference."
-echo ""
-echo "If you need any of the channel-only ops (e.g. transport.capture_recording):"
-echo "  1. Open Logic Pro"
-echo "  2. Logic Pro > Key Commands > Edit (⌥K)"
-echo "  3. Search for the command, click [Learn New Assignment],"
-echo "     and send the matching CC on Channel 16 from your MCP client"
-echo "     (use port:\"keycmd\" so the CC arrives on LogicProMCP-KeyCmd-Internal)."
-echo "  4. Click [Save Assignments]"
-echo ""
+echo "Mapped Logic operations remain unattended_unavailable because setup and"
+echo "outcome readback cannot be verified programmatically."
 echo "Most preset ops are already routed via logic_edit / logic_project /"
-echo "logic_navigate / logic_tracks / logic_transport without any manual"
-echo "binding — see docs/SETUP.md §MIDIKeyCommands for the audited matrix."
-echo ""
-echo "To restore previous Key Commands: Scripts/uninstall-keycmds.sh"
+echo "logic_navigate / logic_tracks / logic_transport through verified alternatives."
+echo "Any backup created by this reference-only staging remains in: $BACKUP_DIR"

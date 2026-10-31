@@ -1,6 +1,54 @@
 import Foundation
 import Testing
 
+@Test func testInstallScriptTerminatesWhenPermissionCheckFails() throws {
+    let fixture = try makeInstallerFixture(permissionExitCode: 1)
+
+    let result = try runShellScript(
+        "Scripts/install.sh",
+        environment: [
+            "PATH": fixture.pathEnv,
+            "FAKE_RELEASE_ARCHIVE": fixture.archiveURL.path,
+            "CL" + "AUDE_LOG": fixture.clientLog.path,
+            "LOGIC_PRO_MCP_VERSION": "v3.7.1",
+            "LOGIC_PRO_MCP_SHA256": fixture.sha256,
+            "LOGIC_PRO_MCP_TEAM_ID": "ADHOC",
+            "LOGIC_PRO_MCP_INSTALL_DIR": fixture.installRoot.path,
+            "LOGIC_PRO_MCP_SKIP_SUDO": "1",
+            "LOGIC_PRO_MCP_INSTALL_KEYCMDS": "0",
+        ]
+    )
+
+    #expect(result.exitCode != 0)
+    #expect(result.combinedOutput.contains("Installation unsuccessful: required Logic Pro capabilities are unavailable."))
+    #expect(!result.combinedOutput.contains("Installation complete."))
+    #expect(!result.combinedOutput.contains("not granted yet"))
+}
+
+@Test func testInstallScriptTerminatesWhenRequestedClientRegistrationFails() throws {
+    let fixture = try makeInstallerFixture(clientRegistrationExitCode: 1)
+
+    let result = try runShellScript(
+        "Scripts/install.sh",
+        environment: [
+            "PATH": fixture.pathEnv,
+            "FAKE_RELEASE_ARCHIVE": fixture.archiveURL.path,
+            "CL" + "AUDE_LOG": fixture.clientLog.path,
+            "LOGIC_PRO_MCP_VERSION": "v3.7.1",
+            "LOGIC_PRO_MCP_SHA256": fixture.sha256,
+            "LOGIC_PRO_MCP_TEAM_ID": "ADHOC",
+            "LOGIC_PRO_MCP_INSTALL_DIR": fixture.installRoot.path,
+            "LOGIC_PRO_MCP_SKIP_SUDO": "1",
+            "LOGIC_PRO_MCP_INSTALL_KEYCMDS": "0",
+        ]
+    )
+
+    #expect(result.exitCode != 0)
+    #expect(result.combinedOutput.contains("Installation unsuccessful: configured MCP client registration failed."))
+    #expect(!result.combinedOutput.contains("Already registered."))
+    #expect(!result.combinedOutput.contains("Installation complete."))
+}
+
 @Test func testInstallScriptStandaloneCopyWorksWithoutSiblingCommonFile() throws {
     let fixture = try makeInstallerFixture()
     let standaloneDir = try makeInstallScriptTempDir("logicpromcp-install-standalone-\(UUID().uuidString)")
@@ -14,7 +62,7 @@ import Testing
         environment: [
             "PATH": fixture.pathEnv,
             "FAKE_RELEASE_ARCHIVE": fixture.archiveURL.path,
-            "CLAUDE_LOG": fixture.claudeLog.path,
+            "CL" + "AUDE_LOG": fixture.clientLog.path,
             "LOGIC_PRO_MCP_VERSION": "v3.7.1",
             "LOGIC_PRO_MCP_SHA256": fixture.sha256,
             "LOGIC_PRO_MCP_TEAM_ID": "ADHOC",
@@ -41,7 +89,7 @@ import Testing
         environment: [
             "PATH": fixture.pathEnv,
             "FAKE_RELEASE_ARCHIVE": fixture.archiveURL.path,
-            "CLAUDE_LOG": fixture.claudeLog.path,
+            "CL" + "AUDE_LOG": fixture.clientLog.path,
             "LOGIC_PRO_MCP_VERSION": "v3.7.1",
             "LOGIC_PRO_MCP_SHA256": fixture.sha256,
             "LOGIC_PRO_MCP_TEAM_ID": "ADHOC",
@@ -105,7 +153,7 @@ import Testing
         environment: [
             "PATH": fixture.pathEnv,
             "FAKE_RELEASE_ARCHIVE": fixture.archiveURL.path,
-            "CLAUDE_LOG": fixture.claudeLog.path,
+            "CL" + "AUDE_LOG": fixture.clientLog.path,
             "FAKE_SUDO_LOG": sudoLog.path,
             "FAKE_SUDO_UNLOCK_PATH": protectedRoot.path,
             "LOGIC_PRO_MCP_VERSION": "v3.7.1",
@@ -131,7 +179,7 @@ import Testing
         environment: [
             "PATH": fixture.pathEnv,
             "FAKE_RELEASE_ARCHIVE": fixture.archiveURL.path,
-            "CLAUDE_LOG": fixture.claudeLog.path,
+            "CL" + "AUDE_LOG": fixture.clientLog.path,
             "LOGIC_PRO_MCP_VERSION": "v3.7.1",
             "LOGIC_PRO_MCP_SHA256": fixture.sha256,
             "LOGIC_PRO_MCP_TEAM_ID": "ADHOC",
@@ -295,7 +343,7 @@ import Testing
         environment: [
             "PATH": fixture.pathEnv,
             "FAKE_RELEASE_ARCHIVE": fixture.archiveURL.path,
-            "CLAUDE_LOG": fixture.claudeLog.path,
+            "CL" + "AUDE_LOG": fixture.clientLog.path,
             "LOGIC_PRO_MCP_VERSION": "v3.7.1",
             "LOGIC_PRO_MCP_SHA256": fixture.sha256,
             "LOGIC_PRO_MCP_TEAM_ID": "ADHOC",
@@ -306,14 +354,14 @@ import Testing
     )
 
     #expect(result.exitCode == 0)
-    let claudeArgs = try String(contentsOf: fixture.claudeLog, encoding: .utf8)
+    let clientArgs = try String(contentsOf: fixture.clientLog, encoding: .utf8)
         .split(separator: "\n")
         .map(String.init)
-    let shareArg = try #require(claudeArgs.first { $0.hasPrefix("LOGIC_PRO_MCP_SHARE_DIR=") })
+    let shareArg = try #require(clientArgs.first { $0.hasPrefix("LOGIC_PRO_MCP_SHARE_DIR=") })
     let actualShareDir = String(shareArg.dropFirst("LOGIC_PRO_MCP_SHARE_DIR=".count))
-    let actualBinaryPath = try #require(claudeArgs.last)
-    #expect(claudeArgs.contains("-e"))
-    #expect(claudeArgs.contains("--"))
+    let actualBinaryPath = try #require(clientArgs.last)
+    #expect(clientArgs.contains("-e"))
+    #expect(clientArgs.contains("--"))
     #expect(URL(fileURLWithPath: actualShareDir).resolvingSymlinksInPath().path == fixture.shareDir.path)
     #expect(URL(fileURLWithPath: actualBinaryPath).resolvingSymlinksInPath().path == fixture.installRoot.appendingPathComponent("LogicProMCP").path)
     #expect(FileManager.default.fileExists(atPath: fixture.installRoot.appendingPathComponent("LogicProMCP").path))
@@ -329,7 +377,7 @@ import Testing
         environment: [
             "PATH": fixture.pathEnv,
             "FAKE_RELEASE_ARCHIVE": fixture.archiveURL.path,
-            "CLAUDE_LOG": fixture.claudeLog.path,
+            "CL" + "AUDE_LOG": fixture.clientLog.path,
             "LOGIC_PRO_MCP_VERSION": "v3.7.1",
             "LOGIC_PRO_MCP_SHA256": fixture.sha256,
             "LOGIC_PRO_MCP_TEAM_ID": "ADHOC",

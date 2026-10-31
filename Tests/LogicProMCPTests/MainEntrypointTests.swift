@@ -106,6 +106,9 @@ private actor MockMainServer: ServerStarting {
     #expect(stdout.contains("--version"))
     #expect(stdout.contains("doctor"))
     #expect(stdout.contains("--check-permissions"))
+    #expect(stdout.contains("legacy compatibility record"))
+    #expect(stdout.contains("does not qualify unattended execution"))
+    #expect(!stdout.contains("Record a manual channel approval and exit"))
     #expect(stdout.contains("Start the MCP server over stdio"))
     #expect(stderr.isEmpty)
 }
@@ -300,7 +303,9 @@ private actor MockMainServer: ServerStarting {
         writeStderr: { approveOutput += $0 }
     )
     #expect(approveExitCode == 0)
-    #expect(approveOutput.contains("Approved MIDIKeyCommands"))
+    #expect(approveOutput.contains("Recorded legacy MIDIKeyCommands compatibility assertion"))
+    #expect(approveOutput.contains("does not qualify unattended execution"))
+    #expect(!approveOutput.contains("for runtime use"))
 
     var listOutput = ""
     let listExitCode = await MainEntrypoint.run(
@@ -323,7 +328,7 @@ private actor MockMainServer: ServerStarting {
         writeStderr: { revokeOutput += $0 }
     )
     #expect(revokeExitCode == 0)
-    #expect(revokeOutput.contains("Revoked approval"))
+    #expect(revokeOutput.contains("Removed legacy compatibility record"))
 }
 
 @Test func testMainEntrypointRejectsUnknownApprovalChannel() async {

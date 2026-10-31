@@ -332,13 +332,20 @@ fi
 
 echo ""
 
-# Register with Claude by default when available.
-if [ "$REGISTER_CLAUDE" = "1" ] && command -v claude &>/dev/null; then
+# Register with Claude when requested. Any unavailable capability or failed
+# mutation terminates explicitly; neither is converted into a human fallback.
+if [ "$REGISTER_CLAUDE" = "1" ]; then
+    if ! command -v claude &>/dev/null; then
+        fail_install "Installation unsuccessful: Claude Code registration was requested but the CLI is unavailable."
+    fi
     echo "  Registering with Claude Code..."
-    claude mcp add --scope user logic-pro -e "LOGIC_PRO_MCP_SHARE_DIR=$SHARE_DIR" -- "$INSTALL_DIR/$BINARY" 2>/dev/null && echo "  Registered." || echo "  Already registered."
+    if claude mcp add --scope user logic-pro -e "LOGIC_PRO_MCP_SHARE_DIR=$SHARE_DIR" -- "$INSTALL_DIR/$BINARY" 2>/dev/null; then
+        echo "  Registered."
+    else
+        fail_install "Installation unsuccessful: configured MCP client registration failed."
+    fi
 else
-    echo "  Claude registration skipped."
-    echo "    Manual command: claude mcp add --scope user logic-pro -e LOGIC_PRO_MCP_SHARE_DIR=\"$SHARE_DIR\" -- \"$INSTALL_DIR/$BINARY\""
+    echo "  Claude registration disabled by caller."
 fi
 
 echo ""
@@ -349,19 +356,19 @@ if [ -f "$SHARE_DIR/install-keycmds.sh" ]; then
         # Commands preset installed" overstated what the inner script
         # actually does. On Logic 12.2+ the .plist cannot be Imported
         # (Logic gates that on the .logikcs format), so the script only
-        # STAGES a CC→Command mapping reference for Manual MIDI Learn.
-        # Wording corrected so an operator reading the install log
-        # doesn't think the bindings are live.
+        # STAGES a CC→Command mapping reference only. The server cannot set
+        # up or read back those bindings programmatically, so mapped commands
+        # remain unavailable for unattended execution.
         echo "  Staging Key Commands mapping reference..."
         if bash "$SHARE_DIR/install-keycmds.sh"; then
-            echo "  Key Commands mapping reference staged. (Logic 12.2+ requires"
-            echo "    Manual MIDI Learn — see docs/SETUP.md §MIDIKeyCommands.)"
+            echo "  Key Commands mapping reference staged."
+            echo "    Mapped Logic commands remain unattended_unavailable: no programmatic setup/readback."
         else
             echo "  Warning: Key Commands reference staging did not complete cleanly."
         fi
     else
         echo "  Key Commands mapping reference staging skipped."
-        echo "    Manual command: bash $SHARE_DIR/install-keycmds.sh"
+        echo "    No manual staging fallback is requested by this installer."
     fi
     echo ""
 fi
@@ -369,27 +376,11 @@ fi
 # Check permissions
 echo "  Checking permissions..."
 if ! "$INSTALL_DIR/$BINARY" --check-permissions 2>&1 | sed 's/^/    /'; then
-    echo "  Warning: required Logic Pro permissions are not granted yet."
+    fail_install "Installation unsuccessful: required Logic Pro capabilities are unavailable."
 fi
 
 echo ""
-echo "  Manual Logic Pro setup required before production use:"
-echo "    1. Open Logic Pro"
-echo "    2. Logic Pro > Control Surfaces > Setup"
-echo "    3. New > Install > Mackie Control > Add"
-echo "    4. Set MIDI In/Out to: LogicProMCP-MCU-Internal"
-echo "    5. Insert MIDI FX > Scripter and load: $SHARE_DIR/LogicProMCP-Scripter.js"
-echo "    6. (Optional) Manually MIDI-Learn a few Key Commands you actually need."
-echo "       Logic Pro 12.2+ no longer accepts the legacy .plist preset import"
-echo "       (the Import menu is gray on 12.2 — see docs/SETUP.md §MIDIKeyCommands)."
-echo "       Most preset operations are already covered by logic_edit /"
-echo "       logic_project / logic_navigate / logic_tracks / logic_transport;"
-echo "       manual binding is only required for channel-only ops like"
-echo "       transport.capture_recording. Audited coverage matrix in SETUP.md."
-echo "    7. Approve verified manual channels:"
-echo "       $INSTALL_DIR/$BINARY --approve-channel MIDIKeyCommands"
-echo "       $INSTALL_DIR/$BINARY --approve-channel Scripter"
-echo ""
-echo "  Installation complete. Health will remain manual_validation_required"
-echo "  for Key Commands and Scripter until those Logic Pro steps are done."
+echo "  Installation complete."
+echo "  Send-only mapped Key Commands and Scripter paths report unattended_unavailable:"
+echo "  setup and outcome readback cannot be verified programmatically. No manual approval is requested."
 echo ""
