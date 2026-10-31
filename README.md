@@ -364,7 +364,7 @@ Live E2E defaults to the release binary. Protocol/security assertions run on any
 - **Target-faithful navigation** — `goto_marker` returns `element_not_found` on a cold cache instead of advancing to the next marker.
 - **1-based MIDI channel** — `send_note`, `send_cc`, and `record_sequence` `ch` values accept 1..16 to match Logic's UI.
 - **Bounded raw SysEx** — `send_sysex` rejects payloads over 1024 bytes before CoreMIDI routing.
-- **Audible-bounce guardrails** — `record_sequence` refuses unverified GM Device / External MIDI imports, `logic://project/audit` marks External MIDI tracks with MIDI regions as export blockers, and `logic_project.bounce` refuses those blockers before opening the Bounce dialog.
+- **Audible-bounce guardrails** — `record_sequence` refuses unverified GM Device / External MIDI imports, `logic://project/audit` reports External MIDI tracks with MIDI regions as export blockers, standalone `logic_project bounce` terminates unsupported, and confirmed `export_run` is the automated artifact path.
 - **Audit phase split** — audit logs distinguish rejected calls, confirmation prompts, and executed route invocations.
 - **Verified project saves** — `project.save_as` verifies the target `.logicx` package exists and that existing packages advance modification time.
 - **Live project metadata** — `logic://project/info` promotes live transport tempo/sample-rate when available and falls back per-field to saved project metadata.
@@ -384,7 +384,7 @@ The repository ships `server.json` for the official MCP Registry metadata path. 
 
 - **Tempo typing**: `transport.set_tempo` uses bounded coarse and exact AX slider fallbacks when Logic's inline tempo input does not commit, and fails closed if exact readback still cannot be verified.
 - **MIDI region padding**: `record_sequence` regions start at bar 1 and extend to the target bar using inaudible padding; note timing inside the region is exact, but the region can look longer than the phrase.
-- **External MIDI bounce readiness**: MIDI regions on GM Device / External MIDI tracks are not accepted as audible-bounce evidence by project audit or `logic_project.bounce`. Move or recreate the material on Software Instrument tracks before claiming a verified Logic Bounce.
+- **External MIDI bounce readiness**: MIDI regions on GM Device / External MIDI tracks are not accepted as audible-bounce evidence by project audit. Standalone `logic_project bounce` is unsupported; use the guarded `export_run` workflow for automated artifact production.
 - **MIDI Key Commands**: Logic 12.2+ does not accept the legacy `.plist` Key Commands import. The reference cannot establish or read back Logic-side bindings, so keycmd-only mapped operations remain `unattended_unavailable`. The automated record-arm key-command setup (`system.setup_arm_key`) refuses for `it-IT`, `pt-BR`, and `zh-TW` until their Key Commands spelling is proven from Apple's data or measured live (see CHANGELOG v3.18.0).
 - **Markers**: marker creation uses Logic's native Navigate menu and verifies the Marker List when it is readable. A closed/unreadable Marker List is reported as unreadable or served from the last readable cache instead of being promoted to a verified empty list. `rename_marker` remains `not_implemented`.
 - **Plugin parameter readback**: `logic_plugins.set_param_verified` opens the target insert's plugin window when needed and live-verifies Compressor `threshold` through that window; arbitrary plugin parameters remain future work and fail closed with `unsupported_param_readback`.

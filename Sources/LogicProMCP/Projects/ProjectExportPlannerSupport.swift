@@ -145,31 +145,29 @@ extension ProjectExportPlanner {
         return steps
     }
 
-    /// #369: the bounce/export step's real execution dependencies, so the manifest
+    /// #369: the export_run artifact step's real execution dependencies, so the manifest
     /// is honest about what the run needs instead of only reporting
     /// `validation_status: valid`. The default export path drives Logic's Bounce
-    /// dialog out-of-process (the bundled `logic_bounce.py` helper) — it is NOT
-    /// gated on the MIDIKeyCommands MIDI-Learn binding, which the correction in
-    /// the `automation_permission` detail spells out.
+    /// dialog out-of-process with the bundled `logic_bounce.py` helper. This is
+    /// an internal phase of confirmed export_run, not standalone project.bounce.
     static func executionPreconditions(artifactKinds: [String]) -> [ProjectExportPrecondition] {
         var preconditions: [ProjectExportPrecondition] = []
         if artifactKinds.contains(where: { $0 != "stem" }) {
             preconditions += [
             ProjectExportPrecondition(
                 requirement: "automation_permission",
-                appliesToCommands: ["bounce"],
+                appliesToCommands: ["export_run"],
                 detail: "The bounce/export step drives Logic Pro's Bounce dialog out-of-process: it issues "
                     + "Logic's default Bounce command (Cmd+B, or File > Bounce > Project or Section) and confirms "
                     + "the settings and save panel through System Events, so Automation approval for BOTH System "
-                    + "Events and Logic Pro is required or the run fails at the bounce step. This does NOT require "
-                    + "the MIDIKeyCommands manual MIDI-Learn binding: that channel is only a fallback route for the "
-                    + "standalone project.bounce operation reported by logic_system health (whose primary route is "
-                    + "also System Events), not this dialog-driven export path.",
+                    + "Events and Logic Pro is required or the run fails at the bounce step. This dialog-driven "
+                    + "phase belongs only to confirmed logic_project export_run; standalone project.bounce is "
+                    + "unsupported and never reaches it.",
                 verifyWith: "LogicProMCP --check-permissions"
             ),
             ProjectExportPrecondition(
                 requirement: "post_event_access",
-                appliesToCommands: ["bounce"],
+                appliesToCommands: ["export_run"],
                 detail: "The Bounce settings and save panel (filename entry, destination navigation, and the "
                     + "confirm button) is driven with native CGEvent, which requires trusted PostEvent access "
                     + "(granted through the launcher app's Accessibility entry).",
@@ -177,14 +175,14 @@ extension ProjectExportPlanner {
             ),
             ProjectExportPrecondition(
                 requirement: "bounce_helper_available",
-                appliesToCommands: ["bounce"],
+                appliesToCommands: ["export_run"],
                 detail: "The export step runs the bundled logic_bounce.py helper; it must resolve on the install "
                     + "share path, pass the ownership-trust check, and have a python3 interpreter available.",
                 verifyWith: "LogicProMCP doctor"
             ),
             ProjectExportPrecondition(
                 requirement: "input_source_available",
-                appliesToCommands: ["bounce"],
+                appliesToCommands: ["export_run"],
                 detail: "The export step types the destination filename into Logic's Bounce/save panel with "
                     + "synthetic keystrokes, so the helper first switches the active keyboard input source to an "
                     + "ABC or US layout (com.apple.keylayout.ABC or com.apple.keylayout.US); one of those must be "

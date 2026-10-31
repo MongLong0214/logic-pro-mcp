@@ -121,9 +121,16 @@ struct ProjectExportPlannerTests {
         #expect(preconditions.count == 4)
         let first = try #require(preconditions.first)
         #expect(first["requirement"] as? String == "automation_permission")
-        #expect(first["applies_to_commands"] as? [String] == ["bounce"])
+        #expect(first["applies_to_commands"] as? [String] == ["export_run"])
         let verifyWith = try #require(first["verify_with"] as? String)
         #expect(!verifyWith.isEmpty)
+        #expect(plan.executionPreconditions.allSatisfy { $0.appliesToCommands == ["export_run"] })
+        #expect(!plan.executionPreconditions.contains {
+            $0.detail.contains("MIDIKeyCommands") || $0.detail.contains("fallback route")
+        })
+        #expect(plan.executionPreconditions.contains {
+            $0.detail.contains("standalone project.bounce is unsupported")
+        })
 
         // Round-trips back into the model unchanged.
         let decoded = try JSONDecoder().decode(ProjectExportPlan.self, from: data)
