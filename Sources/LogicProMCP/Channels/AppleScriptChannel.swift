@@ -557,11 +557,14 @@ actor AppleScriptChannel: Channel {
         case .success:
             return .success("Opened: \(path)")
         case .error(let initialMessage):
-            guard runtime.isLogicProRunning() else {
-                return .error("Failed to verify opened project: \(path). \(initialMessage)")
+            let logicProRunning = runtime.isLogicProRunning()
+            let documentAfterInitialVerification: FrontDocumentIdentity?
+            if logicProRunning {
+                documentAfterInitialVerification = await logicCurrentDocumentIdentity()
+            } else {
+                documentAfterInitialVerification = nil
             }
 
-            let documentAfterInitialVerification = await logicCurrentDocumentIdentity()
             if let currentDocumentPath = documentAfterInitialVerification?.path,
                projectPathsMatch(currentDocumentPath, path) {
                 return .success("Opened: \(path)")
@@ -571,7 +574,12 @@ actor AppleScriptChannel: Channel {
             let frontDocumentPathStatus: String
             let hint: String
             let frontDocumentObserved: Bool
-            if documentAfterInitialVerification?.path != nil {
+            if !logicProRunning {
+                identityClassification = "logic_process_not_observed"
+                frontDocumentPathStatus = "unavailable"
+                frontDocumentObserved = false
+                hint = "project.open terminated after Launch Services accepted the request but Logic Pro was not yet observed running. The accepted open request may still launch and settle after this response, so its final effect remains unknown and it must not be retried."
+            } else if documentAfterInitialVerification?.path != nil {
                 identityClassification = "different_path_observed"
                 frontDocumentPathStatus = "different_path_observed"
                 frontDocumentObserved = true

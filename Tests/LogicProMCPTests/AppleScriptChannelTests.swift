@@ -450,6 +450,35 @@ private func requireTerminalPathUnavailableReceipt(
     #expect(obj["initial_verification_error"] as? String == "osascript failed before polling")
 }
 
+@Test func testAppleScriptProjectOpenReportsUnknownEffectWhenAcceptedOpenHasNotLaunchedLogicYet() async throws {
+    let path = "/tmp/launch-pending.logicx"
+    let openRecorder = OpenFileRecorder()
+    let channel = AppleScriptChannel(
+        runtime: .init(
+            isLogicProRunning: { false },
+            openFile: { openRecorder.open($0) },
+            runScript: { _ in .error("Logic Pro is not running") },
+            executeTransportAction: { _ in .success("OK") }
+        )
+    )
+
+    let result = await channel.execute(operation: "project.open", params: ["path": path])
+    let obj = try #require(JSONSerialization.jsonObject(
+        with: Data(result.message.utf8), options: []
+    ) as? [String: Any])
+
+    #expect(!result.isSuccess)
+    try requireUnknownOpenEffect(obj, frontDocumentObserved: false)
+    #expect(obj["identity_classification"] as? String == "logic_process_not_observed")
+    #expect(obj["initial_verification_error"] as? String == "Logic Pro is not running")
+    #expect(!(try #require(obj["safe_to_retry"] as? Bool)))
+    #expect(try #require(obj["terminal"] as? Bool))
+    #expect(!(try #require(obj["human_intervention_required"] as? Bool)))
+    #expect(obj["human_intervention_requests"] as? Int == 0)
+    #expect(obj["human_dependent_transitions"] as? Int == 0)
+    #expect(openRecorder.snapshot() == [path])
+}
+
 @Test func testAppleScriptProjectOpenDoesNotRetryOrRestoreAfterUnsafeCloseRefusal() async throws {
     let openRecorder = OpenFileRecorder()
     let path = "/tmp/failed.logicx"
