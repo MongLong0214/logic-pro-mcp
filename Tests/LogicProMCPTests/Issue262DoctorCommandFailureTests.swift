@@ -14,25 +14,35 @@ private func issue262Runtime(_ commandResult: SetupDoctor.CommandResult) -> Setu
     )
 }
 
-@Test func doctorCommandFailuresKeepTypedEvidenceAndActionableSummary() {
+@Test func doctorReleaseCommandFailuresTerminateWithTypedEvidence() {
     let cases: [(SetupDoctor.CommandResult, String, String)] = [
-        (.timedOut, "timeout", "Retry"),
-        (.spawnFailed("ENOENT"), "spawn_failed", "Verify the tool exists"),
-        (.notAllowlisted, "allowlist_rejected", "Use an allowlisted tool"),
+        (.timedOut, "timeout", "verification timed out"),
+        (.spawnFailed("ENOENT"), "spawn_failed", "verification could not be started"),
+        (.notAllowlisted, "allowlist_rejected", "blocked by the Doctor command allowlist"),
     ]
 
     for (result, failureReason, summaryFragment) in cases {
-        let check = SetupDoctor.releaseSignatureCheck(
-            executablePath: "/tmp/LogicProMCP",
-            runtime: issue262Runtime(result)
-        )
-
-        #expect(check.status == .warn)
-        #expect(check.evidence["command_failure_reason"] == failureReason)
-        #expect(check.evidence["command_status"] == failureReason)
-        #expect(check.summary.localizedCaseInsensitiveContains(summaryFragment))
-        if case .spawnFailed = result {
-            #expect(check.evidence["spawn_error"] == "present")
+        let runtime = issue262Runtime(result)
+        let checks = [
+            SetupDoctor.releaseSignatureCheck(executablePath: "/tmp/LogicProMCP", runtime: runtime),
+            SetupDoctor.releaseQuarantineCheck(executablePath: "/tmp/LogicProMCP", runtime: runtime),
+        ]
+        for check in checks {
+            #expect(check.status == .fail)
+            #expect(check.remediation.type == .none)
+            #expect(check.remediation.value.isEmpty)
+            #expect(check.evidence["command_failure_reason"] == failureReason)
+            #expect(check.evidence["command_status"] == failureReason)
+            #expect(check.evidence["terminal"] == "true")
+            #expect(check.evidence["human_intervention_required"] == "false")
+            #expect(check.evidence["human_intervention_requests"] == "0")
+            #expect(check.summary.localizedCaseInsensitiveContains(summaryFragment))
+            for staleRequest in ["Retry", "Verify the tool", "Use an allowlisted tool"] {
+                #expect(!check.summary.contains(staleRequest))
+            }
+            if case .spawnFailed = result {
+                #expect(check.evidence["spawn_error"] == "present")
+            }
         }
     }
 }

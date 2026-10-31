@@ -709,11 +709,11 @@ enum SetupDoctor {
     static func commandFailureSummary(command: String, result: CommandResult) -> String {
         switch result {
         case .timedOut:
-            return "\(command) verification timed out. Retry and verify the tool is not blocked."
+            return "\(command) verification timed out."
         case .spawnFailed:
-            return "\(command) verification could not be started. Verify the tool exists and is executable."
+            return "\(command) verification could not be started."
         case .notAllowlisted:
-            return "\(command) verification was blocked by the Doctor command allowlist. Use an allowlisted tool."
+            return "\(command) verification was blocked by the Doctor command allowlist."
         case .completed:
             return "\(command) verification failed."
         }

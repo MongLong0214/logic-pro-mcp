@@ -1003,8 +1003,8 @@ private func issue26RepositoryRootURL() -> URL {
 }
 
 @Test func testMainEntrypointDoctorExitsZeroOnDegraded() async throws {
-    // A warn (codesign uncheckable) with all manual channels approved and no fail
-    // -> degraded -> exit 0.
+    // A warn (quarantine state indeterminate) with all manual channels approved
+    // and no fail -> degraded -> exit 0.
     var stdout = ""
     let store = ManualValidationStore(
         fileURL: FileManager.default.temporaryDirectory
@@ -1023,9 +1023,11 @@ private func issue26RepositoryRootURL() -> URL {
         },
         approvalStoreFactory: { store },
         doctorRuntime: doctorRuntime(commandHandler: { executable, arguments in
-            if executable == "/usr/bin/codesign" { return nil } // -> release.signature warn
+            if executable == "/usr/bin/codesign" {
+                return .init(exitCode: 0, stdout: "", stderr: "")
+            }
             if executable == "/usr/bin/xattr" {
-                return .init(exitCode: 1, stdout: "", stderr: "No such xattr")
+                return .init(exitCode: 13, stdout: "", stderr: "Operation not permitted")
             }
             if executable == "/opt/homebrew/bin/brew" || executable == "/usr/local/bin/brew",
                arguments == ["list", "--versions", "logic-pro-mcp"] {
@@ -1055,9 +1057,11 @@ private func issue26RepositoryRootURL() -> URL {
             logicRunning: false,
             visibleWindow: false,
             commandHandler: { executable, arguments in
-                if executable == "/usr/bin/codesign" { return nil }
+                if executable == "/usr/bin/codesign" {
+                    return .init(exitCode: 0, stdout: "", stderr: "")
+                }
                 if executable == "/usr/bin/xattr" {
-                    return .init(exitCode: 1, stdout: "", stderr: "No such xattr")
+                    return .init(exitCode: 13, stdout: "", stderr: "Operation not permitted")
                 }
                 if executable == "/opt/homebrew/bin/brew" || executable == "/usr/local/bin/brew",
                    arguments == ["list", "--versions", "logic-pro-mcp"] {
@@ -1076,9 +1080,11 @@ private func issue26RepositoryRootURL() -> URL {
         permissionStatus: grantedPermissionStatus(),
         approvals: allApprovals(),
         runtime: doctorRuntime(commandHandler: { executable, arguments in
-            if executable == "/usr/bin/codesign" { return nil } // -> warn
+            if executable == "/usr/bin/codesign" {
+                return .init(exitCode: 0, stdout: "", stderr: "")
+            }
             if executable == "/usr/bin/xattr" {
-                return .init(exitCode: 1, stdout: "", stderr: "No such xattr")
+                return .init(exitCode: 13, stdout: "", stderr: "Operation not permitted")
             }
             if executable == "/opt/homebrew/bin/brew" || executable == "/usr/local/bin/brew",
                arguments == ["list", "--versions", "logic-pro-mcp"] {

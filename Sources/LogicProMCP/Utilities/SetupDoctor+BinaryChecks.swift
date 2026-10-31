@@ -138,10 +138,10 @@ extension SetupDoctor {
             return check(
                 id: "release.signature",
                 domain: "release",
-                status: .warn,
+                status: .fail,
                 summary: commandFailureSummary(command: "codesign", result: result),
-                evidence: commandFailureEvidence(path: executablePath, result: result),
-                remediationType: .docs
+                evidence: terminalBinaryEvidence(commandFailureEvidence(path: executablePath, result: result)),
+                remediationType: .none
             )
         }
         return check(
@@ -188,10 +188,10 @@ extension SetupDoctor {
             return check(
                 id: "release.quarantine",
                 domain: "release",
-                status: .warn,
+                status: .fail,
                 summary: commandFailureSummary(command: "xattr quarantine", result: result),
-                evidence: commandFailureEvidence(path: executablePath, result: result),
-                remediationType: .docs
+                evidence: terminalBinaryEvidence(commandFailureEvidence(path: executablePath, result: result)),
+                remediationType: .none
             )
         }
         // Distinguish three outcomes instead of folding everything but exit 0 into
