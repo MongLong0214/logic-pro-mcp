@@ -59,6 +59,30 @@ launch_agent_service_status() {
     launchctl print "$LAUNCH_AGENT_SERVICE" >/dev/null 2>&1
 }
 
+LAUNCH_AGENT_HOLD=""
+
+restore_held_launch_agent_plist() {
+    if [ -z "$LAUNCH_AGENT_HOLD" ] || { [ ! -e "$LAUNCH_AGENT_HOLD" ] && [ ! -L "$LAUNCH_AGENT_HOLD" ]; }; then
+        return 0
+    fi
+    if [ -e "$LAUNCH_AGENT" ] || [ -L "$LAUNCH_AGENT" ]; then
+        fail_uninstall "Uninstall unsuccessful: launch agent plist path reappeared while the original remained preserved."
+    fi
+    if ! mv "$LAUNCH_AGENT_HOLD" "$LAUNCH_AGENT"; then
+        fail_uninstall "Uninstall unsuccessful: preserved launch agent plist could not be restored after service cleanup failed."
+    fi
+    LAUNCH_AGENT_HOLD=""
+}
+
+fail_launch_agent_cleanup() {
+    local message="$1"
+    local restore_plist="${2:-0}"
+    if [ "$restore_plist" -eq 1 ]; then
+        restore_held_launch_agent_plist
+    fi
+    fail_uninstall "$message"
+}
+
 wait_for_launch_agent_absence() {
     local attempt
     local status
@@ -86,6 +110,7 @@ wait_for_launch_agent_absence() {
 
 stop_launch_agent_service() {
     local bootout_status=0
+    local restore_plist="${1:-0}"
     if launchctl bootout "$LAUNCH_AGENT_SERVICE" >/dev/null 2>&1; then
         :
     else
@@ -99,12 +124,12 @@ stop_launch_agent_service() {
             ;;
         loaded)
             if [ "$bootout_status" -ne 0 ]; then
-                fail_uninstall "Uninstall unsuccessful: launch agent service could not be stopped and remains loaded."
+                fail_launch_agent_cleanup "Uninstall unsuccessful: launch agent service could not be stopped and remains loaded." "$restore_plist"
             fi
-            fail_uninstall "Uninstall unsuccessful: launch agent service remains loaded."
+            fail_launch_agent_cleanup "Uninstall unsuccessful: launch agent service remains loaded." "$restore_plist"
             ;;
         *)
-            fail_uninstall "Uninstall unsuccessful: launch agent service removal could not be verified."
+            fail_launch_agent_cleanup "Uninstall unsuccessful: launch agent service removal could not be verified." "$restore_plist"
             ;;
     esac
 }
@@ -121,13 +146,17 @@ else
 fi
 
 if [ -e "$LAUNCH_AGENT" ] || [ -L "$LAUNCH_AGENT" ]; then
-    if ! rm -f "$LAUNCH_AGENT"; then
-        fail_uninstall "Uninstall unsuccessful: launch agent plist could not be removed."
+    LAUNCH_AGENT_HOLD="${LAUNCH_AGENT}.logicpromcp-uninstall.$$"
+    if [ -e "$LAUNCH_AGENT_HOLD" ] || [ -L "$LAUNCH_AGENT_HOLD" ]; then
+        fail_uninstall "Uninstall unsuccessful: launch agent plist staging path already exists."
     fi
-    if [ -e "$LAUNCH_AGENT" ] || [ -L "$LAUNCH_AGENT" ]; then
-        fail_uninstall "Uninstall unsuccessful: launch agent plist remains after removal."
+    if ! mv "$LAUNCH_AGENT" "$LAUNCH_AGENT_HOLD"; then
+        fail_uninstall "Uninstall unsuccessful: launch agent plist could not be staged for removal."
     fi
-    echo "✓ Removed launch agent plist: $LAUNCH_AGENT"
+    if [ -e "$LAUNCH_AGENT" ] || [ -L "$LAUNCH_AGENT" ] || { [ ! -e "$LAUNCH_AGENT_HOLD" ] && [ ! -L "$LAUNCH_AGENT_HOLD" ]; }; then
+        restore_held_launch_agent_plist
+        fail_uninstall "Uninstall unsuccessful: launch agent plist staging could not be verified."
+    fi
 else
     echo "Launch agent plist not found — skipped."
 fi
@@ -137,13 +166,28 @@ fi
 # owned service once more if needed and refuse before binary deletion unless its
 # final state is observed absent.
 if launch_agent_service_status; then
-    stop_launch_agent_service
+    stop_launch_agent_service 1
     echo "✓ Removed reloaded launch agent service: $LAUNCH_AGENT_SERVICE"
 else
     STATUS=$?
     if [ "$STATUS" -ne 113 ]; then
-        fail_uninstall "Uninstall unsuccessful: final launch agent service state could not be established."
+        fail_launch_agent_cleanup "Uninstall unsuccessful: final launch agent service state could not be established." 1
     fi
+fi
+
+if [ -n "$LAUNCH_AGENT_HOLD" ]; then
+    if rm -f "$LAUNCH_AGENT_HOLD"; then
+        :
+    elif [ -e "$LAUNCH_AGENT_HOLD" ] || [ -L "$LAUNCH_AGENT_HOLD" ]; then
+        restore_held_launch_agent_plist
+        fail_uninstall "Uninstall unsuccessful: launch agent plist could not be removed from staging."
+    fi
+    if [ -e "$LAUNCH_AGENT_HOLD" ] || [ -L "$LAUNCH_AGENT_HOLD" ]; then
+        restore_held_launch_agent_plist
+        fail_uninstall "Uninstall unsuccessful: staged launch agent plist remains after removal."
+    fi
+    LAUNCH_AGENT_HOLD=""
+    echo "✓ Removed launch agent plist: $LAUNCH_AGENT"
 fi
 
 # 2. Remove operator approvals
