@@ -782,7 +782,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
             audit(command, phase: .rejected, reason: "invalid confirmed")
             return toolInvalidParamsResult("cleanup_apply \(hint)")
         case .missing:
-            audit(command, phase: .confirmationRequired, reason: stepID)
+            audit(command, phase: .rejected, reason: stepID)
             return cleanupApplyStateC(
                 .invalidParams,
                 stepID: stepID,
@@ -790,7 +790,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
             )
         case .value(let confirmed):
             guard confirmed else {
-                audit(command, phase: .confirmationRequired, reason: stepID)
+                audit(command, phase: .rejected, reason: stepID)
                 return cleanupApplyStateC(
                     .invalidParams,
                     stepID: stepID,
