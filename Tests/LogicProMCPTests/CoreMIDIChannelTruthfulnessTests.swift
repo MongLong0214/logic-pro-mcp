@@ -29,6 +29,7 @@ actor MockCoreMIDIEngine: CoreMIDIEngineProtocol {
     var active: Bool
     var startCount = 0
     var stopCount = 0
+    var noteOffAttempts = 0
     let startFailure: MockCoreMIDIHarnessError?
     let sendFailure: MockCoreMIDIHarnessError?
     let sendFailureMode: SendFailureMode
@@ -65,6 +66,7 @@ actor MockCoreMIDIEngine: CoreMIDIEngineProtocol {
     }
 
     func sendNoteOff(channel: UInt8, note: UInt8, velocity: UInt8) throws {
+        noteOffAttempts += 1
         try failIfNeeded(.noteOff(channel: channel, note: note, velocity: velocity))
         shortMessages.append(.noteOff(channel: channel, note: note, velocity: velocity))
     }
@@ -468,7 +470,7 @@ private func expectCoreMIDIStateB(
     #expect(await engine.shortMessages.isEmpty)
 }
 
-@Test func testCoreMIDIChannelPlaySequenceNoteOffFailureReturnsStateC() async {
+@Test func testCoreMIDIChannelPlaySequenceNoteOffFailureReturnsStateC() async throws {
     let engine = MockCoreMIDIEngine(
         sendFailure: .sendFailed,
         sendFailureMode: .noteOff
@@ -481,8 +483,25 @@ private func expectCoreMIDIStateB(
     )
 
     #expect(!result.isSuccess)
-    #expect(result.message.contains("\"error\":\"ax_write_failed\""))
-    #expect(result.message.contains("\"operation\":\"midi.play_sequence\""))
+    let object = try coreMIDIHCObject(result)
+    #expect(object["error"] as? String == "ax_write_failed")
+    #expect(object["operation"] as? String == "midi.play_sequence")
+    #expect(object["phase"] as? String == "note_off")
+    #expect(try #require(object["write_attempted"] as? Bool))
+    #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+    #expect(try #require(object["fallback_unsafe"] as? Bool))
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(object["terminal_scope"] as? String == "mcp_request_only")
+    #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(object["human_intervention_requests"] as? Int == 0)
+    #expect(object["human_dependent_transitions"] as? Int == 0)
+    #expect(object["note_on_count_sent"] as? Int == 1)
+    #expect(object["failed_note_off_count"] as? Int == 1)
+    #expect(try #require(object["note_cleanup_attempted"] as? Bool))
+    #expect(object["note_cleanup_status"] as? String == "send_failed")
+    #expect(object["note_cleanup_send_failures"] as? Int == 2)
+    #expect(HonestContract.isFallbackUnsafeStateC(result.message))
+    #expect(await engine.noteOffAttempts == 2)
     #expect(await engine.shortMessages == [
         .noteOn(channel: 0, note: 60, velocity: 100),
     ])
