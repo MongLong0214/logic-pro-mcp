@@ -11,6 +11,14 @@ extension SetupDoctor {
         return result
     }
 
+    private static func observedBinaryPathBlock(
+        for id: String,
+        checks: [Check]
+    ) -> String? {
+        guard status(of: "binary.path", in: checks) != nil else { return nil }
+        return blockingCause(for: id, checks: checks)
+    }
+
     static func requireBinary(_ executablePath: String?, runtime: Runtime) -> String? {
         guard let executablePath, runtime.fileExists(executablePath) else { return nil }
         return executablePath
@@ -24,8 +32,8 @@ extension SetupDoctor {
                 domain: "binary",
                 status: .fail,
                 summary: "LogicProMCP binary could not be resolved from argv0 or PATH.",
-                evidence: ["argv0_resolved": executablePath ?? "<nil>"],
-                remediationType: .docs
+                evidence: terminalBinaryEvidence(["argv0_resolved": executablePath ?? "<nil>"]),
+                remediationType: .none
             )
         }
         return check(
@@ -39,16 +47,32 @@ extension SetupDoctor {
     }
 
 
-    static func binaryExecutableCheck(executablePath: String?, runtime: Runtime) -> Check {
-        guard let executablePath = requireBinary(executablePath, runtime: runtime) else {
+    static func binaryExecutableCheck(
+        executablePath: String?,
+        runtime: Runtime,
+        checks: [Check] = []
+    ) -> Check {
+        if let cause = observedBinaryPathBlock(for: "binary.executable", checks: checks) {
             return check(
                 id: "binary.executable",
                 domain: "binary",
                 status: .skipped,
                 summary: "Executable bit could not be checked because the binary path is missing.",
                 evidence: [:],
-                remediationType: .docs,
+                remediationType: .none,
+                blockedBy: cause,
                 skipReason: .binaryPathMissing
+            )
+        }
+        guard let executablePath = requireBinary(executablePath, runtime: runtime) else {
+            return check(
+                id: "binary.executable",
+                domain: "binary",
+                status: .fail,
+                summary: "Binary path became unavailable before executable permission could be checked.",
+                evidence: terminalBinaryEvidence(["path_state": "unavailable_at_check"]),
+                remediationType: .none,
+                skipReason: nil
             )
         }
         let executable = runtime.isExecutableFile(executablePath)
@@ -81,16 +105,32 @@ extension SetupDoctor {
     }
 
 
-    static func releaseSignatureCheck(executablePath: String?, runtime: Runtime) -> Check {
-        guard let executablePath = requireBinary(executablePath, runtime: runtime) else {
+    static func releaseSignatureCheck(
+        executablePath: String?,
+        runtime: Runtime,
+        checks: [Check] = []
+    ) -> Check {
+        if let cause = observedBinaryPathBlock(for: "release.signature", checks: checks) {
             return check(
                 id: "release.signature",
                 domain: "release",
                 status: .skipped,
                 summary: "Signature verification skipped because the binary path is missing.",
                 evidence: [:],
-                remediationType: .docs,
+                remediationType: .none,
+                blockedBy: cause,
                 skipReason: .binaryPathMissing
+            )
+        }
+        guard let executablePath = requireBinary(executablePath, runtime: runtime) else {
+            return check(
+                id: "release.signature",
+                domain: "release",
+                status: .fail,
+                summary: "Binary path became unavailable before signature verification.",
+                evidence: terminalBinaryEvidence(["path_state": "unavailable_at_check"]),
+                remediationType: .none,
+                skipReason: nil
             )
         }
         let result = runtime.runCommand("/usr/bin/codesign", ["--verify", "--strict", "--verbose=2", executablePath])
@@ -115,16 +155,32 @@ extension SetupDoctor {
     }
 
 
-    static func releaseQuarantineCheck(executablePath: String?, runtime: Runtime) -> Check {
-        guard let executablePath = requireBinary(executablePath, runtime: runtime) else {
+    static func releaseQuarantineCheck(
+        executablePath: String?,
+        runtime: Runtime,
+        checks: [Check] = []
+    ) -> Check {
+        if let cause = observedBinaryPathBlock(for: "release.quarantine", checks: checks) {
             return check(
                 id: "release.quarantine",
                 domain: "release",
                 status: .skipped,
                 summary: "Quarantine check skipped because the binary path is missing.",
                 evidence: [:],
-                remediationType: .docs,
+                remediationType: .none,
+                blockedBy: cause,
                 skipReason: .binaryPathMissing
+            )
+        }
+        guard let executablePath = requireBinary(executablePath, runtime: runtime) else {
+            return check(
+                id: "release.quarantine",
+                domain: "release",
+                status: .fail,
+                summary: "Binary path became unavailable before quarantine inspection.",
+                evidence: terminalBinaryEvidence(["path_state": "unavailable_at_check"]),
+                remediationType: .none,
+                skipReason: nil
             )
         }
         let result = runtime.runCommand("/usr/bin/xattr", ["-p", "com.apple.quarantine", executablePath])

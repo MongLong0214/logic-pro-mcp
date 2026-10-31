@@ -234,7 +234,7 @@ These anchors are intentionally compact because `doctor --json` links to them.
 
 <a id="doctor-binarypath"></a>
 ### `binary.path`
-Install with Homebrew, copy the release binary into PATH, or invoke the source build by absolute path.
+Reports whether the running process resolved its binary from `argv0` or PATH. An unresolved binary is a terminal unavailable state for this read-only inspection; doctor emits no mutation or retry request.
 
 <a id="doctor-binaryexecutable"></a>
 ### `binary.executable`

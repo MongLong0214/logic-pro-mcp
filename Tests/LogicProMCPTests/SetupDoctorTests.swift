@@ -9,6 +9,7 @@ private actor DoctorMockMainServer: ServerStarting {
 private func doctorRuntime(
     executablePath: String? = "/usr/local/bin/LogicProMCP",
     exists: Bool = true,
+    existsProbe: ((String) -> Bool)? = nil,
     executable: Bool = true,
     logicRunning: Bool = true,
     visibleWindow: Bool = true,
@@ -40,7 +41,7 @@ private func doctorRuntime(
 ) -> SetupDoctor.Runtime {
     var runtime = SetupDoctor.Runtime(
         resolveExecutablePath: { _ in executablePath },
-        fileExists: { _ in exists },
+        fileExists: existsProbe ?? { _ in exists },
         isExecutableFile: { _ in executable },
         logicProRunning: { logicRunning },
         logicProHasVisibleWindow: { visibleWindow },
@@ -131,6 +132,15 @@ private func issue26RepositoryRootURL() -> URL {
     #expect(targetAnchor.contains("when the installed version is readable"))
     #expect(!targetAnchor.contains("with a valid share directory and matching version"))
 
+    let pathStart = try #require(setup.range(of: "<a id=\"doctor-binarypath\"></a>"))
+    let pathTail = setup[pathStart.lowerBound...]
+    let pathNextAnchor = try #require(pathTail.dropFirst().range(of: "<a id="))
+    let pathAnchor = String(pathTail[..<pathNextAnchor.lowerBound])
+    for staleContinuation in ["Install ", "install ", "copy ", "invoke ", "Homebrew"] {
+        #expect(!pathAnchor.contains(staleContinuation))
+    }
+    #expect(pathAnchor.contains("terminal unavailable state"))
+
     let binaryStart = try #require(setup.range(of: "<a id=\"doctor-binaryexecutable\"></a>"))
     let binaryTail = setup[binaryStart.lowerBound...]
     let binaryNextAnchor = try #require(binaryTail.dropFirst().range(of: "<a id="))
@@ -220,6 +230,80 @@ private func issue26RepositoryRootURL() -> URL {
     #expect(remediation["value"] as? String != nil)
 }
 
+@Test func testMissingBinaryPathTerminatesWithoutRemediation() throws {
+    let report = SetupDoctor.generate(
+        arguments: ["LogicProMCP", "doctor", "--json"],
+        permissionStatus: grantedPermissionStatus(),
+        approvals: allApprovals(),
+        runtime: doctorRuntime(executablePath: nil, exists: false)
+    )
+    let path = try #require(report.checks.first { $0.id == "binary.path" })
+    #expect(path.status == .fail)
+    #expect(path.remediation.type == .none)
+    #expect(path.remediation.value.isEmpty)
+    #expect(path.evidence["terminal"] == "true")
+    #expect(path.evidence["human_intervention_required"] == "false")
+    #expect(path.evidence["human_intervention_requests"] == "0")
+
+    for id in ["binary.executable", "release.signature", "release.quarantine"] {
+        let dependent = try #require(report.checks.first { $0.id == id })
+        #expect(dependent.status == .skipped)
+        #expect(dependent.blockedBy == "binary.path")
+        #expect(dependent.skipReason == .binaryPathMissing)
+        #expect(dependent.remediation.type == .none)
+        #expect(dependent.remediation.value.isEmpty)
+    }
+    for id in ["binary.path", "binary.executable", "release.signature", "release.quarantine"] {
+        #expect(!report.fixPlan.contains(id))
+    }
+}
+
+@Test func testBinaryPathFailureOwnsDownstreamWhenFileAppearsLater() throws {
+    var reads = 0
+    let report = SetupDoctor.generate(
+        arguments: ["LogicProMCP", "doctor", "--json"],
+        permissionStatus: grantedPermissionStatus(),
+        approvals: allApprovals(),
+        runtime: doctorRuntime(existsProbe: { _ in
+            reads += 1
+            return reads > 1
+        })
+    )
+    let path = try #require(report.checks.first { $0.id == "binary.path" })
+    #expect(path.status == .fail)
+    for id in ["binary.executable", "release.signature", "release.quarantine"] {
+        let dependent = try #require(report.checks.first { $0.id == id })
+        #expect(dependent.status == .skipped)
+        #expect(dependent.blockedBy == "binary.path")
+        #expect(dependent.remediation.type == .none)
+        #expect(SetupDoctor.blockedByDependencies[id] == ["binary.path"])
+    }
+}
+
+@Test func testBinaryDisappearanceAfterPathPassTerminatesWithoutFalseBlockedBy() throws {
+    var reads = 0
+    let report = SetupDoctor.generate(
+        arguments: ["LogicProMCP", "doctor", "--json"],
+        permissionStatus: grantedPermissionStatus(),
+        approvals: allApprovals(),
+        runtime: doctorRuntime(existsProbe: { _ in
+            reads += 1
+            return reads == 1
+        })
+    )
+    let path = try #require(report.checks.first { $0.id == "binary.path" })
+    #expect(path.status == .pass)
+    for id in ["binary.executable", "release.signature", "release.quarantine"] {
+        let dependent = try #require(report.checks.first { $0.id == id })
+        #expect(dependent.status == .fail)
+        #expect(dependent.blockedBy == nil)
+        #expect(dependent.remediation.type == .none)
+        #expect(dependent.evidence["terminal"] == "true")
+        #expect(dependent.evidence["human_intervention_required"] == "false")
+        #expect(dependent.evidence["human_intervention_requests"] == "0")
+    }
+}
+
 @Test func testSetupDoctorReportsRemediationOrTerminalPermissionOutcomeForNonPassStates() {
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json", "--profile", "full", "--client", "claude-code"],
@@ -237,6 +321,10 @@ private func issue26RepositoryRootURL() -> URL {
 
     #expect(report.status == .failed)
     let terminalOutcomeIDs: Set<String> = [
+        "binary.path",
+        "binary.executable",
+        "release.signature",
+        "release.quarantine",
         "permissions.accessibility",
         "permissions.automation_logic_pro",
         "permissions.automation_system_events",
