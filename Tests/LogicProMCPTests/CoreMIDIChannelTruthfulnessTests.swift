@@ -21,6 +21,7 @@ actor MockCoreMIDIEngine: CoreMIDIEngineProtocol {
     enum SendFailureMode: Sendable {
         case all
         case noteOff
+        case partialSequence
         case sysex
     }
 
@@ -29,6 +30,7 @@ actor MockCoreMIDIEngine: CoreMIDIEngineProtocol {
     var active: Bool
     var startCount = 0
     var stopCount = 0
+    var noteOnAttempts = 0
     var noteOffAttempts = 0
     let startFailure: MockCoreMIDIHarnessError?
     let sendFailure: MockCoreMIDIHarnessError?
@@ -61,6 +63,7 @@ actor MockCoreMIDIEngine: CoreMIDIEngineProtocol {
 
     var isActive: Bool { active }
     func sendNoteOn(channel: UInt8, note: UInt8, velocity: UInt8) throws {
+        noteOnAttempts += 1
         try failIfNeeded(.noteOn(channel: channel, note: note, velocity: velocity))
         shortMessages.append(.noteOn(channel: channel, note: note, velocity: velocity))
     }
@@ -100,6 +103,10 @@ actor MockCoreMIDIEngine: CoreMIDIEngineProtocol {
         guard let sendFailure else { return }
         switch (sendFailureMode, message) {
         case (.all, _), (.noteOff, .message(.noteOff(_, _, _))), (.sysex, .sysex):
+            throw sendFailure
+        case (.partialSequence, .message(.noteOn(_, _, _))) where noteOnAttempts == 2:
+            throw sendFailure
+        case (.partialSequence, .message(.noteOff(_, _, _))):
             throw sendFailure
         default:
             return
@@ -501,6 +508,39 @@ private func expectCoreMIDIStateB(
     #expect(object["note_cleanup_status"] as? String == "send_failed")
     #expect(object["note_cleanup_send_failures"] as? Int == 2)
     #expect(HonestContract.isFallbackUnsafeStateC(result.message))
+    #expect(await engine.noteOffAttempts == 2)
+    #expect(await engine.shortMessages == [
+        .noteOn(channel: 0, note: 60, velocity: 100),
+    ])
+}
+
+@Test func testCoreMIDIChannelPlaySequencePartialNoteOnFailureTerminatesAfterCleanup() async throws {
+    let engine = MockCoreMIDIEngine(
+        sendFailure: .sendFailed,
+        sendFailureMode: .partialSequence
+    )
+    let channel = CoreMIDIChannel(engine: engine)
+
+    let result = await channel.execute(
+        operation: "midi.play_sequence",
+        params: ["notes": "60,0,1,100,1;64,0,1,100,1"]
+    )
+
+    #expect(!result.isSuccess)
+    let object = try coreMIDIHCObject(result)
+    #expect(object["error"] as? String == "ax_write_failed")
+    #expect(object["phase"] as? String == "note_on")
+    #expect(try #require(object["note_on_failed"] as? Bool))
+    #expect(object["note_on_count_requested"] as? Int == 2)
+    #expect(object["note_on_count_sent"] as? Int == 1)
+    #expect(object["failed_note_off_count"] as? Int == 1)
+    #expect(object["note_cleanup_status"] as? String == "send_failed")
+    #expect(object["note_cleanup_send_failures"] as? Int == 2)
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(try #require(object["fallback_unsafe"] as? Bool))
+    #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+    #expect(HonestContract.isFallbackUnsafeStateC(result.message))
+    #expect(await engine.noteOnAttempts == 2)
     #expect(await engine.noteOffAttempts == 2)
     #expect(await engine.shortMessages == [
         .noteOn(channel: 0, note: 60, velocity: 100),

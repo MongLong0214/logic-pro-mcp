@@ -501,6 +501,7 @@ actor CoreMIDIChannel: Channel {
             }
             let startNs = DispatchTime.now().uptimeNanoseconds
             var noteOffTasks: [Task<Void, Error>] = []
+            var startedEvents: [NoteSequenceParser.ParsedNote] = []
             for event in events {
                 let targetNs = startNs + UInt64(event.offsetMs) * 1_000_000
                 let nowNs = DispatchTime.now().uptimeNanoseconds
@@ -509,9 +510,24 @@ actor CoreMIDIChannel: Channel {
                 }
                 do {
                     try await engine.sendNoteOn(channel: event.channel, note: event.pitch, velocity: event.velocity)
+                    startedEvents.append(event)
                 } catch {
-                    await drainCoreMIDINoteOffTasks(noteOffTasks)
-                    throw error
+                    let settledFailure = await waitForCoreMIDINoteOffTasks(noteOffTasks)
+                    let cleanup = await attemptCoreMIDINoteCleanup(startedEvents)
+                    return .error(Self.coreMIDISendFailure(
+                        operation: operation,
+                        error: error,
+                        extras: terminalPartialSendExtras([
+                            "phase": "note_on",
+                            "note_on_failed": true,
+                            "note_on_count_requested": events.count,
+                            "failed_note_off_count": settledFailure?.count ?? 0,
+                        ],
+                            noteOnCountSent: startedEvents.count,
+                            cleanup: cleanup,
+                            priorCleanupSendFailures: settledFailure?.count ?? 0
+                        )
+                    ))
                 }
                 let pitch = event.pitch
                 let ch = event.channel
@@ -829,12 +845,6 @@ actor CoreMIDIChannel: Channel {
         }
         guard let firstError else { return nil }
         return CoreMIDINoteOffFailure(count: failureCount, firstError: firstError)
-    }
-
-    private func drainCoreMIDINoteOffTasks(_ tasks: [Task<Void, Error>]) async {
-        for task in tasks {
-            _ = await task.result
-        }
     }
 
     func healthCheck() async -> ChannelHealth {
