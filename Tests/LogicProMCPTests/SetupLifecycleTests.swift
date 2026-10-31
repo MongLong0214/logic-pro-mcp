@@ -694,3 +694,19 @@ private func launchAgentPath(_ home: URL = lifecycleTestHome) -> String {
         #expect(setup.contains("id=\"\(id)\""), "Missing lifecycle remediation anchor \(anchor)")
     }
 }
+
+@Test func testSetupDocsUseAutomatedControlSurfaceSetupWithoutManualFallback() throws {
+    let root = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let setup = try String(
+        contentsOf: root.appendingPathComponent("docs/SETUP.md"),
+        encoding: .utf8
+    )
+
+    #expect(setup.contains("setup_control_surface"))
+    #expect(!setup.contains("To do it by hand instead"))
+    #expect(!setup.contains("New -> Install..."))
+    #expect(!setup.contains("then press **Add**"))
+}

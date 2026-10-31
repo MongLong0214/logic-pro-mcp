@@ -102,21 +102,6 @@ It refuses without `consent` because it writes to your Logic configuration. It d
 replaces if some OTHER control surface is already installed, and it reports success only after Logic
 has actually sent MCU feedback back — the port fields reading the right name is not proof.
 
-To do it by hand instead:
-
-1. Launch Logic Pro and open a project, with the server running (its MIDI ports exist only while it
-   does, so a stopped server means the port is not offered).
-2. Open **Logic Pro -> Control Surfaces -> Setup...**. On a Korean or Japanese Logic that submenu
-   holds TWO items spelled the same (`설정…` / `設定…`) — one opens this window, the other opens
-   preferences. Pick by the window that appears.
-3. In the Setup window's own menu bar, choose **New -> Install...**.
-4. Add **Loud Technologies / Mackie -> Mackie Control**, then press **Add**. Take care not to pick
-   `Mackie Control C4` or either `Mackie Control Extender`.
-5. Set both **Output Port** and **Input Port** to `LogicProMCP-MCU-Internal`. Output first: Input
-   defaults to the all-sources value, which already includes this server, so checking only Input
-   can read as bound while nothing Logic sends reaches anybody.
-6. Close the setup window. Leaving it open makes the live harnesses refuse.
-
 The binding lives in Logic's configuration, not in the server: it survives the server stopping and
 starting, so this is one-time rather than per-session.
 
