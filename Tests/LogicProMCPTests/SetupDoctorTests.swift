@@ -277,7 +277,7 @@ private func issue26RepositoryRootURL() -> URL {
         var runtime = doctorRuntime()
         runtime.logicApps = { logicApps }
         let report = SetupDoctor.generate(
-            arguments: ["LogicProMCP", "doctor", "--json", "--client", "claude-code"],
+            arguments: ["LogicProMCP", "doctor", "--json"],
             permissionStatus: grantedPermissionStatus(),
             approvals: allApprovals(),
             runtime: runtime
@@ -309,7 +309,7 @@ private func issue26RepositoryRootURL() -> URL {
         )]
     }
     let report = SetupDoctor.generate(
-        arguments: ["LogicProMCP", "doctor", "--json", "--client", "claude-code"],
+        arguments: ["LogicProMCP", "doctor", "--json"],
         permissionStatus: grantedPermissionStatus(),
         approvals: allApprovals(),
         runtime: runtime
