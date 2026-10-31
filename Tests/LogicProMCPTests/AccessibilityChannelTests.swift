@@ -2453,8 +2453,16 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     #expect(try #require(object["write_attempted"] as? Bool))
     #expect(!(try #require(object["safe_to_retry"] as? Bool)))
     #expect(try #require(object["terminal"] as? Bool))
+    #expect(object["terminal_scope"] as? String == "mcp_request_only")
     #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(object["human_intervention_requests"] as? Int == 0)
+    #expect(object["human_dependent_transitions"] as? Int == 0)
     #expect(try #require(object["automatic_readback_attempts_exhausted"] as? Bool))
+    let hint = try #require(object["hint"] as? String)
+    #expect(hint.localizedCaseInsensitiveContains("terminated"))
+    for request in ["focus", "dismiss", "retry", "click", "run "] {
+        #expect(!hint.lowercased().contains(request))
+    }
 }
 
 @Test func testImportMIDIFileFailsClosedWhenSystemEventsAutomationDenied() async throws {
@@ -2971,7 +2979,11 @@ private func makeTempoSliderFixture(
     #expect(result.message.contains("automatic tempo lookup terminated"))
     let object = decodeAccessibilityJSON(result.message)
     #expect(try #require(object["terminal"] as? Bool))
+    #expect(object["terminal_scope"] as? String == "mcp_request_only")
     #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+    #expect(object["human_intervention_requests"] as? Int == 0)
+    #expect(object["human_dependent_transitions"] as? Int == 0)
     #expect(try #require(object["automatic_tempo_lookup_exhausted"] as? Bool))
     #expect(!(try #require(object["write_attempted"] as? Bool)))
     let hint = object["hint"] as? String ?? ""

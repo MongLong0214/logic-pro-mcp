@@ -551,14 +551,17 @@ extension AccessibilityChannel {
         if shouldAttemptTempoFallback(landmarks: tempoLandmarks) && runFallback(tempoStr) {
             return .error(HonestContract.encodeStateC(
                 error: .readbackUnavailable,
-                hint: "tempo fallback executed but no tempo readback was available",
+                hint: "tempo fallback executed but no tempo readback was available; the effect remains unknown and this MCP request terminated.",
                 extras: missingExtras.merging([
                     "via": "keyboard-fallback",
                     "write_attempted": true,
                     "safe_to_retry": false,
                     "automatic_readback_attempts_exhausted": true,
                     "terminal": true,
+                    "terminal_scope": "mcp_request_only",
                     "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                    "human_dependent_transitions": 0,
                 ]) { _, new in new }
             ))
         }
@@ -567,9 +570,13 @@ extension AccessibilityChannel {
             hint: missingHint,
             extras: missingExtras.merging([
                 "write_attempted": false,
+                "safe_to_retry": false,
                 "automatic_tempo_lookup_exhausted": true,
                 "terminal": true,
+                "terminal_scope": "mcp_request_only",
                 "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
             ]) { _, new in new }
         ))
     }
