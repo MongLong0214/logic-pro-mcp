@@ -570,11 +570,20 @@ actor AppleScriptChannel: Channel {
             if documentAfterInitialVerification?.isUntitled == true {
                 return .error(HonestContract.encodeStateC(
                     error: .unsupportedState,
-                    hint: "project.open could not verify the requested project and the current front document is untitled; refusing to close an unsaved document to retry",
+                    hint: "project.open terminated after the requested project could not be verified and the current front document was untitled; refusing to close the unsaved document, with no safe automated continuation",
                     extras: [
                         "operation": "project.open",
                         "method": "applescript",
                         "path": path,
+                        "terminal": true,
+                        "human_intervention_required": false,
+                        "human_intervention_requests": 0,
+                        "human_dependent_transitions": 0,
+                        "automatic_precondition_attempts_exhausted": true,
+                        "safe_to_retry": false,
+                        "open_request_attempted": true,
+                        "close_attempted": false,
+                        "unsaved_document_preserved": true,
                     ]
                 ))
             }
