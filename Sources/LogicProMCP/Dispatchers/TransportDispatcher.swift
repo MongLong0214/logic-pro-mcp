@@ -1097,13 +1097,22 @@ struct TransportDispatcher: OperationTraceDispatching {
         if let beforeState {
             extras["observed_before"] = transportStateSummary(beforeState)
         }
+        extras["safe_to_retry"] = false
+        extras["terminal"] = true
+        extras["terminal_scope"] = "mcp_request_only"
+        extras["automatic_read_attempts_exhausted"] = true
+        extras["human_intervention_required"] = false
+        extras["human_intervention_requests"] = 0
+        extras["human_dependent_transitions"] = 0
         if let afterState {
             extras["observed_after"] = transportStateSummary(afterState)
+            extras["hint"] = "\(action.operation) was sent, but the transport did not reach the requested state after 12 automatic readback attempts; the effect remains unconfirmed and this MCP request terminated."
             return toolTextResult(HonestContract.encodeStateB(
                 reason: .readbackMismatch,
                 extras: extras
             ), isError: true)
         }
+        extras["hint"] = "\(action.operation) was sent and its resulting state could not be read in 12 automatic attempts; the effect remains unknown and this MCP request terminated."
         return toolTextResult(HonestContract.encodeStateB(
             reason: .readbackUnavailable,
             extras: extras
