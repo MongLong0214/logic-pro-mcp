@@ -254,19 +254,30 @@ def guard_controller_learn_mode(
         "policy_id": active_policy["policy_id"],
         "before": snapshot,
         "classification": classified,
+        "human_intervention_required": False,
+        "human_intervention_requests": 0,
+        "human_dependent_transitions": 0,
+        "write_attempted": False,
     }
 
     if classified.get("status") == "inactive":
         result["status"] = "clear"
         result["reason"] = classified.get("reason", "inactive")
+        result["terminal"] = False
     elif classified.get("status") == "active":
-        result["status"] = "blocked"
+        result["status"] = "failed"
         result["reason"] = classified.get("reason", "active")
+        result["terminal"] = True
+        result["terminal_scope"] = "mcp_request_only"
+        result["safe_to_retry"] = False
         if isinstance(classified.get("evidence"), dict):
             result["evidence"] = classified["evidence"]
     else:
-        result["status"] = "error"
+        result["status"] = "failed"
         result["reason"] = classified.get("reason", "detect_error")
+        result["terminal"] = True
+        result["terminal_scope"] = "mcp_request_only"
+        result["safe_to_retry"] = False
         if classified.get("stderr"):
             result["stderr"] = classified["stderr"]
     return result
@@ -281,8 +292,24 @@ def _main(argv: list[str]) -> int:
     else:
         print("usage: logic_controller_learn_mode.py [detect|guard]", file=sys.stderr)
         return 2
+    successful = payload.get("status") in {"clear", "inactive"}
+    payload = dict(payload)
+    payload.setdefault("human_intervention_required", False)
+    payload.setdefault("human_intervention_requests", 0)
+    payload.setdefault("human_dependent_transitions", 0)
+    payload.setdefault("write_attempted", False)
+    if successful:
+        payload.setdefault("terminal", False)
+    else:
+        prior_status = payload.get("status", "unknown")
+        if prior_status != "failed":
+            payload["classification_status"] = prior_status
+            payload["status"] = "failed"
+        payload.setdefault("terminal", True)
+        payload.setdefault("terminal_scope", "mcp_request_only")
+        payload.setdefault("safe_to_retry", False)
     print(json.dumps(payload, ensure_ascii=False, indent=2))
-    return 0
+    return 0 if successful else 1
 
 
 if __name__ == "__main__":
