@@ -11,7 +11,7 @@ actor AppleScriptChannel: Channel {
         let path: String?
         let name: String?
 
-        var isUntitled: Bool {
+        var hasNameWithoutPath: Bool {
             name != nil && path == nil
         }
     }
@@ -567,10 +567,10 @@ actor AppleScriptChannel: Channel {
                 return .success("Opened: \(path)")
             }
 
-            if documentAfterInitialVerification?.isUntitled == true {
+            if documentAfterInitialVerification?.hasNameWithoutPath == true {
                 return .error(HonestContract.encodeStateC(
                     error: .unsupportedState,
-                    hint: "project.open terminated after the requested project could not be verified and the current front document was untitled; refusing to close the unsaved document, with no safe automated continuation",
+                    hint: "project.open terminated after the requested project could not be verified and the current front document path remained unavailable; refusing to close a document whose persistence status was not established, with no safe automated continuation",
                     extras: [
                         "operation": "project.open",
                         "method": "applescript",
@@ -583,7 +583,9 @@ actor AppleScriptChannel: Channel {
                         "safe_to_retry": false,
                         "open_request_attempted": true,
                         "close_attempted": false,
-                        "unsaved_document_preserved": true,
+                        "document_preserved": true,
+                        "front_document_path_status": "unavailable",
+                        "identity_classification": "name_observed_path_unavailable",
                     ]
                 ))
             }
