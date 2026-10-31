@@ -333,7 +333,10 @@ mapped Logic execution. A missing reference is reported without a staging comman
 
 <a id="doctor-channelsmcu-wiring-hint"></a>
 ### `channels.mcu_wiring_hint`
-Wire the LogicProMCP MCU port in Logic Pro Control Surfaces if you use MCU-only operations.
+The doctor passes this check only when the controller-assignment data confirms the LogicProMCP MCU
+port. A missing reference or unreadable assignment file is a terminal unsuccessful outcome for the
+full profile: MCU-only operations remain unavailable, no setup is inferred, and no operator action is
+placed in `fix_plan`.
 
 <a id="doctor-dependenciesclick-fallback"></a>
 ### `dependencies.click_fallback`

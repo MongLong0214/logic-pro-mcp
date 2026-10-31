@@ -118,6 +118,14 @@ private func issue26RepositoryRootURL() -> URL {
         #expect(!permissionAnchors.contains(staleContinuation))
     }
     #expect(permissionAnchors.contains("terminal observation"))
+
+    let mcuStart = try #require(setup.range(of: "<a id=\"doctor-channelsmcu-wiring-hint\"></a>"))
+    let mcuEnd = try #require(setup.range(of: "<a id=\"doctor-dependenciesclick-fallback\"></a>"))
+    let mcuGuidance = String(setup[mcuStart.lowerBound..<mcuEnd.lowerBound])
+    for staleContinuation in ["Wire ", "wire ", "open Logic", "Control Surfaces", "manual"] {
+        #expect(!mcuGuidance.contains(staleContinuation))
+    }
+    #expect(mcuGuidance.contains("terminal unsuccessful outcome"))
 }
 
 @Test func testSetupDoctorJSONContractStableCheckIDsAndOKAggregation() throws {
@@ -223,6 +231,36 @@ private func issue26RepositoryRootURL() -> URL {
             #expect(!check.remediation.value.isEmpty, "\(check.id) has no remediation value")
         }
     }
+}
+
+@Test func testMCUWiringHintTerminatesMissingOrUnreadableStateWithoutHumanAction() {
+    let observations: [Bool?] = [false, nil]
+
+    for observation in observations {
+        var runtime = doctorRuntime()
+        runtime.mcuPortReferenceFound = { observation }
+
+        let check = SetupDoctor.mcuWiringHintCheck(runtime: runtime, profile: .full)
+
+        #expect(check.status == .fail)
+        #expect(check.remediation.type == .none)
+        #expect(check.remediation.value.isEmpty)
+        #expect(check.evidence["terminal"] == "true")
+        #expect(check.evidence["human_intervention_required"] == "false")
+        #expect(check.evidence["human_intervention_requests"] == "0")
+        #expect(!check.summary.localizedCaseInsensitiveContains("ignore"))
+    }
+}
+
+@Test func testMCUWiringHintPreservesConfirmedPassWithoutHumanAction() {
+    let check = SetupDoctor.mcuWiringHintCheck(runtime: doctorRuntime(), profile: .full)
+
+    #expect(check.status == .pass)
+    #expect(check.remediation.type == .none)
+    #expect(check.remediation.value.isEmpty)
+    #expect(check.evidence["terminal"] == "false")
+    #expect(check.evidence["human_intervention_required"] == "false")
+    #expect(check.evidence["human_intervention_requests"] == "0")
 }
 
 @Test func testMainEntrypointDoctorJSONDoesNotStartServerAndWritesStdout() async throws {

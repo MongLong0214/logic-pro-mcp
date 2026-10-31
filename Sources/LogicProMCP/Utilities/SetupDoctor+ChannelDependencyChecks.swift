@@ -102,18 +102,24 @@ extension SetupDoctor {
             )
         }
         let found = runtime.mcuPortReferenceFound()
+        let unavailable = found != true
         return check(
             id: "channels.mcu_wiring_hint",
             domain: "channels",
-            status: found == true ? .pass : .manual,
+            status: unavailable ? .fail : .pass,
             summary: found == true
                 ? "Logic controller assignments reference the LogicProMCP MCU port."
-                : "Logic controller assignments do not confirm the LogicProMCP MCU port; ignore this if MCU-only ops are unused.",
+                : found == false
+                    ? "Logic controller assignments do not reference the LogicProMCP MCU port; MCU-only operations are unavailable for unattended execution."
+                    : "Logic controller assignments could not be read; MCU-only operations are unavailable for unattended execution.",
             evidence: [
                 "cs_file_present": found == nil ? "false" : "true",
                 "mcu_port_reference_found": String(found == true),
+                "terminal": String(unavailable),
+                "human_intervention_required": "false",
+                "human_intervention_requests": "0",
             ],
-            remediationType: found == true ? .none : .docs
+            remediationType: .none
         )
     }
 
