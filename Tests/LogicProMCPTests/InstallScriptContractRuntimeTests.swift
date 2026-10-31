@@ -350,6 +350,7 @@ private struct UninstallLaunchAgentFixture {
             "LOGIC_PRO_MCP_INSTALL_DIR": installRoot.path,
             "LOGIC_PRO_MCP_SKIP_SUDO": "1",
             "LAUNCHCTL_LOG": launchctlLog.path,
+            "LAUNCH_AGENT_PATH": launchAgent.resolvingSymlinksInPath().path,
             "SERVICE_STATE": serviceState.path,
         ]
     }
@@ -363,6 +364,8 @@ private func makeUninstallLaunchAgentFixture(
     serviceAbsentExitCode: Int = 113,
     removeServiceBeforeBootoutFailure: Bool = false,
     preserveServiceAfterBootout: Bool = false,
+    finalBootoutExitCode: Int = 0,
+    finalServiceAbsentExitCode: Int? = nil,
     failPlistRemoval: Bool = false,
     reloadServiceAfterPlistRemoval: Bool = false,
     binaryPresent: Bool = false
@@ -408,14 +411,21 @@ private func makeUninstallLaunchAgentFixture(
                 if [ -f "$SERVICE_STATE" ]; then
                     exit 0
                 fi
+                if [ ! -e "$LAUNCH_AGENT_PATH" ] && [ ! -L "$LAUNCH_AGENT_PATH" ] && [ "\(finalServiceAbsentExitCode ?? -1)" -ge 0 ]; then
+                    exit "\(finalServiceAbsentExitCode ?? -1)"
+                fi
                 exit "\(serviceAbsentExitCode)"
                 ;;
             bootout)
-                if [ "\(bootoutExitCode)" -ne 0 ]; then
+                effective_exit="\(bootoutExitCode)"
+                if [ ! -e "$LAUNCH_AGENT_PATH" ] && [ ! -L "$LAUNCH_AGENT_PATH" ] && [ "\(finalBootoutExitCode)" -ne 0 ]; then
+                    effective_exit="\(finalBootoutExitCode)"
+                fi
+                if [ "$effective_exit" -ne 0 ]; then
                     if [ "\(removeServiceBeforeBootoutFailure ? 1 : 0)" -eq 1 ]; then
                         /bin/rm -f "$SERVICE_STATE"
                     fi
-                    exit "\(bootoutExitCode)"
+                    exit "$effective_exit"
                 fi
                 if [ "\(preserveServiceAfterBootout ? 1 : 0)" -eq 0 ]; then
                     /bin/rm -f "$SERVICE_STATE"
@@ -440,6 +450,11 @@ private func makeUninstallLaunchAgentFixture(
             set -euo pipefail
             for argument in "$@"; do
                 case "$argument" in
+                    */Library/LaunchAgents/com.logicpro.mcp.plist.logicpromcp-uninstall.*)
+                        if [ "\(failPlistRemoval ? 1 : 0)" -eq 1 ]; then
+                            exit 71
+                        fi
+                        ;;
                     */Library/LaunchAgents/com.logicpro.mcp.plist)
                         if [ "\(failPlistRemoval ? 1 : 0)" -eq 1 ]; then
                             exit 71
@@ -451,6 +466,22 @@ private func makeUninstallLaunchAgentFixture(
                 esac
             done
             exec /bin/rm "$@"
+            """
+        )
+    }
+    if reloadServiceAfterPlistRemoval {
+        try writeExecutable(
+            fakeBin.appendingPathComponent("mv"),
+            contents: """
+            #!/bin/bash
+            set -euo pipefail
+            source_path="${1:-}"
+            /bin/mv "$@"
+            case "$source_path" in
+                */Library/LaunchAgents/com.logicpro.mcp.plist)
+                    printf loaded > "$SERVICE_STATE"
+                    ;;
+            esac
             """
         )
     }
@@ -755,6 +786,41 @@ private func makeUninstallLaunchAgentFixture(
     #expect(!FileManager.default.fileExists(atPath: stagedReference.path))
     #expect(result.combinedOutput.contains("terminal=true"))
     #expect(result.combinedOutput.contains("human_intervention_requests=0"))
+}
+
+@Test func testUninstallScriptRestoresPlistWhenReloadedServiceCannotStop() throws {
+    let fixture = try makeUninstallLaunchAgentFixture(
+        serviceLoaded: true,
+        plistPresent: true,
+        finalBootoutExitCode: 72,
+        reloadServiceAfterPlistRemoval: true,
+        binaryPresent: true
+    )
+
+    let result = try runShellScript("Scripts/uninstall.sh", environment: fixture.environment)
+
+    #expect(result.exitCode != 0)
+    #expect(result.combinedOutput.contains("launch agent service could not be stopped"))
+    #expect(FileManager.default.fileExists(atPath: fixture.serviceState.path))
+    #expect(FileManager.default.fileExists(atPath: fixture.launchAgent.path))
+    #expect(FileManager.default.fileExists(atPath: fixture.installRoot.appendingPathComponent("LogicProMCP").path))
+}
+
+@Test func testUninstallScriptRestoresPlistWhenFinalReadbackIsIndeterminate() throws {
+    let fixture = try makeUninstallLaunchAgentFixture(
+        serviceLoaded: true,
+        plistPresent: true,
+        finalServiceAbsentExitCode: 75,
+        reloadServiceAfterPlistRemoval: true,
+        binaryPresent: true
+    )
+
+    let result = try runShellScript("Scripts/uninstall.sh", environment: fixture.environment)
+
+    #expect(result.exitCode != 0)
+    #expect(result.combinedOutput.contains("launch agent service removal could not be verified"))
+    #expect(FileManager.default.fileExists(atPath: fixture.launchAgent.path))
+    #expect(FileManager.default.fileExists(atPath: fixture.installRoot.appendingPathComponent("LogicProMCP").path))
 }
 
 @Test func testInstallScriptPersistsShareDirIntoClaudeRegistrationForCustomNonBinLayouts() throws {
