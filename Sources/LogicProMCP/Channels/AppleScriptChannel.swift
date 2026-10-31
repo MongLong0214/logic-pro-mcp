@@ -599,7 +599,7 @@ actor AppleScriptChannel: Channel {
                 "safe_to_retry": false,
                 "terminal_scope": "mcp_request_only",
                 "underlying_operation_stopped": false,
-                "open_effect_status": "unknown_after_verification_deadline",
+                "open_effect_status": "unknown_after_verification_failure",
                 "open_request_attempted": true,
                 "close_attempted": false,
                 "front_document_path_status": frontDocumentPathStatus,
@@ -607,7 +607,7 @@ actor AppleScriptChannel: Channel {
                 "initial_verification_error": initialMessage,
             ]
             if frontDocumentObserved {
-                extras["front_document_observed_after_verification_deadline"] = true
+                extras["front_document_observed_after_verification_failure"] = true
             }
             return .error(HonestContract.encodeStateC(
                 error: .unsupportedState,

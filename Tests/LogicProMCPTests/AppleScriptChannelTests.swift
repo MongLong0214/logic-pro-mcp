@@ -321,6 +321,34 @@ private func makeAppleScriptRuntime(
     #expect(landedAfterReply)
 }
 
+@Test func testAppleScriptProjectOpenReportsNeutralUnknownEffectForImmediateVerificationFailure() async throws {
+    let path = "/tmp/immediate-failure.logicx"
+    let previous = "/tmp/current.logicx"
+    let identities = ScriptResponseQueue([
+        .success("\(previous)\u{001F}Current Project"),
+    ])
+    let channel = AppleScriptChannel(
+        runtime: .init(
+            isLogicProRunning: { true },
+            openFile: { _ in true },
+            runScript: { source in
+                if source.contains("character id 31") {
+                    return await identities.next()
+                }
+                return .error("osascript failed before polling")
+            },
+            executeTransportAction: { _ in .success("OK") }
+        )
+    )
+
+    let result = await channel.execute(operation: "project.open", params: ["path": path])
+    let obj = try #require(JSONSerialization.jsonObject(
+        with: Data(result.message.utf8), options: []
+    ) as? [String: Any])
+    try requireUnknownOpenEffect(obj, frontDocumentObserved: true)
+    #expect(obj["initial_verification_error"] as? String == "osascript failed before polling")
+}
+
 private func projectOpenWithUnavailableFrontPath(
     frontDocumentName: String
 ) async -> (result: ChannelResult, path: String, openedPaths: [String], scripts: [String]) {
@@ -363,15 +391,15 @@ private func requireUnknownOpenEffect(
     frontDocumentObserved: Bool
 ) throws {
     #expect(obj["terminal_scope"] as? String == "mcp_request_only")
-    #expect(obj["open_effect_status"] as? String == "unknown_after_verification_deadline")
+    #expect(obj["open_effect_status"] as? String == "unknown_after_verification_failure")
     let underlyingStopped = try #require(obj["underlying_operation_stopped"] as? Bool)
     #expect(!underlyingStopped)
     #expect(obj["document_preserved"] == nil)
     if frontDocumentObserved {
-        let observed = try #require(obj["front_document_observed_after_verification_deadline"] as? Bool)
+        let observed = try #require(obj["front_document_observed_after_verification_failure"] as? Bool)
         #expect(observed)
     } else {
-        #expect(obj["front_document_observed_after_verification_deadline"] == nil)
+        #expect(obj["front_document_observed_after_verification_failure"] == nil)
     }
 }
 
