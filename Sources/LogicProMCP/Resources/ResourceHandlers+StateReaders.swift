@@ -902,7 +902,8 @@ extension ResourceHandlers {
             extras["reason"] = attempted
                 ? (pollFailure?.rawValue ?? StateCache.MarkerPollFailure.channelUnavailable.rawValue)
                 : "markers_not_polled_yet"
-            if pollFailure == .listNotOpen || pollFailure == .identityUnverified {
+            if pollFailure == .listNotOpen || pollFailure == .identityUnverified
+                || pollFailure == .rowsUnreadable {
                 extras["operation"] = "nav.get_markers"
                 extras["terminal"] = true
                 extras["terminal_scope"] = "mcp_request_only"
@@ -915,8 +916,10 @@ extension ResourceHandlers {
                     extras["failure_stage"] = "marker_list_not_open_for_passive_read"
                     extras["automated_alternative"] = "logic_navigate.capture_markers"
                     extras["automatic_attempts_exhausted"] = true
-                } else {
+                } else if pollFailure == .identityUnverified {
                     extras["failure_stage"] = "marker_list_identity_unverified"
+                } else {
+                    extras["failure_stage"] = "marker_list_rows_unreadable"
                 }
             }
         }

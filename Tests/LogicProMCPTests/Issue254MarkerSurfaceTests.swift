@@ -275,8 +275,17 @@ private func issue254Envelope(_ result: ReadResource.Result) throws -> [String: 
 
     #expect(!(try #require(envelope["readable"] as? Bool)))
     #expect(envelope["reason"] as? String == "marker_list_rows_unreadable")
+    #expect(envelope["operation"] as? String == "nav.get_markers")
+    #expect(envelope["failure_stage"] as? String == "marker_list_rows_unreadable")
     #expect(envelope["automated_alternative"] == nil)
-    #expect(envelope["terminal"] == nil)
+    #expect(envelope["automatic_attempts_exhausted"] == nil)
+    #expect(try #require(envelope["terminal"] as? Bool))
+    #expect(envelope["terminal_scope"] as? String == "mcp_request_only")
+    #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+    #expect(envelope["human_intervention_requests"] as? Int == 0)
+    #expect(envelope["human_dependent_transitions"] as? Int == 0)
+    #expect(!(try #require(envelope["write_attempted"] as? Bool)))
+    #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
 }
 
 /// `nav.delete_marker` must work on a default install.
