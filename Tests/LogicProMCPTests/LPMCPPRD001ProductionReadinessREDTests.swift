@@ -1027,6 +1027,73 @@ struct LPMCPPRD001ProductionReadinessREDTests {
         #expect(!valid.openDebts.contains(.mutationRestoreCompensationMissing))
         #expect(!valid.openDebts.contains(.independentProvenanceNotEnforced))
 
+        let publishDefaultShellWithReplacement = workflow
+            .replacingOccurrences(
+                of: "    permissions:\n      contents: write\n    steps:",
+                with: """
+                    permissions:
+                      contents: write
+                    defaults:
+                      run:
+                        shell: "/usr/bin/true {0}"
+                    steps:
+                """
+            )
+            .replacingOccurrences(
+                of: "      - name: Create release artifact SHA256 manifest",
+                with: """
+                      - name: Replace qualified candidate before hashing
+                        run: cp /tmp/forged LogicProMCP
+                      - name: Create release artifact SHA256 manifest
+                """
+            )
+        let publishDefaultReport = evaluate(publishDefaultShellWithReplacement, consumer)
+        #expect(publishDefaultReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+        #expect(publishDefaultReport.openDebts.contains(.independentProvenanceNotEnforced))
+
+        let buildJobEnvironment = workflow.replacingOccurrences(
+            of: "  build-release:\n    runs-on: macos-15\n    permissions:",
+            with: """
+              build-release:
+                runs-on: macos-15
+                env:
+                  BASH_ENV: /tmp/skip-verification
+                permissions:
+            """
+        )
+        let buildEnvironmentReport = evaluate(buildJobEnvironment, consumer)
+        #expect(buildEnvironmentReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+        #expect(buildEnvironmentReport.openDebts.contains(.independentProvenanceNotEnforced))
+
+        let workflowDefaultShell = workflow.replacingOccurrences(
+            of: "jobs:\n",
+            with: "defaults:\n  run:\n    shell: \"/usr/bin/true {0}\"\njobs:\n"
+        )
+        let workflowDefaultReport = evaluate(workflowDefaultShell, consumer)
+        #expect(workflowDefaultReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+        #expect(workflowDefaultReport.openDebts.contains(.independentProvenanceNotEnforced))
+
+        let workflowEnvironment = workflow.replacingOccurrences(
+            of: "jobs:\n",
+            with: "env:\n  BASH_ENV: /tmp/skip-verification\njobs:\n"
+        )
+        let workflowEnvironmentReport = evaluate(workflowEnvironment, consumer)
+        #expect(workflowEnvironmentReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+        #expect(workflowEnvironmentReport.openDebts.contains(.independentProvenanceNotEnforced))
+
+        let alternateRepositoryCheckout = workflow.replacingOccurrences(
+            of: "      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683\n",
+            with: """
+                  - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+                    with:
+                      repository: attacker/unreviewed-release-scripts
+                      ref: main
+            """ + "\n"
+        )
+        let alternateCheckoutReport = evaluate(alternateRepositoryCheckout, consumer)
+        #expect(alternateCheckoutReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+        #expect(alternateCheckoutReport.openDebts.contains(.independentProvenanceNotEnforced))
+
         let wrongPin = workflow.replacingOccurrences(
             of: "fa7d4430b4e42e15902ab82ca2b7e67380ca56ff",
             with: String(repeating: "0", count: 40)

@@ -370,8 +370,14 @@ enum ProductionReadinessContractEvaluator {
             guard let entry = yamlKeyValue(in: workflowLines[index]) else { return false }
             return entry.key == "contents" && normalizedScalar(entry.value) == "write"
         }.count
+        let checkoutAction = "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"
         guard workflowUses.filter({ $0 == releaseAction }).count == 1,
               writePermissionCount == 1,
+              !workflowIndices.contains(where: { index in
+                  guard workflowLines[index].prefix(while: { $0 == " " }).isEmpty,
+                        let entry = yamlKeyValue(in: workflowLines[index]) else { return false }
+                  return entry.key == "defaults" || entry.key == "env"
+              }),
               !workflowIndices.contains(where: { index in
                   guard let entry = yamlKeyValue(in: workflowLines[index]) else { return false }
                   return entry.key == "permissions" && !entry.value.isEmpty
@@ -379,6 +385,13 @@ enum ProductionReadinessContractEvaluator {
               let buildJob = workflowJob(named: "build-release", in: workflow),
               let publishJob = workflowJob(named: "publish", in: workflow),
               let validateInstallJob = workflowJob(named: "validate-install", in: workflow),
+              directJobKeys(in: buildJob) == Set(["runs-on", "permissions", "outputs", "steps"]),
+              directJobKeys(in: publishJob) == Set(["needs", "runs-on", "permissions", "steps"]),
+              directJobKeys(in: validateInstallJob)
+                == Set(["needs", "permissions", "strategy", "runs-on", "steps"]),
+              firstStepIsExactCheckout(in: buildJob, action: checkoutAction),
+              firstStepIsExactCheckout(in: publishJob, action: checkoutAction),
+              firstStepIsExactCheckout(in: validateInstallJob, action: checkoutAction),
               stepMapping("permissions", in: buildJob) == ["contents": "read"],
               stepMapping("permissions", in: publishJob) == ["contents": "write"],
               stepMapping("permissions", in: validateInstallJob) == ["contents": "read"],
@@ -387,7 +400,6 @@ enum ProductionReadinessContractEvaluator {
               stepScalar("if", in: buildJob) == nil,
               stepScalar("if", in: publishJob) == nil,
               stepScalar("if", in: validateInstallJob) == nil else { return false }
-        let checkoutAction = "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"
         guard jobStepHeaders(in: publishJob) == [
             "- uses: \(checkoutAction)",
             "- name: Checkout authenticated trusted verifier",
@@ -503,6 +515,53 @@ enum ProductionReadinessContractEvaluator {
                 == currentInstallerScriptSHA256
             && SupportBundleBuilder.sha256(Data(releaseConsumerScript.utf8))
                 == currentReleaseConsumerSHA256
+    }
+
+    /// Critical release jobs are exact execution contexts. An inherited `env`,
+    /// `defaults.run.shell`, `continue-on-error`, or any other unreviewed job key can
+    /// change whether the byte-pinned run blocks execute without changing their text.
+    private static func directJobKeys(in job: String) -> Set<String>? {
+        let lines = job.split(separator: "\n", omittingEmptySubsequences: false)
+        guard let indices = structuralIndices(in: lines), let first = lines.first else {
+            return nil
+        }
+        let jobIndentation = first.prefix { $0 == " " }.count
+        var keys: [String] = []
+        for index in indices where lines[index].prefix(while: { $0 == " " }).count == jobIndentation + 2 {
+            if lines[index].trimmingCharacters(in: .whitespaces).hasPrefix("#") { continue }
+            guard let entry = yamlKeyValue(in: lines[index]) else { return nil }
+            keys.append(entry.key)
+        }
+        guard keys.count == Set(keys).count else { return nil }
+        return Set(keys)
+    }
+
+    private static func firstStepIsExactCheckout(in job: String, action: String) -> Bool {
+        let lines = job.split(separator: "\n", omittingEmptySubsequences: false)
+        guard let indices = structuralIndices(in: lines), let first = lines.first else {
+            return false
+        }
+        let jobIndentation = first.prefix { $0 == " " }.count
+        guard let stepsIndex = indices.first(where: { index in
+            lines[index].prefix(while: { $0 == " " }).count == jobIndentation + 2
+                && yamlKeyValue(in: lines[index])?.key == "steps"
+        }) else { return false }
+        let stepIndentation = jobIndentation + 4
+        let stepIndices = indices.filter { index in
+            index > stepsIndex
+                && lines[index].prefix(while: { $0 == " " }).count == stepIndentation
+                && lines[index].trimmingCharacters(in: .whitespaces).hasPrefix("-")
+        }
+        guard let checkoutIndex = stepIndices.first,
+              lines[checkoutIndex].trimmingCharacters(in: .whitespaces) == "- uses: \(action)" else {
+            return false
+        }
+        let checkoutEnd = stepIndices.dropFirst().first ?? lines.endIndex
+        return !indices.contains(where: { index in
+            guard index > checkoutIndex && index < checkoutEnd else { return false }
+            let trimmed = lines[index].trimmingCharacters(in: .whitespaces)
+            return !trimmed.isEmpty && !trimmed.hasPrefix("#")
+        })
     }
 
     private static func jobStepHeaders(in job: String) -> [String]? {
