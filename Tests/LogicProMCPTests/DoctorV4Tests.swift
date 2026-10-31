@@ -589,6 +589,28 @@ private struct DoctorCapabilityEnvelope: Encodable {
     #expect(target.evidence["resolved_path"] == "/tmp/LogicProMCP-dev")
 }
 
+@Test func doctorV4InvalidRegistrationTargetsTerminateWithoutHumanRemediation() throws {
+    let cases: [SetupDoctor.Runtime] = [
+        doctorV4Runtime(registration: .registered(command: "relative/LogicProMCP")),
+        doctorV4Runtime(registration: .registered(command: "/missing/LogicProMCP")),
+    ]
+
+    for runtime in cases {
+        let report = doctorV4Report(runtime: runtime)
+        let target = try #require(report.checks.first { $0.id == "mcp.registration_target" })
+        let rendered = SetupDoctor.renderHuman(report, mode: .verbose, useColor: false)
+
+        #expect(target.status == .fail)
+        #expect(target.remediation.type == .none)
+        #expect(target.remediation.value.isEmpty)
+        #expect(target.evidence["terminal"] == "true")
+        #expect(target.evidence["human_intervention_required"] == "false")
+        #expect(target.evidence["human_intervention_requests"] == "0")
+        #expect(!report.fixPlan.contains(target.id))
+        #expect(!rendered.contains("docs/SETUP.md#doctor-mcpregistration-target"))
+    }
+}
+
 @Test func doctorV4ManualStorePersistsIntentionalSkip() async throws {
     let fileURL = FileManager.default.temporaryDirectory
         .appendingPathComponent("manual-skip-\(UUID().uuidString)")

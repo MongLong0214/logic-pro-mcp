@@ -142,12 +142,13 @@ extension SetupDoctor {
             return check(
                 id: "mcp.registration_target",
                 domain: "mcp",
-                status: .skipped,
+                status: .fail,
                 summary: "Claude Code registration uses an unresolved PATH-dependent command; the MCP client's launch PATH may differ.",
-                evidence: ["command_path": command, "reason": "path_dependent_unresolved"],
-                remediationType: .command,
-                remediationValueOverride: "claude mcp add --scope user logic-pro -- LogicProMCP",
-                skipReason: .pathDependentUnresolved
+                evidence: terminalRegistrationEvidence([
+                    "command_path": command,
+                    "reason": "path_dependent_unresolved",
+                ]),
+                remediationType: .none
             )
         }
         let exists = runtime.fileExistsAtPath(resolvedCommand)
@@ -179,13 +180,12 @@ extension SetupDoctor {
         return check(
             id: "mcp.registration_target",
             domain: "mcp",
-            status: warn ? .warn : .pass,
+            status: warn ? .fail : .pass,
             summary: warn
                 ? "Claude Code registration target is missing, not a regular executable, has a missing share dir, or is stale."
                 : "Claude Code registration target is present and executable. If it was resolved from PATH, this report used the doctor's environment; the MCP client's spawn PATH may differ.",
-            evidence: evidence,
-            remediationType: warn ? .command : .none,
-            remediationValueOverride: warn ? "claude mcp add --scope user logic-pro -- LogicProMCP" : nil
+            evidence: warn ? terminalRegistrationEvidence(evidence) : evidence,
+            remediationType: .none
         )
     }
 

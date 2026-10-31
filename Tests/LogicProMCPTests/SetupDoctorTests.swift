@@ -214,6 +214,7 @@ private func issue26RepositoryRootURL() -> URL {
         "channels.manual_validation",
         "logic.application_state",
         "logic.blocking_dialog",
+        "mcp.registration_target",
     ]
     for check in report.checks where check.status != .pass && !check.optional {
         if terminalOutcomeIDs.contains(check.id) {
