@@ -125,14 +125,16 @@ extension AccessibilityChannel {
         ]
         // Stop semantics: clear Record too (else recording continues even after Play=false).
         // Avoids regression where stop() during recording leaves track in armed-record loop.
+        var stopRecordPreAction = TransportPreActionReceipt.none
         if name == "Stop" {
-            _ = AccessibilityChannel.setControlBarCheckboxValue(
+            let result = AccessibilityChannel.setControlBarCheckboxValue(
                 labels: AXLocalePolicy.transportRecordControl,
                 reportAs: "Record",
                 desired: false,
                 runtime: runtime,
                 mouseRuntime: mouseRuntime
             )
+            stopRecordPreAction = transportPreActionReceipt(result)
         }
         if name == "AutoPunch" {
             return AccessibilityChannel.defaultToggleAutopunch(
@@ -168,11 +170,28 @@ extension AccessibilityChannel {
         guard let button = AXLogicProElements.findTransportButton(named: name, runtime: runtime) else {
             var extras = transportLookupDiagnostics(named: name, runtime: runtime)
             extras["button"] = name
-            extras["recovery_hint"] =
-                "Bring Logic's main arrange window frontmost and dismiss any plugin, chooser, or modal window covering the transport controls."
+            extras["write_attempted"] = stopRecordPreAction.writeAttempted
+            extras["safe_to_retry"] = false
+            extras["automatic_transport_lookup_exhausted"] = true
+            extras["terminal"] = true
+            extras["human_intervention_required"] = false
+            extras["human_intervention_requests"] = 0
+            extras["human_dependent_transitions"] = 0
+            if stopRecordPreAction.writeAttempted {
+                extras["fallback_unsafe"] = true
+                extras["record_clear_outcome"] = stopRecordPreAction.applied
+                    ? "applied"
+                    : "unconfirmed_after_write"
+            }
+            if stopRecordPreAction.applied {
+                extras["record_clear_applied"] = true
+            }
+            let effect = stopRecordPreAction.writeAttempted
+                ? "after the Record clear was attempted; fallback is unsafe"
+                : "without a write"
             return .error(HonestContract.encodeStateC(
                 error: .elementNotFound,
-                hint: "transport button '\(name)' not located in the visible Logic transport UI",
+                hint: "transport button '\(name)' not located after automatic transport lookup; operation terminated \(effect)",
                 extras: extras
             ))
         }
@@ -187,6 +206,32 @@ extension AccessibilityChannel {
             reason: .readbackUnavailable,
             extras: ["button": name, "via": "legacy-axpress"]
         ))
+    }
+
+    private struct TransportPreActionReceipt {
+        let writeAttempted: Bool
+        let applied: Bool
+
+        static let none = TransportPreActionReceipt(writeAttempted: false, applied: false)
+    }
+
+    private static func transportPreActionReceipt(_ result: ChannelResult?) -> TransportPreActionReceipt {
+        guard let result,
+              let data = result.message.data(using: .utf8),
+              let raw = try? JSONSerialization.jsonObject(with: data),
+              let object = raw as? [String: Any] else {
+            return .none
+        }
+        if object["action"] as? String == "no-op" {
+            return .none
+        }
+        if object["write_attempted"] as? Bool == true {
+            return TransportPreActionReceipt(writeAttempted: true, applied: false)
+        }
+        if result.isSuccess, object["action"] as? String != nil {
+            return TransportPreActionReceipt(writeAttempted: true, applied: true)
+        }
+        return .none
     }
 
     private static func transportLookupDiagnostics(
