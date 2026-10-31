@@ -281,6 +281,8 @@ private struct DoctorCapabilityEnvelope: Encodable {
             runtime: doctorV4Runtime(registration: registration)
         )
         let check = try #require(report.checks.first { $0.id == "mcp.claude_code_registration" })
+        let target = try #require(report.checks.first { $0.id == "mcp.registration_target" })
+        let rendered = SetupDoctor.renderHuman(report, mode: .verbose, useColor: false)
 
         #expect(check.status == .fail)
         #expect(check.remediation.type == .none)
@@ -289,6 +291,12 @@ private struct DoctorCapabilityEnvelope: Encodable {
         #expect(check.evidence["human_intervention_required"] == "false")
         #expect(check.evidence["human_intervention_requests"] == "0")
         #expect(!report.fixPlan.contains(check.id))
+        #expect(target.status == .skipped)
+        #expect(target.blockedBy == check.id)
+        #expect(target.remediation.type == .none)
+        #expect(target.remediation.value.isEmpty)
+        #expect(!report.fixPlan.contains(target.id))
+        #expect(!rendered.contains("docs/SETUP.md#doctor-mcpregistration-target"))
     }
 }
 
@@ -657,6 +665,8 @@ private struct DoctorCapabilityEnvelope: Encodable {
     #expect(manual.skipReason == .profileNotRequired)
     #expect(target.status == .skipped)
     #expect(target.blockedBy == "mcp.claude_code_registration")
+    #expect(target.remediation.type == .none)
+    #expect(target.remediation.value.isEmpty)
 }
 
 @Test func doctorV4DroppedRequiredCheckIsSynthesizedAsFailure() throws {

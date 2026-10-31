@@ -122,7 +122,7 @@ extension SetupDoctor {
                 status: .skipped,
                 summary: "Registered MCP target cannot be checked until Claude Code registration is present.",
                 evidence: [:],
-                remediationType: .command,
+                remediationType: .none,
                 blockedBy: cause
             )
         }
@@ -133,7 +133,7 @@ extension SetupDoctor {
                 status: .skipped,
                 summary: "Registered MCP target cannot be checked.",
                 evidence: ["reason": "registration_unavailable"],
-                remediationType: .command,
+                remediationType: .none,
                 blockedBy: "mcp.claude_code_registration"
             )
         }
