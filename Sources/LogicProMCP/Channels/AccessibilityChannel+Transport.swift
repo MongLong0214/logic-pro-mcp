@@ -1168,9 +1168,9 @@ extension AccessibilityChannel {
         guard preparation.isReady else {
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
-                hint: "goto_position terminated before mutation because automatic Logic keyboard "
-                    + "ownership preparation failed; no UI action occurred. The fixed ownership "
-                    + "reason is in frontmost_observation.reason when observed.",
+                hint: "goto_position terminated because automatic Logic keyboard ownership preparation "
+                    + "failed; preparation may have attempted to activate Logic, but no dialog or position "
+                    + "mutation occurred. The fixed ownership reason is in frontmost_observation.reason when observed.",
                 extras: baseExtras.merging([
                     "operation": "transport.goto_position",
                     "method": "ax_goto_position_dialog",

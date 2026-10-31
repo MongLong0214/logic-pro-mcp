@@ -93,6 +93,8 @@ struct Issue440TransportFrontmostTests {
         for request in ["bring Logic", "retry", "manually"] {
             #expect(!hint.localizedCaseInsensitiveContains(request))
         }
+        #expect(!hint.contains("no UI action occurred"))
+        #expect(hint.contains("no dialog or position mutation occurred"))
         #expect(activations.value == 1)
     }
 

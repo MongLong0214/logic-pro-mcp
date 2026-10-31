@@ -2354,6 +2354,7 @@ struct Issue529MenuValidationTests {
         #expect(!humanInterventionRequired)
         #expect(contenderEnvelope["human_intervention_requests"] as? Int == 0)
         #expect(contenderEnvelope["human_dependent_transitions"] as? Int == 0)
+        #expect(try #require(contenderEnvelope["safe_to_retry"] as? Bool))
         #expect(try #require(contenderEnvelope["frontmost_preparation"] as? String) == "activated")
         #expect(contenderActivationCalls.value == 1)
         let hint = try #require(contenderEnvelope["hint"] as? String)
