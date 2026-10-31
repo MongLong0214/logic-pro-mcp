@@ -134,6 +134,7 @@ private func requireTerminalCleanupFailure(_ result: CallTool.Result) throws -> 
     #expect(!(try #require(json["success"] as? Bool)))
     #expect(json["state"] as? String == "C")
     #expect(try #require(json["terminal"] as? Bool))
+    #expect(json["terminal_scope"] as? String == "mcp_request_only")
     #expect(!(try #require(json["safe_to_retry"] as? Bool)))
     #expect(!(try #require(json["human_intervention_required"] as? Bool)))
     #expect(json["human_intervention_requests"] as? Int == 0)

@@ -1222,6 +1222,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
         ]
         for (k, v) in extras { merged[k] = v }
         merged["terminal"] = true
+        merged["terminal_scope"] = "mcp_request_only"
         merged["safe_to_retry"] = false
         merged["human_intervention_required"] = false
         merged["human_intervention_requests"] = 0
