@@ -529,7 +529,21 @@ actor CoreMIDIChannel: Channel {
                     try? await Task.sleep(nanoseconds: endTargetNs - nowNs)
                 }
             }
-            try await waitForCoreMIDINoteOffTasks(noteOffTasks)
+            if let failure = await waitForCoreMIDINoteOffTasks(noteOffTasks) {
+                let cleanup = await attemptCoreMIDINoteCleanup(events)
+                return .error(Self.coreMIDISendFailure(
+                    operation: operation,
+                    error: failure.firstError,
+                    extras: terminalPartialSendExtras([
+                        "phase": "note_off",
+                        "failed_note_off_count": failure.count,
+                    ],
+                        noteOnCountSent: events.count,
+                        cleanup: cleanup,
+                        priorCleanupSendFailures: failure.count
+                    )
+                ))
+            }
             return Self.sendOnlySuccess(
                 operation: operation,
                 legacyMessage: "Sequence sent: \(events.count) events",
@@ -698,7 +712,11 @@ actor CoreMIDIChannel: Channel {
         }
     }
 
-    private static func coreMIDISendFailure(operation: String, error: any Error) -> String {
+    private static func coreMIDISendFailure(
+        operation: String,
+        error: any Error,
+        extras: [String: Any] = [:]
+    ) -> String {
         let failure: HonestContract.FailureError
         if let midiError = error as? MIDIEngineError {
             switch midiError {
@@ -712,11 +730,64 @@ actor CoreMIDIChannel: Channel {
         } else {
             failure = .axWriteFailed
         }
+        let receipt: [String: Any] = ["operation": operation, "channel": "CoreMIDI"]
+            .merging(extras) { _, specificValue in specificValue }
         return HonestContract.encodeStateC(
             error: failure,
             hint: "CoreMIDI send failed for \(operation): \(error)",
-            extras: ["operation": operation, "channel": "CoreMIDI"]
+            extras: receipt
         )
+    }
+
+    private struct CoreMIDINoteOffFailure {
+        let count: Int
+        let firstError: any Error
+    }
+
+    private struct CoreMIDINoteCleanup {
+        let attemptedCount: Int
+        let failureCount: Int
+
+        var status: String {
+            guard attemptedCount > 0 else { return "not_attempted" }
+            return failureCount == 0 ? "sent_no_readback" : "send_failed"
+        }
+    }
+
+    private func terminalPartialSendExtras(
+        _ extras: [String: Any],
+        noteOnCountSent: Int,
+        cleanup: CoreMIDINoteCleanup,
+        priorCleanupSendFailures: Int = 0
+    ) -> [String: Any] {
+        extras.merging([
+            "write_attempted": true,
+            "safe_to_retry": false,
+            "fallback_unsafe": true,
+            "terminal": true,
+            "terminal_scope": "mcp_request_only",
+            "human_intervention_required": false,
+            "human_intervention_requests": 0,
+            "human_dependent_transitions": 0,
+            "note_on_count_sent": noteOnCountSent,
+            "note_cleanup_attempted": cleanup.attemptedCount > 0,
+            "note_cleanup_status": cleanup.status,
+            "note_cleanup_send_failures": priorCleanupSendFailures + cleanup.failureCount,
+        ]) { _, terminalValue in terminalValue }
+    }
+
+    private func attemptCoreMIDINoteCleanup(
+        _ events: [NoteSequenceParser.ParsedNote]
+    ) async -> CoreMIDINoteCleanup {
+        var failureCount = 0
+        for event in events {
+            do {
+                try await engine.sendNoteOff(channel: event.channel, note: event.pitch, velocity: 0)
+            } catch {
+                failureCount += 1
+            }
+        }
+        return CoreMIDINoteCleanup(attemptedCount: events.count, failureCount: failureCount)
     }
 
     private func sendCoreMIDINoteOffs(_ notes: [UInt8], channel: UInt8) async throws {
@@ -741,20 +812,23 @@ actor CoreMIDIChannel: Channel {
         }
     }
 
-    private func waitForCoreMIDINoteOffTasks(_ tasks: [Task<Void, Error>]) async throws {
+    private func waitForCoreMIDINoteOffTasks(
+        _ tasks: [Task<Void, Error>]
+    ) async -> CoreMIDINoteOffFailure? {
+        var failureCount = 0
         var firstError: (any Error)?
         for task in tasks {
             do {
                 try await task.value
             } catch {
+                failureCount += 1
                 if firstError == nil {
                     firstError = error
                 }
             }
         }
-        if let firstError {
-            throw firstError
-        }
+        guard let firstError else { return nil }
+        return CoreMIDINoteOffFailure(count: failureCount, firstError: firstError)
     }
 
     private func drainCoreMIDINoteOffTasks(_ tasks: [Task<Void, Error>]) async {
