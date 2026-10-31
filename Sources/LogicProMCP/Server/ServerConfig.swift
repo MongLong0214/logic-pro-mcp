@@ -85,8 +85,8 @@ struct ServerConfig: Sendable {
     static let statePollingIntervalNs: UInt64 = 3_000_000_000 // 3 seconds
 
     // MARK: - Enterprise Safety
-    /// Channels that report `manual_validation_required` are not considered
-    /// execution-ready in enterprise mode and must not be used for routing.
+    /// Channels without runtime verification are not considered execution-ready
+    /// in enterprise mode and must not be used for mapped-operation routing.
     static let allowManualValidationChannels = false
 
     /// Channels that may fail to initialize without preventing the server from

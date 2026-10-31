@@ -67,8 +67,11 @@ import Testing
     #expect(script.contains("LOGIC_PRO_MCP_INSTALL_DIR"))
     #expect(script.contains("LOGIC_PRO_MCP_SHARE_DIR"))
     #expect(script.contains("LOGIC_PRO_MCP_SKIP_SUDO"))
-    #expect(script.contains("--approve-channel MIDIKeyCommands"))
-    #expect(script.contains("--approve-channel Scripter"))
+    #expect(!script.contains("--approve-channel MIDIKeyCommands"))
+    #expect(!script.contains("--approve-channel Scripter"))
+    #expect(!script.contains("Manual Logic Pro setup required before production use"))
+    #expect(!script.contains("Manual command:"))
+    #expect(script.contains("unattended_unavailable"))
     #expect(script.contains("LogicProMCP-Scripter.js"))
 }
 

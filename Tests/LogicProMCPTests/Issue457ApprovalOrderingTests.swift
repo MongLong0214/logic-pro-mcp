@@ -2,21 +2,13 @@ import Foundation
 import Testing
 @testable import LogicProMCP
 
-// MARK: - Issue #457 — approval must not be offered before the setup it attests
+// MARK: - Issue #457 — legacy assertions never qualify unattended execution
 //
-// `--approve-channel` records an OPERATOR ASSERTION that manual setup happened.
-// It neither configures nor verifies Logic. The fix plan listed it before
-// `channels.keycmd_reference`, so a new user approved both channels first and
-// only afterwards discovered Key Commands had never been staged — a durable
-// false attestation the helper cannot repair, because Logic 12.2+ still needs a
-// manual MIDI Learn that no file-presence check can prove.
+// Legacy records neither configure nor verify Logic. They stay readable for
+// compatibility, but cannot become a success gate or a remediation request.
 //
-// The fix declares the dependency and holds the approval check until staging
-// passes. `computeFixPlan` drops blocked checks, so the prompt disappears from
-// the plan rather than merely sorting later.
-//
-// These tests lock both directions. A gate that only ever blocks would be as
-// wrong as one that never blocks, so the release path is asserted too.
+// The staging dependency still collapses the causal chain to its root. Once it
+// resolves, the check reports a terminal unattended-unavailable result.
 
 private func manualCheck(staged: Bool, profile: SetupDoctor.DoctorProfile = .keycmd) -> SetupDoctor.Check {
     let keycmd = SetupDoctor.check(
@@ -65,12 +57,43 @@ struct Issue457ApprovalOrderingTests {
         )
     }
 
-    /// The gate must release, or the user could never approve at all.
-    @Test("approval is offered once staging passes")
-    func approvalReleasedAfterStaging() {
+    /// Staging can establish file presence, but a stored operator assertion is
+    /// not an unattended readback and must never become a success gate.
+    @Test("staging does not expose a human approval continuation")
+    func approvalIsTerminalAfterStaging() {
         let manual = manualCheck(staged: true)
-        #expect(manual.blockedBy == nil, "staging complete must release the approval prompt")
-        #expect(manual.status == .manual, "approval is still required, just no longer premature")
+        #expect(manual.blockedBy == nil)
+        #expect(manual.status == .fail)
+        #expect(manual.remediation.type == .none)
+        #expect(manual.remediation.value == "")
+        #expect(manual.evidence["terminal"] == "true")
+        #expect(manual.evidence["human_intervention_required"] == "false")
+        #expect(manual.evidence["human_intervention_requests"] == "0")
+        #expect(!SetupDoctor.computeFixPlan([manual]).contains("channels.manual_validation"))
+    }
+
+    @Test("a stored approval does not qualify unattended execution")
+    func storedApprovalDoesNotPass() {
+        let approval = ManualValidationApproval(
+            approvedAt: Date(timeIntervalSince1970: 0),
+            note: "legacy"
+        )
+        let manual = SetupDoctor.manualValidationCheck(
+            approvals: [.midiKeyCommands: approval, .scripter: approval],
+            profile: .full,
+            storeHealth: .ok,
+            checks: [SetupDoctor.check(
+                id: "channels.keycmd_reference",
+                domain: "channels",
+                status: .pass,
+                summary: "staged",
+                evidence: [:],
+                remediationType: .none
+            )]
+        )
+        #expect(manual.status == .fail)
+        #expect(manual.remediation.type == .none)
+        #expect(manual.evidence["legacy_approvals_ignored"] == "MIDIKeyCommands,Scripter")
     }
 
     /// Profile scoping outranks the dependency: a profile that never needs these

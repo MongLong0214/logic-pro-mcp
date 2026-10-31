@@ -109,13 +109,11 @@ actor ChannelRouter {
     internal static let routingTable = v2RoutingTable
 
     /// Operations that are exempt from the runtime-readiness gate
-    /// (`health.ready`). These ops live on the KeyCmd channel, whose
-    /// `verificationStatus` stays `manual_validation_required` until the
-    /// user completes one-time MIDI Learn — the chicken-and-egg lock-in
-    /// described in PRD Issue #1 §4.1. The bypass *only* skips the
-    /// readiness check; `health.available == false` (port not published)
-    /// still produces a `.portUnavailable` State C envelope (terminal,
-    /// no fallback).
+    /// (`health.ready`). These raw-MIDI bypass ops live on the KeyCmd channel,
+    /// whose mapped Logic path remains `unattended_unavailable` because setup
+    /// and outcomes have no programmatic readback. The bypass *only* skips the
+    /// readiness check; `health.available == false` (port not published) still
+    /// produces a `.portUnavailable` State C envelope (terminal, no fallback).
     ///
     /// Membership is locked by `testBypassReadinessOpsContainsAllSevenKeycmdOps`
     /// and the `routingTable` ⇄ `bypassReadinessOps` invariant in

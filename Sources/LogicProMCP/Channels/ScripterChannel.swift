@@ -141,10 +141,9 @@ actor ScripterChannel: KeyCmdCCChannel {
     }
 
     func healthCheck() async -> ChannelHealth {
-        await manualValidationHealth(
-            approval: .scripter,
-            approvedDetail: { "\($0.detail). Scripter insertion approved by operator" },
-            unapprovedDetail: { "\($0.detail). Scripter insertion is not verifiable programmatically. Run `LogicProMCP --approve-channel Scripter` after manual validation" }
-        )
+        await unattendedSendOnlyHealth {
+            "\($0.detail). Scripter mapped-parameter unattended execution unavailable: "
+                + "insert setup and parameter outcome have no programmatic readback"
+        }
     }
 }

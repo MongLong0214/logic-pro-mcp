@@ -206,14 +206,15 @@ private func issue26RepositoryRootURL() -> URL {
     )
 
     #expect(report.status == .failed)
-    let terminalPermissionIDs: Set<String> = [
+    let terminalOutcomeIDs: Set<String> = [
         "permissions.accessibility",
         "permissions.automation_logic_pro",
         "permissions.automation_system_events",
         "permissions.post_event_access",
+        "channels.manual_validation",
     ]
     for check in report.checks where check.status != .pass && !check.optional {
-        if terminalPermissionIDs.contains(check.id) {
+        if terminalOutcomeIDs.contains(check.id) {
             #expect(check.status == .fail, "\(check.id) must terminate as a failure")
             #expect(check.remediation.type == .none, "\(check.id) must not request human remediation")
             #expect(check.remediation.value == "", "\(check.id) must not carry human remediation text")
@@ -835,9 +836,9 @@ private func issue26RepositoryRootURL() -> URL {
     #expect(json["status"] as? String == "failed")
 }
 
-@Test func testMainEntrypointDoctorExitsZeroOnManualActionRequired() async throws {
-    // Manual channels unapproved -> manual_action_required -> exit 0 (do not fail CI
-    // just because operator approvals are outstanding).
+@Test func testMainEntrypointDoctorFailsWhenFullProfileRequiresUnattendedUnavailableChannels() async throws {
+    // A full profile cannot qualify send-only channels through an operator
+    // assertion, so it terminates explicitly and exits nonzero.
     var stdout = ""
     let exitCode = await MainEntrypoint.run(
         arguments: ["LogicProMCP", "doctor", "--json", "--profile", "full"],
@@ -858,9 +859,9 @@ private func issue26RepositoryRootURL() -> URL {
         writeStderr: { _ in }
     )
 
-    #expect(exitCode == 0)
+    #expect(exitCode == 1)
     let json = try #require(sharedJSONObject(stdout))
-    #expect(json["status"] as? String == "manual_action_required")
+    #expect(json["status"] as? String == "failed")
 }
 
 @Test func testMainEntrypointDoctorExitsZeroOnDegraded() async throws {

@@ -128,9 +128,10 @@ Expected health after registration:
 
 ### MIDI Key Commands
 
-Optional. Logic 12.2+ does not reliably import the legacy `.plist`; use it only as a CC mapping reference for manual MIDI Learn.
+Reference only. Logic 12.2+ does not reliably import the legacy `.plist`, and the server cannot
+establish or read back the corresponding Logic bindings programmatically.
 
-Manual binding is only needed for remaining keycmd-only/channel-only paths:
+The following mapped keycmd-only/channel-only paths therefore report `unattended_unavailable`:
 
 - `edit.delete`
 - `edit.duplicate`
@@ -148,15 +149,15 @@ grid rather than carrying the requested value. An unreadable selection aggregate
 region census is refused without opening the pop-up; live availability of this stricter path
 and all-locale qualification remain unverified.
 
-Most normal tool calls route through Accessibility, AppleScript, MCU, CoreMIDI, or CGEvent without manual MIDI Learn.
+Most normal tool calls route through Accessibility, AppleScript, MCU, CoreMIDI, or CGEvent. Raw
+MIDI bypass calls may still use the virtual port when its transport is ready; mapped Logic commands
+do not route through this unverified path.
 
 ### Scripter
 
-Optional legacy path for plugin parameter control. Verified plugin apply-back uses `logic_plugins` instead. Approve Scripter only after placing the bundled Scripter insert on the intended tracks.
-
-```bash
-LogicProMCP --approve-channel Scripter --approval-note "Scripter inserted on intended tracks"
-```
+The bundled file is retained as a legacy reference. Verified plugin apply-back uses `logic_plugins`
+instead. Because insert setup and parameter outcomes have no programmatic readback, the Scripter
+mapped channel reports `unattended_unavailable`; a stored operator assertion cannot make it ready.
 
 ## Verify
 

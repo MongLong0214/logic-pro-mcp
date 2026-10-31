@@ -185,7 +185,7 @@ Generic MCP client config (Claude Desktop, Cursor, VS Code, Codex CLI, Codex Des
 
 If you built from source, point the command at `.build/release/LogicProMCP`.
 
-### 3. Complete Logic Pro setup
+### 3. Inspect readiness
 
 Run the local checks:
 
@@ -193,12 +193,11 @@ Run the local checks:
 LogicProMCP --check-permissions
 ```
 
-Then complete the two Logic-side setup steps in [docs/SETUP.md](docs/SETUP.md):
-
-- Register the `LogicProMCP-MCU-Internal` MCU control surface.
-- Add the bundled Scripter insert if you need plugin-parameter writes.
-
-Logic 12.2+ does not auto-import the legacy Key Commands plist; the bundled preset is staged as a Manual MIDI Learn reference.
+The installer also performs its bounded permission check. Missing capabilities terminate explicitly;
+it does not ask for a manual grant or attestation. The bundled Key Commands mapping and Scripter
+assets remain references, but mapped send-only operations report `unattended_unavailable` because
+their Logic-side setup and outcomes cannot be established programmatically. Raw MIDI bypass calls
+remain available when their virtual transport is ready.
 
 ### 4. Test from your agent
 
@@ -206,7 +205,8 @@ Ask the client:
 
 > Check Logic Pro MCP health and show all ready channels.
 
-Expected: all 7 channels `ready` after full setup, or 5 if you intentionally skipped Key Commands and Scripter.
+Expected: only programmatically qualified channels report `ready`; Key Commands and Scripter mapped
+operations remain `unattended_unavailable` rather than becoming ready from an operator assertion.
 
 ### Pinned shell installer
 
@@ -305,7 +305,7 @@ LogicProMCP doctor --check-updates # opt-in: also checks for a newer release
 
 **Causal chain — `fix_plan` and `blocked_by`.** Only non-pass checks with a concrete remediation are ordered into `fix_plan` (the next actions, most-unblocking first), and each downstream check names the upstream check that `blocked_by` it — so you fix the root, not the symptom. When the highest-priority outcome has a concrete remediation, the `headline` restates that next action. A non-remediable failure remains visible as a `Terminal outcome`; a non-remediable warning or manual result remains visible as an `Unresolved outcome`, but neither invents an action or appears in `fix_plan`.
 
-**Honesty is the whole point.** A check that could not run (missing capability, unreadable TCC db) is reported as an explicit `skipped` with a reason — it is never silently folded into a pass. Intentional skips (`--skip-channel <MIDIKeyCommands|Scripter>` with an optional `--skip-note`, e.g. you deliberately didn't register Scripter) are recorded and excluded from readiness without faking green. TCC findings are redacted to service/principal/state summaries — no raw local paths in the report.
+**Honesty is the whole point.** A check that could not run (missing capability, unreadable TCC db) is reported as an explicit `skipped` with a reason — it is never silently folded into a pass. Legacy manual-channel assertion/skip records remain readable for compatibility, but never qualify unattended readiness or change the selected doctor profile. TCC findings are redacted to service/principal/state summaries — no raw local paths in the report.
 
 **Strict exit codes** (`--strict`, for CI/agent gating): `0` ok · `1` failed · `2` manual_action_required · `3` degraded. Codes `2`/`3` are status codes, not usage errors, and sit below the `sysexits.h` range.
 
