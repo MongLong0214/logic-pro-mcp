@@ -46,6 +46,7 @@ private func lifecycleRuntime(
     registration: SetupDoctor.ClaudeRegistration = .notRegistered,
     claudeCLIAvailable: Bool = true,
     installedVersion: String? = nil,
+    launchAgentServiceState: SetupLifecycle.LaunchAgentServiceState = .notLoaded,
     home: URL = lifecycleTestHome,
     recorder: LifecycleRuntimeRecorder? = nil
 ) -> SetupLifecycle.Runtime {
@@ -62,6 +63,7 @@ private func lifecycleRuntime(
         claudeRegistration: { registration },
         claudeCLIAvailable: { claudeCLIAvailable },
         installedBinaryVersion: { installedVersion },
+        launchAgentServiceState: { launchAgentServiceState },
         homeDirectory: { home }
     )
 }
@@ -205,6 +207,9 @@ private func launchAgentPath(_ home: URL = lifecycleTestHome) -> String {
     let keycmds = try #require(step(plan, "keycmds.remove"))
     #expect(keycmds.action == .delete)
     #expect(keycmds.reversible)
+    #expect(keycmds.remediation.value.contains("removes only the staged mapping reference"))
+    #expect(keycmds.remediation.value.contains("bindings and backups are preserved"))
+    #expect(!keycmds.remediation.value.localizedCaseInsensitiveContains("restore"))
 
     let unregister = try #require(step(plan, "mcp.unregister"))
     #expect(unregister.action == .unregister)
@@ -214,6 +219,8 @@ private func launchAgentPath(_ home: URL = lifecycleTestHome) -> String {
 
     let launch = try #require(step(plan, "launch_agent.remove"))
     #expect(launch.action == .delete)
+    #expect(launch.remediation.type == .none)
+    #expect(launch.remediation.value.isEmpty)
 
     // Every reachable artifact step is reversible (re-installable / re-approvable).
     for s in plan.steps where s.action == .delete || s.action == .unregister {
@@ -239,6 +246,47 @@ private func launchAgentPath(_ home: URL = lifecycleTestHome) -> String {
 
     // A skipped binary removal needs no sudo regardless of dir writability.
     #expect(!(try #require(step(plan, "binary.remove")).requiresSudo))
+}
+
+@Test func testUninstallPlanDeletesLoadedLaunchAgentWhenPlistIsAbsent() throws {
+    let plan = SetupLifecycle.plan(
+        command: .uninstall,
+        runtime: lifecycleRuntime(
+            presentPaths: [],
+            registration: .notRegistered,
+            launchAgentServiceState: .loaded
+        )
+    )
+
+    let launch = try #require(step(plan, "launch_agent.remove"))
+    #expect(launch.action == .delete)
+    #expect(launch.currentState == "service_loaded_plist_absent")
+    #expect(launch.remediation.type == .none)
+    #expect(launch.remediation.value.isEmpty)
+}
+
+@Test func testUninstallPlanDoesNotClaimAbsentWhenLaunchAgentProbeIsUnavailable() throws {
+    let plan = SetupLifecycle.plan(
+        command: .uninstall,
+        runtime: lifecycleRuntime(
+            presentPaths: [],
+            registration: .notRegistered,
+            launchAgentServiceState: .unavailable
+        )
+    )
+
+    let launch = try #require(step(plan, "launch_agent.remove"))
+    #expect(launch.action == .delete)
+    #expect(launch.currentState == "service_state_unavailable_plist_absent")
+    #expect(launch.plannedState == "absent")
+    #expect(launch.remediation.type == .none)
+}
+
+@Test func testLaunchAgentServiceExitClassifierSeparatesAbsentFromIndeterminate() {
+    #expect(SetupLifecycle.classifyLaunchAgentService(exitCode: 0) == .loaded)
+    #expect(SetupLifecycle.classifyLaunchAgentService(exitCode: 113) == .notLoaded)
+    #expect(SetupLifecycle.classifyLaunchAgentService(exitCode: 73) == .unavailable)
+    #expect(SetupLifecycle.classifyLaunchAgentService(exitCode: nil) == .unavailable)
 }
 
 @Test func testUninstallPlanDeletesApprovalsWhenOnlyLockSidecarExists() throws {
@@ -347,16 +395,15 @@ private func launchAgentPath(_ home: URL = lifecycleTestHome) -> String {
 
     // Lock the per-step wire shape with snake_case keys so a CodingKeys typo on a
     // nested field cannot ship green. All force-unwrap / != nil — never dead forms.
-    let first = try #require(steps.first)
-    #expect(first["id"] as? String == "approvals.remove")
-    let action = try #require(first["action"] as? String)
+    let approval = try #require(steps.first { $0["id"] as? String == "approvals.remove" })
+    let action = try #require(approval["action"] as? String)
     #expect(action == "delete")
-    #expect(first["target"] as? String != nil)
-    #expect(first["current_state"] as? String != nil)
-    #expect(first["planned_state"] as? String != nil)
-    _ = try #require(first["reversible"] as? Bool)
-    _ = try #require(first["requires_sudo"] as? Bool)
-    let remediation = try #require(first["remediation"] as? [String: Any])
+    #expect(approval["target"] as? String != nil)
+    #expect(approval["current_state"] as? String != nil)
+    #expect(approval["planned_state"] as? String != nil)
+    _ = try #require(approval["reversible"] as? Bool)
+    _ = try #require(approval["requires_sudo"] as? Bool)
+    let remediation = try #require(approval["remediation"] as? [String: Any])
     #expect(remediation["type"] as? String != nil)
     #expect(remediation["value"] as? String != nil)
 }
@@ -421,6 +468,7 @@ private func launchAgentPath(_ home: URL = lifecycleTestHome) -> String {
         claudeRegistration: { .notRegistered },
         claudeCLIAvailable: { false },
         installedBinaryVersion: { nil },
+        launchAgentServiceState: { .notLoaded },
         homeDirectory: { tmp }
     )
 
@@ -645,4 +693,20 @@ private func launchAgentPath(_ home: URL = lifecycleTestHome) -> String {
         let id = anchor.replacingOccurrences(of: "docs/SETUP.md#", with: "")
         #expect(setup.contains("id=\"\(id)\""), "Missing lifecycle remediation anchor \(anchor)")
     }
+}
+
+@Test func testSetupDocsUseAutomatedControlSurfaceSetupWithoutManualFallback() throws {
+    let root = URL(fileURLWithPath: #filePath)
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+        .deletingLastPathComponent()
+    let setup = try String(
+        contentsOf: root.appendingPathComponent("docs/SETUP.md"),
+        encoding: .utf8
+    )
+
+    #expect(setup.contains("setup_control_surface"))
+    #expect(!setup.contains("To do it by hand instead"))
+    #expect(!setup.contains("New -> Install..."))
+    #expect(!setup.contains("then press **Add**"))
 }

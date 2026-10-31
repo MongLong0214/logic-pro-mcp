@@ -340,6 +340,8 @@ import Testing
 
 @Test func testUninstallScriptReportsUnverifiedLogicResidualsWithoutManualContinuation() throws {
     let script = try scriptContents("Scripts/uninstall.sh")
+    let keyCommandUninstaller = try scriptContents("Scripts/uninstall-keycmds.sh")
+    let launchAgentTemplate = try scriptContents("Scripts/com.logicpro.mcp.plist.template")
 
     #expect(script.contains("claude mcp remove logic-pro"))
     #expect(!script.contains("Manual command:"))
@@ -351,6 +353,22 @@ import Testing
     #expect(script.contains("Removed shared assets"))
     #expect(script.contains("Removed operator approvals"))
     #expect(script.contains("APPROVAL_LOCK"))
+    #expect(script.contains("gui/$UID/com.logicpro.mcp"))
+    #expect(script.contains("launchctl print \"$LAUNCH_AGENT_SERVICE\""))
+    #expect(script.contains("launchctl bootout \"$LAUNCH_AGENT_SERVICE\""))
+    #expect(script.contains("[ -e \"$LAUNCH_AGENT\" ] || [ -L \"$LAUNCH_AGENT\" ]"))
+    #expect(!script.contains("launchctl unload"))
+    #expect(!script.contains("pgrep"))
+    #expect(!script.contains("pkill"))
+    #expect(!script.contains("killall"))
+    #expect(!launchAgentTemplate.contains("launchctl load"))
+    #expect(!launchAgentTemplate.contains("launchctl unload"))
+    #expect(!launchAgentTemplate.contains("rm ~/Library/LaunchAgents"))
+    #expect(launchAgentTemplate.contains("removal is owned by Scripts/uninstall.sh"))
+    #expect(!keyCommandUninstaller.contains("read -p"))
+    #expect(!keyCommandUninstaller.localizedCaseInsensitiveContains("re-run"))
+    #expect(!keyCommandUninstaller.localizedCaseInsensitiveContains("manually"))
+    #expect(!keyCommandUninstaller.localizedCaseInsensitiveContains("restart Logic"))
 }
 
 @Test func testKeyEventHelperSupportsReturnEnterAliasesAndPreflight() throws {

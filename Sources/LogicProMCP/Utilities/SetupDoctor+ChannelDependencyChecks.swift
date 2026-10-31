@@ -50,6 +50,7 @@ extension SetupDoctor {
                 "terminal": "true",
                 "human_intervention_required": "false",
                 "human_intervention_requests": "0",
+                "human_dependent_transitions": "0",
             ],
             remediationType: .none
         )
@@ -82,6 +83,7 @@ extension SetupDoctor {
                 "unattended_qualification": "unaffected",
                 "human_intervention_required": "false",
                 "human_intervention_requests": "0",
+                "human_dependent_transitions": "0",
             ],
             remediationType: .none
         )
@@ -139,6 +141,7 @@ extension SetupDoctor {
             "terminal": String(unavailable),
             "human_intervention_required": "false",
             "human_intervention_requests": "0",
+            "human_dependent_transitions": "0",
         ]) { current, _ in current }
         return check(
             id: "channels.mcu_wiring_hint",
@@ -189,6 +192,7 @@ extension SetupDoctor {
                 "terminal": String(!nativeAvailable),
                 "human_intervention_required": "false",
                 "human_intervention_requests": "0",
+                "human_dependent_transitions": "0",
             ],
             remediationType: .none
         )
