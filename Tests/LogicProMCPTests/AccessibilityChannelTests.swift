@@ -4780,7 +4780,11 @@ private final class ScanEnteredSignal: @unchecked Sendable {
 /// (`isLibraryPanelOpen`), enumerates a non-empty root, and reaches the
 /// `enumerateTree` settle-suspension. Replicates the proven
 /// `makeLibraryPanelFixture` shape from `LibraryAccessorAXRuntimeTests`.
-private func makeOpenLibraryPanelLogicRuntime() -> AXLogicProElements.Runtime {
+private func makeLibraryPanelLogicRuntime(
+    panelInitiallyOpen: Bool = true,
+    openCalls: CallCounter? = nil,
+    openSucceeds: Bool = true
+) -> AXLogicProElements.Runtime {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(20_000)
     let window = builder.element(20_001)
@@ -4792,9 +4796,18 @@ private func makeOpenLibraryPanelLogicRuntime() -> AXLogicProElements.Runtime {
     let sub = builder.element(20_007)
     let funky = builder.element(20_008)
     let horizontalScrollBar = builder.element(20_009)
+    let menuBar = builder.element(20_010)
+    let viewMenu = builder.element(20_011)
+    let showLibrary = builder.element(20_012)
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
-    builder.setChildren(window, [browser])
+    builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
+    builder.setChildren(window, panelInitiallyOpen ? [browser] : [])
+    builder.setChildren(menuBar, [viewMenu])
+    builder.setAttribute(viewMenu, kAXTitleAttribute as String, "View")
+    builder.setChildren(viewMenu, [showLibrary])
+    builder.setAttribute(showLibrary, kAXRoleAttribute as String, kAXMenuItemRole as String)
+    builder.setAttribute(showLibrary, kAXTitleAttribute as String, "Show Library")
     builder.setAttribute(browser, kAXRoleAttribute as String, kAXBrowserRole as String)
     builder.setAttribute(browser, kAXDescriptionAttribute as String, "Library")
     builder.setAttribute(browser, kAXParentAttribute as String, window)
@@ -4824,7 +4837,90 @@ private func makeOpenLibraryPanelLogicRuntime() -> AXLogicProElements.Runtime {
     builder.setAttribute(categoryList, kAXSelectedChildrenAttribute as String, [bass])
     builder.setAttribute(presetList, kAXSelectedChildrenAttribute as String, [sub])
 
-    return builder.makeLogicRuntime(appElement: app)
+    return builder.makeLogicRuntime(
+        appElement: app,
+        setAttributeHandler: nil,
+        performActionHandler: { element, action in
+            guard action == kAXPressAction as String else { return true }
+            if builder.elementID(element) == builder.elementID(showLibrary) {
+                openCalls?.inc()
+                if openSucceeds {
+                    builder.setChildren(window, [browser])
+                }
+            }
+            return true
+        }
+    )
+}
+
+@Test("library.scan_all automatically opens a closed Library panel")
+func testLibraryScanAutomaticallyOpensClosedPanel() async {
+    let inventoryURL = URL(
+        fileURLWithPath: FileManager.default.currentDirectoryPath + "/Resources/library-inventory.json"
+    )
+    let originalInventory = try? Data(contentsOf: inventoryURL)
+    defer {
+        if let originalInventory {
+            try? originalInventory.write(to: inventoryURL, options: .atomic)
+        } else {
+            try? FileManager.default.removeItem(at: inventoryURL)
+        }
+    }
+
+    let openCalls = CallCounter()
+    let runtime = AccessibilityChannel.Runtime.axBacked(
+        isTrusted: { true },
+        isLogicProRunning: { true },
+        hasVisibleWindow: { true },
+        logicRuntime: makeLibraryPanelLogicRuntime(
+            panelInitiallyOpen: false,
+            openCalls: openCalls
+        )
+    )
+    let channel = AccessibilityChannel(runtime: runtime)
+
+    let result = await channel.execute(operation: "library.scan_all", params: ["mode": "ax"])
+
+    #expect(result.isSuccess)
+    #expect(openCalls.count == 1)
+    #expect(!result.message.contains("Open Library"))
+}
+
+@Test("library.scan_all terminates without human recovery when automatic panel open is exhausted")
+func testLibraryScanPanelOpenExhaustionIsTerminal() async throws {
+    let openCalls = CallCounter()
+    let runtime = AccessibilityChannel.Runtime.axBacked(
+        isTrusted: { true },
+        isLogicProRunning: { true },
+        hasVisibleWindow: { true },
+        logicRuntime: makeLibraryPanelLogicRuntime(
+            panelInitiallyOpen: false,
+            openCalls: openCalls,
+            openSucceeds: false
+        )
+    )
+    let channel = AccessibilityChannel(runtime: runtime)
+
+    let result = await channel.execute(operation: "library.scan_all", params: ["mode": "ax"])
+    let object = decodeAccessibilityJSON(result.message)
+
+    #expect(!result.isSuccess)
+    #expect(openCalls.count == 1)
+    #expect(object["error"] as? String == "library_panel_unavailable")
+    #expect(object["precondition"] as? String == "panel_closed_after_automatic_open")
+    let terminal = try #require(object["terminal"] as? Bool)
+    let panelOpenAttempted = try #require(object["panel_open_attempted"] as? Bool)
+    let attemptsExhausted = try #require(object["automatic_precondition_attempts_exhausted"] as? Bool)
+    let safeToRetry = try #require(object["safe_to_retry"] as? Bool)
+    let humanInterventionRequired = try #require(object["human_intervention_required"] as? Bool)
+    #expect(terminal)
+    #expect(panelOpenAttempted)
+    #expect(attemptsExhausted)
+    #expect(!safeToRetry)
+    #expect(!humanInterventionRequired)
+    #expect(object["human_intervention_requests"] as? Int == 0)
+    #expect(object["human_dependent_transitions"] as? Int == 0)
+    #expect(!result.message.contains("Open Library"))
 }
 
 /// Restores the pre-split cross-exclusion between `library.scan_all` and
@@ -4863,7 +4959,7 @@ func testLibraryAndPluginScansAreMutuallyExclusive() async {
         isTrusted: { true },
         isLogicProRunning: { true },
         hasVisibleWindow: { entered.fire(); return true },
-        logicRuntime: makeOpenLibraryPanelLogicRuntime()
+        logicRuntime: makeLibraryPanelLogicRuntime()
     )
     let channel = AccessibilityChannel(runtime: runtime)
 

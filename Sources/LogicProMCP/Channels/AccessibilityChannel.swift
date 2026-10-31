@@ -2255,6 +2255,29 @@ actor AccessibilityChannel: Channel {
 
     /// Production `library.scan_all` path — wires ScanOrchestration + live TreeProbe,
     /// populates `lastScan` for resolve_path, restores Tier-A selection, writes JSON.
+    private static func terminalLibraryScanUnavailable(
+        hint: String,
+        precondition: String,
+        panelOpenAttempted: Bool
+    ) -> ChannelResult {
+        .error(HonestContract.encodeStateC(
+            error: .libraryPanelUnavailable,
+            hint: hint,
+            extras: [
+                "operation": "library.scan_all",
+                "precondition": precondition,
+                "terminal": true,
+                "terminal_scope": "mcp_request_only",
+                "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
+                "automatic_precondition_attempts_exhausted": true,
+                "safe_to_retry": false,
+                "panel_open_attempted": panelOpenAttempted,
+            ]
+        ))
+    }
+
     private func runLiveScan(runtime: AXLogicProElements.Runtime) async -> ChannelResult {
         let t0 = Date()
         Log.info("scan_all: entering runLiveScan", subsystem: "ax")
@@ -2265,16 +2288,27 @@ actor AccessibilityChannel: Channel {
         // there being no visible project window to operate on.
         guard self.runtime.hasVisibleWindow() else {
             Log.info("scan_all: preflight failed — no visible Logic window", subsystem: "ax")
-            return .error("Library panel not found. Open Library (Y) in Logic Pro.")
+            return Self.terminalLibraryScanUnavailable(
+                hint: "Library scan terminated because Logic exposed no visible window; no Library-panel action was attempted.",
+                precondition: "visible_window_unavailable",
+                panelOpenAttempted: false
+            )
         }
 
-        // Precondition: only start the scan if the Library panel is actually open.
-        // This is a < 100 ms AX check and avoids descending into a multi-second
-        // probe chain that has no Library to walk. Run FIRST so we bail before
-        // any expensive setup (probe construction, snapshot extraction).
-        guard LibraryAccessor.isLibraryPanelOpen(runtime: runtime) else {
-            Log.info("scan_all: preflight failed in \(Int(Date().timeIntervalSince(t0) * 1000))ms — panel closed", subsystem: "ax")
-            return .error("Library panel not found. Open Library (Y) in Logic Pro.")
+        // Reuse the existing bounded View > Show Library path instead of asking
+        // the caller to stage the panel. The menu command is not a project-data
+        // write, and the fresh panel read below is the authority for continuing.
+        if !LibraryAccessor.isLibraryPanelOpen(runtime: runtime) {
+            await Self.openLibraryPanelViaKeyCommand(runtime: runtime)
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard LibraryAccessor.isLibraryPanelOpen(runtime: runtime) else {
+                Log.info("scan_all: automatic panel open exhausted in \(Int(Date().timeIntervalSince(t0) * 1000))ms", subsystem: "ax")
+                return Self.terminalLibraryScanUnavailable(
+                    hint: "The bounded automatic Library-panel open attempt did not establish an open panel; the scan terminated before inventory traversal.",
+                    precondition: "panel_closed_after_automatic_open",
+                    panelOpenAttempted: true
+                )
+            }
         }
         Log.info("scan_all: preflight OK in \(Int(Date().timeIntervalSince(t0) * 1000))ms", subsystem: "ax")
 
@@ -2302,7 +2336,11 @@ actor AccessibilityChannel: Channel {
             settleDelayMs: 150
         )
         guard let r = result else {
-            return .error("Library panel not found. Open Library (Y) in Logic Pro.")
+            return Self.terminalLibraryScanUnavailable(
+                hint: "The Library panel was open, but the bounded inventory traversal produced no readable root; the scan terminated without a human continuation.",
+                precondition: "inventory_root_unavailable",
+                panelOpenAttempted: false
+            )
         }
         // v3.1.0 (T6) — AX scan response now includes `source:"panel"` so
         // clients can distinguish it from disk/both responses and route
