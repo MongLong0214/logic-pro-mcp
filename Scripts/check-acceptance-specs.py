@@ -26,7 +26,10 @@ with one while nothing notices until a live run is attempted on it:
      UI. A value is compared by `strip().lower()` against `locale_labels.localised_canonicals()`, the
      canonicals the policy already knows another language spells differently.
 
-Only `*.json` directly in the spec directory is a spec; `evidence/` is never scanned.
+Only `*.json` directly in the spec directory other than `QUEUE.json` is a spec; `evidence/` is
+never scanned. When `QUEUE.json` is present, the same fixed-verifier queue contract is checked
+offline, and every entry must name one of those admitted specs, a repository commit, and a valid
+unique locale subset.
 
     python3 Scripts/check-acceptance-specs.py
 
@@ -42,9 +45,13 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO, "Scripts"))
 
 from locale_labels import localised_canonicals  # noqa: E402
+from verify import runner as fixed_runner  # noqa: E402
+from verify import verify as fixed_verifier  # noqa: E402
 from verify.predicates import parse_path  # noqa: E402
 
 VERIFY = os.path.join(REPO, "Scripts", "verify", "verify.py")
+QUEUE_BASENAME = "QUEUE.json"
+ACCEPTANCE_PREFIX = "docs/acceptance/"
 
 #: Sources no row decides, keyed by (spec basename, source index), with the source the entry was
 #: written for and the reason. May only shrink. The index says where to look and `doc` and `quote`
@@ -69,8 +76,68 @@ def spec_dir() -> str:
 
 
 def specs(directory: str) -> list:
-    """Top-level `*.json` only. `glob` without `**` does not descend, so `evidence/` is never read."""
-    return sorted(p for p in glob.glob(os.path.join(directory, "*.json")) if os.path.isfile(p))
+    """Top-level spec JSON only; the fixed-verifier batch queue is checked separately."""
+    return sorted(
+        p for p in glob.glob(os.path.join(directory, "*.json"))
+        if os.path.isfile(p) and os.path.basename(p) != QUEUE_BASENAME
+    )
+
+
+def _head_is_commit(head: str) -> bool:
+    repository = os.environ.get("LPM_VERIFY_REPO") or REPO
+    try:
+        return subprocess.run(
+            ["git", "-C", repository, "cat-file", "-e", f"{head}^{{commit}}"],
+            capture_output=True,
+            timeout=30,
+        ).returncode == 0
+    except (OSError, subprocess.SubprocessError):
+        return False
+
+
+def acceptance_queue_problems(directory: str, admitted: set) -> tuple[list, int]:
+    """Offline problems in the optional repository-owned fixed-verifier batch queue."""
+    path = os.path.join(directory, QUEUE_BASENAME)
+    if not os.path.isfile(path):
+        return [], 0
+    try:
+        queue = fixed_verifier.E.load(path)
+    except (OSError, ValueError) as exc:
+        return [f"{path}: {exc}"], 0
+    problems = [f"{path}: {problem}" for problem in fixed_verifier.queue_problems(queue)]
+    if problems:
+        return problems, 0
+
+    for index, entry in enumerate(queue["entries"]):
+        prefix = f"{path}: entries[{index}]"
+        declared = os.path.normpath(entry["spec"])
+        if (os.path.isabs(entry["spec"]) or not declared.startswith(ACCEPTANCE_PREFIX)
+                or os.path.dirname(declared[len(ACCEPTANCE_PREFIX):])):
+            problems.append(
+                f"{prefix}: spec {entry['spec']!r} is not a top-level repository acceptance spec"
+            )
+            continue
+        base = declared[len(ACCEPTANCE_PREFIX):]
+        local_path = os.path.join(directory, base)
+        if base not in admitted or not os.path.isfile(local_path):
+            problems.append(
+                f"{prefix}: {entry['spec']} is not a present acceptance spec admitted by this guard"
+            )
+            continue
+        try:
+            spec = fixed_verifier.E.load(local_path)
+        except (OSError, ValueError) as exc:
+            problems.append(f"{prefix}: {local_path}: {exc}")
+            continue
+        problems += [
+            f"{prefix}: {problem}"
+            for problem in fixed_runner.admit(spec, entry.get("locales"))
+        ]
+        if not _head_is_commit(entry["head"]):
+            problems.append(
+                f"{prefix}: head {entry['head'][:12]} is not a commit of this repository"
+            )
+    return problems, len(queue["entries"])
 
 
 def check_spec(path: str, directory: str):
@@ -211,6 +278,9 @@ def main() -> int:
         elif base not in judged and not os.path.isfile(os.path.join(directory, base)):
             problems.append(f"UNDECIDED[({base!r}, {index})]: {base} is gone -- delete the entry")
 
+    queue_problems, queued = acceptance_queue_problems(directory, judged)
+    problems += queue_problems
+
     if problems:
         print(f"{len(paths)} acceptance spec(s) under {directory}; problems:")
         for line in problems:
@@ -218,6 +288,8 @@ def main() -> int:
         return 1
     print(f"{len(paths)} acceptance spec(s) admitted offline by check-spec, every source decided "
           f"or listed ({len(UNDECIDED)} listed), no localised label as a literal")
+    if queued:
+        print(f"{queued} queued acceptance run(s) admitted offline by the fixed-verifier contract")
     return 0
 
 

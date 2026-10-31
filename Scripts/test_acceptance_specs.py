@@ -21,6 +21,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GUARD = os.path.join(REPO, "Scripts", "check-acceptance-specs.py")
 SPECS = os.path.join(REPO, "docs", "acceptance")
 PILOT = "1020.json"
+QUEUE = "QUEUE.json"
 sys.path.insert(0, os.path.join(REPO, "Scripts"))
 
 import locale_labels  # noqa: E402
@@ -39,6 +40,22 @@ def _a_localised_canonical() -> str:
     canonicals = locale_labels.localised_canonicals()
     name = canonicals[sorted(canonicals)[0]]
     return locale_labels.load_json()["labels"][name]["canonical"]
+
+
+def _head() -> str:
+    return subprocess.check_output(
+        ["git", "-C", REPO, "rev-parse", "HEAD"], text=True
+    ).strip()
+
+
+def _queue(*, spec=PILOT, head=None, locales=None) -> dict:
+    entry = {
+        "spec": f"docs/acceptance/{spec}",
+        "head": head or _head(),
+    }
+    if locales is not None:
+        entry["locales"] = locales
+    return {"format": "lpm-queue/1", "entries": [entry]}
 
 
 class Guard(unittest.TestCase):
@@ -94,6 +111,36 @@ class Guard(unittest.TestCase):
             handle.write("{ not json")
         code, out = self._run(root)
         self.assertEqual(code, 0, out[-1500:])
+
+    # queue ------------------------------------------------------------------------------------
+
+    def test_a_valid_queue_is_checked_without_becoming_an_acceptance_spec(self):
+        root = self._tree({PILOT: _pilot(), QUEUE: _queue()})
+        code, out = self._run(root)
+        self.assertEqual(code, 0, out[-1500:])
+        self.assertIn("1 acceptance spec(s) admitted", out)
+        self.assertIn("1 queued acceptance run(s) admitted offline", out)
+
+    def test_a_malformed_queue_is_refused(self):
+        queue = _queue()
+        queue["format"] = "not-the-fixed-verifier-queue"
+        self._refused(self._tree({PILOT: _pilot(), QUEUE: queue}),
+                      "QUEUE.json", "not an lpm-queue/1 queue")
+
+    def test_a_queue_entry_must_reference_a_present_admitted_spec(self):
+        self._refused(self._tree({PILOT: _pilot(), QUEUE: _queue(spec="missing.json")}),
+                      "entries[0]", "docs/acceptance/missing.json", "not a present acceptance spec")
+
+    def test_a_queue_head_must_be_a_commit_of_this_repository(self):
+        self._refused(self._tree({PILOT: _pilot(), QUEUE: _queue(head="0" * 40)}),
+                      "entries[0]", "head 000000000000", "not a commit of this repository")
+
+    def test_queue_locales_must_be_a_unique_subset_of_the_spec_scope(self):
+        for locales, needle in [(["ko", "ko"], "name a locale twice"),
+                                (["not-a-locale"], "is not one of the spec's required locales")]:
+            with self.subTest(locales=locales):
+                self._refused(self._tree({PILOT: _pilot(), QUEUE: _queue(locales=locales)}),
+                              "entries[0]", needle)
 
     # check-spec -------------------------------------------------------------------------------
 
