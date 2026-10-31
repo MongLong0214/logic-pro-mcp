@@ -268,9 +268,13 @@ extension SetupDoctor {
             domain: domain,
             status: .fail,
             summary: summary,
-            evidence: ["reason": reason],
-            remediationType: .manual,
-            remediationValueOverride: "Report this doctor bug with the missing check id: \(id)"
+            evidence: [
+                "reason": reason,
+                "terminal": "true",
+                "human_intervention_required": "false",
+                "human_intervention_requests": "0",
+            ],
+            remediationType: .none
         )
     }
 
