@@ -277,7 +277,10 @@ struct TrackDispatcher: OperationTraceDispatching {
                         "selection_write_attempted": true,
                         "target_mutation_attempted": false,
                         "terminal": true,
+                        "terminal_scope": "mcp_request_only",
                         "human_intervention_required": false,
+                        "human_intervention_requests": 0,
+                        "human_dependent_transitions": 0,
                     ]
                 ), traceID: traceID)
             }
@@ -360,7 +363,10 @@ struct TrackDispatcher: OperationTraceDispatching {
                         "selection_write_attempted": true,
                         "target_mutation_attempted": false,
                         "terminal": true,
+                        "terminal_scope": "mcp_request_only",
                         "human_intervention_required": false,
+                        "human_intervention_requests": 0,
+                        "human_dependent_transitions": 0,
                     ]
                 ), traceID: traceID)
             }
