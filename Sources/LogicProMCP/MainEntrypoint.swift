@@ -276,6 +276,8 @@ enum MainEntrypoint {
                     // same constants was comparing English to English and could not fail.
                     "live_columns": seen.liveHeaderTitles,
                     "first_row_cell_children": seen.firstRowCellChildren,
+                    "item_count_text": seen.rawItemCountText,
+                    "region_path": seen.rawRegionPath,
                     "all_rows": seen.rows.map(eventListProbeCells),
                 ]
                 let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])

@@ -72,6 +72,9 @@ struct OperationDispatchCensusTests {
                     selectedRegionObservation: .init(name: "Census MIDI", trackIndex: 0, startBar: 1, endBar: 2, kind: "midi"),
                     rawRows: [],
                     liveHeaderTitles: [],
+                    rawItemCountText: "0 Events",
+                    rawRegionPath: "Census MIDI",
+                    observedRowsContentStable: true,
                     canonicalNotesComplete: false,
                     partialReason: .identityTimingAndTraversalUnproven,
                     writeAttempted: false
