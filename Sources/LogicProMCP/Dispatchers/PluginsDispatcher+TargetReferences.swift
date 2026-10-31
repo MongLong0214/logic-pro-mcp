@@ -20,23 +20,53 @@ extension PluginsDispatcher {
               !trackName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               let mixerStripIndex = object["mixer_strip_index"] as? Int,
               mixerStripIndex >= 0,
+              let projectName = object["project_name"] as? String,
+              !projectName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+              let projectFilePath = object["project_file_path"] as? String,
+              !projectFilePath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
               var plugins = object["plugins"] as? [[String: Any]] else {
             return result
         }
 
-        let snapshot: TargetRegistrySnapshot
+        var snapshot: TargetRegistrySnapshot
         if let targetSnapshot {
             snapshot = targetSnapshot
         } else {
             snapshot = await targetRegistry.currentSnapshot
         }
+        guard let canonicalProjectPath = ProjectReferenceIssuance.canonicalObservedProjectPath(
+            projectFilePath
+        ) else { return result }
+        let observedProject = ProjectInfo(name: projectName, filePath: canonicalProjectPath)
+        guard let observedSnapshot = await targetRegistry.snapshotForObservedProject(
+            observedProject,
+            ifCurrent: snapshot,
+            stoppingWhen: { false }
+        ) else {
+            return result
+        }
+        snapshot = observedSnapshot
+        switch await ProjectReferenceIssuance.issue(
+            cached: observedProject,
+            registry: targetRegistry,
+            snapshot: snapshot
+        ) {
+        case .issued(let reference):
+            object["project_ref"] = reference.rawValue
+        case .unobserved, .stale:
+            return result
+        }
         let tracks = await cache.getTracks()
         // Inventory's independently observed Arrange identity owns the binding.
         // The cache may corroborate it, but cannot manufacture a name or turn a
         // Mixer ordinal into an Arrange index.
-        let cachedTracks = tracks.filter { $0.id == track }
+        // MCU feedback can create index-shaped rows whose generated names are not
+        // an Arrange observation. They cannot contradict the inventory's native
+        // track-name read; only a live-identity-backed cache row can corroborate
+        // or invalidate that identity.
+        let cachedTracks = tracks.filter { $0.id == track && $0.liveIdentityBacked }
         guard cachedTracks.count <= 1,
-              cachedTracks.allSatisfy({ $0.name == trackName }) else { return result }
+              cachedTracks.allSatisfy({ $0.name.utf8.elementsEqual(trackName.utf8) }) else { return result }
         let descriptor = TargetDescriptor(trackIndex: track, trackName: trackName)
         var changed = false
         for index in plugins.indices {

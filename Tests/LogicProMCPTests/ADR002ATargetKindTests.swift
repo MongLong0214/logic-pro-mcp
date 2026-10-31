@@ -162,6 +162,8 @@ struct ADR002ATargetKindTests {
             "track": 2,
             "track_name": "Bass",
             "mixer_strip_index": 4,
+            "project_name": "Session",
+            "project_file_path": "/tmp/Session.logicx",
             "complete": true,
             "plugins": [
                 [
@@ -228,6 +230,7 @@ struct ADR002ATargetKindTests {
             let registry = TargetRegistry()
             let base: [String: Any] = [
                 "track": 2, "track_name": "Bass", "mixer_strip_index": 4, "complete": true,
+                "project_name": "Session", "project_file_path": "/tmp/Session.logicx",
                 "plugins": [["insert": 0, "read_status": "ok", "occupied": true,
                              "name": "Gain", "plugin_id": "logic.stock.effect.gain"]],
             ]
@@ -235,6 +238,7 @@ struct ADR002ATargetKindTests {
                 ("track_name", NSNull()), ("track_name", "" as Any),
                 ("track_name", "Hi Synth" as Any), ("mixer_strip_index", NSNull()),
                 ("mixer_strip_index", -1 as Any), ("complete", false as Any),
+                ("project_name", NSNull()), ("project_file_path", NSNull()),
             ] {
                 var extras = base
                 extras[key] = value
@@ -256,6 +260,191 @@ struct ADR002ATargetKindTests {
             let raw = try #require(plugins[0]["plugin_insert_ref"] as? String)
             let binding = await registry.resolve(TargetReference(rawValue: raw))
             #expect(binding?.descriptor.trackName == "Bass")
+
+            let exactCache = StateCache()
+            await exactCache.updateTracks([TrackState(id: 2, name: "Caf\u{00e9}", type: .audio)])
+            var byteDistinct = base
+            byteDistinct["track_name"] = "Cafe\u{0301}"
+            let refused = await PluginsDispatcher.addInventoryTargetReferences(
+                to: toolTextResult(HonestContract.encodeV2StateA(extras: byteDistinct)),
+                cache: exactCache,
+                targetRegistry: TargetRegistry()
+            )
+            let refusedPlugins = try #require(object(refused)["plugins"] as? [[String: Any]])
+            #expect(refusedPlugins[0]["plugin_insert_ref"] == nil)
+        }
+    }
+
+    @Test
+    func testInventoryInsertRefResolvesBeforeTrackCachePopulation() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let cache = StateCache()
+            await cache.updateTracks([
+                TrackState(
+                    id: 13,
+                    name: "Track 14",
+                    type: .unknown,
+                    liveIdentityBacked: false
+                ),
+            ])
+            let registry = TargetRegistry()
+            let inventory = await PluginsDispatcher.addInventoryTargetReferences(
+                to: toolTextResult(HonestContract.encodeV2StateA(extras: [
+                    "track": 13,
+                    "track_name": "Audio 13",
+                    "mixer_strip_index": 12,
+                    "project_name": "Session",
+                    "project_file_path": "/tmp/Session.logicx",
+                    "complete": true,
+                    "plugins": [[
+                        "insert": 1,
+                        "read_status": "ok",
+                        "occupied": true,
+                        "name": "Compressor",
+                        "plugin_id": "logic.stock.effect.compressor",
+                    ]],
+                ])),
+                cache: cache,
+                targetRegistry: registry
+            )
+            let plugins = try #require(object(inventory)["plugins"] as? [[String: Any]])
+            let reference = try #require(plugins[0]["plugin_insert_ref"] as? String)
+
+            let resolved = await TargetRefResolver.resolveMutationIndex(
+                ["target_ref": .string(reference)],
+                targetRegistry: registry,
+                cache: cache,
+                operation: "logic_plugins.get_param_verified",
+                indexKeys: ["track"],
+                invalidIndexResult: toolInvalidParamsResult("target_ref required"),
+                acceptedKinds: [.pluginInsert]
+            )
+
+            guard case .success(let target) = resolved else {
+                Issue.record("fresh inventory plugin_insert_ref must resolve without waiting for the poller")
+                return
+            }
+            #expect(target.index == 13)
+            #expect(target.binding?.descriptor.trackName == "Audio 13")
+
+            let (readRouter, channels) = await router()
+            let read = await PluginsDispatcher.handle(
+                verifiedGate: VerifiedOpGate(),
+                command: "get_param_verified",
+                params: [
+                    "target_ref": .string(reference),
+                    "param": .string("threshold"),
+                ],
+                router: readRouter,
+                cache: cache,
+                targetRegistry: registry
+            )
+            let readIsError = try #require(read.isError)
+            #expect(!readIsError)
+            #expect((await channels[0].operations()).first?.1["track"] == "13")
+            #expect((await channels[0].operations()).first?.1["expected_track_name"] == "Audio 13")
+            #expect((await channels[0].operations()).first?.1["project_expected_path"]
+                == ProjectReferenceIssuance.canonicalObservedProjectPath("/tmp/Session.logicx"))
+
+            await cache.updateTracks([
+                TrackState(id: 13, name: "Different Track", type: .audio),
+            ])
+            let contradicted = await TargetRefResolver.resolveMutationIndex(
+                ["target_ref": .string(reference)],
+                targetRegistry: registry,
+                cache: cache,
+                operation: "logic_plugins.get_param_verified",
+                indexKeys: ["track"],
+                invalidIndexResult: toolInvalidParamsResult("target_ref required"),
+                acceptedKinds: [.pluginInsert]
+            )
+            guard case .failure(let refusal) = contradicted else {
+                Issue.record("a populated contradictory cache row must invalidate the reference")
+                return
+            }
+            #expect(object(refusal)["error"] as? String == "stale_target_reference")
+        }
+    }
+
+    @Test
+    func testInventoryProjectObservationInvalidatesPriorDocumentReferences() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let root = FileManager.default.temporaryDirectory
+                .appendingPathComponent("lpm-project-alias-\(UUID().uuidString)", isDirectory: true)
+            let realProject = root.appendingPathComponent("New Session.logicx", isDirectory: true)
+            let aliasProject = root.appendingPathComponent("Alias.logicx", isDirectory: true)
+            try FileManager.default.createDirectory(at: realProject, withIntermediateDirectories: true)
+            try FileManager.default.createSymbolicLink(
+                atPath: aliasProject.path,
+                withDestinationPath: realProject.path
+            )
+            defer { try? FileManager.default.removeItem(at: root) }
+
+            let registry = TargetRegistry()
+            let oldSnapshot = await registry.currentSnapshot
+            let oldProjectDescriptor = try #require(ProjectReferenceIssuance.descriptor(
+                name: "Old Session",
+                filePath: "/tmp/Old Session.logicx",
+                epoch: oldSnapshot.projectEpoch
+            ))
+            let oldProject = try #require(await registry.bind(
+                kind: .project,
+                descriptor: oldProjectDescriptor,
+                fingerprint: oldProjectDescriptor.fingerprint,
+                snapshot: oldSnapshot
+            ))
+            let oldTrack = TargetDescriptor(trackIndex: 13, trackName: "Audio 13")
+            let oldInsert = try #require(await registry.bind(
+                kind: .pluginInsert,
+                descriptor: oldTrack,
+                fingerprint: TargetRefResolver.pluginInsertFingerprint(
+                    descriptor: oldTrack,
+                    insert: 1,
+                    pluginIdentity: "logic.stock.effect.compressor"
+                ),
+                snapshot: oldSnapshot
+            ))
+
+            let inventory = await PluginsDispatcher.addInventoryTargetReferences(
+                to: toolTextResult(HonestContract.encodeV2StateA(extras: [
+                    "track": 13,
+                    "track_name": "Audio 13",
+                    "mixer_strip_index": 12,
+                    "project_name": "New Session",
+                    "project_file_path": aliasProject.path,
+                    "complete": true,
+                    "plugins": [[
+                        "insert": 1,
+                        "read_status": "ok",
+                        "occupied": true,
+                        "name": "Compressor",
+                        "plugin_id": "logic.stock.effect.compressor",
+                    ]],
+                ])),
+                cache: StateCache(),
+                targetRegistry: registry
+            )
+
+            let body = object(inventory)
+            let newProject = try #require(body["project_ref"] as? String)
+            let plugins = try #require(body["plugins"] as? [[String: Any]])
+            let newInsert = try #require(plugins[0]["plugin_insert_ref"] as? String)
+            #expect(await registry.resolve(oldProject) == nil)
+            #expect(await registry.resolve(oldInsert) == nil)
+
+            let current = await registry.currentSnapshot
+            let sameProject = ProjectInfo(
+                name: "New Session",
+                filePath: realProject.resolvingSymlinksInPath().standardizedFileURL.path
+            )
+            let renewed = await registry.snapshotForObservedProject(
+                sameProject,
+                ifCurrent: current,
+                stoppingWhen: { false }
+            )
+            #expect(renewed == current)
+            #expect(await registry.resolve(TargetReference(rawValue: newProject)) != nil)
+            #expect(await registry.resolve(TargetReference(rawValue: newInsert)) != nil)
         }
     }
 
@@ -298,7 +487,9 @@ struct ADR002ATargetKindTests {
             let registry = TargetRegistry()
             let inventory = await PluginsDispatcher.addInventoryTargetReferences(
                 to: toolTextResult(HonestContract.encodeV2StateA(extras: [
-                    "track": 9, "track_name": "Bass", "mixer_strip_index": 11, "complete": true,
+                    "track": 9, "track_name": "Bass", "mixer_strip_index": 11,
+                    "project_name": "Project", "project_file_path": "/tmp/project.logicx",
+                    "complete": true,
                     "plugins": [["insert": 5, "read_status": "ok", "occupied": true,
                                  "name": "Compressor", "plugin_id": "logic.stock.effect.compressor"]],
                 ])), cache: cache, targetRegistry: registry
@@ -374,13 +565,15 @@ struct ADR002ATargetKindTests {
         }
     }
 
-    @Test
-    func testPluginInventorySkipsRefsWhenSnapshotTurnsStaleBeforeBind() async throws {
+    @Test(arguments: ["project_epoch", "topology"])
+    func testPluginInventorySkipsRefsWhenSnapshotTurnsStaleBeforeBind(_ drift: String) async throws {
         let inventory = HonestContract.encodeV2StateA(extras: [
             "operation": "logic_plugins.get_inventory",
             "track": 2,
             "track_name": "Bass",
             "mixer_strip_index": 4,
+            "project_name": "Project",
+            "project_file_path": "/tmp/project.logicx",
             "complete": true,
             "plugins": [[
                 "insert": 0,
@@ -394,7 +587,11 @@ struct ADR002ATargetKindTests {
             let cache = await cacheWithTracks()
             let registry = TargetRegistry()
             let snapshot = await registry.currentSnapshot
-            await registry.bumpTopologyGeneration()
+            if drift == "project_epoch" {
+                await registry.bumpProjectEpoch()
+            } else {
+                await registry.bumpTopologyGeneration()
+            }
 
             let result = await PluginsDispatcher.addInventoryTargetReferences(
                 to: toolTextResult(inventory),
