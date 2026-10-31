@@ -15,6 +15,9 @@ struct ProjectExportRunResult: Codable, Sendable, Equatable {
     let artifactsUncertain: Int
     let artifactsFailed: Int
     let projects: [ProjectExportRunProject]
+    /// Non-instructional terminal diagnostic for envelope-level failures that
+    /// have no per-project artifact on which to preserve the cause.
+    let diagnostic: String?
     let nextSafeAction: String
 
     enum CodingKeys: String, CodingKey {
@@ -32,6 +35,7 @@ struct ProjectExportRunResult: Codable, Sendable, Equatable {
         case artifactsUncertain = "artifacts_uncertain"
         case artifactsFailed = "artifacts_failed"
         case projects
+        case diagnostic
         case nextSafeAction = "next_safe_action"
     }
 }

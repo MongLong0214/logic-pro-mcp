@@ -27,17 +27,13 @@ extension ProjectExportExecutor {
             status = "failed"
         }
 
-        let hasLateBoundStem = plan.projects.contains { project in
-            project.expectedArtifacts.contains { $0.filenamesLateBound == true }
-        }
-        let nextSafeAction: String
-        if status == "completed" {
-            nextSafeAction = "verify_artifacts_with_logic_audio"
-        } else if hasLateBoundStem {
-            nextSafeAction = "review_then_rerun_stem_export_into_clean_destination"
-        } else {
-            nextSafeAction = "review_then_export_resume"
-        }
+        // A failed, partial, or uncertain run is already the terminal outcome
+        // for this bounded invocation. Preserve its per-artifact evidence, but
+        // do not turn it into a required review/retry queue. A new authorized
+        // invocation can still be submitted independently.
+        let nextSafeAction = status == "completed"
+            ? "verify_artifacts_with_logic_audio"
+            : "none_terminal"
 
         return RunResult(
             schema: schema,
@@ -54,6 +50,7 @@ extension ProjectExportExecutor {
             artifactsUncertain: uncertain,
             artifactsFailed: failed,
             projects: projects,
+            diagnostic: nil,
             nextSafeAction: nextSafeAction
         )
     }
@@ -101,7 +98,8 @@ extension ProjectExportExecutor {
             artifactsUncertain: 0,
             artifactsFailed: total,
             projects: arts,
-            nextSafeAction: "retry_with_confirmed_true"
+            diagnostic: nil,
+            nextSafeAction: "none_terminal"
         )
     }
 
@@ -110,7 +108,7 @@ extension ProjectExportExecutor {
     /// would silently skip nothing. Refuse the whole batch before project.open
     /// so a caller cannot read a partial non-stem run as a successful resume.
     static func unsupportedStemResumeRun(plan: ProjectExportPlan) -> RunResult {
-        let reason = "export_resume_unsupported_for_stem: Logic assigns stem filenames only after export, so existing artifact identity cannot be established before the run. Re-run into a clean destination."
+        let reason = "export_resume_unsupported_for_stem: Logic assigns stem filenames only after export, so existing artifact identity cannot be established before the run."
         let projects = plan.projects.map { project in
             RunProject(
                 index: project.index,
@@ -153,7 +151,8 @@ extension ProjectExportExecutor {
             artifactsUncertain: 0,
             artifactsFailed: failed,
             projects: projects,
-            nextSafeAction: "rerun_stem_export_into_clean_destination"
+            diagnostic: nil,
+            nextSafeAction: "none_terminal"
         )
     }
 
@@ -180,7 +179,8 @@ extension ProjectExportExecutor {
             artifactsUncertain: 0,
             artifactsFailed: 0,
             projects: [],
-            nextSafeAction: "fix_inputs_then_retry: \(reason)"
+            diagnostic: reason,
+            nextSafeAction: "none_terminal"
         )
     }
 }

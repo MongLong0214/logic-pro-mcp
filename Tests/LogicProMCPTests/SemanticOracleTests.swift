@@ -1646,7 +1646,7 @@ struct SemanticOracleMutationTests {
         #expect(runGreen, "export_run rejected its own completed-run fixture")
         // status:"partial" — an honest partial run must not read as a verified pass.
         let partialRun: Bool = run.evaluate(
-            responseData: Data(#"{"schema":"logic_pro_mcp_export_run.v1","run_id":"r","mode":"run","confirmed":true,"status":"partial","output_root":"/x","collision_policy":"fail_if_exists","project_count":1,"artifacts_total":2,"artifacts_verified":1,"artifacts_skipped":0,"artifacts_uncertain":0,"artifacts_failed":1,"projects":[{"index":0,"project_path":"/x/a.logicx","display_name":"a","observed_project_path":"/x/a.logicx","identity_verified":true,"opened":true,"artifacts":[]}],"next_safe_action":"review_then_export_resume"}"#.utf8),
+            responseData: Data(#"{"schema":"logic_pro_mcp_export_run.v1","run_id":"r","mode":"run","confirmed":true,"status":"partial","output_root":"/x","collision_policy":"fail_if_exists","project_count":1,"artifacts_total":2,"artifacts_verified":1,"artifacts_skipped":0,"artifacts_uncertain":0,"artifacts_failed":1,"projects":[{"index":0,"project_path":"/x/a.logicx","display_name":"a","observed_project_path":"/x/a.logicx","identity_verified":true,"opened":true,"artifacts":[]}],"next_safe_action":"none_terminal"}"#.utf8),
             readbackData: Data("{}".utf8)) == true
         #expect(!partialRun, "export_run accepted a partial run")
         // status forged "completed" while a failed artifact remains — the
