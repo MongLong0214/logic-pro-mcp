@@ -112,13 +112,16 @@ extension SetupDoctor {
 
     static func logicVersionSupportCheck(logicApps: [LogicAppInfo], checks: [Check]) -> Check {
         if let cause = blockingCause(for: "logic.version_support", checks: checks) {
+            let terminalBlocker = checks.first { $0.id == cause }.map {
+                $0.status == .fail && $0.evidence["terminal"] == "true"
+            } ?? false
             return check(
                 id: "logic.version_support",
                 domain: "logic",
                 status: .skipped,
                 summary: "Logic Pro version support cannot be checked until Logic Pro installation is readable.",
                 evidence: [:],
-                remediationType: .docs,
+                remediationType: terminalBlocker ? .none : .docs,
                 blockedBy: cause
             )
         }

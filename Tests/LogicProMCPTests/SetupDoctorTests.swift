@@ -262,6 +262,70 @@ private func issue26RepositoryRootURL() -> URL {
     #expect(remediation["value"] as? String != nil)
 }
 
+@Test func testTerminalLogicInstallationSuppressesBlockedVersionContinuation() throws {
+    let cases: [[SetupDoctor.LogicAppInfo]] = [
+        [],
+        [SetupDoctor.LogicAppInfo(
+            path: "/Applications/Logic Pro Creator Studio.app",
+            version: "1.0",
+            bundleID: "com.apple.mobilelogic",
+            readable: true
+        )],
+    ]
+
+    for logicApps in cases {
+        var runtime = doctorRuntime()
+        runtime.logicApps = { logicApps }
+        let report = SetupDoctor.generate(
+            arguments: ["LogicProMCP", "doctor", "--json", "--client", "claude-code"],
+            permissionStatus: grantedPermissionStatus(),
+            approvals: allApprovals(),
+            runtime: runtime
+        )
+        let installation = try #require(report.checks.first { $0.id == "logic.installation" })
+        let version = try #require(report.checks.first { $0.id == "logic.version_support" })
+        let human = SetupDoctor.renderHuman(report, useColor: false)
+
+        #expect(installation.status == .fail)
+        #expect(installation.evidence["terminal"] == "true")
+        #expect(version.status == .skipped)
+        #expect(version.blockedBy == installation.id)
+        #expect(version.remediation.type == .none)
+        #expect(version.remediation.value.isEmpty)
+        #expect(!report.fixPlan.contains(installation.id))
+        #expect(!report.fixPlan.contains(version.id))
+        #expect(!human.contains("→ docs/SETUP.md#doctor-logicversion-support"))
+    }
+}
+
+@Test func testUnreadableLogicInstallationKeepsBlockedVersionDiagnostic() throws {
+    var runtime = doctorRuntime()
+    runtime.logicApps = {
+        [SetupDoctor.LogicAppInfo(
+            path: "/Applications/Logic Pro.app",
+            version: nil,
+            bundleID: ServerConfig.logicProBundleID,
+            readable: false
+        )]
+    }
+    let report = SetupDoctor.generate(
+        arguments: ["LogicProMCP", "doctor", "--json", "--client", "claude-code"],
+        permissionStatus: grantedPermissionStatus(),
+        approvals: allApprovals(),
+        runtime: runtime
+    )
+    let installation = try #require(report.checks.first { $0.id == "logic.installation" })
+    let version = try #require(report.checks.first { $0.id == "logic.version_support" })
+    let human = SetupDoctor.renderHuman(report, useColor: false)
+
+    #expect(installation.status == .skipped)
+    #expect(installation.evidence["terminal"] == nil)
+    #expect(version.status == .skipped)
+    #expect(version.blockedBy == installation.id)
+    #expect(version.remediation.type == .docs)
+    #expect(human.contains("→ docs/SETUP.md#doctor-logicversion-support"))
+}
+
 @Test func testMissingBinaryPathTerminatesWithoutRemediation() throws {
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json"],
