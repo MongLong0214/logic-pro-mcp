@@ -29,7 +29,7 @@ private func issue254Envelope(_ result: ReadResource.Result) throws -> [String: 
     }
 }
 
-@Test func issue254ClosedMarkerListIsUnreadableRatherThanVerifiedEmpty() {
+@Test func issue254ClosedMarkerListTerminatesWithoutRequestingHumanSetup() throws {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(25_400)
     builder.setAttribute(app, kAXWindowsAttribute as String, [AXUIElement]())
@@ -39,7 +39,24 @@ private func issue254Envelope(_ result: ReadResource.Result) throws -> [String: 
     )
 
     #expect(!result.isSuccess)
-    #expect(result.message.contains("marker_list_not_open"))
+    let envelope = try #require(
+        JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
+    )
+    #expect(envelope["state"] as? String == "C")
+    #expect(envelope["reason"] as? String == "marker_list_not_open")
+    #expect(envelope["operation"] as? String == "nav.get_markers")
+    #expect(envelope["automated_alternative"] as? String == "logic_navigate.capture_markers")
+    #expect(envelope["failure_stage"] as? String == "marker_list_not_open_for_passive_read")
+    #expect(try #require(envelope["automatic_attempts_exhausted"] as? Bool))
+    #expect(try #require(envelope["terminal"] as? Bool))
+    #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+    #expect(envelope["human_intervention_requests"] as? Int == 0)
+    #expect(envelope["human_dependent_transitions"] as? Int == 0)
+    #expect(!(try #require(envelope["write_attempted"] as? Bool)))
+    #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+    let hint = try #require(envelope["hint"] as? String)
+    #expect(hint.contains("capture_markers"))
+    #expect(!hint.lowercased().contains("open navigate"))
 }
 
 @Test func issue254OpenEmptyMarkerListIsVerifiedEmpty() throws {
@@ -84,6 +101,34 @@ private func issue254Envelope(_ result: ReadResource.Result) throws -> [String: 
     #expect(markers.isEmpty)
 }
 
+@Test func issue254OpenUnverifiedMarkerListIsNotReportedAsClosed() throws {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(25_440)
+    let main = builder.element(25_441)
+    let markerList = builder.element(25_442)
+    builder.setAttribute(app, kAXMainWindowAttribute as String, main)
+    builder.setAttribute(app, kAXWindowsAttribute as String, [main, markerList])
+    builder.setAttribute(main, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(main, kAXTitleAttribute as String, "Issue254 - Tracks")
+    builder.setAttribute(main, kAXDocumentAttribute as String, "/Issue254.logicx")
+    builder.setAttribute(markerList, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(markerList, kAXTitleAttribute as String, "Issue254 - Marker List")
+    // No readable AXDocument: title scope says a Marker List is open, but ownership is unverified.
+
+    let result = AccessibilityChannel.defaultGetMarkers(
+        runtime: builder.makeLogicRuntime(appElement: app)
+    )
+    let envelope = try #require(
+        JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
+    )
+
+    #expect(!result.isSuccess)
+    #expect(envelope["state"] as? String == "C")
+    #expect(envelope["reason"] as? String == "marker_list_identity_unverified")
+    #expect(envelope["automated_alternative"] == nil)
+    #expect(envelope["terminal"] == nil)
+}
+
 @Test func issue254MarkerResourceRefreshesFromLiveAX() async throws {
     let marker = MarkerState(id: 0, name: "Marker 1", position: "1.1.1.1")
     let cache = StateCache()
@@ -123,7 +168,9 @@ private func issue254Envelope(_ result: ReadResource.Result) throws -> [String: 
     #expect(envelope["source"] as? String == "cache")
     let v1 = try #require(envelope["readable"] as? Bool)
     #expect(!v1)
-    #expect(envelope["reason"] as? String == "marker_list_not_open")
+    #expect(envelope["reason"] as? String == "marker_read_unavailable")
+    #expect(envelope["automated_alternative"] == nil)
+    #expect(envelope["terminal"] == nil)
     #expect((data.first?["name"] as? String) == "Cached Marker")
     #expect(await cache.getMarkers().first?.name == "Cached Marker")
 }
@@ -146,6 +193,8 @@ private func issue254Envelope(_ result: ReadResource.Result) throws -> [String: 
     let readable = try #require(envelope["readable"] as? Bool)
     #expect(!readable)
     #expect(envelope["reason"] as? String == "markers_not_polled_yet")
+    #expect(envelope["automated_alternative"] == nil)
+    #expect(envelope["terminal"] == nil)
 }
 
 /// The distinction is "did anything TRY", which the fetch timestamp cannot answer:
@@ -154,7 +203,7 @@ private func issue254Envelope(_ result: ReadResource.Result) throws -> [String: 
 /// moved the false attribution instead of removing it — this is the case that catches that.
 @Test func markerResourceSaysTheListIsClosedOnceAPollHasActuallyFailed() async throws {
     let cache = StateCache()
-    await cache.markMarkersUnreadable()
+    await cache.markMarkersUnreadable(.listNotOpen)
 
     let result = try await ResourceHandlers.read(
         uri: "logic://markers",
@@ -167,6 +216,33 @@ private func issue254Envelope(_ result: ReadResource.Result) throws -> [String: 
     #expect(!readable)
     #expect(envelope["fetched_at"] == nil || envelope["fetched_at"] is NSNull)
     #expect(envelope["reason"] as? String == "marker_list_not_open")
+    #expect(envelope["operation"] as? String == "nav.get_markers")
+    #expect(envelope["automated_alternative"] as? String == "logic_navigate.capture_markers")
+    #expect(envelope["failure_stage"] as? String == "marker_list_not_open_for_passive_read")
+    #expect(try #require(envelope["automatic_attempts_exhausted"] as? Bool))
+    #expect(try #require(envelope["terminal"] as? Bool))
+    #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+    #expect(envelope["human_intervention_requests"] as? Int == 0)
+    #expect(envelope["human_dependent_transitions"] as? Int == 0)
+    #expect(!(try #require(envelope["write_attempted"] as? Bool)))
+    #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+}
+
+@Test func markerResourcePreservesOpenListRowReadFailureWithoutClaimingClosedListRecovery() async throws {
+    let cache = StateCache()
+    await cache.markMarkersUnreadable(.rowsUnreadable)
+
+    let result = try await ResourceHandlers.read(
+        uri: "logic://markers",
+        cache: cache,
+        router: ChannelRouter()
+    )
+    let envelope = try issue254Envelope(result)
+
+    #expect(!(try #require(envelope["readable"] as? Bool)))
+    #expect(envelope["reason"] as? String == "marker_list_rows_unreadable")
+    #expect(envelope["automated_alternative"] == nil)
+    #expect(envelope["terminal"] == nil)
 }
 
 /// `nav.delete_marker` must work on a default install.

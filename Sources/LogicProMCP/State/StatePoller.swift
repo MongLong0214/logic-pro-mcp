@@ -802,17 +802,13 @@ actor StatePoller {
         if markerPollTick >= Self.markerPollInterval {
             if backgroundCycleYields(yieldingToTextEditing) { return yieldCycle(cacheKeys) }
             markerPollTick = 0
-            let markersReady = await pollUnversioned(
-                operation: "nav.get_markers", label: "Marker",
-                axChannel: axChannel, cache: cache, as: [MarkerState].self
-            ) { cache, markers in
-                await cache.updateMarkers(markers)
-            }
+            let markerOutcome = await pollMarkers(axChannel: axChannel, cache: cache)
             if Self.helpReadsStopped { return yieldCycle(cacheKeys) }
-            if markersReady {
+            switch markerOutcome {
+            case .readable:
                 cacheKeys.append(.markers)
-            } else {
-                await cache.markMarkersUnreadable()
+            case .unreadable(let failure):
+                await cache.markMarkersUnreadable(failure)
             }
         }
         return await finishPoll(cacheKeys, yieldingToTextEditing: yieldingToTextEditing)
@@ -897,28 +893,46 @@ actor StatePoller {
         }
     }
 
-    /// Poll helper for cache values that do not have a `CacheSectionID` and
-    /// therefore cannot participate in section-version rejection yet.
-    @discardableResult
-    private func pollUnversioned<T: Decodable & Sendable>(
-        operation: String,
-        label: String,
+    private enum MarkerPollOutcome: Sendable {
+        case readable
+        case unreadable(StateCache.MarkerPollFailure)
+    }
+
+    private func pollMarkers(
         axChannel: AccessibilityChannel,
-        cache: StateCache,
-        as type: T.Type,
-        update: (StateCache, T) async -> Void
-    ) async -> Bool {
-        let result = await axChannel.execute(operation: operation, params: [:])
-        guard case .success(let json) = result else { return false }
-        if Self.helpReadsStopped { return false }
-        guard let data = json.data(using: .utf8) else { return false }
+        cache: StateCache
+    ) async -> MarkerPollOutcome {
+        let result = await axChannel.execute(operation: "nav.get_markers", params: [:])
+        guard case .success(let json) = result else {
+            return .unreadable(Self.markerPollFailure(from: result.message))
+        }
+        if Self.helpReadsStopped { return .unreadable(.channelUnavailable) }
+        guard let data = json.data(using: .utf8) else { return .unreadable(.invalidPayload) }
         do {
-            let value = try Self.iso8601Decoder.decode(T.self, from: data)
-            await update(cache, value)
-            return true
+            let markers = try Self.iso8601Decoder.decode([MarkerState].self, from: data)
+            await cache.updateMarkers(markers)
+            return .readable
         } catch {
-            Log.debug("\(label) poll failed: \(error)", subsystem: "poller")
-            return false
+            Log.debug("Marker poll failed: \(error)", subsystem: "poller")
+            return .unreadable(.invalidPayload)
+        }
+    }
+
+    private static func markerPollFailure(from message: String) -> StateCache.MarkerPollFailure {
+        guard let data = message.data(using: .utf8),
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let reason = object["reason"] as? String else {
+            return .channelUnavailable
+        }
+        switch reason {
+        case StateCache.MarkerPollFailure.listNotOpen.rawValue:
+            return .listNotOpen
+        case StateCache.MarkerPollFailure.identityUnverified.rawValue:
+            return .identityUnverified
+        case StateCache.MarkerPollFailure.rowsUnreadable.rawValue:
+            return .rowsUnreadable
+        default:
+            return .channelUnavailable
         }
     }
 

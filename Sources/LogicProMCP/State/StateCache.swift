@@ -201,6 +201,14 @@ actor StateCache {
         let path: String
     }
 
+    enum MarkerPollFailure: String, Sendable, Equatable {
+        case listNotOpen = "marker_list_not_open"
+        case identityUnverified = "marker_list_identity_unverified"
+        case rowsUnreadable = "marker_list_rows_unreadable"
+        case invalidPayload = "marker_payload_decode_failed"
+        case channelUnavailable = "marker_read_unavailable"
+    }
+
     private(set) var transport = TransportState()
     private(set) var tracks: [TrackState] = []
     private(set) var channelStrips: [ChannelStripState] = []
@@ -215,6 +223,7 @@ actor StateCache {
     /// that wants to say why markers are unreadable needs the two told apart, or it names a cause
     /// nobody looked for.
     private(set) var markersPollAttempted: Bool = false
+    private(set) var markerPollFailure: MarkerPollFailure?
     private(set) var project = ProjectInfo()
     private(set) var mcuConnection = MCUConnectionState()
     private(set) var mcuDisplay = MCUDisplayState()
@@ -325,6 +334,7 @@ actor StateCache {
     func getMarkers() -> [MarkerState] { markers }
     func getMarkersReadable() -> Bool { markersReadable }
     func getMarkersPollAttempted() -> Bool { markersPollAttempted }
+    func getMarkerPollFailure() -> MarkerPollFailure? { markerPollFailure }
     func getProject() -> ProjectInfo { project }
     func getMCUConnection() -> MCUConnectionState { mcuConnection }
     func getMCUDisplay() -> MCUDisplayState { mcuDisplay }
@@ -545,6 +555,7 @@ actor StateCache {
         markers = []
         markersReadable = false
         markersPollAttempted = false
+        markerPollFailure = nil
         // Re-initialising transport picks up its default `lastUpdated =
         // .distantPast`, which is how snapshot() signals "stale" to readers
         // (transport_age_sec becomes astronomically large). Clients can
@@ -799,14 +810,16 @@ actor StateCache {
         markersFetchedAt = Date()
         markersReadable = true
         markersPollAttempted = true
+        markerPollFailure = nil
         if markers != newMarkers {
             markers = newMarkers
         }
     }
 
-    func markMarkersUnreadable() {
+    func markMarkersUnreadable(_ failure: MarkerPollFailure = .channelUnavailable) {
         markersReadable = false
         markersPollAttempted = true
+        markerPollFailure = failure
     }
 
     func updateProject(_ info: ProjectInfo) {
