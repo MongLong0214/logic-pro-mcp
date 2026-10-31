@@ -119,6 +119,7 @@ actor AccessibilityChannel: Channel {
         let importMIDIFile: @Sendable (String) async -> ChannelResult
         let confirmNewTrackDialog: @Sendable () -> Void
         let canPostEvents: @Sendable () -> Bool
+        let scanLibraryDisk: @Sendable () throws -> LibraryRoot
         // v3.1.5 AppleScript-primary helpers (markersAppleScript /
         // projectInfoAppleScript / tracksAppleScript) removed in v3.1.8 —
         // see Issue #7. The dictionary terms they relied on (tracks /
@@ -162,6 +163,9 @@ actor AccessibilityChannel: Channel {
             canPostEvents: @escaping @Sendable () -> Bool = {
                 CGPreflightPostEventAccess()
             },
+            scanLibraryDisk: @escaping @Sendable () throws -> LibraryRoot = {
+                try LibraryDiskScanner.scan()
+            },
             logicRuntime: AXLogicProElements.Runtime = .production,
             observationMouseRuntime: AXMouseHelper.Runtime? = nil
         ) {
@@ -195,6 +199,7 @@ actor AccessibilityChannel: Channel {
             self.importMIDIFile = importMIDIFile
             self.confirmNewTrackDialog = confirmNewTrackDialog
             self.canPostEvents = canPostEvents
+            self.scanLibraryDisk = scanLibraryDisk
             self.logicRuntime = logicRuntime
             self.observationMouseRuntime = observationMouseRuntime
         }
@@ -214,6 +219,9 @@ actor AccessibilityChannel: Channel {
             },
             canPostEvents: @escaping @Sendable () -> Bool = {
                 CGPreflightPostEventAccess()
+            },
+            scanLibraryDisk: @escaping @Sendable () throws -> LibraryRoot = {
+                try LibraryDiskScanner.scan()
             },
             runTempoFallback: @escaping @Sendable (String) -> Bool = { tempo in
                 AccessibilityChannel.runTempoFallbackScript(tempo: tempo)
@@ -300,6 +308,7 @@ actor AccessibilityChannel: Channel {
                 importMIDIFile: { await AccessibilityChannel.defaultImportMIDIFile(path: $0, runtime: logicRuntime) },
                 confirmNewTrackDialog: confirmNewTrackDialog,
                 canPostEvents: canPostEvents,
+                scanLibraryDisk: scanLibraryDisk,
                 logicRuntime: logicRuntime,
                 observationMouseRuntime: observationMouseRuntime
             )
@@ -1926,7 +1935,7 @@ actor AccessibilityChannel: Channel {
             case .both:
                 return await self.runBothScan(runtime: runtime.logicRuntime)
             case .ax:
-                return await self.runLiveScan(runtime: runtime.logicRuntime)
+                return await self.runLiveScan(runtime: runtime.logicRuntime, allowAutoOpen: true)
             }
         case "library.resolve_path":
             // v3.1.0 (T6) + #222 — panel hits win; disk hits are loadable
@@ -2278,9 +2287,13 @@ actor AccessibilityChannel: Channel {
         ))
     }
 
-    private func runLiveScan(runtime: AXLogicProElements.Runtime) async -> ChannelResult {
+    private func runLiveScan(
+        runtime: AXLogicProElements.Runtime,
+        allowAutoOpen: Bool
+    ) async -> ChannelResult {
         let t0 = Date()
         Log.info("scan_all: entering runLiveScan", subsystem: "ax")
+        var panelOpenAttempted = false
 
         // Fail closed when Logic is running in a headless/no-window state.
         // Without this guard, AX can expose stale Library descendants from a
@@ -2299,6 +2312,14 @@ actor AccessibilityChannel: Channel {
         // the caller to stage the panel. The menu command is not a project-data
         // write, and the fresh panel read below is the authority for continuing.
         if !LibraryAccessor.isLibraryPanelOpen(runtime: runtime) {
+            guard allowAutoOpen else {
+                return Self.terminalLibraryScanUnavailable(
+                    hint: "The disk fallback found no open Library panel and terminated without changing Logic UI.",
+                    precondition: "panel_closed_without_automatic_open",
+                    panelOpenAttempted: false
+                )
+            }
+            panelOpenAttempted = true
             await Self.openLibraryPanelViaKeyCommand(runtime: runtime)
             try? await Task.sleep(nanoseconds: 400_000_000)
             guard LibraryAccessor.isLibraryPanelOpen(runtime: runtime) else {
@@ -2339,7 +2360,7 @@ actor AccessibilityChannel: Channel {
             return Self.terminalLibraryScanUnavailable(
                 hint: "The Library panel was open, but the bounded inventory traversal produced no readable root; the scan terminated without a human continuation.",
                 precondition: "inventory_root_unavailable",
-                panelOpenAttempted: false
+                panelOpenAttempted: panelOpenAttempted
             )
         }
         // v3.1.0 (T6) — AX scan response now includes `source:"panel"` so
@@ -2380,7 +2401,7 @@ actor AccessibilityChannel: Channel {
         let t0 = Date()
         Log.info("scan_all: entering runDiskScan (mode=disk)", subsystem: "ax")
         do {
-            let root = try LibraryDiskScanner.scan()
+            let root = try self.runtime.scanLibraryDisk()
             let durationMs = Int(Date().timeIntervalSince(t0) * 1000)
             Log.info(
                 "scan_all: disk scan ok — \(root.leafCount) leaves, \(root.folderCount) folders in \(durationMs)ms",
@@ -2391,10 +2412,10 @@ actor AccessibilityChannel: Channel {
             return Self.encodeLibraryRoot(root, sourceTag: "disk")
         } catch {
             Log.warn(
-                "scan_all: disk scan failed (\(error)); falling back to AX scan",
+                "scan_all: disk scan failed (\(error)); falling back to non-opening AX scan",
                 subsystem: "ax"
             )
-            return await self.runLiveScan(runtime: runtime)
+            return await self.runLiveScan(runtime: runtime, allowAutoOpen: false)
         }
     }
 
