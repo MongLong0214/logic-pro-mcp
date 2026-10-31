@@ -166,11 +166,30 @@ enum TargetRefResolver {
             }
 
             let tracks = await cache.getTracks()
-            guard let track = tracks.first(where: { $0.id == binding.descriptor.trackIndex }),
-                  TargetDescriptor(trackIndex: track.id, trackName: track.name).fingerprint
-                    .utf8.elementsEqual(binding.descriptor.fingerprint.utf8)
-            else {
-                return .failure(staleTargetReferenceResult(rawReference, operation: operation))
+            let rowsAtIndex = tracks.filter {
+                $0.id == binding.descriptor.trackIndex && $0.liveIdentityBacked
+            }
+            if binding.kind == .pluginInsert {
+                // A complete inventory is an independent native observation and may
+                // precede the poller's first track-cache population. Preserve that
+                // reference while the cache is silent, but fail closed as soon as a
+                // present cache row contradicts or ambiguously duplicates it. The
+                // plug-in channel still revalidates the live Arrange name and insert
+                // identity before opening an editor or attempting a write.
+                guard rowsAtIndex.count <= 1,
+                      rowsAtIndex.allSatisfy({
+                          $0.name.utf8.elementsEqual(binding.descriptor.trackName.utf8)
+                      }) else {
+                    return .failure(staleTargetReferenceResult(rawReference, operation: operation))
+                }
+            } else {
+                guard rowsAtIndex.count == 1,
+                      let track = rowsAtIndex.first,
+                      TargetDescriptor(trackIndex: track.id, trackName: track.name).fingerprint
+                        .utf8.elementsEqual(binding.descriptor.fingerprint.utf8)
+                else {
+                    return .failure(staleTargetReferenceResult(rawReference, operation: operation))
+                }
             }
             await beforeFinalValidation?()
             if let projectFailure = await validateProjectReference(

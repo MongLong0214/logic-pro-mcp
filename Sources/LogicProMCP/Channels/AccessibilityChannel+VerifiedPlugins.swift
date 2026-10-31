@@ -285,6 +285,7 @@ extension AccessibilityChannel {
                 ]
             ))
         }
+        let projectBefore = AXPluginTrackBinding.projectObservation(target, runtime: runtime)
 
         guard let slots = AXLogicProElements.audioPluginInsertSlots(in: target.strip, runtime: runtime.ax) else {
             return .success(HonestContract.encodeV2StateB(
@@ -351,7 +352,7 @@ extension AccessibilityChannel {
         }
         let built = pluginInventoryItems(for: slots)
 
-        return .success(HonestContract.encodeV2StateA(extras: [
+        var extras: [String: Any] = [
             "operation": operation,
             "track": track,
             "plugins_source": "ax",
@@ -363,7 +364,18 @@ extension AccessibilityChannel {
             "track_name": target.trackName,
             "mixer_strip_index": target.mixerStripIndex,
             "plugins": built.items,
-        ]))
+        ]
+        if let before = projectBefore,
+           let after = AXPluginTrackBinding.projectObservation(target, runtime: runtime),
+           before == after {
+            let name = projectName(fromWindowTitle: after.windowTitle)
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            if !name.isEmpty {
+                extras["project_name"] = name
+                extras["project_file_path"] = after.filePath
+            }
+        }
+        return .success(HonestContract.encodeV2StateA(extras: extras))
     }
 
     /// Poll window for the mixer area to appear after a reveal action. #142
