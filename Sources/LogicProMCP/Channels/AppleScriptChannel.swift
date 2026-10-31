@@ -570,7 +570,7 @@ actor AppleScriptChannel: Channel {
             if documentAfterInitialVerification?.hasNameWithoutPath == true {
                 return .error(HonestContract.encodeStateC(
                     error: .unsupportedState,
-                    hint: "project.open terminated after the requested project could not be verified and the current front document path remained unavailable; refusing to close a document whose persistence status was not established, with no safe automated continuation",
+                    hint: "project.open terminated after the requested project could not be verified and the current front document path remained unavailable; refusing to close a document whose persistence status was not established. The accepted open request may still settle after this response, so its final effect remains unknown and it must not be retried.",
                     extras: [
                         "operation": "project.open",
                         "method": "applescript",
@@ -581,9 +581,12 @@ actor AppleScriptChannel: Channel {
                         "human_dependent_transitions": 0,
                         "automatic_precondition_attempts_exhausted": true,
                         "safe_to_retry": false,
+                        "terminal_scope": "mcp_request_only",
+                        "underlying_operation_stopped": false,
+                        "open_effect_status": "unknown_after_verification_failure",
                         "open_request_attempted": true,
                         "close_attempted": false,
-                        "document_preserved": true,
+                        "front_document_observed_after_verification_failure": true,
                         "front_document_path_status": "unavailable",
                         "identity_classification": "name_observed_path_unavailable",
                     ]

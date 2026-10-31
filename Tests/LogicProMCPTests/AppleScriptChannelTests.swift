@@ -53,6 +53,34 @@ actor TransportActionRecorder {
     }
 }
 
+actor DelayedOpenLandingProbe {
+    private var landed = false
+    private var releaseRequested = false
+    private var releaseContinuation: CheckedContinuation<Void, Never>?
+
+    func waitForReleaseAndLand() async {
+        if !releaseRequested {
+            await withCheckedContinuation { continuation in
+                releaseContinuation = continuation
+            }
+        }
+        landed = true
+    }
+
+    func release() {
+        if let releaseContinuation {
+            self.releaseContinuation = nil
+            releaseContinuation.resume()
+        } else {
+            releaseRequested = true
+        }
+    }
+
+    func hasLanded() -> Bool {
+        landed
+    }
+}
+
 final class OpenFileRecorder: @unchecked Sendable {
     private let lock = NSLock()
     private(set) var openedPaths: [String] = []
@@ -289,8 +317,13 @@ private func requireTerminalPathUnavailableReceipt(
     #expect(openRequestAttempted)
     let closeAttempted = try #require(obj["close_attempted"] as? Bool)
     #expect(!closeAttempted)
-    let documentPreserved = try #require(obj["document_preserved"] as? Bool)
-    #expect(documentPreserved)
+    #expect(obj["terminal_scope"] as? String == "mcp_request_only")
+    #expect(obj["open_effect_status"] as? String == "unknown_after_verification_failure")
+    let underlyingStopped = try #require(obj["underlying_operation_stopped"] as? Bool)
+    #expect(!underlyingStopped)
+    #expect(obj["document_preserved"] == nil)
+    let observed = try #require(obj["front_document_observed_after_verification_failure"] as? Bool)
+    #expect(observed)
     #expect(obj["front_document_path_status"] as? String == "unavailable")
     #expect(obj["unsaved_document_preserved"] == nil)
     return obj
@@ -308,6 +341,43 @@ private func requireTerminalPathUnavailableReceipt(
     _ = try requireTerminalPathUnavailableReceipt(fixture.result)
     #expect(fixture.openedPaths == [fixture.path])
     #expect(!fixture.scripts.contains(where: { $0.contains("close front document saving no") }))
+}
+
+@Test func testAppleScriptProjectOpenReportsUnknownEffectWhenAcceptedOpenLandsAfterReply() async throws {
+    let landing = DelayedOpenLandingProbe()
+    let path = "/tmp/delayed.logicx"
+    let channel = AppleScriptChannel(
+        runtime: .init(
+            isLogicProRunning: { true },
+            openFile: { _ in
+                Task { await landing.waitForReleaseAndLand() }
+                return true
+            },
+            runScript: { source in
+                if source.contains("character id 31") {
+                    return .success("\u{001F}Saved Project")
+                }
+                if source.contains("path of front document as text") {
+                    return .error("verification deadline elapsed")
+                }
+                return .success("OK")
+            },
+            executeTransportAction: { _ in .success("OK") }
+        )
+    )
+
+    let result = await channel.execute(operation: "project.open", params: ["path": path])
+    _ = try requireTerminalPathUnavailableReceipt(result)
+    let landedBeforeReply = await landing.hasLanded()
+    #expect(!landedBeforeReply)
+
+    await landing.release()
+    for _ in 0..<100 {
+        if await landing.hasLanded() { break }
+        await Task.yield()
+    }
+    let landedAfterReply = await landing.hasLanded()
+    #expect(landedAfterReply)
 }
 
 @Test func testAppleScriptProjectOpenRestoresPreviousSavedProjectAfterRetryFailure() async {
