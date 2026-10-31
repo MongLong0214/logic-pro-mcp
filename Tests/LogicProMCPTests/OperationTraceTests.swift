@@ -536,10 +536,16 @@ struct OperationTraceTests {
             let fetchedWriteAttempted = fetchedBody["write_attempted"] as? Bool ?? true
             #expect(!fetchedWriteAttempted)
             #expect(try #require(fetchedBody["terminal"] as? Bool))
+            #expect(try #require(fetchedBody["terminal_scope"] as? String) == "mcp_request_only")
             #expect(!(try #require(fetchedBody["safe_to_retry"] as? Bool)))
             #expect(!(try #require(fetchedBody["human_intervention_required"] as? Bool)))
             #expect(try #require(fetchedBody["human_intervention_requests"] as? Int) == 0)
             #expect(try #require(fetchedBody["human_dependent_transitions"] as? Int) == 0)
+            let fetchedHint = try #require(fetchedBody["hint"] as? String)
+            #expect(fetchedHint.localizedCaseInsensitiveContains("terminated"))
+            #expect(!fetchedHint.localizedCaseInsensitiveContains("unset"))
+            #expect(!fetchedHint.localizedCaseInsensitiveContains("set it"))
+            #expect(!fetchedHint.localizedCaseInsensitiveContains("retry"))
 
             let unconfirmed = await SystemDispatcher.handle(
                 command: "clear_traces",
@@ -572,6 +578,7 @@ struct OperationTraceTests {
             let clearedSuccessFlag = clearedBody["success"] as? Bool ?? false
             #expect(!clearedSuccessFlag)
             #expect(try #require(clearedBody["terminal"] as? Bool))
+            #expect(try #require(clearedBody["terminal_scope"] as? String) == "mcp_request_only")
             #expect(!(try #require(clearedBody["safe_to_retry"] as? Bool)))
             #expect(!(try #require(clearedBody["human_intervention_required"] as? Bool)))
             #expect(try #require(clearedBody["human_intervention_requests"] as? Int) == 0)

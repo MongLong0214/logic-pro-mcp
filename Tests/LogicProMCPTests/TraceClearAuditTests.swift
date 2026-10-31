@@ -327,6 +327,7 @@ struct TraceClearAuditTests {
             let writeAttempted = try #require(body["write_attempted"] as? Bool)
             #expect(!writeAttempted)
             #expect(try #require(body["terminal"] as? Bool))
+            #expect(try #require(body["terminal_scope"] as? String) == "mcp_request_only")
             #expect(!(try #require(body["safe_to_retry"] as? Bool)))
             #expect(!(try #require(body["human_intervention_required"] as? Bool)))
             #expect(try #require(body["human_intervention_requests"] as? Int) == 0)
