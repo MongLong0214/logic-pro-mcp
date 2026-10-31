@@ -507,24 +507,32 @@ struct Issue883OwnedNewTrackSheetCleanupTests {
         )
 
         #expect(fixture.pressed.current().first == "leaf", "the menu press seam must fire first")
-        #expect(envelope["state"] as? String == "B")
-        let verified = try #require(envelope["verified"] as? Bool)
+        #expect(envelope["state"] as? String == (dismissalRemovesSheet ? "B" : "C"))
         let dismissAttempted = try #require(cleanup["dismiss_attempted"] as? Bool)
         let dialogPresent = try #require(envelope["dialog_present"] as? Bool)
-        #expect(!verified)
         #expect(envelope["reconciled_modal_kind"] as? String == "mandatory_new_track")
         #expect(fixture.createPresses == 0)
         #expect(fixture.cancelPresses == 1)
         #expect(dismissAttempted)
         if dismissalRemovesSheet {
+            #expect(result.isSuccess)
+            #expect(!(try #require(envelope["verified"] as? Bool)))
             #expect(cleanup["result"] as? String == "observed_closed")
             #expect(!dialogPresent)
             #expect(envelope["waiting_for_user"] == nil)
         } else {
+            #expect(!result.isSuccess)
+            #expect(envelope["verified"] == nil)
             #expect(cleanup["result"] as? String == "not_observed_closed")
             #expect(dialogPresent)
-            let waitingForUser = try #require(envelope["waiting_for_user"] as? Bool)
-            #expect(waitingForUser)
+            #expect(envelope["waiting_for_user"] == nil)
+            #expect(envelope["error"] as? String == "unsupported_state")
+            #expect(try #require(envelope["terminal"] as? Bool))
+            #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+            #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+            #expect(envelope["human_intervention_requests"] as? Int == 0)
+            #expect(envelope["human_dependent_transitions"] as? Int == 0)
+            #expect(try #require(envelope["automatic_precondition_attempts_exhausted"] as? Bool))
         }
     }
 

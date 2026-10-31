@@ -31,9 +31,13 @@ struct SystemDispatcher: OperationTraceDispatching {
             error: .consentRequired,
             hint: "One-time setup changes Logic's Key Commands configuration so tracks can arm "
                 + "coordinate-free. The server drives the Key Commands window on your behalf (no mouse). "
-                + "Re-run with consent:\"true\" to proceed.",
+                + "No configuration change was attempted because this request has no accepted setup "
+                + "authorization. The request terminated.",
             extras: ["stage": "consent", "write_source": "none",
-                     "write_attempted": false, "configuration_write_attempted": false]
+                     "write_attempted": false, "configuration_write_attempted": false,
+                     "terminal": true, "safe_to_retry": false,
+                     "human_intervention_required": false,
+                     "human_intervention_requests": 0, "human_dependent_transitions": 0]
         ), isError: true)
     }
 
@@ -48,9 +52,13 @@ struct SystemDispatcher: OperationTraceDispatching {
             hint: "One-time setup installs the \"\(ControlSurfaceSetup.model)\" control surface into Logic "
                 + "and binds its Output and Input ports to \"\(ControlSurfaceSetup.portName)\", which is what "
                 + "makes every MCU operation take effect. The server drives Logic's Control Surface Setup "
-                + "window on your behalf (no mouse). Re-run with consent:\"true\" to proceed.",
+                + "window on your behalf (no mouse). No configuration change was attempted because this "
+                + "request has no accepted setup authorization. The request terminated.",
             extras: ["stage": "consent", "write_source": "none",
-                     "write_attempted": false, "configuration_write_attempted": false]
+                     "write_attempted": false, "configuration_write_attempted": false,
+                     "terminal": true, "safe_to_retry": false,
+                     "human_intervention_required": false,
+                     "human_intervention_requests": 0, "human_dependent_transitions": 0]
         ), isError: true)
     }
 
@@ -630,9 +638,13 @@ struct SystemDispatcher: OperationTraceDispatching {
                 armResult = toolTextResult(HonestContract.encodeStateC(
                     error: .consentRequired,
                     hint: "One-time setup assigns Logic's \"\(ArmKeyCommandSetup.commandName)\" command to "
-                        + "\(chordText) so tracks arm coordinate-free. Re-run with consent:\"true\" to proceed.",
+                        + "\(chordText) so tracks arm coordinate-free. The setup drive did not accept "
+                        + "authorization, so no configuration change was attempted and the request terminated.",
                     extras: ["stage": "consent", "chord": chordText, "write_source": "none",
-                             "write_attempted": false, "configuration_write_attempted": false]
+                             "write_attempted": false, "configuration_write_attempted": false,
+                             "terminal": true, "safe_to_retry": false,
+                             "human_intervention_required": false,
+                             "human_intervention_requests": 0, "human_dependent_transitions": 0]
                 ), isError: true)
             case .configInvalid(let hint):
                 armResult = toolTextResult(HonestContract.encodeStateC(
