@@ -1915,7 +1915,7 @@ actor AccessibilityChannel: Channel {
 
         // MARK: - Library (instrument patch) operations
         case "library.list":
-            return AccessibilityChannel.listLibrary(runtime: runtime.logicRuntime)
+            return await AccessibilityChannel.listLibrary(runtime: runtime.logicRuntime)
         case "library.scan_all":
             // E15: atomic check-and-set within actor step (no suspension points).
             // Library and plugin AX scans are mutually exclusive — either one in

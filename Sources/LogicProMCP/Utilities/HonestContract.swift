@@ -252,8 +252,9 @@ enum HonestContract {
         /// it appear before the bounded re-check. The patch was never attempted.
         /// Distinct from `.axWriteFailed` (a navigation write was rejected) and
         /// `.elementNotFound` (a specific row absent): the whole panel UI the
-        /// op needs is not present. Recovery: open the Library (⌘L) in Logic
-        /// Pro and retry. v3.6.x (#131/#135/#141 canonical hardening).
+        /// op needs is not present. The operation's bounded automatic panel-open
+        /// attempt is exhausted; it terminates without a human continuation.
+        /// v3.6.x (#131/#135/#141 canonical hardening).
         case libraryPanelUnavailable = "library_panel_unavailable"
         /// `track.set_instrument` targeted a track whose channel-strip type
         /// cannot host a software-instrument patch (GM Device / External MIDI).
