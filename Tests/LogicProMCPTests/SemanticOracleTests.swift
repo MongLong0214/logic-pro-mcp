@@ -1655,6 +1655,10 @@ struct SemanticOracleMutationTests {
             responseData: Data(#"{"schema":"logic_pro_mcp_export_run.v1","run_id":"r","mode":"run","confirmed":true,"status":"completed","output_root":"/x","collision_policy":"fail_if_exists","project_count":1,"artifacts_total":2,"artifacts_verified":1,"artifacts_skipped":0,"artifacts_uncertain":0,"artifacts_failed":1,"projects":[{"index":0,"project_path":"/x/a.logicx","display_name":"a","observed_project_path":"/x/a.logicx","identity_verified":true,"opened":true,"artifacts":[]}],"next_safe_action":"verify_artifacts_with_logic_audio"}"#.utf8),
             readbackData: Data("{}".utf8)) == true
         #expect(!mislabelledCompleted, "export_run accepted a completed status with a failed artifact")
+        let missingOutcomeContract: Bool = run.evaluate(
+            responseData: Data(#"{"schema":"logic_pro_mcp_export_run.v1","run_id":"r","mode":"run","confirmed":true,"status":"completed","output_root":"/x","collision_policy":"fail_if_exists","project_count":1,"artifacts_total":1,"artifacts_verified":1,"artifacts_skipped":0,"artifacts_uncertain":0,"artifacts_failed":0,"projects":[{"index":0,"project_path":"/x/a.logicx","display_name":"a","observed_project_path":"/x/a.logicx","identity_verified":true,"opened":true,"artifacts":[]}],"next_safe_action":"verify_artifacts_with_logic_audio"}"#.utf8),
+            readbackData: Data("{}".utf8)) == true
+        #expect(!missingOutcomeContract, "export_run accepted a completed run without its terminal/zero-human contract")
 
         // TOGGLE representative: edit.toggle_step_input rejects a no-op — the window
         // open-state did not change (observed_open == previous_open), so it is not a

@@ -6,6 +6,12 @@ struct ProjectExportRunResult: Codable, Sendable, Equatable {
     let mode: String
     let confirmed: Bool
     let status: String
+    let success: Bool
+    let terminal: Bool
+    let safeToRetry: Bool
+    let humanInterventionRequired: Bool
+    let humanInterventionRequests: Int
+    let humanDependentTransitions: Int
     let outputRoot: String
     let collisionPolicy: String
     let projectCount: Int
@@ -26,6 +32,12 @@ struct ProjectExportRunResult: Codable, Sendable, Equatable {
         case mode
         case confirmed
         case status
+        case success
+        case terminal
+        case safeToRetry = "safe_to_retry"
+        case humanInterventionRequired = "human_intervention_required"
+        case humanInterventionRequests = "human_intervention_requests"
+        case humanDependentTransitions = "human_dependent_transitions"
         case outputRoot = "output_root"
         case collisionPolicy = "collision_policy"
         case projectCount = "project_count"
