@@ -28,8 +28,8 @@ enum EventListReadbackCollector {
     /// else; this entry refuses instead, because "it only observes" is the whole reason a release
     /// binary is allowed to reach it. A press is small, but it is still actuation the shipped
     /// artifact could not previously perform on this path, and a claim of observation that quietly
-    /// actuates is the defect this collector exists to make impossible. Selecting the Event tab is
-    /// the driver's job, before the probe runs.
+    /// actuates is the defect this collector exists to make impossible. If the exact observation
+    /// precondition is absent, the probe terminates without requesting a UI continuation.
     /// What one probe run actually saw. `rows` alone was not enough to prove anything about the
     /// header: `RawEventRow` is keyed by `AXColumnID`s minted from `expectedHeaderTitles`, so a
     /// harness reading those keys compares the canonical English constants against themselves and
@@ -1190,8 +1190,7 @@ enum EventListProbeRefusal: Error, Equatable, Sendable, CustomStringConvertible 
     var description: String {
         switch self {
         case .eventTabNotSelected:
-            return "Event List tab is not selected. This entry observes and will not select it; "
-                + "open the Event List and choose the Event tab first."
+            return "Event List tab is not selected. This read-only probe terminated without changing the Event List; no observation was produced."
         }
     }
 }
