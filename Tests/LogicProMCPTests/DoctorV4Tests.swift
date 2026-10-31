@@ -47,7 +47,7 @@ private func doctorV4Runtime(
     runtime.shareDirProbe = { .complete(path: "/opt/homebrew/share/logic-pro-mcp", source: "brew_pkgshare") }
     runtime.readClaudeDesktopRegistration = { desktopRegistration }
     runtime.keyCommandsPresetStaged = { true }
-    runtime.mcuPortReferenceFound = { true }
+    runtime.mcuPortReferenceProbe = { .found }
     runtime.launchContext = { launchContext }
     runtime.tccCrossContextProbe = { .granted("terminal:accessibility=granted") }
     runtime.blockingDialogInfo = { nil }

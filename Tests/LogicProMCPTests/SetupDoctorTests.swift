@@ -59,7 +59,7 @@ private func doctorRuntime(
     runtime.shareDirProbe = { .complete(path: "/opt/homebrew/share/logic-pro-mcp", source: "brew_pkgshare") }
     runtime.readClaudeDesktopRegistration = { .registered(command: "/Applications/Claude.app/Contents/MacOS/Claude") }
     runtime.keyCommandsPresetStaged = { true }
-    runtime.mcuPortReferenceFound = { true }
+    runtime.mcuPortReferenceProbe = { .found }
     runtime.launchContext = { SetupDoctor.LaunchContextInfo(context: "terminal", responsibleHint: "Terminal") }
     runtime.tccCrossContextProbe = { .granted("terminal:accessibility=granted") }
     runtime.blockingDialogInfo = { nil }
@@ -234,11 +234,15 @@ private func issue26RepositoryRootURL() -> URL {
 }
 
 @Test func testMCUWiringHintTerminatesMissingOrUnreadableStateWithoutHumanAction() {
-    let observations: [Bool?] = [false, nil]
+    let observations: [(SetupDoctor.MCUPortReferenceProbe, String)] = [
+        (.confirmedAbsent, "confirmed_absent"),
+        (.sourceMissing, "source_missing"),
+        (.indeterminate(reason: "timeout"), "indeterminate"),
+    ]
 
-    for observation in observations {
+    for (observation, outcome) in observations {
         var runtime = doctorRuntime()
-        runtime.mcuPortReferenceFound = { observation }
+        runtime.mcuPortReferenceProbe = { observation }
 
         let check = SetupDoctor.mcuWiringHintCheck(runtime: runtime, profile: .full)
 
@@ -248,6 +252,7 @@ private func issue26RepositoryRootURL() -> URL {
         #expect(check.evidence["terminal"] == "true")
         #expect(check.evidence["human_intervention_required"] == "false")
         #expect(check.evidence["human_intervention_requests"] == "0")
+        #expect(check.evidence["assignment_probe"] == outcome)
         #expect(!check.summary.localizedCaseInsensitiveContains("ignore"))
     }
 }
@@ -836,6 +841,48 @@ private func issue26RepositoryRootURL() -> URL {
     )
     #expect(result == .timedOut)
     #expect(result.output == nil)
+}
+
+@Test func testProductionMCUPortReferenceProbeKeepsCommandFailuresIndeterminate() {
+    let failures: [(SetupDoctor.CommandResult, String)] = [
+        (.completed(.init(exitCode: 1, stdout: "", stderr: "unreadable")), "non_zero_exit"),
+        (.timedOut, "timeout"),
+        (.spawnFailed("missing"), "spawn_failed"),
+        (.notAllowlisted, "allowlist_rejected"),
+    ]
+
+    for (result, reason) in failures {
+        let probe = SetupDoctor.productionMCUPortReferenceProbe(
+            fileExistsAtPath: { _ in true },
+            runCommand: { _, _, _ in result }
+        )
+
+        #expect(probe == .indeterminate(reason: reason))
+    }
+}
+
+@Test func testProductionMCUPortReferenceProbeDistinguishesObservedStates() {
+    let missing = SetupDoctor.productionMCUPortReferenceProbe(
+        fileExistsAtPath: { _ in false },
+        runCommand: { _, _, _ in
+            Issue.record("A missing assignment file must not spawn strings")
+            return .timedOut
+        }
+    )
+    #expect(missing == .sourceMissing)
+
+    for (stdout, expected) in [
+        ("unrelated assignment", SetupDoctor.MCUPortReferenceProbe.confirmedAbsent),
+        ("LogicProMCP-MCU-Internal", .found),
+    ] {
+        let probe = SetupDoctor.productionMCUPortReferenceProbe(
+            fileExistsAtPath: { _ in true },
+            runCommand: { _, _, _ in
+                .completed(.init(exitCode: 0, stdout: stdout, stderr: ""))
+            }
+        )
+        #expect(probe == expected)
+    }
 }
 
 // MARK: - Entrypoint exit-code contract

@@ -285,6 +285,13 @@ enum SetupDoctor {
         case indeterminate([String])
     }
 
+    enum MCUPortReferenceProbe: Equatable, Sendable {
+        case found
+        case confirmedAbsent
+        case sourceMissing
+        case indeterminate(reason: String)
+    }
+
     struct Runtime: @unchecked Sendable {
         let resolveExecutablePath: (String?) -> String?
         let fileExists: (String) -> Bool
@@ -306,7 +313,9 @@ enum SetupDoctor {
         var shareDirProbe: () -> ShareDirProbe = { SetupDoctor.productionShareDirProbe() }
         var readClaudeDesktopRegistration: () -> ClaudeRegistration = { SetupDoctor.readProductionClaudeDesktopRegistration() }
         var keyCommandsPresetStaged: () -> Bool = { SetupDoctor.productionKeyCommandsPresetStaged() }
-        var mcuPortReferenceFound: () -> Bool? = { SetupDoctor.productionMCUPortReferenceFound() }
+        var mcuPortReferenceProbe: () -> MCUPortReferenceProbe = {
+            SetupDoctor.productionMCUPortReferenceProbe()
+        }
         var launchContext: () -> LaunchContextInfo = { SetupDoctor.productionLaunchContext() }
         var tccCrossContextProbe: () -> TCCCrossContextProbe = { SetupDoctor.productionTCCCrossContextProbe() }
         var blockingDialogInfo: () -> AXLogicProElements.BlockingDialogInfo? = {
