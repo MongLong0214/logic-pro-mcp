@@ -158,7 +158,17 @@ struct TraceClearAuditTests {
             let storeCleared = try #require(body["store_cleared"] as? Bool)
             #expect(!storeCleared)
             #expect(body["write_attempted"] == nil)
-            #expect(try #require(body["hint"] as? String).contains("left intact"))
+            let hint = try #require(body["hint"] as? String)
+            #expect(hint.contains("left intact"))
+            #expect(!hint.localizedCaseInsensitiveContains("fix"))
+            #expect(!hint.localizedCaseInsensitiveContains("retry"))
+            #expect(try #require(body["terminal"] as? Bool))
+            #expect(try #require(body["terminal_scope"] as? String) == "mcp_request_only")
+            #expect(!(try #require(body["safe_to_retry"] as? Bool)))
+            #expect(try #require(body["automatic_precondition_attempts_exhausted"] as? Bool))
+            #expect(!(try #require(body["human_intervention_required"] as? Bool)))
+            #expect(try #require(body["human_intervention_requests"] as? Int) == 0)
+            #expect(try #require(body["human_dependent_transitions"] as? Int) == 0)
 
             // Fail-closed: nothing was cleared.
             #expect(await OperationTraceStore.shared.recent(limit: 128).count == 2)

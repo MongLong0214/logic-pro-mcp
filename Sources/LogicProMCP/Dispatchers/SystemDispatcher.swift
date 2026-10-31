@@ -2109,10 +2109,19 @@ struct SystemDispatcher: OperationTraceDispatching {
                 return toolStateCResult(
                     .traceClearReceiptFailed,
                     hint: "clear_traces refused: the durable audit receipt could not be written; "
-                        + "the trace store was left intact. Fix the audit-log location and retry.",
+                        + "the trace store was left intact. This MCP request terminated without clearing it.",
                     // The receipt write WAS attempted (and failed); what the
                     // caller needs to know is that the STORE is untouched.
-                    extras: ["store_cleared": false]
+                    extras: [
+                        "store_cleared": false,
+                        "terminal": true,
+                        "terminal_scope": "mcp_request_only",
+                        "safe_to_retry": false,
+                        "automatic_precondition_attempts_exhausted": true,
+                        "human_intervention_required": false,
+                        "human_intervention_requests": 0,
+                        "human_dependent_transitions": 0,
+                    ]
                 )
             }
             let actualCleared = await OperationTraceStore.shared.clearReturningCount()
