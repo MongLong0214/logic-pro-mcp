@@ -266,7 +266,7 @@ Reports whether the selected Claude Code client already has an exact LogicProMCP
 
 <a id="doctor-mcpregistration-target"></a>
 ### `mcp.registration_target`
-Refresh the Claude Code MCP registration when its command is missing, relative, not executable, or stale.
+Reports whether the selected registration target resolves to a present regular executable. When a share directory is configured, doctor checks that it exists; when the installed version is readable, doctor compares it with the running version. A detected invalid target, missing configured share directory, or readable version mismatch is a terminal unavailable state for this read-only run; doctor emits no remediation action or continuation.
 
 <a id="doctor-mcpclaude-desktop-registration"></a>
 ### `mcp.claude_desktop_registration`

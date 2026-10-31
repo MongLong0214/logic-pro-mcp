@@ -118,6 +118,18 @@ private func issue26RepositoryRootURL() -> URL {
         #expect(!permissionAnchors.contains(staleContinuation))
     }
     #expect(permissionAnchors.contains("terminal observation"))
+
+    let targetStart = try #require(setup.range(of: "<a id=\"doctor-mcpregistration-target\"></a>"))
+    let targetTail = setup[targetStart.lowerBound...]
+    let nextAnchor = try #require(targetTail.dropFirst().range(of: "<a id="))
+    let targetAnchor = String(targetTail[..<nextAnchor.lowerBound])
+    for staleContinuation in ["Refresh ", "refresh ", "command", "config-edit", "retry"] {
+        #expect(!targetAnchor.contains(staleContinuation))
+    }
+    #expect(targetAnchor.contains("terminal unavailable state"))
+    #expect(targetAnchor.contains("When a share directory is configured"))
+    #expect(targetAnchor.contains("when the installed version is readable"))
+    #expect(!targetAnchor.contains("with a valid share directory and matching version"))
 }
 
 @Test func testSetupDoctorJSONContractStableCheckIDsAndOKAggregation() throws {
