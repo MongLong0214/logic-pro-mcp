@@ -178,7 +178,7 @@ extension SetupDoctor {
         return check(
             id: "dependencies.click_fallback",
             domain: "dependencies",
-            status: nativeAvailable ? .pass : .warn,
+            status: nativeAvailable ? .pass : .fail,
             summary: nativeAvailable
                 ? "The native synthetic-click path is available (PostEvent granted); no fallback is used."
                 : "No working click path: PostEvent is denied, and the external click-tool fallback "
@@ -186,8 +186,11 @@ extension SetupDoctor {
             evidence: [
                 fallbackTool: (fallbackToolPresent ? "present" : "absent") + " (informational; retired as a server path)",
                 "native_click": nativeAvailable ? "available" : "denied",
+                "terminal": String(!nativeAvailable),
+                "human_intervention_required": "false",
+                "human_intervention_requests": "0",
             ],
-            remediationType: nativeAvailable ? .none : .docs
+            remediationType: .none
         )
     }
 

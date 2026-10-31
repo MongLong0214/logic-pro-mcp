@@ -228,6 +228,7 @@ private func issue26RepositoryRootURL() -> URL {
         "permissions.automation_system_events",
         "permissions.post_event_access",
         "channels.manual_validation",
+        "dependencies.click_fallback",
     ]
     for check in report.checks where check.status != .pass && !check.optional {
         if terminalOutcomeIDs.contains(check.id) {

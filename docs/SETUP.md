@@ -340,7 +340,10 @@ placed in `fix_plan`.
 
 <a id="doctor-dependenciesclick-fallback"></a>
 ### `dependencies.click_fallback`
-The server's only synthetic-click path is the native CGEvent post, which requires PostEvent access — grant it in System Settings ▸ Privacy & Security ▸ Accessibility. The external `cliclick` fallback was retired (a present tool is no longer used by the server and is reported as informational evidence only).
+The server's only synthetic-click path is the native CGEvent post. When PostEvent access is denied,
+this check is a terminal unsuccessful outcome and adds no operator action to `fix_plan`. The external
+`cliclick` fallback remains retired; a present tool is reported as informational evidence only and
+cannot turn the check into a pass.
 
 ## Lifecycle Anchors
 
