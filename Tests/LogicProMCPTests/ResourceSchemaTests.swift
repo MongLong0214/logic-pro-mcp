@@ -561,11 +561,11 @@ func testHealthResponseExposesChannelVerificationStatus() async {
     let router = ChannelRouter()
     await router.register(MockChannel(id: .midiKeyCommands, healthOverride: .healthy(
         detail: "Preset installation is not verifiable programmatically",
-        verificationStatus: .manualValidationRequired
+        verificationStatus: .unattendedUnavailable
     )))
     await router.register(MockChannel(id: .scripter, healthOverride: .healthy(
         detail: "Scripter insertion is not verifiable programmatically",
-        verificationStatus: .manualValidationRequired
+        verificationStatus: .unattendedUnavailable
     )))
 
     let result = await SystemDispatcher.handle(command: "health", params: [:], router: router, cache: cache)
@@ -576,10 +576,14 @@ func testHealthResponseExposesChannelVerificationStatus() async {
         return (name, entry)
     })
 
-    #expect(byName["MIDIKeyCommands"]?["verification_status"] as? String == "manual_validation_required")
+    #expect(byName["MIDIKeyCommands"]?["verification_status"] as? String == "unattended_unavailable")
     #expect(!((byName["MIDIKeyCommands"]?["ready"] as? Bool)!))
-    #expect(byName["Scripter"]?["verification_status"] as? String == "manual_validation_required")
+    #expect(byName["Scripter"]?["verification_status"] as? String == "unattended_unavailable")
     #expect(!((byName["Scripter"]?["ready"] as? Bool)!))
+}
+
+@Test func channelVerificationStatusHasNoManualFallbackState() {
+    #expect(ChannelVerificationStatus(rawValue: "manual_validation_required") == nil)
 }
 
 @Test(processInspectionUnavailableInSandbox)

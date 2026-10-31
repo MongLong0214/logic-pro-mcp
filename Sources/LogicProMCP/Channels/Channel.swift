@@ -21,7 +21,6 @@ enum ChannelResult: Sendable {
 /// Health status of a channel.
 enum ChannelVerificationStatus: String, Sendable {
     case runtimeReady = "runtime_ready"
-    case manualValidationRequired = "manual_validation_required"
     case unattendedUnavailable = "unattended_unavailable"
     case unavailable = "unavailable"
 }
