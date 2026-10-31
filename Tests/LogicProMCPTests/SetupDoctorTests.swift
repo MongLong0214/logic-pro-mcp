@@ -126,6 +126,14 @@ private func issue26RepositoryRootURL() -> URL {
         #expect(!mcuGuidance.contains(staleContinuation))
     }
     #expect(mcuGuidance.contains("terminal unsuccessful outcome"))
+
+    let clickStart = try #require(setup.range(of: "<a id=\"doctor-dependenciesclick-fallback\"></a>"))
+    let clickEnd = try #require(setup.range(of: "## Lifecycle Anchors"))
+    let clickGuidance = String(setup[clickStart.lowerBound..<clickEnd.lowerBound])
+    for staleContinuation in ["grant ", "System Settings", "Privacy & Security", "manual"] {
+        #expect(!clickGuidance.contains(staleContinuation))
+    }
+    #expect(clickGuidance.contains("terminal unsuccessful outcome"))
 }
 
 @Test func testSetupDoctorJSONContractStableCheckIDsAndOKAggregation() throws {
@@ -1004,15 +1012,20 @@ private func registrationFromTemporaryConfig(_ json: String) -> SetupDoctor.Clau
 
 /// The external click-tool fallback was retired: a PRESENT external tool must
 /// no longer mask a PostEvent denial as a passing click path (that was a
-/// false-green about server capability). Warn is driven by PostEvent alone.
-@Test func clickFallbackWarnsOnPostEventDenialEvenWithExternalToolPresent() {
+/// false-green about server capability). Terminal failure is driven by PostEvent alone.
+@Test func clickFallbackTerminatesPostEventDenialEvenWithExternalToolPresent() {
     let runtime = doctorRuntime(executable: true)   // every path "is executable" → tool present
     let status = PermissionChecker.PermissionStatus(
         accessibility: true, automationLogicPro: true, postEventAccess: false
     )
     let check = SetupDoctor.clickFallbackCheck(runtime: runtime, permissionStatus: status)
-    #expect(check.status == .warn)
+    #expect(check.status == .fail)
+    #expect(check.remediation.type == .none)
+    #expect(check.remediation.value.isEmpty)
     #expect(check.evidence["native_click"] == "denied")
+    #expect(check.evidence["terminal"] == "true")
+    #expect(check.evidence["human_intervention_required"] == "false")
+    #expect(check.evidence["human_intervention_requests"] == "0")
 }
 
 @Test func clickFallbackPassesOnPostEventGrantWithoutExternalTool() {
@@ -1022,5 +1035,10 @@ private func registrationFromTemporaryConfig(_ json: String) -> SetupDoctor.Clau
     )
     let check = SetupDoctor.clickFallbackCheck(runtime: runtime, permissionStatus: status)
     #expect(check.status == .pass)
+    #expect(check.remediation.type == .none)
+    #expect(check.remediation.value.isEmpty)
     #expect(check.evidence["native_click"] == "available")
+    #expect(check.evidence["terminal"] == "false")
+    #expect(check.evidence["human_intervention_required"] == "false")
+    #expect(check.evidence["human_intervention_requests"] == "0")
 }
