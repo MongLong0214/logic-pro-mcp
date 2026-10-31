@@ -171,4 +171,33 @@ struct ProjectAuditPhaseTests {
     #expect(!audits.contains { $0.contains("project.export_run rejected") })
 }
 
+@Test func cleanupApplyTerminalAuthorizationRefusalsLogRejected() async throws {
+    let cases: [[String: Value]] = [
+        ["step_id": .string("rename_duplicate_kick_0_1")],
+        ["step_id": .string("rename_duplicate_kick_0_1"), "confirmed": .bool(false)],
+    ]
+
+    for params in cases {
+        let captured = await captureAuditLines {
+            let result = await ProjectDispatcher.handle(
+                command: "cleanup_apply",
+                params: params,
+                router: ChannelRouter(),
+                cache: StateCache()
+            )
+            let body = sharedJSONObject(sharedToolText(result))
+            #expect(body != nil)
+            if let body {
+                let terminal = body["terminal"] as? Bool
+                #expect(terminal != nil)
+                if let terminal { #expect(terminal) }
+            }
+        }
+        let audits = projectAudits(captured)
+        #expect(audits.contains { $0.contains("project.cleanup_apply rejected") })
+        #expect(!audits.contains { $0.contains("project.cleanup_apply confirmation_required") })
+        #expect(!audits.contains { $0.contains("project.cleanup_apply executed") })
+    }
+}
+
 }  // end @Suite(.serialized) struct ProjectAuditPhaseTests

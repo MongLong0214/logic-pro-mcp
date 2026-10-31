@@ -1247,6 +1247,30 @@ struct SemanticOracleMutationTests {
         #expect(verdict, "\(operationID.rawValue) rejected its own realistic fixture")
     }
 
+    @Test func projectExportPlanOraclePinsEachStatusToItsOnlySafeContinuation() throws {
+        let oracle = try #require(SemanticOracleTable.byOperationID[.projectExportPlan])
+        let common = #""schema":"logic_pro_mcp_export_manifest.v1","execution_mode":"dry_run_only","project_count":1,"projects":[{}]"#
+        let cases: [(status: String, action: String, accepted: Bool)] = [
+            ("planned", "execute_export_run", true),
+            ("degraded", "none_terminal", true),
+            ("planned", "none_terminal", false),
+            ("degraded", "execute_export_run", false),
+        ]
+
+        for testCase in cases {
+            let response = Data("{\(common),\"status\":\"\(testCase.status)\",\"next_safe_action\":\"\(testCase.action)\"}".utf8)
+            let verdict = try #require(oracle.evaluate(
+                responseData: response,
+                readbackData: Data("{}".utf8)
+            ))
+            if testCase.accepted {
+                #expect(verdict, "rejected valid pair \(testCase.status) + \(testCase.action)")
+            } else {
+                #expect(!verdict, "accepted crossed pair \(testCase.status) + \(testCase.action)")
+            }
+        }
+    }
+
     @Test("Solo keyboard State A passes qualification")
     func soloKeyboardStateAPassesQualification() throws {
         let oracle = try #require(SemanticOracleTable.byOperationID[.tracksSolo])
@@ -1646,7 +1670,7 @@ struct SemanticOracleMutationTests {
         #expect(runGreen, "export_run rejected its own completed-run fixture")
         // status:"partial" — an honest partial run must not read as a verified pass.
         let partialRun: Bool = run.evaluate(
-            responseData: Data(#"{"schema":"logic_pro_mcp_export_run.v1","run_id":"r","mode":"run","confirmed":true,"status":"partial","output_root":"/x","collision_policy":"fail_if_exists","project_count":1,"artifacts_total":2,"artifacts_verified":1,"artifacts_skipped":0,"artifacts_uncertain":0,"artifacts_failed":1,"projects":[{"index":0,"project_path":"/x/a.logicx","display_name":"a","observed_project_path":"/x/a.logicx","identity_verified":true,"opened":true,"artifacts":[]}],"next_safe_action":"review_then_export_resume"}"#.utf8),
+            responseData: Data(#"{"schema":"logic_pro_mcp_export_run.v1","run_id":"r","mode":"run","confirmed":true,"status":"partial","output_root":"/x","collision_policy":"fail_if_exists","project_count":1,"artifacts_total":2,"artifacts_verified":1,"artifacts_skipped":0,"artifacts_uncertain":0,"artifacts_failed":1,"projects":[{"index":0,"project_path":"/x/a.logicx","display_name":"a","observed_project_path":"/x/a.logicx","identity_verified":true,"opened":true,"artifacts":[]}],"next_safe_action":"none_terminal"}"#.utf8),
             readbackData: Data("{}".utf8)) == true
         #expect(!partialRun, "export_run accepted a partial run")
         // status forged "completed" while a failed artifact remains — the
@@ -1655,6 +1679,10 @@ struct SemanticOracleMutationTests {
             responseData: Data(#"{"schema":"logic_pro_mcp_export_run.v1","run_id":"r","mode":"run","confirmed":true,"status":"completed","output_root":"/x","collision_policy":"fail_if_exists","project_count":1,"artifacts_total":2,"artifacts_verified":1,"artifacts_skipped":0,"artifacts_uncertain":0,"artifacts_failed":1,"projects":[{"index":0,"project_path":"/x/a.logicx","display_name":"a","observed_project_path":"/x/a.logicx","identity_verified":true,"opened":true,"artifacts":[]}],"next_safe_action":"verify_artifacts_with_logic_audio"}"#.utf8),
             readbackData: Data("{}".utf8)) == true
         #expect(!mislabelledCompleted, "export_run accepted a completed status with a failed artifact")
+        let missingOutcomeContract: Bool = run.evaluate(
+            responseData: Data(#"{"schema":"logic_pro_mcp_export_run.v1","run_id":"r","mode":"run","confirmed":true,"status":"completed","output_root":"/x","collision_policy":"fail_if_exists","project_count":1,"artifacts_total":1,"artifacts_verified":1,"artifacts_skipped":0,"artifacts_uncertain":0,"artifacts_failed":0,"projects":[{"index":0,"project_path":"/x/a.logicx","display_name":"a","observed_project_path":"/x/a.logicx","identity_verified":true,"opened":true,"artifacts":[]}],"next_safe_action":"verify_artifacts_with_logic_audio"}"#.utf8),
+            readbackData: Data("{}".utf8)) == true
+        #expect(!missingOutcomeContract, "export_run accepted a completed run without its terminal/zero-human contract")
 
         // TOGGLE representative: edit.toggle_step_input rejects a no-op — the window
         // open-state did not change (observed_open == previous_open), so it is not a

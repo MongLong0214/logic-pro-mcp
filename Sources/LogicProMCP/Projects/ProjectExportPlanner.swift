@@ -83,7 +83,7 @@ enum ProjectExportPlanner {
             enhancementPath: [
                 "After a real bounce/export, verify each produced artifact with logic_audio.analyze_file (logic_pro_mcp_audio_analysis.v1) for duration, non-silence, peak/clipping, sample-rate, channels, and honest loudness estimates.",
             ],
-            nextSafeAction: "review_export_plan"
+            nextSafeAction: status == "planned" ? "execute_export_run" : "none_terminal"
         )
     }
 

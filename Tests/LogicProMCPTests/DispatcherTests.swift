@@ -1761,7 +1761,7 @@ func testTransportDispatcherStillnessRefusalsBeforeTheKeyAreStateC(
     ])
 }
 
-@Test func testMixerDispatcherInsertPluginRequiresConfirmation() async {
+@Test func testMixerDispatcherInsertPluginRequiresConfirmation() async throws {
     let router = ChannelRouter()
     let ax = MockChannel(id: .accessibility)
     await router.register(ax)
@@ -1775,11 +1775,22 @@ func testTransportDispatcherStillnessRefusalsBeforeTheKeyAreStateC(
     )
 
     let resultIsError = result.isError ?? false
-    #expect(!resultIsError)
+    #expect(resultIsError)
     if case .text(let text, _, _) = result.content.first {
-        #expect(text.contains("\"confirmation_required\""))
-        #expect(text.contains("\"command\":\"insert_plugin\""))
-        #expect(text.contains("\"level\":\"L2\""))
+        let object = try #require(parseDispatcherObject(text))
+        #expect(object["status"] as? String == "confirmation_required")
+        #expect(object["state"] as? String == "C")
+        #expect(object["command"] as? String == "insert_plugin")
+        #expect(object["level"] as? String == "L2")
+        let terminal = try #require(object["terminal"] as? Bool)
+        #expect(terminal)
+        let writeAttempted = try #require(object["write_attempted"] as? Bool)
+        #expect(!writeAttempted)
+        let humanInterventionRequired = try #require(object["human_intervention_required"] as? Bool)
+        #expect(!humanInterventionRequired)
+        #expect(object["human_intervention_requests"] as? Int == 0)
+        #expect(object["human_dependent_transitions"] as? Int == 0)
+        #expect(object["confirm_command"] == nil)
     } else {
         Issue.record("Expected confirmation_required text for insert_plugin")
     }
@@ -3135,15 +3146,28 @@ func testEditDispatcherQuantizeCarriesTheExactValidAlias(_ input: String) async 
 
 // MARK: - ProjectDispatcher + DestructivePolicy
 
-@Test func testProjectDispatcherQuitRequiresConfirmation() async {
+@Test func testProjectDispatcherL3CommandsRequireConfirmation() async throws {
     let router = ChannelRouter()
     let cache = StateCache()
 
-    let result = await ProjectDispatcher.handle(command: "quit", params: [:], router: router, cache: cache)
-    // Should return confirmation_required, not actually quit
-    #expect(!result.isError!)
-    if case .text(let text, _, _) = result.content.first {
-        #expect(text.contains("confirmation_required"))
+    for command in ["close", "quit"] {
+        let result = await ProjectDispatcher.handle(
+            command: command,
+            params: [:],
+            router: router,
+            cache: cache
+        )
+        // Missing confirmation terminates the request without performing it.
+        let isError = try #require(result.isError)
+        #expect(isError)
+        let body = try #require(parseDispatcherObject(dispatcherText(result)))
+        #expect(body["status"] as? String == "confirmation_required")
+        #expect(body["state"] as? String == "C")
+        let terminal = try #require(body["terminal"] as? Bool)
+        #expect(terminal)
+        let writeAttempted = try #require(body["write_attempted"] as? Bool)
+        #expect(!writeAttempted)
+        #expect(body["confirm_command"] == nil)
     }
 }
 
@@ -3166,12 +3190,16 @@ func testEditDispatcherQuantizeCarriesTheExactValidAlias(_ input: String) async 
         cache: cache
     )
     for result in [openResult, saveAsResult] {
-        #expect(!result.isError!)
-        if case .text(let text, _, _) = result.content.first {
-            #expect(text.contains("confirmation_required"))
-        } else {
-            Issue.record("Expected confirmation response")
-        }
+        let isError = try #require(result.isError)
+        #expect(isError)
+        let body = try #require(parseDispatcherObject(dispatcherText(result)))
+        #expect(body["status"] as? String == "confirmation_required")
+        #expect(body["state"] as? String == "C")
+        let terminal = try #require(body["terminal"] as? Bool)
+        #expect(terminal)
+        let writeAttempted = try #require(body["write_attempted"] as? Bool)
+        #expect(!writeAttempted)
+        #expect(body["confirm_command"] == nil)
     }
 }
 

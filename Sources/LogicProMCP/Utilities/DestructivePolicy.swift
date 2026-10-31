@@ -56,12 +56,29 @@ enum DestructivePolicy {
         let level = level(for: command)
         guard level >= .l2 else { return nil }
         let levelLabel = level == .l3 ? "L3" : "L2"
+        return terminalConfirmationResponse(command: command, level: levelLabel)
+    }
+
+    /// A missing confirmation terminates the current request before any write.
+    /// Callers may submit a separately authorized request with `confirmed:true`,
+    /// but this response must not manufacture a human review/retry queue.
+    static func terminalConfirmationResponse(command: String, level: String) -> String {
         return HonestContract.jsonString([
             "status": "confirmation_required",
+            "state": "C",
+            "error": "confirmation_required",
+            "reason": "confirmation_required",
             "command": command,
-            "level": levelLabel,
+            "level": level,
             "message": "This operation may change project state or cause data loss.",
-            "confirm_command": "logic_project(\"\(command)\", {confirmed: true})",
+            "success": false,
+            "verified": false,
+            "write_attempted": false,
+            "terminal": true,
+            "safe_to_retry": false,
+            "human_intervention_required": false,
+            "human_intervention_requests": 0,
+            "human_dependent_transitions": 0,
         ])
     }
 

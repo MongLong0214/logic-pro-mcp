@@ -50,6 +50,7 @@ struct ProjectExportPlannerValidationTests {
         ])
 
         #expect(plan.status == "degraded")
+        #expect(plan.nextSafeAction == "none_terminal")
         let project = try #require(plan.projects.first)
         #expect(project.validationStatus == "invalid")
         #expect(project.validationIssues.contains("project_path_not_found"))

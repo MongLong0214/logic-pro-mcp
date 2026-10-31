@@ -32,6 +32,7 @@ struct ProjectExportPlannerTests {
         #expect(plan.projectCount == 1)
         #expect(plan.projects.first?.validationStatus == "valid")
         #expect(plan.projects.first?.manifestStatus == "pending")
+        #expect(plan.nextSafeAction == "execute_export_run")
         // C3: run-window anchor is present and non-empty so the advertised
         // mtime_within_run_window gate has something to bound against.
         #expect(!plan.generatedAt.isEmpty)
@@ -152,6 +153,7 @@ struct ProjectExportPlannerTests {
 
         let artifact = try #require(plan.projects.first?.expectedArtifacts.first)
         #expect(plan.status == "degraded")
+        #expect(plan.nextSafeAction == "none_terminal")
         #expect(artifact.status == "existing")
         #expect(artifact.verification.exists)
         #expect(artifact.verification.fileSizeBytes == 0)

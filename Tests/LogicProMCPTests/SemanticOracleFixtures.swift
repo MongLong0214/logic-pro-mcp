@@ -496,7 +496,7 @@ enum SemanticOracleFixtures {
                 "project_count":1,"projects":[{"path":"/tmp/a.logicx"}],\
                 "required_confirmations":[],"unsupported_or_blocked_steps":[],\
                 "baseline_verification":[],"enhancement_path":[],\
-                "next_safe_action":"review_export_plan"}
+                "next_safe_action":"execute_export_run"}
                 """,
             readback: "{\"cache_age_sec\":null,\"fetched_at\":null,\"ax_occluded\":false,"
                 + "\"source\":\"default\",\"data\":{\"name\":\"Untitled\",\"trackCount\":0}}"
@@ -1494,7 +1494,9 @@ enum SemanticOracleFixtures {
         .projectExportRun: SemanticOracleFixture(
             response: """
                 {"schema":"logic_pro_mcp_export_run.v1","run_id":"run-1","mode":"run",\
-                "confirmed":true,"status":"completed",\
+                "confirmed":true,"status":"completed","success":true,"terminal":false,\
+                "safe_to_retry":false,"human_intervention_required":false,\
+                "human_intervention_requests":0,"human_dependent_transitions":0,\
                 "output_root":"/Users/qualification/exports","collision_policy":"fail_if_exists",\
                 "project_count":1,"artifacts_total":1,"artifacts_verified":1,\
                 "artifacts_skipped":0,"artifacts_uncertain":0,"artifacts_failed":0,\
@@ -1518,7 +1520,9 @@ enum SemanticOracleFixtures {
         .projectExportResume: SemanticOracleFixture(
             response: """
                 {"schema":"logic_pro_mcp_export_run.v1","run_id":"run-2","mode":"resume",\
-                "confirmed":true,"status":"completed",\
+                "confirmed":true,"status":"completed","success":true,"terminal":false,\
+                "safe_to_retry":false,"human_intervention_required":false,\
+                "human_intervention_requests":0,"human_dependent_transitions":0,\
                 "output_root":"/Users/qualification/exports","collision_policy":"skip_existing",\
                 "project_count":1,"artifacts_total":1,"artifacts_verified":0,\
                 "artifacts_skipped":1,"artifacts_uncertain":0,"artifacts_failed":0,\

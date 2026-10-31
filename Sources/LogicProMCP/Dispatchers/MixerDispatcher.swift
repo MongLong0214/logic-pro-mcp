@@ -632,10 +632,13 @@ struct MixerDispatcher: OperationTraceDispatching {
                         command: "insert_plugin"
                     )?.confirmation ?? .l2
                 ) ?? "L2"
-                let response = """
-                {"confirmation_required":true,"command":"insert_plugin","level":"\(level)","message":"insert_plugin changes the channel strip insert chain. Re-call with confirmed:true to insert an allowlisted stock plugin.","confirm_command":"logic_mixer(\\"insert_plugin\\", {\\"track\\": \(track), \\"slot\\": \(slot), \\"plugin_name\\": \\"\(spec.canonicalName)\\", \\"confirmed\\": true})"}
-                """
-                return toolTextResult(response)
+                return toolTextResult(
+                    DestructivePolicy.terminalConfirmationResponse(
+                        command: "insert_plugin",
+                        level: level
+                    ),
+                    isError: true
+                )
             case .value(true):
                 break
             case .invalid(let hint):

@@ -1357,8 +1357,16 @@ enum SemanticOracleTable {
         constraints: [
             .valueEquals(key: "schema", expected: .string("logic_pro_mcp_export_manifest.v1")),
             .valueEquals(key: "execution_mode", expected: .string("dry_run_only")),
-            .valueEquals(key: "next_safe_action", expected: .string("review_export_plan")),
-            .enumMember(key: "status", allowed: ["planned", "degraded"]),
+            .anyOf([
+                [
+                    .valueEquals(key: "status", expected: .string("planned")),
+                    .valueEquals(key: "next_safe_action", expected: .string("execute_export_run")),
+                ],
+                [
+                    .valueEquals(key: "status", expected: .string("degraded")),
+                    .valueEquals(key: "next_safe_action", expected: .string("none_terminal")),
+                ],
+            ]),
             .numericRange(key: "project_count", min: 0, max: 100_000),
             .typedField(key: "projects", type: .array),
         ]
@@ -3073,9 +3081,11 @@ enum SemanticOracleTable {
     // ProjectExportExecutor.aggregate → `logic_pro_mcp_export_run.v1` RunResult
     // (ProjectDispatcher `export_run`). NOTE — this op is DELIBERATELY NOT built
     // through `SafeMutationOracle.oracle`: the executor emits a run RECORD keyed on
-    // `status`, NOT an `HonestContract.encodeStateA` envelope (there is no
-    // state/verified/success field). Pinning `state:"A"` would encode a shape the
-    // handler never emits. The verified-execution proof is `status:"completed"`,
+    // `status`, not an `HonestContract.encodeStateA` envelope (there is no
+    // state/verified field). Pinning `state:"A"` would encode a shape the handler
+    // never emits. The run record does carry explicit success/terminal/no-human
+    // fields so a consumer does not need to infer them from status. The
+    // verified-execution proof is `status:"completed"`,
     // which the aggregator emits ONLY when `artifacts_failed == 0 &&
     // artifacts_uncertain == 0` — so `.valueEquals(artifacts_uncertain, 0)` +
     // `.valueEquals(artifacts_failed, 0)` are pinned ALONGSIDE the status as
@@ -3097,6 +3107,12 @@ enum SemanticOracleTable {
             .valueEquals(key: "mode", expected: .string("run")),
             .valueEquals(key: "confirmed", expected: .bool(true)),
             .valueEquals(key: "status", expected: .string("completed")),
+            .valueEquals(key: "success", expected: .bool(true)),
+            .valueEquals(key: "terminal", expected: .bool(false)),
+            .valueEquals(key: "safe_to_retry", expected: .bool(false)),
+            .valueEquals(key: "human_intervention_required", expected: .bool(false)),
+            .valueEquals(key: "human_intervention_requests", expected: .number(0)),
+            .valueEquals(key: "human_dependent_transitions", expected: .number(0)),
             .valueEquals(key: "artifacts_uncertain", expected: .number(0)),
             .valueEquals(key: "artifacts_failed", expected: .number(0)),
             .numericRange(key: "artifacts_total", min: 1, max: 100_000),
@@ -3121,6 +3137,12 @@ enum SemanticOracleTable {
             .valueEquals(key: "mode", expected: .string("resume")),
             .valueEquals(key: "confirmed", expected: .bool(true)),
             .valueEquals(key: "status", expected: .string("completed")),
+            .valueEquals(key: "success", expected: .bool(true)),
+            .valueEquals(key: "terminal", expected: .bool(false)),
+            .valueEquals(key: "safe_to_retry", expected: .bool(false)),
+            .valueEquals(key: "human_intervention_required", expected: .bool(false)),
+            .valueEquals(key: "human_intervention_requests", expected: .number(0)),
+            .valueEquals(key: "human_dependent_transitions", expected: .number(0)),
             .valueEquals(key: "artifacts_uncertain", expected: .number(0)),
             .valueEquals(key: "artifacts_failed", expected: .number(0)),
             .numericRange(key: "artifacts_total", min: 1, max: 100_000),

@@ -269,7 +269,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
             }
             if !confirmation.confirmed, let response = DestructivePolicy.confirmationResponse(command: command) {
                 audit(command, phase: .confirmationRequired)
-                return await finalizeTrace(toolTextResult(response), traceID: traceID)
+                return await finalizeTrace(toolTextResult(response, isError: true), traceID: traceID)
             }
             if dialogPresent() {
                 audit(command, phase: .rejected, reason: "blocking dialog")
@@ -331,7 +331,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
             }
             if !confirmation.confirmed, let response = DestructivePolicy.confirmationResponse(command: command) {
                 audit(command, phase: .confirmationRequired)
-                return await finalizeTrace(toolTextResult(response), traceID: traceID)
+                return await finalizeTrace(toolTextResult(response, isError: true), traceID: traceID)
             }
             if dialogPresent() {
                 audit(command, phase: .rejected, reason: "blocking dialog")
@@ -369,7 +369,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
             }
             if !confirmation.confirmed, let response = DestructivePolicy.confirmationResponse(command: command) {
                 audit(command, phase: .confirmationRequired)
-                return await finalizeTrace(toolTextResult(response), traceID: traceID)
+                return await finalizeTrace(toolTextResult(response, isError: true), traceID: traceID)
             }
             if dialogPresent() {
                 audit(command, phase: .rejected, reason: "blocking dialog")
@@ -698,7 +698,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
             }
             if !confirmation.confirmed, let response = DestructivePolicy.confirmationResponse(command: command) {
                 audit(command, phase: .confirmationRequired)
-                return await finalizeTrace(toolTextResult(response), traceID: traceID)
+                return await finalizeTrace(toolTextResult(response, isError: true), traceID: traceID)
             }
             if !isLogicProRunning() {
                 audit(command, phase: .rejected, reason: "not running")
@@ -782,19 +782,19 @@ struct ProjectDispatcher: OperationTraceDispatching {
             audit(command, phase: .rejected, reason: "invalid confirmed")
             return toolInvalidParamsResult("cleanup_apply \(hint)")
         case .missing:
-            audit(command, phase: .confirmationRequired, reason: stepID)
+            audit(command, phase: .rejected, reason: stepID)
             return cleanupApplyStateC(
                 .invalidParams,
                 stepID: stepID,
-                hint: "cleanup_apply requires 'confirmed:true' to execute a mutating cleanup step; re-run logic_project cleanup_plan, confirm the step, then retry with confirmed:true."
+                hint: "cleanup_apply terminated before any mutation because write authorization was absent."
             )
         case .value(let confirmed):
             guard confirmed else {
-                audit(command, phase: .confirmationRequired, reason: stepID)
+                audit(command, phase: .rejected, reason: stepID)
                 return cleanupApplyStateC(
                     .invalidParams,
                     stepID: stepID,
-                    hint: "cleanup_apply 'confirmed' was false; the step was not executed. Retry with confirmed:true once the caller has approved it."
+                    hint: "cleanup_apply terminated without mutation because write authorization was denied."
                 )
             }
         }
@@ -812,7 +812,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
             return cleanupApplyStateC(
                 .elementNotFound,
                 stepID: stepID,
-                hint: "cleanup_apply: no cleanup-plan step with id '\(stepID)' in the current audit. The plan is re-derived on every call; re-run logic_project cleanup_plan and use a current step id."
+                hint: "cleanup_apply terminated because step '\(stepID)' is not present in the current audit."
             )
         }
 
@@ -1215,6 +1215,11 @@ struct ProjectDispatcher: OperationTraceDispatching {
             "step_id": stepID,
         ]
         for (k, v) in extras { merged[k] = v }
+        merged["terminal"] = true
+        merged["safe_to_retry"] = false
+        merged["human_intervention_required"] = false
+        merged["human_intervention_requests"] = 0
+        merged["human_dependent_transitions"] = 0
         return toolTextResult(
             HonestContract.encodeStateC(error: error, hint: hint, extras: merged),
             isError: true

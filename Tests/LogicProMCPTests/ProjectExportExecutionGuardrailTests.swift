@@ -41,6 +41,7 @@ struct ProjectExportExecutionGuardrailTests {
         #expect(run.status == "failed")
         #expect(run.artifactsFailed == 1)
         #expect(run.artifactsVerified == 0)
+        #expect(run.nextSafeAction == "none_terminal")
         let runProject = try #require(run.projects.first)
         #expect(!runProject.opened)
         let artifact = try #require(runProject.artifacts.first)
@@ -83,7 +84,7 @@ struct ProjectExportExecutionGuardrailTests {
         #expect(!run.confirmed)
         #expect(run.artifactsFailed == 1)
         #expect(run.artifactsVerified == 0)
-        #expect(run.nextSafeAction == "retry_with_confirmed_true")
+        #expect(run.nextSafeAction == "none_terminal")
         let artifact = try #require(run.projects.first?.artifacts.first)
         #expect(artifact.state == "C")
         #expect(artifact.error == "confirmation_required")
@@ -114,6 +115,7 @@ struct ProjectExportExecutionGuardrailTests {
         )
 
         #expect(run.status == "failed")
+        #expect(run.nextSafeAction == "none_terminal")
         let runProject = try #require(run.projects.first)
         #expect(!runProject.opened)
         #expect(!runProject.identityVerified)
@@ -163,5 +165,119 @@ struct ProjectExportExecutionGuardrailTests {
         // the caller actually sees. Prior `unsafe_path` check was dead.
         let artifactError = try #require(artifact.error)
         #expect(artifactError.contains("artifact_path_unsafe"))
+    }
+
+    @Test("every non-completed export outcome terminates without a review or retry request")
+    func nonCompletedOutcomesAreTerminal() throws {
+        let projDir = try makeExecTempDir()
+        let outputRoot = try makeExecTempDir()
+        let project = try makeLogicxProject(in: projDir, named: "Terminal Song")
+        let plan = try ProjectExportPlanner.plan(params: [
+            "projects": .array([.string(project.path)]),
+            "output_root": .string(outputRoot.path),
+            "artifacts": .array([.string("bounce")]),
+        ])
+
+        func artifact(state: String, verified: Bool, bounceFired: Bool) -> ProjectExportRunArtifact {
+            ProjectExportRunArtifact(
+                kind: "bounce",
+                path: outputRoot.appendingPathComponent(UUID().uuidString).path,
+                state: state,
+                verified: verified,
+                bounceFired: bounceFired,
+                writeAttempted: bounceFired,
+                error: state == "C" ? "bounded_failure" : nil,
+                reason: state == "B" ? "readback_unavailable" : nil,
+                evidence: nil
+            )
+        }
+
+        func aggregate(_ artifacts: [ProjectExportRunArtifact]) -> ProjectExportRunResult {
+            ProjectExportExecutor.aggregate(
+                plan: plan,
+                resume: false,
+                projects: [
+                    ProjectExportRunProject(
+                        index: 0,
+                        projectPath: project.path,
+                        displayName: "Terminal Song",
+                        observedProjectPath: project.path,
+                        identityVerified: true,
+                        opened: true,
+                        artifacts: artifacts
+                    ),
+                ]
+            )
+        }
+
+        func requireOutcomeContract(
+            _ run: ProjectExportRunResult,
+            success expectedSuccess: Bool,
+            terminal expectedTerminal: Bool
+        ) throws {
+            let object = try #require(JSONSerialization.jsonObject(
+                with: JSONEncoder().encode(run)
+            ) as? [String: Any])
+            let success = try #require(object["success"] as? Bool)
+            if expectedSuccess { #expect(success) } else { #expect(!success) }
+            let terminal = try #require(object["terminal"] as? Bool)
+            if expectedTerminal { #expect(terminal) } else { #expect(!terminal) }
+            let safeToRetry = try #require(object["safe_to_retry"] as? Bool)
+            #expect(!safeToRetry)
+            let humanInterventionRequired = try #require(object["human_intervention_required"] as? Bool)
+            #expect(!humanInterventionRequired)
+            #expect(object["human_intervention_requests"] as? Int == 0)
+            #expect(object["human_dependent_transitions"] as? Int == 0)
+        }
+
+        let partial = aggregate([
+            artifact(state: "A", verified: true, bounceFired: true),
+            artifact(state: "C", verified: false, bounceFired: false),
+        ])
+        #expect(partial.status == "partial")
+        #expect(partial.nextSafeAction == "none_terminal")
+        try requireOutcomeContract(partial, success: false, terminal: true)
+
+        let uncertain = aggregate([
+            artifact(state: "B", verified: false, bounceFired: true),
+        ])
+        #expect(uncertain.status == "uncertain")
+        #expect(uncertain.nextSafeAction == "none_terminal")
+        try requireOutcomeContract(uncertain, success: false, terminal: true)
+
+        let completed = aggregate([
+            artifact(state: "A", verified: true, bounceFired: true),
+        ])
+        #expect(completed.status == "completed")
+        #expect(completed.nextSafeAction == "verify_artifacts_with_logic_audio")
+        try requireOutcomeContract(completed, success: true, terminal: false)
+
+        let confirmationRequired = ProjectExportExecutor.confirmationRequiredRun(plan: plan, resume: false)
+        #expect(confirmationRequired.nextSafeAction == "none_terminal")
+        try requireOutcomeContract(confirmationRequired, success: false, terminal: true)
+
+        let unsupportedStem = ProjectExportExecutor.unsupportedStemResumeRun(plan: plan)
+        #expect(unsupportedStem.nextSafeAction == "none_terminal")
+        try requireOutcomeContract(unsupportedStem, success: false, terminal: true)
+        let unsupportedError = try #require(unsupportedStem.projects.first?.artifacts.first?.error)
+        #expect(unsupportedError.hasPrefix("export_resume_unsupported_for_stem:"))
+        #expect(!unsupportedError.localizedCaseInsensitiveContains("re-run"))
+        #expect(!unsupportedError.localizedCaseInsensitiveContains("retry"))
+
+        let failed = ProjectExportExecutor.failedRun(
+            runID: plan.runID,
+            mode: "run",
+            confirmed: true,
+            outputRoot: plan.outputRoot,
+            collisionPolicy: plan.collisionPolicy,
+            reason: "invalid_params"
+        )
+        #expect(failed.nextSafeAction == "none_terminal")
+        try requireOutcomeContract(failed, success: false, terminal: true)
+        #expect(failed.diagnostic == "invalid_params")
+        let failedJSON = try #require(JSONSerialization.jsonObject(
+            with: JSONEncoder().encode(failed)
+        ) as? [String: Any])
+        #expect(failedJSON["diagnostic"] as? String == "invalid_params")
     }
 }
