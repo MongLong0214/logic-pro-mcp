@@ -667,6 +667,96 @@ private func makeUninstallLaunchAgentFixture(
     #expect(calls.filter { $0.hasPrefix("bootout gui/") }.count == 2)
 }
 
+@Test func testKeyCommandUninstallerPreservesBindingsAndBackupsWithoutHumanContinuation() throws {
+    let sandbox = try makeInstallScriptTempDir("logicpromcp-uninstall-keycmds-\(UUID().uuidString)")
+    let keyCommandDir = sandbox.appendingPathComponent("Key Commands", isDirectory: true)
+    let backupDir = keyCommandDir.appendingPathComponent("backups/backup_20261031_120000", isDirectory: true)
+    let currentBindings = keyCommandDir.appendingPathComponent("User.logikcs")
+    let backedUpBindings = backupDir.appendingPathComponent("User.logikcs")
+    let stagedReference = keyCommandDir.appendingPathComponent("LogicProMCP-KeyCommands.plist")
+    try writeFile(currentBindings, contents: "current-bindings")
+    try writeFile(backedUpBindings, contents: "older-backup")
+    try writeFile(stagedReference, contents: "reference-only")
+
+    let result = try runShellScript(
+        "Scripts/uninstall-keycmds.sh",
+        environment: [
+            "LOGIC_PRO_MCP_KEYCMD_DIR": keyCommandDir.path,
+            "LOGIC_PRO_MCP_KEYCMD_AUTO_RESTORE": "1",
+        ]
+    )
+
+    #expect(result.exitCode == 0)
+    #expect(!FileManager.default.fileExists(atPath: stagedReference.path))
+    #expect(try String(contentsOf: currentBindings, encoding: .utf8) == "current-bindings")
+    #expect(try String(contentsOf: backedUpBindings, encoding: .utf8) == "older-backup")
+    #expect(result.combinedOutput.contains("terminal=true"))
+    #expect(result.combinedOutput.contains("human_intervention_required=false"))
+    #expect(result.combinedOutput.contains("human_intervention_requests=0"))
+    #expect(!result.combinedOutput.localizedCaseInsensitiveContains("re-run"))
+    #expect(!result.combinedOutput.localizedCaseInsensitiveContains("manually"))
+    #expect(!result.combinedOutput.localizedCaseInsensitiveContains("restart Logic"))
+}
+
+@Test func testKeyCommandUninstallerReportsRemovalFailureAsTerminal() throws {
+    let sandbox = try makeInstallScriptTempDir("logicpromcp-uninstall-keycmds-failure-\(UUID().uuidString)")
+    let keyCommandDir = sandbox.appendingPathComponent("Key Commands", isDirectory: true)
+    let fakeBin = sandbox.appendingPathComponent("fake-bin", isDirectory: true)
+    let stagedReference = keyCommandDir.appendingPathComponent("LogicProMCP-KeyCommands.plist")
+    try writeFile(stagedReference, contents: "reference-only")
+    try writeExecutable(
+        fakeBin.appendingPathComponent("rm"),
+        contents: """
+        #!/bin/bash
+        exit 71
+        """
+    )
+
+    let result = try runShellScript(
+        "Scripts/uninstall-keycmds.sh",
+        environment: [
+            "PATH": "\(fakeBin.path):/usr/bin:/bin:/usr/sbin:/sbin",
+            "LOGIC_PRO_MCP_KEYCMD_DIR": keyCommandDir.path,
+        ]
+    )
+
+    #expect(result.exitCode != 0)
+    #expect(FileManager.default.fileExists(atPath: stagedReference.path))
+    #expect(result.combinedOutput.contains("terminal=true"))
+    #expect(result.combinedOutput.contains("human_intervention_required=false"))
+    #expect(result.combinedOutput.contains("human_intervention_requests=0"))
+    #expect(result.combinedOutput.contains("reference removal failed"))
+}
+
+@Test func testKeyCommandUninstallerAcceptsObservedAbsenceAfterRmReturnsNonzero() throws {
+    let sandbox = try makeInstallScriptTempDir("logicpromcp-uninstall-keycmds-ambiguous-rm-\(UUID().uuidString)")
+    let keyCommandDir = sandbox.appendingPathComponent("Key Commands", isDirectory: true)
+    let fakeBin = sandbox.appendingPathComponent("fake-bin", isDirectory: true)
+    let stagedReference = keyCommandDir.appendingPathComponent("LogicProMCP-KeyCommands.plist")
+    try writeFile(stagedReference, contents: "reference-only")
+    try writeExecutable(
+        fakeBin.appendingPathComponent("rm"),
+        contents: """
+        #!/bin/bash
+        /bin/rm "$@"
+        exit 71
+        """
+    )
+
+    let result = try runShellScript(
+        "Scripts/uninstall-keycmds.sh",
+        environment: [
+            "PATH": "\(fakeBin.path):/usr/bin:/bin:/usr/sbin:/sbin",
+            "LOGIC_PRO_MCP_KEYCMD_DIR": keyCommandDir.path,
+        ]
+    )
+
+    #expect(result.exitCode == 0)
+    #expect(!FileManager.default.fileExists(atPath: stagedReference.path))
+    #expect(result.combinedOutput.contains("terminal=true"))
+    #expect(result.combinedOutput.contains("human_intervention_requests=0"))
+}
+
 @Test func testInstallScriptPersistsShareDirIntoClaudeRegistrationForCustomNonBinLayouts() throws {
     let fixture = try makeInstallerFixture()
 

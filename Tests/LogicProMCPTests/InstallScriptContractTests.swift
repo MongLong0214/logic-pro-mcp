@@ -340,6 +340,7 @@ import Testing
 
 @Test func testUninstallScriptReportsUnverifiedLogicResidualsWithoutManualContinuation() throws {
     let script = try scriptContents("Scripts/uninstall.sh")
+    let keyCommandUninstaller = try scriptContents("Scripts/uninstall-keycmds.sh")
     let launchAgentTemplate = try scriptContents("Scripts/com.logicpro.mcp.plist.template")
 
     #expect(script.contains("claude mcp remove logic-pro"))
@@ -364,6 +365,10 @@ import Testing
     #expect(!launchAgentTemplate.contains("launchctl unload"))
     #expect(!launchAgentTemplate.contains("rm ~/Library/LaunchAgents"))
     #expect(launchAgentTemplate.contains("removal is owned by Scripts/uninstall.sh"))
+    #expect(!keyCommandUninstaller.contains("read -p"))
+    #expect(!keyCommandUninstaller.localizedCaseInsensitiveContains("re-run"))
+    #expect(!keyCommandUninstaller.localizedCaseInsensitiveContains("manually"))
+    #expect(!keyCommandUninstaller.localizedCaseInsensitiveContains("restart Logic"))
 }
 
 @Test func testKeyEventHelperSupportsReturnEnterAliasesAndPreflight() throws {
