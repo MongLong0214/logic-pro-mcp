@@ -147,10 +147,12 @@ extension SetupDoctor {
         return check(
             id: "release.signature",
             domain: "release",
-            status: output.exitCode == 0 ? .pass : .warn,
+            status: output.exitCode == 0 ? .pass : .fail,
             summary: output.exitCode == 0 ? "Binary signature verifies." : "Binary signature did not verify.",
-            evidence: commandEvidence(path: executablePath, output: output),
-            remediationType: output.exitCode == 0 ? .none : .docs
+            evidence: output.exitCode == 0
+                ? commandEvidence(path: executablePath, output: output)
+                : terminalBinaryEvidence(commandEvidence(path: executablePath, output: output)),
+            remediationType: .none
         )
     }
 
@@ -228,10 +230,10 @@ extension SetupDoctor {
         return check(
             id: "release.quarantine",
             domain: "release",
-            status: .warn,
+            status: .fail,
             summary: "Quarantine state could not be determined.",
-            evidence: evidence,
-            remediationType: .docs
+            evidence: terminalBinaryEvidence(evidence),
+            remediationType: .none
         )
     }
 

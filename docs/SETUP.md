@@ -254,7 +254,7 @@ When helper assets are missing, Homebrew installs use `brew reinstall logic-pro-
 
 <a id="doctor-releasesignature"></a>
 ### `release.signature`
-Reinstall from the pinned release artifact, or ad-hoc sign a local source build with `codesign --force --sign - /path/to/LogicProMCP`.
+Reports whether the resolved LogicProMCP binary's signature verifies. A failed or unavailable verification is a terminal unavailable state for this read-only inspection; doctor emits no mutation or retry request.
 
 <a id="doctor-releasequarantine"></a>
 ### `release.quarantine`

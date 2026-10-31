@@ -58,16 +58,21 @@ private func issue262Runtime(_ commandResult: SetupDoctor.CommandResult) -> Setu
     #expect(check.evidence["command_failure_reason"] == nil)
 }
 
-@Test func doctorCommandNonzeroExitRemainsDistinctFromExecutionFailures() {
+@Test func doctorCommandNonzeroExitTerminatesWithDistinctTypedEvidence() {
     let check = SetupDoctor.releaseSignatureCheck(
         executablePath: "/tmp/LogicProMCP",
         runtime: issue262Runtime(.completed(.init(exitCode: 7, stdout: "", stderr: "invalid signature")))
     )
 
-    #expect(check.status == .warn)
+    #expect(check.status == .fail)
+    #expect(check.remediation.type == .none)
+    #expect(check.remediation.value.isEmpty)
     #expect(check.evidence["command_failure_reason"] == "non_zero_exit")
     #expect(check.evidence["exit_code"] == "7")
     #expect(check.evidence["command_status"] == "non_zero_exit")
+    #expect(check.evidence["terminal"] == "true")
+    #expect(check.evidence["human_intervention_required"] == "false")
+    #expect(check.evidence["human_intervention_requests"] == "0")
 }
 
 @Test func doctorRuntimeReportsAllowlistRejectionWithoutSpawning() {

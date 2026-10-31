@@ -158,6 +158,15 @@ private func issue26RepositoryRootURL() -> URL {
         #expect(!quarantineAnchor.contains(staleContinuation))
     }
     #expect(quarantineAnchor.contains("terminal unavailable state"))
+
+    let signatureStart = try #require(setup.range(of: "<a id=\"doctor-releasesignature\"></a>"))
+    let signatureTail = setup[signatureStart.lowerBound...]
+    let signatureNextAnchor = try #require(signatureTail.dropFirst().range(of: "<a id="))
+    let signatureAnchor = String(signatureTail[..<signatureNextAnchor.lowerBound])
+    for staleContinuation in ["Reinstall", "sign a local", "codesign --force", "remediation action", "continuation"] {
+        #expect(!signatureAnchor.contains(staleContinuation))
+    }
+    #expect(signatureAnchor.contains("terminal unavailable state"))
 }
 
 @Test func testSetupDoctorJSONContractStableCheckIDsAndOKAggregation() throws {
@@ -766,15 +775,21 @@ private func issue26RepositoryRootURL() -> URL {
         })
     )
     let signature = try #require(report.checks.first { $0.id == "release.signature" })
-    #expect(signature.status == .warn)
+    #expect(signature.status == .fail)
+    #expect(signature.remediation.type == .none)
+    #expect(signature.remediation.value.isEmpty)
     #expect(signature.evidence["exit_code"] == "1")
     #expect(signature.evidence["stdout"] == "present")
     #expect(signature.evidence["stdout_truncated"] == "true")
     #expect(signature.evidence["stderr"] == "present")
     #expect(signature.evidence["stderr_truncated"] == "false")
+    #expect(signature.evidence["terminal"] == "true")
+    #expect(signature.evidence["human_intervention_required"] == "false")
+    #expect(signature.evidence["human_intervention_requests"] == "0")
+    #expect(!report.fixPlan.contains(signature.id))
 }
 
-@Test func testReleaseQuarantineReportsWarnWhenStateUndeterminable() throws {
+@Test func testReleaseQuarantineTerminatesWhenStateUndeterminable() throws {
     // Non-zero exit that is NOT the recognized "No such xattr" must NOT be reported
     // as a clean pass — it conflates "not quarantined" with "could not determine".
     let report = SetupDoctor.generate(
@@ -795,9 +810,15 @@ private func issue26RepositoryRootURL() -> URL {
         })
     )
     let quarantine = try #require(report.checks.first { $0.id == "release.quarantine" })
-    #expect(quarantine.status == .warn)
+    #expect(quarantine.status == .fail)
     #expect(quarantine.summary == "Quarantine state could not be determined.")
+    #expect(quarantine.remediation.type == .none)
+    #expect(quarantine.remediation.value.isEmpty)
     #expect(quarantine.evidence["exit_code"] == "13")
+    #expect(quarantine.evidence["terminal"] == "true")
+    #expect(quarantine.evidence["human_intervention_required"] == "false")
+    #expect(quarantine.evidence["human_intervention_requests"] == "0")
+    #expect(!report.fixPlan.contains(quarantine.id))
 }
 
 @Test func testDoctorUnknownLaunchContextIsExplainedButAggregateNeutral() throws {
@@ -1003,7 +1024,7 @@ private func issue26RepositoryRootURL() -> URL {
 }
 
 @Test func testMainEntrypointDoctorExitsZeroOnDegraded() async throws {
-    // A warn (quarantine state indeterminate) with all manual channels approved
+    // A warn (unknown install source) with all manual channels approved
     // and no fail -> degraded -> exit 0.
     var stdout = ""
     let store = ManualValidationStore(
@@ -1022,19 +1043,25 @@ private func issue26RepositoryRootURL() -> URL {
             return DoctorMockMainServer()
         },
         approvalStoreFactory: { store },
-        doctorRuntime: doctorRuntime(commandHandler: { executable, arguments in
-            if executable == "/usr/bin/codesign" {
-                return .init(exitCode: 0, stdout: "", stderr: "")
+        doctorRuntime: doctorRuntime(
+            executablePath: "/tmp/LogicProMCP-manual",
+            registration: .registered(command: "/tmp/LogicProMCP-manual"),
+            commandHandler: { executable, arguments in
+                if executable == "/usr/bin/codesign" {
+                    return .init(exitCode: 0, stdout: "", stderr: "")
+                }
+                if executable == "/usr/bin/xattr" {
+                    return .init(exitCode: 1, stdout: "", stderr: "No such xattr")
+                }
+                if executable == "/usr/bin/lipo" {
+                    return .init(exitCode: 0, stdout: "arm64\n", stderr: "")
+                }
+                if executable == "/usr/bin/strings", arguments.count == 2 {
+                    return .init(exitCode: 0, stdout: "\(ServerConfig.serverVersion)\n", stderr: "")
+                }
+                return nil
             }
-            if executable == "/usr/bin/xattr" {
-                return .init(exitCode: 13, stdout: "", stderr: "Operation not permitted")
-            }
-            if executable == "/opt/homebrew/bin/brew" || executable == "/usr/local/bin/brew",
-               arguments == ["list", "--versions", "logic-pro-mcp"] {
-                return .init(exitCode: 0, stdout: "logic-pro-mcp 3.7.4\n", stderr: "")
-            }
-            return nil
-        }),
+        ),
         writeStdout: { stdout += $0 },
         writeStderr: { _ in }
     )
@@ -1047,30 +1074,35 @@ private func issue26RepositoryRootURL() -> URL {
 // MARK: - aggregateStatus precedence
 
 @Test func testTerminalApplicationFailureOutranksWarn() {
-    // Logic unavailable is terminal; a concurrent release warning cannot
+    // Logic unavailable is terminal; a concurrent install-source warning cannot
     // downgrade the report to a human-action state.
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json"],
         permissionStatus: grantedPermissionStatus(),
         approvals: allApprovals(),
         runtime: doctorRuntime(
+            executablePath: "/tmp/LogicProMCP-manual",
             logicRunning: false,
             visibleWindow: false,
+            registration: .registered(command: "/tmp/LogicProMCP-manual"),
             commandHandler: { executable, arguments in
                 if executable == "/usr/bin/codesign" {
                     return .init(exitCode: 0, stdout: "", stderr: "")
                 }
                 if executable == "/usr/bin/xattr" {
-                    return .init(exitCode: 13, stdout: "", stderr: "Operation not permitted")
+                    return .init(exitCode: 1, stdout: "", stderr: "No such xattr")
                 }
-                if executable == "/opt/homebrew/bin/brew" || executable == "/usr/local/bin/brew",
-                   arguments == ["list", "--versions", "logic-pro-mcp"] {
-                    return .init(exitCode: 0, stdout: "logic-pro-mcp 3.7.4\n", stderr: "")
+                if executable == "/usr/bin/lipo" {
+                    return .init(exitCode: 0, stdout: "arm64\n", stderr: "")
+                }
+                if executable == "/usr/bin/strings", arguments.count == 2 {
+                    return .init(exitCode: 0, stdout: "\(ServerConfig.serverVersion)\n", stderr: "")
                 }
                 return nil
             }
         )
     )
+    #expect(report.checks.first { $0.id == "install.source" }?.status == .warn)
     #expect(report.status == .failed)
 }
 
@@ -1079,20 +1111,27 @@ private func issue26RepositoryRootURL() -> URL {
         arguments: ["LogicProMCP", "doctor", "--json"],
         permissionStatus: grantedPermissionStatus(),
         approvals: allApprovals(),
-        runtime: doctorRuntime(commandHandler: { executable, arguments in
-            if executable == "/usr/bin/codesign" {
-                return .init(exitCode: 0, stdout: "", stderr: "")
+        runtime: doctorRuntime(
+            executablePath: "/tmp/LogicProMCP-manual",
+            registration: .registered(command: "/tmp/LogicProMCP-manual"),
+            commandHandler: { executable, arguments in
+                if executable == "/usr/bin/codesign" {
+                    return .init(exitCode: 0, stdout: "", stderr: "")
+                }
+                if executable == "/usr/bin/xattr" {
+                    return .init(exitCode: 1, stdout: "", stderr: "No such xattr")
+                }
+                if executable == "/usr/bin/lipo" {
+                    return .init(exitCode: 0, stdout: "arm64\n", stderr: "")
+                }
+                if executable == "/usr/bin/strings", arguments.count == 2 {
+                    return .init(exitCode: 0, stdout: "\(ServerConfig.serverVersion)\n", stderr: "")
+                }
+                return nil
             }
-            if executable == "/usr/bin/xattr" {
-                return .init(exitCode: 13, stdout: "", stderr: "Operation not permitted")
-            }
-            if executable == "/opt/homebrew/bin/brew" || executable == "/usr/local/bin/brew",
-               arguments == ["list", "--versions", "logic-pro-mcp"] {
-                return .init(exitCode: 0, stdout: "logic-pro-mcp 3.7.4\n", stderr: "")
-            }
-            return nil
-        })
+        )
     )
+    #expect(report.checks.first { $0.id == "install.source" }?.status == .warn)
     #expect(report.status == .degraded)
 }
 
