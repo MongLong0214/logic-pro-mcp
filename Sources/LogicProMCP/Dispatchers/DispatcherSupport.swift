@@ -223,7 +223,10 @@ func blockingLogicDialogResult(
         "safe_to_retry": false,
         "automatic_precondition_attempts_exhausted": true,
         "terminal": true,
+        "terminal_scope": "mcp_request_only",
         "human_intervention_required": false,
+        "human_intervention_requests": 0,
+        "human_dependent_transitions": 0,
     ]
     var hint = sawADialog
         ? "Refusing \(operation) because a blocking Logic dialog/sheet was observed at the "
