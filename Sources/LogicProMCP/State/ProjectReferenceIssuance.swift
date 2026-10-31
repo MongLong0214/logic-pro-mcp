@@ -8,16 +8,15 @@ enum ProjectIssuance: Sendable {
 
 /// The one place a `prj_` reference is issued (#291 R0).
 ///
-/// `logic://project/info` and `logic://mixer` both issue through here. `TargetRegistry.bind`
+/// `logic://project/info`, `logic://mixer`, and native plug-in inventory all issue through here. `TargetRegistry.bind`
 /// replaces the current project descriptor and drops every other project binding whenever a
 /// different descriptor is bound, so two issuers deriving the descriptor differently would evict
-/// each other's references on alternate reads. Keeping the derivation in `descriptor` alone is
-/// what makes the reference independent of which resource was read first.
+/// each other's references on alternate reads. All issuers share `descriptor`; request-owned AX
+/// observations additionally normalize their path at the inventory boundary before calling it.
 ///
-/// The input is the poller's cached record, not a record one reader completed. `project/info`
-/// fills an empty `filePath` from its own project-file read, which the mixer may not make (it runs
-/// after every poll, outside the #199 deadline). Issuing from that filled path gave `project/info` a
-/// reference the mixer could not carry until the poller filled the same path.
+/// Inputs may be the poller's cached record or one request-owned native observation. The native
+/// inventory boundary canonicalizes its AXDocument path to the poller's real-path form before it
+/// reaches this issuer, without changing the descriptor semantics used by other exact-path gates.
 enum ProjectReferenceIssuance {
     static let unobservedReason = "project identity not yet observed: the cache carries no project name and bundle path"
 
@@ -28,6 +27,15 @@ enum ProjectReferenceIssuance {
         let trimmedPath = (filePath ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty, !trimmedPath.isEmpty else { return nil }
         return TargetDescriptor.project(name: trimmedName, filePath: trimmedPath, epoch: epoch)
+    }
+
+    static func canonicalObservedProjectPath(_ filePath: String?) -> String? {
+        guard let trimmed = filePath?.trimmingCharacters(in: .whitespacesAndNewlines),
+              trimmed.hasPrefix("/") else { return nil }
+        return URL(fileURLWithPath: trimmed)
+            .resolvingSymlinksInPath()
+            .standardizedFileURL
+            .path
     }
 
     static func issue(

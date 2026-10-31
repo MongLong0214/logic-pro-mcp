@@ -264,9 +264,12 @@ func pluginTrackBindingKeepsByteDistinctArrangeSiblingSeparate(_ rawName: String
     #expect(f.builder.setCalls.isEmpty && f.builder.actionCalls.isEmpty)
 }
 
-@Test(arguments: [false, true])
-func pluginTrackBindingRawInventoryRequiresExactCrossSurfaceEvidence(_ identical: Bool) async throws {
+@Test(arguments: [(false, false), (true, false), (true, true)])
+func pluginTrackBindingRawInventoryRequiresExactCrossSurfaceEvidence(
+    _ configuration: (identical: Bool, mismatchedOwner: Bool)
+) async throws {
     try await FeatureFlags.withAdr002TargetRefForTests(true) {
+        let identical = configuration.identical
         let rawName = " Bass "
         let f = PluginBindingFixture(headerNames: [rawName], stripNames: [identical ? rawName : "Bass"])
         let b = f.builder
@@ -284,6 +287,23 @@ func pluginTrackBindingRawInventoryRequiresExactCrossSurfaceEvidence(_ identical
         b.setAttribute(open, kAXDescriptionAttribute as String, "열기")
         b.setChildren(group, [bypass, open])
         b.setChildren(f.strips[0], b.makeAXRuntime().children(f.strips[0]) + [group])
+        b.setAttribute(f.window, kAXTitleAttribute as String, "Session - Tracks")
+        b.setAttribute(
+            f.window,
+            kAXDocumentAttribute as String,
+            URL(fileURLWithPath: "/tmp/Session.logicx").absoluteString
+        )
+        if configuration.mismatchedOwner {
+            let owner = b.element(30703)
+            b.setAttribute(owner, kAXRoleAttribute as String, kAXWindowRole as String)
+            b.setAttribute(
+                owner,
+                kAXDocumentAttribute as String,
+                URL(fileURLWithPath: "/tmp/Other.logicx").absoluteString
+            )
+            b.setAttribute(f.mixer, kAXWindowAttribute as String, owner)
+            b.setAttribute(f.app, kAXWindowsAttribute as String, [f.window, owner])
+        }
         let runtime = f.readOnlyRuntime
         let inventory = await AccessibilityChannel.defaultGetPluginInventory(
             params: ["track": "0"], runtime: runtime,
@@ -304,6 +324,11 @@ func pluginTrackBindingRawInventoryRequiresExactCrossSurfaceEvidence(_ identical
         let observedName = try #require(inventoryBody["track_name"] as? String)
         #expect(observedName.utf8.elementsEqual(rawName.utf8))
 
+        if configuration.mismatchedOwner {
+            #expect(inventoryBody["project_name"] == nil)
+            #expect(inventoryBody["project_file_path"] == nil)
+        }
+
         let cache = StateCache()
         let track = AXValueExtractors.extractTrackState(from: f.headers[0], index: 0, runtime: runtime.ax)
         #expect(track.name.utf8.elementsEqual(rawName.utf8))
@@ -315,6 +340,10 @@ func pluginTrackBindingRawInventoryRequiresExactCrossSurfaceEvidence(_ identical
         let publishedBody = try #require(sharedJSONObject(sharedToolText(published)))
         let plugins = try #require(publishedBody["plugins"] as? [[String: Any]])
         try #require(plugins.count == 1)
+        if configuration.mismatchedOwner {
+            #expect(plugins[0]["plugin_insert_ref"] == nil)
+            return
+        }
         let rawReference = try #require(plugins[0]["plugin_insert_ref"] as? String)
         let reference = TargetReference(rawValue: rawReference)
         let binding = try #require(await registry.resolve(reference))
