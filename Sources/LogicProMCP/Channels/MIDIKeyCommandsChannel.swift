@@ -508,6 +508,7 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel {
         let startNs = DispatchTime.now().uptimeNanoseconds
         let transport = self.transport
         var noteOffTasks: [Task<Void, Error>] = []
+        var startedEvents: [NoteSequenceParser.ParsedNote] = []
         for event in events {
             let targetNs = startNs + UInt64(event.offsetMs) * 1_000_000
             let nowNs = DispatchTime.now().uptimeNanoseconds
@@ -517,9 +518,28 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel {
             let onBytes = buildNoteOnBytes(channel: event.channel, note: event.pitch, velocity: event.velocity)
             do {
                 try await transport.send(onBytes)
+                startedEvents.append(event)
             } catch {
-                await drainKeyCmdNoteOffTasks(noteOffTasks)
-                return failSend(operation: "midi.play_sequence.keycmd", error: error)
+                let settledFailure = await waitForKeyCmdNoteOffTasks(noteOffTasks)
+                let cleanup = await attemptKeyCmdNoteCleanup(
+                    startedEvents.map(\.pitch),
+                    channels: startedEvents.map(\.channel)
+                )
+                return .error(HonestContract.encodeStateC(
+                    error: .axWriteFailed,
+                    hint: "KeyCmd transport sequence note-on send failed after \(startedEvents.count) note-ons: \(error)",
+                    extras: terminalPartialSendExtras([
+                        "operation": "midi.play_sequence.keycmd",
+                        "phase": "note_on",
+                        "note_on_failed": true,
+                        "note_on_count_requested": events.count,
+                        "failed_note_off_count": settledFailure?.count ?? 0,
+                    ],
+                        noteOnCountSent: startedEvents.count,
+                        cleanup: cleanup,
+                        priorCleanupSendFailures: settledFailure?.count ?? 0
+                    )
+                ))
             }
             let pitch = event.pitch
             let ch = event.channel
@@ -685,9 +705,4 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel {
         return KeyCmdNoteOffFailure(count: failureCount, firstError: firstError)
     }
 
-    private func drainKeyCmdNoteOffTasks(_ tasks: [Task<Void, Error>]) async {
-        for task in tasks {
-            _ = await task.result
-        }
-    }
 }
