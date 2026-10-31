@@ -387,7 +387,10 @@ struct CoordFreeTrackToggleTests {
         let terminal = try #require(obj["terminal"] as? Bool)
         let humanRequired = try #require(obj["human_intervention_required"] as? Bool)
         #expect(terminal)
+        #expect(obj["terminal_scope"] as? String == "mcp_request_only")
         #expect(!humanRequired)
+        #expect(obj["human_intervention_requests"] as? Int == 0)
+        #expect(obj["human_dependent_transitions"] as? Int == 0)
 
         let hint = try #require(obj["hint"] as? String)
         for instruction in bannedInstructions {

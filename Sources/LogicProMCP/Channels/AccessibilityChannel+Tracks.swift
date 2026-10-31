@@ -2303,7 +2303,10 @@ extension AccessibilityChannel {
     ) -> [String: Any] {
         extras.merging([
             "terminal": true,
-            "human_intervention_required": false
+            "terminal_scope": "mcp_request_only",
+            "human_intervention_required": false,
+            "human_intervention_requests": 0,
+            "human_dependent_transitions": 0,
         ]) { _, terminalValue in terminalValue }
     }
 
