@@ -262,29 +262,77 @@ private struct DoctorCapabilityEnvelope: Encodable {
 
     #expect(report.clientProfile == .claudeCode)
     #expect(report.clientProfileBasis == "default_claude_code")
-    #expect(registration.status == .warn)
+    #expect(registration.status == .fail)
     #expect(registration.skipReason == nil)
     #expect(object["client_profile_basis"] as? String == "default_claude_code")
 }
 
-@Test func doctorV4PartialClaudeRegistrationsExposeTargetedGuidance() throws {
+@Test func doctorV4ClaudeCodeRegistrationFailuresTerminateWithoutHumanRemediation() throws {
+    let cases: [SetupDoctor.ClaudeRegistration] = [
+        .notRegistered,
+        .configUnavailable(reason: "config_unreadable"),
+        .nameOnly(name: "logic-pro-old", command: "/usr/bin/other"),
+        .commandOnly(name: "studio-tools", command: "/opt/homebrew/bin/LogicProMCP"),
+    ]
+
+    for registration in cases {
+        let report = doctorV4Report(
+            arguments: ["LogicProMCP", "doctor", "--json", "--client", "claude-code"],
+            runtime: doctorV4Runtime(registration: registration)
+        )
+        let check = try #require(report.checks.first { $0.id == "mcp.claude_code_registration" })
+
+        #expect(check.status == .fail)
+        #expect(check.remediation.type == .none)
+        #expect(check.remediation.value.isEmpty)
+        #expect(check.evidence["terminal"] == "true")
+        #expect(check.evidence["human_intervention_required"] == "false")
+        #expect(check.evidence["human_intervention_requests"] == "0")
+        #expect(!report.fixPlan.contains(check.id))
+    }
+}
+
+@Test func doctorV4ClaudeDesktopRegistrationFailuresTerminateWithoutHumanRemediation() throws {
+    let cases: [SetupDoctor.ClaudeRegistration] = [
+        .notRegistered,
+        .configUnavailable(reason: "config_absent"),
+        .configUnavailable(reason: "config_unreadable"),
+        .nameOnly(name: "logic-pro-old", command: "/usr/bin/other"),
+        .commandOnly(name: "studio-tools", command: "/opt/homebrew/bin/LogicProMCP"),
+    ]
+
+    for registration in cases {
+        let report = doctorV4Report(
+            arguments: ["LogicProMCP", "doctor", "--json", "--client", "claude-desktop"],
+            runtime: doctorV4Runtime(desktopRegistration: registration)
+        )
+        let check = try #require(report.checks.first { $0.id == "mcp.claude_desktop_registration" })
+
+        #expect(check.status == .fail)
+        #expect(check.remediation.type == .none)
+        #expect(check.remediation.value.isEmpty)
+        #expect(check.evidence["terminal"] == "true")
+        #expect(check.evidence["human_intervention_required"] == "false")
+        #expect(check.evidence["human_intervention_requests"] == "0")
+        #expect(!report.fixPlan.contains(check.id))
+    }
+}
+
+@Test func doctorV4PartialClaudeRegistrationsPreserveDiagnosticIdentity() throws {
     let cases: [(
         registration: SetupDoctor.ClaudeRegistration,
         matchKind: String,
-        summaryFragment: String,
-        remediationFragment: String
+        summaryFragment: String
     )] = [
         (
             .nameOnly(name: "logic-pro-old", command: "/usr/bin/other"),
             "name_only",
-            "name matches, but its command does not target LogicProMCP",
-            "remove 'logic-pro-old'"
+            "name matches, but its command does not target LogicProMCP"
         ),
         (
             .commandOnly(name: "studio-tools", command: "/opt/homebrew/bin/LogicProMCP"),
             "command_only",
-            "targets LogicProMCP, but its server name does not match logic-pro",
-            "remove 'studio-tools'"
+            "targets LogicProMCP, but its server name does not match logic-pro"
         ),
     ]
 
@@ -298,14 +346,15 @@ private struct DoctorCapabilityEnvelope: Encodable {
         let encoded = try #require(checks.first { $0["id"] as? String == check.id })
         let output = SetupDoctor.renderHuman(report, mode: .verbose, useColor: false)
 
-        #expect(check.status == .warn)
+        #expect(check.status == .fail)
         #expect(report.clientProfile == .claudeCode)
         #expect(report.clientProfileBasis == "registration_config")
         let evidence = try #require(encoded["evidence"] as? [String: Any])
         #expect(evidence["match_kind"] as? String == item.matchKind)
         #expect(check.evidence["match_kind"] == item.matchKind)
         #expect(check.summary.contains(item.summaryFragment))
-        #expect(check.remediation.value.contains(item.remediationFragment))
+        #expect(check.remediation.type == .none)
+        #expect(check.remediation.value.isEmpty)
         #expect(output.contains(item.summaryFragment))
     }
 }
@@ -322,7 +371,7 @@ private struct DoctorCapabilityEnvelope: Encodable {
 
     #expect(report.clientProfile == .claudeCode)
     #expect(report.clientProfileBasis == "default_claude_code")
-    #expect(registration.status == .warn)
+    #expect(registration.status == .fail)
     #expect(registration.skipReason == nil)
 }
 
@@ -495,7 +544,9 @@ private struct DoctorCapabilityEnvelope: Encodable {
 
     let desktop = try #require(report.checks.first { $0.id == "mcp.claude_desktop_registration" })
     let isOptional = desktop.optional
-    #expect(desktop.status == .warn || desktop.status == .manual)
+    #expect(desktop.status == .fail)
+    #expect(desktop.remediation.type == .none)
+    #expect(desktop.evidence["terminal"] == "true")
     #expect(!isOptional)
     #expect(desktop.skipReason != .clientNotSelected)
     #expect(report.status != .ok)

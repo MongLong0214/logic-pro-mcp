@@ -262,7 +262,7 @@ After verifying SHA256 and signature, remove quarantine with `xattr -d com.apple
 
 <a id="doctor-mcpclaude-code-registration"></a>
 ### `mcp.claude_code_registration`
-Register with `claude mcp add --scope user logic-pro -- LogicProMCP`. If config parsing fails, fix `~/.claude.json` and rerun doctor.
+Reports whether the selected Claude Code client already has an exact LogicProMCP registration. Missing, partial, mismatched, or unreadable registration is a terminal unavailable state for this read-only run; doctor emits no command, config-edit, or retry request.
 
 <a id="doctor-mcpregistration-target"></a>
 ### `mcp.registration_target`
@@ -270,7 +270,7 @@ Refresh the Claude Code MCP registration when its command is missing, relative, 
 
 <a id="doctor-mcpclaude-desktop-registration"></a>
 ### `mcp.claude_desktop_registration`
-Optional Claude Desktop registration. An absent config is an optional skip and does not degrade strict status. If configured but unregistered, edit `claude_desktop_config.json`.
+This check is skipped when Claude Desktop is not the selected client. When Claude Desktop is selected, an absent, unreadable, partial, mismatched, or missing registration is a terminal unavailable state; doctor emits no config-edit or retry request.
 
 <a id="doctor-permissionsaccessibility"></a>
 ### `permissions.accessibility`

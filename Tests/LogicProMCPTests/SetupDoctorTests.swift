@@ -704,7 +704,7 @@ private func issue26RepositoryRootURL() -> URL {
     #expect(registration.evidence["match_kind"] == "name_and_command")
 }
 
-@Test func testClaudeRegistrationWarnWhenConfigHasNoMatchingEntry() throws {
+@Test func testClaudeRegistrationTerminatesWhenConfigHasNoMatchingEntry() throws {
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json", "--client", "claude-code"],
         permissionStatus: grantedPermissionStatus(),
@@ -712,13 +712,14 @@ private func issue26RepositoryRootURL() -> URL {
         runtime: doctorRuntime(registration: .notRegistered)
     )
     let registration = try #require(report.checks.first { $0.id == "mcp.claude_code_registration" })
-    #expect(registration.status == .warn)
+    #expect(registration.status == .fail)
     #expect(registration.evidence["match_kind"] == "none")
-    #expect(registration.remediation.type == .command)
-    #expect(!registration.remediation.value.isEmpty)
+    #expect(registration.remediation.type == .none)
+    #expect(registration.remediation.value.isEmpty)
+    #expect(registration.evidence["terminal"] == "true")
 }
 
-@Test func testClaudeRegistrationManualWithConfigReasonWhenUnreadable() throws {
+@Test func testClaudeRegistrationTerminatesWithConfigReasonWhenUnreadable() throws {
     // The config-unavailable path must say the CONFIG could not be read — NOT that
     // the Claude CLI was unavailable.
     let report = SetupDoctor.generate(
@@ -728,7 +729,8 @@ private func issue26RepositoryRootURL() -> URL {
         runtime: doctorRuntime(registration: .configUnavailable(reason: "config file not found at /x/.claude.json"))
     )
     let registration = try #require(report.checks.first { $0.id == "mcp.claude_code_registration" })
-    #expect(registration.status == .manual)
+    #expect(registration.status == .fail)
+    #expect(registration.remediation.type == .none)
     #expect(registration.summary.localizedCaseInsensitiveContains("config"))
     #expect(!registration.summary.localizedCaseInsensitiveContains("CLI"))
     #expect(registration.evidence["reason"] == "config file not found at /x/.claude.json")
