@@ -10,8 +10,7 @@ actor AccessibilityChannel: Channel {
     private let runtime: Runtime
 
     // T4: actor state for scanLibraryAll orchestration
-    private var libraryScanInProgress: Bool = false
-    private var pluginScanInProgress: Bool = false
+    private var axInventoryOperationInProgress: Bool = false
     // v3.1.0 (T6) — split the single `lastScan` into three source-keyed caches.
     // Panel scans certify Panel presence; disk scans provide the full local
     // candidate catalog; `lastScan` remains populated for legacy callers that
@@ -1915,17 +1914,21 @@ actor AccessibilityChannel: Channel {
 
         // MARK: - Library (instrument patch) operations
         case "library.list":
+            if axInventoryOperationInProgress {
+                return .error("AX inventory operation already in progress")
+            }
+            axInventoryOperationInProgress = true
+            defer { axInventoryOperationInProgress = false }
             return await AccessibilityChannel.listLibrary(runtime: runtime.logicRuntime)
         case "library.scan_all":
-            // E15: atomic check-and-set within actor step (no suspension points).
-            // Library and plugin AX scans are mutually exclusive — either one in
-            // flight rejects the other so we never run two concurrent AX-tree
-            // traversals of Logic. Each scan still clears only its OWN flag.
-            if libraryScanInProgress || pluginScanInProgress {
-                return .error("Library scan already in progress")
+            // Atomic actor-local ownership covers list plus both scanners. Each
+            // can suspend while observing/opening Logic UI, so no second AX
+            // inventory operation may interleave before the first returns.
+            if axInventoryOperationInProgress {
+                return .error("AX inventory operation already in progress")
             }
-            libraryScanInProgress = true
-            defer { libraryScanInProgress = false }
+            axInventoryOperationInProgress = true
+            defer { axInventoryOperationInProgress = false }
             // "mode" selects between disk (default, filesystem-backed,
             // Panel-taxonomy mapped), ax (legacy live Panel walk), or both
             // (diff report).
@@ -1951,13 +1954,11 @@ actor AccessibilityChannel: Channel {
             // F2 minimal scan handler — relies on currently-focused plugin window.
             // Full T6 (cache, persistence, axScanInProgress rename, AC-1.5b trackIndex
             // precedence) is follow-up. This handler delivers live menu enumeration.
-            // E15: mutually exclusive with library.scan_all — either AX-tree scan
-            // in flight rejects the other. Each scan still clears only its OWN flag.
-            if libraryScanInProgress || pluginScanInProgress {
-                return .error("AX scan already in progress")
+            if axInventoryOperationInProgress {
+                return .error("AX inventory operation already in progress")
             }
-            pluginScanInProgress = true
-            defer { pluginScanInProgress = false }
+            axInventoryOperationInProgress = true
+            defer { axInventoryOperationInProgress = false }
             let settleMs = Int(params["submenuOpenDelayMs"] ?? "250") ?? 250
             return await AccessibilityChannel.runLivePluginPresetScan(
                 runtime: runtime.logicRuntime, settleMs: settleMs

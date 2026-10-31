@@ -4797,7 +4797,9 @@ private func makeLibraryPanelLogicRuntime(
     panelInitiallyOpen: Bool = true,
     openCalls: CallCounter? = nil,
     openSucceeds: Bool = true,
-    inventoryReadable: Bool = true
+    inventoryReadable: Bool = true,
+    foreignBrowserVisibleWhenLibraryClosed: Bool = false,
+    openStarted: ScanEnteredSignal? = nil
 ) -> AXLogicProElements.Runtime {
     let builder = FakeAXRuntimeBuilder()
     let windowChildrenReads = CallCounter()
@@ -4814,15 +4816,32 @@ private func makeLibraryPanelLogicRuntime(
     let menuBar = builder.element(20_010)
     let viewMenu = builder.element(20_011)
     let showLibrary = builder.element(20_012)
+    let foreignBrowser = builder.element(20_013)
+    let foreignCategory = builder.element(20_014)
+    let foreignItem = builder.element(20_015)
 
     builder.setAttribute(app, kAXMainWindowAttribute as String, window)
     builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
-    builder.setChildren(window, panelInitiallyOpen ? [browser] : [])
+    let closedWindowChildren = foreignBrowserVisibleWhenLibraryClosed ? [foreignBrowser] : []
+    builder.setChildren(window, panelInitiallyOpen ? [browser] : closedWindowChildren)
     builder.setChildren(menuBar, [viewMenu])
     builder.setAttribute(viewMenu, kAXTitleAttribute as String, "View")
     builder.setChildren(viewMenu, [showLibrary])
     builder.setAttribute(showLibrary, kAXRoleAttribute as String, kAXMenuItemRole as String)
     builder.setAttribute(showLibrary, kAXTitleAttribute as String, "Show Library")
+    builder.setAttribute(foreignBrowser, kAXRoleAttribute as String, kAXBrowserRole as String)
+    builder.setAttribute(foreignBrowser, kAXDescriptionAttribute as String, "File Browser")
+    builder.setChildren(foreignBrowser, [foreignCategory, foreignItem])
+    for (element, value, x) in [
+        (foreignCategory, "Files", CGFloat(100)),
+        (foreignItem, "Audio", CGFloat(260)),
+    ] {
+        builder.setAttribute(element, kAXRoleAttribute as String, kAXStaticTextRole as String)
+        builder.setAttribute(element, kAXValueAttribute as String, value)
+        builder.setAttribute(element, kAXPositionAttribute as String, axPoint(x, 100))
+        builder.setAttribute(element, kAXSizeAttribute as String, axSize(80, 20))
+        builder.setAttribute(element, kAXParentAttribute as String, foreignBrowser)
+    }
     builder.setAttribute(browser, kAXRoleAttribute as String, kAXBrowserRole as String)
     builder.setAttribute(browser, kAXDescriptionAttribute as String, "Library")
     builder.setAttribute(browser, kAXParentAttribute as String, window)
@@ -4869,8 +4888,12 @@ private func makeLibraryPanelLogicRuntime(
             guard action == kAXPressAction as String else { return true }
             if builder.elementID(element) == builder.elementID(showLibrary) {
                 openCalls?.inc()
+                openStarted?.fire()
                 if openSucceeds {
-                    builder.setChildren(window, [browser])
+                    builder.setChildren(
+                        window,
+                        foreignBrowserVisibleWhenLibraryClosed ? [foreignBrowser, browser] : [browser]
+                    )
                 }
             }
             return true
@@ -5023,6 +5046,28 @@ func testLibraryListAutomaticallyOpensClosedPanel() async {
     #expect(!result.message.contains("Open Library"))
 }
 
+@Test("library.list ignores a non-Library AXBrowser and opens the exact Library panel")
+func testLibraryListDoesNotTreatForeignBrowserAsLibrary() async {
+    let openCalls = CallCounter()
+    let runtime = AccessibilityChannel.Runtime.axBacked(
+        isTrusted: { true },
+        isLogicProRunning: { true },
+        logicRuntime: makeLibraryPanelLogicRuntime(
+            panelInitiallyOpen: false,
+            openCalls: openCalls,
+            foreignBrowserVisibleWhenLibraryClosed: true
+        )
+    )
+    let channel = AccessibilityChannel(runtime: runtime)
+
+    let result = await channel.execute(operation: "library.list", params: [:])
+
+    #expect(result.isSuccess)
+    #expect(openCalls.count == 1)
+    #expect(result.message.contains("Bass"))
+    #expect(!result.message.contains("Files"))
+}
+
 @Test("library.list terminates without human recovery when automatic panel open is exhausted")
 func testLibraryListPanelOpenExhaustionIsTerminal() async throws {
     let openCalls = CallCounter()
@@ -5056,14 +5101,45 @@ func testLibraryListPanelOpenExhaustionIsTerminal() async throws {
     #expect(!result.message.contains("Open Library"))
 }
 
+@Test("library.list shares exclusive AX inventory ownership with list and scan operations")
+func testLibraryListIsMutuallyExclusiveWithInventoryScans() async {
+    let entered = ScanEnteredSignal()
+    let runtime = AccessibilityChannel.Runtime.axBacked(
+        isTrusted: { true },
+        isLogicProRunning: { true },
+        hasVisibleWindow: { true },
+        logicRuntime: makeLibraryPanelLogicRuntime(
+            panelInitiallyOpen: false,
+            openSucceeds: false,
+            openStarted: entered
+        )
+    )
+    let channel = AccessibilityChannel(runtime: runtime)
+
+    let firstList = Task.detached(priority: .userInitiated) {
+        await channel.execute(operation: "library.list", params: [:])
+    }
+    #expect(entered.waitUntilEntered())
+
+    for operation in ["library.list", "library.scan_all", "plugin.scan_presets"] {
+        let params = operation == "library.scan_all" ? ["mode": "ax"] : [:]
+        let result = await channel.execute(operation: operation, params: params)
+        #expect(!result.isSuccess)
+        #expect(result.message.contains("already in progress"))
+    }
+
+    let firstResult = await firstList.value
+    #expect(!firstResult.message.contains("already in progress"))
+}
+
 /// Restores the pre-split cross-exclusion between `library.scan_all` and
 /// `plugin.scan_presets` (both traverse Logic's AX tree; running them at the
 /// same time launches two simultaneous traversals). Splitting the single
 /// `scanInProgress` flag into two independent flags dropped the cross guard;
 /// this pins the original truth table.
 ///
-/// Determinism (NOT timing-based): scan A sets `libraryScanInProgress` BEFORE
-/// its first suspension (the `enumerateTree` settle-sleep). `hasVisibleWindow` —
+/// Determinism (NOT timing-based): scan A claims the shared AX inventory owner
+/// BEFORE its first suspension (the `enumerateTree` settle-sleep). `hasVisibleWindow` —
 /// invoked on the actor right after the flag is set and before any `await` —
 /// raises `entered`. Once `entered` is observed, the single-threaded actor can
 /// only service the next `execute` after A suspends, at which point A's `defer`
@@ -5103,7 +5179,7 @@ func testLibraryAndPluginScansAreMutuallyExclusive() async {
 
     // CROSS (the regression): a plugin scan must be refused while a library scan
     // is suspended in-flight. Pre-fix this returned the "no plugin window" error
-    // instead, because `pluginScanInProgress` was still false.
+    // instead, because list and scan ownership was previously split.
     let crossResult = await channel.execute(operation: "plugin.scan_presets", params: [:])
     #expect(!crossResult.isSuccess)
     #expect(crossResult.message.contains("already in progress"))
