@@ -1706,8 +1706,13 @@ extension AccessibilityChannel {
         }
         return .error(HonestContract.encodeStateC(
             error: .elementNotFound,
-            hint: "Open Navigate > Open Marker List so Logic Pro can expose marker rows to Accessibility.",
-            extras: ["reason": "marker_list_not_open"]
+            hint: "No Marker List window was observed; marker enumeration terminated without a UI action.",
+            extras: [
+                "reason": "marker_list_not_open",
+                "terminal": true,
+                "human_intervention_required": false,
+                "human_intervention_requests": 0,
+            ]
         ))
     }
 

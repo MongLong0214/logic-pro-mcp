@@ -29,7 +29,7 @@ private func issue254Envelope(_ result: ReadResource.Result) throws -> [String: 
     }
 }
 
-@Test func issue254ClosedMarkerListIsUnreadableRatherThanVerifiedEmpty() {
+@Test func issue254ClosedMarkerListIsTerminalWithoutHumanContinuation() throws {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(25_400)
     builder.setAttribute(app, kAXWindowsAttribute as String, [AXUIElement]())
@@ -39,7 +39,15 @@ private func issue254Envelope(_ result: ReadResource.Result) throws -> [String: 
     )
 
     #expect(!result.isSuccess)
-    #expect(result.message.contains("marker_list_not_open"))
+    let envelope = try #require(
+        JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
+    )
+    #expect(envelope["reason"] as? String == "marker_list_not_open")
+    #expect(try #require(envelope["terminal"] as? Bool))
+    #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+    #expect(try #require(envelope["human_intervention_requests"] as? Int) == 0)
+    let hint = try #require(envelope["hint"] as? String)
+    #expect(hint == "No Marker List window was observed; marker enumeration terminated without a UI action.")
 }
 
 @Test func issue254OpenEmptyMarkerListIsVerifiedEmpty() throws {
