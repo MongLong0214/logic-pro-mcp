@@ -257,13 +257,21 @@ struct Issue112CommandDeadlineTests {
     }
 
     @Test("the deadline timeout result is shaped like a State C envelope")
-    func timeoutResultShape() {
+    func timeoutResultShape() throws {
         let result = LogicProServer.deadlineTimeoutResult(tool: "logic_navigate", command: "create_marker", seconds: 25)
         #expect(result.isError!)
         let obj = json(result)
         #expect(!((obj?["success"] as? Bool)!))
         #expect(obj?["error"] as? String == "operation_timeout")
         #expect(obj?["operation"] as? String == "logic_navigate.create_marker")
+        #expect(try #require(obj?["terminal"] as? Bool))
+        #expect(!(try #require(obj?["human_intervention_required"] as? Bool)))
+        #expect(obj?["human_intervention_requests"] as? Int == 0)
+        #expect(obj?["human_dependent_transitions"] as? Int == 0)
+        let recoveryHint = try #require(obj?["recovery_hint"] as? String)
+        for manualContinuation in ["dismiss", "retry", "click", "press", "ask a person"] {
+            #expect(!recoveryHint.localizedCaseInsensitiveContains(manualContinuation))
+        }
     }
 
     // MARK: - #201 bounded post-timeout gate reclaim
