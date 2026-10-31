@@ -1050,6 +1050,9 @@ func testTransportDispatcherStillnessWithTheTempoUnreadSendsNothingAndSaysSo(
     #expect(object["human_dependent_transitions"] as? Int == 0)
     let hint = try #require(object["hint"] as? String)
     #expect(hint.localizedCaseInsensitiveContains("terminated"))
+    for request in ["focus", "dismiss", "retry", "click", "run "] {
+        #expect(!hint.lowercased().contains(request))
+    }
     #expect(object["already_paused"] == nil)
     #expect(object["resumed_from_pause"] == nil)
     // Nothing was measured, so nothing was waited for.
@@ -1113,6 +1116,9 @@ func testTransportDispatcherStillnessAtFiveBPMDoesNotReadEqualPositionsAsStill(
     #expect(object["human_dependent_transitions"] as? Int == 0)
     let hint = try #require(object["hint"] as? String)
     #expect(hint.localizedCaseInsensitiveContains("terminated"))
+    for request in ["focus", "dismiss", "retry", "click", "run "] {
+        #expect(!hint.lowercased().contains(request))
+    }
     #expect(object["observed_tempo"] as? Double == 5.0)
     #expect(object["already_paused"] == nil)
     #expect(object["resumed_from_pause"] == nil)
