@@ -499,14 +499,14 @@ struct OperationTraceTests {
         #expect(sharedJSONObject(sharedToolText(unknown))?["error"] as? String == "element_not_found")
     }
 
-    @Test func OperationTraceSystemFlagOffReturnsTypedDisabledResponses() async {
+    @Test func OperationTraceSystemFlagOffReturnsTypedDisabledResponses() async throws {
         let router = ChannelRouter()
         let cache = StateCache()
         await OperationTraceStore.shared.clear()
         let traceID = await OperationTraceStore.shared.start(operationID: "test.flag-off.seed")
         await OperationTraceStore.shared.complete(traceID)
 
-        await FeatureFlags.withAdr005OperationTraceForTests(false) {
+        try await FeatureFlags.withAdr005OperationTraceForTests(false) {
             let listed = await SystemDispatcher.handle(
                 command: "list_recent_traces",
                 params: ["limit": .int(1)],
@@ -535,6 +535,11 @@ struct OperationTraceTests {
             #expect(fetchedTraceDisabled)
             let fetchedWriteAttempted = fetchedBody["write_attempted"] as? Bool ?? true
             #expect(!fetchedWriteAttempted)
+            #expect(try #require(fetchedBody["terminal"] as? Bool))
+            #expect(!(try #require(fetchedBody["safe_to_retry"] as? Bool)))
+            #expect(!(try #require(fetchedBody["human_intervention_required"] as? Bool)))
+            #expect(try #require(fetchedBody["human_intervention_requests"] as? Int) == 0)
+            #expect(try #require(fetchedBody["human_dependent_transitions"] as? Int) == 0)
 
             let unconfirmed = await SystemDispatcher.handle(
                 command: "clear_traces",
@@ -566,6 +571,16 @@ struct OperationTraceTests {
             #expect(!clearedWriteAttempted)
             let clearedSuccessFlag = clearedBody["success"] as? Bool ?? false
             #expect(!clearedSuccessFlag)
+            #expect(try #require(clearedBody["terminal"] as? Bool))
+            #expect(!(try #require(clearedBody["safe_to_retry"] as? Bool)))
+            #expect(!(try #require(clearedBody["human_intervention_required"] as? Bool)))
+            #expect(try #require(clearedBody["human_intervention_requests"] as? Int) == 0)
+            #expect(try #require(clearedBody["human_dependent_transitions"] as? Int) == 0)
+            let clearHint = try #require(clearedBody["hint"] as? String)
+            #expect(clearHint.localizedCaseInsensitiveContains("terminated"))
+            #expect(!clearHint.localizedCaseInsensitiveContains("unset"))
+            #expect(!clearHint.localizedCaseInsensitiveContains("set it"))
+            #expect(!clearHint.localizedCaseInsensitiveContains("retry"))
             #expect(await OperationTraceStore.shared.trace(traceID) != nil)
         }
         await OperationTraceStore.shared.clear()

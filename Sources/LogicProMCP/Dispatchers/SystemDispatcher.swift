@@ -93,10 +93,12 @@ struct SystemDispatcher: OperationTraceDispatching {
         toolTextResult(HonestContract.encodeStateC(
             error: .armKeyConfigInvalid,
             hint: "\(setupDeadlineEnvVar) must be a positive integer number of milliseconds; \"\(raw)\" "
-                + "is not valid. Unset it to use the default deadline, or set a value like 8000. No Key "
-                + "Commands change was attempted.",
+                + "is not valid. No Key Commands or configuration change was attempted; this MCP request terminated.",
             extras: ["stage": "setup_deadline_config_invalid", "write_source": "none",
-                     "write_attempted": false, "configuration_write_attempted": false]
+                     "write_attempted": false, "configuration_write_attempted": false,
+                     "terminal": true, "terminal_scope": "mcp_request_only",
+                     "safe_to_retry": false, "human_intervention_required": false,
+                     "human_intervention_requests": 0, "human_dependent_transitions": 0]
         ), isError: true)
     }
 
@@ -2030,11 +2032,17 @@ struct SystemDispatcher: OperationTraceDispatching {
             guard FeatureFlags.adr005OperationTrace else {
                 return toolStateCResult(
                     .notSupported,
-                    hint: "Operation tracing is on by default; it was disabled with LOGIC_MCP_ADR005_OPERATION_TRACE=0",
+                    hint: "Operation tracing is disabled for this process; no trace was read and this MCP request terminated.",
                     extras: [
                         "operation": "system.get_trace",
                         "trace_disabled": true,
                         "write_attempted": false,
+                        "terminal": true,
+                        "terminal_scope": "mcp_request_only",
+                        "safe_to_retry": false,
+                        "human_intervention_required": false,
+                        "human_intervention_requests": 0,
+                        "human_dependent_transitions": 0,
                     ]
                 )
             }
@@ -2086,10 +2094,17 @@ struct SystemDispatcher: OperationTraceDispatching {
                 return toolTextResult(
                     HonestContract.encodeStateC(
                         error: .traceDisabled,
-                        hint: "Operation tracing is on by default; it was disabled with "
-                            + "LOGIC_MCP_ADR005_OPERATION_TRACE=0, so nothing was cleared. "
-                            + "Unset the variable (or set it to any value other than \"0\") to record and manage traces.",
-                        extras: ["trace_disabled": true, "write_attempted": false]
+                        hint: "Operation tracing is disabled for this process; nothing was cleared and this MCP request terminated.",
+                        extras: [
+                            "trace_disabled": true,
+                            "write_attempted": false,
+                            "terminal": true,
+                            "terminal_scope": "mcp_request_only",
+                            "safe_to_retry": false,
+                            "human_intervention_required": false,
+                            "human_intervention_requests": 0,
+                            "human_dependent_transitions": 0,
+                        ]
                     ),
                     isError: true
                 )

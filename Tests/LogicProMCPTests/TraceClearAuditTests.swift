@@ -326,6 +326,11 @@ struct TraceClearAuditTests {
             #expect(try #require(body["error"] as? String) == "trace_disabled")
             let writeAttempted = try #require(body["write_attempted"] as? Bool)
             #expect(!writeAttempted)
+            #expect(try #require(body["terminal"] as? Bool))
+            #expect(!(try #require(body["safe_to_retry"] as? Bool)))
+            #expect(!(try #require(body["human_intervention_required"] as? Bool)))
+            #expect(try #require(body["human_intervention_requests"] as? Int) == 0)
+            #expect(try #require(body["human_dependent_transitions"] as? Int) == 0)
 
             // Store intact — a no-op never clears.
             #expect(await OperationTraceStore.shared.recent(limit: 128).count == 2)

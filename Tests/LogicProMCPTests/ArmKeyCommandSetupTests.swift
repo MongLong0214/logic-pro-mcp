@@ -1284,6 +1284,16 @@ import Testing
         #expect(!writeAttempted)
         let configWriteAttempted = try #require(object["configuration_write_attempted"] as? Bool)
         #expect(!configWriteAttempted)
+        #expect(try #require(object["terminal"] as? Bool))
+        #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+        #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+        #expect(try #require(object["human_intervention_requests"] as? Int) == 0)
+        #expect(try #require(object["human_dependent_transitions"] as? Int) == 0)
+        let hint = try #require(object["hint"] as? String)
+        #expect(hint.localizedCaseInsensitiveContains("terminated"))
+        #expect(!hint.localizedCaseInsensitiveContains("unset"))
+        #expect(!hint.localizedCaseInsensitiveContains("set a value"))
+        #expect(!hint.localizedCaseInsensitiveContains("retry"))
     }
 
     private static func jsonText(_ result: CallTool.Result) throws -> String {
