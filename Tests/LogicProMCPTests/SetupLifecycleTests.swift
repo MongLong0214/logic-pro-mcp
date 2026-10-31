@@ -120,10 +120,13 @@ private func launchAgentPath(_ home: URL = lifecycleTestHome) -> String {
     let keycmds = try #require(step(plan, "keycmds.stage"))
     #expect(keycmds.action == .create)
 
-    // Scripter is a manual Logic-side step with no FS artifact -> always skip.
+    // Scripter has no programmatically verifiable setup/readback path.
     let scripter = try #require(step(plan, "scripter.insert"))
     #expect(scripter.action == .skip)
-    #expect(scripter.remediation.type == .manual)
+    #expect(scripter.currentState == "unattended_unavailable")
+    #expect(scripter.plannedState == "unattended_unavailable")
+    #expect(scripter.remediation.type == .none)
+    #expect(scripter.remediation.value.isEmpty)
 
     // No delete/unregister actions in a fresh install plan.
     let actions = Set(plan.steps.map(\.action))
@@ -190,6 +193,8 @@ private func launchAgentPath(_ home: URL = lifecycleTestHome) -> String {
     #expect(approvals.action == .delete)
     #expect(approvals.reversible)
     #expect(!approvals.requiresSudo)
+    #expect(!approvals.remediation.value.contains("re-approve"))
+    #expect(!approvals.remediation.value.contains("--approve-channel"))
 
     let binary = try #require(step(plan, "binary.remove"))
     #expect(binary.action == .delete)
@@ -251,7 +256,7 @@ private func launchAgentPath(_ home: URL = lifecycleTestHome) -> String {
     #expect(approvals.remediation.value.contains("operator-approvals.json.lock"))
 }
 
-@Test func testUninstallUnregisterIsManualWhenClaudeCLIMissing() throws {
+@Test func testUninstallUnregisterHasNoHumanFallbackWhenClientCLIMissing() throws {
     let plan = SetupLifecycle.plan(
         command: .uninstall,
         runtime: lifecycleRuntime(
@@ -261,7 +266,8 @@ private func launchAgentPath(_ home: URL = lifecycleTestHome) -> String {
     )
     let unregister = try #require(step(plan, "mcp.unregister"))
     #expect(unregister.action == .unregister)
-    #expect(unregister.remediation.type == .manual)
+    #expect(unregister.remediation.type == .none)
+    #expect(unregister.remediation.value.isEmpty)
 }
 
 // MARK: - Update plan (version delta)

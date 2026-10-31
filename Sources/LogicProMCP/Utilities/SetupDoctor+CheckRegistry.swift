@@ -115,10 +115,9 @@ extension SetupDoctor {
         .init(.logicApplicationState, capabilityGroups: allCapabilityGroups, remediationAnchor: "docs/SETUP.md#doctor-logicapplication-state"),
         .init(.logicBlockingDialog, dependencies: [.logicApplicationState, .permissionsAccessibility], capabilityGroups: ["track_management", "mixer_ax", "verified_plugin_applyback"], remediationAnchor: "docs/SETUP.md#doctor-logicblocking-dialog"),
         .init(.channelsKeycmdReference, capabilityGroups: ["keycmd_only_ops"], remediationAnchor: "docs/SETUP.md#doctor-channelskeycmd-reference", profileRule: "keycmd|full"),
-        // #457: legacy assertion records neither configure nor verify Logic. Keep the
-        // staging dependency so an unresolved reference remains the single root cause;
-        // once staging resolves, this check terminates without exposing a human action.
-        .init(.channelsManualValidation, dependencies: [.channelsKeycmdReference], capabilityGroups: ["keycmd_only_ops", "legacy_scripter"], remediationAnchor: "docs/SETUP.md#doctor-channelsmanual-validation", profileRule: "keycmd|legacy-scripter|full"),
+        // #457: neither a reference file nor a legacy assertion configures or
+        // verifies Logic, so this terminal check has no actionable dependency.
+        .init(.channelsManualValidation, capabilityGroups: ["keycmd_only_ops", "legacy_scripter"], remediationAnchor: "docs/SETUP.md#doctor-channelsmanual-validation", profileRule: "keycmd|legacy-scripter|full"),
         .init(.channelsMCUWiringHint, capabilityGroups: ["mixer_mcu"], remediationAnchor: "docs/SETUP.md#doctor-channelsmcu-wiring-hint", profileRule: "full"),
         .init(.dependenciesClickFallback, remediationAnchor: "docs/SETUP.md#doctor-dependenciesclick-fallback"),
         .init(

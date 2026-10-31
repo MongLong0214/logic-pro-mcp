@@ -50,6 +50,8 @@ import Testing
 
 @Test func testInstallScriptRegistersClaudeAndKeyCommandsByDefault() throws {
     let script = try scriptContents("Scripts/install.sh")
+    let keycmdScript = try scriptContents("Scripts/install-keycmds.sh")
+    let keycmdReference = try scriptContents("Scripts/keycmd-preset.plist")
 
     #expect(script.contains("SETUP.md"))
     #expect(script.contains("logic_bounce.py"))
@@ -59,10 +61,8 @@ import Testing
     #expect(script.contains("LOGIC_PRO_MCP_REGISTER_CLAUDE"))
     #expect(script.contains("Registering with Claude Code"))
     #expect(script.contains("LOGIC_PRO_MCP_INSTALL_KEYCMDS"))
-    // RB-6 (v3.4.0): wording was "Installing Key Commands preset" — corrected to
-    // "Staging Key Commands mapping reference" since Logic 12.2 doesn't actually
-    // import the .plist; the script only stages a CC→Command mapping reference
-    // for Manual MIDI Learn.
+    // The asset is a reference only; staging it never creates a human
+    // continuation or qualifies mapped Logic execution.
     #expect(script.contains("Staging Key Commands mapping reference"))
     #expect(script.contains("LOGIC_PRO_MCP_INSTALL_DIR"))
     #expect(script.contains("LOGIC_PRO_MCP_SHARE_DIR"))
@@ -73,6 +73,13 @@ import Testing
     #expect(!script.contains("Manual command:"))
     #expect(script.contains("unattended_unavailable"))
     #expect(script.contains("LogicProMCP-Scripter.js"))
+    for publicText in [keycmdScript, keycmdReference] {
+        #expect(!publicText.contains("Open Logic Pro"))
+        #expect(!publicText.contains("Learn New Assignment"))
+        #expect(!publicText.contains("Save Assignments"))
+        #expect(!publicText.contains("Manual MIDI Learn"))
+        #expect(publicText.contains("unattended_unavailable"))
+    }
 }
 
 @Test func testInstallScriptEscalatesWhenEitherInstallOrSharePathNeedsSudo() throws {
@@ -331,11 +338,14 @@ import Testing
     #expect(formula.contains("claude mcp add --scope user logic-pro -e LOGIC_PRO_MCP_SHARE_DIR=\"#{pkgshare}\" -- LogicProMCP"))
 }
 
-@Test func testUninstallScriptRemovesClaudeRegistrationAndKeepsManualScripterReminder() throws {
+@Test func testUninstallScriptReportsUnverifiedLogicResidualsWithoutManualContinuation() throws {
     let script = try scriptContents("Scripts/uninstall.sh")
 
     #expect(script.contains("claude mcp remove logic-pro"))
-    #expect(script.contains("Remove Scripter MIDI FX"))
+    #expect(!script.contains("Manual command:"))
+    #expect(!script.contains("Remove Scripter MIDI FX"))
+    #expect(!script.contains("manually"))
+    #expect(script.contains("Uninstall unsuccessful: Logic-resident Scripter/MCU state is unverified."))
     #expect(script.contains("APPROVAL_STORE"))
     #expect(script.contains("LOGIC_PRO_MCP_SHARE_DIR"))
     #expect(script.contains("Removed shared assets"))

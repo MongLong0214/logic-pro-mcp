@@ -369,6 +369,25 @@ private struct DoctorCapabilityEnvelope: Encodable {
     #expect(report.status == .ok)
 }
 
+@Test func doctorV4MissingKeycmdReferenceDoesNotRequestStagingBeforeTerminalOutcome() throws {
+    var runtime = doctorV4Runtime()
+    runtime.keyCommandsPresetStaged = { false }
+    let report = doctorV4Report(
+        arguments: ["LogicProMCP", "doctor", "--json", "--profile", "keycmd"],
+        runtime: runtime,
+        approvals: [:]
+    )
+    let reference = try #require(report.checks.first { $0.id == "channels.keycmd_reference" })
+    let manual = try #require(report.checks.first { $0.id == "channels.manual_validation" })
+    #expect(reference.status == .warn)
+    #expect(reference.remediation.type == .none)
+    #expect(reference.remediation.value.isEmpty)
+    #expect(manual.status == .fail)
+    #expect(manual.blockedBy == nil)
+    #expect(!report.fixPlan.contains("channels.keycmd_reference"))
+    #expect(!report.fixPlan.contains("channels.manual_validation"))
+}
+
 @Test func doctorV4FullProfileTerminatesUnavailableSendOnlyChannels() throws {
     let report = doctorV4Report(
         arguments: ["LogicProMCP", "doctor", "--json", "--profile", "full"],

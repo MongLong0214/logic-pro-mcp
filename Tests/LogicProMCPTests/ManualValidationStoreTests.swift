@@ -12,7 +12,7 @@ import Testing
 @Test func testManualValidationSummaryHandlesEmptyAndNoteLessApprovals() {
     #expect(
         ManualValidationStore.summary(for: [:]) ==
-        "No manual-validation channels have been approved."
+        "No legacy manual-channel compatibility records."
     )
 
     let summary = ManualValidationStore.summary(
@@ -24,7 +24,7 @@ import Testing
         ]
     )
 
-    #expect(summary.contains("Scripter: approved at 1970-01-01T00:00:00Z"))
+    #expect(summary.contains("Scripter: legacy assertion recorded at 1970-01-01T00:00:00Z"))
     #expect(!summary.contains("—"))
 }
 

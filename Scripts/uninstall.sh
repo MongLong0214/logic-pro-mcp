@@ -95,21 +95,17 @@ fi
 # 4. Remove MCP registration
 echo ""
 if command -v claude >/dev/null 2>&1; then
-    claude mcp remove logic-pro >/dev/null 2>&1 && echo "✓ Removed Claude Code registration: logic-pro" || echo "Claude Code registration not present — skipped."
+    if claude mcp remove logic-pro >/dev/null 2>&1; then
+        echo "✓ Removed Claude Code registration: logic-pro"
+    else
+        fail_uninstall "Uninstall unsuccessful: Claude Code deregistration failed or could not be established."
+    fi
 else
-    echo "Claude Code CLI not found — skipped MCP deregistration."
-    echo "  Manual command: claude mcp remove logic-pro"
+    fail_uninstall "Uninstall unsuccessful: Claude Code deregistration is unavailable because the CLI is missing."
 fi
 echo ""
 
-# 5. Scripter reminder
-echo "Note: Remove Scripter MIDI FX from Logic Pro channel strips manually."
-echo "  (Logic Pro > Channel Strip > MIDI FX > remove LogicProMCP-Scripter)"
-echo ""
-
-# 6. MCU reminder
-echo "Note: Remove MCU control surface from Logic Pro:"
-echo "  Logic Pro > Control Surfaces > Setup > delete LogicProMCP-MCU device"
-echo ""
-
-echo "=== Uninstall complete ==="
+# Logic-resident Scripter/MCU state has no programmatic removal/readback path.
+# Preserve the completed filesystem/registration effects and terminate with the
+# exact residual instead of requesting an operator cleanup.
+fail_uninstall "Uninstall unsuccessful: Logic-resident Scripter/MCU state is unverified."

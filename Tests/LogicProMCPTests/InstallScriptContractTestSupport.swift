@@ -28,7 +28,7 @@ struct InstallerFixture {
     let fakeBin: URL
     let installRoot: URL
     let shareDir: URL
-    let claudeLog: URL
+    let clientLog: URL
     let pathEnv: String
 }
 
@@ -108,7 +108,9 @@ func writeFile(_ url: URL, contents: String) throws {
 func makeInstallerFixture(
     includeProjectHelperScripts: Bool = true,
     includeSharedJXAHelper: Bool = true,
-    symlinkedBounceHelper: Bool = false
+    symlinkedBounceHelper: Bool = false,
+    permissionExitCode: Int32 = 0,
+    clientRegistrationExitCode: Int32 = 0
 ) throws -> InstallerFixture {
     let sandbox = try makeInstallScriptTempDir("logicpromcp-install-fixture-\(UUID().uuidString)")
     let payload = sandbox.appendingPathComponent("payload", isDirectory: true)
@@ -118,7 +120,7 @@ func makeInstallerFixture(
     let fakeBin = sandbox.appendingPathComponent("fake-bin", isDirectory: true)
     let installRoot = sandbox.appendingPathComponent("custom-install-root", isDirectory: true)
     let shareDir = installRoot.appendingPathComponent("share/logic-pro-mcp", isDirectory: true)
-    let claudeLog = sandbox.appendingPathComponent("claude-args.log")
+    let clientLog = sandbox.appendingPathComponent("client-args.log")
 
     try FileManager.default.createDirectory(at: docs, withIntermediateDirectories: true)
     try FileManager.default.createDirectory(at: scripts, withIntermediateDirectories: true)
@@ -132,7 +134,7 @@ func makeInstallerFixture(
           echo "Accessibility: granted"
           echo "Automation: granted"
         fi
-        exit 0
+        exit \(permissionExitCode)
         """
     )
     try writeFile(docs.appendingPathComponent("SETUP.md"), contents: "setup")
@@ -230,7 +232,7 @@ func makeInstallerFixture(
         for arg in "$@"; do
           printf '%s\n' "$arg" >> "$CLAUDE_LOG"
         done
-        exit 0
+        exit \(clientRegistrationExitCode)
         """
     )
     return InstallerFixture(
@@ -240,7 +242,7 @@ func makeInstallerFixture(
         fakeBin: fakeBin,
         installRoot: installRoot,
         shareDir: shareDir,
-        claudeLog: claudeLog,
+        clientLog: clientLog,
         pathEnv: "\(fakeBin.path):/usr/bin:/bin:/usr/sbin:/sbin"
     )
 }

@@ -438,7 +438,7 @@ actor ChannelRouter {
             }
             guard isBypass || health.ready || ServerConfig.allowManualValidationChannels else {
                 Log.debug(
-                    "Channel \(channelID.rawValue) requires manual validation: \(health.detail), trying next",
+                    "Channel \(channelID.rawValue) is not runtime-ready: \(health.detail), trying next",
                     subsystem: "router"
                 )
                 lastError = "Channel \(channelID.rawValue) is not runtime-ready: \(health.detail)"

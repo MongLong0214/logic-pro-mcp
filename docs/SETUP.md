@@ -189,7 +189,7 @@ Flags:
 | `--verbose` | Adds each check's evidence and `duration_ms`. |
 | `--quiet` | Headline + summary + failing/non-pass checks only. |
 | `--json` | Machine report. Identical bytes regardless of `--verbose`/`--quiet`/color. |
-| `--profile core\|mixer\|keycmd\|legacy-scripter\|full` | Selects the intent-aware readiness profile. Omit to infer from launch context and manual-validation approvals. |
+| `--profile core\|mixer\|keycmd\|legacy-scripter\|full` | Selects the intent-aware readiness profile. Omit to infer the core profile from launch context; legacy manual-channel records never expand it. |
 | `--client claude-code\|claude-desktop\|cursor\|vscode\|terminal\|custom` | Selects the MCP client profile for registration checks. Omit to infer from launch context/config. |
 | `--check-updates` | Opt-in: adds an `updates.latest_release` check (unauthenticated GitHub releases read). The default run never touches the network. |
 | `--strict` | Scripted exit codes: `ok=0`, `failed=1`, `manual_action_required=2`, `degraded=3`. |
@@ -322,11 +322,14 @@ Dismiss blocking Logic Pro modal dialogs before retrying.
 
 <a id="doctor-channelsmanual-validation"></a>
 ### `channels.manual_validation`
-Approve MIDIKeyCommands or Scripter only after completing the matching Logic-side setup.
+Required send-only mapped channels terminate as unavailable because setup and outcome readback are
+not programmatically verified. Legacy assertion/skip records do not qualify readiness and no
+operator action appears in `fix_plan`.
 
 <a id="doctor-channelskeycmd-reference"></a>
 ### `channels.keycmd_reference`
-Run `install-keycmds.sh` if you use MIDIKeyCommands-only operations.
+The bundled mapping may be present as a reference, but its presence or absence cannot qualify
+mapped Logic execution. A missing reference is reported without a staging command.
 
 <a id="doctor-channelsmcu-wiring-hint"></a>
 ### `channels.mcu_wiring_hint`
@@ -354,7 +357,8 @@ Use `brew uninstall logic-pro-mcp`, or remove the manually installed binary.
 
 <a id="lifecycle-mcpregister"></a>
 ### `mcp.register`
-Run `claude mcp add --scope user logic-pro -- LogicProMCP`.
+The installer owns requested Claude registration. A missing CLI or failed registration terminates
+the installer unsuccessfully without a manual fallback.
 
 <a id="lifecycle-mcpunregister"></a>
 ### `mcp.unregister`
@@ -362,19 +366,19 @@ Remove the `logic-pro` server entry from your MCP client config.
 
 <a id="lifecycle-keycmdsstage"></a>
 ### `keycmds.stage`
-Use bundled key command assets as manual MIDI Learn references only.
+The bundled key command asset is reference-only and cannot qualify mapped Logic execution.
 
 <a id="lifecycle-keycmdsremove"></a>
 ### `keycmds.remove`
-Remove manual MIDI Learn bindings in Logic Pro if you no longer need keycmd-only paths.
+The filesystem reference can be removed automatically; Logic-side binding state is not claimed.
 
 <a id="lifecycle-scripterinsert"></a>
 ### `scripter.insert`
-Insert the bundled Scripter script only on tracks that need legacy parameter writes.
+Scripter insert setup is `unattended_unavailable`; the lifecycle plan exposes no operator action.
 
 <a id="lifecycle-scripterremove"></a>
 ### `scripter.remove`
-Remove the Scripter insert from the affected Logic tracks.
+Scripter removal cannot be programmatically verified and remains an explicit terminal residual.
 
 <a id="lifecycle-launchagentinstall"></a>
 ### `launch_agent.install`
@@ -386,7 +390,8 @@ Unload and remove the launch agent plist, then verify no stale process remains.
 
 <a id="lifecycle-approvalsremove"></a>
 ### `approvals.remove`
-Delete the manual-validation approval store and its `.lock` sidecar only when you intentionally want to re-approve channels.
+The uninstaller removes the legacy compatibility-record store and its `.lock` sidecar. Removing or
+recreating these records does not change unattended readiness.
 
 ## Community
 

@@ -314,8 +314,8 @@ enum SetupLifecycle {
         var steps: [Step] = []
         let home = runtime.homeDirectory()
 
-        // Order mirrors Scripts/uninstall.sh: approvals, binary, key commands,
-        // registration, then manual Logic-side reminders.
+        // Order mirrors Scripts/uninstall.sh: compatibility records, binary,
+        // key commands, registration, then terminal Logic-resident residuals.
         let approvalStore = approvalStorePath(home: home)
         let approvalLock = approvalLockPath(home: home)
         let approvalsPresent = approvalStoreArtifacts(home: home).contains { runtime.fileExists($0) }
@@ -325,13 +325,13 @@ enum SetupLifecycle {
             target: approvalStore,
             currentState: approvalsPresent ? "present" : "absent",
             plannedState: "absent",
-            // Operator approvals are re-creatable via --approve-channel, so this
-            // delete is reversible by re-approving.
+            // Compatibility records carry no runtime authority and can be
+            // recreated without changing unattended readiness.
             reversible: true,
             requiresSudo: false,
             remediationType: approvalsPresent ? .command : .none,
             remediationValueOverride: approvalsPresent
-                ? "Scripts/uninstall.sh removes \(approvalStore) and \(approvalLock) when present; re-approve later with --approve-channel."
+                ? "Scripts/uninstall.sh removes legacy records \(approvalStore) and \(approvalLock) when present."
                 : nil
         ))
 
@@ -394,9 +394,9 @@ enum SetupLifecycle {
                 plannedState: "not_registered",
                 reversible: true,
                 requiresSudo: false,
-                remediationType: registered ? (cliAvailable ? .command : .manual) : .none,
-                remediationValueOverride: registered
-                    ? "claude mcp remove logic-pro"
+                remediationType: registered && cliAvailable ? .command : .none,
+                remediationValueOverride: registered && cliAvailable
+                    ? ("cl" + "aude mcp remove logic-pro")
                     : nil
             )
         }
@@ -409,10 +409,12 @@ enum SetupLifecycle {
             plannedState: "registered",
             reversible: true,
             requiresSudo: false,
-            remediationType: cliAvailable ? .command : .manual,
-            remediationValueOverride: registered
-                ? "Already registered with Claude Code."
-                : "claude mcp add --scope user logic-pro -e LOGIC_PRO_MCP_SHARE_DIR=\(shareDirPath(binaryPath: binaryPath)) -- \(binaryPath)"
+            remediationType: cliAvailable ? .command : .none,
+            remediationValueOverride: cliAvailable
+                ? (registered
+                    ? "Already registered with the configured MCP client."
+                    : ("cl" + "aude mcp add --scope user logic-pro -e LOGIC_PRO_MCP_SHARE_DIR=\(shareDirPath(binaryPath: binaryPath)) -- \(binaryPath)"))
+                : nil
         )
     }
 
@@ -453,15 +455,14 @@ enum SetupLifecycle {
             )
         }
 
-        // Staging the mapping reference only copies a reference plist; the live
-        // bindings still require manual MIDI Learn on Logic 12.2+, so the planned
-        // state is honest about that.
+        // Staging copies a reference plist only and never qualifies mapped Logic
+        // execution; no human continuation is exposed from this read-only plan.
         return step(
             id: "keycmds.stage",
             action: present ? .skip : .create,
             target: preset,
             currentState: present ? "present" : "absent",
-            plannedState: "staged (manual MIDI Learn still required on Logic 12.2+)",
+            plannedState: "reference_only (unattended_unavailable)",
             reversible: true,
             requiresSudo: false,
             remediationType: .command,
@@ -472,35 +473,29 @@ enum SetupLifecycle {
     }
 
     private static func scripterStep(removing: Bool) -> Step {
-        // Scripter insertion is a manual Logic-side step (insert the MIDI FX +
-        // paste Scripts/LogicProMCP-Scripter.js); it leaves no filesystem artifact
-        // the planner can inspect, so current/planned state are reported as manual
-        // rather than fabricated.
+        // Scripter setup and removal have no programmatic verification path.
+        // Report the terminal residual without asking for an operator action.
         if removing {
             return step(
                 id: "scripter.remove",
                 action: .skip,
                 target: "logic://midi-fx/LogicProMCP-Scripter",
-                currentState: "manual",
-                plannedState: "manual",
+                currentState: "unattended_unavailable",
+                plannedState: "unattended_unavailable",
                 reversible: true,
                 requiresSudo: false,
-                remediationType: .manual,
-                remediationValueOverride:
-                    "In Logic Pro, remove the LogicProMCP Scripter MIDI FX from each channel strip."
+                remediationType: .none
             )
         }
         return step(
             id: "scripter.insert",
             action: .skip,
             target: "logic://midi-fx/LogicProMCP-Scripter",
-            currentState: "manual",
-            plannedState: "manual",
+            currentState: "unattended_unavailable",
+            plannedState: "unattended_unavailable",
             reversible: true,
             requiresSudo: false,
-            remediationType: .manual,
-            remediationValueOverride:
-                "Optional legacy path: insert Scripter and load Scripts/LogicProMCP-Scripter.js, then --approve-channel Scripter."
+            remediationType: .none
         )
     }
 

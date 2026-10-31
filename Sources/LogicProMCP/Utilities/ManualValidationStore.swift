@@ -113,7 +113,7 @@ actor ManualValidationStore: ManualValidationStoring {
 
     static func summary(for approvals: [ManualValidationChannel: ManualValidationApproval]) -> String {
         guard !approvals.isEmpty else {
-            return "No manual-validation channels have been approved."
+            return "No legacy manual-channel compatibility records."
         }
 
         let formatter = ISO8601DateFormatter()
@@ -126,7 +126,9 @@ actor ManualValidationStore: ManualValidationStoring {
                 } else {
                     noteSuffix = ""
                 }
-                let label = approval.kind == .approved ? "approved" : "intentionally skipped"
+                let label = approval.kind == .approved
+                    ? "legacy assertion recorded"
+                    : "legacy skip recorded"
                 return "\(channel.rawValue): \(label) at \(formatter.string(from: approval.approvedAt))\(noteSuffix)"
             }
         return lines.joined(separator: "\n")

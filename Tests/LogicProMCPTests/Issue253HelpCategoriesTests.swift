@@ -46,6 +46,9 @@ import Testing
     #expect(sharedToolText(result).contains(
         "Categories: transport, tracks, mixer, midi, edit, navigate, project, audio, plugins, system"
     ))
+    #expect(!sharedToolText(result).contains("Manual channel approval CLI"))
+    #expect(!sharedToolText(result).contains("--approve-channel"))
+    #expect(sharedToolText(result).contains("Legacy manual-channel records do not qualify unattended execution"))
 }
 
 @Test func navigateHelpDoesNotExposeMarkerImplementationMetadata() async {

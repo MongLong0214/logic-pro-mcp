@@ -14,10 +14,10 @@ private func manualCheck(staged: Bool, profile: SetupDoctor.DoctorProfile = .key
     let keycmd = SetupDoctor.check(
         id: "channels.keycmd_reference",
         domain: "channels",
-        status: staged ? .pass : .manual,
+        status: staged ? .pass : .warn,
         summary: staged ? "staged" : "not staged",
         evidence: ["preset_staged": String(staged)],
-        remediationType: staged ? .none : .command
+        remediationType: .none
     )
     return SetupDoctor.manualValidationCheck(
         approvals: [:],
@@ -29,32 +29,30 @@ private func manualCheck(staged: Bool, profile: SetupDoctor.DoctorProfile = .key
 
 @Suite("Issue #457 — approval ordering")
 struct Issue457ApprovalOrderingTests {
-    /// The regression: approving before staging is a false attestation.
-    @Test("approval is held while Key Commands staging is incomplete")
-    func approvalHeldUntilStagingCompletes() {
+    /// A reference file cannot make the mapped channel ready, so its absence
+    /// must not delay or replace the terminal unattended result.
+    @Test("missing reference does not delay terminal channel result")
+    func missingReferenceDoesNotDelayTerminalResult() {
         let manual = manualCheck(staged: false)
-        #expect(manual.blockedBy == "channels.keycmd_reference")
-        #expect(manual.status == .skipped)
+        #expect(manual.blockedBy == nil)
+        #expect(manual.status == .fail)
+        #expect(manual.remediation.type == .none)
+        #expect(manual.evidence["terminal"] == "true")
     }
 
-    /// A held check must actually leave the fix plan, not just sort later —
-    /// sorting alone still shows the user the premature command.
-    @Test("a held approval does not appear in the fix plan")
-    func heldApprovalIsAbsentFromFixPlan() {
+    @Test("missing reference and terminal channel expose no fix action")
+    func missingReferenceAndTerminalChannelAreAbsentFromFixPlan() {
         let keycmd = SetupDoctor.check(
             id: "channels.keycmd_reference",
             domain: "channels",
-            status: .manual,
+            status: .warn,
             summary: "not staged",
             evidence: [:],
-            remediationType: .command
+            remediationType: .none
         )
         let plan = SetupDoctor.computeFixPlan([keycmd, manualCheck(staged: false)])
-        #expect(plan.contains("channels.keycmd_reference"), "staging must still be offered")
-        #expect(
-            !plan.contains("channels.manual_validation"),
-            "approval must not be offered before the setup it attests"
-        )
+        #expect(!plan.contains("channels.keycmd_reference"))
+        #expect(!plan.contains("channels.manual_validation"))
     }
 
     /// Staging can establish file presence, but a stored operator assertion is
@@ -96,8 +94,7 @@ struct Issue457ApprovalOrderingTests {
         #expect(manual.evidence["legacy_approvals_ignored"] == "MIDIKeyCommands,Scripter")
     }
 
-    /// Profile scoping outranks the dependency: a profile that never needs these
-    /// channels must report `profile_not_required`, not "waiting on staging".
+    /// A profile that never needs these channels remains outside the terminal check.
     @Test("a profile that does not require manual channels is unaffected")
     func profileScopingWinsOverBlocking() {
         let manual = manualCheck(staged: false, profile: .core)

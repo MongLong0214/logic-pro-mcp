@@ -21,20 +21,6 @@ extension SetupDoctor {
             )
         }
 
-        // Keep dependency collapse stable: if staging itself is unresolved, it
-        // remains the root cause. No approval continuation is exposed afterward.
-        if let cause = blockingCause(for: "channels.manual_validation", checks: checks) {
-            return check(
-                id: "channels.manual_validation",
-                domain: "channels",
-                status: .skipped,
-                summary: "Unattended send-only qualification is deferred until its staging dependency resolves.",
-                evidence: ["blocked_by": cause],
-                remediationType: .none,
-                blockedBy: cause
-            )
-        }
-
         let legacyApprovals = requiredChannels
             .filter { approvals[$0]?.kind == .approved }
             .map(\.rawValue)
@@ -87,29 +73,18 @@ extension SetupDoctor {
         return check(
             id: "channels.keycmd_reference",
             domain: "channels",
-            status: staged ? .pass : .manual,
+            status: staged ? .pass : .warn,
             summary: staged
-                ? "Key Commands preset is staged."
-                : "Key Commands preset is not staged; ignore this if MIDIKeyCommands-only ops are unused.",
-            evidence: ["preset_staged": String(staged)],
-            remediationType: staged ? .none : .command,
-            remediationValueOverride: staged ? nil : keyCommandsRemediation(runtime: runtime)
+                ? "Key Commands mapping reference is staged; it does not qualify mapped Logic execution."
+                : "Key Commands mapping reference is absent; staging cannot qualify mapped Logic execution.",
+            evidence: [
+                "preset_staged": String(staged),
+                "unattended_qualification": "unaffected",
+                "human_intervention_required": "false",
+                "human_intervention_requests": "0",
+            ],
+            remediationType: .none
         )
-    }
-
-    // #456: Homebrew installs install-keycmds.sh into the formula pkgshare, not on
-    // PATH, so printing the bare script name hands the user a command they cannot
-    // run — and fetching the script alone fails on its sibling keycmd-preset.plist.
-    // The share dir is already resolved for the install checks, so the remediation
-    // is derived from that same probe and stays runnable wherever the package put
-    // it. Only an unresolved share dir falls back to the bare name, and it says so.
-    static func keyCommandsRemediation(runtime: Runtime) -> String {
-        switch runtime.shareDirProbe() {
-        case let .complete(path, _), let .missing(path, _, _), let .invalid(path, _):
-            return "\(path)/install-keycmds.sh"
-        case .unresolved:
-            return "install-keycmds.sh (share dir unresolved; set LOGIC_PRO_MCP_SHARE_DIR or reinstall)"
-        }
     }
 
 

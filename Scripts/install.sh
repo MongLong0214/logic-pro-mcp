@@ -332,13 +332,20 @@ fi
 
 echo ""
 
-# Register with Claude by default when available.
-if [ "$REGISTER_CLAUDE" = "1" ] && command -v claude &>/dev/null; then
+# Register with Claude when requested. Any unavailable capability or failed
+# mutation terminates explicitly; neither is converted into a human fallback.
+if [ "$REGISTER_CLAUDE" = "1" ]; then
+    if ! command -v claude &>/dev/null; then
+        fail_install "Installation unsuccessful: Claude Code registration was requested but the CLI is unavailable."
+    fi
     echo "  Registering with Claude Code..."
-    claude mcp add --scope user logic-pro -e "LOGIC_PRO_MCP_SHARE_DIR=$SHARE_DIR" -- "$INSTALL_DIR/$BINARY" 2>/dev/null && echo "  Registered." || echo "  Already registered."
+    if claude mcp add --scope user logic-pro -e "LOGIC_PRO_MCP_SHARE_DIR=$SHARE_DIR" -- "$INSTALL_DIR/$BINARY" 2>/dev/null; then
+        echo "  Registered."
+    else
+        fail_install "Installation unsuccessful: configured MCP client registration failed."
+    fi
 else
-    echo "  Claude registration skipped."
-    echo "    No manual registration fallback is requested by this installer."
+    echo "  Claude registration disabled by caller."
 fi
 
 echo ""
@@ -369,7 +376,7 @@ fi
 # Check permissions
 echo "  Checking permissions..."
 if ! "$INSTALL_DIR/$BINARY" --check-permissions 2>&1 | sed 's/^/    /'; then
-    echo "  Warning: required Logic Pro permissions are not granted yet."
+    fail_install "Installation unsuccessful: required Logic Pro capabilities are unavailable."
 fi
 
 echo ""

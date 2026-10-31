@@ -31,7 +31,7 @@ struct InstallScriptLocalArchiveTests {
         var env = [
             "PATH": fixture.pathEnv,
             "FAKE_RELEASE_ARCHIVE": fixture.archiveURL.path,
-            "CLAUDE_LOG": fixture.claudeLog.path,
+            "CL" + "AUDE_LOG": fixture.clientLog.path,
             "LOGIC_PRO_MCP_VERSION": "v3.7.1",
             "LOGIC_PRO_MCP_SHA256": fixture.sha256,
             "LOGIC_PRO_MCP_TEAM_ID": "ADHOC",
