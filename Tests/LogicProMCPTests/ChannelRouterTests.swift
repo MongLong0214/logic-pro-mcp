@@ -281,11 +281,11 @@ private func waitUntil(
     #expect(appleScriptOps[0].0 == "transport.play")
 }
 
-@Test func testRouterSkipsManualValidationChannelsAndFallsBackToRuntimeReadyChannel() async {
+@Test func testRouterSkipsUnattendedUnavailableChannelsAndFallsBackToRuntimeReadyChannel() async {
     let router = ChannelRouter()
     let keyCmd = MockChannel(id: .midiKeyCommands, healthOverride: .healthy(
         detail: "Preset installation is not verifiable programmatically",
-        verificationStatus: .manualValidationRequired
+        verificationStatus: .unattendedUnavailable
     ))
     let cgEvent = MockChannel(id: .cgEvent)
     await router.register(keyCmd)

@@ -63,18 +63,18 @@ private func parseEnvelope(_ msg: String) -> [String: Any]? {
     }
 }
 
-// MARK: - Test #2 — Bypass routes through manual_validation_required
+// MARK: - Test #2 — Raw-MIDI bypass routes through unattended_unavailable
 
-@Test func testBypassOpsRouteThroughManualValidationChannel() async {
-    // KeyCmd channel: available:true, ready:false (manual_validation_required).
+@Test func testBypassOpsRouteThroughUnattendedUnavailableChannel() async {
+    // KeyCmd channel: available:true, ready:false (unattended_unavailable).
     // Pre-T4 this would skip the channel and exhaust the chain. Post-T4 the
     // bypass op must reach `execute()`.
     let router = ChannelRouter()
     let keyCmd = BypassMockChannel(
         id: .midiKeyCommands,
         health: .healthy(
-            detail: "KeyCmd virtual port published; awaiting Logic MIDI Learn",
-            verificationStatus: .manualValidationRequired
+            detail: "KeyCmd virtual port published; mapped operations remain unavailable",
+            verificationStatus: .unattendedUnavailable
         )
     )
     await router.register(keyCmd)
@@ -97,7 +97,7 @@ private func parseEnvelope(_ msg: String) -> [String: Any]? {
     // Strategy: invoke route() with a bypass op. Even if routingTable has no
     // entry, the function returns "Unknown operation". That's not what we want.
     // So instead we assert the *gate logic* by routing through edit.undo with
-    // a manual_validation_required channel and confirming the GENERAL path
+    // an unattended_unavailable channel and confirming the GENERAL path
     // still skips (sanity baseline). The bypass execution proof is delivered
     // post-T5 in the integration test, but we can still verify the bypass
     // *flag is honored* through a unit-level assertion: route a bypass op
@@ -111,11 +111,9 @@ private func parseEnvelope(_ msg: String) -> [String: Any]? {
     let result = await router.route(operation: "midi.send_cc.keycmd")
     // T5 added the keycmd routing entries: midi.send_cc.keycmd → [.midiKeyCommands].
     // The bypass gate must allow the channel to execute even though it reports
-    // verificationStatus=.manualValidationRequired (ready=false). This is the
-    // whole point of `bypassReadinessOps` — the KeyCmd surface can never reach
-    // runtime-ready without a one-time MIDI Learn that we cannot trigger from
-    // the server side, so the gate has to let the bytes through to give the
-    // operator a path to validate the binding.
+    // verificationStatus=.unattendedUnavailable (ready=false). This is the
+    // whole point of `bypassReadinessOps`: mapped Logic operations remain
+    // unroutable, while an explicit raw-MIDI request may still send bytes.
     if case .error(let msg) = result {
         Issue.record("expected bypass to deliver to channel, got error: \(msg)")
     }
@@ -193,15 +191,15 @@ private func parseEnvelope(_ msg: String) -> [String: Any]? {
 // MARK: - Test #4 — Non-bypass uses standard readiness gate
 
 @Test func testNonBypassOpUsesStandardReadinessGate() async {
-    // edit.undo (non-bypass) + manual_validation_required keyCmd channel
+    // edit.undo (non-bypass) + unattended_unavailable keyCmd channel
     // must skip the channel (existing behavior). The bypass logic must not
     // accidentally let it through.
     let router = ChannelRouter()
     let keyCmd = BypassMockChannel(
         id: .midiKeyCommands,
         health: .healthy(
-            detail: "manual validation required",
-            verificationStatus: .manualValidationRequired
+            detail: "mapped operations unavailable for unattended execution",
+            verificationStatus: .unattendedUnavailable
         )
     )
     let cgEvent = BypassMockChannel(
@@ -216,7 +214,7 @@ private func parseEnvelope(_ msg: String) -> [String: Any]? {
 
     let keyCmdOps = await keyCmd.executedOps
     let cgOps = await cgEvent.executedOps
-    #expect(keyCmdOps.isEmpty, "non-bypass op must skip manual_validation_required channel")
+    #expect(keyCmdOps.isEmpty, "non-bypass op must skip unattended_unavailable channel")
     #expect(cgOps.count == 1, "fallback to cgEvent should fire")
 }
 
