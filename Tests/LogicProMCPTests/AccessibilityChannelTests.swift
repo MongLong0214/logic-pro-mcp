@@ -6155,7 +6155,10 @@ private struct Issue1097Rail {
     let humanRequired = try #require(body["human_intervention_required"] as? Bool)
     let writeAttempted = try #require(body["write_attempted"] as? Bool)
     #expect(terminal)
+    #expect(body["terminal_scope"] as? String == "mcp_request_only")
     #expect(!humanRequired)
+    #expect(body["human_intervention_requests"] as? Int == 0)
+    #expect(body["human_dependent_transitions"] as? Int == 0)
     #expect(!writeAttempted)
     let hint = body["hint"] as? String ?? ""
     #expect(!hint.localizedCaseInsensitiveContains("deselect"))
