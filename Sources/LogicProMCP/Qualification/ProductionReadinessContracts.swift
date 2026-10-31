@@ -50,6 +50,13 @@ enum ProductionReadinessContractEvaluator {
     static let provenanceMarker = "trusted-provenance-verify"
     static let promotionVerificationMarker = "--verify-promotion"
     static let trustedVerifierCommitSHA = "67fec5fccf817f9978022f0ca262b80a789e2dce"
+    static let currentTrustedVerifierCommitSHA = "fa7d4430b4e42e15902ab82ca2b7e67380ca56ff"
+    static let currentVerifierBuildScriptSHA256 = "6648dcddb6912e0d8e44428f23653301d5e80b398dbb364d9d6a1ef65b160856"
+    static let currentPackageScriptSHA256 = "65204b38a713edf4de1b6e455547a1da0e940d5784dbef73da12857236b2e7ab"
+    static let currentPublishReverifyScriptSHA256 = "599cb379def82b7a28f06b5e08703af561834bccb71719604598c4cc2612be17"
+    static let currentInstallReverifyScriptSHA256 = "0f27f1d94c03f46fd42c5653cdc1bd28e146760c045ed15ba55571836e3eaebb"
+    static let currentInstallerScriptSHA256 = "05baeb501f55328a94988d0517cc20aa24f040705ba9b507be24356c4c51198c"
+    static let currentReleaseConsumerSHA256 = "a90ff889c8b852f6fcf803d1581f2c6a90faa926e98d05aa765261068b5833a0"
     static let uploadArtifactCommitSHA = "65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08"
     static let downloadArtifactCommitSHA = "d3f86a106a0bac45b974a628896c90dbdf5c8093"
 
@@ -341,6 +348,180 @@ enum ProductionReadinessContractEvaluator {
         return qualification.body
     }
 
+    /// Recognises the current final-artifact release chain without weakening the
+    /// legacy workflow contract above. The checked-in release no longer performs
+    /// qualification inline: it consumes owner-staged bytes, verifies the private
+    /// bundle and public projection with an authenticated verifier, gates publication
+    /// on install validation, then repeats verification on the downloaded artifact.
+    private static func currentFinalArtifactEnforcement(
+        in workflow: String,
+        releaseConsumerScript: String
+    ) -> Bool {
+        let workflowLines = workflow.split(separator: "\n", omittingEmptySubsequences: false)
+        guard let workflowIndices = structuralIndices(in: workflowLines) else { return false }
+        let releaseAction = "softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191"
+        let workflowUses = workflowIndices.compactMap { index -> String? in
+            guard let entry = yamlKeyValue(in: workflowLines[index]), entry.key == "uses" else {
+                return nil
+            }
+            return normalizedScalar(entry.value)
+        }
+        let writePermissionCount = workflowIndices.filter { index in
+            guard let entry = yamlKeyValue(in: workflowLines[index]) else { return false }
+            return entry.key == "contents" && normalizedScalar(entry.value) == "write"
+        }.count
+        guard workflowUses.filter({ $0 == releaseAction }).count == 1,
+              writePermissionCount == 1,
+              !workflowIndices.contains(where: { index in
+                  guard let entry = yamlKeyValue(in: workflowLines[index]) else { return false }
+                  return entry.key == "permissions" && !entry.value.isEmpty
+              }),
+              let buildJob = workflowJob(named: "build-release", in: workflow),
+              let publishJob = workflowJob(named: "publish", in: workflow),
+              let validateInstallJob = workflowJob(named: "validate-install", in: workflow),
+              stepMapping("permissions", in: buildJob) == ["contents": "read"],
+              stepMapping("permissions", in: publishJob) == ["contents": "write"],
+              stepMapping("permissions", in: validateInstallJob) == ["contents": "read"],
+              stepScalar("needs", in: publishJob) == "[build-release,validate-install]",
+              stepScalar("needs", in: validateInstallJob) == "build-release",
+              stepScalar("if", in: buildJob) == nil,
+              stepScalar("if", in: publishJob) == nil,
+              stepScalar("if", in: validateInstallJob) == nil else { return false }
+        let checkoutAction = "actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683"
+        guard jobStepHeaders(in: publishJob) == [
+            "- uses: \(checkoutAction)",
+            "- name: Checkout authenticated trusted verifier",
+            "- name: Resolve and build trusted verifier without changing pins",
+            "- name: Download verified release artifacts",
+            "- name: Reverify downloaded release artifact",
+            "- name: Create GitHub Release",
+        ], jobStepHeaders(in: validateInstallJob) == [
+            "- uses: \(checkoutAction)",
+            "- name: Download verified release artifacts",
+            "- name: Reverify downloaded release artifact",
+            "- name: Record what this runner actually is",
+            "- name: Validate installer and uninstaller against release asset",
+            "- name: Upload install validation evidence",
+        ] else { return false }
+
+        guard let buildCheckout = blockingStep(
+                  named: "Checkout authenticated trusted verifier", in: buildJob),
+              let buildVerifier = blockingStep(
+                  named: "Resolve and build trusted verifier without changing pins", in: buildJob),
+              let package = blockingStep(named: "Package", in: buildJob),
+              let manifest = blockingStep(
+                  named: "Create release artifact SHA256 manifest", in: buildJob),
+              let upload = blockingStep(named: "Upload verified release artifacts", in: buildJob),
+              buildCheckout.index < buildVerifier.index,
+              buildVerifier.index < package.index,
+              package.index < manifest.index,
+              manifest.index < upload.index,
+              let publishCheckout = blockingStep(
+                  named: "Checkout authenticated trusted verifier", in: publishJob),
+              let publishVerifier = blockingStep(
+                  named: "Resolve and build trusted verifier without changing pins", in: publishJob),
+              let download = blockingStep(named: "Download verified release artifacts", in: publishJob),
+              let reverify = blockingStep(
+                  named: "Reverify downloaded release artifact", in: publishJob),
+              let publication = blockingStep(named: "Create GitHub Release", in: publishJob),
+              publishCheckout.index < publishVerifier.index,
+              publishVerifier.index < download.index,
+              download.index < reverify.index,
+              reverify.index < publication.index,
+              publication.endIndex == publication.jobEndIndex,
+              upload.endIndex == upload.jobEndIndex,
+              let installDownload = blockingStep(
+                  named: "Download verified release artifacts", in: validateInstallJob),
+              let installReverify = blockingStep(
+                  named: "Reverify downloaded release artifact", in: validateInstallJob),
+              let installer = blockingStep(
+                  named: "Validate installer and uninstaller against release asset",
+                  in: validateInstallJob
+              ),
+              installDownload.index < installReverify.index,
+              installReverify.index < installer.index else { return false }
+
+        let verifierPin = currentTrustedVerifierCommitSHA
+        guard stepScalar("uses", in: buildCheckout.body) == checkoutAction,
+              nestedStepScalar("ref", under: "with", in: buildCheckout.body) == verifierPin,
+              nestedStepScalar("path", under: "with", in: buildCheckout.body) == "trusted-verifier-src",
+              stepScalar("uses", in: publishCheckout.body) == checkoutAction,
+              nestedStepScalar("ref", under: "with", in: publishCheckout.body) == verifierPin,
+              nestedStepScalar("path", under: "with", in: publishCheckout.body) == "trusted-verifier-src",
+              workflow.components(separatedBy: verifierPin).count - 1 == 4,
+              let buildVerifierScript = stepBlockScalar("run", in: buildVerifier.body),
+              let publishVerifierScript = stepBlockScalar("run", in: publishVerifier.body),
+              stepScalar("working-directory", in: buildVerifier.body) == "trusted-verifier-src",
+              stepScalar("working-directory", in: publishVerifier.body) == "trusted-verifier-src" else {
+            return false
+        }
+        guard SupportBundleBuilder.sha256(Data(buildVerifierScript.utf8))
+                == currentVerifierBuildScriptSHA256,
+              SupportBundleBuilder.sha256(Data(publishVerifierScript.utf8))
+                == currentVerifierBuildScriptSHA256 else { return false }
+
+        let packageEnvironment = [
+            "QUALIFICATION_CANDIDATE_URL": "${{secrets.qualification_candidate_url}}",
+            "QUALIFICATION_CANDIDATE_SHA256": "${{secrets.qualification_candidate_sha256}}",
+            "QUALIFICATION_EVIDENCE_URL": "${{secrets.qualification_evidence_url}}",
+            "QUALIFICATION_EVIDENCE_SHA256": "${{secrets.qualification_evidence_sha256}}",
+            "TRUSTED_QUALIFICATION_PUBLIC_KEY": "${{secrets.trusted_qualification_public_key}}",
+            "QUALIFICATION_PUBLIC_ASSETS_URL": "${{secrets.qualification_public_assets_url}}",
+            "QUALIFICATION_PUBLIC_ASSETS_SHA256": "${{secrets.qualification_public_assets_sha256}}",
+        ]
+        let reverifyEnvironment = [
+            "QUALIFICATION_EVIDENCE_URL": "${{secrets.qualification_evidence_url}}",
+            "QUALIFICATION_EVIDENCE_SHA256": "${{secrets.qualification_evidence_sha256}}",
+            "TRUSTED_QUALIFICATION_PUBLIC_KEY": "${{secrets.trusted_qualification_public_key}}",
+        ]
+        guard stepMapping("env", in: package.body) == packageEnvironment,
+              stepMapping("env", in: reverify.body) == reverifyEnvironment else { return false }
+
+        guard let packageScript = stepBlockScalar("run", in: package.body),
+              let reverifyScript = stepBlockScalar("run", in: reverify.body),
+              stepScalar("uses", in: upload.body) == "actions/upload-artifact@\(uploadArtifactCommitSHA)",
+              stepScalar("uses", in: download.body) == "actions/download-artifact@\(downloadArtifactCommitSHA)",
+              stepScalar("uses", in: installDownload.body)
+                == "actions/download-artifact@\(downloadArtifactCommitSHA)",
+              stepMapping("with", in: installDownload.body) == [
+                  "name": "${{needs.build-release.outputs.verified_artifact_name}}",
+                  "path": "${{runner.temp}}/artifact",
+              ],
+              stepScalar("working-directory", in: installReverify.body) == "${{runner.temp}}/artifact",
+              let installReverifyScript = stepBlockScalar("run", in: installReverify.body),
+              let installerScript = stepBlockScalar("run", in: installer.body),
+              stepScalar("uses", in: publication.body) == releaseAction else {
+            return false
+        }
+
+        return SupportBundleBuilder.sha256(Data(packageScript.utf8)) == currentPackageScriptSHA256
+            && SupportBundleBuilder.sha256(Data(reverifyScript.utf8))
+                == currentPublishReverifyScriptSHA256
+            && SupportBundleBuilder.sha256(Data(installReverifyScript.utf8))
+                == currentInstallReverifyScriptSHA256
+            && SupportBundleBuilder.sha256(Data(installerScript.utf8))
+                == currentInstallerScriptSHA256
+            && SupportBundleBuilder.sha256(Data(releaseConsumerScript.utf8))
+                == currentReleaseConsumerSHA256
+    }
+
+    private static func jobStepHeaders(in job: String) -> [String]? {
+        let lines = job.split(separator: "\n", omittingEmptySubsequences: false)
+        guard let indices = structuralIndices(in: lines), let first = lines.first else { return nil }
+        let jobIndentation = first.prefix { $0 == " " }.count
+        guard let steps = indices.first(where: {
+            $0 > lines.startIndex
+                && lines[$0].prefix { $0 == " " }.count == jobIndentation + 2
+                && yamlKeyValue(in: lines[$0])?.key == "steps"
+        }) else { return nil }
+        let stepIndentation = jobIndentation + 4
+        return indices.filter { index in
+            index > steps
+                && lines[index].prefix { $0 == " " }.count == stepIndentation
+                && lines[index].trimmingCharacters(in: .whitespaces).hasPrefix("-")
+        }.map { lines[$0].trimmingCharacters(in: .whitespaces) }
+    }
+
     private static func nestedStepScalar(
         _ key: String,
         under parent: String,
@@ -513,13 +694,20 @@ enum ProductionReadinessContractEvaluator {
         independentProvenanceEnforced: Bool,
         governedWaivers: [QualificationWaiver] = [],
         managedFixturesPresent: Bool = false,
-        liveCreditedOperationIDs: Set<String> = []
+        liveCreditedOperationIDs: Set<String> = [],
+        releaseConsumerScript: String? = nil
     ) -> ProductionReadinessContractReport {
         var findings: [ProductionReadinessDebtFinding] = []
 
         // R-REL: release workflow must block promotion on independent exact-artifact qualification.
         let qualificationStep = pinnedTrustedVerifierStep(in: releaseWorkflowYAML)
-        if qualificationStep == nil {
+        let currentFinalArtifactEnforced = releaseConsumerScript.map {
+            currentFinalArtifactEnforcement(
+                in: releaseWorkflowYAML,
+                releaseConsumerScript: $0
+            )
+        } ?? false
+        if qualificationStep == nil && !currentFinalArtifactEnforced {
             findings.append(.init(
                 id: .releaseWorkflowMissingIndependentQualification,
                 detail: "release.yml lacks step '\(independentQualificationStepMarker)' before publication"
@@ -580,8 +768,9 @@ enum ProductionReadinessContractEvaluator {
         // self-attestation (an `echo` satisfied the contract while no fixture existed).
         let axisMarker = "required-matrix-axes:\(requiredMatrixAxisCount)"
         if requiredMatrixAxisCount < QualificationAxis.requiredCombinations.count
-            || qualificationStep?.contains(axisMarker) != true
-            || qualificationStep?.contains("--bundle qualification-evidence") != true {
+            || (!currentFinalArtifactEnforced
+                && (qualificationStep?.contains(axisMarker) != true
+                    || qualificationStep?.contains("--bundle qualification-evidence") != true)) {
             findings.append(.init(
                 id: .managedFixtureMatrixUnbound,
                 detail: "release path does not bind managed-fixture matrix (\(QualificationAxis.requiredCombinations.count) axes)"
@@ -594,7 +783,9 @@ enum ProductionReadinessContractEvaluator {
         }
 
         // R-MUT: mutation/readback/restore/compensation evidence must be required by release path.
-        if !mutationRestoreCompensationEvidencePresent && qualificationStep == nil {
+        if !mutationRestoreCompensationEvidencePresent
+            && qualificationStep == nil
+            && !currentFinalArtifactEnforced {
             findings.append(.init(
                 id: .mutationRestoreCompensationMissing,
                 detail: "no mutation/readback/restore/compensation evidence requirement in release path"
@@ -602,9 +793,10 @@ enum ProductionReadinessContractEvaluator {
         }
 
         // R-PROV: independent provenance verification (not candidate self-sign only).
-        if qualificationStep == nil
-            || (!independentProvenanceEnforced
-                && qualificationStep?.contains("LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY=\"$TRUSTED_QUALIFICATION_PUBLIC_KEY\"") != true) {
+        if !currentFinalArtifactEnforced
+            && (qualificationStep == nil
+                || (!independentProvenanceEnforced
+                    && qualificationStep?.contains("LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY=\"$TRUSTED_QUALIFICATION_PUBLIC_KEY\"") != true)) {
             findings.append(.init(
                 id: .independentProvenanceNotEnforced,
                 detail: "release path does not enforce trusted independent provenance verification"
@@ -663,6 +855,10 @@ enum ProductionReadinessContractEvaluator {
     ) throws -> ProductionReadinessContractReport {
         let releaseURL = root.appendingPathComponent(releaseWorkflowRelativePath)
         let releaseYAML = try String(contentsOf: releaseURL, encoding: .utf8)
+        let releaseConsumer = try String(
+            contentsOf: root.appendingPathComponent("Scripts/release-consume-final.sh"),
+            encoding: .utf8
+        )
         let boardURL = root.appendingPathComponent(debtBoardRelativePath)
         let board = try? String(contentsOf: boardURL, encoding: .utf8)
         let waiversURL = root.appendingPathComponent(waiversRelativePath)
@@ -686,7 +882,8 @@ enum ProductionReadinessContractEvaluator {
             mutationRestoreCompensationEvidencePresent: false,
             independentProvenanceEnforced: false,
             governedWaivers: waivers,
-            managedFixturesPresent: managedFixturesPresent(atRepositoryRoot: root)
+            managedFixturesPresent: managedFixturesPresent(atRepositoryRoot: root),
+            releaseConsumerScript: releaseConsumer
         )
     }
 
