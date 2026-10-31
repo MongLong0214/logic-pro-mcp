@@ -591,6 +591,23 @@ struct TransportDispatcher: OperationTraceDispatching {
                 extras: extras
             ), isError: true)
         }
+        func terminalAfterWrite(
+            _ error: HonestContract.FailureError,
+            hint: String
+        ) -> CallTool.Result {
+            extras["safe_to_retry"] = false
+            extras["terminal"] = true
+            extras["terminal_scope"] = "mcp_request_only"
+            extras["automatic_read_attempts_exhausted"] = true
+            extras["human_intervention_required"] = false
+            extras["human_intervention_requests"] = 0
+            extras["human_dependent_transitions"] = 0
+            return toolTextResult(HonestContract.encodeStateC(
+                error: error,
+                hint: hint,
+                extras: extras
+            ), isError: true)
+        }
         guard let tempo = await observedTempo(router: router) else {
             return stillnessUnmeasuredResult(
                 reason: "tempo_unreadable",
@@ -641,24 +658,20 @@ struct TransportDispatcher: OperationTraceDispatching {
         await sleep(gap)
         let confirming = await readTransportState(router: router)
         guard let settled, let confirming, let stillAfter = playheadStill(settled, confirming) else {
-            extras["safe_to_retry"] = false
-            return toolTextResult(HonestContract.encodeStateC(
-                error: .readbackUnavailable,
-                hint: "The play key was sent to a paused transport, but the transport could not be read twice afterwards. Do not resend play; read the transport state first.",
-                extras: extras
-            ), isError: true)
+            return terminalAfterWrite(
+                .readbackUnavailable,
+                hint: "The play key was sent to a paused transport and its resulting state could not be read twice; the effect remains unknown and this MCP request terminated."
+            )
         }
         extras["observed_settled"] = transportStateSummary(settled)
         extras["observed_after"] = transportStateSummary(confirming)
         if settled.isPlaying, confirming.isPlaying, stillAfter == false {
             return toolTextResult(.success(HonestContract.encodeStateA(extras: extras)))
         }
-        extras["safe_to_retry"] = false
-        return toolTextResult(HonestContract.encodeStateC(
-            error: .readbackMismatch,
-            hint: "The play key was sent to a paused transport, but the playhead does not move with Play on. Do not resend play; read the transport state first.",
-            extras: extras
-        ), isError: true)
+        return terminalAfterWrite(
+            .readbackMismatch,
+            hint: "The play key was sent to a paused transport, but the playhead did not move with Play on; the effect remains unconfirmed and this MCP request terminated."
+        )
     }
 
     private static func stopReadbackUnavailableExtras(
