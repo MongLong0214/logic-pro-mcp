@@ -151,6 +151,8 @@ private func makeMixerFixture(
     let mixer = b.element(702)
     let strip = b.element(703)
     b.setAttribute(app, kAXMainWindowAttribute as String, window)
+    b.setAttribute(app, kAXWindowsAttribute as String, [window])
+    b.setAttribute(window, kAXRoleAttribute as String, kAXWindowRole as String)
     b.setChildren(window, [mixer])
     b.setAttribute(mixer, kAXRoleAttribute as String, "AXLayoutArea")
     b.setAttribute(mixer, kAXDescriptionAttribute as String, "Mixer")
@@ -185,6 +187,13 @@ private func makeMixerFixture(
             addOccupiedSlot(b, 712, name: nil),
         ]
     }
+    let projectPath = "/tmp/Inventory Fixture.logicx"
+    b.setAttribute(b.element(701), kAXTitleAttribute as String, "Inventory Fixture - Tracks")
+    b.setAttribute(
+        b.element(701),
+        kAXDocumentAttribute as String,
+        URL(fileURLWithPath: projectPath).absoluteString
+    )
 
     let result = await AccessibilityChannel.defaultGetPluginInventory(params: ["track": "0"], runtime: runtime)
     #expect(result.isSuccess)
@@ -198,6 +207,9 @@ private func makeMixerFixture(
     #expect(obj["plugins_source"] as? String == "ax")
     #expect(obj["plugins_unknown_reason"] is NSNull)
     #expect(obj["operation"] as? String == "logic_plugins.get_inventory")
+    #expect(obj["project_name"] as? String == "Inventory Fixture")
+    #expect(obj["project_file_path"] as? String
+        == ProjectReferenceIssuance.canonicalObservedProjectPath(projectPath))
 
     let plugins = obj["plugins"] as! [[String: Any]]
     #expect(plugins.count == 3)
