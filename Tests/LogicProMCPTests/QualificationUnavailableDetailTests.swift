@@ -37,8 +37,9 @@ struct QualificationUnavailableDetailTests {
         #expect(codeOnly.contains("named no precondition"))
 
         let hintOnly = QualificationOperationResult.unavailableDetail(
-            error: String?.none, hint: "Open an instrument plugin window first.")
-        #expect(hintOnly.contains("Open an instrument plugin window first."))
+            error: String?.none, hint: AccessibilityChannel.pluginWindowUnavailableHint)
+        #expect(hintOnly.contains(AccessibilityChannel.pluginWindowUnavailableHint))
+        #expect(!hintOnly.contains("Open an instrument plugin window first."))
         #expect(!hintOnly.contains("refused with"))
     }
 

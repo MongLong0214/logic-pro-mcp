@@ -689,10 +689,10 @@ struct QualificationOperationResult: Equatable, Sendable {
                   hint == AccessibilityChannel.libraryListPanelUnavailableHint else { return nil }
             return "requires an exact open Library panel with readable inventory"
         }
-        guard error == "channels_exhausted" else { return nil }
         switch OperationID(rawValue: operationID) {
         case .tracksScanPluginPresets
-            where hint == "No plugin window with Setting dropdown found. Open an instrument plugin window first.":
+            where error == HonestContract.FailureError.pluginWindowUnavailable.rawValue
+                && hint == AccessibilityChannel.pluginWindowUnavailableHint:
             return "requires an open plugin window with a Setting dropdown"
         default:
             return nil
@@ -846,8 +846,8 @@ struct QualificationOperationResult: Equatable, Sendable {
                 //
                 // Measured 2026-08-24: `tracks.list_library` takes NO parameters and its refusal
                 // names the unavailable Library panel rather than a missing request parameter;
-                // `tracks.scan_plugin_presets` refuses with "No plugin window with Setting dropdown
-                // found." Both name their precondition exactly. The old text sent whoever read the
+                // `tracks.scan_plugin_presets` refuses with a typed missing-plugin-window receipt.
+                // Both name their precondition exactly. The old text sent whoever read the
                 // attestation to check probe parameters that do not exist for those operations,
                 // while the operation had already said what it needed.
                 //
