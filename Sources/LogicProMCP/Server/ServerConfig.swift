@@ -84,11 +84,6 @@ struct ServerConfig: Sendable {
     // drift fixed in v3.1.2 P2.)
     static let statePollingIntervalNs: UInt64 = 3_000_000_000 // 3 seconds
 
-    // MARK: - Enterprise Safety
-    /// Channels without runtime verification are not considered execution-ready
-    /// in enterprise mode and must not be used for mapped-operation routing.
-    static let allowManualValidationChannels = false
-
     /// Channels that may fail to initialize without preventing the server from
     /// starting in degraded mode. Their unavailability must still surface in
     /// health/resource reporting.
