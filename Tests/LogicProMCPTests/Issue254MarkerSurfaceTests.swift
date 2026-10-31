@@ -102,7 +102,7 @@ private func issue254Envelope(_ result: ReadResource.Result) throws -> [String: 
     #expect(markers.isEmpty)
 }
 
-@Test func issue254OpenUnverifiedMarkerListIsNotReportedAsClosed() throws {
+@Test func issue254OpenUnverifiedMarkerListTerminatesWithoutHumanContinuation() throws {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(25_440)
     let main = builder.element(25_441)
@@ -127,7 +127,13 @@ private func issue254Envelope(_ result: ReadResource.Result) throws -> [String: 
     #expect(envelope["state"] as? String == "C")
     #expect(envelope["reason"] as? String == "marker_list_identity_unverified")
     #expect(envelope["automated_alternative"] == nil)
-    #expect(envelope["terminal"] == nil)
+    #expect(try #require(envelope["terminal"] as? Bool))
+    #expect(envelope["terminal_scope"] as? String == "mcp_request_only")
+    #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+    #expect(envelope["human_intervention_requests"] as? Int == 0)
+    #expect(envelope["human_dependent_transitions"] as? Int == 0)
+    #expect(!(try #require(envelope["write_attempted"] as? Bool)))
+    #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
 }
 
 @Test func issue254MarkerResourceRefreshesFromLiveAX() async throws {
