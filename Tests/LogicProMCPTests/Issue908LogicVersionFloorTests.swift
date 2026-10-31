@@ -55,6 +55,11 @@ struct Issue908LogicVersionFloorTests {
     func logicElevenFails(version: String) {
         let result = SetupDoctor.logicVersionSupportCheck(logicApps: [Self.app(version)], checks: [Self.installed])
         #expect(result.status == .fail, "\(version) produced \(result.status)")
+        #expect(result.remediation.type == .none)
+        #expect(result.remediation.value.isEmpty)
+        #expect(result.evidence["terminal"] == "true")
+        #expect(result.evidence["human_intervention_required"] == "false")
+        #expect(result.evidence["human_intervention_requests"] == "0")
         #expect(result.summary.contains(version))
         #expect(result.evidence["minimum_supported"] == LogicProSupport.minimumSupportedLogicVersion)
     }
@@ -67,5 +72,13 @@ struct Issue908LogicVersionFloorTests {
     func supportedVersionsAreAccepted(version: String) {
         let result = SetupDoctor.logicVersionSupportCheck(logicApps: [Self.app(version)], checks: [Self.installed])
         #expect(result.status != .fail, "\(version) produced \(result.status)")
+        #expect(result.evidence["terminal"] == nil)
+        if version == LogicProSupport.latestValidatedLogicVersion {
+            #expect(result.status == .pass)
+            #expect(result.remediation.type == .none)
+        } else {
+            #expect(result.status == .warn)
+            #expect(result.remediation.type == .docs)
+        }
     }
 }

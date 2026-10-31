@@ -414,14 +414,23 @@ private struct FrozenV1Report: Codable {
 }
 
 @Test func test_t2_macos_fail_lt_14() throws {
-    let c = try #require(check(makeReport(runtime: enterpriseRuntime(macOSVersion: OperatingSystemVersion(majorVersion: 13, minorVersion: 6, patchVersion: 1))), "system.macos_version"))
+    let report = makeReport(runtime: enterpriseRuntime(macOSVersion: OperatingSystemVersion(majorVersion: 13, minorVersion: 6, patchVersion: 1)))
+    let c = try #require(check(report, "system.macos_version"))
     #expect(c.status == .fail)
+    #expect(c.remediation.type == .none)
+    #expect(c.remediation.value.isEmpty)
+    #expect(c.evidence["terminal"] == "true")
+    #expect(c.evidence["human_intervention_required"] == "false")
+    #expect(c.evidence["human_intervention_requests"] == "0")
+    #expect(!report.fixPlan.contains(c.id))
 }
 
 @Test func test_t2_macos_skipped_unreadable() throws {
     let c = try #require(check(makeReport(runtime: enterpriseRuntime(macOSVersion: nil)), "system.macos_version"))
     #expect(c.status == .skipped)
+    #expect(c.remediation.type == .docs)
     #expect(c.evidence["reason"] == "version_unreadable")
+    #expect(c.evidence["terminal"] == nil)
 }
 
 @Test func test_t2_system_events_denial_makes_report_failed() {

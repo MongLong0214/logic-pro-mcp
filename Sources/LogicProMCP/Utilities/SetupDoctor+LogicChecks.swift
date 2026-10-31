@@ -1,6 +1,14 @@
 import Foundation
 
 extension SetupDoctor {
+    private static func terminalLogicEvidence(_ evidence: [String: String]) -> [String: String] {
+        var result = evidence
+        result["terminal"] = "true"
+        result["human_intervention_required"] = "false"
+        result["human_intervention_requests"] = "0"
+        return result
+    }
+
     static func macOSVersionCheck(runtime: Runtime) -> Check {
         let minimumMajor = 14 // Package.swift: platforms: [.macOS(.v14)]
         guard let version = runtime.macOSVersion() else {
@@ -30,8 +38,11 @@ extension SetupDoctor {
             domain: "system",
             status: .fail,
             summary: "macOS \(versionString) is below the required minimum (\(minimumMajor)+).",
-            evidence: ["version": versionString, "minimum_major": String(minimumMajor)],
-            remediationType: .docs
+            evidence: terminalLogicEvidence([
+                "version": versionString,
+                "minimum_major": String(minimumMajor),
+            ]),
+            remediationType: .none
         )
     }
 
@@ -44,8 +55,8 @@ extension SetupDoctor {
                 domain: "logic",
                 status: .fail,
                 summary: "Logic Pro.app was not found in /Applications or ~/Applications (desktop or Creator Studio).",
-                evidence: ["path": "not_found"],
-                remediationType: .docs
+                evidence: terminalLogicEvidence(["path": "not_found"]),
+                remediationType: .none
             )
         }
         if Self.unshippedVariantOnly(supported) {
@@ -57,9 +68,11 @@ extension SetupDoctor {
                 status: .fail,
                 summary: "Only Logic Pro Creator Studio was found. This release ships for desktop "
                     + "Logic Pro only; Creator Studio is recognised so it is not driven by mistake.",
-                evidence: ["reason": "unshipped_variant_only",
-                           "path": supported.map(\.path).joined(separator: ",")],
-                remediationType: .docs
+                evidence: terminalLogicEvidence([
+                    "reason": "unshipped_variant_only",
+                    "path": supported.map(\.path).joined(separator: ","),
+                ]),
+                remediationType: .none
             )
         }
         guard let primary = preferredReadableLogicApp(supported), let version = primary.version else {
@@ -124,17 +137,21 @@ extension SetupDoctor {
             status = .warn
             summary = "Logic Pro \(version) is outside the latest validated version \(latest)."
         }
+        var evidence = [
+            "detected_version": version,
+            "minimum_supported": minimum,
+            "latest_validated": latest,
+        ]
+        if status == .fail {
+            evidence = terminalLogicEvidence(evidence)
+        }
         return check(
             id: "logic.version_support",
             domain: "logic",
             status: status,
             summary: summary,
-            evidence: [
-                "detected_version": version,
-                "minimum_supported": minimum,
-                "latest_validated": latest,
-            ],
-            remediationType: status == .pass ? .none : .docs
+            evidence: evidence,
+            remediationType: status == .warn ? .docs : .none
         )
     }
 

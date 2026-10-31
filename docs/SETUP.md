@@ -298,7 +298,7 @@ Cross-context TCC enrichment. If unavailable, the live permission probes remain 
 
 <a id="doctor-systemmacos-version"></a>
 ### `system.macos_version`
-Logic Pro MCP requires macOS 14 or newer. Upgrade macOS if this check fails.
+Logic Pro MCP requires macOS 14 or newer. A detected version below that floor is a terminal unavailable state: the check reports the measured version without requesting an upgrade or adding a continuation to `fix_plan`. An unreadable OS version remains a skipped diagnostic.
 
 <a id="doctor-updateslatest-release"></a>
 ### `updates.latest_release`
@@ -312,11 +312,11 @@ project creation, or retry.
 
 <a id="doctor-logicinstallation"></a>
 ### `logic.installation`
-Install Logic Pro in `/Applications` or `~/Applications`.
+No supported Logic Pro installation, or a Creator-Studio-only installation this release does not ship for, is a terminal unavailable state. The check preserves the observed path and variant reason without requesting an installation or adding an action to `fix_plan`. An existing bundle whose version cannot be read remains a skipped diagnostic.
 
 <a id="doctor-logicversion-support"></a>
 ### `logic.version_support`
-Use Logic Pro 12.0.1 or newer; 12.3 is the latest validated target.
+A detected Logic Pro version below the 12.0.1 support floor is a terminal unavailable state: the check preserves the measured version without requesting a version change or adding a continuation to `fix_plan`. Logic Pro 12.3 is the latest validated target; other versions at or above the floor remain informational warnings.
 
 <a id="doctor-logicblocking-dialog"></a>
 ### `logic.blocking_dialog`

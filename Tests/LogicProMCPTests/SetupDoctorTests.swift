@@ -167,6 +167,29 @@ private func issue26RepositoryRootURL() -> URL {
         #expect(!signatureAnchor.contains(staleContinuation))
     }
     #expect(signatureAnchor.contains("terminal unavailable state"))
+
+    let macOSStart = try #require(setup.range(of: "<a id=\"doctor-systemmacos-version\"></a>"))
+    let macOSTail = setup[macOSStart.lowerBound...]
+    let macOSNextAnchor = try #require(macOSTail.dropFirst().range(of: "<a id="))
+    let macOSAnchor = String(macOSTail[..<macOSNextAnchor.lowerBound])
+    #expect(!macOSAnchor.contains("Upgrade macOS"))
+    #expect(macOSAnchor.contains("terminal unavailable state"))
+
+    let installationStart = try #require(setup.range(of: "<a id=\"doctor-logicinstallation\"></a>"))
+    let installationTail = setup[installationStart.lowerBound...]
+    let installationNextAnchor = try #require(installationTail.dropFirst().range(of: "<a id="))
+    let installationAnchor = String(installationTail[..<installationNextAnchor.lowerBound])
+    for staleContinuation in ["Install Logic", "install Logic", "retry", "continuation"] {
+        #expect(!installationAnchor.contains(staleContinuation))
+    }
+    #expect(installationAnchor.contains("terminal unavailable state"))
+
+    let versionStart = try #require(setup.range(of: "<a id=\"doctor-logicversion-support\"></a>"))
+    let versionTail = setup[versionStart.lowerBound...]
+    let versionNextAnchor = try #require(versionTail.dropFirst().range(of: "<a id="))
+    let versionAnchor = String(versionTail[..<versionNextAnchor.lowerBound])
+    #expect(!versionAnchor.contains("Use Logic"))
+    #expect(versionAnchor.contains("terminal unavailable state"))
 }
 
 @Test func testSetupDoctorJSONContractStableCheckIDsAndOKAggregation() throws {
