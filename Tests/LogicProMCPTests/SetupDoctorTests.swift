@@ -212,10 +212,15 @@ private func issue26RepositoryRootURL() -> URL {
         "permissions.automation_system_events",
         "permissions.post_event_access",
         "channels.manual_validation",
+        "logic.application_state",
+        "logic.blocking_dialog",
     ]
     for check in report.checks where check.status != .pass && !check.optional {
         if terminalOutcomeIDs.contains(check.id) {
-            #expect(check.status == .fail, "\(check.id) must terminate as a failure")
+            #expect(
+                check.status == .fail || (check.status == .skipped && check.blockedBy != nil),
+                "\(check.id) must terminate or remain collapsed behind its terminal prerequisite"
+            )
             #expect(check.remediation.type == .none, "\(check.id) must not request human remediation")
             #expect(check.remediation.value == "", "\(check.id) must not carry human remediation text")
         } else {
@@ -906,9 +911,9 @@ private func issue26RepositoryRootURL() -> URL {
 
 // MARK: - aggregateStatus precedence
 
-@Test func testAggregateStatusManualOutranksWarn() {
-    // logic not running -> logic.application_state manual; codesign nil -> release
-    // .signature warn. manual must win.
+@Test func testTerminalApplicationFailureOutranksWarn() {
+    // Logic unavailable is terminal; a concurrent release warning cannot
+    // downgrade the report to a human-action state.
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json"],
         permissionStatus: grantedPermissionStatus(),
@@ -929,7 +934,7 @@ private func issue26RepositoryRootURL() -> URL {
             }
         )
     )
-    #expect(report.status == .manualActionRequired)
+    #expect(report.status == .failed)
 }
 
 @Test func testAggregateStatusWarnWithoutFailOrManualIsDegraded() {

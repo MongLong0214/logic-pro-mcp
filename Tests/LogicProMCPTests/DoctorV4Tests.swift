@@ -8,6 +8,9 @@ private func doctorV4Runtime(
     desktopRegistration: SetupDoctor.ClaudeRegistration = .registered(command: "/Applications/Claude.app/Contents/MacOS/Claude"),
     launchContext: SetupDoctor.LaunchContextInfo = .init(context: "terminal", responsibleHint: "Terminal"),
     macOSVersion: OperatingSystemVersion? = OperatingSystemVersion(majorVersion: 14, minorVersion: 0, patchVersion: 0),
+    logicRunning: Bool = true,
+    visibleWindow: Bool = true,
+    blockingDialog: AXLogicProElements.BlockingDialogInfo? = nil,
     commandHandler: @escaping (String, [String]) -> SetupDoctor.CommandOutput? = { executable, arguments in
         if executable == "/usr/bin/codesign" {
             return .init(exitCode: 0, stdout: "", stderr: "")
@@ -32,8 +35,8 @@ private func doctorV4Runtime(
         resolveExecutablePath: { _ in executablePath },
         fileExists: { _ in true },
         isExecutableFile: { _ in true },
-        logicProRunning: { true },
-        logicProHasVisibleWindow: { true },
+        logicProRunning: { logicRunning },
+        logicProHasVisibleWindow: { visibleWindow },
         runCommand: { executable, arguments in
             commandHandler(executable, arguments).map(SetupDoctor.CommandResult.completed)
                 ?? .spawnFailed("test_command_unavailable")
@@ -50,13 +53,58 @@ private func doctorV4Runtime(
     runtime.mcuPortReferenceFound = { true }
     runtime.launchContext = { launchContext }
     runtime.tccCrossContextProbe = { .granted("terminal:accessibility=granted") }
-    runtime.blockingDialogInfo = { nil }
+    runtime.blockingDialogInfo = { blockingDialog }
     runtime.fileExistsAtPath = { path in
         path == "/opt/homebrew/bin/LogicProMCP" || path == "/usr/local/bin/LogicProMCP"
     }
     runtime.isRegularFile = runtime.fileExistsAtPath
     runtime.isDirectory = { _ in true }
     return runtime
+}
+
+@Test func doctorV4UnavailableLogicApplicationStateIsTerminalWithoutHumanAction() throws {
+    for runtime in [
+        doctorV4Runtime(logicRunning: false, visibleWindow: false),
+        doctorV4Runtime(logicRunning: true, visibleWindow: false),
+    ] {
+        let report = doctorV4Report(
+            arguments: ["LogicProMCP", "doctor", "--json", "--profile", "core"],
+            runtime: runtime
+        )
+        let state = try #require(report.checks.first { $0.id == "logic.application_state" })
+        #expect(state.status == .fail)
+        #expect(state.remediation.type == .none)
+        #expect(state.remediation.value.isEmpty)
+        #expect(state.evidence["terminal"] == "true")
+        #expect(state.evidence["human_intervention_required"] == "false")
+        #expect(state.evidence["human_intervention_requests"] == "0")
+        #expect(report.status == .failed)
+        #expect(!report.fixPlan.contains("logic.application_state"))
+    }
+}
+
+@Test func doctorV4BlockingDialogIsTerminalWithoutDismissalRequest() throws {
+    let runtime = doctorV4Runtime(blockingDialog: .init(
+        title: "Save",
+        role: "AXDialog",
+        owningWindow: "Fixture - Tracks",
+        buttonTitles: ["Cancel", "Save"],
+        recoveryAction: "Press Cancel and retry."
+    ))
+    let report = doctorV4Report(
+        arguments: ["LogicProMCP", "doctor", "--json", "--profile", "core"],
+        runtime: runtime
+    )
+    let dialog = try #require(report.checks.first { $0.id == "logic.blocking_dialog" })
+    #expect(dialog.status == .fail)
+    #expect(dialog.remediation.type == .none)
+    #expect(dialog.remediation.value.isEmpty)
+    #expect(dialog.evidence["terminal"] == "true")
+    #expect(dialog.evidence["human_intervention_required"] == "false")
+    #expect(dialog.evidence["human_intervention_requests"] == "0")
+    #expect(dialog.evidence["recovery_action"] == "unavailable")
+    #expect(report.status == .failed)
+    #expect(!report.fixPlan.contains("logic.blocking_dialog"))
 }
 
 private func doctorV4Permissions() -> PermissionChecker.PermissionStatus {

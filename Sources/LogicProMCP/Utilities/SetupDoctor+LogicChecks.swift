@@ -142,14 +142,20 @@ extension SetupDoctor {
     static func logicApplicationStateCheck(runtime: Runtime) -> Check {
         let running = runtime.logicProRunning()
         let visible = running && runtime.logicProHasVisibleWindow()
-        let status: CheckStatus = running ? (visible ? .pass : .warn) : .manual
+        let ready = running && visible
         return check(
             id: "logic.application_state",
             domain: "logic",
-            status: status,
+            status: ready ? .pass : .fail,
             summary: logicApplicationSummary(running: running, visible: visible),
-            evidence: ["running": String(running), "visible_window": String(visible)],
-            remediationType: running ? (visible ? .none : .manual) : .manual
+            evidence: [
+                "running": String(running),
+                "visible_window": String(visible),
+                "terminal": String(!ready),
+                "human_intervention_required": "false",
+                "human_intervention_requests": "0",
+            ],
+            remediationType: .none
         )
     }
 
@@ -162,7 +168,7 @@ extension SetupDoctor {
                 status: .skipped,
                 summary: "Blocking-dialog scan skipped because a prerequisite is not passing.",
                 evidence: [:],
-                remediationType: .manual,
+                remediationType: .none,
                 blockedBy: cause
             )
         }
@@ -179,16 +185,19 @@ extension SetupDoctor {
         return check(
             id: "logic.blocking_dialog",
             domain: "logic",
-            status: .warn,
-            summary: "Logic Pro has a blocking modal dialog.",
+            status: .fail,
+            summary: "Logic Pro has a blocking modal dialog that this unattended check cannot resolve.",
             evidence: [
                 "dialog_present": "true",
                 "dialog_title": info.title,
                 "role": info.role,
                 "buttons": info.buttonTitles.joined(separator: ","),
-                "recovery_action": info.recoveryAction,
+                "recovery_action": "unavailable",
+                "terminal": "true",
+                "human_intervention_required": "false",
+                "human_intervention_requests": "0",
             ],
-            remediationType: .manual
+            remediationType: .none
         )
     }
 

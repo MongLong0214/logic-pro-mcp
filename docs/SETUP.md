@@ -306,7 +306,9 @@ Shown only with `doctor --check-updates`. If a newer release exists, Homebrew in
 
 <a id="doctor-logicapplication-state"></a>
 ### `logic.application_state`
-Launch Logic Pro and open or create a project.
+A stopped application or missing visible project window is a terminal unavailable state for this
+read-only check. It reports zero human-intervention requests and does not ask for a launch, focus,
+project creation, or retry.
 
 <a id="doctor-logicinstallation"></a>
 ### `logic.installation`
@@ -318,7 +320,9 @@ Use Logic Pro 12.0.1 or newer; 12.3 is the latest validated target.
 
 <a id="doctor-logicblocking-dialog"></a>
 ### `logic.blocking_dialog`
-Dismiss blocking Logic Pro modal dialogs before retrying.
+A measured blocking modal is a terminal unavailable state for this read-only check. The diagnostic
+retains bounded dialog identity but suppresses the observed dismissal instruction and exposes no
+operator action in `fix_plan`.
 
 <a id="doctor-channelsmanual-validation"></a>
 ### `channels.manual_validation`
