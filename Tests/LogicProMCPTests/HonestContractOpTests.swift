@@ -203,6 +203,41 @@ private func decodeJSON(_ s: String) -> [String: Any] {
     )
 }
 
+@Test(arguments: [false, true])
+func testSetCycleRangeTransportWithoutLocatorFieldsIsTerminal(
+    fallbackSucceeds: Bool
+) throws {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(752)
+    let window = builder.element(753)
+    let transport = builder.element(754)
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setChildren(window, [transport])
+    builder.setAttribute(transport, kAXRoleAttribute as String, kAXToolbarRole as String)
+    builder.setChildren(transport, [])
+
+    let result = AccessibilityChannel.defaultSetCycleRange(
+        params: ["start": "1", "end": "5"],
+        runtime: builder.makeLogicRuntime(appElement: app),
+        runFallback: { _, _ in fallbackSucceeds }
+    )
+    #expect(!result.isSuccess)
+    let object = decodeJSON(result.message)
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(object["terminal_scope"] as? String == "mcp_request_only")
+    #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+    #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(object["human_intervention_requests"] as? Int == 0)
+    #expect(object["human_dependent_transitions"] as? Int == 0)
+    if fallbackSucceeds {
+        #expect(try #require(object["write_attempted"] as? Bool))
+        #expect(object["error"] as? String == "readback_unavailable")
+    } else {
+        #expect(!(try #require(object["write_attempted"] as? Bool)))
+        #expect(object["error"] as? String == "not_implemented")
+    }
+}
+
 @Test func testSetCycleRangeHasNoManualRecoveryRequestInAnyTerminalBranch() throws {
     let repositoryRoot = URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()
