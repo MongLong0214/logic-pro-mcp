@@ -7,8 +7,8 @@ import Testing
 // Legacy records neither configure nor verify Logic. They stay readable for
 // compatibility, but cannot become a success gate or a remediation request.
 //
-// The staging dependency still collapses the causal chain to its root. Once it
-// resolves, the check reports a terminal unattended-unavailable result.
+// Reference presence is informational and no longer delays the required
+// channel's terminal unattended-unavailable result.
 
 private func manualCheck(staged: Bool, profile: SetupDoctor.DoctorProfile = .keycmd) -> SetupDoctor.Check {
     let keycmd = SetupDoctor.check(
