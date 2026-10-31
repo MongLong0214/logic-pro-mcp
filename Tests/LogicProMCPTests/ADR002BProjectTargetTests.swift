@@ -125,7 +125,7 @@ struct ADR002BProjectTargetTests {
     }
 
     @Test
-    func projectSaveAsFlagOffPreservesCacheState() async throws {
+    func projectSaveAsFlagOffTerminatesWithoutInvalidatingCacheState() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(false) {
             let cache = StateCache()
             await cache.updateTracks([
@@ -140,8 +140,13 @@ struct ADR002BProjectTargetTests {
                 cache: cache
             )
 
-            let v1 = try #require(result.isError)
-            #expect(!v1)
+            let object = try requireStateC(result)
+            #expect(object["error"] as? String == "confirmation_required")
+            #expect(try #require(object["terminal"] as? Bool))
+            #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+            #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+            #expect(try #require(object["human_intervention_requests"] as? Int) == 0)
+            #expect(try #require(object["human_dependent_transitions"] as? Int) == 0)
             #expect(await cache.getTracks().map(\.name) == ["Existing"])
         }
     }
