@@ -20,7 +20,7 @@ private final class AppleScriptOpenHarness: @unchecked Sendable {
     #expect(DestructivePolicy.level(for: "quit") == .l3)
     #expect(DestructivePolicy.level(for: "close") == .l3)
     #expect(DestructivePolicy.level(for: "save_as") == .l2)
-    #expect(DestructivePolicy.level(for: "bounce") == .l2)
+    #expect(DestructivePolicy.level(for: "bounce") == .l0)
     #expect(DestructivePolicy.level(for: "open") == .l2)
     #expect(DestructivePolicy.level(for: "save") == .l1)
     #expect(DestructivePolicy.level(for: "new") == .l1)
