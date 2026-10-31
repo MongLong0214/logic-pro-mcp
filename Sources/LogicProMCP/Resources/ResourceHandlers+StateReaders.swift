@@ -112,7 +112,10 @@ extension ResourceHandlers {
                 + "the cached or default state remains unverified.",
             "automatic_refresh_attempts_exhausted": true,
             "terminal": true,
+            "terminal_scope": "mcp_request_only",
             "human_intervention_required": false,
+            "human_intervention_requests": 0,
+            "human_dependent_transitions": 0,
         ]
         if let errorCode = liveRefresh.errorCode {
             extras["refresh_error"] = errorCode
