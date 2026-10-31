@@ -335,6 +335,243 @@ import Testing
     #expect(!FileManager.default.fileExists(atPath: rmLog.path))
 }
 
+private struct UninstallLaunchAgentFixture {
+    let home: URL
+    let fakeBin: URL
+    let installRoot: URL
+    let launchAgent: URL
+    let serviceState: URL
+    let launchctlLog: URL
+
+    var environment: [String: String] {
+        [
+            "PATH": "\(fakeBin.path):/usr/bin:/bin:/usr/sbin:/sbin",
+            "HOME": home.path,
+            "LOGIC_PRO_MCP_INSTALL_DIR": installRoot.path,
+            "LOGIC_PRO_MCP_SKIP_SUDO": "1",
+            "LAUNCHCTL_LOG": launchctlLog.path,
+            "SERVICE_STATE": serviceState.path,
+        ]
+    }
+}
+
+private func makeUninstallLaunchAgentFixture(
+    serviceLoaded: Bool,
+    plistPresent: Bool,
+    bootoutExitCode: Int = 0,
+    serviceAbsentExitCode: Int = 113,
+    preserveServiceAfterBootout: Bool = false,
+    failPlistRemoval: Bool = false,
+    binaryPresent: Bool = false
+) throws -> UninstallLaunchAgentFixture {
+    let sandbox = try makeInstallScriptTempDir("logicpromcp-uninstall-launch-agent-\(UUID().uuidString)")
+    let home = sandbox.appendingPathComponent("home", isDirectory: true)
+    let fakeBin = sandbox.appendingPathComponent("fake-bin", isDirectory: true)
+    let installRoot = sandbox.appendingPathComponent("install-root", isDirectory: true)
+    let launchAgent = home.appendingPathComponent("Library/LaunchAgents/com.logicpro.mcp.plist")
+    let serviceState = sandbox.appendingPathComponent("service-loaded")
+    let launchctlLog = sandbox.appendingPathComponent("launchctl.log")
+
+    try FileManager.default.createDirectory(at: fakeBin, withIntermediateDirectories: true)
+    try FileManager.default.createDirectory(at: installRoot, withIntermediateDirectories: true)
+    if plistPresent {
+        try writeFile(launchAgent, contents: "fixture")
+    }
+    if serviceLoaded {
+        try writeFile(serviceState, contents: "loaded")
+    }
+    if binaryPresent {
+        try writeFile(installRoot.appendingPathComponent("LogicProMCP"), contents: "fixture")
+    }
+
+    try writeExecutable(
+        fakeBin.appendingPathComponent("launchctl"),
+        contents: """
+        #!/bin/bash
+        set -euo pipefail
+        echo "$*" >> "$LAUNCHCTL_LOG"
+        [ "${2:-}" = "gui/$UID/com.logicpro.mcp" ] || exit 64
+        case "${1:-}" in
+            print)
+                if [ -f "$SERVICE_STATE" ]; then
+                    exit 0
+                fi
+                exit "\(serviceAbsentExitCode)"
+                ;;
+            bootout)
+                if [ "\(bootoutExitCode)" -ne 0 ]; then
+                    exit "\(bootoutExitCode)"
+                fi
+                if [ "\(preserveServiceAfterBootout ? 1 : 0)" -eq 0 ]; then
+                    /bin/rm -f "$SERVICE_STATE"
+                fi
+                ;;
+            *) exit 64 ;;
+        esac
+        """
+    )
+    try writeExecutable(
+        fakeBin.appendingPathComponent("claude"),
+        contents: """
+        #!/bin/bash
+        exit 0
+        """
+    )
+    if failPlistRemoval {
+        try writeExecutable(
+            fakeBin.appendingPathComponent("rm"),
+            contents: """
+            #!/bin/bash
+            set -euo pipefail
+            for argument in "$@"; do
+                case "$argument" in
+                    */Library/LaunchAgents/com.logicpro.mcp.plist) exit 71 ;;
+                esac
+            done
+            exec /bin/rm "$@"
+            """
+        )
+    }
+
+    return UninstallLaunchAgentFixture(
+        home: home,
+        fakeBin: fakeBin,
+        installRoot: installRoot,
+        launchAgent: launchAgent,
+        serviceState: serviceState,
+        launchctlLog: launchctlLog
+    )
+}
+
+@Test func testUninstallScriptBootsOutExactLoadedLaunchAgentWithoutPlist() throws {
+    let fixture = try makeUninstallLaunchAgentFixture(serviceLoaded: true, plistPresent: false)
+
+    let result = try runShellScript("Scripts/uninstall.sh", environment: fixture.environment)
+
+    #expect(result.exitCode != 0)
+    #expect(result.combinedOutput.contains("Removed launch agent service"))
+    #expect(result.combinedOutput.contains("Logic-resident Scripter/MCU state is unverified"))
+    #expect(!FileManager.default.fileExists(atPath: fixture.serviceState.path))
+    let calls = try String(contentsOf: fixture.launchctlLog, encoding: .utf8)
+        .split(separator: "\n")
+        .map(String.init)
+    #expect(calls.count == 3)
+    #expect(calls[0].hasPrefix("print gui/"))
+    #expect(calls[1].hasPrefix("bootout gui/"))
+    #expect(calls[2].hasPrefix("print gui/"))
+    #expect(calls.allSatisfy { $0.hasSuffix("/com.logicpro.mcp") })
+}
+
+@Test func testUninstallScriptRemovesFixedPlistWhenLaunchAgentIsNotLoaded() throws {
+    let fixture = try makeUninstallLaunchAgentFixture(serviceLoaded: false, plistPresent: true)
+
+    let result = try runShellScript("Scripts/uninstall.sh", environment: fixture.environment)
+
+    #expect(result.exitCode != 0)
+    #expect(result.combinedOutput.contains("Removed launch agent plist"))
+    #expect(result.combinedOutput.contains("Logic-resident Scripter/MCU state is unverified"))
+    #expect(!FileManager.default.fileExists(atPath: fixture.launchAgent.path))
+    let calls = try String(contentsOf: fixture.launchctlLog, encoding: .utf8)
+        .split(separator: "\n")
+    #expect(calls.count == 1)
+    #expect(calls[0].hasPrefix("print gui/"))
+}
+
+@Test func testUninstallScriptSkipsAbsentLaunchAgentWithoutBootout() throws {
+    let fixture = try makeUninstallLaunchAgentFixture(serviceLoaded: false, plistPresent: false)
+
+    let result = try runShellScript("Scripts/uninstall.sh", environment: fixture.environment)
+
+    #expect(result.exitCode != 0)
+    #expect(result.combinedOutput.contains("Launch agent service not loaded"))
+    #expect(result.combinedOutput.contains("Logic-resident Scripter/MCU state is unverified"))
+    let calls = try String(contentsOf: fixture.launchctlLog, encoding: .utf8)
+        .split(separator: "\n")
+    #expect(calls.count == 1)
+    #expect(calls[0].hasPrefix("print gui/"))
+}
+
+@Test func testUninstallScriptPreservesBinaryAndPlistWhenLaunchAgentBootoutFails() throws {
+    let fixture = try makeUninstallLaunchAgentFixture(
+        serviceLoaded: true,
+        plistPresent: true,
+        bootoutExitCode: 72,
+        binaryPresent: true
+    )
+
+    let result = try runShellScript("Scripts/uninstall.sh", environment: fixture.environment)
+
+    #expect(result.exitCode != 0)
+    #expect(result.combinedOutput.contains("launch agent service could not be stopped"))
+    #expect(FileManager.default.fileExists(atPath: fixture.serviceState.path))
+    #expect(FileManager.default.fileExists(atPath: fixture.launchAgent.path))
+    #expect(FileManager.default.fileExists(atPath: fixture.installRoot.appendingPathComponent("LogicProMCP").path))
+}
+
+@Test func testUninstallScriptRejectsLaunchAgentThatRemainsLoadedAfterBootout() throws {
+    let fixture = try makeUninstallLaunchAgentFixture(
+        serviceLoaded: true,
+        plistPresent: true,
+        preserveServiceAfterBootout: true,
+        binaryPresent: true
+    )
+
+    let result = try runShellScript("Scripts/uninstall.sh", environment: fixture.environment)
+
+    #expect(result.exitCode != 0)
+    #expect(result.combinedOutput.contains("launch agent service remains loaded"))
+    #expect(FileManager.default.fileExists(atPath: fixture.launchAgent.path))
+    #expect(FileManager.default.fileExists(atPath: fixture.installRoot.appendingPathComponent("LogicProMCP").path))
+}
+
+@Test func testUninstallScriptTerminatesWhenFixedPlistRemovalFails() throws {
+    let fixture = try makeUninstallLaunchAgentFixture(
+        serviceLoaded: false,
+        plistPresent: true,
+        failPlistRemoval: true,
+        binaryPresent: true
+    )
+
+    let result = try runShellScript("Scripts/uninstall.sh", environment: fixture.environment)
+
+    #expect(result.exitCode != 0)
+    #expect(result.combinedOutput.contains("launch agent plist could not be removed"))
+    #expect(FileManager.default.fileExists(atPath: fixture.launchAgent.path))
+    #expect(FileManager.default.fileExists(atPath: fixture.installRoot.appendingPathComponent("LogicProMCP").path))
+}
+
+@Test func testUninstallScriptPreservesArtifactsWhenLaunchAgentProbeIsIndeterminate() throws {
+    let fixture = try makeUninstallLaunchAgentFixture(
+        serviceLoaded: false,
+        plistPresent: true,
+        serviceAbsentExitCode: 73,
+        binaryPresent: true
+    )
+
+    let result = try runShellScript("Scripts/uninstall.sh", environment: fixture.environment)
+
+    #expect(result.exitCode != 0)
+    #expect(result.combinedOutput.contains("launch agent service state could not be established"))
+    #expect(FileManager.default.fileExists(atPath: fixture.launchAgent.path))
+    #expect(FileManager.default.fileExists(atPath: fixture.installRoot.appendingPathComponent("LogicProMCP").path))
+}
+
+@Test func testUninstallScriptPreservesArtifactsWhenBootoutReadbackIsIndeterminate() throws {
+    let fixture = try makeUninstallLaunchAgentFixture(
+        serviceLoaded: true,
+        plistPresent: true,
+        serviceAbsentExitCode: 73,
+        binaryPresent: true
+    )
+
+    let result = try runShellScript("Scripts/uninstall.sh", environment: fixture.environment)
+
+    #expect(result.exitCode != 0)
+    #expect(result.combinedOutput.contains("launch agent service removal could not be verified"))
+    #expect(FileManager.default.fileExists(atPath: fixture.launchAgent.path))
+    #expect(FileManager.default.fileExists(atPath: fixture.installRoot.appendingPathComponent("LogicProMCP").path))
+}
+
 @Test func testInstallScriptPersistsShareDirIntoClaudeRegistrationForCustomNonBinLayouts() throws {
     let fixture = try makeInstallerFixture()
 

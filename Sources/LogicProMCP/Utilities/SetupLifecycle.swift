@@ -1,4 +1,5 @@
 import Foundation
+import Darwin
 
 /// Read-only PLANNER for the install / update / uninstall lifecycle.
 ///
@@ -16,6 +17,12 @@ import Foundation
 /// `Scripts/install.sh` / `Scripts/uninstall.sh`; the planner does not pretend
 /// to perform it.
 enum SetupLifecycle {
+    enum LaunchAgentServiceState: String, Sendable {
+        case loaded
+        case notLoaded
+        case unavailable
+    }
+
     enum Command: String, Codable, Sendable, CaseIterable {
         case install
         case update
@@ -103,6 +110,9 @@ enum SetupLifecycle {
         /// Version string of the binary already installed at `INSTALL_DIR`, if it
         /// can be read; nil when nothing is installed or the version cannot be read.
         let installedBinaryVersion: () -> String?
+        /// Exact current-user launchd service state. Kept separate from the
+        /// plist because a loaded service can outlive a missing plist.
+        let launchAgentServiceState: () -> LaunchAgentServiceState
         /// Home directory for resolving per-user artifacts (Key Commands, plist,
         /// approval store). Injected so tests never read the real home dir.
         let homeDirectory: () -> URL
@@ -125,6 +135,9 @@ enum SetupLifecycle {
             },
             installedBinaryVersion: {
                 productionInstalledBinaryVersion()
+            },
+            launchAgentServiceState: {
+                productionLaunchAgentServiceState()
             },
             homeDirectory: {
                 FileManager.default.homeDirectoryForCurrentUser
@@ -314,8 +327,47 @@ enum SetupLifecycle {
         var steps: [Step] = []
         let home = runtime.homeDirectory()
 
-        // Order mirrors Scripts/uninstall.sh: compatibility records, binary,
-        // key commands, registration, then terminal Logic-resident residuals.
+        // Stop the exact owned launchd service before deleting the binary. The
+        // legacy plist enables KeepAlive, so deleting the binary first can leave
+        // a restart loop and an unverifiable partial uninstall.
+        let launchAgent = launchAgentPath(home: home)
+        let launchAgentPresent = runtime.fileExists(launchAgent)
+        let launchAgentServiceState = runtime.launchAgentServiceState()
+        let launchAgentAction: Action
+        let launchAgentCurrentState: String
+        switch (launchAgentServiceState, launchAgentPresent) {
+        case (.loaded, true):
+            launchAgentAction = .delete
+            launchAgentCurrentState = "service_loaded_plist_present"
+        case (.loaded, false):
+            launchAgentAction = .delete
+            launchAgentCurrentState = "service_loaded_plist_absent"
+        case (.notLoaded, true):
+            launchAgentAction = .delete
+            launchAgentCurrentState = "service_not_loaded_plist_present"
+        case (.notLoaded, false):
+            launchAgentAction = .skip
+            launchAgentCurrentState = "absent"
+        case (.unavailable, true):
+            launchAgentAction = .delete
+            launchAgentCurrentState = "service_state_unavailable_plist_present"
+        case (.unavailable, false):
+            launchAgentAction = .delete
+            launchAgentCurrentState = "service_state_unavailable_plist_absent"
+        }
+        steps.append(step(
+            id: "launch_agent.remove",
+            action: launchAgentAction,
+            target: launchAgent,
+            currentState: launchAgentCurrentState,
+            plannedState: "absent",
+            reversible: true,
+            requiresSudo: false,
+            remediationType: .none
+        ))
+
+        // Remaining order mirrors Scripts/uninstall.sh: compatibility records,
+        // binary, key commands, registration, then Logic-resident residuals.
         let approvalStore = approvalStorePath(home: home)
         let approvalLock = approvalLockPath(home: home)
         let approvalsPresent = approvalStoreArtifacts(home: home).contains { runtime.fileExists($0) }
@@ -353,22 +405,6 @@ enum SetupLifecycle {
         steps.append(keyCommandsStep(runtime: runtime, removing: true))
         steps.append(registrationStep(runtime: runtime, binaryPath: binaryPath, removing: true))
         steps.append(scripterStep(removing: true))
-
-        let launchAgent = launchAgentPath(home: home)
-        let launchAgentPresent = runtime.fileExists(launchAgent)
-        steps.append(step(
-            id: "launch_agent.remove",
-            action: launchAgentPresent ? .delete : .skip,
-            target: launchAgent,
-            currentState: launchAgentPresent ? "present" : "absent",
-            plannedState: "absent",
-            reversible: true,
-            requiresSudo: false,
-            remediationType: launchAgentPresent ? .manual : .none,
-            remediationValueOverride: launchAgentPresent
-                ? "launchctl unload \(launchAgent) && rm \(launchAgent)"
-                : nil
-        ))
 
         return steps
     }
@@ -653,5 +689,27 @@ enum SetupLifecycle {
         }
         let trimmed = output.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
         return trimmed.isEmpty ? nil : trimmed
+    }
+
+    private static func productionLaunchAgentServiceState() -> LaunchAgentServiceState {
+        let service = "gui/\(getuid())/com.logicpro.mcp"
+        let result = SetupDoctor.runProductionCommandForTesting(
+            executable: "/bin/launchctl",
+            arguments: ["print", service],
+            timeout: 1.0
+        )
+        guard let output = result.output else {
+            return .unavailable
+        }
+        switch output.exitCode {
+        case 0:
+            return .loaded
+        case 113:
+            // Measured launchctl result for an absent service in the current
+            // user's GUI domain. Other failures remain indeterminate.
+            return .notLoaded
+        default:
+            return .unavailable
+        }
     }
 }

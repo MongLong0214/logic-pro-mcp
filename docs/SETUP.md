@@ -396,7 +396,13 @@ Install a launch agent only when your MCP client requires one; normal stdio use 
 
 <a id="lifecycle-launchagentremove"></a>
 ### `launch_agent.remove`
-Unload and remove the launch agent plist, then verify no stale process remains.
+The source-checkout uninstaller probes the exact current-user service
+`gui/$UID/com.logicpro.mcp`, boots out only that service, verifies its absence with a bounded
+readback, removes only `~/Library/LaunchAgents/com.logicpro.mcp.plist`, and verifies the path is
+absent. It terminates before deleting the binary or plist when service ownership or removal cannot
+be established; it never uses process-wide termination. The current release archive and Homebrew
+pkgshare do not ship `uninstall.sh` with its required `install-common.sh`, so installed-distribution
+uninstall ownership remains unavailable.
 
 <a id="lifecycle-approvalsremove"></a>
 ### `approvals.remove`

@@ -351,6 +351,14 @@ import Testing
     #expect(script.contains("Removed shared assets"))
     #expect(script.contains("Removed operator approvals"))
     #expect(script.contains("APPROVAL_LOCK"))
+    #expect(script.contains("gui/$UID/com.logicpro.mcp"))
+    #expect(script.contains("launchctl print \"$LAUNCH_AGENT_SERVICE\""))
+    #expect(script.contains("launchctl bootout \"$LAUNCH_AGENT_SERVICE\""))
+    #expect(script.contains("[ -e \"$LAUNCH_AGENT\" ] || [ -L \"$LAUNCH_AGENT\" ]"))
+    #expect(!script.contains("launchctl unload"))
+    #expect(!script.contains("pgrep"))
+    #expect(!script.contains("pkill"))
+    #expect(!script.contains("killall"))
 }
 
 @Test func testKeyEventHelperSupportsReturnEnterAliasesAndPreflight() throws {
