@@ -5153,14 +5153,14 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(everyDispositionIsAccountedFor)
     }
 
-    @Test func liveGateClassifiesExactClosedLibraryPanelHintAsEnvironmental() {
+    @Test func liveGateClassifiesExactLibraryInventoryPreconditionAsEnvironmental() {
         let summary = QualificationLiveGateSummary(operationResults: [
             Self.tracksListLibraryRefusal()
         ])
         let classifiesClosedPanelAsEnvironmental = summary.environmentalPreconditions == [
             .init(
                 operationID: OperationID.tracksListLibrary.rawValue,
-                reason: "automatic Library-panel open was exhausted"
+                reason: "requires an exact open Library panel with readable inventory"
             ),
         ] && summary.failed == 0
 

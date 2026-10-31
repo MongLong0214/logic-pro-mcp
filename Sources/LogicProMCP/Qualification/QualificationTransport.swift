@@ -687,7 +687,7 @@ struct QualificationOperationResult: Equatable, Sendable {
         if OperationID(rawValue: operationID) == .tracksListLibrary {
             guard error == HonestContract.FailureError.libraryPanelUnavailable.rawValue,
                   hint == AccessibilityChannel.libraryListPanelUnavailableHint else { return nil }
-            return "automatic Library-panel open was exhausted"
+            return "requires an exact open Library panel with readable inventory"
         }
         guard error == "channels_exhausted" else { return nil }
         switch OperationID(rawValue: operationID) {
