@@ -120,6 +120,15 @@ extension AccessibilityChannel {
                 error: error, hint: hint, extras: extras.merging(more) { _, new in new }
             ))
         }
+        let terminalPreconditionFields: [String: Any] = [
+            "terminal": true,
+            "terminal_scope": "mcp_request_only",
+            "safe_to_retry": false,
+            "automatic_precondition_attempts_exhausted": true,
+            "human_intervention_required": false,
+            "human_intervention_requests": 0,
+            "human_dependent_transitions": 0,
+        ]
 
         // The strip, by the same ordinal convention `insert_plugin` uses, refusing when a Mixer
         // child would not report a role: a dropped child shifts every later ordinal.
@@ -176,8 +185,8 @@ extension AccessibilityChannel {
         extras["before"] = before.json
         if let expected, expected != before {
             return refusal(.staleSnapshot, "expected_current does not match the strip's observed "
-                + "output; re-read it and retry. Nothing was pressed.",
-                ["expected_current": expected.json])
+                + "output; this request terminated without pressing anything.",
+                terminalPreconditionFields.merging(["expected_current": expected.json]) { _, new in new })
         }
         let noOutputChange = before == .noOutput || destination == .noOutput
         if noOutputChange {
@@ -215,8 +224,9 @@ extension AccessibilityChannel {
         }
         if playing || recording {
             let state = recording ? "recording" : "playing"
-            return refusal(.unsupportedState, "Refusing while the transport is \(state): stop it and "
-                + "retry. Nothing was pressed.", ["transport": state])
+            return refusal(.unsupportedState, "Refusing while the transport is \(state); this request "
+                + "terminated without pressing anything.",
+                terminalPreconditionFields.merging(["transport": state]) { _, new in new })
         }
 
         if case .bus(let number) = destination {

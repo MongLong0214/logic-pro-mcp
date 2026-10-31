@@ -518,7 +518,18 @@ extension AccessibilityChannel {
             case nil:
                 return .error(HonestContract.encodeStateC(
                     error: .internalInconsistency,
-                    hint: "Library path resolution returned a miss without a miss category. No absence was observed; run scan_library and retry."
+                    hint: "Library path resolution terminated because an internal miss had no category; "
+                        + "no absence was observed and no further action was attempted.",
+                    extras: [
+                        "operation": "library.resolve_path",
+                        "terminal": true,
+                        "terminal_scope": "mcp_request_only",
+                        "safe_to_retry": false,
+                        "automatic_precondition_attempts_exhausted": true,
+                        "human_intervention_required": false,
+                        "human_intervention_requests": 0,
+                        "human_dependent_transitions": 0,
+                    ]
                 ))
             }
         }

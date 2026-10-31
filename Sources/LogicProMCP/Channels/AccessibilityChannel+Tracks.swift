@@ -4257,7 +4257,8 @@ extension AccessibilityChannel {
         )
         // #883: every exit below gives up, and giving up used to leave this operation's New Track
         // sheet on screen for the next call to be refused on. Dismiss it and report the re-read.
-        // The verdict below still keys on `lastModal`: Create may have landed, so the state stays B.
+        // The verdict below still keys on `lastModal`: a residual observed modal terminates the
+        // request even when the pre-write track-count baseline was unreadable.
         var cleanup: NewTrackSheetCleanup?
         if newTrackSheetIsOwned, lastModal.kind == .mandatoryNewTrack {
             let result = await dismissOwnedNewTrackSheet(
@@ -4268,18 +4269,8 @@ extension AccessibilityChannel {
             merged["new_track_sheet_cleanup"] = result.envelopeValue
             cleanup = result
         }
-        // Without a successful pre-write rail read, a later count cannot tell
-        // whether the tracks existed before the menu action. The write may have
-        // happened, but State A is unavailable rather than a zero-count guess.
-        guard beforeTracks != nil else {
-            return .success(HonestContract.encodeStateB(
-                reason: .retryExhausted,
-                extras: merged
-            ))
-        }
-        // `dialog_present` / `waiting_for_user` must claim only what was
-        // actually observed. `kind != .none` is a real blocker: something is
-        // genuinely on screen waiting for the user. An incomplete scan
+        // `dialog_present` must claim only what was actually observed.
+        // `kind != .none` is a real blocker. An incomplete scan
         // (`!modalObservationIsComplete` while `kind == .none`) is a read
         // that did not answer — it must not be reported as "a dialog is
         // present", which is a claim about a control that was never seen.
@@ -4293,8 +4284,33 @@ extension AccessibilityChannel {
         merged["dialog_present"] = blockerStillPresent
         if realBlockerPresent {
             if blockerStillPresent {
-                merged["waiting_for_user"] = true
+                let terminal = merged.merging([
+                    "terminal": true,
+                    "terminal_scope": "mcp_request_only",
+                    "safe_to_retry": false,
+                    "automatic_precondition_attempts_exhausted": true,
+                    "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                    "human_dependent_transitions": 0,
+                ]) { _, terminalValue in terminalValue }
+                return .error(HonestContract.encodeStateC(
+                    error: .unsupportedState,
+                    hint: "An observed Logic modal remained open after bounded automatic reconciliation; "
+                        + "this request terminated without requesting human intervention.",
+                    extras: terminal
+                ))
             }
+            return .success(HonestContract.encodeStateB(
+                reason: .retryExhausted,
+                extras: merged
+            ))
+        }
+        // Without a successful pre-write rail read, a later count cannot tell
+        // whether the tracks existed before the menu action. The write may have
+        // happened, but State A is unavailable rather than a zero-count guess.
+        // Classify an actually observed residual modal first: an unreadable
+        // count baseline must not hide a terminal blocker.
+        guard beforeTracks != nil else {
             return .success(HonestContract.encodeStateB(
                 reason: .retryExhausted,
                 extras: merged

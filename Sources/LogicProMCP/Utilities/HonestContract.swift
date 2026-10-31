@@ -318,9 +318,9 @@ enum HonestContract {
         /// append-only audit receipt (directory-create or append error), so the
         /// clear was REFUSED and the in-process trace store left intact —
         /// destroying evidence without a surviving receipt is the failure mode
-        /// this debt closes. Terminal: no fallback channel or retry can create a
-        /// filesystem path the operator's environment denies; the caller must
-        /// fix the audit-log location.
+        /// this debt closes. Terminal for this MCP request: no fallback channel
+        /// can create a filesystem path denied by the current environment, and
+        /// the response never transfers completion to a human.
         case traceClearReceiptFailed = "trace_clear_receipt_failed"
         case sagaInProgress = "saga_in_progress"
         case idempotencyKeyConflict = "idempotency_key_conflict"
@@ -561,9 +561,9 @@ enum HonestContract {
         // classification consistency.)
         FailureError.unknownCategory.rawValue,
         FailureError.supportBundleExportFailed.rawValue,
-        // PRD-015: a trace-clear receipt-write failure is terminal — no channel
-        // or retry can create a path the operator's environment denies; the
-        // store is left intact and the caller must fix the audit-log location.
+        // PRD-015: a trace-clear receipt-write failure is terminal for this MCP
+        // request — no channel can create a path denied by the current
+        // environment, and the store is left intact without human handoff.
         FailureError.traceClearReceiptFailed.rawValue,
         FailureError.idempotencyKeyConflict.rawValue,
         FailureError.sagaJournalCapacityExceeded.rawValue,

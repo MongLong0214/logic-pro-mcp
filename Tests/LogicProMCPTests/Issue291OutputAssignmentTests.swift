@@ -597,6 +597,16 @@ func outputAssignmentRefusesAStaleExpectation() async throws {
     #expect(envelope["error"] as? String == "stale_snapshot")
     #expect(dictionary(envelope["before"]) == json(.stereoOutput))
     #expect(dictionary(envelope["expected_current"]) == json(.physical(3, 4)))
+    #expect(try #require(envelope["terminal"] as? Bool))
+    #expect(envelope["terminal_scope"] as? String == "mcp_request_only")
+    #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+    #expect(try #require(envelope["automatic_precondition_attempts_exhausted"] as? Bool))
+    #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+    #expect(envelope["human_intervention_requests"] as? Int == 0)
+    #expect(envelope["human_dependent_transitions"] as? Int == 0)
+    let hint = try #require(envelope["hint"] as? String)
+    #expect(!hint.localizedCaseInsensitiveContains("re-read"))
+    #expect(!hint.localizedCaseInsensitiveContains("retry"))
     #expect(fixture.presses.isEmpty)
 }
 
@@ -871,6 +881,16 @@ func outputAssignmentRefusesUnlessStopped(_ transport: R2Transport) async throws
     case .playing, .recording:
         #expect(envelope["error"] as? String == "unsupported_state")
         #expect(envelope["transport"] as? String == transport.rawValue)
+        #expect(try #require(envelope["terminal"] as? Bool))
+        #expect(envelope["terminal_scope"] as? String == "mcp_request_only")
+        #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+        #expect(try #require(envelope["automatic_precondition_attempts_exhausted"] as? Bool))
+        #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+        #expect(envelope["human_intervention_requests"] as? Int == 0)
+        #expect(envelope["human_dependent_transitions"] as? Int == 0)
+        let hint = try #require(envelope["hint"] as? String)
+        #expect(!hint.localizedCaseInsensitiveContains("stop it"))
+        #expect(!hint.localizedCaseInsensitiveContains("retry"))
     case .unreadable:
         #expect(envelope["error"] as? String == "transport_state_unknown")
     }

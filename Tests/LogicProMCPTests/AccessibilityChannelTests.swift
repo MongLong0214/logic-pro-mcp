@@ -3153,7 +3153,7 @@ private func makeTempoSliderFixture(
     #expect(result.message.contains("\"observed_delta\":0"))
 }
 
-@Test func testAccessibilityChannelCreateInstrumentReportsDialogPendingWhenModalPersists() async throws {
+@Test func testAccessibilityChannelCreateInstrumentTerminatesWithoutHumanWaitWhenModalPersists() async throws {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(280)
     let window = builder.element(281)
@@ -3201,16 +3201,23 @@ private func makeTempoSliderFixture(
 
     let receipt = decodeAccessibilityJSON(result.message)
     // This fixture's top-level AXDialog has no children and therefore exposes
-    // no readable Create button. It must remain pending rather than triggering
-    // the injected legacy Return seam; the receipt makes that non-confirmation
-    // explicit for the caller.
+    // no readable Create button. It must terminate after bounded automatic
+    // reconciliation rather than queueing a human wait or triggering the
+    // injected legacy Return seam.
     #expect(!confirmation.value)
     #expect(!(try #require(receipt["dialog_confirmation_attempted"] as? Bool)))
-    #expect(result.isSuccess)
-    #expect(result.message.contains("\"verified\":false"))
-    #expect(result.message.contains("\"reason\":\"retry_exhausted\""))
+    #expect(!result.isSuccess)
+    #expect(receipt["verified"] == nil)
+    #expect(result.message.contains("\"state\":\"C\""))
+    #expect(result.message.contains("\"error\":\"unsupported_state\""))
     #expect(result.message.contains("\"dialog_present\":true"))
-    #expect(result.message.contains("\"waiting_for_user\":true"))
+    #expect(receipt["waiting_for_user"] == nil)
+    #expect(try #require(receipt["terminal"] as? Bool))
+    #expect(!(try #require(receipt["safe_to_retry"] as? Bool)))
+    #expect(!(try #require(receipt["human_intervention_required"] as? Bool)))
+    #expect(receipt["human_intervention_requests"] as? Int == 0)
+    #expect(receipt["human_dependent_transitions"] as? Int == 0)
+    #expect(try #require(receipt["automatic_precondition_attempts_exhausted"] as? Bool))
 }
 
 @Test func testAccessibilityChannelAXBackedTrackDefaultsUseFakeAXTree() async throws {

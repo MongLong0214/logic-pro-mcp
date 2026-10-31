@@ -452,11 +452,17 @@ enum TargetRefResolver {
     ) -> CallTool.Result {
         toolStateCResult(
             .targetRefUnavailable,
-            hint: "stable target reference requires an active target resolver and LOGIC_MCP_ADR002_TARGET_REF unset or != \"0\" (on by default)",
+            hint: "Stable target reference resolution is unavailable for this process; no target was resolved and this MCP request terminated.",
             extras: [
                 "operation": operation,
                 "target_ref": rawReference ?? "",
                 "write_attempted": false,
+                "terminal": true,
+                "terminal_scope": "mcp_request_only",
+                "safe_to_retry": false,
+                "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
             ]
         )
     }
@@ -467,11 +473,17 @@ enum TargetRefResolver {
     ) -> CallTool.Result {
         toolStateCResult(
             .targetRefUnavailable,
-            hint: "project_ref requires an active project identity and LOGIC_MCP_ADR002_TARGET_REF unset or != \"0\" (on by default)",
+            hint: "Project reference resolution is unavailable for this process; no project was resolved and this MCP request terminated.",
             extras: [
                 "operation": operation,
                 "project_ref": rawReference ?? "",
                 "write_attempted": false,
+                "terminal": true,
+                "terminal_scope": "mcp_request_only",
+                "safe_to_retry": false,
+                "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
             ]
         )
     }

@@ -31,9 +31,13 @@ struct SystemDispatcher: OperationTraceDispatching {
             error: .consentRequired,
             hint: "One-time setup changes Logic's Key Commands configuration so tracks can arm "
                 + "coordinate-free. The server drives the Key Commands window on your behalf (no mouse). "
-                + "Re-run with consent:\"true\" to proceed.",
+                + "No configuration change was attempted because this request has no accepted setup "
+                + "authorization. The request terminated.",
             extras: ["stage": "consent", "write_source": "none",
-                     "write_attempted": false, "configuration_write_attempted": false]
+                     "write_attempted": false, "configuration_write_attempted": false,
+                     "terminal": true, "safe_to_retry": false,
+                     "human_intervention_required": false,
+                     "human_intervention_requests": 0, "human_dependent_transitions": 0]
         ), isError: true)
     }
 
@@ -48,9 +52,13 @@ struct SystemDispatcher: OperationTraceDispatching {
             hint: "One-time setup installs the \"\(ControlSurfaceSetup.model)\" control surface into Logic "
                 + "and binds its Output and Input ports to \"\(ControlSurfaceSetup.portName)\", which is what "
                 + "makes every MCU operation take effect. The server drives Logic's Control Surface Setup "
-                + "window on your behalf (no mouse). Re-run with consent:\"true\" to proceed.",
+                + "window on your behalf (no mouse). No configuration change was attempted because this "
+                + "request has no accepted setup authorization. The request terminated.",
             extras: ["stage": "consent", "write_source": "none",
-                     "write_attempted": false, "configuration_write_attempted": false]
+                     "write_attempted": false, "configuration_write_attempted": false,
+                     "terminal": true, "safe_to_retry": false,
+                     "human_intervention_required": false,
+                     "human_intervention_requests": 0, "human_dependent_transitions": 0]
         ), isError: true)
     }
 
@@ -85,10 +93,12 @@ struct SystemDispatcher: OperationTraceDispatching {
         toolTextResult(HonestContract.encodeStateC(
             error: .armKeyConfigInvalid,
             hint: "\(setupDeadlineEnvVar) must be a positive integer number of milliseconds; \"\(raw)\" "
-                + "is not valid. Unset it to use the default deadline, or set a value like 8000. No Key "
-                + "Commands change was attempted.",
+                + "is not valid. No Key Commands or configuration change was attempted; this MCP request terminated.",
             extras: ["stage": "setup_deadline_config_invalid", "write_source": "none",
-                     "write_attempted": false, "configuration_write_attempted": false]
+                     "write_attempted": false, "configuration_write_attempted": false,
+                     "terminal": true, "terminal_scope": "mcp_request_only",
+                     "safe_to_retry": false, "human_intervention_required": false,
+                     "human_intervention_requests": 0, "human_dependent_transitions": 0]
         ), isError: true)
     }
 
@@ -630,9 +640,13 @@ struct SystemDispatcher: OperationTraceDispatching {
                 armResult = toolTextResult(HonestContract.encodeStateC(
                     error: .consentRequired,
                     hint: "One-time setup assigns Logic's \"\(ArmKeyCommandSetup.commandName)\" command to "
-                        + "\(chordText) so tracks arm coordinate-free. Re-run with consent:\"true\" to proceed.",
+                        + "\(chordText) so tracks arm coordinate-free. The setup drive did not accept "
+                        + "authorization, so no configuration change was attempted and the request terminated.",
                     extras: ["stage": "consent", "chord": chordText, "write_source": "none",
-                             "write_attempted": false, "configuration_write_attempted": false]
+                             "write_attempted": false, "configuration_write_attempted": false,
+                             "terminal": true, "safe_to_retry": false,
+                             "human_intervention_required": false,
+                             "human_intervention_requests": 0, "human_dependent_transitions": 0]
                 ), isError: true)
             case .configInvalid(let hint):
                 armResult = toolTextResult(HonestContract.encodeStateC(
@@ -2018,11 +2032,17 @@ struct SystemDispatcher: OperationTraceDispatching {
             guard FeatureFlags.adr005OperationTrace else {
                 return toolStateCResult(
                     .notSupported,
-                    hint: "Operation tracing is on by default; it was disabled with LOGIC_MCP_ADR005_OPERATION_TRACE=0",
+                    hint: "Operation tracing is disabled for this process; no trace was read and this MCP request terminated.",
                     extras: [
                         "operation": "system.get_trace",
                         "trace_disabled": true,
                         "write_attempted": false,
+                        "terminal": true,
+                        "terminal_scope": "mcp_request_only",
+                        "safe_to_retry": false,
+                        "human_intervention_required": false,
+                        "human_intervention_requests": 0,
+                        "human_dependent_transitions": 0,
                     ]
                 )
             }
@@ -2074,10 +2094,17 @@ struct SystemDispatcher: OperationTraceDispatching {
                 return toolTextResult(
                     HonestContract.encodeStateC(
                         error: .traceDisabled,
-                        hint: "Operation tracing is on by default; it was disabled with "
-                            + "LOGIC_MCP_ADR005_OPERATION_TRACE=0, so nothing was cleared. "
-                            + "Unset the variable (or set it to any value other than \"0\") to record and manage traces.",
-                        extras: ["trace_disabled": true, "write_attempted": false]
+                        hint: "Operation tracing is disabled for this process; nothing was cleared and this MCP request terminated.",
+                        extras: [
+                            "trace_disabled": true,
+                            "write_attempted": false,
+                            "terminal": true,
+                            "terminal_scope": "mcp_request_only",
+                            "safe_to_retry": false,
+                            "human_intervention_required": false,
+                            "human_intervention_requests": 0,
+                            "human_dependent_transitions": 0,
+                        ]
                     ),
                     isError: true
                 )
@@ -2109,10 +2136,19 @@ struct SystemDispatcher: OperationTraceDispatching {
                 return toolStateCResult(
                     .traceClearReceiptFailed,
                     hint: "clear_traces refused: the durable audit receipt could not be written; "
-                        + "the trace store was left intact. Fix the audit-log location and retry.",
+                        + "the trace store was left intact. This MCP request terminated without clearing it.",
                     // The receipt write WAS attempted (and failed); what the
                     // caller needs to know is that the STORE is untouched.
-                    extras: ["store_cleared": false]
+                    extras: [
+                        "store_cleared": false,
+                        "terminal": true,
+                        "terminal_scope": "mcp_request_only",
+                        "safe_to_retry": false,
+                        "automatic_precondition_attempts_exhausted": true,
+                        "human_intervention_required": false,
+                        "human_intervention_requests": 0,
+                        "human_dependent_transitions": 0,
+                    ]
                 )
             }
             let actualCleared = await OperationTraceStore.shared.clearReturningCount()
