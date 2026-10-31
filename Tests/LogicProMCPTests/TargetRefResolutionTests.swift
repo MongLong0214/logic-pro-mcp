@@ -233,8 +233,8 @@ struct TargetRefResolutionTests {
     }
 
     @Test
-    func testResolverFlagOffTargetRefFailsClosedBeforeIndexFallback() async {
-        await FeatureFlags.withAdr002TargetRefForTests(false) {
+    func testResolverFlagOffTargetRefFailsClosedBeforeIndexFallback() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(false) {
             let (registry, cache, reference) = await boundTrack(index: 2)
             let outcome = await TargetRefResolver.resolveMutationIndex(
                 ["target_ref": .string(reference.rawValue), "index": .int(5)],
@@ -255,10 +255,56 @@ struct TargetRefResolutionTests {
             // unconditionally. These two assertions were dead — the hint one
             // still pinned the pre-PRD-007 "=1" wording and did not fail when
             // that wording changed.
-            let writeAttempted = body["write_attempted"] as! Bool
+            let writeAttempted = try #require(body["write_attempted"] as? Bool)
             #expect(!writeAttempted)
-            let hint = body["hint"] as! String
-            #expect(hint.contains("LOGIC_MCP_ADR002_TARGET_REF"))
+            let terminal = try #require(body["terminal"] as? Bool)
+            #expect(terminal)
+            #expect(body["terminal_scope"] as? String == "mcp_request_only")
+            let safeToRetry = try #require(body["safe_to_retry"] as? Bool)
+            #expect(!safeToRetry)
+            let humanRequired = try #require(body["human_intervention_required"] as? Bool)
+            #expect(!humanRequired)
+            #expect(body["human_intervention_requests"] as? Int == 0)
+            #expect(body["human_dependent_transitions"] as? Int == 0)
+            let hint = try #require(body["hint"] as? String)
+            #expect(hint.localizedCaseInsensitiveContains("terminated"))
+            #expect(!hint.contains("LOGIC_MCP_ADR002_TARGET_REF"))
+            #expect(!hint.localizedCaseInsensitiveContains("unset"))
+            #expect(!hint.localizedCaseInsensitiveContains("retry"))
+        }
+    }
+
+    @Test
+    func testProjectResolverFlagOffProjectRefTerminatesWithoutContinuation() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(false) {
+            let result = await TargetRefResolver.validateProjectReference(
+                ["project_ref": .string("prj_unavailable")],
+                targetRegistry: nil,
+                operation: "mixer.get_output_verified"
+            )
+            guard let result else {
+                Issue.record("expected the disabled resolver to refuse project_ref")
+                return
+            }
+            let body = sharedJSONObject(sharedToolText(result)) ?? [:]
+            #expect(errorCode(result) == "target_ref_unavailable")
+            #expect(body["project_ref"] as? String == "prj_unavailable")
+            let writeAttempted = try #require(body["write_attempted"] as? Bool)
+            #expect(!writeAttempted)
+            let terminal = try #require(body["terminal"] as? Bool)
+            #expect(terminal)
+            #expect(body["terminal_scope"] as? String == "mcp_request_only")
+            let safeToRetry = try #require(body["safe_to_retry"] as? Bool)
+            #expect(!safeToRetry)
+            let humanRequired = try #require(body["human_intervention_required"] as? Bool)
+            #expect(!humanRequired)
+            #expect(body["human_intervention_requests"] as? Int == 0)
+            #expect(body["human_dependent_transitions"] as? Int == 0)
+            let hint = try #require(body["hint"] as? String)
+            #expect(hint.localizedCaseInsensitiveContains("terminated"))
+            #expect(!hint.contains("LOGIC_MCP_ADR002_TARGET_REF"))
+            #expect(!hint.localizedCaseInsensitiveContains("unset"))
+            #expect(!hint.localizedCaseInsensitiveContains("retry"))
         }
     }
 
