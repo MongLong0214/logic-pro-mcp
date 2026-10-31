@@ -74,6 +74,7 @@ struct Issue199ResourceReadDeadlineTests {
         #expect(obj?["uri"] as? String == uri)
         #expect(obj?["timeout_sec"] as? Double == 25)
         #expect(try #require(obj?["terminal"] as? Bool))
+        #expect(obj?["terminal_scope"] as? String == "mcp_request_only")
         #expect(!(try #require(obj?["human_intervention_required"] as? Bool)))
         #expect(obj?["human_intervention_requests"] as? Int == 0)
         #expect(obj?["human_dependent_transitions"] as? Int == 0)
