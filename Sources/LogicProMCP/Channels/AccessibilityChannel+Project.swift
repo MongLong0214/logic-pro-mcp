@@ -1694,9 +1694,22 @@ extension AccessibilityChannel {
             case .failure:
                 return .error(HonestContract.encodeStateC(
                     error: .readbackUnavailable,
-                    hint: "Marker List rows could not be read."
+                    hint: "Marker List rows could not be read.",
+                    extras: ["reason": "marker_list_rows_unreadable"]
                 ))
             }
+        }
+        if AXLogicProElements.hasUnverifiedMarkerListWindow(runtime: runtime) {
+            return .error(HonestContract.encodeStateC(
+                error: .readbackUnavailable,
+                hint: "An open Marker List could not be bound to the active project.",
+                extras: [
+                    "reason": "marker_list_identity_unverified",
+                    "operation": "nav.get_markers",
+                    "failure_stage": "marker_list_identity_unverified",
+                    "write_attempted": false,
+                ]
+            ))
         }
         if let area = AXLogicProElements.getArrangementArea(runtime: runtime) {
             let legacyMarkers = AXLogicProElements.enumerateMarkers(in: area, runtime: runtime)
@@ -1706,8 +1719,20 @@ extension AccessibilityChannel {
         }
         return .error(HonestContract.encodeStateC(
             error: .elementNotFound,
-            hint: "Open Navigate > Open Marker List so Logic Pro can expose marker rows to Accessibility.",
-            extras: ["reason": "marker_list_not_open"]
+            hint: "Marker rows are unavailable to this passive read. Use logic_navigate capture_markers for bounded automatic acquisition and restoration.",
+            extras: [
+                "reason": "marker_list_not_open",
+                "operation": "nav.get_markers",
+                "failure_stage": "marker_list_not_open_for_passive_read",
+                "automated_alternative": "logic_navigate.capture_markers",
+                "automatic_attempts_exhausted": true,
+                "terminal": true,
+                "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
+                "write_attempted": false,
+                "safe_to_retry": false,
+            ]
         ))
     }
 

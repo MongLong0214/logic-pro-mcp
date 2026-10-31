@@ -204,6 +204,7 @@ private func latestChangelogReleaseHeading() throws -> ChangelogReleaseHeading? 
     // reply reports about it; the old one-line "no readback echo" contract went with that change.
     #expect(api.contains("`modal_after_press` is what the last read found: `clear`, `open`"))
     #expect(api.contains("State B `modal_left_open` whatever the mode read"))
+    #expect(api.contains("only the exact `marker_list_not_open` outcome carries the terminal `logic_navigate capture_markers` alternative"))
 }
 
 /// Issue #22 (thomas-doesburg): `brew install` broke at v3.4.6/v3.5.0 because

@@ -435,6 +435,82 @@ private func makeStatePollerAccessibilityRuntime(
     #expect(markers[2].position == "25.1.1.1")
 }
 
+@Test func testStatePollerPreservesClosedMarkerListFailureReason() async {
+    let cache = StateCache()
+    let channel = AccessibilityChannel(
+        runtime: makeStatePollerAccessibilityRuntime(
+            projectInfoResult: .success(#"{"name":"Markers Test","sampleRate":44100,"bitDepth":24,"tempo":120,"timeSignature":"4/4","trackCount":1,"filePath":null,"lastUpdated":"2026-04-16T00:00:00Z"}"#),
+            markersResult: .error(#"{"reason":"marker_list_not_open"}"#)
+        )
+    )
+    let poller = StatePoller(
+        axChannel: channel,
+        cache: cache,
+        runtime: .init(hasVisibleWindow: { true })
+    )
+
+    await poller.refreshNow()
+
+    #expect(await cache.getMarkerPollFailure() == .listNotOpen)
+}
+
+@Test func testStatePollerDoesNotCollapseOpenListRowFailureIntoClosedList() async {
+    let cache = StateCache()
+    let channel = AccessibilityChannel(
+        runtime: makeStatePollerAccessibilityRuntime(
+            projectInfoResult: .success(#"{"name":"Markers Test","sampleRate":44100,"bitDepth":24,"tempo":120,"timeSignature":"4/4","trackCount":1,"filePath":null,"lastUpdated":"2026-04-16T00:00:00Z"}"#),
+            markersResult: .error(#"{"reason":"marker_list_rows_unreadable"}"#)
+        )
+    )
+    let poller = StatePoller(
+        axChannel: channel,
+        cache: cache,
+        runtime: .init(hasVisibleWindow: { true })
+    )
+
+    await poller.refreshNow()
+
+    #expect(await cache.getMarkerPollFailure() == .rowsUnreadable)
+}
+
+@Test func testStatePollerDoesNotCollapseUnverifiedOpenListIntoClosedList() async {
+    let cache = StateCache()
+    let channel = AccessibilityChannel(
+        runtime: makeStatePollerAccessibilityRuntime(
+            projectInfoResult: .success(#"{"name":"Markers Test","sampleRate":44100,"bitDepth":24,"tempo":120,"timeSignature":"4/4","trackCount":1,"filePath":null,"lastUpdated":"2026-04-16T00:00:00Z"}"#),
+            markersResult: .error(#"{"reason":"marker_list_identity_unverified"}"#)
+        )
+    )
+    let poller = StatePoller(
+        axChannel: channel,
+        cache: cache,
+        runtime: .init(hasVisibleWindow: { true })
+    )
+
+    await poller.refreshNow()
+
+    #expect(await cache.getMarkerPollFailure() == .identityUnverified)
+}
+
+@Test func testStatePollerClassifiesMalformedMarkerPayloadWithoutBlamingTheList() async {
+    let cache = StateCache()
+    let channel = AccessibilityChannel(
+        runtime: makeStatePollerAccessibilityRuntime(
+            projectInfoResult: .success(#"{"name":"Markers Test","sampleRate":44100,"bitDepth":24,"tempo":120,"timeSignature":"4/4","trackCount":1,"filePath":null,"lastUpdated":"2026-04-16T00:00:00Z"}"#),
+            markersResult: .success("{invalid-json")
+        )
+    )
+    let poller = StatePoller(
+        axChannel: channel,
+        cache: cache,
+        runtime: .init(hasVisibleWindow: { true })
+    )
+
+    await poller.refreshNow()
+
+    #expect(await cache.getMarkerPollFailure() == .invalidPayload)
+}
+
 @Test func testStatePollerClearsMarkersWhenDocumentCloses() async {
     let cache = StateCache()
     await cache.updateMarkers([
