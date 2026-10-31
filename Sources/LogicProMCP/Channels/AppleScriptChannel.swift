@@ -557,67 +557,71 @@ actor AppleScriptChannel: Channel {
         case .success:
             return .success("Opened: \(path)")
         case .error(let initialMessage):
-            guard runtime.isLogicProRunning() else {
-                return .error("Failed to verify opened project: \(path). \(initialMessage)")
+            let logicProRunning = runtime.isLogicProRunning()
+            let documentAfterInitialVerification: FrontDocumentIdentity?
+            if logicProRunning {
+                documentAfterInitialVerification = await logicCurrentDocumentIdentity()
+            } else {
+                documentAfterInitialVerification = nil
             }
 
-            let documentAfterInitialVerification = await logicCurrentDocumentIdentity()
             if let currentDocumentPath = documentAfterInitialVerification?.path,
                projectPathsMatch(currentDocumentPath, path) {
                 return .success("Opened: \(path)")
             }
 
-            if documentAfterInitialVerification?.hasNameWithoutPath == true {
-                return .error(HonestContract.encodeStateC(
-                    error: .unsupportedState,
-                    hint: "project.open terminated after the requested project could not be verified and the current front document path remained unavailable; refusing to close a document whose persistence status was not established. The accepted open request may still settle after this response, so its final effect remains unknown and it must not be retried.",
-                    extras: [
-                        "operation": "project.open",
-                        "method": "applescript",
-                        "path": path,
-                        "terminal": true,
-                        "human_intervention_required": false,
-                        "human_intervention_requests": 0,
-                        "human_dependent_transitions": 0,
-                        "automatic_precondition_attempts_exhausted": true,
-                        "safe_to_retry": false,
-                        "terminal_scope": "mcp_request_only",
-                        "underlying_operation_stopped": false,
-                        "open_effect_status": "unknown_after_verification_failure",
-                        "open_request_attempted": true,
-                        "close_attempted": false,
-                        "front_document_observed_after_verification_failure": true,
-                        "front_document_path_status": "unavailable",
-                        "identity_classification": "name_observed_path_unavailable",
-                    ]
-                ))
+            let identityClassification: String
+            let frontDocumentPathStatus: String
+            let hint: String
+            let frontDocumentObserved: Bool
+            if !logicProRunning {
+                identityClassification = "logic_process_not_observed"
+                frontDocumentPathStatus = "unavailable"
+                frontDocumentObserved = false
+                hint = "project.open terminated after Launch Services accepted the request but Logic Pro was not yet observed running. The accepted open request may still launch and settle after this response, so its final effect remains unknown and it must not be retried."
+            } else if documentAfterInitialVerification?.path != nil {
+                identityClassification = "different_path_observed"
+                frontDocumentPathStatus = "different_path_observed"
+                frontDocumentObserved = true
+                hint = "project.open terminated after the requested project could not be verified and a different front document remained open; refusing to close it because its modification state was not established. The accepted open request may still settle after this response, so its final effect remains unknown and it must not be retried."
+            } else if documentAfterInitialVerification?.hasNameWithoutPath == true {
+                identityClassification = "name_observed_path_unavailable"
+                frontDocumentPathStatus = "unavailable"
+                frontDocumentObserved = true
+                hint = "project.open terminated after the requested project could not be verified and the current front document path remained unavailable; refusing to close a document whose persistence status was not established. The accepted open request may still settle after this response, so its final effect remains unknown and it must not be retried."
+            } else {
+                identityClassification = "front_document_identity_unavailable"
+                frontDocumentPathStatus = "unavailable"
+                frontDocumentObserved = false
+                hint = "project.open terminated after the requested project could not be verified and the current front document identity was unavailable; refusing to issue an unverified close. The accepted open request may still settle after this response, so its final effect remains unknown and it must not be retried."
             }
-
-            _ = await runScript(closeCurrentProjectIfAnyScript(saving: "no"))
-
-            guard runtime.openFile(path) else {
-                if let previousDocumentPath = documentAfterInitialVerification?.path,
-                   !projectPathsMatch(previousDocumentPath, path) {
-                    _ = runtime.openFile(previousDocumentPath)
-                }
-                return .error("Failed to open after closing current project: \(path)")
+            var extras: [String: Any] = [
+                "operation": "project.open",
+                "method": "applescript",
+                "path": path,
+                "terminal": true,
+                "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
+                "automatic_precondition_attempts_exhausted": true,
+                "safe_to_retry": false,
+                "terminal_scope": "mcp_request_only",
+                "underlying_operation_stopped": false,
+                "open_effect_status": "unknown_after_verification_failure",
+                "open_request_attempted": true,
+                "close_attempted": false,
+                "front_document_path_status": frontDocumentPathStatus,
+                "identity_classification": identityClassification,
+                "initial_verification_error": initialMessage,
+            ]
+            if frontDocumentObserved {
+                extras["front_document_observed_after_verification_failure"] = true
             }
-
-            let retryVerification = await runScript(verifyOpenedProjectScript(path: path))
-            switch retryVerification {
-            case .success:
-                return .success("Opened: \(path)")
-            case .error(let retryMessage):
-                if let currentDocumentPath = await logicCurrentDocumentPath(),
-                   projectPathsMatch(currentDocumentPath, path) {
-                    return .success("Opened: \(path)")
-                }
-                if let previousDocumentPath = documentAfterInitialVerification?.path,
-                   !projectPathsMatch(previousDocumentPath, path) {
-                    _ = runtime.openFile(previousDocumentPath)
-                }
-                return .error("Failed to verify opened project: \(path). \(retryMessage)")
-            }
+            return .error(HonestContract.encodeStateC(
+                error: .unsupportedState,
+                hint: hint,
+                extras: extras
+            ))
         }
     }
 
@@ -626,17 +630,6 @@ actor AppleScriptChannel: Channel {
         return """
         \(LogicProTarget.appleScriptTarget().tellApplicationByBundleID)
             close front document \(saveClause)
-        end tell
-        """
-    }
-
-    private func closeCurrentProjectIfAnyScript(saving: String) -> String {
-        let saveClause = closeProjectSaveClause(saving: saving)
-        return """
-        \(LogicProTarget.appleScriptTarget().tellApplicationByBundleID)
-            if (count of documents) > 0 then
-                close front document \(saveClause)
-            end if
         end tell
         """
     }

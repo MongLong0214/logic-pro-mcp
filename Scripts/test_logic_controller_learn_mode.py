@@ -4,10 +4,15 @@
 from __future__ import annotations
 
 import importlib.util
+import io
+import json
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
+from unittest import mock
 
 import logic_session_bootstrap as bootstrap_module
+import logic_controller_learn_mode as learn_mode_module
 from logic_controller_learn_mode import (
     DEFAULT_CONTROLLER_LEARN_MODE_POLICY,
     classify_controller_learn_mode,
@@ -58,6 +63,11 @@ class ControllerLearnModeGuardTests(unittest.TestCase):
         self.assertEqual(result["status"], "blocked")
         self.assertEqual(result["reason"], "assignment_prompt_present")
         self.assertIn("This control is already assigned", " ".join(result["evidence"]["labels"]))
+        self.assertIs(result["terminal"], True)
+        self.assertNotIn("terminal_scope", result)
+        self.assertIs(result["human_intervention_required"], False)
+        self.assertEqual(result["human_intervention_requests"], 0)
+        self.assertEqual(result["human_dependent_transitions"], 0)
 
     def test_enabled_learn_mode_checkbox_blocks(self):
         result = guard_controller_learn_mode(
@@ -75,6 +85,10 @@ class ControllerLearnModeGuardTests(unittest.TestCase):
         self.assertEqual(result["status"], "blocked")
         self.assertEqual(result["reason"], "learn_mode_enabled")
         self.assertEqual(result["evidence"]["control"]["name"], "Learn Mode")
+        self.assertIs(result["terminal"], True)
+        self.assertIs(result["human_intervention_required"], False)
+        self.assertEqual(result["human_intervention_requests"], 0)
+        self.assertEqual(result["human_dependent_transitions"], 0)
 
     def test_detect_error_returns_error_with_policy_id(self):
         result = guard_controller_learn_mode(
@@ -84,6 +98,40 @@ class ControllerLearnModeGuardTests(unittest.TestCase):
         self.assertEqual(result["status"], "error")
         self.assertEqual(result["reason"], "osascript_failed")
         self.assertEqual(result["policy_id"], DEFAULT_CONTROLLER_LEARN_MODE_POLICY["policy_id"])
+        self.assertIs(result["terminal"], True)
+        self.assertNotIn("terminal_scope", result)
+        self.assertIs(result["human_intervention_required"], False)
+        self.assertEqual(result["human_intervention_requests"], 0)
+        self.assertEqual(result["human_dependent_transitions"], 0)
+
+    def test_clear_guard_records_zero_human_transitions(self):
+        result = guard_controller_learn_mode(runner=FakeRunner({"status": "inactive"}))
+
+        self.assertEqual(result["status"], "clear")
+        self.assertIs(result["terminal"], False)
+        self.assertIs(result["human_intervention_required"], False)
+        self.assertEqual(result["human_intervention_requests"], 0)
+        self.assertEqual(result["human_dependent_transitions"], 0)
+
+    def test_standalone_commands_exit_nonzero_for_failed_outcomes(self):
+        cases = [
+            ("guard", "guard_controller_learn_mode", {"status": "blocked"}),
+            ("detect", "detect_controller_learn_mode", {"status": "active"}),
+            ("detect", "detect_controller_learn_mode", {"status": "error"}),
+        ]
+
+        for command, target, payload in cases:
+            with self.subTest(command=command, status=payload["status"]):
+                output = io.StringIO()
+                with mock.patch.object(learn_mode_module, target, return_value=payload), redirect_stdout(output):
+                    self.assertEqual(learn_mode_module._main(["script", command]), 1)
+                published = json.loads(output.getvalue())
+                self.assertEqual(published["status"], payload["status"])
+                self.assertIs(published["terminal"], True)
+                self.assertNotIn("terminal_scope", published)
+                self.assertIs(published["human_intervention_required"], False)
+                self.assertEqual(published["human_intervention_requests"], 0)
+                self.assertEqual(published["human_dependent_transitions"], 0)
 
     def test_classifier_accepts_not_present_as_inactive(self):
         result = classify_controller_learn_mode({"status": "not_present"})
