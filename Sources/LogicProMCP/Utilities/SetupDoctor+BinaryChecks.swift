@@ -8,6 +8,7 @@ extension SetupDoctor {
         result["terminal"] = "true"
         result["human_intervention_required"] = "false"
         result["human_intervention_requests"] = "0"
+        result["human_dependent_transitions"] = "0"
         return result
     }
 

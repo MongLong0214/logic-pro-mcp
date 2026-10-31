@@ -763,6 +763,21 @@ private struct DoctorCapabilityEnvelope: Encodable {
     #expect(!headline.contains("Next action"))
 }
 
+@Test func doctorV4ZeroHumanRequestEvidenceReportsZeroDependentTransitions() {
+    for arguments in [
+        ["LogicProMCP", "doctor", "--json", "--profile", "core"],
+        ["LogicProMCP", "doctor", "--json", "--profile", "full"],
+    ] {
+        let report = doctorV4Report(arguments: arguments, approvals: [:])
+        for check in report.checks where check.evidence["human_intervention_requests"] == "0" {
+            #expect(
+                check.evidence["human_dependent_transitions"] == "0",
+                "Missing zero-transition receipt for \(check.id)"
+            )
+        }
+    }
+}
+
 @Test func doctorV4CapabilityChecksAreConsistentWithRegistryGroups() throws {
     let report = doctorV4Report()
     let grouped = Dictionary(grouping: SetupDoctor.checkDefinitions.flatMap { definition in

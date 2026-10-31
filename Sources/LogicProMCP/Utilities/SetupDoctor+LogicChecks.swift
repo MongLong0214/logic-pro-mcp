@@ -6,6 +6,7 @@ extension SetupDoctor {
         result["terminal"] = "true"
         result["human_intervention_required"] = "false"
         result["human_intervention_requests"] = "0"
+        result["human_dependent_transitions"] = "0"
         return result
     }
 
@@ -174,6 +175,7 @@ extension SetupDoctor {
                 "terminal": String(!ready),
                 "human_intervention_required": "false",
                 "human_intervention_requests": "0",
+                "human_dependent_transitions": "0",
             ],
             remediationType: .none
         )
@@ -216,6 +218,7 @@ extension SetupDoctor {
                 "terminal": "true",
                 "human_intervention_required": "false",
                 "human_intervention_requests": "0",
+                "human_dependent_transitions": "0",
             ],
             remediationType: .none
         )
