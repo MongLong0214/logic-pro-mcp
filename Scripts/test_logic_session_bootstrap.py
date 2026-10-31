@@ -201,6 +201,49 @@ class EvaluateFreshSessionTests(unittest.TestCase):
             config=make_config(),
         )
         self.assert_reason(assessment, "blocking_dialog_present")
+        self.assertEqual(
+            assessment.hint,
+            "A blocking Logic dialog or sheet remained after bounded automatic dismissal; "
+            "bootstrap terminated.",
+        )
+
+    def test_environment_failures_describe_bounded_automatic_termination(self):
+        cases = [
+            (
+                make_ui(),
+                make_health(logic_pro_running=False),
+                "logic_not_running",
+                "Logic Pro was not observed running after bounded automatic launch preparation; "
+                "bootstrap terminated.",
+            ),
+            (
+                make_ui(),
+                make_health(logic_pro_has_window=False),
+                "logic_window_not_visible",
+                "A Logic Pro document window was not observed after bounded automatic acquisition; "
+                "bootstrap terminated.",
+            ),
+            (
+                make_ui(frontmost_app="Finder"),
+                make_health(),
+                "logic_not_frontmost",
+                "Logic Pro was not confirmed frontmost after bounded automatic activation; "
+                "bootstrap terminated.",
+            ),
+        ]
+
+        for ui, health, reason, hint in cases:
+            with self.subTest(reason=reason):
+                assessment = evaluate_fresh_session(
+                    ui=ui,
+                    health=health,
+                    project_payload=make_project(track_count=1),
+                    tracks_payload=make_tracks(count=1),
+                    region_count=0,
+                    config=make_config(),
+                )
+                self.assert_reason(assessment, reason)
+                self.assertEqual(assessment.hint, hint)
 
     def test_blocks_placeholder_tracks(self):
         assessment = evaluate_fresh_session(
@@ -380,16 +423,18 @@ class BootstrapResultTests(unittest.TestCase):
         self.assertIs(payload["human_intervention_required"], False)
         self.assertEqual(payload["human_intervention_requests"], 0)
 
-    def test_unclassified_failure_does_not_claim_a_no_human_outcome(self):
+    def test_failure_defaults_to_terminal_no_human_outcome(self):
         payload = BootstrapResult(
             ok=False,
             reason="logic_window_not_visible",
-            hint="Bring a Logic Pro document window on-screen before continuing.",
+            hint="Bounded automatic window acquisition terminated.",
         ).as_dict()
 
-        self.assertIsNone(payload["terminal"])
-        self.assertIsNone(payload["human_intervention_required"])
-        self.assertIsNone(payload["human_intervention_requests"])
+        self.assertIs(payload["terminal"], True)
+        self.assertEqual(payload["terminal_scope"], "mcp_request_only")
+        self.assertIs(payload["human_intervention_required"], False)
+        self.assertEqual(payload["human_intervention_requests"], 0)
+        self.assertEqual(payload["human_dependent_transitions"], 0)
 
 
 class ActivationHelperTests(unittest.TestCase):
