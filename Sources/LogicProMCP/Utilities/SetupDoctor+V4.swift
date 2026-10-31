@@ -273,6 +273,7 @@ extension SetupDoctor {
                 "terminal": "true",
                 "human_intervention_required": "false",
                 "human_intervention_requests": "0",
+                "human_dependent_transitions": "0",
             ],
             remediationType: .none
         )
