@@ -39,4 +39,13 @@ struct MIDIDispatcherDescriptionTests {
             "MIDIDispatcher.tool.description must state channel range 1..16"
         )
     }
+
+    @Test("keycmd description is honest without requesting manual setup")
+    func testKeycmdDescriptionHasNoManualContinuation() {
+        let description = MIDIDispatcher.tool.description ?? ""
+
+        #expect(!description.contains("requires one-time MIDI Learn"))
+        #expect(description.contains("no programmatic Logic binding or outcome readback"))
+        #expect(description.contains("returns State B without requesting setup"))
+    }
 }

@@ -654,7 +654,10 @@ actor CGEventChannel: Channel {
             extras["safe_to_retry"] = false
             extras["automatic_input_source_restore_attempts_exhausted"] = true
             extras["terminal"] = true
+            extras["terminal_scope"] = "mcp_request_only"
             extras["human_intervention_required"] = false
+            extras["human_intervention_requests"] = 0
+            extras["human_dependent_transitions"] = 0
         }
         return extras
     }
@@ -820,7 +823,10 @@ actor CGEventChannel: Channel {
             "safe_to_retry": false,
             "automatic_input_source_attempts_exhausted": true,
             "terminal": true,
+            "terminal_scope": "mcp_request_only",
             "human_intervention_required": false,
+            "human_intervention_requests": 0,
+            "human_dependent_transitions": 0,
         ]
         if let id = source?.id {
             extras["input_source_id"] = id
@@ -892,7 +898,10 @@ actor CGEventChannel: Channel {
                 "safe_to_retry": false,
                 "automatic_permission_attempts_exhausted": true,
                 "terminal": true,
+                "terminal_scope": "mcp_request_only",
                 "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
             ]
         ))
     }
@@ -912,7 +921,10 @@ actor CGEventChannel: Channel {
             "safe_to_retry": false,
             "automatic_frontmost_attempts_exhausted": true,
             "terminal": true,
+            "terminal_scope": "mcp_request_only",
             "human_intervention_required": false,
+            "human_intervention_requests": 0,
+            "human_dependent_transitions": 0,
         ]
         if let observation { extras["frontmost_observation"] = observation.diagnostic }
         return .error(HonestContract.encodeStateC(
@@ -1019,7 +1031,10 @@ actor CGEventChannel: Channel {
                 "fallback_unsafe": openerPosted,
                 "automatic_dialog_attempts_exhausted": true,
                 "terminal": true,
+                "terminal_scope": "mcp_request_only",
                 "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
             ]
         ))
     }

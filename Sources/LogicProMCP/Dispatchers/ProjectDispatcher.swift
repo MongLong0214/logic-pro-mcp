@@ -829,7 +829,10 @@ struct ProjectDispatcher: OperationTraceDispatching {
                     "write_attempted": false,
                     "automatic_read_attempts_exhausted": true,
                     "terminal": true,
+                    "terminal_scope": "mcp_request_only",
                     "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                    "human_dependent_transitions": 0,
                 ]
             )
         }
@@ -1007,7 +1010,10 @@ struct ProjectDispatcher: OperationTraceDispatching {
                     "applied": renamed,
                     "underlying": body,
                     "terminal": true,
+                    "terminal_scope": "mcp_request_only",
                     "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                    "human_dependent_transitions": 0,
                 ]
                 if anyRenameWriteAttempted {
                     failureExtras["write_attempted"] = true
@@ -1216,6 +1222,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
         ]
         for (k, v) in extras { merged[k] = v }
         merged["terminal"] = true
+        merged["terminal_scope"] = "mcp_request_only"
         merged["safe_to_retry"] = false
         merged["human_intervention_required"] = false
         merged["human_intervention_requests"] = 0

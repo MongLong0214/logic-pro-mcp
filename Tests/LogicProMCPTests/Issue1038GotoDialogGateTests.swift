@@ -187,7 +187,10 @@ struct Issue1038GotoDialogGateTests {
         #expect(try #require(envelope["fallback_unsafe"] as? Bool))
         #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
         #expect(try #require(envelope["terminal"] as? Bool))
+        #expect(envelope["terminal_scope"] as? String == "mcp_request_only")
         #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+        #expect(envelope["human_intervention_requests"] as? Int == 0)
+        #expect(envelope["human_dependent_transitions"] as? Int == 0)
         #expect(try #require(envelope["automatic_dialog_attempts_exhausted"] as? Bool))
         let hint = try #require(envelope["hint"] as? String)
         for request in ["retry", "close a", "read Logic", "manually"] {

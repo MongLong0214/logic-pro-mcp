@@ -75,6 +75,7 @@ enum DestructivePolicy {
             "verified": false,
             "write_attempted": false,
             "terminal": true,
+            "terminal_scope": "mcp_request_only",
             "safe_to_retry": false,
             "human_intervention_required": false,
             "human_intervention_requests": 0,

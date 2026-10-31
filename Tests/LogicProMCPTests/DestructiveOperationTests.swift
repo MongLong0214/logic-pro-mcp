@@ -46,6 +46,7 @@ private final class AppleScriptOpenHarness: @unchecked Sendable {
     #expect(!success)
     let terminal = try #require(object["terminal"] as? Bool)
     #expect(terminal)
+    #expect(object["terminal_scope"] as? String == "mcp_request_only")
     let writeAttempted = try #require(object["write_attempted"] as? Bool)
     #expect(!writeAttempted)
     let safeToRetry = try #require(object["safe_to_retry"] as? Bool)

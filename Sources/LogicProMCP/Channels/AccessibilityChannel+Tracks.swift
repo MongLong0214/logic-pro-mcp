@@ -1892,7 +1892,11 @@ extension AccessibilityChannel {
         details["reason"] = reason
         details["write_attempted"] = false
         details["terminal"] = true
+        details["terminal_scope"] = "mcp_request_only"
         details["human_intervention_required"] = false
+        details["human_intervention_requests"] = 0
+        details["human_dependent_transitions"] = 0
+        details["safe_to_retry"] = false
         return .error(HonestContract.encodeStateC(error: error, hint: hint, extras: details))
     }
 
@@ -2303,7 +2307,10 @@ extension AccessibilityChannel {
     ) -> [String: Any] {
         extras.merging([
             "terminal": true,
-            "human_intervention_required": false
+            "terminal_scope": "mcp_request_only",
+            "human_intervention_required": false,
+            "human_intervention_requests": 0,
+            "human_dependent_transitions": 0,
         ]) { _, terminalValue in terminalValue }
     }
 
@@ -3239,7 +3246,10 @@ extension AccessibilityChannel {
                         "selection_unreadable": states.enumerated().compactMap { $0.offset != index && $0.element == nil ? $0.offset : nil },
                         "write_attempted": false,
                         "terminal": true,
+                        "terminal_scope": "mcp_request_only",
                         "human_intervention_required": false,
+                        "human_intervention_requests": 0,
+                        "human_dependent_transitions": 0,
                     ]) { _, new in new }
                 ))
             }
@@ -3803,7 +3813,10 @@ extension AccessibilityChannel {
                 "write_attempted": sent > 0,
                 "automatic_focus_attempts_exhausted": precondition == "text_focus_not_reached",
                 "terminal": true,
+                "terminal_scope": "mcp_request_only",
                 "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
             ]) { _, new in new }
         ))
     }

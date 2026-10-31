@@ -1257,7 +1257,10 @@ actor MCUChannel: Channel {
                 extras["safe_to_retry"] = false
                 extras["automatic_precondition_attempts_exhausted"] = true
                 extras["terminal"] = true
+                extras["terminal_scope"] = "mcp_request_only"
                 extras["human_intervention_required"] = false
+                extras["human_intervention_requests"] = 0
+                extras["human_dependent_transitions"] = 0
                 for (k, v) in await mcuConnectionExtras() { extras[k] = v }
                 let hint = "\(operation) sent nothing: the MCU LCD upper row has never been received on this "
                     + "server, so there is no bank window to compare a move against. This invocation "

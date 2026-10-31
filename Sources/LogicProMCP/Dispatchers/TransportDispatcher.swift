@@ -390,10 +390,15 @@ struct TransportDispatcher: OperationTraceDispatching {
             extras["write_attempted"] = false
             extras["safe_to_retry"] = true
             extras["human_intervention_required"] = false
+            extras["human_intervention_requests"] = 0
+            extras["human_dependent_transitions"] = 0
             extras["terminal"] = true
+            extras["terminal_scope"] = "mcp_request_only"
+            let terminalHint = hint.localizedCaseInsensitiveContains("terminated")
+                ? hint : "\(hint) This MCP request terminated."
             return toolTextResult(HonestContract.encodeStateC(
                 error: .readbackUnavailable,
-                hint: hint,
+                hint: terminalHint,
                 extras: extras
             ), isError: true)
         }
@@ -546,8 +551,19 @@ struct TransportDispatcher: OperationTraceDispatching {
         extras["reason"] = reason
         extras["write_attempted"] = false
         extras["safe_to_retry"] = true
+        extras["terminal"] = true
+        extras["terminal_scope"] = "mcp_request_only"
+        extras["human_intervention_required"] = false
+        extras["human_intervention_requests"] = 0
+        extras["human_dependent_transitions"] = 0
+        let terminalHint = hint.localizedCaseInsensitiveContains("terminated")
+            ? hint : "\(hint) This MCP request terminated."
         return toolTextResult(
-            HonestContract.encodeStateC(error: .readbackUnavailable, hint: hint, extras: extras),
+            HonestContract.encodeStateC(
+                error: .readbackUnavailable,
+                hint: terminalHint,
+                extras: extras
+            ),
             isError: true
         )
     }
@@ -594,10 +610,15 @@ struct TransportDispatcher: OperationTraceDispatching {
             extras["write_attempted"] = false
             extras["safe_to_retry"] = true
             extras["human_intervention_required"] = false
+            extras["human_intervention_requests"] = 0
+            extras["human_dependent_transitions"] = 0
             extras["terminal"] = true
+            extras["terminal_scope"] = "mcp_request_only"
+            let terminalHint = hint.localizedCaseInsensitiveContains("terminated")
+                ? hint : "\(hint) This MCP request terminated."
             return toolTextResult(HonestContract.encodeStateC(
                 error: .readbackUnavailable,
-                hint: hint,
+                hint: terminalHint,
                 extras: extras
             ), isError: true)
         }

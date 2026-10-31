@@ -163,7 +163,10 @@ struct NavigateDispatcher: OperationTraceDispatching {
                             "cached_marker_count": markers.count,
                             "write_attempted": false,
                             "terminal": true,
+                            "terminal_scope": "mcp_request_only",
                             "human_intervention_required": false,
+                            "human_intervention_requests": 0,
+                            "human_dependent_transitions": 0,
                         ]
                     ),
                     isError: true
@@ -189,7 +192,10 @@ struct NavigateDispatcher: OperationTraceDispatching {
                         "cached_marker_count": markers.count,
                         "write_attempted": false,
                         "terminal": true,
+                        "terminal_scope": "mcp_request_only",
                         "human_intervention_required": false,
+                        "human_intervention_requests": 0,
+                        "human_dependent_transitions": 0,
                     ]
                 ),
                 isError: true

@@ -35,7 +35,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                 + "authorization. The request terminated.",
             extras: ["stage": "consent", "write_source": "none",
                      "write_attempted": false, "configuration_write_attempted": false,
-                     "terminal": true, "safe_to_retry": false,
+                     "terminal": true, "terminal_scope": "mcp_request_only", "safe_to_retry": false,
                      "human_intervention_required": false,
                      "human_intervention_requests": 0, "human_dependent_transitions": 0]
         ), isError: true)
@@ -56,7 +56,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                 + "request has no accepted setup authorization. The request terminated.",
             extras: ["stage": "consent", "write_source": "none",
                      "write_attempted": false, "configuration_write_attempted": false,
-                     "terminal": true, "safe_to_retry": false,
+                     "terminal": true, "terminal_scope": "mcp_request_only", "safe_to_retry": false,
                      "human_intervention_required": false,
                      "human_intervention_requests": 0, "human_dependent_transitions": 0]
         ), isError: true)
@@ -644,7 +644,7 @@ struct SystemDispatcher: OperationTraceDispatching {
                         + "authorization, so no configuration change was attempted and the request terminated.",
                     extras: ["stage": "consent", "chord": chordText, "write_source": "none",
                              "write_attempted": false, "configuration_write_attempted": false,
-                             "terminal": true, "safe_to_retry": false,
+                             "terminal": true, "terminal_scope": "mcp_request_only", "safe_to_retry": false,
                              "human_intervention_required": false,
                              "human_intervention_requests": 0, "human_dependent_transitions": 0]
                 ), isError: true)
@@ -782,7 +782,10 @@ struct SystemDispatcher: OperationTraceDispatching {
                         "stage": stage,
                         "write_attempted": evidence.configurationWriteAttempted,
                         "terminal": true,
+                        "terminal_scope": "mcp_request_only",
                         "human_intervention_required": false,
+                        "human_intervention_requests": 0,
+                        "human_dependent_transitions": 0,
                     ]) { _, new in new }
                 ), isError: true)
             }

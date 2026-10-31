@@ -97,7 +97,10 @@ extension AccessibilityChannel {
                 "failure_stage": "precondition_open_document",
                 "automatic_precondition_attempts_exhausted": true,
                 "terminal": true,
+                "terminal_scope": "mcp_request_only",
                 "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
                 // Both numbers, so a reader can see that a chooser on screen was NOT the reason
                 // (#590). When they differ, the difference is chooser windows.
                 "observed_all_window_count": windows?.count ?? NSNull(),
@@ -1101,7 +1104,10 @@ extension AccessibilityChannel {
                     "safe_to_retry": false,
                     "automatic_frontmost_attempts_exhausted": true,
                     "terminal": true,
+                    "terminal_scope": "mcp_request_only",
                     "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                    "human_dependent_transitions": 0,
                 ]
             ))
         }
@@ -1379,6 +1385,7 @@ extension AccessibilityChannel {
                 "safe_to_retry": false,
                 "automatic_attempts_exhausted": true,
                 "terminal": true,
+                "terminal_scope": "mcp_request_only",
                 "human_intervention_required": false,
                 "human_intervention_requests": 0,
                 "human_dependent_transitions": 0,
@@ -1605,6 +1612,7 @@ extension AccessibilityChannel {
                 "automated_alternative": "logic_navigate.capture_markers",
                 "automatic_attempts_exhausted": true,
                 "terminal": true,
+                "terminal_scope": "mcp_request_only",
                 "human_intervention_required": false,
                 "human_intervention_requests": 0,
                 "human_dependent_transitions": 0,

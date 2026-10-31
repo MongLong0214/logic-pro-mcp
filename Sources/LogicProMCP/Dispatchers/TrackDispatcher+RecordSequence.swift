@@ -509,7 +509,7 @@ extension TrackDispatcher {
                 for key in [
                     "file_open_dialog_seen", "tempo_dialog_seen", "missing_element", "osascript_stderr",
                     "permission", "safe_to_retry",
-                    "automatic_permission_attempts_exhausted", "terminal",
+                    "automatic_permission_attempts_exhausted", "terminal", "terminal_scope",
                     "human_intervention_required", "human_intervention_requests",
                     "human_dependent_transitions",
                 ] {
@@ -606,7 +606,10 @@ extension TrackDispatcher {
                 "track_count_before": tracksBefore,
                 "track_count_after": tracksAfter,
                 "terminal": true,
+                "terminal_scope": "mcp_request_only",
                 "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
                 "safe_to_retry": false,
                 "automatic_precondition_attempts_exhausted": true,
                 "hint": "record_sequence: import handler reported success but the bounded live AX census still shows \(tracksBefore) tracks. No further write was issued; the import effect remains unverified.",
@@ -736,7 +739,10 @@ extension TrackDispatcher {
             payload["error"] = error
             payload["failure_stage"] = stage
             payload["terminal"] = true
+            payload["terminal_scope"] = "mcp_request_only"
             payload["human_intervention_required"] = false
+            payload["human_intervention_requests"] = 0
+            payload["human_dependent_transitions"] = 0
             payload["safe_to_retry"] = false
             payload["automatic_precondition_attempts_exhausted"] = true
             payload["hint"] = hint + " The imported take is still on GM Device lane \(gmLane) ('\(gmLaneName)')."

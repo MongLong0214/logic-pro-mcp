@@ -805,8 +805,10 @@ extension AccessibilityChannel {
                         "safe_to_retry": false,
                         "automatic_permission_attempts_exhausted": true,
                         "terminal": true,
+                        "terminal_scope": "mcp_request_only",
                         "human_intervention_required": false,
                         "human_intervention_requests": 0,
+                        "human_dependent_transitions": 0,
                     ]) { _, new in new }
                 ))
             }
@@ -968,7 +970,10 @@ extension AccessibilityChannel {
                         "precondition": "panel_closed",
                         "recovery_attempted": "open_panel",
                         "human_intervention_required": false,
+                        "human_intervention_requests": 0,
+                        "human_dependent_transitions": 0,
                         "terminal": true,
+                        "terminal_scope": "mcp_request_only",
                     ]) { _, new in new }
                 ))
             }
@@ -995,7 +1000,10 @@ extension AccessibilityChannel {
                     "path_kind": pathKind.rawValue,
                     "next_machine_action": "logic_tracks.scan_library",
                     "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                    "human_dependent_transitions": 0,
                     "terminal": true,
+                    "terminal_scope": "mcp_request_only",
                 ]) { _, new in new }
             ))
         }
@@ -1013,7 +1021,10 @@ extension AccessibilityChannel {
                     "precondition": "missing_path",
                     "next_machine_action": "logic_tracks.scan_library",
                     "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                    "human_dependent_transitions": 0,
                     "terminal": true,
+                    "terminal_scope": "mcp_request_only",
                 ]) { _, new in new }
             ))
         }

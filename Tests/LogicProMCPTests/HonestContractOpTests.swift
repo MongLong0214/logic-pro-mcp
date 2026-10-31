@@ -137,7 +137,7 @@ private func decodeJSON(_ s: String) -> [String: Any] {
 // a structured State C payload instead of letting the router wrap a free-form
 // string in `channels_exhausted`.
 
-@Test func testSetCycleRangeReturnsErrorWhenNoTransportFields() {
+@Test func testSetCycleRangeReturnsErrorWhenNoTransportFields() throws {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(740)
     let window = builder.element(741)
@@ -160,13 +160,18 @@ private func decodeJSON(_ s: String) -> [String: Any] {
     #expect(obj["observed"] as? [String: Any] != nil)
     #expect(obj["scanned_landmarks"] as? [String: Any] != nil)
     #expect(!((obj["safe_to_retry"] as? Bool)!))
+    #expect(try #require(obj["terminal"] as? Bool))
+    #expect(obj["terminal_scope"] as? String == "mcp_request_only")
+    #expect(!(try #require(obj["human_intervention_required"] as? Bool)))
+    #expect(obj["human_intervention_requests"] as? Int == 0)
+    #expect(obj["human_dependent_transitions"] as? Int == 0)
     #expect(
         obj["recovery_hint"] as? String
             == "Automatic cycle-range recovery found no verified write path. This result is terminal; preserve the observed project state."
     )
 }
 
-@Test func testSetCycleRangeOsascriptFallbackFailsClosedWithoutReadback() {
+@Test func testSetCycleRangeOsascriptFallbackFailsClosedWithoutReadback() throws {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(750)
     let window = builder.element(751)
@@ -185,11 +190,52 @@ private func decodeJSON(_ s: String) -> [String: Any] {
     #expect(obj["error"] as? String == "readback_unavailable")
     #expect(obj["method"] as? String == "osascript_set_locators_dialog")
     #expect((obj["write_attempted"] as? Bool)!)
+    #expect(!(try #require(obj["safe_to_retry"] as? Bool)))
+    #expect(try #require(obj["terminal"] as? Bool))
+    #expect(obj["terminal_scope"] as? String == "mcp_request_only")
+    #expect(!(try #require(obj["human_intervention_required"] as? Bool)))
+    #expect(obj["human_intervention_requests"] as? Int == 0)
+    #expect(obj["human_dependent_transitions"] as? Int == 0)
     #expect(obj["observed"] as? [String: Any] != nil)
     #expect(
         obj["recovery_hint"] as? String
             == "Automatic cycle-range recovery ended without verified locator readback. This result is terminal; preserve the observed project state."
     )
+}
+
+@Test(arguments: [false, true])
+func testSetCycleRangeTransportWithoutLocatorFieldsIsTerminal(
+    fallbackSucceeds: Bool
+) throws {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(752)
+    let window = builder.element(753)
+    let transport = builder.element(754)
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setChildren(window, [transport])
+    builder.setAttribute(transport, kAXRoleAttribute as String, kAXToolbarRole as String)
+    builder.setChildren(transport, [])
+
+    let result = AccessibilityChannel.defaultSetCycleRange(
+        params: ["start": "1", "end": "5"],
+        runtime: builder.makeLogicRuntime(appElement: app),
+        runFallback: { _, _ in fallbackSucceeds }
+    )
+    #expect(!result.isSuccess)
+    let object = decodeJSON(result.message)
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(object["terminal_scope"] as? String == "mcp_request_only")
+    #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+    #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(object["human_intervention_requests"] as? Int == 0)
+    #expect(object["human_dependent_transitions"] as? Int == 0)
+    if fallbackSucceeds {
+        #expect(try #require(object["write_attempted"] as? Bool))
+        #expect(object["error"] as? String == "readback_unavailable")
+    } else {
+        #expect(!(try #require(object["write_attempted"] as? Bool)))
+        #expect(object["error"] as? String == "not_implemented")
+    }
 }
 
 @Test func testSetCycleRangeHasNoManualRecoveryRequestInAnyTerminalBranch() throws {

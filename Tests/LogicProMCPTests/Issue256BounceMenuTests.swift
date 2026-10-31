@@ -43,6 +43,7 @@ struct Issue256BounceMenuTests {
         #expect(!verified)
         #expect(!writeAttempted)
         #expect(terminal)
+        #expect(json["terminal_scope"] as? String == "mcp_request_only")
         #expect(!interventionRequired)
         #expect(json["human_intervention_requests"] as? Int == 0)
         #expect(json["human_dependent_transitions"] as? Int == 0)

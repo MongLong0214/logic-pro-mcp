@@ -174,6 +174,7 @@ extension AccessibilityChannel {
             extras["safe_to_retry"] = false
             extras["automatic_transport_lookup_exhausted"] = true
             extras["terminal"] = true
+            extras["terminal_scope"] = "mcp_request_only"
             extras["human_intervention_required"] = false
             extras["human_intervention_requests"] = 0
             extras["human_dependent_transitions"] = 0
@@ -551,14 +552,17 @@ extension AccessibilityChannel {
         if shouldAttemptTempoFallback(landmarks: tempoLandmarks) && runFallback(tempoStr) {
             return .error(HonestContract.encodeStateC(
                 error: .readbackUnavailable,
-                hint: "tempo fallback executed but no tempo readback was available",
+                hint: "tempo fallback executed but no tempo readback was available; the effect remains unknown and this MCP request terminated.",
                 extras: missingExtras.merging([
                     "via": "keyboard-fallback",
                     "write_attempted": true,
                     "safe_to_retry": false,
                     "automatic_readback_attempts_exhausted": true,
                     "terminal": true,
+                    "terminal_scope": "mcp_request_only",
                     "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                    "human_dependent_transitions": 0,
                 ]) { _, new in new }
             ))
         }
@@ -567,9 +571,13 @@ extension AccessibilityChannel {
             hint: missingHint,
             extras: missingExtras.merging([
                 "write_attempted": false,
+                "safe_to_retry": false,
                 "automatic_tempo_lookup_exhausted": true,
                 "terminal": true,
+                "terminal_scope": "mcp_request_only",
                 "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
             ]) { _, new in new }
         ))
     }
@@ -819,6 +827,11 @@ extension AccessibilityChannel {
                         "observed": cycleRangeObserved(start: nil, end: nil),
                         "write_attempted": true,
                         "safe_to_retry": false,
+                        "terminal": true,
+                        "terminal_scope": "mcp_request_only",
+                        "human_intervention_required": false,
+                        "human_intervention_requests": 0,
+                        "human_dependent_transitions": 0,
                         "what_was_attempted": "locate numeric cycle locator AX text fields, then drive Logic's 'Set Locators' dialog as a fallback",
                         "what_was_observed": "Logic exposes no cycle start/end AX text fields in the transport bar, so the fallback write could not be independently read back",
                         "scanned_landmarks": transportLandmarks,
@@ -838,6 +851,11 @@ extension AccessibilityChannel {
                     "observed": cycleRangeObserved(start: nil, end: nil),
                     "write_attempted": false,
                     "safe_to_retry": false,
+                    "terminal": true,
+                    "terminal_scope": "mcp_request_only",
+                    "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                    "human_dependent_transitions": 0,
                     "what_was_attempted": "locate numeric cycle locator AX text fields, then open Logic's 'Set Locators' dialog as a fallback",
                     "what_was_observed": "Logic exposes no cycle start/end AX text fields in the transport bar and the fallback dialog could not be completed",
                     "scanned_landmarks": transportLandmarks,
@@ -861,6 +879,11 @@ extension AccessibilityChannel {
                     "observed": cycleRangeObserved(start: nil, end: nil),
                     "write_attempted": true,
                     "safe_to_retry": false,
+                    "terminal": true,
+                    "terminal_scope": "mcp_request_only",
+                    "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                    "human_dependent_transitions": 0,
                     "what_was_attempted": "find the transport bar, then drive Logic's 'Set Locators' dialog as a fallback",
                     "what_was_observed": "no transport bar was locatable for AX readback, so the fallback write could not be independently verified",
                     "scanned_landmarks": missingTransportLandmarks,
@@ -879,6 +902,11 @@ extension AccessibilityChannel {
                 "observed": cycleRangeObserved(start: nil, end: nil),
                 "write_attempted": false,
                 "safe_to_retry": false,
+                "terminal": true,
+                "terminal_scope": "mcp_request_only",
+                "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
                 "what_was_attempted": "find Logic's transport bar and numeric cycle locator fields",
                 "what_was_observed": "no transport bar was locatable and the fallback dialog path could not be completed",
                 "scanned_landmarks": missingTransportLandmarks,
@@ -1141,9 +1169,9 @@ extension AccessibilityChannel {
         guard preparation.isReady else {
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
-                hint: "goto_position terminated before mutation because automatic Logic keyboard "
-                    + "ownership preparation failed; no UI action occurred. The fixed ownership "
-                    + "reason is in frontmost_observation.reason when observed.",
+                hint: "goto_position terminated because automatic Logic keyboard ownership preparation "
+                    + "failed; preparation may have attempted to activate Logic, but no dialog or position "
+                    + "mutation occurred. The fixed ownership reason is in frontmost_observation.reason when observed.",
                 extras: baseExtras.merging([
                     "operation": "transport.goto_position",
                     "method": "ax_goto_position_dialog",
@@ -1152,7 +1180,10 @@ extension AccessibilityChannel {
                     "safe_to_retry": false,
                     "automatic_frontmost_attempts_exhausted": true,
                     "terminal": true,
+                    "terminal_scope": "mcp_request_only",
                     "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                    "human_dependent_transitions": 0,
                 ]) { _, new in new }
             ))
         }
@@ -1182,7 +1213,10 @@ extension AccessibilityChannel {
                     "safe_to_retry": true,
                     "automatic_recovery_owner": "active_goto_position_request",
                     "terminal": true,
+                    "terminal_scope": "mcp_request_only",
                     "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                    "human_dependent_transitions": 0,
                 ]) { _, new in new }
             ))
         }
@@ -3379,8 +3413,12 @@ extension AccessibilityChannel {
                         transportLandmarkLabels(root: $0, role: kAXCheckBoxRole, runtime: runtime)
                     } ?? [],
                     "write_attempted": false,
+                    "safe_to_retry": false,
                     "terminal": true,
+                    "terminal_scope": "mcp_request_only",
                     "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                    "human_dependent_transitions": 0,
                 ]
             ))
         }
