@@ -698,10 +698,14 @@ enum SetupLifecycle {
             arguments: ["print", service],
             timeout: 1.0
         )
-        guard let output = result.output else {
+        return classifyLaunchAgentService(exitCode: result.output?.exitCode)
+    }
+
+    static func classifyLaunchAgentService(exitCode: Int32?) -> LaunchAgentServiceState {
+        guard let exitCode else {
             return .unavailable
         }
-        switch output.exitCode {
+        switch exitCode {
         case 0:
             return .loaded
         case 113:

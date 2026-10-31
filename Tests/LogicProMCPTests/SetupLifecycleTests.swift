@@ -279,6 +279,13 @@ private func launchAgentPath(_ home: URL = lifecycleTestHome) -> String {
     #expect(launch.remediation.type == .none)
 }
 
+@Test func testLaunchAgentServiceExitClassifierSeparatesAbsentFromIndeterminate() {
+    #expect(SetupLifecycle.classifyLaunchAgentService(exitCode: 0) == .loaded)
+    #expect(SetupLifecycle.classifyLaunchAgentService(exitCode: 113) == .notLoaded)
+    #expect(SetupLifecycle.classifyLaunchAgentService(exitCode: 73) == .unavailable)
+    #expect(SetupLifecycle.classifyLaunchAgentService(exitCode: nil) == .unavailable)
+}
+
 @Test func testUninstallPlanDeletesApprovalsWhenOnlyLockSidecarExists() throws {
     let plan = SetupLifecycle.plan(
         command: .uninstall,

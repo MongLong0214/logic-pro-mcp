@@ -59,31 +59,58 @@ launch_agent_service_status() {
     launchctl print "$LAUNCH_AGENT_SERVICE" >/dev/null 2>&1
 }
 
-if launch_agent_service_status; then
-    if ! launchctl bootout "$LAUNCH_AGENT_SERVICE" >/dev/null 2>&1; then
-        fail_uninstall "Uninstall unsuccessful: launch agent service could not be stopped."
-    fi
-
-    LAUNCH_AGENT_GONE=0
-    for ATTEMPT in 1 2 3 4 5; do
+wait_for_launch_agent_absence() {
+    local attempt
+    local status
+    LAUNCH_AGENT_WAIT_OUTCOME="indeterminate"
+    for attempt in 1 2 3 4 5; do
         if launch_agent_service_status; then
-            if [ "$ATTEMPT" -lt 5 ]; then
+            if [ "$attempt" -lt 5 ]; then
                 sleep 0.1
                 continue
             fi
-            fail_uninstall "Uninstall unsuccessful: launch agent service remains loaded."
+            LAUNCH_AGENT_WAIT_OUTCOME="loaded"
+            return 0
         else
-            STATUS=$?
-            if [ "$STATUS" -eq 113 ]; then
-                LAUNCH_AGENT_GONE=1
-                break
+            status=$?
+            if [ "$status" -eq 113 ]; then
+                LAUNCH_AGENT_WAIT_OUTCOME="absent"
+                return 0
             fi
-            fail_uninstall "Uninstall unsuccessful: launch agent service removal could not be verified."
+            return 0
         fi
     done
-    if [ "$LAUNCH_AGENT_GONE" -ne 1 ]; then
-        fail_uninstall "Uninstall unsuccessful: launch agent service remains loaded."
+    LAUNCH_AGENT_WAIT_OUTCOME="loaded"
+    return 0
+}
+
+stop_launch_agent_service() {
+    local bootout_status=0
+    if launchctl bootout "$LAUNCH_AGENT_SERVICE" >/dev/null 2>&1; then
+        :
+    else
+        bootout_status=$?
     fi
+
+    wait_for_launch_agent_absence
+    case "$LAUNCH_AGENT_WAIT_OUTCOME" in
+        absent)
+            return 0
+            ;;
+        loaded)
+            if [ "$bootout_status" -ne 0 ]; then
+                fail_uninstall "Uninstall unsuccessful: launch agent service could not be stopped and remains loaded."
+            fi
+            fail_uninstall "Uninstall unsuccessful: launch agent service remains loaded."
+            ;;
+        *)
+            fail_uninstall "Uninstall unsuccessful: launch agent service removal could not be verified."
+            ;;
+    esac
+}
+
+if launch_agent_service_status; then
+    stop_launch_agent_service
     echo "✓ Removed launch agent service: $LAUNCH_AGENT_SERVICE"
 else
     STATUS=$?
@@ -103,6 +130,20 @@ if [ -e "$LAUNCH_AGENT" ] || [ -L "$LAUNCH_AGENT" ]; then
     echo "✓ Removed launch agent plist: $LAUNCH_AGENT"
 else
     echo "Launch agent plist not found — skipped."
+fi
+
+# Close the KeepAlive race: the exact service can reappear between the first
+# absence readback and plist removal. With the plist now absent, stop that same
+# owned service once more if needed and refuse before binary deletion unless its
+# final state is observed absent.
+if launch_agent_service_status; then
+    stop_launch_agent_service
+    echo "✓ Removed reloaded launch agent service: $LAUNCH_AGENT_SERVICE"
+else
+    STATUS=$?
+    if [ "$STATUS" -ne 113 ]; then
+        fail_uninstall "Uninstall unsuccessful: final launch agent service state could not be established."
+    fi
 fi
 
 # 2. Remove operator approvals
