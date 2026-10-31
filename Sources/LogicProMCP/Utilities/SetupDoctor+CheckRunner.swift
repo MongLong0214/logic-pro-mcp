@@ -50,7 +50,11 @@ extension SetupDoctor {
         case .binaryPath:
             return binaryPathCheck(executablePath: context.executablePath, runtime: context.runtime)
         case .binaryExecutable:
-            return binaryExecutableCheck(executablePath: context.executablePath, runtime: context.runtime)
+            return binaryExecutableCheck(
+                executablePath: context.executablePath,
+                runtime: context.runtime,
+                checks: checks
+            )
         case .binaryVersion:
             return binaryVersionCheck()
         case .installSource:
@@ -69,9 +73,17 @@ extension SetupDoctor {
         case .installShareDir:
             return installShareDirCheck(runtime: context.runtime, installSource: context.installSource)
         case .releaseSignature:
-            return releaseSignatureCheck(executablePath: context.executablePath, runtime: context.runtime)
+            return releaseSignatureCheck(
+                executablePath: context.executablePath,
+                runtime: context.runtime,
+                checks: checks
+            )
         case .releaseQuarantine:
-            return releaseQuarantineCheck(executablePath: context.executablePath, runtime: context.runtime)
+            return releaseQuarantineCheck(
+                executablePath: context.executablePath,
+                runtime: context.runtime,
+                checks: checks
+            )
         case .mcpClaudeCodeRegistration:
             return claudeRegistrationCheck(
                 registration: context.claudeRegistration,

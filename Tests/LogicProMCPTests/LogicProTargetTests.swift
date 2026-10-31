@@ -187,9 +187,42 @@ import Testing
     ]
     let check = SetupDoctor.logicInstallationCheck(logicApps: apps)
     #expect(check.status == SetupDoctor.CheckStatus.fail)
+    #expect(check.remediation.type == .none)
+    #expect(check.remediation.value.isEmpty)
+    #expect(check.evidence["terminal"] == "true")
+    #expect(check.evidence["human_intervention_required"] == "false")
+    #expect(check.evidence["human_intervention_requests"] == "0")
     #expect(check.evidence["reason"] == "unshipped_variant_only")
     #expect(check.evidence["path"] == "/Applications/Logic Pro Creator Studio.app")
     #expect(check.evidence["variant"] == nil)
+}
+
+@Test func setupDoctorMissingLogicInstallationTerminatesWithoutInstallRequest() {
+    let check = SetupDoctor.logicInstallationCheck(logicApps: [])
+
+    #expect(check.status == .fail)
+    #expect(check.remediation.type == .none)
+    #expect(check.remediation.value.isEmpty)
+    #expect(check.evidence["path"] == "not_found")
+    #expect(check.evidence["terminal"] == "true")
+    #expect(check.evidence["human_intervention_required"] == "false")
+    #expect(check.evidence["human_intervention_requests"] == "0")
+}
+
+@Test func setupDoctorUnreadableInstallationRemainsSkippedDiagnostic() {
+    let check = SetupDoctor.logicInstallationCheck(logicApps: [
+        SetupDoctor.LogicAppInfo(
+            path: "/Applications/Logic Pro.app",
+            version: nil,
+            bundleID: ServerConfig.logicProBundleID,
+            readable: false
+        ),
+    ])
+
+    #expect(check.status == .skipped)
+    #expect(check.remediation.type == .docs)
+    #expect(check.evidence["reason"] == "bundle_unreadable")
+    #expect(check.evidence["terminal"] == nil)
 }
 
 @Test func setupDoctorTCCRedactsMobileLogicAppleEvents() {

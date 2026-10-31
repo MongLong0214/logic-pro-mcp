@@ -53,20 +53,22 @@ extension SetupDoctor {
             return check(
                 id: "mcp.claude_code_registration",
                 domain: "mcp",
-                status: .warn,
+                status: .fail,
                 summary: "Claude Code MCP registration was not found.",
-                evidence: ["registered": "false", "match_kind": ClaudeRegistrationMatchKind.none.rawValue],
-                remediationType: .command,
-                remediationValueOverride: "claude mcp add --scope user logic-pro -- LogicProMCP"
+                evidence: terminalRegistrationEvidence([
+                    "registered": "false",
+                    "match_kind": ClaudeRegistrationMatchKind.none.rawValue,
+                ]),
+                remediationType: .none
             )
         case let .configUnavailable(reason):
             return check(
                 id: "mcp.claude_code_registration",
                 domain: "mcp",
-                status: .manual,
+                status: .fail,
                 summary: "Claude Code registration could not be checked because the Claude config could not be read.",
-                evidence: ["reason": reason],
-                remediationType: .manual
+                evidence: terminalRegistrationEvidence(["reason": reason]),
+                remediationType: .none
             )
         }
     }
@@ -80,16 +82,15 @@ extension SetupDoctor {
         check(
             id: "mcp.claude_code_registration",
             domain: "mcp",
-            status: .warn,
+            status: .fail,
             summary: summary,
-            evidence: [
+            evidence: terminalRegistrationEvidence([
                 "registered": "false",
                 "match_kind": matchKind.rawValue,
                 "server_name": name,
                 "command": command,
-            ],
-            remediationType: .command,
-            remediationValueOverride: "claude mcp remove \(shellQuote(name)) && claude mcp add --scope user logic-pro -- LogicProMCP"
+            ]),
+            remediationType: .none
         )
     }
 
@@ -121,7 +122,7 @@ extension SetupDoctor {
                 status: .skipped,
                 summary: "Registered MCP target cannot be checked until Claude Code registration is present.",
                 evidence: [:],
-                remediationType: .command,
+                remediationType: .none,
                 blockedBy: cause
             )
         }
@@ -132,7 +133,7 @@ extension SetupDoctor {
                 status: .skipped,
                 summary: "Registered MCP target cannot be checked.",
                 evidence: ["reason": "registration_unavailable"],
-                remediationType: .command,
+                remediationType: .none,
                 blockedBy: "mcp.claude_code_registration"
             )
         }
@@ -141,12 +142,13 @@ extension SetupDoctor {
             return check(
                 id: "mcp.registration_target",
                 domain: "mcp",
-                status: .skipped,
+                status: .fail,
                 summary: "Claude Code registration uses an unresolved PATH-dependent command; the MCP client's launch PATH may differ.",
-                evidence: ["command_path": command, "reason": "path_dependent_unresolved"],
-                remediationType: .command,
-                remediationValueOverride: "claude mcp add --scope user logic-pro -- LogicProMCP",
-                skipReason: .pathDependentUnresolved
+                evidence: terminalRegistrationEvidence([
+                    "command_path": command,
+                    "reason": "path_dependent_unresolved",
+                ]),
+                remediationType: .none
             )
         }
         let exists = runtime.fileExistsAtPath(resolvedCommand)
@@ -178,13 +180,12 @@ extension SetupDoctor {
         return check(
             id: "mcp.registration_target",
             domain: "mcp",
-            status: warn ? .warn : .pass,
+            status: warn ? .fail : .pass,
             summary: warn
                 ? "Claude Code registration target is missing, not a regular executable, has a missing share dir, or is stale."
                 : "Claude Code registration target is present and executable. If it was resolved from PATH, this report used the doctor's environment; the MCP client's spawn PATH may differ.",
-            evidence: evidence,
-            remediationType: warn ? .command : .none,
-            remediationValueOverride: warn ? "claude mcp add --scope user logic-pro -- LogicProMCP" : nil
+            evidence: warn ? terminalRegistrationEvidence(evidence) : evidence,
+            remediationType: .none
         )
     }
 
@@ -234,26 +235,29 @@ extension SetupDoctor {
             return check(
                 id: "mcp.claude_desktop_registration",
                 domain: "mcp",
-                status: .warn,
+                status: .fail,
                 summary: "Claude Desktop config exists but LogicProMCP is not registered.",
-                evidence: [
+                evidence: terminalRegistrationEvidence([
                     "config_present": "true",
                     "registered": "false",
                     "match_kind": ClaudeRegistrationMatchKind.none.rawValue,
-                ],
-                remediationType: .manual
+                ]),
+                remediationType: .none
             )
         case let .configUnavailable(reason):
             let absent = reason == "config_absent"
             return check(
                 id: "mcp.claude_desktop_registration",
                 domain: "mcp",
-                status: absent ? .warn : .manual,
+                status: .fail,
                 summary: absent
                     ? "Claude Desktop config is absent."
                     : "Claude Desktop config could not be read.",
-                evidence: ["config_present": absent ? "false" : "true", "reason": reason],
-                remediationType: .manual
+                evidence: terminalRegistrationEvidence([
+                    "config_present": absent ? "false" : "true",
+                    "reason": reason,
+                ]),
+                remediationType: .none
             )
         }
     }
@@ -267,17 +271,27 @@ extension SetupDoctor {
         check(
             id: "mcp.claude_desktop_registration",
             domain: "mcp",
-            status: .warn,
+            status: .fail,
             summary: summary,
-            evidence: [
+            evidence: terminalRegistrationEvidence([
                 "config_present": "true",
                 "registered": "false",
                 "match_kind": matchKind.rawValue,
                 "server_name": name,
                 "command": command,
-            ],
-            remediationType: .manual
+            ]),
+            remediationType: .none
         )
+    }
+
+    private static func terminalRegistrationEvidence(
+        _ evidence: [String: String]
+    ) -> [String: String] {
+        var result = evidence
+        result["terminal"] = "true"
+        result["human_intervention_required"] = "false"
+        result["human_intervention_requests"] = "0"
+        return result
     }
 
     struct RegisteredCommandResolution: Equatable, Sendable {

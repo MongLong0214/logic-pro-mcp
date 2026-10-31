@@ -93,13 +93,13 @@ extension SetupDoctor {
 
     static let checkDefinitions: [DoctorCheckDefinition] = [
         .init(.binaryPath, capabilityGroups: allCapabilityGroups, remediationAnchor: "docs/SETUP.md#doctor-binarypath"),
-        .init(.binaryExecutable, capabilityGroups: allCapabilityGroups, remediationAnchor: "docs/SETUP.md#doctor-binaryexecutable"),
+        .init(.binaryExecutable, dependencies: [.binaryPath], capabilityGroups: allCapabilityGroups, remediationAnchor: "docs/SETUP.md#doctor-binaryexecutable"),
         .init(.binaryVersion),
         .init(.installSource, remediationAnchor: "docs/SETUP.md#doctor-installsource"),
         .init(.installBinaryInventory, remediationAnchor: "docs/SETUP.md#doctor-installbinary-inventory"),
         .init(.installShareDir, remediationAnchor: "docs/SETUP.md#doctor-installshare-dir"),
-        .init(.releaseSignature, remediationAnchor: "docs/SETUP.md#doctor-releasesignature"),
-        .init(.releaseQuarantine, remediationAnchor: "docs/SETUP.md#doctor-releasequarantine"),
+        .init(.releaseSignature, dependencies: [.binaryPath], remediationAnchor: "docs/SETUP.md#doctor-releasesignature"),
+        .init(.releaseQuarantine, dependencies: [.binaryPath], remediationAnchor: "docs/SETUP.md#doctor-releasequarantine"),
         .init(.mcpClaudeCodeRegistration, remediationAnchor: "docs/SETUP.md#doctor-mcpclaude-code-registration", clientRule: "claude-code"),
         .init(.mcpRegistrationTarget, dependencies: [.mcpClaudeCodeRegistration], remediationAnchor: "docs/SETUP.md#doctor-mcpregistration-target", clientRule: "claude-code"),
         .init(.mcpClaudeDesktopRegistration, remediationAnchor: "docs/SETUP.md#doctor-mcpclaude-desktop-registration", clientRule: "claude-desktop"),

@@ -1,6 +1,14 @@
 import Foundation
 
 extension SetupDoctor {
+    private static func terminalLogicEvidence(_ evidence: [String: String]) -> [String: String] {
+        var result = evidence
+        result["terminal"] = "true"
+        result["human_intervention_required"] = "false"
+        result["human_intervention_requests"] = "0"
+        return result
+    }
+
     static func macOSVersionCheck(runtime: Runtime) -> Check {
         let minimumMajor = 14 // Package.swift: platforms: [.macOS(.v14)]
         guard let version = runtime.macOSVersion() else {
@@ -30,8 +38,11 @@ extension SetupDoctor {
             domain: "system",
             status: .fail,
             summary: "macOS \(versionString) is below the required minimum (\(minimumMajor)+).",
-            evidence: ["version": versionString, "minimum_major": String(minimumMajor)],
-            remediationType: .docs
+            evidence: terminalLogicEvidence([
+                "version": versionString,
+                "minimum_major": String(minimumMajor),
+            ]),
+            remediationType: .none
         )
     }
 
@@ -44,8 +55,8 @@ extension SetupDoctor {
                 domain: "logic",
                 status: .fail,
                 summary: "Logic Pro.app was not found in /Applications or ~/Applications (desktop or Creator Studio).",
-                evidence: ["path": "not_found"],
-                remediationType: .docs
+                evidence: terminalLogicEvidence(["path": "not_found"]),
+                remediationType: .none
             )
         }
         if Self.unshippedVariantOnly(supported) {
@@ -57,9 +68,11 @@ extension SetupDoctor {
                 status: .fail,
                 summary: "Only Logic Pro Creator Studio was found. This release ships for desktop "
                     + "Logic Pro only; Creator Studio is recognised so it is not driven by mistake.",
-                evidence: ["reason": "unshipped_variant_only",
-                           "path": supported.map(\.path).joined(separator: ",")],
-                remediationType: .docs
+                evidence: terminalLogicEvidence([
+                    "reason": "unshipped_variant_only",
+                    "path": supported.map(\.path).joined(separator: ","),
+                ]),
+                remediationType: .none
             )
         }
         guard let primary = preferredReadableLogicApp(supported), let version = primary.version else {
@@ -99,13 +112,16 @@ extension SetupDoctor {
 
     static func logicVersionSupportCheck(logicApps: [LogicAppInfo], checks: [Check]) -> Check {
         if let cause = blockingCause(for: "logic.version_support", checks: checks) {
+            let terminalBlocker = checks.first { $0.id == cause }.map {
+                $0.status == .fail && $0.evidence["terminal"] == "true"
+            } ?? false
             return check(
                 id: "logic.version_support",
                 domain: "logic",
                 status: .skipped,
                 summary: "Logic Pro version support cannot be checked until Logic Pro installation is readable.",
                 evidence: [:],
-                remediationType: .docs,
+                remediationType: terminalBlocker ? .none : .docs,
                 blockedBy: cause
             )
         }
@@ -124,17 +140,21 @@ extension SetupDoctor {
             status = .warn
             summary = "Logic Pro \(version) is outside the latest validated version \(latest)."
         }
+        var evidence = [
+            "detected_version": version,
+            "minimum_supported": minimum,
+            "latest_validated": latest,
+        ]
+        if status == .fail {
+            evidence = terminalLogicEvidence(evidence)
+        }
         return check(
             id: "logic.version_support",
             domain: "logic",
             status: status,
             summary: summary,
-            evidence: [
-                "detected_version": version,
-                "minimum_supported": minimum,
-                "latest_validated": latest,
-            ],
-            remediationType: status == .pass ? .none : .docs
+            evidence: evidence,
+            remediationType: status == .warn ? .docs : .none
         )
     }
 
@@ -142,14 +162,20 @@ extension SetupDoctor {
     static func logicApplicationStateCheck(runtime: Runtime) -> Check {
         let running = runtime.logicProRunning()
         let visible = running && runtime.logicProHasVisibleWindow()
-        let status: CheckStatus = running ? (visible ? .pass : .warn) : .manual
+        let ready = running && visible
         return check(
             id: "logic.application_state",
             domain: "logic",
-            status: status,
+            status: ready ? .pass : .fail,
             summary: logicApplicationSummary(running: running, visible: visible),
-            evidence: ["running": String(running), "visible_window": String(visible)],
-            remediationType: running ? (visible ? .none : .manual) : .manual
+            evidence: [
+                "running": String(running),
+                "visible_window": String(visible),
+                "terminal": String(!ready),
+                "human_intervention_required": "false",
+                "human_intervention_requests": "0",
+            ],
+            remediationType: .none
         )
     }
 
@@ -162,7 +188,7 @@ extension SetupDoctor {
                 status: .skipped,
                 summary: "Blocking-dialog scan skipped because a prerequisite is not passing.",
                 evidence: [:],
-                remediationType: .manual,
+                remediationType: .none,
                 blockedBy: cause
             )
         }
@@ -179,16 +205,19 @@ extension SetupDoctor {
         return check(
             id: "logic.blocking_dialog",
             domain: "logic",
-            status: .warn,
-            summary: "Logic Pro has a blocking modal dialog.",
+            status: .fail,
+            summary: "Logic Pro has a blocking modal dialog that this unattended check cannot resolve.",
             evidence: [
                 "dialog_present": "true",
                 "dialog_title": info.title,
                 "role": info.role,
                 "buttons": info.buttonTitles.joined(separator: ","),
-                "recovery_action": info.recoveryAction,
+                "recovery_action": "unavailable",
+                "terminal": "true",
+                "human_intervention_required": "false",
+                "human_intervention_requests": "0",
             ],
-            remediationType: .manual
+            remediationType: .none
         )
     }
 
