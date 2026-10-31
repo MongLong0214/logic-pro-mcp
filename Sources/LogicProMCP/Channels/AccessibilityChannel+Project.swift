@@ -1572,20 +1572,8 @@ extension AccessibilityChannel {
     /// |--------------|--------------------|----------|
     /// | non-nil      | open / closed      | `enumerateMarkers(in: area)` runs all 3 strategies |
     static func defaultGetMarkers(runtime: AXLogicProElements.Runtime = .production) -> ChannelResult {
-        if let listWindow = AXLogicProElements.findMarkerListWindow(runtime: runtime) {
-            switch AXLogicProElements.enumerateMarkersFromListWindow(listWindow, runtime: runtime.ax) {
-            case .success(let markers):
-                return encodeResult(markers)
-            case .failure:
-                return .error(HonestContract.encodeStateC(
-                    error: .readbackUnavailable,
-                    hint: "Marker List rows could not be read.",
-                    extras: ["reason": "marker_list_rows_unreadable"]
-                ))
-            }
-        }
-        if AXLogicProElements.hasUnverifiedMarkerListWindow(runtime: runtime) {
-            return .error(HonestContract.encodeStateC(
+        func unverifiedMarkerListResult() -> ChannelResult {
+            .error(HonestContract.encodeStateC(
                 error: .readbackUnavailable,
                 hint: "An open Marker List could not be bound to the active project.",
                 extras: [
@@ -1602,6 +1590,22 @@ extension AccessibilityChannel {
                 ]
             ))
         }
+
+        if let listWindow = AXLogicProElements.findMarkerListWindow(runtime: runtime) {
+            switch AXLogicProElements.enumerateMarkersFromListWindow(listWindow, runtime: runtime.ax) {
+            case .success(let markers):
+                return encodeResult(markers)
+            case .failure:
+                return .error(HonestContract.encodeStateC(
+                    error: .readbackUnavailable,
+                    hint: "Marker List rows could not be read.",
+                    extras: ["reason": "marker_list_rows_unreadable"]
+                ))
+            }
+        }
+        if AXLogicProElements.hasUnverifiedMarkerListWindow(runtime: runtime) {
+            return unverifiedMarkerListResult()
+        }
         if let area = AXLogicProElements.getArrangementArea(runtime: runtime) {
             let legacyMarkers = AXLogicProElements.enumerateMarkers(in: area, runtime: runtime)
             if !legacyMarkers.isEmpty {
@@ -1609,16 +1613,7 @@ extension AccessibilityChannel {
             }
         }
         if AXLogicProElements.hasUnverifiedMarkerListWindow(runtime: runtime) {
-            return .error(HonestContract.encodeStateC(
-                error: .readbackUnavailable,
-                hint: "Marker List window identity could not be verified; marker enumeration terminated without a UI action.",
-                extras: [
-                    "reason": "marker_list_identity_unverified",
-                    "terminal": true,
-                    "human_intervention_required": false,
-                    "human_intervention_requests": 0,
-                ]
-            ))
+            return unverifiedMarkerListResult()
         }
         return .error(HonestContract.encodeStateC(
             error: .elementNotFound,
