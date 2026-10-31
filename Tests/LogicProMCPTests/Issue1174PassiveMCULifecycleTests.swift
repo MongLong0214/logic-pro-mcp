@@ -170,23 +170,68 @@ private actor PassiveMCUProbe: Channel {
     await router.stopAll()
 }
 
-@Test func issue1174SetupRequiresConsentBeforeStartingMCU() async {
+@Test func issue1174SetupRequiresConsentBeforeStartingMCU() async throws {
     let router = ChannelRouter()
     let mcu = PassiveMCUProbe(.mcu)
     await router.register(mcu)
     _ = await router.startAll()
     let cache = StateCache()
-    _ = await SystemDispatcher.handle(command: "setup_control_surface", params: [:],
+    let refusal = await SystemDispatcher.handle(command: "setup_control_surface", params: [:],
         router: router, cache: cache, controlSurfaceSetup: { _ in
             Issue.record("setup drive ran without consent")
             return .failed(stage: "test", hint: "test", .init())
         })
+    let body = try #require(sharedJSONObject(sharedToolText(refusal)))
+    #expect(body["error"] as? String == "consent_required")
+    let terminal = try #require(body["terminal"] as? Bool)
+    let safeToRetry = try #require(body["safe_to_retry"] as? Bool)
+    let humanRequired = try #require(body["human_intervention_required"] as? Bool)
+    #expect(terminal)
+    #expect(!safeToRetry)
+    #expect(!humanRequired)
+    #expect(body["human_intervention_requests"] as? Int == 0)
+    #expect(body["human_dependent_transitions"] as? Int == 0)
+    #expect(body["confirm_command"] == nil)
+    let hint = try #require(body["hint"] as? String)
+    for forbidden in ["re-run", "retry", "consent:\"true\""] {
+        #expect(!hint.localizedCaseInsensitiveContains(forbidden))
+    }
     #expect(await mcu.starts == 0)
     _ = await SystemDispatcher.handle(command: "setup_control_surface", params: ["consent": .string("true")],
         router: router, cache: cache, controlSurfaceSetup: { _ in
             .failed(stage: "test", hint: "test", .init())
         })
     #expect(await mcu.starts == 1)
+    await router.stopAll()
+}
+
+@Test func issue1403LateControlSurfaceConsentRefusalIsTerminalWithoutHumanContinuation() async throws {
+    let router = ChannelRouter()
+    let mcu = PassiveMCUProbe(.mcu)
+    await router.register(mcu)
+    _ = await router.startAll()
+    let result = await SystemDispatcher.handle(
+        command: "setup_control_surface",
+        params: ["consent": .string("true")],
+        router: router,
+        cache: StateCache(),
+        controlSurfaceSetup: { _ in .consentRequired }
+    )
+    let body = try #require(sharedJSONObject(sharedToolText(result)))
+    #expect(body["error"] as? String == "consent_required")
+    let terminal = try #require(body["terminal"] as? Bool)
+    let safeToRetry = try #require(body["safe_to_retry"] as? Bool)
+    let humanRequired = try #require(body["human_intervention_required"] as? Bool)
+    #expect(terminal)
+    #expect(!safeToRetry)
+    #expect(!humanRequired)
+    #expect(body["human_intervention_requests"] as? Int == 0)
+    #expect(body["human_dependent_transitions"] as? Int == 0)
+    #expect(body["confirm_command"] == nil)
+    let hint = try #require(body["hint"] as? String)
+    for forbidden in ["re-run", "retry", "consent:\"true\""] {
+        #expect(!hint.localizedCaseInsensitiveContains(forbidden))
+    }
     await router.stopAll()
 }
 
