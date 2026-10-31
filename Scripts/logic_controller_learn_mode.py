@@ -265,18 +265,16 @@ def guard_controller_learn_mode(
         result["reason"] = classified.get("reason", "inactive")
         result["terminal"] = False
     elif classified.get("status") == "active":
-        result["status"] = "failed"
+        result["status"] = "blocked"
         result["reason"] = classified.get("reason", "active")
         result["terminal"] = True
-        result["terminal_scope"] = "mcp_request_only"
         result["safe_to_retry"] = False
         if isinstance(classified.get("evidence"), dict):
             result["evidence"] = classified["evidence"]
     else:
-        result["status"] = "failed"
+        result["status"] = "error"
         result["reason"] = classified.get("reason", "detect_error")
         result["terminal"] = True
-        result["terminal_scope"] = "mcp_request_only"
         result["safe_to_retry"] = False
         if classified.get("stderr"):
             result["stderr"] = classified["stderr"]
@@ -301,12 +299,7 @@ def _main(argv: list[str]) -> int:
     if successful:
         payload.setdefault("terminal", False)
     else:
-        prior_status = payload.get("status", "unknown")
-        if prior_status != "failed":
-            payload["classification_status"] = prior_status
-            payload["status"] = "failed"
         payload.setdefault("terminal", True)
-        payload.setdefault("terminal_scope", "mcp_request_only")
         payload.setdefault("safe_to_retry", False)
     print(json.dumps(payload, ensure_ascii=False, indent=2))
     return 0 if successful else 1

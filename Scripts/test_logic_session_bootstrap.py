@@ -431,7 +431,7 @@ class BootstrapResultTests(unittest.TestCase):
         ).as_dict()
 
         self.assertIs(payload["terminal"], True)
-        self.assertEqual(payload["terminal_scope"], "mcp_request_only")
+        self.assertNotIn("terminal_scope", payload)
         self.assertIs(payload["human_intervention_required"], False)
         self.assertEqual(payload["human_intervention_requests"], 0)
         self.assertEqual(payload["human_dependent_transitions"], 0)

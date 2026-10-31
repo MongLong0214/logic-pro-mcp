@@ -187,7 +187,6 @@ class BootstrapResult:
     reason: str | None = None
     hint: str | None = None
     terminal: bool | None = None
-    terminal_scope: str | None = None
     human_intervention_required: bool | None = None
     human_intervention_requests: int | None = None
     human_dependent_transitions: int | None = None
@@ -202,11 +201,6 @@ class BootstrapResult:
         return {
             "ok": self.ok,
             "terminal": self.terminal if self.terminal is not None else not self.ok,
-            "terminal_scope": (
-                self.terminal_scope
-                if self.terminal_scope is not None
-                else (None if self.ok else "mcp_request_only")
-            ),
             "human_intervention_required": (
                 self.human_intervention_required
                 if self.human_intervention_required is not None
@@ -932,7 +926,6 @@ def bootstrap_fresh_logic_session(
         hint: str,
         *,
         terminal: bool = True,
-        terminal_scope: str | None = "mcp_request_only",
         human_intervention_required: bool = False,
         human_intervention_requests: int = 0,
         human_dependent_transitions: int = 0,
@@ -947,7 +940,6 @@ def bootstrap_fresh_logic_session(
             reason=reason,
             hint=hint,
             terminal=terminal,
-            terminal_scope=terminal_scope,
             human_intervention_required=human_intervention_required,
             human_intervention_requests=human_intervention_requests,
             human_dependent_transitions=human_dependent_transitions,
@@ -2001,7 +1993,6 @@ def bootstrap_fresh_logic_session(
         reason=assessment.reason,
         hint=assessment.hint,
         terminal=not assessment.ok,
-        terminal_scope=None if assessment.ok else "mcp_request_only",
         human_intervention_required=False,
         human_intervention_requests=0,
         human_dependent_transitions=0,

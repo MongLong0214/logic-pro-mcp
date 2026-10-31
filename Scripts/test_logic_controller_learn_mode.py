@@ -60,11 +60,11 @@ class ControllerLearnModeGuardTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["status"], "blocked")
         self.assertEqual(result["reason"], "assignment_prompt_present")
         self.assertIn("This control is already assigned", " ".join(result["evidence"]["labels"]))
         self.assertIs(result["terminal"], True)
-        self.assertEqual(result["terminal_scope"], "mcp_request_only")
+        self.assertNotIn("terminal_scope", result)
         self.assertIs(result["human_intervention_required"], False)
         self.assertEqual(result["human_intervention_requests"], 0)
         self.assertEqual(result["human_dependent_transitions"], 0)
@@ -82,7 +82,7 @@ class ControllerLearnModeGuardTests(unittest.TestCase):
             )
         )
 
-        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["status"], "blocked")
         self.assertEqual(result["reason"], "learn_mode_enabled")
         self.assertEqual(result["evidence"]["control"]["name"], "Learn Mode")
         self.assertIs(result["terminal"], True)
@@ -95,11 +95,11 @@ class ControllerLearnModeGuardTests(unittest.TestCase):
             runner=FakeRunner({"status": "error", "reason": "osascript_failed", "stderr": "denied"})
         )
 
-        self.assertEqual(result["status"], "failed")
+        self.assertEqual(result["status"], "error")
         self.assertEqual(result["reason"], "osascript_failed")
         self.assertEqual(result["policy_id"], DEFAULT_CONTROLLER_LEARN_MODE_POLICY["policy_id"])
         self.assertIs(result["terminal"], True)
-        self.assertEqual(result["terminal_scope"], "mcp_request_only")
+        self.assertNotIn("terminal_scope", result)
         self.assertIs(result["human_intervention_required"], False)
         self.assertEqual(result["human_intervention_requests"], 0)
         self.assertEqual(result["human_dependent_transitions"], 0)
@@ -115,7 +115,7 @@ class ControllerLearnModeGuardTests(unittest.TestCase):
 
     def test_standalone_commands_exit_nonzero_for_failed_outcomes(self):
         cases = [
-            ("guard", "guard_controller_learn_mode", {"status": "failed"}),
+            ("guard", "guard_controller_learn_mode", {"status": "blocked"}),
             ("detect", "detect_controller_learn_mode", {"status": "active"}),
             ("detect", "detect_controller_learn_mode", {"status": "error"}),
         ]
@@ -126,8 +126,9 @@ class ControllerLearnModeGuardTests(unittest.TestCase):
                 with mock.patch.object(learn_mode_module, target, return_value=payload), redirect_stdout(output):
                     self.assertEqual(learn_mode_module._main(["script", command]), 1)
                 published = json.loads(output.getvalue())
+                self.assertEqual(published["status"], payload["status"])
                 self.assertIs(published["terminal"], True)
-                self.assertEqual(published["terminal_scope"], "mcp_request_only")
+                self.assertNotIn("terminal_scope", published)
                 self.assertIs(published["human_intervention_required"], False)
                 self.assertEqual(published["human_intervention_requests"], 0)
                 self.assertEqual(published["human_dependent_transitions"], 0)
