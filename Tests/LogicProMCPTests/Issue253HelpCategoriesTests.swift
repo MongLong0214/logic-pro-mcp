@@ -75,3 +75,18 @@ import Testing
 
     #expect(!text.contains("MCU write + AX track-header readback"))
 }
+
+@Test func projectHelpRetiresStandaloneBounceDialogGuidance() async {
+    let result = await SystemDispatcher.handle(
+        command: "help",
+        params: ["category": .string("project")],
+        router: ChannelRouter(),
+        cache: StateCache()
+    )
+    let text = sharedToolText(result)
+
+    #expect(text.contains("bounce            -> {} — Unsupported standalone route; returns terminal State C before UI"))
+    #expect(text.contains("export_run        -> { projects, output_root, artifacts?, confirmed: true }"))
+    #expect(!text.contains("Open bounce dialog after audit preflight"))
+    #expect(!text.contains("export blockers return export_readiness_blocked"))
+}
