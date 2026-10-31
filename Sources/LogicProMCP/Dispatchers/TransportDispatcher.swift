@@ -397,6 +397,23 @@ struct TransportDispatcher: OperationTraceDispatching {
             extras["observed_after"] = transportStateSummary(state)
             return toolTextResult(.success(HonestContract.encodeStateA(extras: extras)))
         }
+        func terminalAfterWrite(
+            _ error: HonestContract.FailureError,
+            hint: String
+        ) -> CallTool.Result {
+            extras["safe_to_retry"] = false
+            extras["terminal"] = true
+            extras["terminal_scope"] = "mcp_request_only"
+            extras["automatic_read_attempts_exhausted"] = true
+            extras["human_intervention_required"] = false
+            extras["human_intervention_requests"] = 0
+            extras["human_dependent_transitions"] = 0
+            return toolTextResult(HonestContract.encodeStateC(
+                error: error,
+                hint: hint,
+                extras: extras
+            ), isError: true)
+        }
 
         guard let first = await liveTransportState(router: router, cache: cache) else {
             return refusalBeforeWrite("transport.pause terminated before the toggle because live transport state was unavailable; nothing was sent.")
@@ -454,12 +471,10 @@ struct TransportDispatcher: OperationTraceDispatching {
         await sleep(gap)
         let confirming = await liveTransportState(router: router, cache: cache)
         guard let settled, let confirming, let stillAfter = playheadStill(settled, confirming) else {
-            extras["safe_to_retry"] = false
-            return toolTextResult(HonestContract.encodeStateC(
-                error: .readbackUnavailable,
-                hint: "transport.pause was sent, but the transport could not be read twice afterwards. Do not resend pause: it is a toggle. Read the transport state first.",
-                extras: extras
-            ), isError: true)
+            return terminalAfterWrite(
+                .readbackUnavailable,
+                hint: "transport.pause was sent and its resulting state could not be read twice; the effect remains unknown and this MCP request terminated."
+            )
         }
         extras["observed_after"] = [transportStateSummary(settled), transportStateSummary(confirming)]
         extras["observed_isPlaying"] = confirming.isPlaying
@@ -467,12 +482,10 @@ struct TransportDispatcher: OperationTraceDispatching {
         if settled.isPlaying, confirming.isPlaying, stillAfter {
             return toolTextResult(.success(HonestContract.encodeStateA(extras: extras)))
         }
-        extras["safe_to_retry"] = false
-        return toolTextResult(HonestContract.encodeStateC(
-            error: .readbackMismatch,
-            hint: "transport.pause was sent, but the transport does not read as paused (Play on with the playhead still). Do not resend pause: it is a toggle, and a second press resumes playback. Read the transport state first.",
-            extras: extras
-        ), isError: true)
+        return terminalAfterWrite(
+            .readbackMismatch,
+            hint: "transport.pause was sent, but the transport did not read as paused; the effect remains unconfirmed and this MCP request terminated."
+        )
     }
 
     /// How long to wait after the Pause or Play key before the first reading. Measured for Pause:

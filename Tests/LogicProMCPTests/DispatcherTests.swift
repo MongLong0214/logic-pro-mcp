@@ -916,6 +916,58 @@ private actor RecordedSleeps {
     #expect(try #require(object["write_attempted"] as? Bool))
     let safeToRetry = try #require(object["safe_to_retry"] as? Bool)
     #expect(!safeToRetry)
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(try #require(object["terminal_scope"] as? String) == "mcp_request_only")
+    #expect(try #require(object["automatic_read_attempts_exhausted"] as? Bool))
+    #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(try #require(object["human_intervention_requests"] as? Int) == 0)
+    #expect(try #require(object["human_dependent_transitions"] as? Int) == 0)
+    let hint = try #require(object["hint"] as? String)
+    #expect(hint.localizedCaseInsensitiveContains("terminated"))
+    for request in ["do not", "read the", "resend", "retry"] {
+        #expect(!hint.lowercased().contains(request))
+    }
+}
+
+@Test func testTransportDispatcherPausePostWriteReadFailureTerminatesWithoutContinuation() async throws {
+    let router = ChannelRouter()
+    let pauseWrite = FixedResultChannel(id: .cgEvent, result: .success("pause key sent"))
+    let readback = SequencedTransportReadbackChannel(
+        id: .accessibility,
+        transportStates: [
+            pauseReading(playing: true, at: "12.1"),
+            pauseReading(playing: true, at: "12.3"),
+        ]
+    )
+    await router.register(pauseWrite)
+    await router.register(readback)
+
+    let result = await TransportDispatcher.handle(
+        command: "pause",
+        params: [:],
+        router: router,
+        cache: StateCache(),
+        sleep: { _ in }
+    )
+
+    #expect(result.isError!)
+    #expect(await pauseWrite.executedOps.map(\.0) == ["transport.pause"])
+    let object = try #require(parseDispatcherObject(dispatcherText(result)))
+    #expect(object["error"] as? String == "readback_unavailable")
+    #expect(object["operation"] as? String == "transport.pause")
+    #expect(try #require(object["write_attempted"] as? Bool))
+    #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(try #require(object["terminal_scope"] as? String) == "mcp_request_only")
+    #expect(try #require(object["automatic_read_attempts_exhausted"] as? Bool))
+    #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(try #require(object["human_intervention_requests"] as? Int) == 0)
+    #expect(try #require(object["human_dependent_transitions"] as? Int) == 0)
+    let hint = try #require(object["hint"] as? String)
+    #expect(hint.localizedCaseInsensitiveContains("terminated"))
+    for request in ["do not", "read the", "resend", "retry"] {
+        #expect(!hint.lowercased().contains(request))
+    }
 }
 
 @Test(arguments: [
