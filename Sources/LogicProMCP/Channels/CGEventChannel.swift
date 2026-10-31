@@ -820,7 +820,10 @@ actor CGEventChannel: Channel {
             "safe_to_retry": false,
             "automatic_input_source_attempts_exhausted": true,
             "terminal": true,
+            "terminal_scope": "mcp_request_only",
             "human_intervention_required": false,
+            "human_intervention_requests": 0,
+            "human_dependent_transitions": 0,
         ]
         if let id = source?.id {
             extras["input_source_id"] = id
@@ -892,7 +895,10 @@ actor CGEventChannel: Channel {
                 "safe_to_retry": false,
                 "automatic_permission_attempts_exhausted": true,
                 "terminal": true,
+                "terminal_scope": "mcp_request_only",
                 "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
             ]
         ))
     }
@@ -912,7 +918,10 @@ actor CGEventChannel: Channel {
             "safe_to_retry": false,
             "automatic_frontmost_attempts_exhausted": true,
             "terminal": true,
+            "terminal_scope": "mcp_request_only",
             "human_intervention_required": false,
+            "human_intervention_requests": 0,
+            "human_dependent_transitions": 0,
         ]
         if let observation { extras["frontmost_observation"] = observation.diagnostic }
         return .error(HonestContract.encodeStateC(
