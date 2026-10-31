@@ -219,10 +219,11 @@ struct Issue112CommandDeadlineTests {
         #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_transport", command: "stop") == 25)
         #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_mixer", command: "set_volume") == 25)
         #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_tracks", command: "mute") == 25)
-        // Long tier — full Library walks / SMF import / guarded export.
+        // Long tier — full Library walks / SMF import.
         #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_tracks", command: "scan_library") == 300)
         #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_midi", command: "import_file") == 300)
-        #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_project", command: "bounce") == 300)
+        // Unsupported standalone bounce terminates without UI on the short tier.
+        #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_project", command: "bounce") == 25)
         // Medium tier — multi-step menu/library navigation.
         #expect(LogicProServer.commandDeadlineSeconds(tool: "logic_tracks", command: "set_instrument") == 90)
         #expect(AccessibilityChannel.setInstrumentLibraryNavigationDeadlineSeconds == 30)

@@ -626,7 +626,7 @@ struct SemanticOracleCensusTests {
         #expect(mutatingOracles == SemanticOracleTable.coveredMutatingOperationIDs)
         #expect(SemanticOracleTable.phaseB1MutatingOperationIDs.count == 12)
         #expect(SemanticOracleTable.phaseB2MutatingOperationIDs.count == 16)
-        #expect(SemanticOracleTable.phaseB3MutatingOperationIDs.count == 15)
+        #expect(SemanticOracleTable.phaseB3MutatingOperationIDs.count == 14)
         #expect(SemanticOracleTable.phaseB4MutatingOperationIDs.count == 6)
         // B1, B2, B3 and B4 are PAIRWISE-DISJOINT increments — no op claimed twice.
         let increments = [
@@ -1039,13 +1039,13 @@ struct SemanticOracleCensusTests {
         #expect(SemanticOracleTable.byOperationID[.mixerSetSendBypassVerified] == nil)
     }
 
-    /// set_cycle_range is excluded a level EARLIER than the structural list: it is
-    /// registry `.unsupported`, so `mutatingSpecIDs` (which filters `.unsupported`)
-    /// never surfaces it, and it can carry no oracle. Its exclusion is documented
-    /// explicitly + reasoned, NOT left implicit in the availability filter.
+    /// Unsupported operations are excluded a level EARLIER than the structural list:
+    /// `mutatingSpecIDs` filters `.unsupported`, so they never surface and carry no
+    /// success oracle. Each exclusion remains explicit and reasoned.
     @Test func unsupportedExclusionsAreDocumentedAndFilteredOut() {
         let unsupported = SemanticOracleTable.unsupportedExcludedMutatingOperationIDs
         #expect(unsupported[.transportSetCycleRange] != nil)
+        #expect(unsupported[.projectBounce] != nil)
         for (id, reason) in unsupported {
             let spec = OperationRegistry.specs.first { $0.id == id }
             // Registered mutating, but `.unsupported` — so filtered from the surface.

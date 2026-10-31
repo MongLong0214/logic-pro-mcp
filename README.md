@@ -92,7 +92,7 @@ Logic Pro MCP uses a different model. It routes each operation to the strongest 
 | Mixer | Volume, pan, plugin snapshots, guarded stock plugin insertion, MCU-driven fader bank walk | AX writes with same-surface readback for volume/pan; MCU writes verify by LCD upper-row redraw; occupied plugin slots refuse replacement |
 | Library | Scan Logic's instrument library and load patches by path | Disk/AX inventory is cached; disk scan dedupes user/app-bundle `.patch` candidates and `resolve_path` classifies kind/source/loadable before `set_instrument` |
 | Navigation | Bars, markers, zoom, view toggles | Marker navigation is target-faithful; cold-cache misses return failure instead of "next marker" |
-| Project lifecycle | New, open, save, save-as, close, bounce, export plan, quit; cache-only session-population report | Destructive operations require confirmation; dry-run export plans do not open Logic or write artifacts |
+| Project lifecycle | New, open, save, save-as, close, export plan/run, quit; cache-only session-population report | Standalone bounce terminates unsupported without UI; guarded `export_run` is the automated artifact path |
 
 ## Agent-Grade Surfaces
 

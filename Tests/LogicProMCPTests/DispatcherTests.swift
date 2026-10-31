@@ -3165,9 +3165,7 @@ func testEditDispatcherQuantizeCarriesTheExactValidAlias(_ input: String) async 
         router: router,
         cache: cache
     )
-    let bounceResult = await ProjectDispatcher.handle(command: "bounce", params: [:], router: router, cache: cache)
-
-    for result in [openResult, saveAsResult, bounceResult] {
+    for result in [openResult, saveAsResult] {
         #expect(!result.isError!)
         if case .text(let text, _, _) = result.content.first {
             #expect(text.contains("confirmation_required"))
@@ -3175,6 +3173,39 @@ func testEditDispatcherQuantizeCarriesTheExactValidAlias(_ input: String) async 
             Issue.record("Expected confirmation response")
         }
     }
+}
+
+@Test func testProjectDispatcherStandaloneBounceTerminatesWithoutConfirmationOrRouting() async throws {
+    let router = ChannelRouter()
+    let accessibility = MockChannel(id: .accessibility)
+    await router.register(accessibility)
+
+    let result = await ProjectDispatcher.handle(
+        command: "bounce",
+        params: [:],
+        router: router,
+        cache: StateCache(),
+        dialogPresent: {
+            Issue.record("standalone bounce must not inspect or mutate native UI")
+            return true
+        }
+    )
+
+    #expect(try #require(result.isError))
+    let object = try #require(parseDispatcherObject(dispatcherText(result)))
+    #expect(object["error"] as? String == "unsupported_state")
+    #expect(object["operation"] as? String == "project.bounce")
+    #expect(object["failure_stage"] as? String == "standalone_bounce_unattended_unavailable")
+    #expect(object["automated_alternative"] as? String == "logic_project.export_run")
+    let verified = try #require(object["verified"] as? Bool)
+    let writeAttempted = try #require(object["write_attempted"] as? Bool)
+    let terminal = try #require(object["terminal"] as? Bool)
+    #expect(!verified)
+    #expect(!writeAttempted)
+    #expect(terminal)
+    #expect(object["human_intervention_requests"] as? Int == 0)
+    #expect(object["human_dependent_transitions"] as? Int == 0)
+    #expect(await accessibility.executedOps.isEmpty)
 }
 
 @Test func testProjectDispatcherSaveNoConfirmation() async {
@@ -3222,13 +3253,10 @@ func testEditDispatcherQuantizeCarriesTheExactValidAlias(_ input: String) async 
         router: router,
         cache: cache
     )
-    let bounceResult = await ProjectDispatcher.handle(command: "bounce", params: ["confirmed": .bool(true)], router: router, cache: cache)
-
     #expect(!newResult.isError!)
     #expect(!openResult.isError!)
     #expect(!saveAsResult.isError!)
     #expect(!closeResult.isError!)
-    #expect(!bounceResult.isError!)
 
     let keyCmdOps = await keyCmd.executedOps
     let accessibilityOps = await accessibility.executedOps
@@ -3238,52 +3266,12 @@ func testEditDispatcherQuantizeCarriesTheExactValidAlias(_ input: String) async 
     expectExecutedOps(accessibilityOps, equals: [
         ("project.new", [:]),
         ("project.save_as", ["path": saveAsPath]),
-        ("project.bounce", [:]),
     ])
     expectExecutedOps(keyCmdOps, equals: [])
     expectExecutedOps(appleScriptOps, equals: [
         ("project.open", ["path": existingPath]),
         ("project.close", ["saving": "yes"]),
     ])
-}
-
-@Test func testProjectDispatcherBounceBlocksExternalMIDIBeforeRouting() async throws {
-    let router = ChannelRouter()
-    let keyCmd = MockChannel(id: .midiKeyCommands)
-    await router.register(keyCmd)
-
-    let cache = StateCache()
-    await cache.updateTracks([
-        TrackState(id: 0, name: "GM Device 1", type: .externalMIDI),
-    ])
-    await cache.updateRegions([
-        RegionState(
-            id: "0:1:5:Lead",
-            name: "Lead",
-            trackIndex: 0,
-            startPosition: "1 1 1 1",
-            endPosition: "5 1 1 1",
-            length: "4 0 0 0"
-        ),
-    ], complete: true)
-
-    let result = await ProjectDispatcher.handle(
-        command: "bounce",
-        params: ["confirmed": .bool(true)],
-        router: router,
-        cache: cache
-    )
-
-    let isError = try #require(result.isError)
-    #expect(isError)
-    let object = try #require(parseDispatcherObject(dispatcherText(result)))
-    #expect(!((object["success"] as? Bool)!))
-    #expect(object["error"] as? String == "export_readiness_blocked")
-    #expect(object["failure_stage"] as? String == "pre_bounce_audit")
-    #expect(((object["blockers"] as? [String])?.contains("external_midi_regions_bounce_risk"))!)
-
-    let routedOps = await keyCmd.executedOps
-    #expect(routedOps.isEmpty)
 }
 
 @Test func testProjectDispatcherCloseHonoursSavingParameter() async {

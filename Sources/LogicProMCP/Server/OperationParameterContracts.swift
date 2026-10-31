@@ -524,7 +524,6 @@ extension OperationRegistry {
                            ["value"], ["mode"], ["project_expected_path"]]),
 
             // logic_project
-            "project.bounce": .init(params: ["confirmed": .enforced(.boolean, .bool(false))], required: []),
             "project.quit": .init(params: ["confirmed": .enforced(.boolean, .bool(false))], required: []),
             "project.close": .init(params: [
                 "confirmed": .enforced(.boolean, .bool(false)),

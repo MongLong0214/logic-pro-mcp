@@ -21,12 +21,12 @@ extension ProjectExportPlanner {
         if artifactKinds.contains(where: { $0 != "stem" }) {
             steps.append(ProjectExportWorkflowStep(
                 id: "project_\(index)_bounce_export",
-                title: "Trigger approved bounce/export operation",
+                title: "Run the bounce artifact phase inside export_run",
                 tool: "logic_project",
-                command: "bounce",
+                command: "export_run",
                 mutates: true,
                 executed: false,
-                requiresConfirmationLevel: confirmationLabel(for: "bounce"),
+                requiresConfirmationLevel: confirmationLabel(for: "export_run"),
                 stopConditions: ["missing_output", "stale_output", "overwrite_risk"]
             ))
         }
@@ -57,13 +57,15 @@ extension ProjectExportPlanner {
     static func requiredConfirmations(artifactKinds: [String]) -> [ProjectExportConfirmation] {
         var boundaries = ["open"]
         if artifactKinds.contains(where: { $0 != "stem" }) {
-            boundaries.append("bounce")
+            boundaries.append("export_run")
         }
         if artifactKinds.contains("stem") {
             // Per-track export is an internal phase of the registered
             // `logic_project export_run` command.  There is no public `stem`
             // command to advertise as an independently invocable step.
-            boundaries.append("export_run")
+            if !boundaries.contains("export_run") {
+                boundaries.append("export_run")
+            }
         }
         return [ProjectExportConfirmation(
             level: "L2",

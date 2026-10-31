@@ -1297,17 +1297,6 @@ enum SemanticOracleFixtures {
                 """,
             readback: "{}"
         ),
-        // AccessibilityChannel.openBounceDialogViaMenu BOUNCE_DIALOG_OPENED branch:
-        // dialog opened, bounce NOT fired.
-        .projectBounce: SemanticOracleFixture(
-            response: """
-                {"success":true,"verified":true,"state":"A","operation":"project.bounce",\
-                "requested":"bounce_dialog_open","observed":"bounce_dialog_open",\
-                "dialog_opened":true,"bounce_fired":false,"via":"file-menu",\
-                "next_action":"Review the Bounce settings in Logic, then confirm and choose the destination."}
-                """,
-            readback: "{}"
-        ),
         // verifyTrackCreation State A: count increased by 1, type "audio".
         .tracksCreateAudio: SemanticOracleFixture(
             response: """

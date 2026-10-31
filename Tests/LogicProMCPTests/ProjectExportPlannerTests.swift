@@ -38,8 +38,8 @@ struct ProjectExportPlannerTests {
         #expect(plan.baselineVerification.contains("mtime_within_run_window"))
         let l2 = try #require(plan.requiredConfirmations.first { $0.level == "L2" })
         #expect(l2.requiredFor.contains("open"))
-        #expect(l2.requiredFor.contains("bounce"))
         #expect(l2.requiredFor.contains("export_run"))
+        #expect(!l2.requiredFor.contains("bounce"))
         #expect(!l2.requiredFor.contains("close"))
         #expect(!plan.requiredConfirmations.contains { $0.requiredFor.contains("close") })
         #expect(!plan.unsupportedOrBlockedSteps.map(\.operation).contains("export_run"))
@@ -60,7 +60,7 @@ struct ProjectExportPlannerTests {
         let steps = try #require(plan.projects.first?.workflowSteps)
         #expect(steps.allSatisfy { !$0.executed })
         let openStep = try #require(steps.first { $0.command == "open" })
-        let bounceStep = try #require(steps.first { $0.command == "bounce" })
+        let bounceStep = try #require(steps.first { $0.id == "project_0_bounce_export" })
         let stemStep = try #require(steps.first { $0.id == "project_0_stem_export" })
         #expect(openStep.requiresConfirmationLevel == "L2")
         #expect(bounceStep.requiresConfirmationLevel == "L2")
@@ -68,7 +68,8 @@ struct ProjectExportPlannerTests {
         #expect(!steps.contains { $0.command == "close" })
         #expect(stemStep.command == nil)
         #expect(stemStep.title.contains("no standalone stem command"))
-        #expect(steps.map(\.command) == ["open", "bounce", nil])
+        #expect(bounceStep.command == "export_run")
+        #expect(steps.map(\.command) == ["open", "export_run", nil])
     }
 
     @Test("#369: surfaces the bounce step's execution preconditions in the manifest")
@@ -220,7 +221,9 @@ struct ProjectExportPlannerTests {
         ])
 
         let steps = try #require(plan.projects.first?.workflowSteps)
-        #expect(steps.map(\.command) == ["open", "bounce"])
+        #expect(steps.map(\.command) == ["open", "export_run"])
+        #expect(!plan.requiredConfirmations.contains { $0.requiredFor.contains("bounce") })
+        #expect(plan.requiredConfirmations.contains { $0.requiredFor.contains("export_run") })
         #expect(!plan.requiredConfirmations.contains { $0.requiredFor.contains("close") })
     }
 }

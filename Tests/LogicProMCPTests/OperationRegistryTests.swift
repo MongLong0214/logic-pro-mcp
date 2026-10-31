@@ -746,7 +746,7 @@ struct OperationRegistryTests {
         ("project.save", "save", .mutating, .medium, .readbackRequired),
         ("project.save_as", "save_as", .mutating, .long, .readbackRequired),
         ("project.close", "close", .mutating, .medium, .none),
-        ("project.bounce", "bounce", .mutating, .long, .readbackRequired),
+        ("project.bounce", "bounce", .mutating, .short, .none),
         ("project.is_running", "is_running", .readOnly, .short, .none),
         ("project.launch", "launch", .mutating, .short, .readbackRequired),
         ("project.quit", "quit", .mutating, .medium, .readbackRequired),
@@ -773,7 +773,6 @@ struct OperationRegistryTests {
         ("logic_project", "apply_session_repair", .l1),
         ("logic_project", "open", .l2),
         ("logic_project", "save_as", .l2),
-        ("logic_project", "bounce", .l2),
         ("logic_project", "export_run", .l2),
         ("logic_project", "export_resume", .l2),
         ("logic_mixer", "insert_plugin", .l2),
@@ -816,7 +815,9 @@ struct OperationRegistryTests {
             // policy (defaultInstall only when tracing was enabled when the
             // registry was built); everything else stays defaultInstall.
             #expect(spec.availability == (
-                OperationRegistry.traceOperationIDs.contains(id)
+                id == .projectBounce
+                    ? .unsupported
+                    : OperationRegistry.traceOperationIDs.contains(id)
                     ? OperationRegistry.traceAvailability(
                         traceEnabled: OperationRegistry.traceEnabledAtRegistryBuild
                     )
@@ -845,9 +846,9 @@ struct OperationRegistryTests {
 
     @Test("project deadlines exactly match registry short medium and long tiers")
     func projectDeadlineParity() {
-        #expect(Self.projectCommands.filter { $0.deadline == .short }.count == 7)
+        #expect(Self.projectCommands.filter { $0.deadline == .short }.count == 8)
         #expect(Self.projectCommands.filter { $0.deadline == .medium }.count == 6)
-        #expect(Self.projectCommands.filter { $0.deadline == .long }.count == 5)
+        #expect(Self.projectCommands.filter { $0.deadline == .long }.count == 4)
         #expect(Self.projectCommands.filter { $0.deadline == .saga }.map(\.command) == ["apply_session_repair"])
 
         for entry in Self.projectCommands {

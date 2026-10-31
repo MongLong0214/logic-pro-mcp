@@ -1374,6 +1374,7 @@ extension AccessibilityChannel {
                 "operation": "project.bounce",
                 "failure_stage": "standalone_bounce_unattended_unavailable",
                 "automated_alternative": "logic_project.export_run",
+                "verified": false,
                 "write_attempted": false,
                 "safe_to_retry": false,
                 "automatic_attempts_exhausted": true,
