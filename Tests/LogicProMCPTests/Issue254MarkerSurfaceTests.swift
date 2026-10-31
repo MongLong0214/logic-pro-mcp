@@ -236,6 +236,32 @@ private func issue254Envelope(_ result: ReadResource.Result) throws -> [String: 
     #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
 }
 
+@Test func markerResourceTerminatesAnOpenListWhoseProjectIdentityWasNotVerified() async throws {
+    let cache = StateCache()
+    await cache.markMarkersUnreadable(.identityUnverified)
+
+    let result = try await ResourceHandlers.read(
+        uri: "logic://markers",
+        cache: cache,
+        router: ChannelRouter()
+    )
+    let envelope = try issue254Envelope(result)
+
+    #expect(!(try #require(envelope["readable"] as? Bool)))
+    #expect(envelope["reason"] as? String == "marker_list_identity_unverified")
+    #expect(envelope["operation"] as? String == "nav.get_markers")
+    #expect(envelope["failure_stage"] as? String == "marker_list_identity_unverified")
+    #expect(envelope["automated_alternative"] == nil)
+    #expect(envelope["automatic_attempts_exhausted"] == nil)
+    #expect(try #require(envelope["terminal"] as? Bool))
+    #expect(envelope["terminal_scope"] as? String == "mcp_request_only")
+    #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+    #expect(envelope["human_intervention_requests"] as? Int == 0)
+    #expect(envelope["human_dependent_transitions"] as? Int == 0)
+    #expect(!(try #require(envelope["write_attempted"] as? Bool)))
+    #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+}
+
 @Test func markerResourcePreservesOpenListRowReadFailureWithoutClaimingClosedListRecovery() async throws {
     let cache = StateCache()
     await cache.markMarkersUnreadable(.rowsUnreadable)
