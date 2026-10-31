@@ -36,6 +36,7 @@ private actor Issue1403LifecycleMockServer: ServerStarting {
         object["human_intervention_required"] as? Bool
     )
     #expect(terminal)
+    #expect(object["terminal_scope"] as? String == "mcp_request_only")
     #expect(!writeAttempted)
     #expect(!humanInterventionRequired)
     #expect(object["human_intervention_requests"] as? Int == 0)
