@@ -40,8 +40,11 @@ private final class TrackCreateFlag: @unchecked Sendable {
 @Suite("Issue #538 — create observations are status- and identity-bound")
 struct Issue538TrackCreationObservationTests {
 
-    @Test("an unreadable pre-create rail is not flattened to zero and cannot certify State A")
-    func createDoesNotTreatUnreadableBeforeRailAsZero() async throws {
+    @Test(
+        "an unreadable pre-create rail never fabricates State A and a residual modal still terminates",
+        arguments: [false, true]
+    )
+    func createDoesNotTreatUnreadableBeforeRailAsZero(residualModal: Bool) async throws {
         let builder = FakeAXRuntimeBuilder()
         let app = builder.element(600)
         let window = builder.element(601)
@@ -50,6 +53,10 @@ struct Issue538TrackCreationObservationTests {
         let createItem = builder.element(604)
         let headers = builder.element(605)
         let existing = (0..<4).map { builder.element(606 + $0) }
+        let sheet = builder.element(610)
+        let group = builder.element(611)
+        let create = builder.element(612)
+        let cancel = builder.element(613)
         let menuWasClicked = TrackCreateFlag()
         let unreadableBeforeRailReads = TrackCreateCounter()
 
@@ -72,9 +79,28 @@ struct Issue538TrackCreationObservationTests {
         builder.setChildren(trackMenu, [createItem])
         builder.setAttribute(createItem, kAXTitleAttribute as String, "소프트웨어 악기")
         builder.setAttribute(createItem, kAXSelectedAttribute as String, false)
+        builder.setAttribute(sheet, kAXRoleAttribute as String, kAXSheetRole as String)
+        builder.setAttribute(sheet, kAXDescriptionAttribute as String, "New Track")
+        builder.setAttribute(group, kAXRoleAttribute as String, kAXGroupRole as String)
+        builder.setAttribute(create, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(create, kAXTitleAttribute as String, "Make")
+        builder.setAttribute(cancel, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(cancel, kAXTitleAttribute as String, "Cancel")
+        builder.setAttribute(cancel, kAXEnabledAttribute as String, false)
+        builder.setChildren(group, [create, cancel])
+        builder.setChildren(sheet, [group])
 
         let runtime = builder.makeLogicRuntime(
             appElement: app,
+            attributeValueResultHandler: { element, attribute in
+                if residualModal, CFEqual(element, window), attribute == "AXSheets" {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.attributeUnsupported.rawValue))
+                }
+                if residualModal, CFEqual(element, sheet), attribute == (kAXModalAttribute as String) {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+                }
+                return nil
+            },
             childrenHandler: { element in
                 guard CFEqual(element, headers), !menuWasClicked.get() else { return nil }
                 unreadableBeforeRailReads.increment()
@@ -89,6 +115,7 @@ struct Issue538TrackCreationObservationTests {
             performActionHandler: { element, action in
                 guard CFEqual(element, createItem), action == (kAXPressAction as String) else { return false }
                 menuWasClicked.set()
+                if residualModal { builder.setChildren(window, [headers, sheet]) }
                 return true
             }
         )
@@ -103,11 +130,9 @@ struct Issue538TrackCreationObservationTests {
             expectedTrackType: .softwareInstrument,
             runtime: runtime
         )
-        try #require(result.isSuccess, "expected an honest State B envelope, got: \(result.message)")
         let envelope = try #require(
             try JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
         )
-        let verified = try #require(envelope["verified"] as? Bool)
         let beforeWasUnobserved = envelope["track_count_before"] is NSNull
         let deltaWasUnobserved = envelope["observed_delta"] is NSNull
 
@@ -115,11 +140,25 @@ struct Issue538TrackCreationObservationTests {
         // old `allTrackHeaders()` enumeration for the pre-write read. Its empty
         // best-effort result makes the four pre-existing headers appear as a
         // delta of four and this fixture falsely encodes State A.
-        #expect(!verified)
         #expect(beforeWasUnobserved)
         #expect(deltaWasUnobserved)
         #expect(menuWasClicked.get(), "the menu-action seam must run before the post-write headers appear")
         #expect(unreadableBeforeRailReads.current() > 0, "the pre-write unreadable-rail seam must fire")
+        if residualModal {
+            #expect(!result.isSuccess)
+            #expect(envelope["state"] as? String == "C")
+            #expect(envelope["error"] as? String == "unsupported_state")
+            #expect(envelope["verified"] == nil)
+            #expect(try #require(envelope["terminal"] as? Bool))
+            #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+            #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+            #expect(envelope["human_intervention_requests"] as? Int == 0)
+            #expect(envelope["human_dependent_transitions"] as? Int == 0)
+        } else {
+            #expect(result.isSuccess)
+            #expect(envelope["state"] as? String == "B")
+            #expect(!(try #require(envelope["verified"] as? Bool)))
+        }
     }
 
     @Test("observed_track_type is read from the newly observed header rather than requested menu type")
@@ -544,7 +583,7 @@ struct Issue538TrackCreationObservationTests {
         #expect(actionIssued.get(), "the first Create press seam must fire")
     }
 
-    @Test("a create timeout with a still-present New Track sheet is State B, not a clean write failure")
+    @Test("a create timeout with a still-present New Track sheet terminates without a human wait")
     func createTimeoutNamesThePresentSheetInsteadOfReportingNoWindow() async throws {
         let builder = FakeAXRuntimeBuilder()
         let app = builder.element(700)
@@ -617,21 +656,28 @@ struct Issue538TrackCreationObservationTests {
             expectedTrackType: .softwareInstrument,
             runtime: runtime
         )
-        try #require(result.isSuccess, "expected a State B envelope, got: \(result.message)")
+        #expect(!result.isSuccess)
         let envelope = try #require(
             try JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
         )
         let state = try #require(envelope["state"] as? String)
-        let verified = try #require(envelope["verified"] as? Bool)
         let kind = try #require(envelope["reconciled_modal_kind"] as? String)
 
-        #expect(!verified)
-        #expect(state == "B")
+        #expect(envelope["verified"] == nil)
+        #expect(state == "C")
+        #expect(envelope["error"] as? String == "unsupported_state")
         #expect(kind == "mandatory_new_track")
+        #expect(envelope["waiting_for_user"] == nil)
+        #expect(try #require(envelope["terminal"] as? Bool))
+        #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+        #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+        #expect(envelope["human_intervention_requests"] as? Int == 0)
+        #expect(envelope["human_dependent_transitions"] as? Int == 0)
+        #expect(try #require(envelope["automatic_precondition_attempts_exhausted"] as? Bool))
         #expect(menuWasClicked.get())
     }
 
-    @Test("a count increase while the New Track sheet is still present cannot certify State A")
+    @Test("a count increase with a still-present New Track sheet terminates without a human wait")
     func createDoesNotCertifyStateAWhileMandatorySheetRemains() async throws {
         let builder = FakeAXRuntimeBuilder()
         let app = builder.element(720)
@@ -699,17 +745,25 @@ struct Issue538TrackCreationObservationTests {
             expectedTrackType: .softwareInstrument,
             runtime: runtime
         )
-        try #require(result.isSuccess, "expected a State B envelope, got: \(result.message)")
+        #expect(!result.isSuccess)
         let envelope = try #require(
             try JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
         )
         let state = try #require(envelope["state"] as? String)
-        let verified = try #require(envelope["verified"] as? Bool)
         let kind = try #require(envelope["reconciled_modal_kind"] as? String)
 
-        #expect(!verified)
-        #expect(state == "B")
+        #expect(envelope["verified"] == nil)
+        #expect(state == "C")
+        #expect(envelope["error"] as? String == "unsupported_state")
         #expect(kind == "mandatory_new_track")
+        #expect(envelope["observed_delta"] as? Int == 1)
+        #expect(envelope["waiting_for_user"] == nil)
+        #expect(try #require(envelope["terminal"] as? Bool))
+        #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+        #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+        #expect(envelope["human_intervention_requests"] as? Int == 0)
+        #expect(envelope["human_dependent_transitions"] as? Int == 0)
+        #expect(try #require(envelope["automatic_precondition_attempts_exhausted"] as? Bool))
     }
 
     @Test("State A does not name a track that was already selected before the write")

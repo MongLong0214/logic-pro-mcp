@@ -65,7 +65,7 @@ struct OperationTraceTests {
             sleep: { _ in }
         )
 
-        let expected = #"{"operation":"transport.play","poll_attempts":12,"reason":"readback_unavailable","state":"B","success":true,"verified":false,"verify_source":"transport_state","write_attempted":true,"write_result":"Mock: transport.play"}"#
+        let expected = #"{"automatic_read_attempts_exhausted":true,"hint":"transport.play was sent and its resulting state could not be read in 12 automatic attempts; the effect remains unknown and this MCP request terminated.","human_dependent_transitions":0,"human_intervention_requests":0,"human_intervention_required":false,"operation":"transport.play","poll_attempts":12,"reason":"readback_unavailable","safe_to_retry":false,"state":"B","success":true,"terminal":true,"terminal_scope":"mcp_request_only","verified":false,"verify_source":"transport_state","write_attempted":true,"write_result":"Mock: transport.play"}"#
         #expect(sharedToolText(result) == expected)
         let resultIsError = result.isError ?? false
         #expect(resultIsError)
@@ -499,14 +499,14 @@ struct OperationTraceTests {
         #expect(sharedJSONObject(sharedToolText(unknown))?["error"] as? String == "element_not_found")
     }
 
-    @Test func OperationTraceSystemFlagOffReturnsTypedDisabledResponses() async {
+    @Test func OperationTraceSystemFlagOffReturnsTypedDisabledResponses() async throws {
         let router = ChannelRouter()
         let cache = StateCache()
         await OperationTraceStore.shared.clear()
         let traceID = await OperationTraceStore.shared.start(operationID: "test.flag-off.seed")
         await OperationTraceStore.shared.complete(traceID)
 
-        await FeatureFlags.withAdr005OperationTraceForTests(false) {
+        try await FeatureFlags.withAdr005OperationTraceForTests(false) {
             let listed = await SystemDispatcher.handle(
                 command: "list_recent_traces",
                 params: ["limit": .int(1)],
@@ -535,6 +535,17 @@ struct OperationTraceTests {
             #expect(fetchedTraceDisabled)
             let fetchedWriteAttempted = fetchedBody["write_attempted"] as? Bool ?? true
             #expect(!fetchedWriteAttempted)
+            #expect(try #require(fetchedBody["terminal"] as? Bool))
+            #expect(try #require(fetchedBody["terminal_scope"] as? String) == "mcp_request_only")
+            #expect(!(try #require(fetchedBody["safe_to_retry"] as? Bool)))
+            #expect(!(try #require(fetchedBody["human_intervention_required"] as? Bool)))
+            #expect(try #require(fetchedBody["human_intervention_requests"] as? Int) == 0)
+            #expect(try #require(fetchedBody["human_dependent_transitions"] as? Int) == 0)
+            let fetchedHint = try #require(fetchedBody["hint"] as? String)
+            #expect(fetchedHint.localizedCaseInsensitiveContains("terminated"))
+            #expect(!fetchedHint.localizedCaseInsensitiveContains("unset"))
+            #expect(!fetchedHint.localizedCaseInsensitiveContains("set it"))
+            #expect(!fetchedHint.localizedCaseInsensitiveContains("retry"))
 
             let unconfirmed = await SystemDispatcher.handle(
                 command: "clear_traces",
@@ -566,6 +577,17 @@ struct OperationTraceTests {
             #expect(!clearedWriteAttempted)
             let clearedSuccessFlag = clearedBody["success"] as? Bool ?? false
             #expect(!clearedSuccessFlag)
+            #expect(try #require(clearedBody["terminal"] as? Bool))
+            #expect(try #require(clearedBody["terminal_scope"] as? String) == "mcp_request_only")
+            #expect(!(try #require(clearedBody["safe_to_retry"] as? Bool)))
+            #expect(!(try #require(clearedBody["human_intervention_required"] as? Bool)))
+            #expect(try #require(clearedBody["human_intervention_requests"] as? Int) == 0)
+            #expect(try #require(clearedBody["human_dependent_transitions"] as? Int) == 0)
+            let clearHint = try #require(clearedBody["hint"] as? String)
+            #expect(clearHint.localizedCaseInsensitiveContains("terminated"))
+            #expect(!clearHint.localizedCaseInsensitiveContains("unset"))
+            #expect(!clearHint.localizedCaseInsensitiveContains("set it"))
+            #expect(!clearHint.localizedCaseInsensitiveContains("retry"))
             #expect(await OperationTraceStore.shared.trace(traceID) != nil)
         }
         await OperationTraceStore.shared.clear()

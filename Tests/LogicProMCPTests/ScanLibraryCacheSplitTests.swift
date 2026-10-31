@@ -153,6 +153,16 @@ import Testing
     #expect(existsIsOmitted)
     let isTerminal = HonestContract.isTerminalStateC(result.message)
     #expect(isTerminal)
+    let hint = try #require(obj["hint"] as? String)
+    #expect(!hint.localizedCaseInsensitiveContains("scan_library"))
+    #expect(!hint.localizedCaseInsensitiveContains("retry"))
+    #expect(try #require(obj["terminal"] as? Bool))
+    #expect(try #require(obj["terminal_scope"] as? String) == "mcp_request_only")
+    #expect(!(try #require(obj["safe_to_retry"] as? Bool)))
+    #expect(try #require(obj["automatic_precondition_attempts_exhausted"] as? Bool))
+    #expect(!(try #require(obj["human_intervention_required"] as? Bool)))
+    #expect(try #require(obj["human_intervention_requests"] as? Int) == 0)
+    #expect(try #require(obj["human_dependent_transitions"] as? Int) == 0)
 }
 
 @Test func testResolvePathReturnsPanelSourceAndLoadableTrueForMatch() async throws {

@@ -916,6 +916,58 @@ private actor RecordedSleeps {
     #expect(try #require(object["write_attempted"] as? Bool))
     let safeToRetry = try #require(object["safe_to_retry"] as? Bool)
     #expect(!safeToRetry)
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(try #require(object["terminal_scope"] as? String) == "mcp_request_only")
+    #expect(try #require(object["automatic_read_attempts_exhausted"] as? Bool))
+    #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(try #require(object["human_intervention_requests"] as? Int) == 0)
+    #expect(try #require(object["human_dependent_transitions"] as? Int) == 0)
+    let hint = try #require(object["hint"] as? String)
+    #expect(hint.localizedCaseInsensitiveContains("terminated"))
+    for request in ["do not", "read the", "resend", "retry"] {
+        #expect(!hint.lowercased().contains(request))
+    }
+}
+
+@Test func testTransportDispatcherPausePostWriteReadFailureTerminatesWithoutContinuation() async throws {
+    let router = ChannelRouter()
+    let pauseWrite = FixedResultChannel(id: .cgEvent, result: .success("pause key sent"))
+    let readback = SequencedTransportReadbackChannel(
+        id: .accessibility,
+        transportStates: [
+            pauseReading(playing: true, at: "12.1"),
+            pauseReading(playing: true, at: "12.3"),
+        ]
+    )
+    await router.register(pauseWrite)
+    await router.register(readback)
+
+    let result = await TransportDispatcher.handle(
+        command: "pause",
+        params: [:],
+        router: router,
+        cache: StateCache(),
+        sleep: { _ in }
+    )
+
+    #expect(result.isError!)
+    #expect(await pauseWrite.executedOps.map(\.0) == ["transport.pause"])
+    let object = try #require(parseDispatcherObject(dispatcherText(result)))
+    #expect(object["error"] as? String == "readback_unavailable")
+    #expect(object["operation"] as? String == "transport.pause")
+    #expect(try #require(object["write_attempted"] as? Bool))
+    #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(try #require(object["terminal_scope"] as? String) == "mcp_request_only")
+    #expect(try #require(object["automatic_read_attempts_exhausted"] as? Bool))
+    #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(try #require(object["human_intervention_requests"] as? Int) == 0)
+    #expect(try #require(object["human_dependent_transitions"] as? Int) == 0)
+    let hint = try #require(object["hint"] as? String)
+    #expect(hint.localizedCaseInsensitiveContains("terminated"))
+    for request in ["do not", "read the", "resend", "retry"] {
+        #expect(!hint.lowercased().contains(request))
+    }
 }
 
 @Test(arguments: [
@@ -1370,6 +1422,58 @@ func testTransportDispatcherStillnessRefusalsBeforeTheKeyAreStateC(
     #expect(try #require(object["write_attempted"] as? Bool))
     let safeToRetry = try #require(object["safe_to_retry"] as? Bool)
     #expect(!safeToRetry)
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(try #require(object["terminal_scope"] as? String) == "mcp_request_only")
+    #expect(try #require(object["automatic_read_attempts_exhausted"] as? Bool))
+    #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(try #require(object["human_intervention_requests"] as? Int) == 0)
+    #expect(try #require(object["human_dependent_transitions"] as? Int) == 0)
+    let hint = try #require(object["hint"] as? String)
+    #expect(hint.localizedCaseInsensitiveContains("terminated"))
+    for request in ["do not", "read the", "resend", "retry"] {
+        #expect(!hint.lowercased().contains(request))
+    }
+}
+
+@Test func testTransportDispatcherPlayPostWriteReadFailureTerminatesWithoutContinuation() async throws {
+    let router = ChannelRouter()
+    let keyWrite = FixedResultChannel(id: .cgEvent, result: .success("play key sent"))
+    let readback = SequencedTransportReadbackChannel(
+        id: .accessibility,
+        transportStates: [
+            pauseReading(playing: true, at: "10.3"),
+            pauseReading(playing: true, at: "10.3"),
+        ]
+    )
+    await router.register(keyWrite)
+    await router.register(readback)
+
+    let result = await TransportDispatcher.handle(
+        command: "play",
+        params: [:],
+        router: router,
+        cache: StateCache(),
+        sleep: { _ in }
+    )
+
+    #expect(result.isError!)
+    #expect(await keyWrite.executedOps.map(\.0) == ["transport.resume"])
+    let object = try #require(parseDispatcherObject(dispatcherText(result)))
+    #expect(object["error"] as? String == "readback_unavailable")
+    #expect(object["operation"] as? String == "transport.play")
+    #expect(try #require(object["write_attempted"] as? Bool))
+    #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(try #require(object["terminal_scope"] as? String) == "mcp_request_only")
+    #expect(try #require(object["automatic_read_attempts_exhausted"] as? Bool))
+    #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(try #require(object["human_intervention_requests"] as? Int) == 0)
+    #expect(try #require(object["human_dependent_transitions"] as? Int) == 0)
+    let hint = try #require(object["hint"] as? String)
+    #expect(hint.localizedCaseInsensitiveContains("terminated"))
+    for request in ["do not", "read the", "resend", "retry"] {
+        #expect(!hint.lowercased().contains(request))
+    }
 }
 
 @Test func testTransportDispatcherPauseReturnsStateCWhenReadbackUnavailable() async throws {
@@ -4556,7 +4660,7 @@ private actor TransportStateSequenceChannel: Channel {
     #expect(coreOps.isEmpty)
 }
 
-@Test func testTransportDispatcherRecordReturnsReadbackMismatchWhenFallbackDoesNotRecord() async {
+@Test func testTransportDispatcherRecordReturnsReadbackMismatchWhenFallbackDoesNotRecord() async throws {
     let router = ChannelRouter()
     let ax = TransportStateSequenceChannel(
         id: .accessibility,
@@ -4588,12 +4692,33 @@ private actor TransportStateSequenceChannel: Channel {
     #expect(text.contains(#""verified":false"#))
     #expect(text.contains(#""reason":"readback_mismatch""#))
     #expect(text.contains(#""operation":"transport.record""#))
+    let object = try #require(parseDispatcherObject(text))
+    #expect(try #require(object["write_attempted"] as? Bool))
+    #expect(object["poll_attempts"] as? Int == 12)
+    #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(try #require(object["terminal_scope"] as? String) == "mcp_request_only")
+    #expect(try #require(object["automatic_read_attempts_exhausted"] as? Bool))
+    #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(object["human_intervention_requests"] as? Int == 0)
+    #expect(object["human_dependent_transitions"] as? Int == 0)
+    let hint = try #require(object["hint"] as? String)
+    #expect(hint.localizedCaseInsensitiveContains("terminated"))
+    for request in ["focus", "dismiss", "retry", "click", "run "] {
+        #expect(!hint.lowercased().contains(request))
+    }
+    let axOps = await ax.executedOps
+    #expect(axOps.filter { $0.0 == "transport.get_state" }.count == 13)
+    #expect(axOps.filter { $0.0 == "transport.record" }.count == 1)
+    #expect(axOps.first?.0 == "transport.get_state")
+    #expect(axOps.dropFirst().first?.0 == "transport.record")
+    #expect(axOps.dropFirst(2).allSatisfy { $0.0 == "transport.get_state" })
     let coreOps = await coreMIDI.executedOps
     #expect(coreOps.count == 1)
     #expect(coreOps[0].0 == "transport.record")
 }
 
-@Test func testTransportDispatcherPlayStateBReadbackUnavailableIsError() async {
+@Test func testTransportDispatcherPlayStateBReadbackUnavailableIsError() async throws {
     let router = ChannelRouter()
     let ax = TransportStateSequenceChannel(
         id: .accessibility,
@@ -4620,6 +4745,27 @@ private actor TransportStateSequenceChannel: Channel {
     #expect(text.contains(#""verified":false"#))
     #expect(text.contains(#""reason":"readback_unavailable""#))
     #expect(text.contains(#""operation":"transport.play""#))
+    let object = try #require(parseDispatcherObject(text))
+    #expect(try #require(object["write_attempted"] as? Bool))
+    #expect(object["poll_attempts"] as? Int == 12)
+    #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(try #require(object["terminal_scope"] as? String) == "mcp_request_only")
+    #expect(try #require(object["automatic_read_attempts_exhausted"] as? Bool))
+    #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(object["human_intervention_requests"] as? Int == 0)
+    #expect(object["human_dependent_transitions"] as? Int == 0)
+    let hint = try #require(object["hint"] as? String)
+    #expect(hint.localizedCaseInsensitiveContains("terminated"))
+    for request in ["focus", "dismiss", "retry", "click", "run "] {
+        #expect(!hint.lowercased().contains(request))
+    }
+    let operations = await ax.executedOps
+    #expect(operations.filter { $0.0 == "transport.get_state" }.count == 13)
+    #expect(operations.filter { $0.0 == "transport.play" }.count == 1)
+    #expect(operations.first?.0 == "transport.get_state")
+    #expect(operations.dropFirst().first?.0 == "transport.play")
+    #expect(operations.dropFirst(2).allSatisfy { $0.0 == "transport.get_state" })
 }
 
 @Test func testTransportDispatcherStopPromotesFallbackWriteToVerifiedReadback() async {
@@ -4759,10 +4905,16 @@ private actor TransportStateSequenceChannel: Channel {
     #expect(json["refresh_error"] as? String == "element_not_found")
     #expect(json["cached_source"] as? String == "cache")
     #expect((json["cache_age_sec"] as? Double ?? 0) > 0)
+    #expect(try #require(json["write_attempted"] as? Bool))
+    #expect(try #require(json["safe_to_retry"] as? Bool))
+    #expect(json["poll_attempts"] as? Int == 12)
     let terminal = try #require(json["terminal"] as? Bool)
     #expect(terminal)
+    #expect(try #require(json["terminal_scope"] as? String) == "mcp_request_only")
     let humanInterventionRequired = try #require(json["human_intervention_required"] as? Bool)
     #expect(!humanInterventionRequired)
+    #expect(try #require(json["human_intervention_requests"] as? Int) == 0)
+    #expect(try #require(json["human_dependent_transitions"] as? Int) == 0)
     let attemptsExhausted = try #require(json["automatic_read_attempts_exhausted"] as? Bool)
     #expect(attemptsExhausted)
     let hint = json["hint"] as? String ?? ""
@@ -4771,9 +4923,14 @@ private actor TransportStateSequenceChannel: Channel {
     for request in ["focus", "dismiss", "retry", "click", "run "] {
         #expect(!hint.lowercased().contains(request))
     }
+    let operations = await ax.executedOps
+    #expect(operations.first == "transport.get_state")
+    #expect(operations.filter { $0 == "transport.stop" }.count == 1)
+    #expect(operations.filter { $0 == "transport.get_state" }.count == 13)
+    #expect(operations.dropFirst(2).allSatisfy { $0 == "transport.get_state" })
 }
 
-@Test func testTransportDispatcherStopFailsClosedWhenLiveStateStillReportsPlayback() async {
+@Test func testTransportDispatcherStopFailsClosedWhenLiveStateStillReportsPlayback() async throws {
     let router = ChannelRouter()
     let ax = ScriptedTransportChannel(id: .accessibility, results: [
         "transport.stop": .success(HonestContract.encodeStateB(
@@ -4804,9 +4961,26 @@ private actor TransportStateSequenceChannel: Channel {
     #expect((json["observed_isRecording"] as? Bool)!)
     #expect(json["observed_position"] as? String == "96.1.1.1")
     #expect((json["safe_to_retry"] as? Bool)!)
+    #expect(json["poll_attempts"] as? Int == 12)
+    #expect(try #require(json["terminal"] as? Bool))
+    #expect(try #require(json["terminal_scope"] as? String) == "mcp_request_only")
+    #expect(try #require(json["automatic_read_attempts_exhausted"] as? Bool))
+    #expect(!(try #require(json["human_intervention_required"] as? Bool)))
+    #expect(try #require(json["human_intervention_requests"] as? Int) == 0)
+    #expect(try #require(json["human_dependent_transitions"] as? Int) == 0)
+    let hint = try #require(json["hint"] as? String)
+    #expect(hint.localizedCaseInsensitiveContains("terminated"))
+    for request in ["focus", "dismiss", "click", "run "] {
+        #expect(!hint.lowercased().contains(request))
+    }
 
     let cached = await cache.getTransport()
     #expect(cached.isPlaying)
     #expect(cached.isRecording)
     #expect(cached.position == "96.1.1.1")
+    let operations = await ax.executedOps
+    #expect(operations.first == "transport.get_state")
+    #expect(operations.filter { $0 == "transport.stop" }.count == 1)
+    #expect(operations.filter { $0 == "transport.get_state" }.count == 13)
+    #expect(operations.dropFirst(2).allSatisfy { $0 == "transport.get_state" })
 }

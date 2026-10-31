@@ -1140,6 +1140,44 @@ import Testing
         let error = try #require(object["error"] as? String)
         #expect(error == "consent_required")
         #expect(object["trace_id"] == nil)
+        let terminal = try #require(object["terminal"] as? Bool)
+        let safeToRetry = try #require(object["safe_to_retry"] as? Bool)
+        let humanRequired = try #require(object["human_intervention_required"] as? Bool)
+        #expect(terminal)
+        #expect(!safeToRetry)
+        #expect(!humanRequired)
+        #expect(object["human_intervention_requests"] as? Int == 0)
+        #expect(object["human_dependent_transitions"] as? Int == 0)
+        #expect(object["confirm_command"] == nil)
+        let hint = try #require(object["hint"] as? String)
+        for forbidden in ["re-run", "retry", "consent:\"true\""] {
+            #expect(!hint.localizedCaseInsensitiveContains(forbidden))
+        }
+    }
+
+    @Test func dispatchLateConsentRefusalIsTerminalWithoutHumanContinuation() async throws {
+        let result = await SystemDispatcher.handle(
+            command: "setup_arm_key",
+            params: ["consent": .string("true")],
+            router: ChannelRouter(),
+            cache: StateCache(),
+            armKeySetup: { _, _, _ in .consentRequired }
+        )
+        let object = try Self.jsonObject(result)
+        #expect(object["error"] as? String == "consent_required")
+        let terminal = try #require(object["terminal"] as? Bool)
+        let safeToRetry = try #require(object["safe_to_retry"] as? Bool)
+        let humanRequired = try #require(object["human_intervention_required"] as? Bool)
+        #expect(terminal)
+        #expect(!safeToRetry)
+        #expect(!humanRequired)
+        #expect(object["human_intervention_requests"] as? Int == 0)
+        #expect(object["human_dependent_transitions"] as? Int == 0)
+        #expect(object["confirm_command"] == nil)
+        let hint = try #require(object["hint"] as? String)
+        for forbidden in ["re-run", "retry", "consent:\"true\""] {
+            #expect(!hint.localizedCaseInsensitiveContains(forbidden))
+        }
     }
 
     @Test func dispatchAlreadyConfiguredEmitsStateAWithExistingMappingSource() async throws {
@@ -1246,6 +1284,17 @@ import Testing
         #expect(!writeAttempted)
         let configWriteAttempted = try #require(object["configuration_write_attempted"] as? Bool)
         #expect(!configWriteAttempted)
+        #expect(try #require(object["terminal"] as? Bool))
+        #expect(try #require(object["terminal_scope"] as? String) == "mcp_request_only")
+        #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+        #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+        #expect(try #require(object["human_intervention_requests"] as? Int) == 0)
+        #expect(try #require(object["human_dependent_transitions"] as? Int) == 0)
+        let hint = try #require(object["hint"] as? String)
+        #expect(hint.localizedCaseInsensitiveContains("terminated"))
+        #expect(!hint.localizedCaseInsensitiveContains("unset"))
+        #expect(!hint.localizedCaseInsensitiveContains("set a value"))
+        #expect(!hint.localizedCaseInsensitiveContains("retry"))
     }
 
     private static func jsonText(_ result: CallTool.Result) throws -> String {

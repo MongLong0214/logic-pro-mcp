@@ -144,8 +144,19 @@ struct MixerDispatcher: OperationTraceDispatching {
                       let pair = await cache.retainedMixerAssociation(reference: reference, source: physical,
                         snapshot: await targetRegistry.currentSnapshot) else {
                     return toolTextResult(.error(HonestContract.encodeStateC(error: .staleSnapshot,
-                        hint: "The exact occupied Send needs its retained original-header association; acquire a fresh selected-source inspection.",
-                        extras: ["operation": operation, "write_attempted": false])))
+                        hint: "The exact occupied Send's retained original-header association was unavailable; "
+                            + "this MCP request terminated before writing.",
+                        extras: [
+                            "operation": operation,
+                            "write_attempted": false,
+                            "terminal": true,
+                            "terminal_scope": "mcp_request_only",
+                            "safe_to_retry": false,
+                            "automatic_precondition_attempts_exhausted": true,
+                            "human_intervention_required": false,
+                            "human_intervention_requests": 0,
+                            "human_dependent_transitions": 0,
+                        ])))
                 }
                 let traceID = await startTraceIfEnabled(command: command)
                 let result = await withWriteBoundaryArmed(traceID) {
@@ -228,13 +239,35 @@ struct MixerDispatcher: OperationTraceDispatching {
                 } else { pair = cachedPair; currentPhysical = physical }
                 if creating, pair == nil {
                     return toolTextResult(.error(HonestContract.encodeStateC(error: .staleSnapshot,
-                        hint: "Fresh-empty creation requires its retained original-header association; acquire a fresh selected-source inspection.",
-                        extras: ["operation": operation, "write_attempted": false])))
+                        hint: "Fresh-empty creation's retained original-header association was unavailable; "
+                            + "this MCP request terminated before writing.",
+                        extras: [
+                            "operation": operation,
+                            "write_attempted": false,
+                            "terminal": true,
+                            "terminal_scope": "mcp_request_only",
+                            "safe_to_retry": false,
+                            "automatic_precondition_attempts_exhausted": true,
+                            "human_intervention_required": false,
+                            "human_intervention_requests": 0,
+                            "human_dependent_transitions": 0,
+                        ])))
                 }
                 if case .bus = destination, destination != expected, pair == nil {
                     return toolTextResult(.error(HonestContract.encodeStateC(error: .staleSnapshot,
-                        hint: "A changed existing-bus send requires its retained original-header association; acquire a fresh selected-source inspection before retrying.",
-                        extras: ["operation": operation, "write_attempted": false])))
+                        hint: "The changed existing-bus Send's retained original-header association was unavailable; "
+                            + "this MCP request terminated before writing.",
+                        extras: [
+                            "operation": operation,
+                            "write_attempted": false,
+                            "terminal": true,
+                            "terminal_scope": "mcp_request_only",
+                            "safe_to_retry": false,
+                            "automatic_precondition_attempts_exhausted": true,
+                            "human_intervention_required": false,
+                            "human_intervention_requests": 0,
+                            "human_dependent_transitions": 0,
+                        ])))
                 }
                 let traceID = await startTraceIfEnabled(command: command)
                 let routed = await withWriteBoundaryArmed(traceID) {
