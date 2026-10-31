@@ -496,7 +496,7 @@ enum SemanticOracleFixtures {
                 "project_count":1,"projects":[{"path":"/tmp/a.logicx"}],\
                 "required_confirmations":[],"unsupported_or_blocked_steps":[],\
                 "baseline_verification":[],"enhancement_path":[],\
-                "next_safe_action":"review_export_plan"}
+                "next_safe_action":"execute_export_run"}
                 """,
             readback: "{\"cache_age_sec\":null,\"fetched_at\":null,\"ax_occluded\":false,"
                 + "\"source\":\"default\",\"data\":{\"name\":\"Untitled\",\"trackCount\":0}}"

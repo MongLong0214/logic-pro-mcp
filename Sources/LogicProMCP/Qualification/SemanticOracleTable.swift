@@ -1357,7 +1357,7 @@ enum SemanticOracleTable {
         constraints: [
             .valueEquals(key: "schema", expected: .string("logic_pro_mcp_export_manifest.v1")),
             .valueEquals(key: "execution_mode", expected: .string("dry_run_only")),
-            .valueEquals(key: "next_safe_action", expected: .string("review_export_plan")),
+            .valueEquals(key: "next_safe_action", expected: .string("execute_export_run")),
             .enumMember(key: "status", allowed: ["planned", "degraded"]),
             .numericRange(key: "project_count", min: 0, max: 100_000),
             .typedField(key: "projects", type: .array),
