@@ -3,10 +3,16 @@ import Foundation
 
 /// Plugin operations address Arrange tracks; Mixer ordinals are observations, never identity.
 enum AXPluginTrackBinding {
+    struct ProjectObservation: Equatable, Sendable {
+        let windowTitle: String
+        let filePath: String
+    }
+
     struct Binding: @unchecked Sendable {
         let trackIndex: Int
         let trackName: String
         let mixerStripIndex: Int
+        let window: AXUIElement
         let header: AXUIElement
         /// The acquired Mixer surface. A floating and embedded Mixer can expose different AX
         /// elements for the same track; global rediscovery must not switch between them mid-write.
@@ -79,7 +85,7 @@ enum AXPluginTrackBinding {
         }
         guard matching.count == 1 else { onRefusal?("strip_name_not_unique"); return nil }
         return Binding(trackIndex: track, trackName: name, mixerStripIndex: matching[0].0,
-                       header: headers[track], mixer: mixer, strip: matching[0].1)
+                       window: window, header: headers[track], mixer: mixer, strip: matching[0].1)
     }
 
     /// The acquired Mixer's owning window, not whichever Mixer a global search currently finds.
@@ -131,8 +137,41 @@ enum AXPluginTrackBinding {
     static func isStable(_ original: Binding, runtime: AXLogicProElements.Runtime) -> Bool {
         guard let fresh = resolve(track: original.trackIndex, mixer: original.mixer, runtime: runtime),
               fresh.trackName.utf8.elementsEqual(original.trackName.utf8),
+              CFEqual(fresh.window, original.window),
               CFEqual(fresh.header, original.header), CFEqual(fresh.strip, original.strip) else { return false }
         return true
+    }
+
+    /// A project identity is publishable only when the retained Arrange target and acquired
+    /// Mixer still agree on one live document. This prevents a window switch from combining
+    /// one project's insert census with another project's title/path.
+    static func projectObservation(
+        _ binding: Binding,
+        runtime: AXLogicProElements.Runtime
+    ) -> ProjectObservation? {
+        func documentPath(_ window: AXUIElement) -> String? {
+            guard case .success(.some(let document)) = AXLogicProElements.projectPickerDocumentRead(
+                window,
+                runtime: runtime
+            ),
+                  let url = URL(string: document),
+                  url.isFileURL,
+                  url.host == nil || url.host == "" || url.host == "localhost" else { return nil }
+            return ProjectReferenceIssuance.canonicalObservedProjectPath(url.path)
+        }
+
+        guard isStable(binding, runtime: runtime),
+              let mixerWindow = owningWindow(binding, runtime: runtime),
+              let arrangePath = documentPath(binding.window),
+              let mixerPath = documentPath(mixerWindow),
+              arrangePath.utf8.elementsEqual(mixerPath.utf8),
+              case .success(.some(let title)) = AXHelpers.getAttributeResult(
+                binding.window,
+                kAXTitleAttribute as String,
+                runtime: runtime.ax
+              ) as Result<String?, AXHelpers.AXStatusError>,
+              !title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return ProjectObservation(windowTitle: title, filePath: arrangePath)
     }
 
     /// Allow transient AX observations after selection to settle, never reacquiring a different
