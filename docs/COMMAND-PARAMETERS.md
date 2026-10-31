@@ -111,7 +111,7 @@ Each command's accepted parameters and the registry's policy words for it. "Clos
 |---|---|---|---|---|---|---|---|---|---|
 | `apply_session_repair` | `confirmed`, `digest`, `idempotency_key`, `plan_id` | `plan_id`; `digest`; `confirmed`; `idempotency_key` | closed | mutating | l1 | none | readback_required | never_automatic | default_install |
 | `audit` | none | none | closed | read_only | none | none | none | never_automatic | default_install |
-| `bounce` | `confirmed`: boolean | none | closed | mutating | l2 | none | readback_required | never_automatic | default_install |
+| `bounce` | none | none | closed | mutating | none | none | none | never_automatic | unsupported |
 | `cleanup_apply` | `confirmed`: boolean, `name`, `names`, `new_name`, `stepId`, `step_id` | `step_id` or `stepId`; `confirmed` | closed | mutating | l1 | none | readback_required | never_automatic | default_install |
 | `cleanup_plan` | none | none | closed | read_only | none | none | none | never_automatic | default_install |
 | `close` | `confirmed`: boolean, `saving` | none | closed | mutating | l3 | none | none | never_automatic | default_install |
