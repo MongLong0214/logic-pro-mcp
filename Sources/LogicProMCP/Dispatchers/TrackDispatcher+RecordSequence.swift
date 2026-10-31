@@ -739,7 +739,10 @@ extension TrackDispatcher {
             payload["error"] = error
             payload["failure_stage"] = stage
             payload["terminal"] = true
+            payload["terminal_scope"] = "mcp_request_only"
             payload["human_intervention_required"] = false
+            payload["human_intervention_requests"] = 0
+            payload["human_dependent_transitions"] = 0
             payload["safe_to_retry"] = false
             payload["automatic_precondition_attempts_exhausted"] = true
             payload["hint"] = hint + " The imported take is still on GM Device lane \(gmLane) ('\(gmLaneName)')."
