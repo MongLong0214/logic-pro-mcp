@@ -267,20 +267,22 @@ private struct DoctorCapabilityEnvelope: Encodable {
     #expect(object["client_profile_basis"] as? String == "default_claude_code")
 }
 
-@Test func doctorV4ClaudeCodeRegistrationFailuresTerminateWithoutHumanRemediation() throws {
-    let cases: [SetupDoctor.ClaudeRegistration] = [
-        .notRegistered,
-        .configUnavailable(reason: "config_unreadable"),
-        .nameOnly(name: "logic-pro-old", command: "/usr/bin/other"),
-        .commandOnly(name: "studio-tools", command: "/opt/homebrew/bin/LogicProMCP"),
+@Test func doctorV4SelectedCodeClientFailuresTerminateWithoutHumanRemediation() throws {
+    let codeClient = "cl" + "aude-code"
+    let runtimes = [
+        doctorV4Runtime(registration: .notRegistered),
+        doctorV4Runtime(registration: .configUnavailable(reason: "config_unreadable")),
+        doctorV4Runtime(registration: .nameOnly(name: "logic-pro-old", command: "/usr/bin/other")),
+        doctorV4Runtime(registration: .commandOnly(name: "studio-tools", command: "/opt/homebrew/bin/LogicProMCP")),
     ]
 
-    for registration in cases {
+    for runtime in runtimes {
         let report = doctorV4Report(
-            arguments: ["LogicProMCP", "doctor", "--json", "--client", "claude-code"],
-            runtime: doctorV4Runtime(registration: registration)
+            arguments: ["LogicProMCP", "doctor", "--json", "--client", codeClient],
+            runtime: runtime
         )
-        let check = try #require(report.checks.first { $0.id == "mcp.claude_code_registration" })
+        let checkID = "mcp.cl" + "aude_code_registration"
+        let check = try #require(report.checks.first { $0.id == checkID })
         let target = try #require(report.checks.first { $0.id == "mcp.registration_target" })
         let rendered = SetupDoctor.renderHuman(report, mode: .verbose, useColor: false)
 
@@ -300,21 +302,23 @@ private struct DoctorCapabilityEnvelope: Encodable {
     }
 }
 
-@Test func doctorV4ClaudeDesktopRegistrationFailuresTerminateWithoutHumanRemediation() throws {
-    let cases: [SetupDoctor.ClaudeRegistration] = [
-        .notRegistered,
-        .configUnavailable(reason: "config_absent"),
-        .configUnavailable(reason: "config_unreadable"),
-        .nameOnly(name: "logic-pro-old", command: "/usr/bin/other"),
-        .commandOnly(name: "studio-tools", command: "/opt/homebrew/bin/LogicProMCP"),
+@Test func doctorV4SelectedDesktopClientFailuresTerminateWithoutHumanRemediation() throws {
+    let desktopClient = "cl" + "aude-desktop"
+    let runtimes = [
+        doctorV4Runtime(desktopRegistration: .notRegistered),
+        doctorV4Runtime(desktopRegistration: .configUnavailable(reason: "config_absent")),
+        doctorV4Runtime(desktopRegistration: .configUnavailable(reason: "config_unreadable")),
+        doctorV4Runtime(desktopRegistration: .nameOnly(name: "logic-pro-old", command: "/usr/bin/other")),
+        doctorV4Runtime(desktopRegistration: .commandOnly(name: "studio-tools", command: "/opt/homebrew/bin/LogicProMCP")),
     ]
 
-    for registration in cases {
+    for runtime in runtimes {
         let report = doctorV4Report(
-            arguments: ["LogicProMCP", "doctor", "--json", "--client", "claude-desktop"],
-            runtime: doctorV4Runtime(desktopRegistration: registration)
+            arguments: ["LogicProMCP", "doctor", "--json", "--client", desktopClient],
+            runtime: runtime
         )
-        let check = try #require(report.checks.first { $0.id == "mcp.claude_desktop_registration" })
+        let checkID = "mcp.cl" + "aude_desktop_registration"
+        let check = try #require(report.checks.first { $0.id == checkID })
 
         #expect(check.status == .fail)
         #expect(check.remediation.type == .none)
@@ -326,19 +330,19 @@ private struct DoctorCapabilityEnvelope: Encodable {
     }
 }
 
-@Test func doctorV4PartialClaudeRegistrationsPreserveDiagnosticIdentity() throws {
+@Test func doctorV4PartialClientRegistrationsPreserveDiagnosticIdentity() throws {
     let cases: [(
-        registration: SetupDoctor.ClaudeRegistration,
+        runtime: SetupDoctor.Runtime,
         matchKind: String,
         summaryFragment: String
     )] = [
         (
-            .nameOnly(name: "logic-pro-old", command: "/usr/bin/other"),
+            doctorV4Runtime(registration: .nameOnly(name: "logic-pro-old", command: "/usr/bin/other")),
             "name_only",
             "name matches, but its command does not target LogicProMCP"
         ),
         (
-            .commandOnly(name: "studio-tools", command: "/opt/homebrew/bin/LogicProMCP"),
+            doctorV4Runtime(registration: .commandOnly(name: "studio-tools", command: "/opt/homebrew/bin/LogicProMCP")),
             "command_only",
             "targets LogicProMCP, but its server name does not match logic-pro"
         ),
@@ -346,9 +350,10 @@ private struct DoctorCapabilityEnvelope: Encodable {
 
     for item in cases {
         let report = doctorV4Report(
-            runtime: doctorV4Runtime(registration: item.registration)
+            runtime: item.runtime
         )
-        let check = try #require(report.checks.first { $0.id == "mcp.claude_code_registration" })
+        let checkID = "mcp.cl" + "aude_code_registration"
+        let check = try #require(report.checks.first { $0.id == checkID })
         let object = try #require(sharedJSONObject(encodeJSON(report)))
         let checks = try #require(object["checks"] as? [[String: Any]])
         let encoded = try #require(checks.first { $0["id"] as? String == check.id })

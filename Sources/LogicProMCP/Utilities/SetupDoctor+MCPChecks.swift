@@ -57,7 +57,7 @@ extension SetupDoctor {
                 summary: "Claude Code MCP registration was not found.",
                 evidence: terminalRegistrationEvidence([
                     "registered": "false",
-                    "match_kind": ClaudeRegistrationMatchKind.none.rawValue,
+                    "match_kind": registration.matchKind?.rawValue ?? "none",
                 ]),
                 remediationType: .none
             )
