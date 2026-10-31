@@ -160,6 +160,15 @@ struct Issue1059TransportFirstPressTests {
         #expect(try #require(envelope["fallback_unsafe"] as? Bool))
         #expect(envelope["action"] as? String == "axpress")
         #expect(envelope["attempts"] as? [String] == ["axpress"])
+        #expect(try #require(envelope["terminal"] as? Bool))
+        #expect(try #require(envelope["terminal_scope"] as? String) == "mcp_request_only")
+        #expect(try #require(envelope["automatic_read_attempts_exhausted"] as? Bool))
+        #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+        #expect(try #require(envelope["human_intervention_requests"] as? Int) == 0)
+        #expect(try #require(envelope["human_dependent_transitions"] as? Int) == 0)
+        let hint = try #require(envelope["hint"] as? String)
+        #expect(hint.localizedCaseInsensitiveContains("terminated"))
+        #expect(!hint.localizedCaseInsensitiveContains("retry"))
         if readback == .arrivesAfterWait {
             #expect(try #require(envelope["observed"] as? Bool),
                     "the mismatch receipt includes the fresh read after the wait")
