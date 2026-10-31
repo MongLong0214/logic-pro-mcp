@@ -623,14 +623,20 @@ struct SystemDispatcher: OperationTraceDispatching {
                     error: .armKeyConfigInvalid,
                     hint: "LOGIC_PRO_MCP_ARM_KEYCODE '\(raw)' is not a valid decimal keycode.",
                     extras: ["stage": "resolve_chord", "write_source": "none",
-                             "write_attempted": false, "configuration_write_attempted": false]
+                             "write_attempted": false, "configuration_write_attempted": false,
+                             "terminal": true, "terminal_scope": "mcp_request_only",
+                             "safe_to_retry": false, "human_intervention_required": false,
+                             "human_intervention_requests": 0, "human_dependent_transitions": 0]
                 ), isError: true), traceID: armTraceID)
             case .invalidModifierToken(let token):
                 return await finalizeTrace(toolTextResult(HonestContract.encodeStateC(
                     error: .armKeyConfigInvalid,
                     hint: "LOGIC_PRO_MCP_ARM_KEY_MODIFIERS has an unknown modifier token '\(token)'.",
                     extras: ["stage": "resolve_chord", "write_source": "none",
-                             "write_attempted": false, "configuration_write_attempted": false]
+                             "write_attempted": false, "configuration_write_attempted": false,
+                             "terminal": true, "terminal_scope": "mcp_request_only",
+                             "safe_to_retry": false, "human_intervention_required": false,
+                             "human_intervention_requests": 0, "human_dependent_transitions": 0]
                 ), isError: true), traceID: armTraceID)
             }
             let chordText = ArmKeyCommandSetup.chordLabel(keyCode: keyCode, modifiers: modifiers)
@@ -653,7 +659,10 @@ struct SystemDispatcher: OperationTraceDispatching {
                     error: .armKeyConfigInvalid,
                     hint: hint,
                     extras: ["stage": "arm_key_config_invalid", "chord": chordText, "write_source": "none",
-                             "write_attempted": false, "configuration_write_attempted": false]
+                             "write_attempted": false, "configuration_write_attempted": false,
+                             "terminal": true, "terminal_scope": "mcp_request_only",
+                             "safe_to_retry": false, "human_intervention_required": false,
+                             "human_intervention_requests": 0, "human_dependent_transitions": 0]
                 ), isError: true)
             case .alreadyConfigured(let evidence):
                 armResult = toolTextResult(HonestContract.encodeStateA(extras: evidence.extras.merging([
@@ -682,8 +691,13 @@ struct SystemDispatcher: OperationTraceDispatching {
                         "chord": chordText,
                         "command": ArmKeyCommandSetup.commandName,
                         "detail": "Setup steps ran, but the assignment is UNPROVEN — \(why).",
+                        "terminal": true,
+                        "terminal_scope": "mcp_request_only",
+                        "human_intervention_required": false,
+                        "human_intervention_requests": 0,
+                        "human_dependent_transitions": 0,
                     ]) { _, new in new }
-                ))
+                ), isError: true)
             case .failed(let stage, let hint, let evidence):
                 armResult = toolTextResult(HonestContract.encodeStateC(
                     error: .axWriteFailed,
@@ -692,6 +706,11 @@ struct SystemDispatcher: OperationTraceDispatching {
                         "stage": stage,
                         "chord": chordText,
                         "write_attempted": evidence.configurationWriteAttempted,
+                        "terminal": true,
+                        "terminal_scope": "mcp_request_only",
+                        "human_intervention_required": false,
+                        "human_intervention_requests": 0,
+                        "human_dependent_transitions": 0,
                     ]) { _, new in new }
                 ), isError: true)
             }

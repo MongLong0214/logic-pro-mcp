@@ -189,6 +189,7 @@ class BootstrapResult:
     terminal: bool | None = None
     human_intervention_required: bool | None = None
     human_intervention_requests: int | None = None
+    human_dependent_transitions: int | None = None
     actions: list[str] = field(default_factory=list)
     ui: dict[str, Any] = field(default_factory=dict)
     health: dict[str, Any] = field(default_factory=dict)
@@ -199,16 +200,21 @@ class BootstrapResult:
     def as_dict(self) -> dict[str, Any]:
         return {
             "ok": self.ok,
-            "terminal": self.terminal if self.terminal is not None else (False if self.ok else None),
+            "terminal": self.terminal if self.terminal is not None else not self.ok,
             "human_intervention_required": (
                 self.human_intervention_required
                 if self.human_intervention_required is not None
-                else (False if self.ok else None)
+                else False
             ),
             "human_intervention_requests": (
                 self.human_intervention_requests
                 if self.human_intervention_requests is not None
-                else (0 if self.ok else None)
+                else 0
+            ),
+            "human_dependent_transitions": (
+                self.human_dependent_transitions
+                if self.human_dependent_transitions is not None
+                else 0
             ),
             "reason": self.reason,
             "hint": self.hint,
@@ -345,7 +351,11 @@ def evaluate_fresh_session(
     permissions = health.get("permissions", {}) if isinstance(health, dict) else {}
 
     if health.get("logic_pro_running") is not True:
-        return FreshSessionAssessment(False, "logic_not_running", "Launch Logic Pro before continuing.")
+        return FreshSessionAssessment(
+            False,
+            "logic_not_running",
+            "Logic Pro was not observed running after bounded automatic launch preparation; bootstrap terminated.",
+        )
     if permissions.get("accessibility") is not True:
         return FreshSessionAssessment(
             False,
@@ -356,7 +366,7 @@ def evaluate_fresh_session(
         return FreshSessionAssessment(
             False,
             "logic_window_not_visible",
-            "Bring a Logic Pro document window on-screen before continuing.",
+            "A Logic Pro document window was not observed after bounded automatic acquisition; bootstrap terminated.",
         )
     if ui.system_events_error:
         return FreshSessionAssessment(
@@ -368,13 +378,13 @@ def evaluate_fresh_session(
         return FreshSessionAssessment(
             False,
             "blocking_dialog_present",
-            "Dismiss the blocking Logic dialog or sheet before continuing.",
+            "A blocking Logic dialog or sheet remained after bounded automatic dismissal; bootstrap terminated.",
         )
     if not is_logic_frontmost_app(ui.frontmost_app):
         return FreshSessionAssessment(
             False,
             "logic_not_frontmost",
-            "Logic Pro must be the frontmost app so modal/readback state is trustworthy.",
+            "Logic Pro was not confirmed frontmost after bounded automatic activation; bootstrap terminated.",
         )
     if config.expected_language:
         if ui.detected_language is None:
@@ -915,9 +925,10 @@ def bootstrap_fresh_logic_session(
         reason: str,
         hint: str,
         *,
-        terminal: bool | None = None,
-        human_intervention_required: bool | None = None,
-        human_intervention_requests: int | None = None,
+        terminal: bool = True,
+        human_intervention_required: bool = False,
+        human_intervention_requests: int = 0,
+        human_dependent_transitions: int = 0,
         health: dict[str, Any] | None = None,
         project: dict[str, Any] | None = None,
         tracks: dict[str, Any] | None = None,
@@ -931,6 +942,7 @@ def bootstrap_fresh_logic_session(
             terminal=terminal,
             human_intervention_required=human_intervention_required,
             human_intervention_requests=human_intervention_requests,
+            human_dependent_transitions=human_dependent_transitions,
             actions=actions,
             ui=asdict(ui) if ui else {},
             health=health or {},
@@ -1980,6 +1992,10 @@ def bootstrap_fresh_logic_session(
         ok=assessment.ok,
         reason=assessment.reason,
         hint=assessment.hint,
+        terminal=not assessment.ok,
+        human_intervention_required=False,
+        human_intervention_requests=0,
+        human_dependent_transitions=0,
         actions=actions,
         ui=asdict(ui),
         health=health,
