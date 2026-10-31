@@ -748,7 +748,11 @@ actor LogicProServer {
         var extras: [String: Any] = [
             "operation": operation,
             "timeout_sec": seconds,
-            "recovery_hint": "Logic Pro may be busy, occluded, or showing a modal dialog. Dismiss any dialog and retry; check logic_system.health.",
+            "recovery_hint": "The request reached its finite deadline and terminated. logic_system.health remains a separate read-only diagnostic and does not resume this operation.",
+            "terminal": true,
+            "human_intervention_required": false,
+            "human_intervention_requests": 0,
+            "human_dependent_transitions": 0,
         ]
         if tool == ToolID.logicSystem.rawValue,
            ["saga_preflight", "saga_execute", "saga_status", "saga_cancel"].contains(command) {
@@ -1004,7 +1008,13 @@ actor LogicProServer {
             extras: [
                 "uri": uri,
                 "timeout_sec": seconds,
-                "recovery_hint": "Logic Pro may be busy, occluded, or showing a modal dialog. Dismiss any dialog and retry; check logic_system.health.",
+                "recovery_hint": "The read reached its finite deadline and terminated without changing Logic; bounded callers may issue a fresh read under their existing policy.",
+                "terminal": true,
+                "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
+                "safe_to_retry": true,
+                "write_attempted": false,
             ]
         )
         return ReadResource.Result(contents: [.text(body, uri: uri, mimeType: "application/json")])
