@@ -7,32 +7,45 @@ extension AccessibilityChannel {
     // MARK: - Library operations
 
     static let libraryListPanelUnavailableHint =
-        "The bounded automatic Library-panel open attempt did not establish an open panel; library.list terminated before reading inventory."
+        "An exact open Library panel with readable inventory was not established; library.list terminated without reading another browser."
 
     static func listLibrary(
         runtime: AXLogicProElements.Runtime = .production
     ) async -> ChannelResult {
-        var inventory = LibraryAccessor.enumerate(runtime: runtime)
-        if inventory == nil {
+        var panelOpenAttempted = false
+        if !LibraryAccessor.isLibraryPanelOpen(runtime: runtime) {
+            panelOpenAttempted = true
             await openLibraryPanelViaKeyCommand(runtime: runtime)
             try? await Task.sleep(nanoseconds: 400_000_000)
-            inventory = LibraryAccessor.enumerate(runtime: runtime)
         }
+
+        let panelOpen = LibraryAccessor.isLibraryPanelOpen(runtime: runtime)
+        let inventory = panelOpen
+            ? LibraryAccessor.enumerate(
+                runtime: runtime,
+                requireExplicitLibraryIdentity: true
+            )
+            : nil
         guard let inventory else {
             return .error(HonestContract.encodeStateC(
                 error: .libraryPanelUnavailable,
                 hint: libraryListPanelUnavailableHint,
                 extras: [
                     "operation": "library.list",
-                    "precondition": "panel_closed_after_automatic_open",
+                    "precondition": panelOpen
+                        ? "exact_library_inventory_unreadable"
+                        : (panelOpenAttempted
+                            ? "panel_closed_after_automatic_open"
+                            : "panel_closed_without_automatic_open"),
                     "terminal": true,
                     "terminal_scope": "mcp_request_only",
                     "human_intervention_required": false,
                     "human_intervention_requests": 0,
                     "human_dependent_transitions": 0,
-                    "automatic_precondition_attempts_exhausted": true,
+                    "automatic_precondition_attempts_exhausted": panelOpenAttempted,
                     "safe_to_retry": false,
-                    "panel_open_attempted": true,
+                    "panel_open_attempted": panelOpenAttempted,
+                    "panel_open_observed": panelOpen,
                 ]
             ))
         }
