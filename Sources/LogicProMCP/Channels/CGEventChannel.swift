@@ -1028,7 +1028,10 @@ actor CGEventChannel: Channel {
                 "fallback_unsafe": openerPosted,
                 "automatic_dialog_attempts_exhausted": true,
                 "terminal": true,
+                "terminal_scope": "mcp_request_only",
                 "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
             ]
         ))
     }
