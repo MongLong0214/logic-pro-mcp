@@ -336,7 +336,7 @@ cannot turn the check into a pass.
 
 ## Lifecycle Anchors
 
-`LogicProMCP lifecycle <install|update|uninstall> [--json]` prints a read-only lifecycle plan and exits without starting the server — e.g. `LogicProMCP lifecycle install --json`. (The bare `LogicProMCP install --dry-run --json` form produces the same plan.) These anchors are stable remediation targets.
+`LogicProMCP lifecycle <install|update|uninstall> [--json]` prints a read-only lifecycle plan and exits without starting the server — e.g. `LogicProMCP lifecycle install --json`. (The bare `LogicProMCP install --dry-run --json` form produces the same plan.) A bare action without `--dry-run` does not write or redirect a person to another command: it exits non-zero with a terminal outcome, and `--json` emits a `logic_pro_mcp_lifecycle_terminal.v1` receipt with zero human-dependent transitions and zero human-intervention requests. These anchors are stable remediation targets.
 
 <a id="lifecycle-binaryinstall"></a>
 ### `binary.install`

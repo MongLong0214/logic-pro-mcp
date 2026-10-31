@@ -684,22 +684,16 @@ struct QualificationOperationResult: Equatable, Sendable {
                   hint == ProjectDispatcher.planSessionRepairUnboundProjectHint else { return nil }
             return "requires a project saved to a file, so its session inspection is retained"
         }
-        guard error == "channels_exhausted" else { return nil }
+        if OperationID(rawValue: operationID) == .tracksListLibrary {
+            guard error == HonestContract.FailureError.libraryPanelUnavailable.rawValue,
+                  hint == AccessibilityChannel.libraryListPanelUnavailableHint else { return nil }
+            return "requires an exact open Library panel with readable inventory"
+        }
         switch OperationID(rawValue: operationID) {
         case .tracksScanPluginPresets
-            where hint == "No plugin window with Setting dropdown found. Open an instrument plugin window first.":
+            where error == HonestContract.FailureError.pluginWindowUnavailable.rawValue
+                && hint == AccessibilityChannel.pluginWindowUnavailableHint:
             return "requires an open plugin window with a Setting dropdown"
-        // Measured 2026-09-02: `tracks.list_library` answers differently depending
-        // on whether Logic's Library panel is open. With the panel open it returns
-        // categories and presets and its readback is compared; with the panel
-        // closed it refuses with this exact hint. Both observations are true — they
-        // are of different states — so the closed-panel refusal is an environmental
-        // prerequisite, exactly like the plug-in window above, and not a semantic
-        // shortfall. Pinning it as a semantic failure made the gate's exact-match
-        // assertion fire on a panel the operator happened to close.
-        case .tracksListLibrary
-            where hint == "Library panel not found. Open Library (Y) in Logic Pro.":
-            return "requires Logic's Library panel to be open"
         default:
             return nil
         }
@@ -850,10 +844,10 @@ struct QualificationOperationResult: Equatable, Sendable {
                 // and the operation refused for want of a parameter. That is true for some and
                 // false for others, and the attestation had no way to tell them apart.
                 //
-                // Measured 2026-08-24: `tracks.list_library` takes NO parameters and refuses with
-                // `channels_exhausted` / "Library panel not found. Open Library (Y) in Logic Pro.";
-                // `tracks.scan_plugin_presets` refuses with "No plugin window with Setting dropdown
-                // found." Both name their precondition exactly. The old text sent whoever read the
+                // Measured 2026-08-24: `tracks.list_library` takes NO parameters and its refusal
+                // names the unavailable Library panel rather than a missing request parameter;
+                // `tracks.scan_plugin_presets` refuses with a typed missing-plugin-window receipt.
+                // Both name their precondition exactly. The old text sent whoever read the
                 // attestation to check probe parameters that do not exist for those operations,
                 // while the operation had already said what it needed.
                 //

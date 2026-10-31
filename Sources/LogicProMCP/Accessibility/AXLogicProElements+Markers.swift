@@ -152,12 +152,9 @@ extension AXLogicProElements {
     /// FAILS below it, so a Logic 11 install has been refused at setup this whole time while this
     /// comment called the question open. Nothing comes back here.
     ///
-    /// Strategy 1's data quality requires the user to keep the Marker List
-    /// window open. Callers that need first-class markers without a
-    /// pre-opened window can set `LOGIC_PRO_MCP_AUTO_OPEN_MARKER_LIST=1`
-    /// in the environment to trigger a one-time menu click on first
-    /// successful project poll (see `defaultGetMarkers` in
-    /// `AccessibilityChannel`).
+    /// This legacy passive enumerator reads only a Marker List that is already
+    /// open. Callers that need first-class markers without one use the bounded
+    /// `nav.capture_markers` path, which owns automatic open/read/restore.
     static func enumerateMarkers(
         in arrangementArea: AXUIElement,
         runtime: Runtime = .production

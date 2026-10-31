@@ -578,9 +578,13 @@ enum LibraryAccessor {
     /// Enumerate the currently-visible Library: categories + presets of the
     /// currently-selected category. Returns nil if Library panel isn't found.
     static func enumerate(
-        runtime: AXLogicProElements.Runtime = .production
+        runtime: AXLogicProElements.Runtime = .production,
+        requireExplicitLibraryIdentity: Bool = false
     ) -> Inventory? {
-        guard let browser = findLibraryBrowser(runtime: runtime) else {
+        guard let browser = findLibraryBrowser(
+            runtime: runtime,
+            allowUnidentifiedBrowserFallback: !requireExplicitLibraryIdentity
+        ) else {
             return nil
         }
         // Collect all AXStaticText elements in the two AXList columns.
@@ -1199,7 +1203,8 @@ enum LibraryAccessor {
     }
 
     private static func findLibraryBrowser(
-        runtime: AXLogicProElements.Runtime
+        runtime: AXLogicProElements.Runtime,
+        allowUnidentifiedBrowserFallback: Bool = true
     ) -> AXUIElement? {
         guard let window = AXLogicProElements.mainWindow(runtime: runtime) else { return nil }
         let browsers = AXHelpers.findAllDescendants(
@@ -1211,9 +1216,10 @@ enum LibraryAccessor {
                 return b
             }
         }
-        // Fallback: return first browser in the window (Library is typically the
-        // most prominent one)
-        return browsers.first
+        // Legacy callers can retain the historical first-browser fallback.
+        // Staging paths that may open the Library must require an exact identity:
+        // Inspector/File browsers can coexist and must never satisfy that precondition.
+        return allowUnidentifiedBrowserFallback ? browsers.first : nil
     }
 
     private static func position(

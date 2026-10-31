@@ -11,7 +11,7 @@ actor AppleScriptChannel: Channel {
         let path: String?
         let name: String?
 
-        var isUntitled: Bool {
+        var hasNameWithoutPath: Bool {
             name != nil && path == nil
         }
     }
@@ -567,14 +567,28 @@ actor AppleScriptChannel: Channel {
                 return .success("Opened: \(path)")
             }
 
-            if documentAfterInitialVerification?.isUntitled == true {
+            if documentAfterInitialVerification?.hasNameWithoutPath == true {
                 return .error(HonestContract.encodeStateC(
                     error: .unsupportedState,
-                    hint: "project.open could not verify the requested project and the current front document is untitled; refusing to close an unsaved document to retry",
+                    hint: "project.open terminated after the requested project could not be verified and the current front document path remained unavailable; refusing to close a document whose persistence status was not established. The accepted open request may still settle after this response, so its final effect remains unknown and it must not be retried.",
                     extras: [
                         "operation": "project.open",
                         "method": "applescript",
                         "path": path,
+                        "terminal": true,
+                        "human_intervention_required": false,
+                        "human_intervention_requests": 0,
+                        "human_dependent_transitions": 0,
+                        "automatic_precondition_attempts_exhausted": true,
+                        "safe_to_retry": false,
+                        "terminal_scope": "mcp_request_only",
+                        "underlying_operation_stopped": false,
+                        "open_effect_status": "unknown_after_verification_failure",
+                        "open_request_attempted": true,
+                        "close_attempted": false,
+                        "front_document_observed_after_verification_failure": true,
+                        "front_document_path_status": "unavailable",
+                        "identity_classification": "name_observed_path_unavailable",
                     ]
                 ))
             }

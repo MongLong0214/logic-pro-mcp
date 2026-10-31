@@ -250,8 +250,17 @@ private func waitUntil(
         id: .accessibility,
         envelope: HonestContract.encodeStateC(
             error: .elementNotFound,
-            hint: "transport button 'Play' not located in the visible Logic transport UI",
-            extras: ["button": "Play"]
+            hint: "transport button 'Play' not located after automatic transport lookup; operation terminated without a write",
+            extras: [
+                "button": "Play",
+                "write_attempted": false,
+                "safe_to_retry": false,
+                "automatic_transport_lookup_exhausted": true,
+                "terminal": true,
+                "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
+            ]
         )
     )
     let mcu = MockChannel(id: .mcu, available: false)
@@ -272,11 +281,11 @@ private func waitUntil(
     #expect(appleScriptOps[0].0 == "transport.play")
 }
 
-@Test func testRouterSkipsManualValidationChannelsAndFallsBackToRuntimeReadyChannel() async {
+@Test func testRouterSkipsUnattendedUnavailableChannelsAndFallsBackToRuntimeReadyChannel() async {
     let router = ChannelRouter()
     let keyCmd = MockChannel(id: .midiKeyCommands, healthOverride: .healthy(
         detail: "Preset installation is not verifiable programmatically",
-        verificationStatus: .manualValidationRequired
+        verificationStatus: .unattendedUnavailable
     ))
     let cgEvent = MockChannel(id: .cgEvent)
     await router.register(keyCmd)

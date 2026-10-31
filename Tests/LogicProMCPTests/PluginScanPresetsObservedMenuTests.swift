@@ -99,3 +99,28 @@ private struct ScanPresetsFixture {
     #expect(!result.isSuccess)
     #expect(result.message.contains("Setting menu did not appear"))
 }
+
+@Test func testScanPresetsMissingPluginWindowTerminatesWithoutHumanRecovery() async throws {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(91_000)
+    let result = await AccessibilityChannel.runLivePluginPresetScan(
+        runtime: builder.makeLogicRuntime(appElement: app),
+        settleMs: 0
+    )
+    let object = try #require(
+        JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
+    )
+
+    #expect(!result.isSuccess)
+    #expect(HonestContract.isTerminalStateC(result.message))
+    #expect(object["error"] as? String == "plugin_window_unavailable")
+    #expect(object["operation"] as? String == "plugin.scan_presets")
+    #expect(object["precondition"] as? String == "focused_plugin_window_unavailable")
+    let terminal = try #require(object["terminal"] as? Bool)
+    let humanInterventionRequired = try #require(object["human_intervention_required"] as? Bool)
+    #expect(terminal)
+    #expect(!humanInterventionRequired)
+    #expect(object["human_intervention_requests"] as? Int == 0)
+    #expect(object["human_dependent_transitions"] as? Int == 0)
+    #expect(!result.message.contains("Open an instrument plugin window"))
+}

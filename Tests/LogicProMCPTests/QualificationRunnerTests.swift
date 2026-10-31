@@ -5113,11 +5113,11 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             command: "scan_plugin_presets",
             mutability: .readOnly,
             requestID: "missing-plugin-window-request",
-            responseData: Data(#"{"state":"C","error":"channels_exhausted","write_attempted":false}"#.utf8),
+            responseData: Data(#"{"state":"C","error":"plugin_window_unavailable","write_attempted":false}"#.utf8),
             isError: true,
             state: "C",
-            error: "channels_exhausted",
-            hint: "No plugin window with Setting dropdown found. Open an instrument plugin window first.",
+            error: HonestContract.FailureError.pluginWindowUnavailable.rawValue,
+            hint: AccessibilityChannel.pluginWindowUnavailableHint,
             writeAttempted: false,
             readbackSource: "logic://library/inventory",
             readbackRequestID: "missing-plugin-window-readback",
@@ -5153,14 +5153,14 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(everyDispositionIsAccountedFor)
     }
 
-    @Test func liveGateClassifiesExactClosedLibraryPanelHintAsEnvironmental() {
+    @Test func liveGateClassifiesExactLibraryInventoryPreconditionAsEnvironmental() {
         let summary = QualificationLiveGateSummary(operationResults: [
             Self.tracksListLibraryRefusal()
         ])
         let classifiesClosedPanelAsEnvironmental = summary.environmentalPreconditions == [
             .init(
                 operationID: OperationID.tracksListLibrary.rawValue,
-                reason: "requires Logic's Library panel to be open"
+                reason: "requires an exact open Library panel with readable inventory"
             ),
         ] && summary.failed == 0
 
@@ -7682,8 +7682,8 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
     }
 
     private static func tracksListLibraryRefusal(
-        error: String = "channels_exhausted",
-        hint: String = "Library panel not found. Open Library (Y) in Logic Pro."
+        error: String = HonestContract.FailureError.libraryPanelUnavailable.rawValue,
+        hint: String = AccessibilityChannel.libraryListPanelUnavailableHint
     ) -> QualificationOperationResult {
         QualificationOperationResult(
             operationID: OperationID.tracksListLibrary.rawValue,

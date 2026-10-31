@@ -6,11 +6,51 @@ import Foundation
 extension AccessibilityChannel {
     // MARK: - Library operations
 
+    static let libraryListPanelUnavailableHint =
+        "An exact open Library panel with readable inventory was not established; library.list terminated without reading another browser."
+
+    static let pluginWindowUnavailableHint =
+        "No focused plugin window with a Setting dropdown was available; plugin.scan_presets terminated without scanning."
+
     static func listLibrary(
         runtime: AXLogicProElements.Runtime = .production
-    ) -> ChannelResult {
-        guard let inventory = LibraryAccessor.enumerate(runtime: runtime) else {
-            return .error("Library panel not found. Open Library (Y) in Logic Pro.")
+    ) async -> ChannelResult {
+        var panelOpenAttempted = false
+        if !LibraryAccessor.isLibraryPanelOpen(runtime: runtime) {
+            panelOpenAttempted = true
+            await openLibraryPanelViaKeyCommand(runtime: runtime)
+            try? await Task.sleep(nanoseconds: 400_000_000)
+        }
+
+        let panelOpen = LibraryAccessor.isLibraryPanelOpen(runtime: runtime)
+        let inventory = panelOpen
+            ? LibraryAccessor.enumerate(
+                runtime: runtime,
+                requireExplicitLibraryIdentity: true
+            )
+            : nil
+        guard let inventory else {
+            return .error(HonestContract.encodeStateC(
+                error: .libraryPanelUnavailable,
+                hint: libraryListPanelUnavailableHint,
+                extras: [
+                    "operation": "library.list",
+                    "precondition": panelOpen
+                        ? "exact_library_inventory_unreadable"
+                        : (panelOpenAttempted
+                            ? "panel_closed_after_automatic_open"
+                            : "panel_closed_without_automatic_open"),
+                    "terminal": true,
+                    "terminal_scope": "mcp_request_only",
+                    "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                    "human_dependent_transitions": 0,
+                    "automatic_precondition_attempts_exhausted": panelOpenAttempted,
+                    "safe_to_retry": false,
+                    "panel_open_attempted": panelOpenAttempted,
+                    "panel_open_observed": panelOpen,
+                ]
+            ))
         }
         do {
             let data = try JSONEncoder().encode(inventory)
@@ -68,7 +108,20 @@ extension AccessibilityChannel {
         }
         // 2. Find focused plugin window (heuristic: has AXPopUpButton with "Preset"/"기본" value)
         guard let pluginWin = PluginInspector.findFocusedPluginWindowAX(in: appRoot, runtime: runtime.ax) else {
-            return .error("No plugin window with Setting dropdown found. Open an instrument plugin window first.")
+            return .error(HonestContract.encodeStateC(
+                error: .pluginWindowUnavailable,
+                hint: pluginWindowUnavailableHint,
+                extras: [
+                    "operation": "plugin.scan_presets",
+                    "precondition": "focused_plugin_window_unavailable",
+                    "terminal": true,
+                    "terminal_scope": "mcp_request_only",
+                    "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                    "human_dependent_transitions": 0,
+                    "safe_to_retry": false,
+                ]
+            ))
         }
         // 3. Locate Setting popup
         guard let popup = PluginInspector.findSettingPopupAX(in: pluginWin, runtime: runtime.ax) else {

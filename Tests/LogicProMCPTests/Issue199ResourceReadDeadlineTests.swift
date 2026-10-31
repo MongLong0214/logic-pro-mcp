@@ -65,7 +65,7 @@ struct Issue199ResourceReadDeadlineTests {
     }
 
     @Test("the resource timeout body is a State C envelope shape")
-    func timeoutBodyShape() {
+    func timeoutBodyShape() throws {
         let uri = "logic://tracks/0/regions"
         let result = LogicProServer.resourceReadTimeoutResult(uri: uri, seconds: 25)
         let obj = json(result)
@@ -73,5 +73,15 @@ struct Issue199ResourceReadDeadlineTests {
         #expect(obj?["error"] as? String == "operation_timeout")
         #expect(obj?["uri"] as? String == uri)
         #expect(obj?["timeout_sec"] as? Double == 25)
+        #expect(try #require(obj?["terminal"] as? Bool))
+        #expect(!(try #require(obj?["human_intervention_required"] as? Bool)))
+        #expect(obj?["human_intervention_requests"] as? Int == 0)
+        #expect(obj?["human_dependent_transitions"] as? Int == 0)
+        #expect(try #require(obj?["safe_to_retry"] as? Bool))
+        #expect(!(try #require(obj?["write_attempted"] as? Bool)))
+        let recoveryHint = try #require(obj?["recovery_hint"] as? String)
+        for manualContinuation in ["dismiss", "retry", "click", "press", "ask a person"] {
+            #expect(!recoveryHint.localizedCaseInsensitiveContains(manualContinuation))
+        }
     }
 }

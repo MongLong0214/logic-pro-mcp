@@ -10,8 +10,7 @@ actor AccessibilityChannel: Channel {
     private let runtime: Runtime
 
     // T4: actor state for scanLibraryAll orchestration
-    private var libraryScanInProgress: Bool = false
-    private var pluginScanInProgress: Bool = false
+    private var axInventoryOperationInProgress: Bool = false
     // v3.1.0 (T6) — split the single `lastScan` into three source-keyed caches.
     // Panel scans certify Panel presence; disk scans provide the full local
     // candidate catalog; `lastScan` remains populated for legacy callers that
@@ -119,6 +118,7 @@ actor AccessibilityChannel: Channel {
         let importMIDIFile: @Sendable (String) async -> ChannelResult
         let confirmNewTrackDialog: @Sendable () -> Void
         let canPostEvents: @Sendable () -> Bool
+        let scanLibraryDisk: @Sendable () throws -> LibraryRoot
         // v3.1.5 AppleScript-primary helpers (markersAppleScript /
         // projectInfoAppleScript / tracksAppleScript) removed in v3.1.8 —
         // see Issue #7. The dictionary terms they relied on (tracks /
@@ -162,6 +162,9 @@ actor AccessibilityChannel: Channel {
             canPostEvents: @escaping @Sendable () -> Bool = {
                 CGPreflightPostEventAccess()
             },
+            scanLibraryDisk: @escaping @Sendable () throws -> LibraryRoot = {
+                try LibraryDiskScanner.scan()
+            },
             logicRuntime: AXLogicProElements.Runtime = .production,
             observationMouseRuntime: AXMouseHelper.Runtime? = nil
         ) {
@@ -195,6 +198,7 @@ actor AccessibilityChannel: Channel {
             self.importMIDIFile = importMIDIFile
             self.confirmNewTrackDialog = confirmNewTrackDialog
             self.canPostEvents = canPostEvents
+            self.scanLibraryDisk = scanLibraryDisk
             self.logicRuntime = logicRuntime
             self.observationMouseRuntime = observationMouseRuntime
         }
@@ -214,6 +218,9 @@ actor AccessibilityChannel: Channel {
             },
             canPostEvents: @escaping @Sendable () -> Bool = {
                 CGPreflightPostEventAccess()
+            },
+            scanLibraryDisk: @escaping @Sendable () throws -> LibraryRoot = {
+                try LibraryDiskScanner.scan()
             },
             runTempoFallback: @escaping @Sendable (String) -> Bool = { tempo in
                 AccessibilityChannel.runTempoFallbackScript(tempo: tempo)
@@ -300,6 +307,7 @@ actor AccessibilityChannel: Channel {
                 importMIDIFile: { await AccessibilityChannel.defaultImportMIDIFile(path: $0, runtime: logicRuntime) },
                 confirmNewTrackDialog: confirmNewTrackDialog,
                 canPostEvents: canPostEvents,
+                scanLibraryDisk: scanLibraryDisk,
                 logicRuntime: logicRuntime,
                 observationMouseRuntime: observationMouseRuntime
             )
@@ -1906,17 +1914,21 @@ actor AccessibilityChannel: Channel {
 
         // MARK: - Library (instrument patch) operations
         case "library.list":
-            return AccessibilityChannel.listLibrary(runtime: runtime.logicRuntime)
-        case "library.scan_all":
-            // E15: atomic check-and-set within actor step (no suspension points).
-            // Library and plugin AX scans are mutually exclusive — either one in
-            // flight rejects the other so we never run two concurrent AX-tree
-            // traversals of Logic. Each scan still clears only its OWN flag.
-            if libraryScanInProgress || pluginScanInProgress {
-                return .error("Library scan already in progress")
+            if axInventoryOperationInProgress {
+                return .error("AX inventory operation already in progress")
             }
-            libraryScanInProgress = true
-            defer { libraryScanInProgress = false }
+            axInventoryOperationInProgress = true
+            defer { axInventoryOperationInProgress = false }
+            return await AccessibilityChannel.listLibrary(runtime: runtime.logicRuntime)
+        case "library.scan_all":
+            // Atomic actor-local ownership covers list plus both scanners. Each
+            // can suspend while observing/opening Logic UI, so no second AX
+            // inventory operation may interleave before the first returns.
+            if axInventoryOperationInProgress {
+                return .error("AX inventory operation already in progress")
+            }
+            axInventoryOperationInProgress = true
+            defer { axInventoryOperationInProgress = false }
             // "mode" selects between disk (default, filesystem-backed,
             // Panel-taxonomy mapped), ax (legacy live Panel walk), or both
             // (diff report).
@@ -1926,7 +1938,7 @@ actor AccessibilityChannel: Channel {
             case .both:
                 return await self.runBothScan(runtime: runtime.logicRuntime)
             case .ax:
-                return await self.runLiveScan(runtime: runtime.logicRuntime)
+                return await self.runLiveScan(runtime: runtime.logicRuntime, allowAutoOpen: true)
             }
         case "library.resolve_path":
             // v3.1.0 (T6) + #222 — panel hits win; disk hits are loadable
@@ -1942,13 +1954,11 @@ actor AccessibilityChannel: Channel {
             // F2 minimal scan handler — relies on currently-focused plugin window.
             // Full T6 (cache, persistence, axScanInProgress rename, AC-1.5b trackIndex
             // precedence) is follow-up. This handler delivers live menu enumeration.
-            // E15: mutually exclusive with library.scan_all — either AX-tree scan
-            // in flight rejects the other. Each scan still clears only its OWN flag.
-            if libraryScanInProgress || pluginScanInProgress {
-                return .error("AX scan already in progress")
+            if axInventoryOperationInProgress {
+                return .error("AX inventory operation already in progress")
             }
-            pluginScanInProgress = true
-            defer { pluginScanInProgress = false }
+            axInventoryOperationInProgress = true
+            defer { axInventoryOperationInProgress = false }
             let settleMs = Int(params["submenuOpenDelayMs"] ?? "250") ?? 250
             return await AccessibilityChannel.runLivePluginPresetScan(
                 runtime: runtime.logicRuntime, settleMs: settleMs
@@ -2255,9 +2265,36 @@ actor AccessibilityChannel: Channel {
 
     /// Production `library.scan_all` path — wires ScanOrchestration + live TreeProbe,
     /// populates `lastScan` for resolve_path, restores Tier-A selection, writes JSON.
-    private func runLiveScan(runtime: AXLogicProElements.Runtime) async -> ChannelResult {
+    private static func terminalLibraryScanUnavailable(
+        hint: String,
+        precondition: String,
+        panelOpenAttempted: Bool
+    ) -> ChannelResult {
+        .error(HonestContract.encodeStateC(
+            error: .libraryPanelUnavailable,
+            hint: hint,
+            extras: [
+                "operation": "library.scan_all",
+                "precondition": precondition,
+                "terminal": true,
+                "terminal_scope": "mcp_request_only",
+                "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
+                "automatic_precondition_attempts_exhausted": true,
+                "safe_to_retry": false,
+                "panel_open_attempted": panelOpenAttempted,
+            ]
+        ))
+    }
+
+    private func runLiveScan(
+        runtime: AXLogicProElements.Runtime,
+        allowAutoOpen: Bool
+    ) async -> ChannelResult {
         let t0 = Date()
         Log.info("scan_all: entering runLiveScan", subsystem: "ax")
+        var panelOpenAttempted = false
 
         // Fail closed when Logic is running in a headless/no-window state.
         // Without this guard, AX can expose stale Library descendants from a
@@ -2265,16 +2302,35 @@ actor AccessibilityChannel: Channel {
         // there being no visible project window to operate on.
         guard self.runtime.hasVisibleWindow() else {
             Log.info("scan_all: preflight failed — no visible Logic window", subsystem: "ax")
-            return .error("Library panel not found. Open Library (Y) in Logic Pro.")
+            return Self.terminalLibraryScanUnavailable(
+                hint: "Library scan terminated because Logic exposed no visible window; no Library-panel action was attempted.",
+                precondition: "visible_window_unavailable",
+                panelOpenAttempted: false
+            )
         }
 
-        // Precondition: only start the scan if the Library panel is actually open.
-        // This is a < 100 ms AX check and avoids descending into a multi-second
-        // probe chain that has no Library to walk. Run FIRST so we bail before
-        // any expensive setup (probe construction, snapshot extraction).
-        guard LibraryAccessor.isLibraryPanelOpen(runtime: runtime) else {
-            Log.info("scan_all: preflight failed in \(Int(Date().timeIntervalSince(t0) * 1000))ms — panel closed", subsystem: "ax")
-            return .error("Library panel not found. Open Library (Y) in Logic Pro.")
+        // Reuse the existing bounded View > Show Library path instead of asking
+        // the caller to stage the panel. The menu command is not a project-data
+        // write, and the fresh panel read below is the authority for continuing.
+        if !LibraryAccessor.isLibraryPanelOpen(runtime: runtime) {
+            guard allowAutoOpen else {
+                return Self.terminalLibraryScanUnavailable(
+                    hint: "The disk fallback found no open Library panel and terminated without changing Logic UI.",
+                    precondition: "panel_closed_without_automatic_open",
+                    panelOpenAttempted: false
+                )
+            }
+            panelOpenAttempted = true
+            await Self.openLibraryPanelViaKeyCommand(runtime: runtime)
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard LibraryAccessor.isLibraryPanelOpen(runtime: runtime) else {
+                Log.info("scan_all: automatic panel open exhausted in \(Int(Date().timeIntervalSince(t0) * 1000))ms", subsystem: "ax")
+                return Self.terminalLibraryScanUnavailable(
+                    hint: "The bounded automatic Library-panel open attempt did not establish an open panel; the scan terminated before inventory traversal.",
+                    precondition: "panel_closed_after_automatic_open",
+                    panelOpenAttempted: true
+                )
+            }
         }
         Log.info("scan_all: preflight OK in \(Int(Date().timeIntervalSince(t0) * 1000))ms", subsystem: "ax")
 
@@ -2302,7 +2358,11 @@ actor AccessibilityChannel: Channel {
             settleDelayMs: 150
         )
         guard let r = result else {
-            return .error("Library panel not found. Open Library (Y) in Logic Pro.")
+            return Self.terminalLibraryScanUnavailable(
+                hint: "The Library panel was open, but the bounded inventory traversal produced no readable root; the scan terminated without a human continuation.",
+                precondition: "inventory_root_unavailable",
+                panelOpenAttempted: panelOpenAttempted
+            )
         }
         // v3.1.0 (T6) — AX scan response now includes `source:"panel"` so
         // clients can distinguish it from disk/both responses and route
@@ -2342,7 +2402,7 @@ actor AccessibilityChannel: Channel {
         let t0 = Date()
         Log.info("scan_all: entering runDiskScan (mode=disk)", subsystem: "ax")
         do {
-            let root = try LibraryDiskScanner.scan()
+            let root = try self.runtime.scanLibraryDisk()
             let durationMs = Int(Date().timeIntervalSince(t0) * 1000)
             Log.info(
                 "scan_all: disk scan ok — \(root.leafCount) leaves, \(root.folderCount) folders in \(durationMs)ms",
@@ -2353,10 +2413,10 @@ actor AccessibilityChannel: Channel {
             return Self.encodeLibraryRoot(root, sourceTag: "disk")
         } catch {
             Log.warn(
-                "scan_all: disk scan failed (\(error)); falling back to AX scan",
+                "scan_all: disk scan failed (\(error)); falling back to non-opening AX scan",
                 subsystem: "ax"
             )
-            return await self.runLiveScan(runtime: runtime)
+            return await self.runLiveScan(runtime: runtime, allowAutoOpen: false)
         }
     }
 

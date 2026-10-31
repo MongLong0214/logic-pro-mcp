@@ -866,6 +866,7 @@ extension ResourceHandlers {
         let axOccluded = await cache.getAXOccluded()
         let readable = await cache.getMarkersReadable()
         let attempted = await cache.getMarkersPollAttempted()
+        let pollFailure = await cache.getMarkerPollFailure()
         let body = encodeMarkersWire(markers)
         let source = readable ? "ax_live" : (markers.isEmpty ? "unreadable" : "cache")
         // A stable, length-prefixed projection lets mutation oracles bind a reported survivor set
@@ -895,7 +896,21 @@ extension ResourceHandlers {
             // advances only on a successful read, so a poll that ran and failed leaves it at
             // `.distantPast` exactly like a poll that never ran. Keying on that would have moved
             // the false attribution rather than removed it.
-            extras["reason"] = attempted ? "marker_list_not_open" : "markers_not_polled_yet"
+            extras["reason"] = attempted
+                ? (pollFailure?.rawValue ?? StateCache.MarkerPollFailure.channelUnavailable.rawValue)
+                : "markers_not_polled_yet"
+            if pollFailure == .listNotOpen {
+                extras["operation"] = "nav.get_markers"
+                extras["failure_stage"] = "marker_list_not_open_for_passive_read"
+                extras["automated_alternative"] = "logic_navigate.capture_markers"
+                extras["automatic_attempts_exhausted"] = true
+                extras["terminal"] = true
+                extras["human_intervention_required"] = false
+                extras["human_intervention_requests"] = 0
+                extras["human_dependent_transitions"] = 0
+                extras["write_attempted"] = false
+                extras["safe_to_retry"] = false
+            }
         }
         let envelope = wrapWithCacheEnvelope(
             bodyJSON: body,

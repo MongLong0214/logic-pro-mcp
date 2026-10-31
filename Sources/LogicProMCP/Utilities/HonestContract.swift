@@ -252,9 +252,15 @@ enum HonestContract {
         /// it appear before the bounded re-check. The patch was never attempted.
         /// Distinct from `.axWriteFailed` (a navigation write was rejected) and
         /// `.elementNotFound` (a specific row absent): the whole panel UI the
-        /// op needs is not present. Recovery: open the Library (⌘L) in Logic
-        /// Pro and retry. v3.6.x (#131/#135/#141 canonical hardening).
+        /// op needs is not present. The operation's bounded automatic panel-open
+        /// attempt is exhausted; it terminates without a human continuation.
+        /// v3.6.x (#131/#135/#141 canonical hardening).
         case libraryPanelUnavailable = "library_panel_unavailable"
+        /// `plugin.scan_presets` requires a focused plugin editor exposing a
+        /// Setting dropdown. If none is observed, the bounded read-only request
+        /// is terminal; there is no automatic transition left to perform and no
+        /// scan was started.
+        case pluginWindowUnavailable = "plugin_window_unavailable"
         /// `track.set_instrument` targeted a track whose channel-strip type
         /// cannot host a software-instrument patch (GM Device / External MIDI).
         /// Terminal for this op — loading a Library instrument patch onto an
@@ -547,6 +553,7 @@ enum HonestContract {
         // the client must read the parent collection for valid indices.
         FailureError.indexOutOfRange.rawValue,
         FailureError.folderNotPreset.rawValue,
+        FailureError.pluginWindowUnavailable.rawValue,
         FailureError.internalInconsistency.rawValue,
         // #219: an unknown help category is terminal — no channel/retry can turn
         // a bad category token into a valid one; the caller must pick a listed

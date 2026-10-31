@@ -7,19 +7,18 @@ import Testing
 /// The detail this replaces asserted one cause for every read-only shortfall: that the probe sends
 /// `[:]` and the operation refused for want of a parameter. Measured 2026-08-24, that is false for
 /// the two operations it most needed to describe — `tracks.list_library` takes no parameters at all
-/// and refuses with `channels_exhausted` / "Library panel not found. Open Library (Y) in Logic
-/// Pro." The attestation was sending its reader to check parameters that do not exist, while the
-/// operation had already named its precondition.
+/// and names a Library-panel precondition. The attestation was sending its reader to check
+/// parameters that do not exist, while the operation had already named its precondition.
 @Suite("QualificationUnavailableDetail")
 struct QualificationUnavailableDetailTests {
 
     @Test("the measured refusal is quoted, code and precondition both")
     func measuredRefusalIsQuoted() {
         let detail = QualificationOperationResult.unavailableDetail(
-            error: "channels_exhausted",
-            hint: "Library panel not found. Open Library (Y) in Logic Pro.")
-        #expect(detail.contains("channels_exhausted"))
-        #expect(detail.contains("Library panel not found. Open Library (Y) in Logic Pro."))
+            error: HonestContract.FailureError.libraryPanelUnavailable.rawValue,
+            hint: AccessibilityChannel.libraryListPanelUnavailableHint)
+        #expect(detail.contains("library_panel_unavailable"))
+        #expect(detail.contains(AccessibilityChannel.libraryListPanelUnavailableHint))
         // The claim the old text made, which was wrong for this operation.
         #expect(!detail.contains("parameter"))
     }
@@ -38,8 +37,9 @@ struct QualificationUnavailableDetailTests {
         #expect(codeOnly.contains("named no precondition"))
 
         let hintOnly = QualificationOperationResult.unavailableDetail(
-            error: String?.none, hint: "Open an instrument plugin window first.")
-        #expect(hintOnly.contains("Open an instrument plugin window first."))
+            error: String?.none, hint: AccessibilityChannel.pluginWindowUnavailableHint)
+        #expect(hintOnly.contains(AccessibilityChannel.pluginWindowUnavailableHint))
+        #expect(!hintOnly.contains("Open an instrument plugin window first."))
         #expect(!hintOnly.contains("refused with"))
     }
 

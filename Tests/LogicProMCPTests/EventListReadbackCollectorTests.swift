@@ -359,6 +359,10 @@ import Testing
         }
         // ... and it did not press its way there.
         #expect((AXHelpers.getAttribute(fixture.eventTab, kAXValueAttribute as String, runtime: runtime.ax) as Int?) == 0)
+        let refusal = EventListProbeRefusal.eventTabNotSelected.description
+        #expect(refusal.contains("terminated without changing the Event List"))
+        #expect(!refusal.contains("open the Event List"))
+        #expect(!refusal.contains("choose the Event tab"))
     }
 
     @Test func headerMismatchIsRefused() throws {

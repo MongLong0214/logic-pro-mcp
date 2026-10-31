@@ -178,6 +178,58 @@ struct Issue1059TransportFirstPressTests {
         #expect(result.isSuccess)
     }
 
+    @Test("Stop cannot fall through after its Record clear may have landed")
+    func stopRecordClearForbidsFallbackWhenStopControlIsMissing() async throws {
+        let bar = Issue1059Bar(description: "녹음", initial: true, readback: .arrivesAfterWait)
+        let router = ChannelRouter()
+        let cgEvent = MockChannel(id: .cgEvent, available: false)
+        let fallbacks = [
+            MockChannel(id: .mcu), MockChannel(id: .coreMIDI), MockChannel(id: .appleScript),
+        ]
+        await router.register(issue1059Channel(bar))
+        await router.register(cgEvent)
+        for channel in fallbacks { await router.register(channel) }
+
+        let result = await router.route(operation: "transport.stop", params: [:])
+
+        #expect(bar.checkbox.performed == [kAXPressAction as String])
+        #expect(await cgEvent.executedOps.isEmpty)
+        for channel in fallbacks {
+            #expect(await channel.executedOps.isEmpty)
+        }
+        #expect(!result.isSuccess)
+        let envelope = try #require(issue1059Object(result.message))
+        #expect(envelope["state"] as? String == "C")
+        #expect(envelope["error"] as? String == "element_not_found")
+        #expect(try #require(envelope["write_attempted"] as? Bool))
+        #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+        #expect(try #require(envelope["fallback_unsafe"] as? Bool))
+        #expect(envelope["record_clear_outcome"] as? String == "unconfirmed_after_write")
+        #expect(envelope["record_clear_applied"] == nil)
+        #expect(try #require(envelope["terminal"] as? Bool))
+        #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+        #expect(envelope["human_intervention_requests"] as? Int == 0)
+        #expect(envelope["human_dependent_transitions"] as? Int == 0)
+    }
+
+    @Test("Stop may use automatic fallback when Record was already clear")
+    func stopNoOpRecordClearKeepsFallbackEligible() async {
+        let bar = Issue1059Bar(description: "녹음", initial: false, readback: .staysAtInitial)
+        let router = ChannelRouter()
+        let cgEvent = MockChannel(id: .cgEvent, available: false)
+        let mcu = MockChannel(id: .mcu)
+        await router.register(cgEvent)
+        await router.register(issue1059Channel(bar))
+        await router.register(mcu)
+
+        let result = await router.route(operation: "transport.stop", params: [:])
+
+        #expect(bar.checkbox.performed.isEmpty)
+        #expect(await cgEvent.executedOps.isEmpty)
+        #expect((await mcu.executedOps).count == 1)
+        #expect(result.isSuccess)
+    }
+
     @Test("AXConfirm may follow an AXPress that reported no delivery")
     func undeliveredPressAllowsNextStrategy() async throws {
         let bar = Issue1059Bar(description: "재생", initial: false,

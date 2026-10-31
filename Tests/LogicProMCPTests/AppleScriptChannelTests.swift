@@ -53,6 +53,34 @@ actor TransportActionRecorder {
     }
 }
 
+actor DelayedOpenLandingProbe {
+    private var landed = false
+    private var releaseRequested = false
+    private var releaseContinuation: CheckedContinuation<Void, Never>?
+
+    func waitForReleaseAndLand() async {
+        if !releaseRequested {
+            await withCheckedContinuation { continuation in
+                releaseContinuation = continuation
+            }
+        }
+        landed = true
+    }
+
+    func release() {
+        if let releaseContinuation {
+            self.releaseContinuation = nil
+            releaseContinuation.resume()
+        } else {
+            releaseRequested = true
+        }
+    }
+
+    func hasLanded() -> Bool {
+        landed
+    }
+}
+
 final class OpenFileRecorder: @unchecked Sendable {
     private let lock = NSLock()
     private(set) var openedPaths: [String] = []
@@ -225,12 +253,14 @@ private func makeAppleScriptRuntime(
     #expect(openRecorder.snapshot() == [path, path])
 }
 
-@Test func testAppleScriptProjectOpenRefusesToCloseUntitledCurrentDocumentOnRetry() async throws {
+private func projectOpenWithUnavailableFrontPath(
+    frontDocumentName: String
+) async -> (result: ChannelResult, path: String, openedPaths: [String], scripts: [String]) {
     let openRecorder = OpenFileRecorder()
-    let path = "/tmp/untitled.logicx"
+    let path = "/tmp/path-unavailable.logicx"
     let recorder = AppleScriptRecorder()
     let identities = ScriptResponseQueue([
-        .success("\u{001F}Untitled 12"),
+        .success("\u{001F}\(frontDocumentName)"),
     ])
     let channel = AppleScriptChannel(
         runtime: .init(
@@ -257,16 +287,97 @@ private func makeAppleScriptRuntime(
     )
 
     let result = await channel.execute(operation: "project.open", params: ["path": path])
+    return (result, path, openRecorder.snapshot(), await recorder.snapshot())
+}
+
+private func requireTerminalPathUnavailableReceipt(
+    _ result: ChannelResult
+) throws -> [String: Any] {
     #expect(!result.isSuccess)
     let obj = try JSONSerialization.jsonObject(
         with: Data(result.message.utf8), options: []
     ) as! [String: Any]
     #expect(!((obj["success"] as? Bool)!))
     #expect(obj["error"] as? String == "unsupported_state")
-    #expect(((obj["hint"] as? String)?.contains("refusing to close"))!)
-    #expect(openRecorder.snapshot() == [path])
-    let scripts = await recorder.snapshot()
-    #expect(!scripts.contains(where: { $0.contains("close front document saving no") }))
+    let hint = try #require(obj["hint"] as? String)
+    #expect(hint.contains("refusing to close"))
+    #expect(!hint.contains("untitled"))
+    #expect(!hint.contains("unsaved"))
+    let terminal = try #require(obj["terminal"] as? Bool)
+    #expect(terminal)
+    let humanInterventionRequired = try #require(obj["human_intervention_required"] as? Bool)
+    #expect(!humanInterventionRequired)
+    #expect(obj["human_intervention_requests"] as? Int == 0)
+    #expect(obj["human_dependent_transitions"] as? Int == 0)
+    let attemptsExhausted = try #require(obj["automatic_precondition_attempts_exhausted"] as? Bool)
+    #expect(attemptsExhausted)
+    let safeToRetry = try #require(obj["safe_to_retry"] as? Bool)
+    #expect(!safeToRetry)
+    let openRequestAttempted = try #require(obj["open_request_attempted"] as? Bool)
+    #expect(openRequestAttempted)
+    let closeAttempted = try #require(obj["close_attempted"] as? Bool)
+    #expect(!closeAttempted)
+    #expect(obj["terminal_scope"] as? String == "mcp_request_only")
+    #expect(obj["open_effect_status"] as? String == "unknown_after_verification_failure")
+    let underlyingStopped = try #require(obj["underlying_operation_stopped"] as? Bool)
+    #expect(!underlyingStopped)
+    #expect(obj["document_preserved"] == nil)
+    let observed = try #require(obj["front_document_observed_after_verification_failure"] as? Bool)
+    #expect(observed)
+    #expect(obj["front_document_path_status"] as? String == "unavailable")
+    #expect(obj["unsaved_document_preserved"] == nil)
+    return obj
+}
+
+@Test func testAppleScriptProjectOpenRefusesToCloseWhenFrontDocumentPathIsUnavailable() async throws {
+    let fixture = await projectOpenWithUnavailableFrontPath(frontDocumentName: "Untitled 12")
+    _ = try requireTerminalPathUnavailableReceipt(fixture.result)
+    #expect(fixture.openedPaths == [fixture.path])
+    #expect(!fixture.scripts.contains(where: { $0.contains("close front document saving no") }))
+}
+
+@Test func testAppleScriptProjectOpenDoesNotCallSavedNameUntitledWhenPathReadFails() async throws {
+    let fixture = await projectOpenWithUnavailableFrontPath(frontDocumentName: "Saved Project")
+    _ = try requireTerminalPathUnavailableReceipt(fixture.result)
+    #expect(fixture.openedPaths == [fixture.path])
+    #expect(!fixture.scripts.contains(where: { $0.contains("close front document saving no") }))
+}
+
+@Test func testAppleScriptProjectOpenReportsUnknownEffectWhenAcceptedOpenLandsAfterReply() async throws {
+    let landing = DelayedOpenLandingProbe()
+    let path = "/tmp/delayed.logicx"
+    let channel = AppleScriptChannel(
+        runtime: .init(
+            isLogicProRunning: { true },
+            openFile: { _ in
+                Task { await landing.waitForReleaseAndLand() }
+                return true
+            },
+            runScript: { source in
+                if source.contains("character id 31") {
+                    return .success("\u{001F}Saved Project")
+                }
+                if source.contains("path of front document as text") {
+                    return .error("verification deadline elapsed")
+                }
+                return .success("OK")
+            },
+            executeTransportAction: { _ in .success("OK") }
+        )
+    )
+
+    let result = await channel.execute(operation: "project.open", params: ["path": path])
+    _ = try requireTerminalPathUnavailableReceipt(result)
+    let landedBeforeReply = await landing.hasLanded()
+    #expect(!landedBeforeReply)
+
+    await landing.release()
+    for _ in 0..<100 {
+        if await landing.hasLanded() { break }
+        await Task.yield()
+    }
+    let landedAfterReply = await landing.hasLanded()
+    #expect(landedAfterReply)
 }
 
 @Test func testAppleScriptProjectOpenRestoresPreviousSavedProjectAfterRetryFailure() async {
