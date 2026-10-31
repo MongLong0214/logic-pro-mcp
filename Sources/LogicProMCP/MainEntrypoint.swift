@@ -23,7 +23,6 @@ enum MainEntrypoint {
         let state = "C"
         let success = false
         let terminal = true
-        let terminalScope = "mcp_request_only"
         let reason = "live_lifecycle_unavailable"
         let writeAttempted = false
         let humanInterventionRequired = false
@@ -36,7 +35,6 @@ enum MainEntrypoint {
             case state
             case success
             case terminal
-            case terminalScope = "terminal_scope"
             case reason
             case writeAttempted = "write_attempted"
             case humanInterventionRequired = "human_intervention_required"
