@@ -3489,8 +3489,8 @@ extension AccessibilityChannel {
                 return .error(HonestContract.encodeStateC(
                     error: .readbackMismatch,
                     hint: "control-bar checkbox '\(labels.canonical)' did not read as changed after \(strategy.name). "
-                        + "The press was delivered and may have landed with the readback lagging, so it was not "
-                        + "pressed again and no other channel may press it: read the control before retrying.",
+                        + "The press was delivered and may have landed with readback lag; this MCP request "
+                        + "terminated after the bounded readback without another press.",
                     extras: [
                         "button": reportAs,
                         "control": reportAs,
@@ -3500,7 +3500,13 @@ extension AccessibilityChannel {
                         "attempts": attempts,
                         "write_attempted": true,
                         "safe_to_retry": false,
-                        "fallback_unsafe": true
+                        "fallback_unsafe": true,
+                        "terminal": true,
+                        "terminal_scope": "mcp_request_only",
+                        "automatic_read_attempts_exhausted": true,
+                        "human_intervention_required": false,
+                        "human_intervention_requests": 0,
+                        "human_dependent_transitions": 0
                     ]
                 ))
             } else {
@@ -3623,15 +3629,21 @@ extension AccessibilityChannel {
             return .error(HonestContract.encodeStateC(
                 error: .readbackMismatch,
                 hint: "control-bar checkbox '\(english)' did not read as desired=\(desired) after \(strategy.name). "
-                    + "The press was delivered and may have landed with the readback lagging; "
-                    + "read the control before retrying.",
+                    + "The press was delivered and may have landed with readback lag; this MCP request "
+                    + "terminated after the bounded readback without another press.",
                 extras: baseExtras.merging([
                     "observed": observed as Any? ?? NSNull(),
                     "action": strategy.name,
                     "attempts": attempts,
                     "write_attempted": true,
                     "safe_to_retry": false,
-                    "fallback_unsafe": true
+                    "fallback_unsafe": true,
+                    "terminal": true,
+                    "terminal_scope": "mcp_request_only",
+                    "automatic_read_attempts_exhausted": true,
+                    "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                    "human_dependent_transitions": 0
                 ]) { _, new in new }
             ))
         }

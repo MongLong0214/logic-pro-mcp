@@ -5977,7 +5977,7 @@ struct Issue965HeldSelectionAssociationTests {
 
     @Test(arguments: ["missing", "duplicate", "unread_mark", "no_checked_mode", "two_checked_modes",
                       "wrong_target", "wrong_project", "unsupported_mode", "boolean_mode", "extra_param",
-                      "late_document", "late_level", "late_bypass", "late_play", "late_mode", "late_peer", "boolean_raw"])
+                      "expired_pair", "late_document", "late_level", "late_bypass", "late_play", "late_mode", "late_peer", "boolean_raw"])
     func registeredSendModeRefusesUnownedOrUnknownBefore(fault: String) async throws {
         try await assertOccupiedSingleSendRenewal(modeCommand: fault)
     }
@@ -6704,6 +6704,19 @@ struct Issue965HeldSelectionAssociationTests {
                                                peerDisplayHydration: Bool = false,
                                                peerDisplaySecondSampleFault: String? = nil,
                                                restoredNameCaption: RestoredNameCaptionScenario? = nil) async throws {
+        func assertTerminalAssociationRefusal(_ body: [String: Any]) throws {
+            let hint = try #require(body["hint"] as? String)
+            #expect(!hint.localizedCaseInsensitiveContains("acquire"))
+            #expect(!hint.localizedCaseInsensitiveContains("inspection"))
+            #expect(!hint.localizedCaseInsensitiveContains("retry"))
+            #expect(try #require(body["terminal"] as? Bool))
+            #expect(try #require(body["terminal_scope"] as? String) == "mcp_request_only")
+            #expect(!(try #require(body["safe_to_retry"] as? Bool)))
+            #expect(try #require(body["automatic_precondition_attempts_exhausted"] as? Bool))
+            #expect(!(try #require(body["human_intervention_required"] as? Bool)))
+            #expect(try #require(body["human_intervention_requests"] as? Int) == 0)
+            #expect(try #require(body["human_dependent_transitions"] as? Int) == 0)
+        }
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let f = try Fixture(fourTracks: measureInverseAssociations || measureForwardAssociations), b = f.builder
             let hydrationPeer = peerDisplayHydration ? b.element(1_971_800) : nil
@@ -9223,6 +9236,7 @@ struct Issue965HeldSelectionAssociationTests {
                 case "boolean_raw": b.setAttribute(b.element(1_965_2624), kAXValueAttribute as String, false)
                 case "wrong_target": prepared["target_ref"] = .string(try #require(capture.mixerReference(at: 0)).rawValue)
                 case "wrong_project": prepared["project_ref"] = .string("prj_foreign")
+                case "expired_pair": f.expireRetainedCapture = true
                 case "unsupported_mode": prepared["mode"] = .string("post_pan_extra")
                 case "boolean_mode": prepared["mode"] = .bool(true)
                 case "extra_param": prepared["value"] = .double(0.5)
@@ -9371,6 +9385,7 @@ struct Issue965HeldSelectionAssociationTests {
                 if !["roundtrip", "post_pan_roundtrip", "noop", "independent_pan"].contains(modeCommand) {
                     #expect(body["state"] as? String == "C", "\(sharedToolText(result))")
                     #expect(f.routingModePresses == 0 && f.routingDestinationPresses == 0)
+                    if modeCommand == "expired_pair" { try assertTerminalAssociationRefusal(body) }
                     if modeCommand.hasPrefix("late_") || modeCommand == "unread_mark" { #expect(f.routingLateScopeInjected) }
                     return
                 }
@@ -9459,6 +9474,7 @@ struct Issue965HeldSelectionAssociationTests {
                      "calibrate_late_target", "late_target", "boolean_after"].contains(freshEmpty ?? "") {
                     #expect(body["state"] as? String == "C", "Actual refused fresh-empty source: \(sharedToolText(result))")
                     #expect(f.routingDestinationPresses == 0)
+                    if freshEmpty == "expired_pair" { try assertTerminalAssociationRefusal(body) }
                     if ["unread_mark", "late_empty", "late_document", "late_play", "before_peer"].contains(freshEmpty ?? "") { #expect(f.routingLateScopeInjected) }
                     return
                 }
