@@ -3406,8 +3406,12 @@ extension AccessibilityChannel {
                         transportLandmarkLabels(root: $0, role: kAXCheckBoxRole, runtime: runtime)
                     } ?? [],
                     "write_attempted": false,
+                    "safe_to_retry": false,
                     "terminal": true,
+                    "terminal_scope": "mcp_request_only",
                     "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                    "human_dependent_transitions": 0,
                 ]
             ))
         }
