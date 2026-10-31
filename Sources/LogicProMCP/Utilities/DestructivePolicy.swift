@@ -71,6 +71,7 @@ enum DestructivePolicy {
             "command": command,
             "level": level,
             "message": "This operation may change project state or cause data loss.",
+            "success": false,
             "verified": false,
             "write_attempted": false,
             "terminal": true,

@@ -42,6 +42,8 @@ private final class AppleScriptOpenHarness: @unchecked Sendable {
 
     #expect(object["status"] as? String == "confirmation_required")
     #expect(object["state"] as? String == "C")
+    let success = try #require(object["success"] as? Bool)
+    #expect(!success)
     let terminal = try #require(object["terminal"] as? Bool)
     #expect(terminal)
     let writeAttempted = try #require(object["write_attempted"] as? Bool)
