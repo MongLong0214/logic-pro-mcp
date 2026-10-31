@@ -17,6 +17,32 @@ extension ServerStarting {
 extension LogicProServer: ServerStarting {}
 
 enum MainEntrypoint {
+    private struct LifecycleTerminalReceipt: Encodable {
+        let schema = "logic_pro_mcp_lifecycle_terminal.v1"
+        let command: String
+        let state = "C"
+        let success = false
+        let terminal = true
+        let reason = "live_lifecycle_unavailable"
+        let writeAttempted = false
+        let humanInterventionRequired = false
+        let humanInterventionRequests = 0
+        let humanDependentTransitions = 0
+
+        enum CodingKeys: String, CodingKey {
+            case schema
+            case command
+            case state
+            case success
+            case terminal
+            case reason
+            case writeAttempted = "write_attempted"
+            case humanInterventionRequired = "human_intervention_required"
+            case humanInterventionRequests = "human_intervention_requests"
+            case humanDependentTransitions = "human_dependent_transitions"
+        }
+    }
+
     static func eventListProbeCells(_ row: RawEventRow) -> [String: Any] {
         row.reduce(into: [String: Any]()) { out, pair in
             var cell: [String: Any] = [
@@ -142,17 +168,20 @@ enum MainEntrypoint {
 
         if let command = lifecycleCommand(arguments) {
             // Live execution is intentionally NOT performed here — it is delegated
-            // to Scripts/install.sh / uninstall.sh. Without --dry-run we refuse
-            // honestly and exit non-zero rather than faking execution.
+            // to the separately invoked installer/uninstaller. Without --dry-run
+            // this entrypoint terminates rather than asking a person to continue
+            // through another command.
             guard arguments.contains("--dry-run") else {
-                let script = command == .uninstall
-                    ? "Scripts/uninstall.sh"
-                    : "Scripts/install.sh"
-                writeStderr(
-                    "Live \(command.rawValue) is not performed by this binary. "
-                        + "Re-run with --dry-run to preview the plan, or run \(script) "
-                        + "to execute (see docs/SETUP.md).\n"
-                )
+                let receipt = LifecycleTerminalReceipt(command: command.rawValue)
+                if arguments.contains("--json") {
+                    writeStderr(encodeJSON(receipt, compact: true) + "\n")
+                } else {
+                    writeStderr(
+                        "Lifecycle \(command.rawValue) terminal outcome: live execution is "
+                            + "unavailable in this binary; write attempted: false; "
+                            + "human-dependent transitions: 0; human-intervention requests: 0.\n"
+                    )
+                }
                 return 1
             }
             let plan = SetupLifecycle.plan(command: command, runtime: lifecycleRuntime)

@@ -528,7 +528,7 @@ private func launchAgentPath(_ home: URL = lifecycleTestHome) -> String {
     #expect(stdout.contains("mcp.unregister"))
 }
 
-@Test func testMainEntrypointLifecycleWithoutDryRunRefusesAndExitsNonZero() async {
+@Test func testMainEntrypointLifecycleWithoutDryRunTerminatesWithoutContinuation() async {
     var stdout = ""
     var stderr = ""
     let exitCode = await MainEntrypoint.run(
@@ -546,11 +546,16 @@ private func launchAgentPath(_ home: URL = lifecycleTestHome) -> String {
 
     #expect(exitCode == 1)
     #expect(stdout.isEmpty)
-    #expect(stderr.contains("--dry-run"))
-    #expect(stderr.contains("Scripts/install.sh"))
+    #expect(stderr.contains("terminal outcome"))
+    #expect(stderr.contains("write attempted: false"))
+    #expect(stderr.contains("human-dependent transitions: 0"))
+    #expect(stderr.contains("human-intervention requests: 0"))
+    #expect(!stderr.contains("--dry-run"))
+    #expect(!stderr.contains("Scripts/"))
 }
 
-@Test func testMainEntrypointUninstallWithoutDryRunPointsAtUninstallScript() async {
+@Test func testMainEntrypointUninstallWithoutDryRunTerminatesWithoutContinuation() async {
+    var stdout = ""
     var stderr = ""
     let exitCode = await MainEntrypoint.run(
         arguments: ["LogicProMCP", "uninstall"],
@@ -561,11 +566,16 @@ private func launchAgentPath(_ home: URL = lifecycleTestHome) -> String {
         },
         approvalStoreFactory: { ManualValidationStore() },
         lifecycleRuntime: lifecycleRuntime(),
+        writeStdout: { stdout += $0 },
         writeStderr: { stderr += $0 }
     )
 
     #expect(exitCode == 1)
-    #expect(stderr.contains("Scripts/uninstall.sh"))
+    #expect(stdout.isEmpty)
+    #expect(stderr.contains("terminal outcome"))
+    #expect(stderr.contains("write attempted: false"))
+    #expect(!stderr.contains("--dry-run"))
+    #expect(!stderr.contains("Scripts/"))
 }
 
 @Test func testMainEntrypointLifecycleSubcommandJSONExitsZeroWithoutStartingServer() async throws {
