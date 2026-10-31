@@ -238,7 +238,7 @@ Install with Homebrew, copy the release binary into PATH, or invoke the source b
 
 <a id="doctor-binaryexecutable"></a>
 ### `binary.executable`
-Run `chmod +x '/path/to/LogicProMCP'`. Quote the path if it contains spaces or shell metacharacters.
+Reports whether the resolved LogicProMCP binary is executable. A resolved binary without executable permission is a terminal unavailable state for this read-only inspection; doctor emits no mutation or retry request.
 
 <a id="doctor-installsource"></a>
 ### `install.source`
@@ -258,7 +258,7 @@ Reinstall from the pinned release artifact, or ad-hoc sign a local source build 
 
 <a id="doctor-releasequarantine"></a>
 ### `release.quarantine`
-After verifying SHA256 and signature, remove quarantine with `xattr -d com.apple.quarantine '/path/to/LogicProMCP'`. Quote the path if it contains spaces or shell metacharacters.
+Reports the observed quarantine state of the resolved LogicProMCP binary. A present quarantine attribute is a terminal unavailable state for this read-only inspection; doctor emits no mutation or retry request.
 
 <a id="doctor-mcpclaude-code-registration"></a>
 ### `mcp.claude_code_registration`

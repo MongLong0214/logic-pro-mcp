@@ -1,6 +1,16 @@
 import Foundation
 
 extension SetupDoctor {
+    private static func terminalBinaryEvidence(
+        _ evidence: [String: String]
+    ) -> [String: String] {
+        var result = evidence
+        result["terminal"] = "true"
+        result["human_intervention_required"] = "false"
+        result["human_intervention_requests"] = "0"
+        return result
+    }
+
     static func requireBinary(_ executablePath: String?, runtime: Runtime) -> String? {
         guard let executablePath, runtime.fileExists(executablePath) else { return nil }
         return executablePath
@@ -42,14 +52,14 @@ extension SetupDoctor {
             )
         }
         let executable = runtime.isExecutableFile(executablePath)
+        let evidence = ["path": executablePath, "executable": String(executable)]
         return check(
             id: "binary.executable",
             domain: "binary",
             status: executable ? .pass : .fail,
             summary: executable ? "Binary has executable permission." : "Binary is not executable.",
-            evidence: ["path": executablePath, "executable": String(executable)],
-            remediationType: executable ? .none : .command,
-            remediationValueOverride: executable ? nil : "chmod +x \(shellQuote(executablePath))"
+            evidence: executable ? evidence : terminalBinaryEvidence(evidence),
+            remediationType: .none
         )
     }
 
@@ -140,11 +150,10 @@ extension SetupDoctor {
             return check(
                 id: "release.quarantine",
                 domain: "release",
-                status: .warn,
+                status: .fail,
                 summary: "Binary has a macOS quarantine attribute.",
-                evidence: evidence,
-                remediationType: .command,
-                remediationValueOverride: "xattr -d com.apple.quarantine \(shellQuote(executablePath))"
+                evidence: terminalBinaryEvidence(evidence),
+                remediationType: .none
             )
         }
         let attributeAbsent = output.exitCode == 1

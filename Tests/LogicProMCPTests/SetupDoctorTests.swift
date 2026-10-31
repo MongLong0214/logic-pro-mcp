@@ -130,6 +130,24 @@ private func issue26RepositoryRootURL() -> URL {
     #expect(targetAnchor.contains("When a share directory is configured"))
     #expect(targetAnchor.contains("when the installed version is readable"))
     #expect(!targetAnchor.contains("with a valid share directory and matching version"))
+
+    let binaryStart = try #require(setup.range(of: "<a id=\"doctor-binaryexecutable\"></a>"))
+    let binaryTail = setup[binaryStart.lowerBound...]
+    let binaryNextAnchor = try #require(binaryTail.dropFirst().range(of: "<a id="))
+    let binaryAnchor = String(binaryTail[..<binaryNextAnchor.lowerBound])
+    for staleContinuation in ["chmod", "Run ", "run ", "remediation action", "continuation"] {
+        #expect(!binaryAnchor.contains(staleContinuation))
+    }
+    #expect(binaryAnchor.contains("terminal unavailable state"))
+
+    let quarantineStart = try #require(setup.range(of: "<a id=\"doctor-releasequarantine\"></a>"))
+    let quarantineTail = setup[quarantineStart.lowerBound...]
+    let quarantineNextAnchor = try #require(quarantineTail.dropFirst().range(of: "<a id="))
+    let quarantineAnchor = String(quarantineTail[..<quarantineNextAnchor.lowerBound])
+    for staleContinuation in ["xattr -d", "remove quarantine", "remediation action", "continuation"] {
+        #expect(!quarantineAnchor.contains(staleContinuation))
+    }
+    #expect(quarantineAnchor.contains("terminal unavailable state"))
 }
 
 @Test func testSetupDoctorJSONContractStableCheckIDsAndOKAggregation() throws {
@@ -557,7 +575,7 @@ private func issue26RepositoryRootURL() -> URL {
     #expect(quarantine.summary == "Binary is not quarantined.")
 }
 
-@Test func testReleaseQuarantineReportsWarnWhenAttributePresent() throws {
+@Test func testReleaseQuarantineTerminatesWhenAttributePresent() throws {
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json"],
         permissionStatus: grantedPermissionStatus(),
@@ -576,12 +594,17 @@ private func issue26RepositoryRootURL() -> URL {
         })
     )
     let quarantine = try #require(report.checks.first { $0.id == "release.quarantine" })
-    #expect(quarantine.status == .warn)
+    #expect(quarantine.status == .fail)
     #expect(quarantine.summary == "Binary has a macOS quarantine attribute.")
-    #expect(quarantine.remediation.type == .command)
+    #expect(quarantine.remediation.type == .none)
+    #expect(quarantine.remediation.value.isEmpty)
+    #expect(quarantine.evidence["terminal"] == "true")
+    #expect(quarantine.evidence["human_intervention_required"] == "false")
+    #expect(quarantine.evidence["human_intervention_requests"] == "0")
+    #expect(!report.fixPlan.contains(quarantine.id))
 }
 
-@Test func testDoctorRemediationShellQuotesPaths() throws {
+@Test func testBinaryDiagnosticsDoNotExposeShellRemediation() throws {
     let path = "/Users/x/My Build/LogicProMCP"
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json"],
@@ -603,8 +626,15 @@ private func issue26RepositoryRootURL() -> URL {
     )
     let executable = try #require(report.checks.first { $0.id == "binary.executable" })
     let quarantine = try #require(report.checks.first { $0.id == "release.quarantine" })
-    #expect(executable.remediation.value == "chmod +x '\(path)'")
-    #expect(quarantine.remediation.value == "xattr -d com.apple.quarantine '\(path)'")
+    for check in [executable, quarantine] {
+        #expect(check.status == .fail)
+        #expect(check.remediation.type == .none)
+        #expect(check.remediation.value.isEmpty)
+        #expect(check.evidence["terminal"] == "true")
+        #expect(check.evidence["human_intervention_required"] == "false")
+        #expect(check.evidence["human_intervention_requests"] == "0")
+        #expect(!report.fixPlan.contains(check.id))
+    }
 }
 
 @Test func testDoctorXattrEvidenceKeepsStdoutStderrSummary() throws {
