@@ -679,7 +679,7 @@ private func recordSequenceJSONObject(_ result: CallTool.Result) -> [String: Any
 }
 
 @Test func testRecordSequenceSurfacesSystemEventsAutomationDeniedImportError() async throws {
-    let expectedHint = "System Events Automation is denied for the process responsible for launching this server (a launcher-permission gap, not a Logic limitation). Grant it in System Settings > Privacy & Security > Automation, or run the server/harness under a responsible app that already has it (Terminal, iTerm, or your editor). Logic Pro automation being granted is separate and not sufficient."
+    let expectedHint = "System Events Automation is unavailable for the process responsible for launching this server (a launcher-permission gap, not a Logic limitation). The current operation terminated before further action; Logic Pro automation being granted is separate and not sufficient."
     let cache = StateCache()
     await cache.updateDocumentState(true)
 
@@ -687,15 +687,24 @@ private func recordSequenceJSONObject(_ result: CallTool.Result) -> [String: Any
     let importEnvelope = HonestContract.encodeStateC(
         error: .systemEventsAutomationDenied,
         hint: expectedHint,
-        extras: [
+        extras: AppleScriptErrorClassifier.systemEventsAutomationTerminalExtras([
             "osascript_stderr": stderr,
             "file_open_dialog_seen": false,
             "tempo_dialog_seen": false,
-        ]
+            "write_attempted": false,
+        ])
     )
 
     let router = ChannelRouter()
-    let ax = RecordingMockChannel(id: .accessibility, importResult: .error(importEnvelope))
+    let ax = RecordingMockChannel(
+        id: .accessibility,
+        importResult: .error(importEnvelope),
+        gotoResult: .success(HonestContract.encodeStateA()),
+        transportReadbacks: [
+            try recordSequencePosition("2.1.1.1"),
+            try recordSequencePosition("1.1.1.1"),
+        ]
+    )
     await router.register(ax)
 
     let result = await TrackDispatcher.handleRecordSequenceSMF(
@@ -715,6 +724,14 @@ private func recordSequenceJSONObject(_ result: CallTool.Result) -> [String: Any
     #expect(object["osascript_stderr"] as? String == stderr)
     let hint = try #require(object["hint"] as? String)
     #expect(hint == expectedHint)
+    let humanInterventionRequired = try #require(object["human_intervention_required"] as? Bool)
+    let terminal = try #require(object["terminal"] as? Bool)
+    #expect(!humanInterventionRequired)
+    #expect(object["human_intervention_requests"] as? Int == 0)
+    #expect(object["human_dependent_transitions"] as? Int == 0)
+    #expect(terminal)
+    let writeAttempted = try #require(object["write_attempted"] as? Bool)
+    #expect(writeAttempted, "the outer result must retain its completed playhead write")
 }
 
 @Test func testRecordSequenceFailsClosedOnGMDeviceImportDowngrade() async throws {

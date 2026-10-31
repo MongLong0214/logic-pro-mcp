@@ -184,7 +184,7 @@ Flags:
 
 | Flag | Effect |
 |------|--------|
-| (none) | Human report: a "next action" headline, a `summary:` counts line, and one line per check. |
+| (none) | Human report: an outcome headline, a `summary:` counts line, and one line per check. |
 | `--verbose` | Adds each check's evidence and `duration_ms`. |
 | `--quiet` | Headline + summary + failing/non-pass checks only. |
 | `--json` | Machine report. Identical bytes regardless of `--verbose`/`--quiet`/color. |
@@ -224,6 +224,8 @@ Consumer compatibility notes:
 | Skipped-count alarms | Expect a higher baseline; v4 reports diagnostic-capability gaps instead of hiding them. Optional skips do not imply degraded status. |
 | UIs unaware of `fix_plan` | Continue rendering checks normally; `fix_plan` only orders the next actions. |
 | Readiness dashboards | Prefer `capabilities.<id>.status` for profile-aware readiness over hand-rolled check groups. |
+
+`fix_plan` contains only non-pass checks that have a concrete remediation. Terminal and unresolved checks without a concrete remediation are excluded from that action list but remain visible in `headline` and `checks`. A `fail` without remediation uses `Terminal outcome`; a `warn` or `manual` result without remediation uses `Unresolved outcome`. `Next action` is reserved for a result whose remediation can actually be carried out.
 
 ## Doctor Remediation Anchors
 
@@ -271,27 +273,27 @@ Optional Claude Desktop registration. An absent config is an optional skip and d
 
 <a id="doctor-permissionsaccessibility"></a>
 ### `permissions.accessibility`
-Grant Accessibility to the launcher app in System Settings.
+Reports the launcher app's current Accessibility authorization. A non-pass result is a terminal observation for this unattended run; doctor emits no remediation for this check.
 
 <a id="doctor-permissionsautomation-logic-pro"></a>
 ### `permissions.automation_logic_pro`
-Grant Automation access for Logic Pro. If status is `not_verifiable`, launch Logic Pro once and rerun doctor.
+Reports the responsible process's current Automation authorization for Logic Pro. Denied, consent-required, and unverifiable results are terminal observations for this unattended run and carry no remediation.
 
 <a id="doctor-permissionsautomation-system-events"></a>
 ### `permissions.automation_system_events`
-Grant Automation access for **System Events** (System Settings > Privacy & Security > Automation → System Events). This is a separate TCC target from Logic Pro automation and is required by MIDI import / tempo-dialog / project-state paths (#188). If status is `manual` (`not_verifiable`), the probe could not run — rerun doctor.
+Reports the responsible process's current Automation authorization for **System Events**. This is a separate TCC target from Logic Pro automation and is required by MIDI import / tempo-dialog / project-state paths (#188). Denied, consent-required, and unverifiable results are terminal observations for this unattended run and carry no remediation.
 
 <a id="doctor-permissionspost-event-access"></a>
 ### `permissions.post_event_access`
-Grant Accessibility/PostEvent access to the app that launches LogicProMCP; CGEvent fallback operations need it.
+Reports whether the responsible launcher can use the native PostEvent path required by CGEvent operations. A non-pass result is a terminal observation for this unattended run; doctor emits no remediation for this check.
 
 <a id="doctor-permissionslaunch-context"></a>
 ### `permissions.launch_context`
-Informational. If the launch context is unknown, re-run doctor from the same app that will launch the server when cross-context TCC is in doubt.
+Identifies which responsible process context the permission observations describe. Unknown context remains an informational observation and does not create a continuation action.
 
 <a id="doctor-permissionstcc-cross-context"></a>
 ### `permissions.tcc_cross_context`
-Cross-context TCC enrichment. If skipped, live permission probes remain authoritative.
+Cross-context TCC enrichment. If unavailable, the live permission probes remain authoritative; a non-pass enrichment result does not create a continuation action.
 
 <a id="doctor-systemmacos-version"></a>
 ### `system.macos_version`

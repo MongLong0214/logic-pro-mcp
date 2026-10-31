@@ -352,12 +352,14 @@ func testProcessUtilsProductionActivateWrapperReturnsWithoutCrash() {
     #expect(!(status.summary.contains("System Settings")))
 }
 
-@Test func testPermissionStatusSummaryOnlyMentionsMissingAutomationGuidance() {
+@Test func testPermissionStatusSummaryTerminatesWithoutAutomationGuidance() {
     let status = PermissionChecker.PermissionStatus(accessibility: true, automationLogicPro: false)
 
     #expect(!(status.allGranted))
     #expect(status.summary.contains("Accessibility: granted"))
     #expect(status.summary.contains("Automation (Logic Pro): NOT GRANTED"))
     #expect(!(status.summary.contains("Accessibility → add your terminal app")))
-    #expect(status.summary.contains("Automation → allow control of Logic Pro"))
+    #expect(status.summary.contains("Outcome: terminal"))
+    #expect(!(status.summary.contains("Automation → allow control of Logic Pro")))
+    #expect(!(status.summary.contains("System Settings")))
 }

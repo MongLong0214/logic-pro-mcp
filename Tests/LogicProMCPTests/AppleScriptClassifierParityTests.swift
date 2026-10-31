@@ -35,15 +35,15 @@ private func arrayLiteral(after marker: String, in source: String) throws -> Str
     let classifier = try sourceString(at: "Sources/LogicProMCP/Utilities/AppleScriptErrorClassifier.swift")
     let spike = try sourceString(at: "Scripts/spike-midi-region-drag-export.swift")
 
-    let classifierRemediation = try stringLiteral(
+    let classifierHint = try stringLiteral(
         after: "systemEventsAutomationDeniedHint =",
         in: classifier
     )
-    let spikeRemediation = try stringLiteral(
-        after: "systemEventsAutomationDeniedRemediation =",
+    let spikeTerminalNote = try stringLiteral(
+        after: "systemEventsAutomationDeniedTerminalNote =",
         in: spike
     )
-    #expect(classifierRemediation == spikeRemediation)
+    #expect(classifierHint == spikeTerminalNote)
 
     let classifierCoreTokens = try arrayLiteral(
         after: "systemEventsAutomationDeniedCoreMatchTokens =",

@@ -472,7 +472,8 @@ private let toolText = sharedToolText
     )
     #expect(!(status.automationLogicPro))
     #expect(status.summary.contains("Automation (Logic Pro): NOT VERIFIABLE"))
-    #expect(status.summary.contains("Launch Logic Pro once"))
+    #expect(status.summary.contains("Outcome: terminal"))
+    #expect(!(status.summary.contains("Launch Logic Pro")))
 }
 
 @Test func testStatePollerStartStopLifecycle() async {

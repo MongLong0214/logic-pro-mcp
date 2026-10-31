@@ -8,7 +8,7 @@ extension SetupDoctor {
             status: status.accessibility ? .pass : .fail,
             summary: status.accessibility ? "Accessibility permission is granted." : "Accessibility permission is not granted.",
             evidence: ["state": status.accessibilityState.rawValue],
-            remediationType: status.accessibility ? .none : .systemSettings
+            remediationType: .none
         )
     }
 
@@ -21,7 +21,7 @@ extension SetupDoctor {
         case .notGranted:
             checkStatus = .fail
         case .notVerifiable:
-            checkStatus = .manual
+            checkStatus = .fail
         }
         return check(
             id: "permissions.automation_logic_pro",
@@ -29,15 +29,16 @@ extension SetupDoctor {
             status: checkStatus,
             summary: automationSummary(for: status.automationState),
             evidence: ["state": status.automationState.rawValue],
-            remediationType: status.automationState == .granted ? .none : .systemSettings
+            remediationType: .none
         )
     }
 
 
     static func systemEventsAutomationCheck(_ status: PermissionChecker.PermissionStatus) -> Check {
         // Surfaces the System Events automation target the runtime treats as a HARD
-        // requirement (#188) but the v1 doctor dropped. Honest mapping: a probe that
-        // could-not-run (.notVerifiable) is `manual`, never `fail` ("denied").
+        // requirement (#188) but the v1 doctor dropped. A probe that could not run
+        // remains distinguishable in evidence, but it is an explicit unsuccessful
+        // terminal outcome rather than a request for a person to repair the host.
         let checkStatus: CheckStatus
         switch status.systemEventsAutomationState {
         case .granted:
@@ -45,7 +46,7 @@ extension SetupDoctor {
         case .notGranted:
             checkStatus = .fail
         case .notVerifiable:
-            checkStatus = .manual
+            checkStatus = .fail
         }
         return check(
             id: "permissions.automation_system_events",
@@ -53,7 +54,7 @@ extension SetupDoctor {
             status: checkStatus,
             summary: systemEventsSummary(for: status.systemEventsAutomationState),
             evidence: ["state": status.systemEventsAutomationState.rawValue],
-            remediationType: status.systemEventsAutomationState == .granted ? .none : .systemSettings
+            remediationType: .none
         )
     }
 
@@ -67,7 +68,7 @@ extension SetupDoctor {
                 ? "PostEvent access for CGEvent-family operations is granted."
                 : "PostEvent access is denied; CGEvent-family ops (transport.stop/pause + most edit/view/track fallbacks) will fail.",
             evidence: ["post_event_access": status.postEventAccess ? "granted" : "denied"],
-            remediationType: status.postEventAccess ? .none : .systemSettings
+            remediationType: .none
         )
     }
 
@@ -75,8 +76,8 @@ extension SetupDoctor {
     static func launchContextCheck(runtime: Runtime) -> Check {
         let context = runtime.launchContext()
         let summary = context.context == "unknown"
-            ? "Launch context is unknown; TCC follows the responsible process that launches the server. Re-run doctor from that app, or run under Terminal, iTerm, or your editor if it already has Automation grants."
-            : "This report measures the TCC responsible process of \(context.context); re-verify under a different app if it spawns the server, or run under Terminal, iTerm, or your editor if it already has Automation grants."
+            ? "This report could not identify the responsible process; permission results remain bound to the unresolved launch context."
+            : "This report measures TCC permissions for the responsible process \(context.context); permission results are bound to that launch context."
         return check(
             id: "permissions.launch_context",
             domain: "permissions",
@@ -106,7 +107,7 @@ extension SetupDoctor {
                 status: .warn,
                 summary: "TCC database shows a known MCP host explicitly denied a required permission.",
                 evidence: ["tcc_db_readable": "true", "full_disk_access": "true", "findings": detail],
-                remediationType: .systemSettings
+                remediationType: .none
             )
         case let .skipped(reason):
             let readable: String
