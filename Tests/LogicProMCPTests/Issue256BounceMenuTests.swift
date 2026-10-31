@@ -2,7 +2,7 @@ import Foundation
 import Testing
 @testable import LogicProMCP
 
-@Suite("Issue #256 native Bounce menu")
+@Suite("Standalone Bounce terminal outcome")
 struct Issue256BounceMenuTests {
     final class Probe: @unchecked Sendable {
         var called = false
@@ -15,11 +15,14 @@ struct Issue256BounceMenuTests {
         )
     }
 
-    @Test("menu click is verified by Bounce dialog readback")
-    func verifiedDialogOpen() async throws {
+    @Test("standalone Bounce refuses without opening UI and points to automated export")
+    func standaloneBounceIsTerminal() async throws {
         let probe = Probe()
         let result = await AccessibilityChannel.openBounceDialogViaMenu(
-            systemEventsAuthorized: { true },
+            systemEventsAuthorized: {
+                probe.called = true
+                return true
+            },
             executeScript: { script in
                 probe.called = true
                 probe.script = script
@@ -28,70 +31,18 @@ struct Issue256BounceMenuTests {
         )
 
         let json = try object(result)
-        #expect(result.isSuccess)
-        #expect((json["verified"] as? Bool)!)
-        #expect(json["via"] as? String == "file-menu")
-        #expect((json["dialog_opened"] as? Bool)!)
-        #expect(!((json["bounce_fired"] as? Bool)!))
-        #expect(probe.called)
-        #expect(probe.script.contains("\"Project or Section…\""))
-        #expect(probe.script.contains("\"프로젝트 또는 섹션…\""))
-        #expect(!probe.script.contains("menu item 1"))
-        #expect(probe.script.contains("BOUNCE_DIALOG_OPENED"))
-    }
-
-    @Test("System Events denial fails before opening the menu")
-    func permissionDenied() async throws {
-        let probe = Probe()
-        let result = await AccessibilityChannel.openBounceDialogViaMenu(
-            systemEventsAuthorized: { false },
-            executeScript: { _ in
-                probe.called = true
-                return .success("unexpected")
-            }
-        )
-
-        let json = try object(result)
         #expect(!result.isSuccess)
-        #expect(json["error"] as? String == "system_events_automation_denied")
-        #expect(!((json["write_attempted"] as? Bool)!))
-        let safeToRetry = try #require(json["safe_to_retry"] as? Bool)
-        let automaticAttemptsExhausted = try #require(json["automatic_permission_attempts_exhausted"] as? Bool)
-        let terminal = try #require(json["terminal"] as? Bool)
-        let humanInterventionRequired = try #require(json["human_intervention_required"] as? Bool)
-        #expect(!safeToRetry)
-        #expect(automaticAttemptsExhausted)
-        #expect(terminal)
-        #expect(!humanInterventionRequired)
+        #expect(json["error"] as? String == "unsupported_state")
+        #expect(json["operation"] as? String == "project.bounce")
+        #expect(json["failure_stage"] as? String == "standalone_bounce_unattended_unavailable")
+        #expect(json["automated_alternative"] as? String == "logic_project.export_run")
+        #expect(json["write_attempted"] as? Bool == false)
+        #expect(json["terminal"] as? Bool == true)
+        #expect(json["human_intervention_required"] as? Bool == false)
         #expect(json["human_intervention_requests"] as? Int == 0)
         #expect(json["human_dependent_transitions"] as? Int == 0)
         #expect(!probe.called)
+        #expect(probe.script.isEmpty)
     }
 
-    @Test("missing native menu item returns a targeted terminal failure")
-    func menuItemMissing() async throws {
-        let result = await AccessibilityChannel.openBounceDialogViaMenu(
-            systemEventsAuthorized: { true },
-            executeScript: { _ in .success(#"{"result":"BOUNCE_MENU_ITEM_NOT_FOUND"}"#) }
-        )
-
-        let json = try object(result)
-        #expect(!result.isSuccess)
-        #expect(json["error"] as? String == "element_not_found")
-        #expect(json["failure_stage"] as? String == "locate_bounce_menu_item")
-    }
-
-    @Test("menu click without a dialog fails closed")
-    func dialogMissing() async throws {
-        let result = await AccessibilityChannel.openBounceDialogViaMenu(
-            systemEventsAuthorized: { true },
-            executeScript: { _ in .success(#"{"result":"BOUNCE_DIALOG_NOT_FOUND"}"#) }
-        )
-
-        let json = try object(result)
-        #expect(!result.isSuccess)
-        #expect(json["error"] as? String == "dialog_not_found")
-        #expect(json["failure_stage"] as? String == "verify_bounce_dialog")
-        #expect((json["write_attempted"] as? Bool)!)
-    }
 }

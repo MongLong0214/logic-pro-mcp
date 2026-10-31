@@ -1361,149 +1361,26 @@ extension AccessibilityChannel {
     }
 
     static func openBounceDialogViaMenu(
-        systemEventsAuthorized: @Sendable () -> Bool = { PermissionChecker.checkSystemEventsAutomation() },
-        executeScript: @escaping @Sendable (String) async -> ChannelResult = {
+        systemEventsAuthorized _: @Sendable () -> Bool = { PermissionChecker.checkSystemEventsAutomation() },
+        executeScript _: @escaping @Sendable (String) async -> ChannelResult = {
             await AppleScriptChannel.executeAppleScript($0)
         }
     ) async -> ChannelResult {
-        guard systemEventsAuthorized() else {
-            return .error(HonestContract.encodeStateC(
-                error: .systemEventsAutomationDenied,
-                hint: AppleScriptErrorClassifier.systemEventsAutomationDeniedHint,
-                extras: AppleScriptErrorClassifier.systemEventsAutomationTerminalExtras([
-                    "operation": "project.bounce",
-                    "failure_stage": "preflight_system_events_permission",
-                    "write_attempted": false,
-                ])
-            ))
-        }
-
-        let processTarget = LogicProTarget.appleScriptTarget().systemEventsProcessTarget
-        // #519: bar ("File") and item ("Bounce") names are resolved from AXLocalePolicy's
-        // LabelSets instead of hard-coded EN/KO literals — this also makes the already-recorded
-        // Japanese "ファイル" variant reachable, which the old hard-coded pair could not reach.
-        // The "Project or Section…" leaf keeps trying every recorded ellipsis rendering, now
-        // sourced from AXLocalePolicy.projectOrSectionMenuItem instead of a separate inline list.
-        let barResolution = AppleScriptMenuResolution.menuBarItem(
-            AXLocalePolicy.fileMenuBar,
-            variableName: "barName",
-            notFoundError: "BOUNCE_MENU_ITEM_NOT_FOUND"
-        )
-        // The dialog Logic opens is titled in Logic's language. `contains "Bounce" or contains
-        // "바운스"` saw two of the ten, so on a German or Japanese Logic this poll ran out and
-        // reported BOUNCE_DIALOG_NOT_FOUND about a dialog that was on screen. The names come from
-        // the same LabelSet that drove the menu click.
-        let bounceDialogSeen = AppleScriptMenuResolution.textContainsAny(
-            AXLocalePolicy.bounceMenuItem,
-            of: "bounceName",
-            variableName: "bounceSeen"
-        )
-        let itemResolution = AppleScriptMenuResolution.menuItem(
-            AXLocalePolicy.bounceMenuItem,
-            under: "menu bar item barName of menu bar 1",
-            variableName: "itemName",
-            notFoundError: "BOUNCE_MENU_ITEM_NOT_FOUND"
-        )
-        let projectOrSectionLiterals = AXLocalePolicy.projectOrSectionMenuItem.labels
-            .map { "\"\(AppleScriptSafety.escapeForScript($0))\"" }
-            .joined(separator: ", ")
-        let script = """
-        tell application "System Events"
-            tell \(processTarget)
-                set frontmost to true
-                set menuClicked to false
-                try
-                    \(barResolution)
-                    \(itemResolution)
-                on error
-                    return "BOUNCE_MENU_ITEM_NOT_FOUND"
-                end try
-                repeat with targetName in {\(projectOrSectionLiterals)}
-                    if menuClicked is false then
-                        try
-                            click menu item (targetName as text) of menu 1 of menu item itemName of menu 1 of menu bar item barName of menu bar 1
-                            set menuClicked to true
-                        end try
-                    end if
-                end repeat
-                -- #519 review: every failure path after a menu is OPEN must close it. The click above
-                -- walks File > Bounce, so both menus are on screen by the time the leaf can fail; the
-                -- bare `try` swallows that and returning here left Logic sitting with the File menu
-                -- open, and a wedged menu turns every later operation into a refusal. Escape first.
-                if menuClicked is false then
-                    key code 53
-                    delay 0.1
-                    return "BOUNCE_MENU_ITEM_NOT_FOUND"
-                end if
-                repeat 10 times
-                    set bounceName to ""
-                    try
-                        set bounceName to name of front window
-                    end try
-                    try
-                        set bounceName to bounceName & " " & name of sheet 1 of front window
-                    end try
-                    \(bounceDialogSeen)
-                    if bounceSeen then
-                        return "BOUNCE_DIALOG_OPENED"
-                    end if
-                    delay 0.2
-                end repeat
-                return "BOUNCE_DIALOG_NOT_FOUND"
-            end tell
-        end tell
-        """
-
-        let result = await executeScript(script)
-        guard result.isSuccess else {
-            if HonestContract.stateCErrorCode(result.message)
-                == HonestContract.FailureError.systemEventsAutomationDenied.rawValue {
-                return result
-            }
-            return .error(HonestContract.encodeStateC(
-                error: .axWriteFailed,
-                hint: "File > Bounce menu execution failed",
-                extras: [
-                    "operation": "project.bounce",
-                    "failure_stage": "open_bounce_menu",
-                    "write_attempted": true,
-                    "safe_to_retry": true,
-                    "cause": result.message,
-                ]
-            ))
-        }
-
-        if result.message.contains("BOUNCE_DIALOG_OPENED") {
-            return .success(HonestContract.encodeStateA(extras: [
-                "operation": "project.bounce",
-                "requested": "bounce_dialog_open",
-                "observed": "bounce_dialog_open",
-                "dialog_opened": true,
-                "bounce_fired": false,
-                "via": "file-menu",
-                "next_action": "Review the Bounce settings in Logic, then confirm and choose the destination.",
-            ]))
-        }
-        if result.message.contains("BOUNCE_MENU_ITEM_NOT_FOUND") {
-            return .error(HonestContract.encodeStateC(
-                error: .elementNotFound,
-                hint: "File > Bounce > Project or Section menu item was not found",
-                extras: [
-                    "operation": "project.bounce",
-                    "failure_stage": "locate_bounce_menu_item",
-                    "write_attempted": false,
-                    "safe_to_retry": true,
-                ]
-            ))
-        }
         return .error(HonestContract.encodeStateC(
-            error: .dialogNotFound,
-            hint: "File > Bounce menu was clicked but the Bounce dialog did not appear within 2 seconds",
+            error: .unsupportedState,
+            hint: "Standalone project.bounce cannot complete an artifact without a human-owned dialog. "
+                + "The registered unattended artifact path is logic_project export_run.",
             extras: [
                 "operation": "project.bounce",
-                "failure_stage": "verify_bounce_dialog",
-                "write_attempted": true,
-                "safe_to_retry": true,
+                "failure_stage": "standalone_bounce_unattended_unavailable",
+                "automated_alternative": "logic_project.export_run",
+                "write_attempted": false,
+                "safe_to_retry": false,
+                "automatic_attempts_exhausted": true,
+                "terminal": true,
+                "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
             ]
         ))
     }
