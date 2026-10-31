@@ -4990,6 +4990,59 @@ func testLibraryScanUnreadableRootReportsAutomaticOpenAttempt() async throws {
     #expect(object["human_intervention_requests"] as? Int == 0)
 }
 
+@Test("library.list automatically opens a closed Library panel")
+func testLibraryListAutomaticallyOpensClosedPanel() async {
+    let openCalls = CallCounter()
+    let runtime = AccessibilityChannel.Runtime.axBacked(
+        isTrusted: { true },
+        isLogicProRunning: { true },
+        logicRuntime: makeLibraryPanelLogicRuntime(
+            panelInitiallyOpen: false,
+            openCalls: openCalls
+        )
+    )
+    let channel = AccessibilityChannel(runtime: runtime)
+
+    let result = await channel.execute(operation: "library.list", params: [:])
+
+    #expect(result.isSuccess)
+    #expect(openCalls.count == 1)
+    #expect(!result.message.contains("Open Library"))
+}
+
+@Test("library.list terminates without human recovery when automatic panel open is exhausted")
+func testLibraryListPanelOpenExhaustionIsTerminal() async throws {
+    let openCalls = CallCounter()
+    let runtime = AccessibilityChannel.Runtime.axBacked(
+        isTrusted: { true },
+        isLogicProRunning: { true },
+        logicRuntime: makeLibraryPanelLogicRuntime(
+            panelInitiallyOpen: false,
+            openCalls: openCalls,
+            openSucceeds: false
+        )
+    )
+    let channel = AccessibilityChannel(runtime: runtime)
+
+    let result = await channel.execute(operation: "library.list", params: [:])
+    let object = decodeAccessibilityJSON(result.message)
+
+    #expect(!result.isSuccess)
+    #expect(openCalls.count == 1)
+    #expect(object["error"] as? String == "library_panel_unavailable")
+    #expect(object["operation"] as? String == "library.list")
+    #expect(object["precondition"] as? String == "panel_closed_after_automatic_open")
+    let terminal = try #require(object["terminal"] as? Bool)
+    let panelOpenAttempted = try #require(object["panel_open_attempted"] as? Bool)
+    let humanInterventionRequired = try #require(object["human_intervention_required"] as? Bool)
+    #expect(terminal)
+    #expect(panelOpenAttempted)
+    #expect(!humanInterventionRequired)
+    #expect(object["human_intervention_requests"] as? Int == 0)
+    #expect(object["human_dependent_transitions"] as? Int == 0)
+    #expect(!result.message.contains("Open Library"))
+}
+
 /// Restores the pre-split cross-exclusion between `library.scan_all` and
 /// `plugin.scan_presets` (both traverse Logic's AX tree; running them at the
 /// same time launches two simultaneous traversals). Splitting the single

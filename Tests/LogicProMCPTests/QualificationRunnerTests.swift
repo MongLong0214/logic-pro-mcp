@@ -5160,7 +5160,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         let classifiesClosedPanelAsEnvironmental = summary.environmentalPreconditions == [
             .init(
                 operationID: OperationID.tracksListLibrary.rawValue,
-                reason: "requires Logic's Library panel to be open"
+                reason: "automatic Library-panel open was exhausted"
             ),
         ] && summary.failed == 0
 
@@ -7682,8 +7682,8 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
     }
 
     private static func tracksListLibraryRefusal(
-        error: String = "channels_exhausted",
-        hint: String = "Library panel not found. Open Library (Y) in Logic Pro."
+        error: String = HonestContract.FailureError.libraryPanelUnavailable.rawValue,
+        hint: String = AccessibilityChannel.libraryListPanelUnavailableHint
     ) -> QualificationOperationResult {
         QualificationOperationResult(
             operationID: OperationID.tracksListLibrary.rawValue,
