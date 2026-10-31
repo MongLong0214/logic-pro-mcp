@@ -712,6 +712,16 @@ private struct DoctorCapabilityEnvelope: Encodable {
     #expect(synthesized.status == .fail)
     #expect(!isOptional)
     #expect(synthesized.evidence["reason"] == "required_check_missing")
+    #expect(synthesized.evidence["terminal"] == "true")
+    #expect(synthesized.evidence["human_intervention_required"] == "false")
+    #expect(synthesized.evidence["human_intervention_requests"] == "0")
+    #expect(synthesized.evidence["human_dependent_transitions"] == "0")
+    #expect(synthesized.remediation.type == .none)
+    #expect(synthesized.remediation.value.isEmpty)
+    #expect(SetupDoctor.computeFixPlan([synthesized]).isEmpty)
+    let headline = SetupDoctor.computeHeadline(checks: [synthesized], status: .failed)
+    #expect(headline == "Terminal outcome [binary.executable]: Required doctor check was not emitted; readiness cannot be claimed.")
+    #expect(!headline.contains("Next action"))
 
     let requiredIDs = SetupDoctor.requiredCheckIDs(
         for: report.doctorProfile,
@@ -719,6 +729,53 @@ private struct DoctorCapabilityEnvelope: Encodable {
     )
     let scoped = closed.filter { requiredIDs.contains($0.id) && !$0.optional }
     #expect(SetupDoctor.aggregateStatus(scoped) != .ok)
+}
+
+@Test func doctorV4OptionalRequiredCheckIsSynthesizedAsTerminalFailure() throws {
+    let optional = SetupDoctor.check(
+        id: "binary.executable",
+        domain: "binary",
+        status: .pass,
+        summary: "Executable is available.",
+        evidence: [:],
+        remediationType: .none,
+        optional: true
+    )
+    let closed = SetupDoctor.checksClosingRequiredGaps(
+        [optional],
+        profile: .core,
+        clientProfile: .custom
+    )
+    let synthesized = try #require(closed.first { $0.id == "binary.executable" })
+
+    #expect(synthesized.status == .fail)
+    #expect(!synthesized.optional)
+    #expect(synthesized.evidence["reason"] == "required_check_marked_optional")
+    #expect(synthesized.evidence["terminal"] == "true")
+    #expect(synthesized.evidence["human_intervention_required"] == "false")
+    #expect(synthesized.evidence["human_intervention_requests"] == "0")
+    #expect(synthesized.evidence["human_dependent_transitions"] == "0")
+    #expect(synthesized.remediation.type == .none)
+    #expect(synthesized.remediation.value.isEmpty)
+    #expect(SetupDoctor.computeFixPlan([synthesized]).isEmpty)
+    let headline = SetupDoctor.computeHeadline(checks: [synthesized], status: .failed)
+    #expect(headline == "Terminal outcome [binary.executable]: Required doctor check was emitted as optional; readiness cannot be claimed.")
+    #expect(!headline.contains("Next action"))
+}
+
+@Test func doctorV4ZeroHumanRequestEvidenceReportsZeroDependentTransitions() {
+    for arguments in [
+        ["LogicProMCP", "doctor", "--json", "--profile", "core"],
+        ["LogicProMCP", "doctor", "--json", "--profile", "full"],
+    ] {
+        let report = doctorV4Report(arguments: arguments, approvals: [:])
+        for check in report.checks where check.evidence["human_intervention_requests"] == "0" {
+            #expect(
+                check.evidence["human_dependent_transitions"] == "0",
+                "Missing zero-transition receipt for \(check.id)"
+            )
+        }
+    }
 }
 
 @Test func doctorV4CapabilityChecksAreConsistentWithRegistryGroups() throws {
