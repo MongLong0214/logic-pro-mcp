@@ -207,6 +207,24 @@ class LiveE2EGuardedCallTests(unittest.TestCase):
             "Could not read logic_system.health from the MCP server.",
         )
 
+    def test_safe_dialog_cancel_requires_post_cleanup_readback(self):
+        module = self.load_live_e2e_module()
+        before = mock.Mock(blocking_dialog_present=True, logic_window_names=["Save"])
+        after = mock.Mock(blocking_dialog_present=True, logic_window_names=["Save"])
+
+        with (
+            mock.patch.object(module, "collect_ui_snapshot", side_effect=[before, after]),
+            mock.patch.object(module, "_click_safe_dialog_cancel_button", return_value=True),
+            mock.patch.object(module.time, "sleep"),
+        ):
+            result = module.dismiss_safe_logic_dialog()
+
+        self.assertEqual(result["status"], "blocked")
+        self.assertEqual(result["method"], "cancel_button")
+        self.assertEqual(result["windows"], ["Save"])
+        self.assertFalse(module.safe_dialog_cleanup_is_clear(result))
+        self.assertTrue(module.safe_dialog_cleanup_is_clear({"status": "dismissed"}))
+
 
 if __name__ == "__main__":
     unittest.main()
