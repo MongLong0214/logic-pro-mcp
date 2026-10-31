@@ -56,6 +56,7 @@ enum ProductionReadinessContractEvaluator {
     static let currentPublishReverifyScriptSHA256 = "599cb379def82b7a28f06b5e08703af561834bccb71719604598c4cc2612be17"
     static let currentInstallReverifyScriptSHA256 = "0f27f1d94c03f46fd42c5653cdc1bd28e146760c045ed15ba55571836e3eaebb"
     static let currentInstallerScriptSHA256 = "05baeb501f55328a94988d0517cc20aa24f040705ba9b507be24356c4c51198c"
+    static let currentInstallerEnvironmentSHA256 = "667e46a28039d26a227d9f0a9368c95e3202c75663404c059a6a4c809f1f8bc2"
     static let currentReleaseConsumerSHA256 = "a90ff889c8b852f6fcf803d1581f2c6a90faa926e98d05aa765261068b5833a0"
     static let uploadArtifactCommitSHA = "65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08"
     static let downloadArtifactCommitSHA = "d3f86a106a0bac45b974a628896c90dbdf5c8093"
@@ -455,9 +456,11 @@ enum ProductionReadinessContractEvaluator {
 
         let verifierPin = currentTrustedVerifierCommitSHA
         guard stepScalar("uses", in: buildCheckout.body) == checkoutAction,
+              stepMapping("env", in: buildCheckout.body) == nil,
               nestedStepScalar("ref", under: "with", in: buildCheckout.body) == verifierPin,
               nestedStepScalar("path", under: "with", in: buildCheckout.body) == "trusted-verifier-src",
               stepScalar("uses", in: publishCheckout.body) == checkoutAction,
+              stepMapping("env", in: publishCheckout.body) == nil,
               nestedStepScalar("ref", under: "with", in: publishCheckout.body) == verifierPin,
               nestedStepScalar("path", under: "with", in: publishCheckout.body) == "trusted-verifier-src",
               workflow.components(separatedBy: verifierPin).count - 1 == 4,
@@ -489,7 +492,15 @@ enum ProductionReadinessContractEvaluator {
             "TRUSTED_QUALIFICATION_PUBLIC_KEY": "${{secrets.trusted_qualification_public_key}}",
         ]
         guard stepMapping("env", in: package.body) == packageEnvironment,
-              stepMapping("env", in: reverify.body) == reverifyEnvironment else { return false }
+              stepMapping("env", in: manifest.body) == nil,
+              stepMapping("env", in: upload.body) == nil,
+              stepMapping("env", in: download.body) == nil,
+              stepMapping("env", in: reverify.body) == reverifyEnvironment,
+              stepMapping("env", in: publication.body) == nil,
+              stepMapping("env", in: installDownload.body) == nil,
+              stepMapping("env", in: installReverify.body) == nil,
+              mappingSHA256(stepMapping("env", in: installer.body))
+                == currentInstallerEnvironmentSHA256 else { return false }
 
         guard let packageScript = stepBlockScalar("run", in: package.body),
               let reverifyScript = stepBlockScalar("run", in: reverify.body),
@@ -646,6 +657,14 @@ enum ProductionReadinessContractEvaluator {
             values[entry.key] = normalizedScalar(entry.value)
         }
         return values
+    }
+
+    private static func mappingSHA256(_ mapping: [String: String]?) -> String? {
+        guard let mapping else { return nil }
+        let canonical = mapping.keys.sorted().map { key in
+            "\(key)=\(mapping[key]!)"
+        }.joined(separator: "\n")
+        return SupportBundleBuilder.sha256(Data(canonical.utf8))
     }
 
     private static func stepBlockScalar(_ key: String, in step: String) -> String? {

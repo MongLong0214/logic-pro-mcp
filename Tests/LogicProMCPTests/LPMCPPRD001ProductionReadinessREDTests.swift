@@ -1117,6 +1117,41 @@ struct LPMCPPRD001ProductionReadinessREDTests {
             verifierBuildPathOverrideReport.openDebts.contains(.independentProvenanceNotEnforced)
         )
 
+        let installReverifyPathOverride = workflow.replacingOccurrences(
+            of: "        working-directory: ${{ runner.temp }}/artifact\n        run: |",
+            with: "        env:\n"
+                + "          PATH: ${{ github.workspace }}/attacker-bin:${{ env.PATH }}\n"
+                + "        working-directory: ${{ runner.temp }}/artifact\n"
+                + "        run: |"
+        )
+        #expect(installReverifyPathOverride != workflow)
+        let installReverifyPathOverrideReport = evaluate(installReverifyPathOverride, consumer)
+        #expect(
+            installReverifyPathOverrideReport.openDebts.contains(
+                .releaseWorkflowMissingIndependentQualification
+            )
+        )
+        #expect(
+            installReverifyPathOverrideReport.openDebts.contains(.independentProvenanceNotEnforced)
+        )
+
+        let installerEnvironmentOverride = workflow.replacingOccurrences(
+            of: "        env:\n          LOGIC_PRO_MCP_VERSION:",
+            with: "        env:\n"
+                + "          BASH_ENV: ${{ github.workspace }}/attacker-env\n"
+                + "          LOGIC_PRO_MCP_VERSION:"
+        )
+        #expect(installerEnvironmentOverride != workflow)
+        let installerEnvironmentOverrideReport = evaluate(installerEnvironmentOverride, consumer)
+        #expect(
+            installerEnvironmentOverrideReport.openDebts.contains(
+                .releaseWorkflowMissingIndependentQualification
+            )
+        )
+        #expect(
+            installerEnvironmentOverrideReport.openDebts.contains(.independentProvenanceNotEnforced)
+        )
+
         let wrongPin = workflow.replacingOccurrences(
             of: "fa7d4430b4e42e15902ab82ca2b7e67380ca56ff",
             with: String(repeating: "0", count: 40)
