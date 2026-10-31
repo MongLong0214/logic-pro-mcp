@@ -36,6 +36,29 @@ private final class AppleScriptOpenHarness: @unchecked Sendable {
     #expect(response!.contains("\"level\":\"L3\""))
 }
 
+@Test func testMissingDestructiveConfirmationIsTerminalWithoutHumanContinuation() throws {
+    let response = try #require(DestructivePolicy.confirmationResponse(command: "quit"))
+    let object = try #require(sharedJSONObject(response))
+
+    #expect(object["status"] as? String == "confirmation_required")
+    #expect(object["state"] as? String == "C")
+    let terminal = try #require(object["terminal"] as? Bool)
+    #expect(terminal)
+    let writeAttempted = try #require(object["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+    let safeToRetry = try #require(object["safe_to_retry"] as? Bool)
+    #expect(!safeToRetry)
+    let humanInterventionRequired = try #require(object["human_intervention_required"] as? Bool)
+    #expect(!humanInterventionRequired)
+    #expect(object["human_intervention_requests"] as? Int == 0)
+    #expect(object["human_dependent_transitions"] as? Int == 0)
+    #expect(object["confirm_command"] == nil)
+    let message = try #require(object["message"] as? String)
+    #expect(!message.localizedCaseInsensitiveContains("re-call"))
+    #expect(!message.localizedCaseInsensitiveContains("retry"))
+    #expect(!message.localizedCaseInsensitiveContains("review"))
+}
+
 @Test func testL2RequiresConfirmation() {
     let response = DestructivePolicy.confirmationResponse(command: "save_as")
     #expect(response != nil)

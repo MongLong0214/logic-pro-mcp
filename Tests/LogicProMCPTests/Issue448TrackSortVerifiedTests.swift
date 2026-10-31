@@ -310,6 +310,52 @@ private struct TrackSortAXFixture: @unchecked Sendable {
 
 @Suite("#448 verified track sort")
 struct Issue448TrackSortVerifiedTests {
+    @Test("missing sort confirmation terminates without a human continuation")
+    func missingConfirmationIsTerminal() async throws {
+        let registry = TargetRegistry()
+        var references: [TargetReference] = []
+        for (index, name) in ["Kick", "Bass"].enumerated() {
+            let descriptor = TargetDescriptor(trackIndex: index, trackName: name)
+            references.append(await registry.bind(
+                kind: .track,
+                descriptor: descriptor,
+                fingerprint: descriptor.fingerprint
+            ))
+        }
+        let channel = TrackSortStateBChannel()
+        let router = ChannelRouter()
+        await router.register(channel)
+
+        let result = await FeatureFlags.withAdr002TargetRefForTests(true) {
+            await TrackDispatcher.handle(
+                command: "sort_verified",
+                params: [
+                    "criterion": .string("track_name"),
+                    "expected_order": .array(references.map { .string($0.rawValue) }),
+                ],
+                router: router,
+                cache: StateCache(),
+                targetRegistry: registry
+            )
+        }
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+
+        let isError = try #require(result.isError)
+        #expect(isError)
+        #expect(body["status"] as? String == "confirmation_required")
+        #expect(body["state"] as? String == "C")
+        let terminal = try #require(body["terminal"] as? Bool)
+        #expect(terminal)
+        let writeAttempted = try #require(body["write_attempted"] as? Bool)
+        #expect(!writeAttempted)
+        let humanInterventionRequired = try #require(body["human_intervention_required"] as? Bool)
+        #expect(!humanInterventionRequired)
+        #expect(body["human_intervention_requests"] as? Int == 0)
+        #expect(body["human_dependent_transitions"] as? Int == 0)
+        #expect(body["confirm_command"] == nil)
+        #expect(await channel.calls.isEmpty)
+    }
+
     @Test(arguments: ["sorted", "ineffective_press", "wrong_order", "unreadable", "stale_ref"])
     func thirtyTwoTrackDispatcherChecksTheEntireNativeOrder(mode: String) async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {

@@ -837,18 +837,13 @@ struct TrackDispatcher: OperationTraceDispatching {
                         command: "sort_verified"
                     )?.confirmation ?? .l2
                 ) ?? "L2"
-                let confirmedParams = HonestContract.jsonString([
-                    "criterion": criterion.rawValue,
-                    "expected_order": expectedOrder,
-                    "confirmed": true,
-                ])
-                return toolTextResult(HonestContract.jsonString([
-                    "status": "confirmation_required",
-                    "command": "sort_verified",
-                    "level": level,
-                    "message": "sort_verified reorders the project's track layout. Re-call with confirmed:true after reviewing the expected order.",
-                    "confirm_command": "logic_tracks(\"sort_verified\", \(confirmedParams))",
-                ]))
+                return toolTextResult(
+                    DestructivePolicy.terminalConfirmationResponse(
+                        command: "sort_verified",
+                        level: level
+                    ),
+                    isError: true
+                )
             case .invalid(let hint):
                 return toolInvalidParamsResult(
                     "sort_verified \(hint)",

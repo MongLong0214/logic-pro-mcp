@@ -269,7 +269,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
             }
             if !confirmation.confirmed, let response = DestructivePolicy.confirmationResponse(command: command) {
                 audit(command, phase: .confirmationRequired)
-                return await finalizeTrace(toolTextResult(response), traceID: traceID)
+                return await finalizeTrace(toolTextResult(response, isError: true), traceID: traceID)
             }
             if dialogPresent() {
                 audit(command, phase: .rejected, reason: "blocking dialog")
@@ -331,7 +331,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
             }
             if !confirmation.confirmed, let response = DestructivePolicy.confirmationResponse(command: command) {
                 audit(command, phase: .confirmationRequired)
-                return await finalizeTrace(toolTextResult(response), traceID: traceID)
+                return await finalizeTrace(toolTextResult(response, isError: true), traceID: traceID)
             }
             if dialogPresent() {
                 audit(command, phase: .rejected, reason: "blocking dialog")
@@ -369,7 +369,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
             }
             if !confirmation.confirmed, let response = DestructivePolicy.confirmationResponse(command: command) {
                 audit(command, phase: .confirmationRequired)
-                return await finalizeTrace(toolTextResult(response), traceID: traceID)
+                return await finalizeTrace(toolTextResult(response, isError: true), traceID: traceID)
             }
             if dialogPresent() {
                 audit(command, phase: .rejected, reason: "blocking dialog")
@@ -698,7 +698,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
             }
             if !confirmation.confirmed, let response = DestructivePolicy.confirmationResponse(command: command) {
                 audit(command, phase: .confirmationRequired)
-                return await finalizeTrace(toolTextResult(response), traceID: traceID)
+                return await finalizeTrace(toolTextResult(response, isError: true), traceID: traceID)
             }
             if !isLogicProRunning() {
                 audit(command, phase: .rejected, reason: "not running")
