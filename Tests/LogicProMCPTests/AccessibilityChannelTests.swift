@@ -2371,6 +2371,7 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     #expect(missingButton.message.contains("transport button 'Metronome' not located"))
     let missingButtonObject = try #require(sharedJSONObject(missingButton.message))
     #expect(try #require(missingButtonObject["terminal"] as? Bool))
+    #expect(missingButtonObject["terminal_scope"] as? String == "mcp_request_only")
     #expect(!(try #require(missingButtonObject["human_intervention_required"] as? Bool)))
     #expect(!(try #require(missingButtonObject["write_attempted"] as? Bool)))
     #expect(!(try #require(missingButtonObject["safe_to_retry"] as? Bool)))

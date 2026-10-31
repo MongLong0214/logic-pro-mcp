@@ -174,6 +174,7 @@ extension AccessibilityChannel {
             extras["safe_to_retry"] = false
             extras["automatic_transport_lookup_exhausted"] = true
             extras["terminal"] = true
+            extras["terminal_scope"] = "mcp_request_only"
             extras["human_intervention_required"] = false
             extras["human_intervention_requests"] = 0
             extras["human_dependent_transitions"] = 0

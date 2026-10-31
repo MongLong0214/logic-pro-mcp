@@ -216,6 +216,7 @@ struct Issue1059TransportFirstPressTests {
         #expect(envelope["record_clear_outcome"] as? String == "unconfirmed_after_write")
         #expect(envelope["record_clear_applied"] == nil)
         #expect(try #require(envelope["terminal"] as? Bool))
+        #expect(envelope["terminal_scope"] as? String == "mcp_request_only")
         #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
         #expect(envelope["human_intervention_requests"] as? Int == 0)
         #expect(envelope["human_dependent_transitions"] as? Int == 0)
