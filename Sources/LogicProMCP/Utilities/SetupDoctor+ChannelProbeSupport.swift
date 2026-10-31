@@ -9,17 +9,25 @@ extension SetupDoctor {
     }
 
 
-    static func productionMCUPortReferenceFound() -> Bool? {
+    static func productionMCUPortReferenceProbe(
+        fileExistsAtPath: (String) -> Bool = { FileManager.default.fileExists(atPath: $0) },
+        runCommand: (String, [String], TimeInterval) -> CommandResult = { executable, arguments, timeout in
+            SetupDoctor.runProductionCommand(
+                executable: executable,
+                arguments: arguments,
+                timeout: timeout
+            )
+        }
+    ) -> MCUPortReferenceProbe {
         let path = FileManager.default.homeDirectoryForCurrentUser
             .appendingPathComponent("Library/Preferences/com.apple.logic.pro.cs")
             .path
-        guard FileManager.default.fileExists(atPath: path) else { return nil }
-        let output = runProductionCommand(
-            executable: "/usr/bin/strings",
-            arguments: [path],
-            timeout: 1.5
-        ).output?.stdout ?? ""
-        return output.contains("LogicProMCP-MCU-Internal")
+        guard fileExistsAtPath(path) else { return .sourceMissing }
+        let result = runCommand("/usr/bin/strings", [path], 1.5)
+        guard case let .completed(output) = result, output.exitCode == 0 else {
+            return .indeterminate(reason: result.failureReason ?? "unknown_failure")
+        }
+        return output.stdout.contains("LogicProMCP-MCU-Internal") ? .found : .confirmedAbsent
     }
 
 

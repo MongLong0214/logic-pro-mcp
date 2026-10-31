@@ -39,7 +39,7 @@ private func enterpriseRuntime(
     runtime.shareDirProbe = { .complete(path: "/opt/homebrew/share/logic-pro-mcp", source: "brew_pkgshare") }
     runtime.readClaudeDesktopRegistration = { .registered(command: "/Applications/Claude.app/Contents/MacOS/Claude") }
     runtime.keyCommandsPresetStaged = { true }
-    runtime.mcuPortReferenceFound = { true }
+    runtime.mcuPortReferenceProbe = { .found }
     runtime.launchContext = { SetupDoctor.LaunchContextInfo(context: "terminal", responsibleHint: "Terminal") }
     runtime.tccCrossContextProbe = { .granted("terminal:accessibility=granted") }
     runtime.blockingDialogInfo = { nil }

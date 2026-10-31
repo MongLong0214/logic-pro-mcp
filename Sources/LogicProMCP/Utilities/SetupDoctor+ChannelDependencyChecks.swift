@@ -101,24 +101,51 @@ extension SetupDoctor {
                 skipReason: .profileNotRequired
             )
         }
-        let found = runtime.mcuPortReferenceFound()
-        let unavailable = found != true
+        let observation = runtime.mcuPortReferenceProbe()
+        let found = observation == .found
+        let unavailable = !found
+        let summary: String
+        let probeOutcome: String
+        let sourcePresent: String
+        let referenceFound: String
+        var evidence: [String: String] = [:]
+        switch observation {
+        case .found:
+            summary = "Logic controller assignments reference the LogicProMCP MCU port."
+            probeOutcome = "found"
+            sourcePresent = "true"
+            referenceFound = "true"
+        case .confirmedAbsent:
+            summary = "Logic controller assignments do not reference the LogicProMCP MCU port; MCU-only operations are unavailable for unattended execution."
+            probeOutcome = "confirmed_absent"
+            sourcePresent = "true"
+            referenceFound = "false"
+        case .sourceMissing:
+            summary = "Logic controller assignments are absent; MCU-only operations are unavailable for unattended execution."
+            probeOutcome = "source_missing"
+            sourcePresent = "false"
+            referenceFound = "unverified"
+        case let .indeterminate(reason):
+            summary = "Logic controller assignments could not be read; MCU-only operations are unavailable for unattended execution."
+            probeOutcome = "indeterminate"
+            sourcePresent = "true"
+            referenceFound = "unverified"
+            evidence = ["probe_failure_reason": reason]
+        }
+        evidence = evidence.merging([
+            "assignment_probe": probeOutcome,
+            "cs_file_present": sourcePresent,
+            "mcu_port_reference_found": referenceFound,
+            "terminal": String(unavailable),
+            "human_intervention_required": "false",
+            "human_intervention_requests": "0",
+        ]) { current, _ in current }
         return check(
             id: "channels.mcu_wiring_hint",
             domain: "channels",
             status: unavailable ? .fail : .pass,
-            summary: found == true
-                ? "Logic controller assignments reference the LogicProMCP MCU port."
-                : found == false
-                    ? "Logic controller assignments do not reference the LogicProMCP MCU port; MCU-only operations are unavailable for unattended execution."
-                    : "Logic controller assignments could not be read; MCU-only operations are unavailable for unattended execution.",
-            evidence: [
-                "cs_file_present": found == nil ? "false" : "true",
-                "mcu_port_reference_found": String(found == true),
-                "terminal": String(unavailable),
-                "human_intervention_required": "false",
-                "human_intervention_requests": "0",
-            ],
+            summary: summary,
+            evidence: evidence,
             remediationType: .none
         )
     }
