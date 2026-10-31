@@ -9,6 +9,7 @@ private actor DoctorMockMainServer: ServerStarting {
 private func doctorRuntime(
     executablePath: String? = "/usr/local/bin/LogicProMCP",
     exists: Bool = true,
+    existsProbe: ((String) -> Bool)? = nil,
     executable: Bool = true,
     logicRunning: Bool = true,
     visibleWindow: Bool = true,
@@ -40,7 +41,7 @@ private func doctorRuntime(
 ) -> SetupDoctor.Runtime {
     var runtime = SetupDoctor.Runtime(
         resolveExecutablePath: { _ in executablePath },
-        fileExists: { _ in exists },
+        fileExists: existsProbe ?? { _ in exists },
         isExecutableFile: { _ in executable },
         logicProRunning: { logicRunning },
         logicProHasVisibleWindow: { visibleWindow },
@@ -59,7 +60,7 @@ private func doctorRuntime(
     runtime.shareDirProbe = { .complete(path: "/opt/homebrew/share/logic-pro-mcp", source: "brew_pkgshare") }
     runtime.readClaudeDesktopRegistration = { .registered(command: "/Applications/Claude.app/Contents/MacOS/Claude") }
     runtime.keyCommandsPresetStaged = { true }
-    runtime.mcuPortReferenceFound = { true }
+    runtime.mcuPortReferenceProbe = { .found }
     runtime.launchContext = { SetupDoctor.LaunchContextInfo(context: "terminal", responsibleHint: "Terminal") }
     runtime.tccCrossContextProbe = { .granted("terminal:accessibility=granted") }
     runtime.blockingDialogInfo = { nil }
@@ -118,6 +119,92 @@ private func issue26RepositoryRootURL() -> URL {
         #expect(!permissionAnchors.contains(staleContinuation))
     }
     #expect(permissionAnchors.contains("terminal observation"))
+
+    let mcuStart = try #require(setup.range(of: "<a id=\"doctor-channelsmcu-wiring-hint\"></a>"))
+    let mcuEnd = try #require(setup.range(of: "<a id=\"doctor-dependenciesclick-fallback\"></a>"))
+    let mcuGuidance = String(setup[mcuStart.lowerBound..<mcuEnd.lowerBound])
+    for staleContinuation in ["Wire ", "wire ", "open Logic", "Control Surfaces", "manual"] {
+        #expect(!mcuGuidance.contains(staleContinuation))
+    }
+    #expect(mcuGuidance.contains("terminal unsuccessful outcome"))
+
+    let clickStart = try #require(setup.range(of: "<a id=\"doctor-dependenciesclick-fallback\"></a>"))
+    let clickEnd = try #require(setup.range(of: "## Lifecycle Anchors"))
+    let clickGuidance = String(setup[clickStart.lowerBound..<clickEnd.lowerBound])
+    for staleContinuation in ["grant ", "System Settings", "Privacy & Security", "manual"] {
+        #expect(!clickGuidance.contains(staleContinuation))
+    }
+    #expect(clickGuidance.contains("terminal unsuccessful outcome"))
+    let targetStart = try #require(setup.range(of: "<a id=\"doctor-mcpregistration-target\"></a>"))
+    let targetTail = setup[targetStart.lowerBound...]
+    let nextAnchor = try #require(targetTail.dropFirst().range(of: "<a id="))
+    let targetAnchor = String(targetTail[..<nextAnchor.lowerBound])
+    for staleContinuation in ["Refresh ", "refresh ", "command", "config-edit", "retry"] {
+        #expect(!targetAnchor.contains(staleContinuation))
+    }
+    #expect(targetAnchor.contains("terminal unavailable state"))
+    #expect(targetAnchor.contains("When a share directory is configured"))
+    #expect(targetAnchor.contains("when the installed version is readable"))
+    #expect(!targetAnchor.contains("with a valid share directory and matching version"))
+
+    let pathStart = try #require(setup.range(of: "<a id=\"doctor-binarypath\"></a>"))
+    let pathTail = setup[pathStart.lowerBound...]
+    let pathNextAnchor = try #require(pathTail.dropFirst().range(of: "<a id="))
+    let pathAnchor = String(pathTail[..<pathNextAnchor.lowerBound])
+    for staleContinuation in ["Install ", "install ", "copy ", "invoke ", "Homebrew"] {
+        #expect(!pathAnchor.contains(staleContinuation))
+    }
+    #expect(pathAnchor.contains("terminal unavailable state"))
+
+    let binaryStart = try #require(setup.range(of: "<a id=\"doctor-binaryexecutable\"></a>"))
+    let binaryTail = setup[binaryStart.lowerBound...]
+    let binaryNextAnchor = try #require(binaryTail.dropFirst().range(of: "<a id="))
+    let binaryAnchor = String(binaryTail[..<binaryNextAnchor.lowerBound])
+    for staleContinuation in ["chmod", "Run ", "run ", "remediation action", "continuation"] {
+        #expect(!binaryAnchor.contains(staleContinuation))
+    }
+    #expect(binaryAnchor.contains("terminal unavailable state"))
+
+    let quarantineStart = try #require(setup.range(of: "<a id=\"doctor-releasequarantine\"></a>"))
+    let quarantineTail = setup[quarantineStart.lowerBound...]
+    let quarantineNextAnchor = try #require(quarantineTail.dropFirst().range(of: "<a id="))
+    let quarantineAnchor = String(quarantineTail[..<quarantineNextAnchor.lowerBound])
+    for staleContinuation in ["xattr -d", "remove quarantine", "remediation action", "continuation"] {
+        #expect(!quarantineAnchor.contains(staleContinuation))
+    }
+    #expect(quarantineAnchor.contains("terminal unavailable state"))
+
+    let signatureStart = try #require(setup.range(of: "<a id=\"doctor-releasesignature\"></a>"))
+    let signatureTail = setup[signatureStart.lowerBound...]
+    let signatureNextAnchor = try #require(signatureTail.dropFirst().range(of: "<a id="))
+    let signatureAnchor = String(signatureTail[..<signatureNextAnchor.lowerBound])
+    for staleContinuation in ["Reinstall", "sign a local", "codesign --force", "remediation action", "continuation"] {
+        #expect(!signatureAnchor.contains(staleContinuation))
+    }
+    #expect(signatureAnchor.contains("terminal unavailable state"))
+
+    let macOSStart = try #require(setup.range(of: "<a id=\"doctor-systemmacos-version\"></a>"))
+    let macOSTail = setup[macOSStart.lowerBound...]
+    let macOSNextAnchor = try #require(macOSTail.dropFirst().range(of: "<a id="))
+    let macOSAnchor = String(macOSTail[..<macOSNextAnchor.lowerBound])
+    #expect(!macOSAnchor.contains("Upgrade macOS"))
+    #expect(macOSAnchor.contains("terminal unavailable state"))
+
+    let installationStart = try #require(setup.range(of: "<a id=\"doctor-logicinstallation\"></a>"))
+    let installationTail = setup[installationStart.lowerBound...]
+    let installationNextAnchor = try #require(installationTail.dropFirst().range(of: "<a id="))
+    let installationAnchor = String(installationTail[..<installationNextAnchor.lowerBound])
+    for staleContinuation in ["Install Logic", "install Logic", "retry", "continuation"] {
+        #expect(!installationAnchor.contains(staleContinuation))
+    }
+    #expect(installationAnchor.contains("terminal unavailable state"))
+
+    let versionStart = try #require(setup.range(of: "<a id=\"doctor-logicversion-support\"></a>"))
+    let versionTail = setup[versionStart.lowerBound...]
+    let versionNextAnchor = try #require(versionTail.dropFirst().range(of: "<a id="))
+    let versionAnchor = String(versionTail[..<versionNextAnchor.lowerBound])
+    #expect(!versionAnchor.contains("Use Logic"))
+    #expect(versionAnchor.contains("terminal unavailable state"))
 }
 
 @Test func testSetupDoctorJSONContractStableCheckIDsAndOKAggregation() throws {
@@ -190,6 +277,144 @@ private func issue26RepositoryRootURL() -> URL {
     #expect(remediation["value"] as? String != nil)
 }
 
+@Test func testTerminalLogicInstallationSuppressesBlockedVersionContinuation() throws {
+    let cases: [[SetupDoctor.LogicAppInfo]] = [
+        [],
+        [SetupDoctor.LogicAppInfo(
+            path: "/Applications/Logic Pro Creator Studio.app",
+            version: "1.0",
+            bundleID: "com.apple.mobilelogic",
+            readable: true
+        )],
+    ]
+
+    for logicApps in cases {
+        var runtime = doctorRuntime()
+        runtime.logicApps = { logicApps }
+        let report = SetupDoctor.generate(
+            arguments: ["LogicProMCP", "doctor", "--json"],
+            permissionStatus: grantedPermissionStatus(),
+            approvals: allApprovals(),
+            runtime: runtime
+        )
+        let installation = try #require(report.checks.first { $0.id == "logic.installation" })
+        let version = try #require(report.checks.first { $0.id == "logic.version_support" })
+        let human = SetupDoctor.renderHuman(report, useColor: false)
+
+        #expect(installation.status == .fail)
+        #expect(installation.evidence["terminal"] == "true")
+        #expect(version.status == .skipped)
+        #expect(version.blockedBy == installation.id)
+        #expect(version.remediation.type == .none)
+        #expect(version.remediation.value.isEmpty)
+        #expect(!report.fixPlan.contains(installation.id))
+        #expect(!report.fixPlan.contains(version.id))
+        #expect(!human.contains("→ docs/SETUP.md#doctor-logicversion-support"))
+    }
+}
+
+@Test func testUnreadableLogicInstallationKeepsBlockedVersionDiagnostic() throws {
+    var runtime = doctorRuntime()
+    runtime.logicApps = {
+        [SetupDoctor.LogicAppInfo(
+            path: "/Applications/Logic Pro.app",
+            version: nil,
+            bundleID: ServerConfig.logicProBundleID,
+            readable: false
+        )]
+    }
+    let report = SetupDoctor.generate(
+        arguments: ["LogicProMCP", "doctor", "--json"],
+        permissionStatus: grantedPermissionStatus(),
+        approvals: allApprovals(),
+        runtime: runtime
+    )
+    let installation = try #require(report.checks.first { $0.id == "logic.installation" })
+    let version = try #require(report.checks.first { $0.id == "logic.version_support" })
+    let human = SetupDoctor.renderHuman(report, useColor: false)
+
+    #expect(installation.status == .skipped)
+    #expect(installation.evidence["terminal"] == nil)
+    #expect(version.status == .skipped)
+    #expect(version.blockedBy == installation.id)
+    #expect(version.remediation.type == .docs)
+    #expect(human.contains("→ docs/SETUP.md#doctor-logicversion-support"))
+}
+
+@Test func testMissingBinaryPathTerminatesWithoutRemediation() throws {
+    let report = SetupDoctor.generate(
+        arguments: ["LogicProMCP", "doctor", "--json"],
+        permissionStatus: grantedPermissionStatus(),
+        approvals: allApprovals(),
+        runtime: doctorRuntime(executablePath: nil, exists: false)
+    )
+    let path = try #require(report.checks.first { $0.id == "binary.path" })
+    #expect(path.status == .fail)
+    #expect(path.remediation.type == .none)
+    #expect(path.remediation.value.isEmpty)
+    #expect(path.evidence["terminal"] == "true")
+    #expect(path.evidence["human_intervention_required"] == "false")
+    #expect(path.evidence["human_intervention_requests"] == "0")
+
+    for id in ["binary.executable", "release.signature", "release.quarantine"] {
+        let dependent = try #require(report.checks.first { $0.id == id })
+        #expect(dependent.status == .skipped)
+        #expect(dependent.blockedBy == "binary.path")
+        #expect(dependent.skipReason == .binaryPathMissing)
+        #expect(dependent.remediation.type == .none)
+        #expect(dependent.remediation.value.isEmpty)
+    }
+    for id in ["binary.path", "binary.executable", "release.signature", "release.quarantine"] {
+        #expect(!report.fixPlan.contains(id))
+    }
+}
+
+@Test func testBinaryPathFailureOwnsDownstreamWhenFileAppearsLater() throws {
+    var reads = 0
+    let report = SetupDoctor.generate(
+        arguments: ["LogicProMCP", "doctor", "--json"],
+        permissionStatus: grantedPermissionStatus(),
+        approvals: allApprovals(),
+        runtime: doctorRuntime(existsProbe: { _ in
+            reads += 1
+            return reads > 1
+        })
+    )
+    let path = try #require(report.checks.first { $0.id == "binary.path" })
+    #expect(path.status == .fail)
+    for id in ["binary.executable", "release.signature", "release.quarantine"] {
+        let dependent = try #require(report.checks.first { $0.id == id })
+        #expect(dependent.status == .skipped)
+        #expect(dependent.blockedBy == "binary.path")
+        #expect(dependent.remediation.type == .none)
+        #expect(SetupDoctor.blockedByDependencies[id] == ["binary.path"])
+    }
+}
+
+@Test func testBinaryDisappearanceAfterPathPassTerminatesWithoutFalseBlockedBy() throws {
+    var reads = 0
+    let report = SetupDoctor.generate(
+        arguments: ["LogicProMCP", "doctor", "--json"],
+        permissionStatus: grantedPermissionStatus(),
+        approvals: allApprovals(),
+        runtime: doctorRuntime(existsProbe: { _ in
+            reads += 1
+            return reads == 1
+        })
+    )
+    let path = try #require(report.checks.first { $0.id == "binary.path" })
+    #expect(path.status == .pass)
+    for id in ["binary.executable", "release.signature", "release.quarantine"] {
+        let dependent = try #require(report.checks.first { $0.id == id })
+        #expect(dependent.status == .fail)
+        #expect(dependent.blockedBy == nil)
+        #expect(dependent.remediation.type == .none)
+        #expect(dependent.evidence["terminal"] == "true")
+        #expect(dependent.evidence["human_intervention_required"] == "false")
+        #expect(dependent.evidence["human_intervention_requests"] == "0")
+    }
+}
+
 @Test func testSetupDoctorReportsRemediationOrTerminalPermissionOutcomeForNonPassStates() {
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json", "--profile", "full", "--client", "claude-code"],
@@ -207,15 +432,26 @@ private func issue26RepositoryRootURL() -> URL {
 
     #expect(report.status == .failed)
     let terminalOutcomeIDs: Set<String> = [
+        "binary.path",
+        "binary.executable",
+        "release.signature",
+        "release.quarantine",
         "permissions.accessibility",
         "permissions.automation_logic_pro",
         "permissions.automation_system_events",
         "permissions.post_event_access",
         "channels.manual_validation",
+        "dependencies.click_fallback",
+        "logic.application_state",
+        "logic.blocking_dialog",
+        "mcp.registration_target",
     ]
     for check in report.checks where check.status != .pass && !check.optional {
         if terminalOutcomeIDs.contains(check.id) {
-            #expect(check.status == .fail, "\(check.id) must terminate as a failure")
+            #expect(
+                check.status == .fail || (check.status == .skipped && check.blockedBy != nil),
+                "\(check.id) must terminate or remain collapsed behind its terminal prerequisite"
+            )
             #expect(check.remediation.type == .none, "\(check.id) must not request human remediation")
             #expect(check.remediation.value == "", "\(check.id) must not carry human remediation text")
         } else {
@@ -223,6 +459,41 @@ private func issue26RepositoryRootURL() -> URL {
             #expect(!check.remediation.value.isEmpty, "\(check.id) has no remediation value")
         }
     }
+}
+
+@Test func testMCUWiringHintTerminatesMissingOrUnreadableStateWithoutHumanAction() {
+    let observations: [(SetupDoctor.MCUPortReferenceProbe, String)] = [
+        (.confirmedAbsent, "confirmed_absent"),
+        (.sourceMissing, "source_missing"),
+        (.indeterminate(reason: "timeout"), "indeterminate"),
+    ]
+
+    for (observation, outcome) in observations {
+        var runtime = doctorRuntime()
+        runtime.mcuPortReferenceProbe = { observation }
+
+        let check = SetupDoctor.mcuWiringHintCheck(runtime: runtime, profile: .full)
+
+        #expect(check.status == .fail)
+        #expect(check.remediation.type == .none)
+        #expect(check.remediation.value.isEmpty)
+        #expect(check.evidence["terminal"] == "true")
+        #expect(check.evidence["human_intervention_required"] == "false")
+        #expect(check.evidence["human_intervention_requests"] == "0")
+        #expect(check.evidence["assignment_probe"] == outcome)
+        #expect(!check.summary.localizedCaseInsensitiveContains("ignore"))
+    }
+}
+
+@Test func testMCUWiringHintPreservesConfirmedPassWithoutHumanAction() {
+    let check = SetupDoctor.mcuWiringHintCheck(runtime: doctorRuntime(), profile: .full)
+
+    #expect(check.status == .pass)
+    #expect(check.remediation.type == .none)
+    #expect(check.remediation.value.isEmpty)
+    #expect(check.evidence["terminal"] == "false")
+    #expect(check.evidence["human_intervention_required"] == "false")
+    #expect(check.evidence["human_intervention_requests"] == "0")
 }
 
 @Test func testMainEntrypointDoctorJSONDoesNotStartServerAndWritesStdout() async throws {
@@ -539,7 +810,7 @@ private func issue26RepositoryRootURL() -> URL {
     #expect(quarantine.summary == "Binary is not quarantined.")
 }
 
-@Test func testReleaseQuarantineReportsWarnWhenAttributePresent() throws {
+@Test func testReleaseQuarantineTerminatesWhenAttributePresent() throws {
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json"],
         permissionStatus: grantedPermissionStatus(),
@@ -558,12 +829,17 @@ private func issue26RepositoryRootURL() -> URL {
         })
     )
     let quarantine = try #require(report.checks.first { $0.id == "release.quarantine" })
-    #expect(quarantine.status == .warn)
+    #expect(quarantine.status == .fail)
     #expect(quarantine.summary == "Binary has a macOS quarantine attribute.")
-    #expect(quarantine.remediation.type == .command)
+    #expect(quarantine.remediation.type == .none)
+    #expect(quarantine.remediation.value.isEmpty)
+    #expect(quarantine.evidence["terminal"] == "true")
+    #expect(quarantine.evidence["human_intervention_required"] == "false")
+    #expect(quarantine.evidence["human_intervention_requests"] == "0")
+    #expect(!report.fixPlan.contains(quarantine.id))
 }
 
-@Test func testDoctorRemediationShellQuotesPaths() throws {
+@Test func testBinaryDiagnosticsDoNotExposeShellRemediation() throws {
     let path = "/Users/x/My Build/LogicProMCP"
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json"],
@@ -585,8 +861,15 @@ private func issue26RepositoryRootURL() -> URL {
     )
     let executable = try #require(report.checks.first { $0.id == "binary.executable" })
     let quarantine = try #require(report.checks.first { $0.id == "release.quarantine" })
-    #expect(executable.remediation.value == "chmod +x '\(path)'")
-    #expect(quarantine.remediation.value == "xattr -d com.apple.quarantine '\(path)'")
+    for check in [executable, quarantine] {
+        #expect(check.status == .fail)
+        #expect(check.remediation.type == .none)
+        #expect(check.remediation.value.isEmpty)
+        #expect(check.evidence["terminal"] == "true")
+        #expect(check.evidence["human_intervention_required"] == "false")
+        #expect(check.evidence["human_intervention_requests"] == "0")
+        #expect(!report.fixPlan.contains(check.id))
+    }
 }
 
 @Test func testDoctorXattrEvidenceKeepsStdoutStderrSummary() throws {
@@ -630,15 +913,21 @@ private func issue26RepositoryRootURL() -> URL {
         })
     )
     let signature = try #require(report.checks.first { $0.id == "release.signature" })
-    #expect(signature.status == .warn)
+    #expect(signature.status == .fail)
+    #expect(signature.remediation.type == .none)
+    #expect(signature.remediation.value.isEmpty)
     #expect(signature.evidence["exit_code"] == "1")
     #expect(signature.evidence["stdout"] == "present")
     #expect(signature.evidence["stdout_truncated"] == "true")
     #expect(signature.evidence["stderr"] == "present")
     #expect(signature.evidence["stderr_truncated"] == "false")
+    #expect(signature.evidence["terminal"] == "true")
+    #expect(signature.evidence["human_intervention_required"] == "false")
+    #expect(signature.evidence["human_intervention_requests"] == "0")
+    #expect(!report.fixPlan.contains(signature.id))
 }
 
-@Test func testReleaseQuarantineReportsWarnWhenStateUndeterminable() throws {
+@Test func testReleaseQuarantineTerminatesWhenStateUndeterminable() throws {
     // Non-zero exit that is NOT the recognized "No such xattr" must NOT be reported
     // as a clean pass — it conflates "not quarantined" with "could not determine".
     let report = SetupDoctor.generate(
@@ -659,9 +948,15 @@ private func issue26RepositoryRootURL() -> URL {
         })
     )
     let quarantine = try #require(report.checks.first { $0.id == "release.quarantine" })
-    #expect(quarantine.status == .warn)
+    #expect(quarantine.status == .fail)
     #expect(quarantine.summary == "Quarantine state could not be determined.")
+    #expect(quarantine.remediation.type == .none)
+    #expect(quarantine.remediation.value.isEmpty)
     #expect(quarantine.evidence["exit_code"] == "13")
+    #expect(quarantine.evidence["terminal"] == "true")
+    #expect(quarantine.evidence["human_intervention_required"] == "false")
+    #expect(quarantine.evidence["human_intervention_requests"] == "0")
+    #expect(!report.fixPlan.contains(quarantine.id))
 }
 
 @Test func testDoctorUnknownLaunchContextIsExplainedButAggregateNeutral() throws {
@@ -699,7 +994,7 @@ private func issue26RepositoryRootURL() -> URL {
     #expect(registration.evidence["match_kind"] == "name_and_command")
 }
 
-@Test func testClaudeRegistrationWarnWhenConfigHasNoMatchingEntry() throws {
+@Test func testClientRegistrationTerminatesWhenConfigHasNoMatchingEntry() throws {
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json", "--client", "claude-code"],
         permissionStatus: grantedPermissionStatus(),
@@ -707,13 +1002,14 @@ private func issue26RepositoryRootURL() -> URL {
         runtime: doctorRuntime(registration: .notRegistered)
     )
     let registration = try #require(report.checks.first { $0.id == "mcp.claude_code_registration" })
-    #expect(registration.status == .warn)
+    #expect(registration.status == .fail)
     #expect(registration.evidence["match_kind"] == "none")
-    #expect(registration.remediation.type == .command)
-    #expect(!registration.remediation.value.isEmpty)
+    #expect(registration.remediation.type == .none)
+    #expect(registration.remediation.value.isEmpty)
+    #expect(registration.evidence["terminal"] == "true")
 }
 
-@Test func testClaudeRegistrationManualWithConfigReasonWhenUnreadable() throws {
+@Test func testClientRegistrationTerminatesWithConfigReasonWhenUnreadable() throws {
     // The config-unavailable path must say the CONFIG could not be read — NOT that
     // the Claude CLI was unavailable.
     let report = SetupDoctor.generate(
@@ -723,7 +1019,8 @@ private func issue26RepositoryRootURL() -> URL {
         runtime: doctorRuntime(registration: .configUnavailable(reason: "config file not found at /x/.claude.json"))
     )
     let registration = try #require(report.checks.first { $0.id == "mcp.claude_code_registration" })
-    #expect(registration.status == .manual)
+    #expect(registration.status == .fail)
+    #expect(registration.remediation.type == .none)
     #expect(registration.summary.localizedCaseInsensitiveContains("config"))
     #expect(!registration.summary.localizedCaseInsensitiveContains("CLI"))
     #expect(registration.evidence["reason"] == "config file not found at /x/.claude.json")
@@ -800,6 +1097,48 @@ private func issue26RepositoryRootURL() -> URL {
     #expect(result.output == nil)
 }
 
+@Test func testProductionMCUPortReferenceProbeKeepsCommandFailuresIndeterminate() {
+    let failures: [(SetupDoctor.CommandResult, String)] = [
+        (.completed(.init(exitCode: 1, stdout: "", stderr: "unreadable")), "non_zero_exit"),
+        (.timedOut, "timeout"),
+        (.spawnFailed("missing"), "spawn_failed"),
+        (.notAllowlisted, "allowlist_rejected"),
+    ]
+
+    for (result, reason) in failures {
+        let probe = SetupDoctor.productionMCUPortReferenceProbe(
+            fileExistsAtPath: { _ in true },
+            runCommand: { _, _, _ in result }
+        )
+
+        #expect(probe == .indeterminate(reason: reason))
+    }
+}
+
+@Test func testProductionMCUPortReferenceProbeDistinguishesObservedStates() {
+    let missing = SetupDoctor.productionMCUPortReferenceProbe(
+        fileExistsAtPath: { _ in false },
+        runCommand: { _, _, _ in
+            Issue.record("A missing assignment file must not spawn strings")
+            return .timedOut
+        }
+    )
+    #expect(missing == .sourceMissing)
+
+    for (stdout, expected) in [
+        ("unrelated assignment", SetupDoctor.MCUPortReferenceProbe.confirmedAbsent),
+        ("LogicProMCP-MCU-Internal", .found),
+    ] {
+        let probe = SetupDoctor.productionMCUPortReferenceProbe(
+            fileExistsAtPath: { _ in true },
+            runCommand: { _, _, _ in
+                .completed(.init(exitCode: 0, stdout: stdout, stderr: ""))
+            }
+        )
+        #expect(probe == expected)
+    }
+}
+
 // MARK: - Entrypoint exit-code contract
 
 @Test func testMainEntrypointDoctorExitsOneAndReportsFailedStatus() async throws {
@@ -865,8 +1204,8 @@ private func issue26RepositoryRootURL() -> URL {
 }
 
 @Test func testMainEntrypointDoctorExitsZeroOnDegraded() async throws {
-    // A warn (codesign uncheckable) with all manual channels approved and no fail
-    // -> degraded -> exit 0.
+    // A warn (unknown install source) with all manual channels approved
+    // and no fail -> degraded -> exit 0.
     var stdout = ""
     let store = ManualValidationStore(
         fileURL: FileManager.default.temporaryDirectory
@@ -884,17 +1223,25 @@ private func issue26RepositoryRootURL() -> URL {
             return DoctorMockMainServer()
         },
         approvalStoreFactory: { store },
-        doctorRuntime: doctorRuntime(commandHandler: { executable, arguments in
-            if executable == "/usr/bin/codesign" { return nil } // -> release.signature warn
-            if executable == "/usr/bin/xattr" {
-                return .init(exitCode: 1, stdout: "", stderr: "No such xattr")
+        doctorRuntime: doctorRuntime(
+            executablePath: "/tmp/LogicProMCP-manual",
+            registration: .registered(command: "/tmp/LogicProMCP-manual"),
+            commandHandler: { executable, arguments in
+                if executable == "/usr/bin/codesign" {
+                    return .init(exitCode: 0, stdout: "", stderr: "")
+                }
+                if executable == "/usr/bin/xattr" {
+                    return .init(exitCode: 1, stdout: "", stderr: "No such xattr")
+                }
+                if executable == "/usr/bin/lipo" {
+                    return .init(exitCode: 0, stdout: "arm64\n", stderr: "")
+                }
+                if executable == "/usr/bin/strings", arguments.count == 2 {
+                    return .init(exitCode: 0, stdout: "\(ServerConfig.serverVersion)\n", stderr: "")
+                }
+                return nil
             }
-            if executable == "/opt/homebrew/bin/brew" || executable == "/usr/local/bin/brew",
-               arguments == ["list", "--versions", "logic-pro-mcp"] {
-                return .init(exitCode: 0, stdout: "logic-pro-mcp 3.7.4\n", stderr: "")
-            }
-            return nil
-        }),
+        ),
         writeStdout: { stdout += $0 },
         writeStderr: { _ in }
     )
@@ -906,30 +1253,37 @@ private func issue26RepositoryRootURL() -> URL {
 
 // MARK: - aggregateStatus precedence
 
-@Test func testAggregateStatusManualOutranksWarn() {
-    // logic not running -> logic.application_state manual; codesign nil -> release
-    // .signature warn. manual must win.
+@Test func testTerminalApplicationFailureOutranksWarn() {
+    // Logic unavailable is terminal; a concurrent install-source warning cannot
+    // downgrade the report to a human-action state.
     let report = SetupDoctor.generate(
         arguments: ["LogicProMCP", "doctor", "--json"],
         permissionStatus: grantedPermissionStatus(),
         approvals: allApprovals(),
         runtime: doctorRuntime(
+            executablePath: "/tmp/LogicProMCP-manual",
             logicRunning: false,
             visibleWindow: false,
+            registration: .registered(command: "/tmp/LogicProMCP-manual"),
             commandHandler: { executable, arguments in
-                if executable == "/usr/bin/codesign" { return nil }
+                if executable == "/usr/bin/codesign" {
+                    return .init(exitCode: 0, stdout: "", stderr: "")
+                }
                 if executable == "/usr/bin/xattr" {
                     return .init(exitCode: 1, stdout: "", stderr: "No such xattr")
                 }
-                if executable == "/opt/homebrew/bin/brew" || executable == "/usr/local/bin/brew",
-                   arguments == ["list", "--versions", "logic-pro-mcp"] {
-                    return .init(exitCode: 0, stdout: "logic-pro-mcp 3.7.4\n", stderr: "")
+                if executable == "/usr/bin/lipo" {
+                    return .init(exitCode: 0, stdout: "arm64\n", stderr: "")
+                }
+                if executable == "/usr/bin/strings", arguments.count == 2 {
+                    return .init(exitCode: 0, stdout: "\(ServerConfig.serverVersion)\n", stderr: "")
                 }
                 return nil
             }
         )
     )
-    #expect(report.status == .manualActionRequired)
+    #expect(report.checks.first { $0.id == "install.source" }?.status == .warn)
+    #expect(report.status == .failed)
 }
 
 @Test func testAggregateStatusWarnWithoutFailOrManualIsDegraded() {
@@ -937,18 +1291,27 @@ private func issue26RepositoryRootURL() -> URL {
         arguments: ["LogicProMCP", "doctor", "--json"],
         permissionStatus: grantedPermissionStatus(),
         approvals: allApprovals(),
-        runtime: doctorRuntime(commandHandler: { executable, arguments in
-            if executable == "/usr/bin/codesign" { return nil } // -> warn
-            if executable == "/usr/bin/xattr" {
-                return .init(exitCode: 1, stdout: "", stderr: "No such xattr")
+        runtime: doctorRuntime(
+            executablePath: "/tmp/LogicProMCP-manual",
+            registration: .registered(command: "/tmp/LogicProMCP-manual"),
+            commandHandler: { executable, arguments in
+                if executable == "/usr/bin/codesign" {
+                    return .init(exitCode: 0, stdout: "", stderr: "")
+                }
+                if executable == "/usr/bin/xattr" {
+                    return .init(exitCode: 1, stdout: "", stderr: "No such xattr")
+                }
+                if executable == "/usr/bin/lipo" {
+                    return .init(exitCode: 0, stdout: "arm64\n", stderr: "")
+                }
+                if executable == "/usr/bin/strings", arguments.count == 2 {
+                    return .init(exitCode: 0, stdout: "\(ServerConfig.serverVersion)\n", stderr: "")
+                }
+                return nil
             }
-            if executable == "/opt/homebrew/bin/brew" || executable == "/usr/local/bin/brew",
-               arguments == ["list", "--versions", "logic-pro-mcp"] {
-                return .init(exitCode: 0, stdout: "logic-pro-mcp 3.7.4\n", stderr: "")
-            }
-            return nil
-        })
+        )
     )
+    #expect(report.checks.first { $0.id == "install.source" }?.status == .warn)
     #expect(report.status == .degraded)
 }
 
@@ -966,15 +1329,20 @@ private func registrationFromTemporaryConfig(_ json: String) -> SetupDoctor.Clau
 
 /// The external click-tool fallback was retired: a PRESENT external tool must
 /// no longer mask a PostEvent denial as a passing click path (that was a
-/// false-green about server capability). Warn is driven by PostEvent alone.
-@Test func clickFallbackWarnsOnPostEventDenialEvenWithExternalToolPresent() {
+/// false-green about server capability). Terminal failure is driven by PostEvent alone.
+@Test func clickFallbackTerminatesPostEventDenialEvenWithExternalToolPresent() {
     let runtime = doctorRuntime(executable: true)   // every path "is executable" → tool present
     let status = PermissionChecker.PermissionStatus(
         accessibility: true, automationLogicPro: true, postEventAccess: false
     )
     let check = SetupDoctor.clickFallbackCheck(runtime: runtime, permissionStatus: status)
-    #expect(check.status == .warn)
+    #expect(check.status == .fail)
+    #expect(check.remediation.type == .none)
+    #expect(check.remediation.value.isEmpty)
     #expect(check.evidence["native_click"] == "denied")
+    #expect(check.evidence["terminal"] == "true")
+    #expect(check.evidence["human_intervention_required"] == "false")
+    #expect(check.evidence["human_intervention_requests"] == "0")
 }
 
 @Test func clickFallbackPassesOnPostEventGrantWithoutExternalTool() {
@@ -984,5 +1352,10 @@ private func registrationFromTemporaryConfig(_ json: String) -> SetupDoctor.Clau
     )
     let check = SetupDoctor.clickFallbackCheck(runtime: runtime, permissionStatus: status)
     #expect(check.status == .pass)
+    #expect(check.remediation.type == .none)
+    #expect(check.remediation.value.isEmpty)
     #expect(check.evidence["native_click"] == "available")
+    #expect(check.evidence["terminal"] == "false")
+    #expect(check.evidence["human_intervention_required"] == "false")
+    #expect(check.evidence["human_intervention_requests"] == "0")
 }

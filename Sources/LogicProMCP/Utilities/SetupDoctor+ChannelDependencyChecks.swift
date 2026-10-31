@@ -101,19 +101,52 @@ extension SetupDoctor {
                 skipReason: .profileNotRequired
             )
         }
-        let found = runtime.mcuPortReferenceFound()
+        let observation = runtime.mcuPortReferenceProbe()
+        let found = observation == .found
+        let unavailable = !found
+        let summary: String
+        let probeOutcome: String
+        let sourcePresent: String
+        let referenceFound: String
+        var evidence: [String: String] = [:]
+        switch observation {
+        case .found:
+            summary = "Logic controller assignments reference the LogicProMCP MCU port."
+            probeOutcome = "found"
+            sourcePresent = "true"
+            referenceFound = "true"
+        case .confirmedAbsent:
+            summary = "Logic controller assignments do not reference the LogicProMCP MCU port; MCU-only operations are unavailable for unattended execution."
+            probeOutcome = "confirmed_absent"
+            sourcePresent = "true"
+            referenceFound = "false"
+        case .sourceMissing:
+            summary = "Logic controller assignments are absent; MCU-only operations are unavailable for unattended execution."
+            probeOutcome = "source_missing"
+            sourcePresent = "false"
+            referenceFound = "unverified"
+        case let .indeterminate(reason):
+            summary = "Logic controller assignments could not be read; MCU-only operations are unavailable for unattended execution."
+            probeOutcome = "indeterminate"
+            sourcePresent = "true"
+            referenceFound = "unverified"
+            evidence = ["probe_failure_reason": reason]
+        }
+        evidence = evidence.merging([
+            "assignment_probe": probeOutcome,
+            "cs_file_present": sourcePresent,
+            "mcu_port_reference_found": referenceFound,
+            "terminal": String(unavailable),
+            "human_intervention_required": "false",
+            "human_intervention_requests": "0",
+        ]) { current, _ in current }
         return check(
             id: "channels.mcu_wiring_hint",
             domain: "channels",
-            status: found == true ? .pass : .manual,
-            summary: found == true
-                ? "Logic controller assignments reference the LogicProMCP MCU port."
-                : "Logic controller assignments do not confirm the LogicProMCP MCU port; ignore this if MCU-only ops are unused.",
-            evidence: [
-                "cs_file_present": found == nil ? "false" : "true",
-                "mcu_port_reference_found": String(found == true),
-            ],
-            remediationType: found == true ? .none : .docs
+            status: unavailable ? .fail : .pass,
+            summary: summary,
+            evidence: evidence,
+            remediationType: .none
         )
     }
 
@@ -145,7 +178,7 @@ extension SetupDoctor {
         return check(
             id: "dependencies.click_fallback",
             domain: "dependencies",
-            status: nativeAvailable ? .pass : .warn,
+            status: nativeAvailable ? .pass : .fail,
             summary: nativeAvailable
                 ? "The native synthetic-click path is available (PostEvent granted); no fallback is used."
                 : "No working click path: PostEvent is denied, and the external click-tool fallback "
@@ -153,8 +186,11 @@ extension SetupDoctor {
             evidence: [
                 fallbackTool: (fallbackToolPresent ? "present" : "absent") + " (informational; retired as a server path)",
                 "native_click": nativeAvailable ? "available" : "denied",
+                "terminal": String(!nativeAvailable),
+                "human_intervention_required": "false",
+                "human_intervention_requests": "0",
             ],
-            remediationType: nativeAvailable ? .none : .docs
+            remediationType: .none
         )
     }
 

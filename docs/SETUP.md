@@ -234,11 +234,11 @@ These anchors are intentionally compact because `doctor --json` links to them.
 
 <a id="doctor-binarypath"></a>
 ### `binary.path`
-Install with Homebrew, copy the release binary into PATH, or invoke the source build by absolute path.
+Reports whether the running process resolved its binary from `argv0` or PATH. An unresolved binary is a terminal unavailable state for this read-only inspection; doctor emits no mutation or retry request.
 
 <a id="doctor-binaryexecutable"></a>
 ### `binary.executable`
-Run `chmod +x '/path/to/LogicProMCP'`. Quote the path if it contains spaces or shell metacharacters.
+Reports whether the resolved LogicProMCP binary is executable. A resolved binary without executable permission is a terminal unavailable state for this read-only inspection; doctor emits no mutation or retry request.
 
 <a id="doctor-installsource"></a>
 ### `install.source`
@@ -254,23 +254,23 @@ When helper assets are missing, Homebrew installs use `brew reinstall logic-pro-
 
 <a id="doctor-releasesignature"></a>
 ### `release.signature`
-Reinstall from the pinned release artifact, or ad-hoc sign a local source build with `codesign --force --sign - /path/to/LogicProMCP`.
+Reports whether the resolved LogicProMCP binary's signature verifies. A failed or unavailable verification is a terminal unavailable state for this read-only inspection; doctor emits no mutation or retry request.
 
 <a id="doctor-releasequarantine"></a>
 ### `release.quarantine`
-After verifying SHA256 and signature, remove quarantine with `xattr -d com.apple.quarantine '/path/to/LogicProMCP'`. Quote the path if it contains spaces or shell metacharacters.
+Reports the observed quarantine state of the resolved LogicProMCP binary. A present quarantine attribute is a terminal unavailable state for this read-only inspection; doctor emits no mutation or retry request.
 
 <a id="doctor-mcpclaude-code-registration"></a>
 ### `mcp.claude_code_registration`
-Register with `claude mcp add --scope user logic-pro -- LogicProMCP`. If config parsing fails, fix `~/.claude.json` and rerun doctor.
+Reports whether the selected Claude Code client already has an exact LogicProMCP registration. Missing, partial, mismatched, or unreadable registration is a terminal unavailable state for this read-only run; doctor emits no command, config-edit, or retry request.
 
 <a id="doctor-mcpregistration-target"></a>
 ### `mcp.registration_target`
-Refresh the Claude Code MCP registration when its command is missing, relative, not executable, or stale.
+Reports whether the selected registration target resolves to a present regular executable. When a share directory is configured, doctor checks that it exists; when the installed version is readable, doctor compares it with the running version. A detected invalid target, missing configured share directory, or readable version mismatch is a terminal unavailable state for this read-only run; doctor emits no remediation action or continuation.
 
 <a id="doctor-mcpclaude-desktop-registration"></a>
 ### `mcp.claude_desktop_registration`
-Optional Claude Desktop registration. An absent config is an optional skip and does not degrade strict status. If configured but unregistered, edit `claude_desktop_config.json`.
+This check is skipped when Claude Desktop is not the selected client. When Claude Desktop is selected, an absent, unreadable, partial, mismatched, or missing registration is a terminal unavailable state; doctor emits no config-edit or retry request.
 
 <a id="doctor-permissionsaccessibility"></a>
 ### `permissions.accessibility`
@@ -298,7 +298,7 @@ Cross-context TCC enrichment. If unavailable, the live permission probes remain 
 
 <a id="doctor-systemmacos-version"></a>
 ### `system.macos_version`
-Logic Pro MCP requires macOS 14 or newer. Upgrade macOS if this check fails.
+Logic Pro MCP requires macOS 14 or newer. A detected version below that floor is a terminal unavailable state: the check reports the measured version without requesting an upgrade or adding a continuation to `fix_plan`. An unreadable OS version remains a skipped diagnostic.
 
 <a id="doctor-updateslatest-release"></a>
 ### `updates.latest_release`
@@ -306,19 +306,23 @@ Shown only with `doctor --check-updates`. If a newer release exists, Homebrew in
 
 <a id="doctor-logicapplication-state"></a>
 ### `logic.application_state`
-Launch Logic Pro and open or create a project.
+A stopped application or missing visible project window is a terminal unavailable state for this
+read-only check. It reports zero human-intervention requests and does not ask for a launch, focus,
+project creation, or retry.
 
 <a id="doctor-logicinstallation"></a>
 ### `logic.installation`
-Install Logic Pro in `/Applications` or `~/Applications`.
+No supported Logic Pro installation, or a Creator-Studio-only installation this release does not ship for, is a terminal unavailable state. The check preserves the observed path and variant reason without requesting an installation or adding an action to `fix_plan`. An existing bundle whose version cannot be read remains a skipped diagnostic.
 
 <a id="doctor-logicversion-support"></a>
 ### `logic.version_support`
-Use Logic Pro 12.0.1 or newer; 12.3 is the latest validated target.
+A detected Logic Pro version below the 12.0.1 support floor is a terminal unavailable state: the check preserves the measured version without requesting a version change or adding a continuation to `fix_plan`. Logic Pro 12.3 is the latest validated target; other versions at or above the floor remain informational warnings.
 
 <a id="doctor-logicblocking-dialog"></a>
 ### `logic.blocking_dialog`
-Dismiss blocking Logic Pro modal dialogs before retrying.
+A measured blocking modal is a terminal unavailable state for this read-only check. The diagnostic
+retains bounded dialog identity but suppresses the observed dismissal instruction and exposes no
+operator action in `fix_plan`.
 
 <a id="doctor-channelsmanual-validation"></a>
 ### `channels.manual_validation`
@@ -333,11 +337,17 @@ mapped Logic execution. A missing reference is reported without a staging comman
 
 <a id="doctor-channelsmcu-wiring-hint"></a>
 ### `channels.mcu_wiring_hint`
-Wire the LogicProMCP MCU port in Logic Pro Control Surfaces if you use MCU-only operations.
+The doctor passes this check only when the controller-assignment data confirms the LogicProMCP MCU
+port. A missing reference or unreadable assignment file is a terminal unsuccessful outcome for the
+full profile: MCU-only operations remain unavailable, no setup is inferred, and no operator action is
+placed in `fix_plan`.
 
 <a id="doctor-dependenciesclick-fallback"></a>
 ### `dependencies.click_fallback`
-The server's only synthetic-click path is the native CGEvent post, which requires PostEvent access — grant it in System Settings ▸ Privacy & Security ▸ Accessibility. The external `cliclick` fallback was retired (a present tool is no longer used by the server and is reported as informational evidence only).
+The server's only synthetic-click path is the native CGEvent post. When PostEvent access is denied,
+this check is a terminal unsuccessful outcome and adds no operator action to `fix_plan`. The external
+`cliclick` fallback remains retired; a present tool is reported as informational evidence only and
+cannot turn the check into a pass.
 
 ## Lifecycle Anchors
 

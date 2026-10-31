@@ -57,7 +57,7 @@ private func doctorV3Runtime(
     runtime.shareDirProbe = { .complete(path: "/opt/homebrew/share/logic-pro-mcp", source: "brew_pkgshare") }
     runtime.readClaudeDesktopRegistration = { .registered(command: "/Applications/Claude.app/Contents/MacOS/Claude") }
     runtime.keyCommandsPresetStaged = { true }
-    runtime.mcuPortReferenceFound = { true }
+    runtime.mcuPortReferenceProbe = { .found }
     runtime.launchContext = { SetupDoctor.LaunchContextInfo(context: "terminal", responsibleHint: "Terminal") }
     runtime.tccCrossContextProbe = { .granted("service=accessibility;principal_hint=Terminal;state=granted") }
     runtime.blockingDialogInfo = { nil }
@@ -157,18 +157,20 @@ private func doctorV3Check(_ report: SetupDoctor.Report, _ id: String) throws ->
     #expect(check.evidence["resolution_basis"] == "canonical_path")
 }
 
-@Test func testDoctorV3RegisteredCommandMustBeRegularFile() throws {
+@Test func testDoctorV3RegisteredCommandMustBeRegularFileOrTerminate() throws {
     let command = "/opt/homebrew/bin/LogicProMCP"
     let runtime = doctorV3Runtime(
         registration: .registered(command: command),
         regular: { $0 != command }
     )
     let check = try doctorV3Check(doctorV3Report(runtime), "mcp.registration_target")
-    #expect(check.status == .warn)
+    #expect(check.status == .fail)
     #expect(check.evidence["regular_file"] == "false")
+    #expect(check.evidence["terminal"] == "true")
+    #expect(check.remediation.type == .none)
 }
 
-@Test func testDoctorV3RegisteredShareDirEnvMissingWarns() throws {
+@Test func testDoctorV3RegisteredShareDirEnvMissingTerminates() throws {
     let runtime = doctorV3Runtime(
         registration: .registered(
             command: "/opt/homebrew/bin/LogicProMCP",
@@ -177,8 +179,10 @@ private func doctorV3Check(_ report: SetupDoctor.Report, _ id: String) throws ->
         directory: { $0 != "/missing/share" }
     )
     let check = try doctorV3Check(doctorV3Report(runtime), "mcp.registration_target")
-    #expect(check.status == .warn)
+    #expect(check.status == .fail)
     #expect(check.evidence["share_dir"] == "missing")
+    #expect(check.evidence["terminal"] == "true")
+    #expect(check.remediation.type == .none)
 }
 
 @Test func testDoctorV3InstallShareDirEvidenceDoesNotExposeEnvPath() throws {

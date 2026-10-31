@@ -285,6 +285,13 @@ enum SetupDoctor {
         case indeterminate([String])
     }
 
+    enum MCUPortReferenceProbe: Equatable, Sendable {
+        case found
+        case confirmedAbsent
+        case sourceMissing
+        case indeterminate(reason: String)
+    }
+
     struct Runtime: @unchecked Sendable {
         let resolveExecutablePath: (String?) -> String?
         let fileExists: (String) -> Bool
@@ -306,7 +313,9 @@ enum SetupDoctor {
         var shareDirProbe: () -> ShareDirProbe = { SetupDoctor.productionShareDirProbe() }
         var readClaudeDesktopRegistration: () -> ClaudeRegistration = { SetupDoctor.readProductionClaudeDesktopRegistration() }
         var keyCommandsPresetStaged: () -> Bool = { SetupDoctor.productionKeyCommandsPresetStaged() }
-        var mcuPortReferenceFound: () -> Bool? = { SetupDoctor.productionMCUPortReferenceFound() }
+        var mcuPortReferenceProbe: () -> MCUPortReferenceProbe = {
+            SetupDoctor.productionMCUPortReferenceProbe()
+        }
         var launchContext: () -> LaunchContextInfo = { SetupDoctor.productionLaunchContext() }
         var tccCrossContextProbe: () -> TCCCrossContextProbe = { SetupDoctor.productionTCCCrossContextProbe() }
         var blockingDialogInfo: () -> AXLogicProElements.BlockingDialogInfo? = {
@@ -709,11 +718,11 @@ enum SetupDoctor {
     static func commandFailureSummary(command: String, result: CommandResult) -> String {
         switch result {
         case .timedOut:
-            return "\(command) verification timed out. Retry and verify the tool is not blocked."
+            return "\(command) verification timed out."
         case .spawnFailed:
-            return "\(command) verification could not be started. Verify the tool exists and is executable."
+            return "\(command) verification could not be started."
         case .notAllowlisted:
-            return "\(command) verification was blocked by the Doctor command allowlist. Use an allowlisted tool."
+            return "\(command) verification was blocked by the Doctor command allowlist."
         case .completed:
             return "\(command) verification failed."
         }

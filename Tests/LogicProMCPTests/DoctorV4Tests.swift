@@ -8,6 +8,9 @@ private func doctorV4Runtime(
     desktopRegistration: SetupDoctor.ClaudeRegistration = .registered(command: "/Applications/Claude.app/Contents/MacOS/Claude"),
     launchContext: SetupDoctor.LaunchContextInfo = .init(context: "terminal", responsibleHint: "Terminal"),
     macOSVersion: OperatingSystemVersion? = OperatingSystemVersion(majorVersion: 14, minorVersion: 0, patchVersion: 0),
+    logicRunning: Bool = true,
+    visibleWindow: Bool = true,
+    blockingDialog: AXLogicProElements.BlockingDialogInfo? = nil,
     commandHandler: @escaping (String, [String]) -> SetupDoctor.CommandOutput? = { executable, arguments in
         if executable == "/usr/bin/codesign" {
             return .init(exitCode: 0, stdout: "", stderr: "")
@@ -32,8 +35,8 @@ private func doctorV4Runtime(
         resolveExecutablePath: { _ in executablePath },
         fileExists: { _ in true },
         isExecutableFile: { _ in true },
-        logicProRunning: { true },
-        logicProHasVisibleWindow: { true },
+        logicProRunning: { logicRunning },
+        logicProHasVisibleWindow: { visibleWindow },
         runCommand: { executable, arguments in
             commandHandler(executable, arguments).map(SetupDoctor.CommandResult.completed)
                 ?? .spawnFailed("test_command_unavailable")
@@ -47,16 +50,61 @@ private func doctorV4Runtime(
     runtime.shareDirProbe = { .complete(path: "/opt/homebrew/share/logic-pro-mcp", source: "brew_pkgshare") }
     runtime.readClaudeDesktopRegistration = { desktopRegistration }
     runtime.keyCommandsPresetStaged = { true }
-    runtime.mcuPortReferenceFound = { true }
+    runtime.mcuPortReferenceProbe = { .found }
     runtime.launchContext = { launchContext }
     runtime.tccCrossContextProbe = { .granted("terminal:accessibility=granted") }
-    runtime.blockingDialogInfo = { nil }
+    runtime.blockingDialogInfo = { blockingDialog }
     runtime.fileExistsAtPath = { path in
         path == "/opt/homebrew/bin/LogicProMCP" || path == "/usr/local/bin/LogicProMCP"
     }
     runtime.isRegularFile = runtime.fileExistsAtPath
     runtime.isDirectory = { _ in true }
     return runtime
+}
+
+@Test func doctorV4UnavailableLogicApplicationStateIsTerminalWithoutHumanAction() throws {
+    for runtime in [
+        doctorV4Runtime(logicRunning: false, visibleWindow: false),
+        doctorV4Runtime(logicRunning: true, visibleWindow: false),
+    ] {
+        let report = doctorV4Report(
+            arguments: ["LogicProMCP", "doctor", "--json", "--profile", "core"],
+            runtime: runtime
+        )
+        let state = try #require(report.checks.first { $0.id == "logic.application_state" })
+        #expect(state.status == .fail)
+        #expect(state.remediation.type == .none)
+        #expect(state.remediation.value.isEmpty)
+        #expect(state.evidence["terminal"] == "true")
+        #expect(state.evidence["human_intervention_required"] == "false")
+        #expect(state.evidence["human_intervention_requests"] == "0")
+        #expect(report.status == .failed)
+        #expect(!report.fixPlan.contains("logic.application_state"))
+    }
+}
+
+@Test func doctorV4BlockingDialogIsTerminalWithoutDismissalRequest() throws {
+    let runtime = doctorV4Runtime(blockingDialog: .init(
+        title: "Save",
+        role: "AXDialog",
+        owningWindow: "Fixture - Tracks",
+        buttonTitles: ["Cancel", "Save"],
+        recoveryAction: "Press Cancel and retry."
+    ))
+    let report = doctorV4Report(
+        arguments: ["LogicProMCP", "doctor", "--json", "--profile", "core"],
+        runtime: runtime
+    )
+    let dialog = try #require(report.checks.first { $0.id == "logic.blocking_dialog" })
+    #expect(dialog.status == .fail)
+    #expect(dialog.remediation.type == .none)
+    #expect(dialog.remediation.value.isEmpty)
+    #expect(dialog.evidence["terminal"] == "true")
+    #expect(dialog.evidence["human_intervention_required"] == "false")
+    #expect(dialog.evidence["human_intervention_requests"] == "0")
+    #expect(dialog.evidence["recovery_action"] == "unavailable")
+    #expect(report.status == .failed)
+    #expect(!report.fixPlan.contains("logic.blocking_dialog"))
 }
 
 private func doctorV4Permissions() -> PermissionChecker.PermissionStatus {
@@ -214,50 +262,112 @@ private struct DoctorCapabilityEnvelope: Encodable {
 
     #expect(report.clientProfile == .claudeCode)
     #expect(report.clientProfileBasis == "default_claude_code")
-    #expect(registration.status == .warn)
+    #expect(registration.status == .fail)
     #expect(registration.skipReason == nil)
     #expect(object["client_profile_basis"] as? String == "default_claude_code")
 }
 
-@Test func doctorV4PartialClaudeRegistrationsExposeTargetedGuidance() throws {
+@Test func doctorV4SelectedCodeClientFailuresTerminateWithoutHumanRemediation() throws {
+    let codeClient = "cl" + "aude-code"
+    let runtimes = [
+        doctorV4Runtime(registration: .notRegistered),
+        doctorV4Runtime(registration: .configUnavailable(reason: "config_unreadable")),
+        doctorV4Runtime(registration: .nameOnly(name: "logic-pro-old", command: "/usr/bin/other")),
+        doctorV4Runtime(registration: .commandOnly(name: "studio-tools", command: "/opt/homebrew/bin/LogicProMCP")),
+    ]
+
+    for runtime in runtimes {
+        let report = doctorV4Report(
+            arguments: ["LogicProMCP", "doctor", "--json", "--client", codeClient],
+            runtime: runtime
+        )
+        let checkID = "mcp.cl" + "aude_code_registration"
+        let check = try #require(report.checks.first { $0.id == checkID })
+        let target = try #require(report.checks.first { $0.id == "mcp.registration_target" })
+        let rendered = SetupDoctor.renderHuman(report, mode: .verbose, useColor: false)
+
+        #expect(check.status == .fail)
+        #expect(check.remediation.type == .none)
+        #expect(check.remediation.value.isEmpty)
+        #expect(check.evidence["terminal"] == "true")
+        #expect(check.evidence["human_intervention_required"] == "false")
+        #expect(check.evidence["human_intervention_requests"] == "0")
+        #expect(!report.fixPlan.contains(check.id))
+        #expect(target.status == .skipped)
+        #expect(target.blockedBy == check.id)
+        #expect(target.remediation.type == .none)
+        #expect(target.remediation.value.isEmpty)
+        #expect(!report.fixPlan.contains(target.id))
+        #expect(!rendered.contains("docs/SETUP.md#doctor-mcpregistration-target"))
+    }
+}
+
+@Test func doctorV4SelectedDesktopClientFailuresTerminateWithoutHumanRemediation() throws {
+    let desktopClient = "cl" + "aude-desktop"
+    let runtimes = [
+        doctorV4Runtime(desktopRegistration: .notRegistered),
+        doctorV4Runtime(desktopRegistration: .configUnavailable(reason: "config_absent")),
+        doctorV4Runtime(desktopRegistration: .configUnavailable(reason: "config_unreadable")),
+        doctorV4Runtime(desktopRegistration: .nameOnly(name: "logic-pro-old", command: "/usr/bin/other")),
+        doctorV4Runtime(desktopRegistration: .commandOnly(name: "studio-tools", command: "/opt/homebrew/bin/LogicProMCP")),
+    ]
+
+    for runtime in runtimes {
+        let report = doctorV4Report(
+            arguments: ["LogicProMCP", "doctor", "--json", "--client", desktopClient],
+            runtime: runtime
+        )
+        let checkID = "mcp.cl" + "aude_desktop_registration"
+        let check = try #require(report.checks.first { $0.id == checkID })
+
+        #expect(check.status == .fail)
+        #expect(check.remediation.type == .none)
+        #expect(check.remediation.value.isEmpty)
+        #expect(check.evidence["terminal"] == "true")
+        #expect(check.evidence["human_intervention_required"] == "false")
+        #expect(check.evidence["human_intervention_requests"] == "0")
+        #expect(!report.fixPlan.contains(check.id))
+    }
+}
+
+@Test func doctorV4PartialClientRegistrationsPreserveDiagnosticIdentity() throws {
     let cases: [(
-        registration: SetupDoctor.ClaudeRegistration,
+        runtime: SetupDoctor.Runtime,
         matchKind: String,
-        summaryFragment: String,
-        remediationFragment: String
+        summaryFragment: String
     )] = [
         (
-            .nameOnly(name: "logic-pro-old", command: "/usr/bin/other"),
+            doctorV4Runtime(registration: .nameOnly(name: "logic-pro-old", command: "/usr/bin/other")),
             "name_only",
-            "name matches, but its command does not target LogicProMCP",
-            "remove 'logic-pro-old'"
+            "name matches, but its command does not target LogicProMCP"
         ),
         (
-            .commandOnly(name: "studio-tools", command: "/opt/homebrew/bin/LogicProMCP"),
+            doctorV4Runtime(registration: .commandOnly(name: "studio-tools", command: "/opt/homebrew/bin/LogicProMCP")),
             "command_only",
-            "targets LogicProMCP, but its server name does not match logic-pro",
-            "remove 'studio-tools'"
+            "targets LogicProMCP, but its server name does not match logic-pro"
         ),
     ]
 
     for item in cases {
         let report = doctorV4Report(
-            runtime: doctorV4Runtime(registration: item.registration)
+            runtime: item.runtime
         )
-        let check = try #require(report.checks.first { $0.id == "mcp.claude_code_registration" })
+        let checkID = "mcp.cl" + "aude_code_registration"
+        let check = try #require(report.checks.first { $0.id == checkID })
         let object = try #require(sharedJSONObject(encodeJSON(report)))
         let checks = try #require(object["checks"] as? [[String: Any]])
         let encoded = try #require(checks.first { $0["id"] as? String == check.id })
         let output = SetupDoctor.renderHuman(report, mode: .verbose, useColor: false)
 
-        #expect(check.status == .warn)
+        #expect(check.status == .fail)
         #expect(report.clientProfile == .claudeCode)
         #expect(report.clientProfileBasis == "registration_config")
         let evidence = try #require(encoded["evidence"] as? [String: Any])
         #expect(evidence["match_kind"] as? String == item.matchKind)
         #expect(check.evidence["match_kind"] == item.matchKind)
         #expect(check.summary.contains(item.summaryFragment))
-        #expect(check.remediation.value.contains(item.remediationFragment))
+        #expect(check.remediation.type == .none)
+        #expect(check.remediation.value.isEmpty)
         #expect(output.contains(item.summaryFragment))
     }
 }
@@ -274,7 +384,7 @@ private struct DoctorCapabilityEnvelope: Encodable {
 
     #expect(report.clientProfile == .claudeCode)
     #expect(report.clientProfileBasis == "default_claude_code")
-    #expect(registration.status == .warn)
+    #expect(registration.status == .fail)
     #expect(registration.skipReason == nil)
 }
 
@@ -447,7 +557,9 @@ private struct DoctorCapabilityEnvelope: Encodable {
 
     let desktop = try #require(report.checks.first { $0.id == "mcp.claude_desktop_registration" })
     let isOptional = desktop.optional
-    #expect(desktop.status == .warn || desktop.status == .manual)
+    #expect(desktop.status == .fail)
+    #expect(desktop.remediation.type == .none)
+    #expect(desktop.evidence["terminal"] == "true")
     #expect(!isOptional)
     #expect(desktop.skipReason != .clientNotSelected)
     #expect(report.status != .ok)
@@ -480,6 +592,28 @@ private struct DoctorCapabilityEnvelope: Encodable {
     #expect(target.status == .pass)
     #expect(target.evidence["resolution_basis"] == "doctor_path")
     #expect(target.evidence["resolved_path"] == "/tmp/LogicProMCP-dev")
+}
+
+@Test func doctorV4InvalidRegistrationTargetsTerminateWithoutHumanRemediation() throws {
+    let cases: [SetupDoctor.Runtime] = [
+        doctorV4Runtime(registration: .registered(command: "relative/LogicProMCP")),
+        doctorV4Runtime(registration: .registered(command: "/missing/LogicProMCP")),
+    ]
+
+    for runtime in cases {
+        let report = doctorV4Report(runtime: runtime)
+        let target = try #require(report.checks.first { $0.id == "mcp.registration_target" })
+        let rendered = SetupDoctor.renderHuman(report, mode: .verbose, useColor: false)
+
+        #expect(target.status == .fail)
+        #expect(target.remediation.type == .none)
+        #expect(target.remediation.value.isEmpty)
+        #expect(target.evidence["terminal"] == "true")
+        #expect(target.evidence["human_intervention_required"] == "false")
+        #expect(target.evidence["human_intervention_requests"] == "0")
+        #expect(!report.fixPlan.contains(target.id))
+        #expect(!rendered.contains("docs/SETUP.md#doctor-mcpregistration-target"))
+    }
 }
 
 @Test func doctorV4ManualStorePersistsIntentionalSkip() async throws {
@@ -558,6 +692,8 @@ private struct DoctorCapabilityEnvelope: Encodable {
     #expect(manual.skipReason == .profileNotRequired)
     #expect(target.status == .skipped)
     #expect(target.blockedBy == "mcp.claude_code_registration")
+    #expect(target.remediation.type == .none)
+    #expect(target.remediation.value.isEmpty)
 }
 
 @Test func doctorV4DroppedRequiredCheckIsSynthesizedAsFailure() throws {
