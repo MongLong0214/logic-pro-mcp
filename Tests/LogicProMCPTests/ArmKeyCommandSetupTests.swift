@@ -1219,6 +1219,13 @@ import Testing
         let object = try Self.jsonObject(result)
         #expect((object["state"] as? String) == "B")
         #expect(!raw.lowercased().contains("assigned;"))
+        #expect(try #require(result.isError))
+        #expect(try #require(object["terminal"] as? Bool))
+        #expect(object["terminal_scope"] as? String == "mcp_request_only")
+        #expect(try #require(object["safe_to_retry"] as? Bool))
+        #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+        #expect(object["human_intervention_requests"] as? Int == 0)
+        #expect(object["human_dependent_transitions"] as? Int == 0)
     }
 
     @Test func dispatchConfigInvalidSurfacesArmKeyConfigInvalid() async throws {
@@ -1236,6 +1243,12 @@ import Testing
         #expect(!writeAttempted)
         let isError = try #require(result.isError)
         #expect(isError)
+        #expect(try #require(object["terminal"] as? Bool))
+        #expect(object["terminal_scope"] as? String == "mcp_request_only")
+        #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+        #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+        #expect(object["human_intervention_requests"] as? Int == 0)
+        #expect(object["human_dependent_transitions"] as? Int == 0)
     }
 
     @Test func dispatchFailedSurfacesWriteAttempted() async throws {
@@ -1257,6 +1270,13 @@ import Testing
         #expect((object["error"] as? String) == "ax_write_failed")
         let writeAttempted = try #require(object["write_attempted"] as? Bool)
         #expect(writeAttempted)
+        #expect(try #require(result.isError))
+        #expect(try #require(object["terminal"] as? Bool))
+        #expect(object["terminal_scope"] as? String == "mcp_request_only")
+        #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+        #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+        #expect(object["human_intervention_requests"] as? Int == 0)
+        #expect(object["human_dependent_transitions"] as? Int == 0)
     }
 
     // MARK: - Deadline override (LOGIC_PRO_MCP_SETUP_DEADLINE_MS)
