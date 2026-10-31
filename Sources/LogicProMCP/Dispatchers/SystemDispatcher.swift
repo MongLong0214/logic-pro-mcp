@@ -2289,10 +2289,11 @@ struct SystemDispatcher: OperationTraceDispatching {
                   save              -> {} — Save current project
                   save_as           -> { path: String } — Save to new path
                   close             -> {} — Close project
-                  bounce            -> {} — Open bounce dialog after audit preflight;
-                                       export blockers return export_readiness_blocked
+                  bounce            -> {} — Unsupported standalone route; returns terminal State C before UI
                   get_regions       -> {} — Read visible arrange regions with complete=false scope metadata
                   export_plan       -> { projects, output_root, artifacts? } — Dry-run export manifest plan
+                  export_run        -> { projects, output_root, artifacts?, confirmed: true } — Guarded automated artifact production
+                  export_resume     -> { projects, output_root, artifacts?, confirmed: true } — Resume known-path artifacts
                   launch            -> {} — Launch Logic Pro
                   quit              -> {} — Quit Logic Pro
 
