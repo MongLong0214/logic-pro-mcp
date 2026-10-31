@@ -463,6 +463,8 @@ enum ProductionReadinessContractEvaluator {
               workflow.components(separatedBy: verifierPin).count - 1 == 4,
               let buildVerifierScript = stepBlockScalar("run", in: buildVerifier.body),
               let publishVerifierScript = stepBlockScalar("run", in: publishVerifier.body),
+              stepMapping("env", in: buildVerifier.body) == nil,
+              stepMapping("env", in: publishVerifier.body) == nil,
               stepScalar("working-directory", in: buildVerifier.body) == "trusted-verifier-src",
               stepScalar("working-directory", in: publishVerifier.body) == "trusted-verifier-src" else {
             return false

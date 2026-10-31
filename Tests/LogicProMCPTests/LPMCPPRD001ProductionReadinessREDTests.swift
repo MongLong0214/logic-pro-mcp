@@ -1094,6 +1094,29 @@ struct LPMCPPRD001ProductionReadinessREDTests {
         #expect(alternateCheckoutReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
         #expect(alternateCheckoutReport.openDebts.contains(.independentProvenanceNotEnforced))
 
+        let verifierBuildPathOverride = workflow.replacingOccurrences(
+            of: "        working-directory: trusted-verifier-src\n        run: |",
+            with: "        env:\n"
+                + "          PATH: ${{ github.workspace }}/attacker-bin:${{ env.PATH }}\n"
+                + "        working-directory: trusted-verifier-src\n"
+                + "        run: |"
+        )
+        #expect(verifierBuildPathOverride != workflow)
+        #expect(
+            verifierBuildPathOverride.components(
+                separatedBy: "          PATH: ${{ github.workspace }}/attacker-bin:${{ env.PATH }}"
+            ).count - 1 == 2
+        )
+        let verifierBuildPathOverrideReport = evaluate(verifierBuildPathOverride, consumer)
+        #expect(
+            verifierBuildPathOverrideReport.openDebts.contains(
+                .releaseWorkflowMissingIndependentQualification
+            )
+        )
+        #expect(
+            verifierBuildPathOverrideReport.openDebts.contains(.independentProvenanceNotEnforced)
+        )
+
         let wrongPin = workflow.replacingOccurrences(
             of: "fa7d4430b4e42e15902ab82ca2b7e67380ca56ff",
             with: String(repeating: "0", count: 40)
