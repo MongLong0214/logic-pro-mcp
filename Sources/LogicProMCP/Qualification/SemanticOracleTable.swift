@@ -176,9 +176,9 @@ enum SemanticOracleTable {
     /// step_input/create_virtual_port — every one routes to a send-only channel that
     /// emits State B send_only_no_readback with no read-back).
     static let phaseB3MutatingOperationIDs: Set<OperationID> = [
-        // project (3 of the 8 lifecycle ops audited — new/open/close/launch/quit
-        // reach no State A; save_as is envelope-only, see its oracle)
-        .projectSave, .projectSaveAs, .projectBounce,
+        // project (2 lifecycle ops — standalone bounce is registry-unsupported;
+        // new/open/close/launch/quit reach no State A; save_as is envelope-only)
+        .projectSave, .projectSaveAs,
         // tracks (6 — the 4 create_* + delete + record_sequence topology writes)
         .tracksCreateAudio, .tracksCreateInstrument, .tracksCreateDrummer,
         .tracksCreateExternalMIDI, .tracksDelete, .tracksRecordSequence,
@@ -513,6 +513,10 @@ enum SemanticOracleTable {
             "registry .unsupported — Logic 12.x exposes no numeric cycle-locator AX fields, "
             + "so AccessibilityChannel.defaultSetCycleRange fails closed with State C "
             + "not_implemented and can never verify a write; excluded from mutatingSpecIDs",
+        .projectBounce:
+            "registry .unsupported — standalone bounce formerly stopped at a human-owned dialog; "
+            + "it now terminates before UI while project.export_run remains the unattended "
+            + "artifact-producing path, so no successful standalone State-A oracle exists",
     ]
 
     static let all: [OperationOracle] = [
@@ -585,7 +589,6 @@ enum SemanticOracleTable {
         // #373 Phase B3 — project/tracks/system/midi verified-write oracles.
         projectSave,
         projectSaveAs,
-        projectBounce,
         tracksCreateAudio,
         tracksCreateInstrument,
         tracksCreateDrummer,
@@ -2672,27 +2675,6 @@ enum SemanticOracleTable {
     static let projectSaveAs = SafeMutationOracle.oracle(
         .projectSaveAs,
         semantics: []
-    )
-
-    // AccessibilityChannel `openBounceDialogViaMenu` (chain [.accessibility, …];
-    // the midiKeyCommands/cgEvent fallbacks are send-only State B, so this is the
-    // ONLY State-A shape). CRITICAL semantic: State A here means the Bounce DIALOG
-    // OPENED — NOT that a bounce artifact was produced (`bounce_fired:false` is
-    // hardcoded and load-bearing: the op deliberately stops at the dialog for the
-    // human to choose settings/destination). `requested`/`observed` are both the
-    // literal "bounce_dialog_open" (pinned exactly, so a handler that reported the
-    // wrong milestone is caught), `dialog_opened:true` is the confirmed effect, and
-    // `via:"file-menu"` is the fixed provenance.
-    static let projectBounce = SafeMutationOracle.oracle(
-        .projectBounce,
-        semantics: [
-            .valueEquals(key: "operation", expected: .string("project.bounce")),
-            .valueEquals(key: "requested", expected: .string("bounce_dialog_open")),
-            .valueEquals(key: "observed", expected: .string("bounce_dialog_open")),
-            .valueEquals(key: "dialog_opened", expected: .bool(true)),
-            .valueEquals(key: "bounce_fired", expected: .bool(false)),
-            .valueEquals(key: "via", expected: .string("file-menu")),
-        ]
     )
 
     // MARK: - #373 Phase B3 — tracks safe-mutation oracles

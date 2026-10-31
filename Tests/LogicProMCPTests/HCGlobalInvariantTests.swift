@@ -355,7 +355,7 @@ struct HCGlobalInvariantTests {
             RouteCase(tool: "logic_project", command: "save", params: [:], operation: "project.save", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_project", command: "save_as", params: ["path": .string(fixtures.saveAsProjectPath), "confirmed": .bool(true)], operation: "project.save_as", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_project", command: "close", params: ["confirmed": .bool(true), "saving": .string("no")], operation: "project.close", destinations: [], invariant: .minimumV1),
-            RouteCase(tool: "logic_project", command: "bounce", params: ["confirmed": .bool(true)], operation: "project.bounce", destinations: [], invariant: .minimumV1),
+            RouteCase(tool: "logic_project", command: "bounce", params: [:], operation: "project.bounce", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_project", command: "cleanup_apply", params: ["step_id": .string("rename_duplicate_kick_0_1"), "confirmed": .bool(true), "names": .string("Kick L,Kick R")], operation: "project.cleanup_apply", destinations: [], invariant: .minimumV1),
             RouteCase(tool: "logic_project", command: "apply_session_repair", params: [:], operation: "project.apply_session_repair", destinations: [], invariant: .minimumV1),
 

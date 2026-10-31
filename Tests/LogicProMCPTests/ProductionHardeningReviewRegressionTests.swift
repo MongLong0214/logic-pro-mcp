@@ -75,25 +75,8 @@ struct ProductionHardeningReviewRegressionTests {
         )
     }
 
-    @Test("destructive confirmation requires literal bool true")
+    @Test("supported destructive confirmation requires literal bool true")
     func testDestructiveConfirmationRequiresLiteralBoolTrue() async {
-        let projectRouter = ChannelRouter()
-        let keyCmd = MockChannel(id: .midiKeyCommands)
-        await projectRouter.register(keyCmd)
-
-        let bounce = await ProjectDispatcher.handle(
-            command: "bounce",
-            params: ["confirmed": .string("yes")],
-            router: projectRouter,
-            cache: StateCache()
-        )
-
-        await expectInvalidParamsWithoutRouting(
-            bounce,
-            channels: [keyCmd],
-            label: "project.bounce confirmed string"
-        )
-
         let insertRouter = ChannelRouter()
         let ax = MockChannel(id: .accessibility)
         await insertRouter.register(ax)

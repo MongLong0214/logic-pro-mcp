@@ -59,17 +59,6 @@ struct Issue144ProjectModalPreconditionTests {
         #expect(await channel.operations().isEmpty)
     }
 
-    @Test("project.bounce refuses before routing while a blocking dialog is present")
-    func projectBounceRefusesBlockingDialog() async throws {
-        let (result, channel) = await call(
-            command: "bounce",
-            params: ["confirmed": .bool(true)]
-        )
-
-        try assertBlockingDialog(result, operation: "project.bounce")
-        #expect(await channel.operations().isEmpty)
-    }
-
     private func assertBlockingDialog(_ result: CallTool.Result, operation: String) throws {
         let isError = try #require(result.isError)
         #expect(isError)

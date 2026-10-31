@@ -889,7 +889,7 @@ enum OperationRegistry {
         (.projectSave, "save", Mutability.`mutating`, ConfirmationPolicy.l1, VerificationPolicy.readbackRequired, DeadlineClass.medium, []),
         (.projectSaveAs, "save_as", Mutability.`mutating`, ConfirmationPolicy.l2, VerificationPolicy.readbackRequired, DeadlineClass.long, ["confirmed", "path"]),
         (.projectClose, "close", Mutability.`mutating`, ConfirmationPolicy.l3, VerificationPolicy.none, DeadlineClass.medium, ["confirmed", "saving"]),
-        (.projectBounce, "bounce", Mutability.`mutating`, ConfirmationPolicy.l2, VerificationPolicy.readbackRequired, DeadlineClass.long, ["confirmed"]),
+        (.projectBounce, "bounce", Mutability.`mutating`, ConfirmationPolicy.none, VerificationPolicy.none, DeadlineClass.short, []),
         (.projectIsRunning, "is_running", Mutability.readOnly, ConfirmationPolicy.none, VerificationPolicy.none, DeadlineClass.short, []),
         (.projectLaunch, "launch", Mutability.`mutating`, ConfirmationPolicy.l1, VerificationPolicy.readbackRequired, DeadlineClass.short, []),
         (.projectQuit, "quit", Mutability.`mutating`, ConfirmationPolicy.l3, VerificationPolicy.readbackRequired, DeadlineClass.medium, ["confirmed"]),
@@ -965,7 +965,7 @@ enum OperationRegistry {
             verification: entry.4,
             retry: .neverAutomatic,
             deadline: entry.5,
-            availability: .defaultInstall,
+            availability: entry.0 == .projectBounce ? .unsupported : .defaultInstall,
             allowedParams: allowedParams(for: entry.0, commandSpecific: entry.6),
             capability: CapabilityID(rawValue: entry.0.rawValue),
             dirtySections: projectDirtySections(for: entry.1)

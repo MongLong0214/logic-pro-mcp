@@ -196,7 +196,6 @@ struct OperationCatalogTests {
         .projectOpen: ["confirmed", "path"],
         .projectSaveAs: ["confirmed", "path"],
         .projectClose: ["confirmed", "saving"],
-        .projectBounce: ["confirmed"],
         .projectQuit: ["confirmed"],
         .projectExportPlan: [
             "artifact", "artifacts", "collision_policy", "kind", "naming_policy",

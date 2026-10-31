@@ -309,7 +309,7 @@
         "save": 90,
         "save_as": 300,
         "close": 90,
-        "bounce": 300,
+        "bounce": 25,
         "is_running": 25,
         "launch": 25,
         "quit": 90,

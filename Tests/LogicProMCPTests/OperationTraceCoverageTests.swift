@@ -1074,7 +1074,7 @@ private func operationTraceCoverageParams(
     case .projectClose:
         return ["saving": .string("no"), "confirmed": .bool(true)]
     case .projectBounce:
-        return ["confirmed": .bool(false)]
+        return [:]
     case .projectQuit:
         return ["confirmed": .bool(true)]
     case .projectExportRun, .projectExportResume:
