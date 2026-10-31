@@ -53,6 +53,34 @@ actor TransportActionRecorder {
     }
 }
 
+actor DelayedOpenLandingProbe {
+    private var landed = false
+    private var releaseRequested = false
+    private var releaseContinuation: CheckedContinuation<Void, Never>?
+
+    func waitForReleaseAndLand() async {
+        if !releaseRequested {
+            await withCheckedContinuation { continuation in
+                releaseContinuation = continuation
+            }
+        }
+        landed = true
+    }
+
+    func release() {
+        if let releaseContinuation {
+            self.releaseContinuation = nil
+            releaseContinuation.resume()
+        } else {
+            releaseRequested = true
+        }
+    }
+
+    func hasLanded() -> Bool {
+        landed
+    }
+}
+
 final class OpenFileRecorder: @unchecked Sendable {
     private let lock = NSLock()
     private(set) var openedPaths: [String] = []
@@ -182,6 +210,7 @@ private func makeAppleScriptRuntime(
     #expect(verifyFailure["identity_classification"] as? String == "front_document_identity_unavailable")
     let closeAttempted = try #require(verifyFailure["close_attempted"] as? Bool)
     #expect(!closeAttempted)
+    try requireUnknownOpenEffect(verifyFailure, frontDocumentObserved: false)
     #expect(openRecorder.snapshot() == [path, path])
     let scriptsAfterFailure = await scriptRecorder.snapshot()
     #expect(!scriptsAfterFailure.contains(where: { $0.contains("close front document saving no") }))
@@ -242,9 +271,54 @@ private func makeAppleScriptRuntime(
     let safeToRetry = try #require(obj["safe_to_retry"] as? Bool)
     #expect(!safeToRetry)
     #expect(obj["front_document_path_status"] as? String == "different_path_observed")
+    try requireUnknownOpenEffect(obj, frontDocumentObserved: true)
     #expect(openRecorder.snapshot() == [path])
     let scripts = await scriptRecorder.snapshot()
     #expect(!scripts.contains(where: { $0.contains("close front document saving no") }))
+}
+
+@Test func testAppleScriptProjectOpenReportsUnknownEffectWhenAcceptedOpenLandsAfterReply() async throws {
+    let landing = DelayedOpenLandingProbe()
+    let path = "/tmp/delayed.logicx"
+    let previous = "/tmp/current.logicx"
+    let identities = ScriptResponseQueue([
+        .success("\(previous)\u{001F}Current Project"),
+    ])
+    let channel = AppleScriptChannel(
+        runtime: .init(
+            isLogicProRunning: { true },
+            openFile: { _ in
+                Task { await landing.waitForReleaseAndLand() }
+                return true
+            },
+            runScript: { source in
+                if source.contains("character id 31") {
+                    return await identities.next()
+                }
+                if source.contains("path of front document as text") {
+                    return .error("verification deadline elapsed")
+                }
+                return .success("OK")
+            },
+            executeTransportAction: { _ in .success("OK") }
+        )
+    )
+
+    let result = await channel.execute(operation: "project.open", params: ["path": path])
+    let obj = try #require(JSONSerialization.jsonObject(
+        with: Data(result.message.utf8), options: []
+    ) as? [String: Any])
+    try requireUnknownOpenEffect(obj, frontDocumentObserved: true)
+    let landedBeforeReply = await landing.hasLanded()
+    #expect(!landedBeforeReply)
+
+    await landing.release()
+    for _ in 0..<100 {
+        if await landing.hasLanded() { break }
+        await Task.yield()
+    }
+    let landedAfterReply = await landing.hasLanded()
+    #expect(landedAfterReply)
 }
 
 private func projectOpenWithUnavailableFrontPath(
@@ -284,6 +358,23 @@ private func projectOpenWithUnavailableFrontPath(
     return (result, path, openRecorder.snapshot(), await recorder.snapshot())
 }
 
+private func requireUnknownOpenEffect(
+    _ obj: [String: Any],
+    frontDocumentObserved: Bool
+) throws {
+    #expect(obj["terminal_scope"] as? String == "mcp_request_only")
+    #expect(obj["open_effect_status"] as? String == "unknown_after_verification_deadline")
+    let underlyingStopped = try #require(obj["underlying_operation_stopped"] as? Bool)
+    #expect(!underlyingStopped)
+    #expect(obj["document_preserved"] == nil)
+    if frontDocumentObserved {
+        let observed = try #require(obj["front_document_observed_after_verification_deadline"] as? Bool)
+        #expect(observed)
+    } else {
+        #expect(obj["front_document_observed_after_verification_deadline"] == nil)
+    }
+}
+
 private func requireTerminalPathUnavailableReceipt(
     _ result: ChannelResult
 ) throws -> [String: Any] {
@@ -311,8 +402,7 @@ private func requireTerminalPathUnavailableReceipt(
     #expect(openRequestAttempted)
     let closeAttempted = try #require(obj["close_attempted"] as? Bool)
     #expect(!closeAttempted)
-    let documentPreserved = try #require(obj["document_preserved"] as? Bool)
-    #expect(documentPreserved)
+    try requireUnknownOpenEffect(obj, frontDocumentObserved: true)
     #expect(obj["front_document_path_status"] as? String == "unavailable")
     #expect(obj["unsaved_document_preserved"] == nil)
     return obj

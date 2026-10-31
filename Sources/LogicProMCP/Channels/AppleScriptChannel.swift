@@ -570,22 +570,22 @@ actor AppleScriptChannel: Channel {
             let identityClassification: String
             let frontDocumentPathStatus: String
             let hint: String
-            let documentObserved: Bool
+            let frontDocumentObserved: Bool
             if documentAfterInitialVerification?.path != nil {
                 identityClassification = "different_path_observed"
                 frontDocumentPathStatus = "different_path_observed"
-                documentObserved = true
-                hint = "project.open terminated after the requested project could not be verified and a different front document remained open; refusing to close it because its modification state was not established, with no safe automated continuation"
+                frontDocumentObserved = true
+                hint = "project.open terminated after the requested project could not be verified and a different front document remained open; refusing to close it because its modification state was not established. The accepted open request may still settle after this response, so its final effect remains unknown and it must not be retried."
             } else if documentAfterInitialVerification?.hasNameWithoutPath == true {
                 identityClassification = "name_observed_path_unavailable"
                 frontDocumentPathStatus = "unavailable"
-                documentObserved = true
-                hint = "project.open terminated after the requested project could not be verified and the current front document path remained unavailable; refusing to close a document whose persistence status was not established, with no safe automated continuation"
+                frontDocumentObserved = true
+                hint = "project.open terminated after the requested project could not be verified and the current front document path remained unavailable; refusing to close a document whose persistence status was not established. The accepted open request may still settle after this response, so its final effect remains unknown and it must not be retried."
             } else {
                 identityClassification = "front_document_identity_unavailable"
                 frontDocumentPathStatus = "unavailable"
-                documentObserved = false
-                hint = "project.open terminated after the requested project could not be verified and the current front document identity was unavailable; refusing to issue an unverified close, with no safe automated continuation"
+                frontDocumentObserved = false
+                hint = "project.open terminated after the requested project could not be verified and the current front document identity was unavailable; refusing to issue an unverified close. The accepted open request may still settle after this response, so its final effect remains unknown and it must not be retried."
             }
             var extras: [String: Any] = [
                 "operation": "project.open",
@@ -597,14 +597,17 @@ actor AppleScriptChannel: Channel {
                 "human_dependent_transitions": 0,
                 "automatic_precondition_attempts_exhausted": true,
                 "safe_to_retry": false,
+                "terminal_scope": "mcp_request_only",
+                "underlying_operation_stopped": false,
+                "open_effect_status": "unknown_after_verification_deadline",
                 "open_request_attempted": true,
                 "close_attempted": false,
                 "front_document_path_status": frontDocumentPathStatus,
                 "identity_classification": identityClassification,
                 "initial_verification_error": initialMessage,
             ]
-            if documentObserved {
-                extras["document_preserved"] = true
+            if frontDocumentObserved {
+                extras["front_document_observed_after_verification_deadline"] = true
             }
             return .error(HonestContract.encodeStateC(
                 error: .unsupportedState,
