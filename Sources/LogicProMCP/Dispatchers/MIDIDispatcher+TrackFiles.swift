@@ -134,7 +134,9 @@ extension MIDIDispatcher {
             }
             var payload: [String: Any] = ["error": code, "verified": false, "success": false,
                 "state": "C", "operation": "midi.\(command)",
-                "terminal": true, "human_intervention_required": false, "safe_to_retry": false,
+                "terminal": true, "terminal_scope": "mcp_request_only",
+                "human_intervention_required": false, "human_intervention_requests": 0,
+                "human_dependent_transitions": 0, "safe_to_retry": false,
                 "hint": terminalHint,
                 "detail": String(describing: classifiedError), "ui_effects": uiEffects]
             if let path { payload["path"] = path }

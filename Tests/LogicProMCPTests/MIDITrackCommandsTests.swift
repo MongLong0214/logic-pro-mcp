@@ -168,7 +168,10 @@ func midiTrackCommandsRejectMalformedRequestsBeforeTheProvider(fault: String) as
     #expect(body["observed_residual_name"] as? String == "User Edit")
     #expect(body["cleanup_status"] as? String == "unconfirmed")
     #expect(try #require(body["terminal"] as? Bool))
+    #expect(body["terminal_scope"] as? String == "mcp_request_only")
     #expect(!(try #require(body["human_intervention_required"] as? Bool)))
+    #expect(body["human_intervention_requests"] as? Int == 0)
+    #expect(body["human_dependent_transitions"] as? Int == 0)
     #expect(!(try #require(body["safe_to_retry"] as? Bool)))
 }
 
