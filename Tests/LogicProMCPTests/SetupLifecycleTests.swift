@@ -207,6 +207,9 @@ private func launchAgentPath(_ home: URL = lifecycleTestHome) -> String {
     let keycmds = try #require(step(plan, "keycmds.remove"))
     #expect(keycmds.action == .delete)
     #expect(keycmds.reversible)
+    #expect(keycmds.remediation.value.contains("removes only the staged mapping reference"))
+    #expect(keycmds.remediation.value.contains("bindings and backups are preserved"))
+    #expect(!keycmds.remediation.value.localizedCaseInsensitiveContains("restore"))
 
     let unregister = try #require(step(plan, "mcp.unregister"))
     #expect(unregister.action == .unregister)

@@ -480,13 +480,14 @@ enum SetupLifecycle {
                 target: preset,
                 currentState: present ? "present" : "absent",
                 plannedState: "absent",
-                // uninstall-keycmds.sh can restore a pre-install backup, so this
-                // delete is reversible.
+                // uninstall-keycmds.sh removes only the staged mapping reference
+                // and preserves existing bindings and backups. The reference can
+                // be staged again, so this delete remains reversible.
                 reversible: true,
                 requiresSudo: false,
                 remediationType: present ? .command : .none,
                 remediationValueOverride: present
-                    ? "Scripts/uninstall-keycmds.sh (restores any pre-install backup)."
+                    ? "Scripts/uninstall-keycmds.sh removes only the staged mapping reference; existing bindings and backups are preserved."
                     : nil
             )
         }
