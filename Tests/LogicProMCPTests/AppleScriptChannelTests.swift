@@ -225,12 +225,14 @@ private func makeAppleScriptRuntime(
     #expect(openRecorder.snapshot() == [path, path])
 }
 
-@Test func testAppleScriptProjectOpenRefusesToCloseUntitledCurrentDocumentOnRetry() async throws {
+private func projectOpenWithUnavailableFrontPath(
+    frontDocumentName: String
+) async -> (result: ChannelResult, path: String, openedPaths: [String], scripts: [String]) {
     let openRecorder = OpenFileRecorder()
-    let path = "/tmp/untitled.logicx"
+    let path = "/tmp/path-unavailable.logicx"
     let recorder = AppleScriptRecorder()
     let identities = ScriptResponseQueue([
-        .success("\u{001F}Untitled 12"),
+        .success("\u{001F}\(frontDocumentName)"),
     ])
     let channel = AppleScriptChannel(
         runtime: .init(
@@ -257,16 +259,55 @@ private func makeAppleScriptRuntime(
     )
 
     let result = await channel.execute(operation: "project.open", params: ["path": path])
+    return (result, path, openRecorder.snapshot(), await recorder.snapshot())
+}
+
+private func requireTerminalPathUnavailableReceipt(
+    _ result: ChannelResult
+) throws -> [String: Any] {
     #expect(!result.isSuccess)
     let obj = try JSONSerialization.jsonObject(
         with: Data(result.message.utf8), options: []
     ) as! [String: Any]
     #expect(!((obj["success"] as? Bool)!))
     #expect(obj["error"] as? String == "unsupported_state")
-    #expect(((obj["hint"] as? String)?.contains("refusing to close"))!)
-    #expect(openRecorder.snapshot() == [path])
-    let scripts = await recorder.snapshot()
-    #expect(!scripts.contains(where: { $0.contains("close front document saving no") }))
+    let hint = try #require(obj["hint"] as? String)
+    #expect(hint.contains("refusing to close"))
+    #expect(!hint.contains("untitled"))
+    #expect(!hint.contains("unsaved"))
+    let terminal = try #require(obj["terminal"] as? Bool)
+    #expect(terminal)
+    let humanInterventionRequired = try #require(obj["human_intervention_required"] as? Bool)
+    #expect(!humanInterventionRequired)
+    #expect(obj["human_intervention_requests"] as? Int == 0)
+    #expect(obj["human_dependent_transitions"] as? Int == 0)
+    let attemptsExhausted = try #require(obj["automatic_precondition_attempts_exhausted"] as? Bool)
+    #expect(attemptsExhausted)
+    let safeToRetry = try #require(obj["safe_to_retry"] as? Bool)
+    #expect(!safeToRetry)
+    let openRequestAttempted = try #require(obj["open_request_attempted"] as? Bool)
+    #expect(openRequestAttempted)
+    let closeAttempted = try #require(obj["close_attempted"] as? Bool)
+    #expect(!closeAttempted)
+    let documentPreserved = try #require(obj["document_preserved"] as? Bool)
+    #expect(documentPreserved)
+    #expect(obj["front_document_path_status"] as? String == "unavailable")
+    #expect(obj["unsaved_document_preserved"] == nil)
+    return obj
+}
+
+@Test func testAppleScriptProjectOpenRefusesToCloseWhenFrontDocumentPathIsUnavailable() async throws {
+    let fixture = await projectOpenWithUnavailableFrontPath(frontDocumentName: "Untitled 12")
+    _ = try requireTerminalPathUnavailableReceipt(fixture.result)
+    #expect(fixture.openedPaths == [fixture.path])
+    #expect(!fixture.scripts.contains(where: { $0.contains("close front document saving no") }))
+}
+
+@Test func testAppleScriptProjectOpenDoesNotCallSavedNameUntitledWhenPathReadFails() async throws {
+    let fixture = await projectOpenWithUnavailableFrontPath(frontDocumentName: "Saved Project")
+    _ = try requireTerminalPathUnavailableReceipt(fixture.result)
+    #expect(fixture.openedPaths == [fixture.path])
+    #expect(!fixture.scripts.contains(where: { $0.contains("close front document saving no") }))
 }
 
 @Test func testAppleScriptProjectOpenRestoresPreviousSavedProjectAfterRetryFailure() async {
