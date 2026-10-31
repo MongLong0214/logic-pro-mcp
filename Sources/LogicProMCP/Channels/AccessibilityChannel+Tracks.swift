@@ -1892,7 +1892,11 @@ extension AccessibilityChannel {
         details["reason"] = reason
         details["write_attempted"] = false
         details["terminal"] = true
+        details["terminal_scope"] = "mcp_request_only"
         details["human_intervention_required"] = false
+        details["human_intervention_requests"] = 0
+        details["human_dependent_transitions"] = 0
+        details["safe_to_retry"] = false
         return .error(HonestContract.encodeStateC(error: error, hint: hint, extras: details))
     }
 
