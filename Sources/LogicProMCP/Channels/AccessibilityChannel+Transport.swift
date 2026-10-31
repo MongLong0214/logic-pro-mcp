@@ -1179,7 +1179,10 @@ extension AccessibilityChannel {
                     "safe_to_retry": false,
                     "automatic_frontmost_attempts_exhausted": true,
                     "terminal": true,
+                    "terminal_scope": "mcp_request_only",
                     "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                    "human_dependent_transitions": 0,
                 ]) { _, new in new }
             ))
         }
@@ -1209,7 +1212,10 @@ extension AccessibilityChannel {
                     "safe_to_retry": true,
                     "automatic_recovery_owner": "active_goto_position_request",
                     "terminal": true,
+                    "terminal_scope": "mcp_request_only",
                     "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                    "human_dependent_transitions": 0,
                 ]) { _, new in new }
             ))
         }
