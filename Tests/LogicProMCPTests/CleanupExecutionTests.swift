@@ -127,6 +127,24 @@ private let headlessCleanupAuditFileReader = LogicProjectFileReader.Runtime(
     sleep: { _ in }
 )
 
+private func requireTerminalCleanupFailure(_ result: CallTool.Result) throws -> [String: Any] {
+    #expect(try #require(result.isError))
+    let body = sharedToolText(result)
+    let json = try #require(sharedJSONObject(body))
+    #expect(!(try #require(json["success"] as? Bool)))
+    #expect(json["state"] as? String == "C")
+    #expect(try #require(json["terminal"] as? Bool))
+    #expect(!(try #require(json["safe_to_retry"] as? Bool)))
+    #expect(!(try #require(json["human_intervention_required"] as? Bool)))
+    #expect(json["human_intervention_requests"] as? Int == 0)
+    #expect(json["human_dependent_transitions"] as? Int == 0)
+    let hint = try #require(json["hint"] as? String)
+    #expect(!hint.localizedCaseInsensitiveContains("retry"))
+    #expect(!hint.localizedCaseInsensitiveContains("re-run"))
+    #expect(!hint.localizedCaseInsensitiveContains("confirm"))
+    return json
+}
+
 // MARK: - Tests
 
 @Suite("Cleanup execution", .serialized)
@@ -356,9 +374,7 @@ func scalarRenamePreservesPrintableAndJoinerNameBytes(name: String) async throws
         cleanupAuditFileReader: headlessCleanupAuditFileReader
     )
 
-    #expect(result.isError!)
-    let json = try #require(sharedJSONObject(sharedToolText(result)))
-    #expect(!(try #require(json["success"] as? Bool)))
+    _ = try requireTerminalCleanupFailure(result)
     // Fail-closed: NO rename was attempted.
     let calls = await channel.calls()
     #expect(calls.isEmpty)
@@ -381,9 +397,7 @@ func scalarRenamePreservesPrintableAndJoinerNameBytes(name: String) async throws
         cleanupAuditFileReader: headlessCleanupAuditFileReader
     )
 
-    #expect(result.isError!)
-    let json = try #require(sharedJSONObject(sharedToolText(result)))
-    #expect(!(try #require(json["success"] as? Bool)))
+    _ = try requireTerminalCleanupFailure(result)
     let calls = await channel.calls()
     #expect(calls.isEmpty)
 }
@@ -406,9 +420,7 @@ func scalarRenamePreservesPrintableAndJoinerNameBytes(name: String) async throws
         cleanupAuditFileReader: headlessCleanupAuditFileReader
     )
 
-    #expect(result.isError!)
-    let json = try #require(sharedJSONObject(sharedToolText(result)))
-    #expect(!(try #require(json["success"] as? Bool)))
+    let json = try requireTerminalCleanupFailure(result)
     #expect(json["error"] as? String == "element_not_found")
     let calls = await channel.calls()
     #expect(calls.isEmpty)
