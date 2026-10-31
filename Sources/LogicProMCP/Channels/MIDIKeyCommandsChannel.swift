@@ -290,15 +290,19 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel {
             // surfacing the failure so a transient KeyCmd transport error still
             // attempts to silence the note (mirrors the CoreMIDI send_note path).
             // State C stays truthful — the reliable note-off could not be confirmed.
-            try? await transport.send(buildNoteOffBytes(channel: channel, note: note))
+            let cleanup = await attemptKeyCmdNoteCleanup([note], channel: channel)
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
                 hint: "KeyCmd transport note-off send failed after note-on: \(error)",
-                extras: [
+                extras: terminalPartialSendExtras([
                     "operation": "midi.send_note.keycmd",
                     "note_off_failed": true,
                     "note_on_sent": true,
-                ]
+                ],
+                    noteOnCountSent: 1,
+                    cleanup: cleanup,
+                    priorCleanupSendFailures: 1
+                )
             ))
         }
         return .success(HonestContract.encodeStateB(reason: .sendOnlyNoReadback, extras: [
@@ -333,30 +337,45 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel {
         }
         let durationMs = min(params["duration_ms"].flatMap(UInt64.init) ?? 500, 30_000)
         let notes = parsed.map { UInt8($0) }
-        if let failure = await runValidated(operation: "midi.send_chord.keycmd", {
-            for n in notes {
-                try await transport.send(buildNoteOnBytes(channel: channel, note: n, velocity: velocity))
+        var startedNotes: [UInt8] = []
+        for note in notes {
+            do {
+                try await transport.send(buildNoteOnBytes(channel: channel, note: note, velocity: velocity))
+                startedNotes.append(note)
+            } catch {
+                let cleanup = await attemptKeyCmdNoteCleanup(startedNotes, channel: channel)
+                return .error(HonestContract.encodeStateC(
+                    error: .axWriteFailed,
+                    hint: "KeyCmd transport chord note-on send failed after \(startedNotes.count) note-ons: \(error)",
+                    extras: terminalPartialSendExtras([
+                        "operation": "midi.send_chord.keycmd",
+                        "note_on_count_requested": notes.count,
+                    ],
+                        noteOnCountSent: startedNotes.count,
+                        cleanup: cleanup
+                    )
+                ))
             }
-        }) {
-            return failure
         }
         try? await Task.sleep(nanoseconds: durationMs * 1_000_000)
         if let failure = await sendKeyCmdNoteOffs(notes, channel: channel) {
             // Best-effort re-send of every note-off before surfacing the failure
             // so a transient transport error still attempts to silence the chord
             // (mirrors the CoreMIDI send_chord path). State C stays truthful.
-            for n in notes {
-                try? await transport.send(buildNoteOffBytes(channel: channel, note: n))
-            }
+            let cleanup = await attemptKeyCmdNoteCleanup(notes, channel: channel)
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
                 hint: "KeyCmd transport note-off send failed after chord note-ons: \(failure.firstError)",
-                extras: [
+                extras: terminalPartialSendExtras([
                     "operation": "midi.send_chord.keycmd",
                     "note_off_failed": true,
                     "failed_note_off_count": failure.count,
                     "note_on_count": notes.count,
-                ]
+                ],
+                    noteOnCountSent: notes.count,
+                    cleanup: cleanup,
+                    priorCleanupSendFailures: failure.count
+                )
             ))
         }
         return .success(HonestContract.encodeStateB(reason: .sendOnlyNoReadback, extras: [
@@ -519,15 +538,23 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel {
             }
         }
         if let failure = await waitForKeyCmdNoteOffTasks(noteOffTasks) {
+            let cleanup = await attemptKeyCmdNoteCleanup(
+                events.map(\.pitch),
+                channels: events.map(\.channel)
+            )
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
                 hint: "KeyCmd transport note-off send failed after sequence note-ons: \(failure.firstError)",
-                extras: [
+                extras: terminalPartialSendExtras([
                     "operation": "midi.play_sequence.keycmd",
                     "note_off_failed": true,
                     "failed_note_off_count": failure.count,
                     "note_on_count": events.count,
-                ]
+                ],
+                    noteOnCountSent: events.count,
+                    cleanup: cleanup,
+                    priorCleanupSendFailures: failure.count
+                )
             ))
         }
         return .success(HonestContract.encodeStateB(reason: .sendOnlyNoReadback, extras: [
@@ -563,6 +590,60 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel {
     private struct KeyCmdNoteOffFailure {
         let count: Int
         let firstError: any Error
+    }
+
+    private struct KeyCmdNoteCleanup {
+        let attemptedCount: Int
+        let failureCount: Int
+
+        var status: String {
+            guard attemptedCount > 0 else { return "not_attempted" }
+            return failureCount == 0 ? "sent_no_readback" : "send_failed"
+        }
+    }
+
+    private func terminalPartialSendExtras(
+        _ extras: [String: Any],
+        noteOnCountSent: Int,
+        cleanup: KeyCmdNoteCleanup,
+        priorCleanupSendFailures: Int = 0
+    ) -> [String: Any] {
+        extras.merging([
+            "write_attempted": true,
+            "safe_to_retry": false,
+            "fallback_unsafe": true,
+            "terminal": true,
+            "terminal_scope": "mcp_request_only",
+            "human_intervention_required": false,
+            "human_intervention_requests": 0,
+            "human_dependent_transitions": 0,
+            "note_on_count_sent": noteOnCountSent,
+            "note_cleanup_attempted": cleanup.attemptedCount > 0,
+            "note_cleanup_status": cleanup.status,
+            "note_cleanup_send_failures": priorCleanupSendFailures + cleanup.failureCount,
+        ]) { _, terminalValue in terminalValue }
+    }
+
+    private func attemptKeyCmdNoteCleanup(
+        _ notes: [UInt8],
+        channel: UInt8
+    ) async -> KeyCmdNoteCleanup {
+        await attemptKeyCmdNoteCleanup(notes, channels: Array(repeating: channel, count: notes.count))
+    }
+
+    private func attemptKeyCmdNoteCleanup(
+        _ notes: [UInt8],
+        channels: [UInt8]
+    ) async -> KeyCmdNoteCleanup {
+        var failureCount = 0
+        for (note, channel) in zip(notes, channels) {
+            do {
+                try await transport.send(buildNoteOffBytes(channel: channel, note: note))
+            } catch {
+                failureCount += 1
+            }
+        }
+        return KeyCmdNoteCleanup(attemptedCount: min(notes.count, channels.count), failureCount: failureCount)
     }
 
     private func sendKeyCmdNoteOffs(
