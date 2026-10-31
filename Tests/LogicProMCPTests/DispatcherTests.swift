@@ -4864,6 +4864,8 @@ private actor TransportStateSequenceChannel: Channel {
     #expect(json["cached_source"] as? String == "cache")
     #expect((json["cache_age_sec"] as? Double ?? 0) > 0)
     #expect(try #require(json["write_attempted"] as? Bool))
+    #expect(try #require(json["safe_to_retry"] as? Bool))
+    #expect(json["poll_attempts"] as? Int == 12)
     let terminal = try #require(json["terminal"] as? Bool)
     #expect(terminal)
     #expect(try #require(json["terminal_scope"] as? String) == "mcp_request_only")
@@ -4879,6 +4881,11 @@ private actor TransportStateSequenceChannel: Channel {
     for request in ["focus", "dismiss", "retry", "click", "run "] {
         #expect(!hint.lowercased().contains(request))
     }
+    let operations = await ax.executedOps
+    #expect(operations.first == "transport.get_state")
+    #expect(operations.filter { $0 == "transport.stop" }.count == 1)
+    #expect(operations.filter { $0 == "transport.get_state" }.count == 13)
+    #expect(operations.dropFirst(2).allSatisfy { $0 == "transport.get_state" })
 }
 
 @Test func testTransportDispatcherStopFailsClosedWhenLiveStateStillReportsPlayback() async throws {
@@ -4912,6 +4919,7 @@ private actor TransportStateSequenceChannel: Channel {
     #expect((json["observed_isRecording"] as? Bool)!)
     #expect(json["observed_position"] as? String == "96.1.1.1")
     #expect((json["safe_to_retry"] as? Bool)!)
+    #expect(json["poll_attempts"] as? Int == 12)
     #expect(try #require(json["terminal"] as? Bool))
     #expect(try #require(json["terminal_scope"] as? String) == "mcp_request_only")
     #expect(try #require(json["automatic_read_attempts_exhausted"] as? Bool))
@@ -4928,4 +4936,9 @@ private actor TransportStateSequenceChannel: Channel {
     #expect(cached.isPlaying)
     #expect(cached.isRecording)
     #expect(cached.position == "96.1.1.1")
+    let operations = await ax.executedOps
+    #expect(operations.first == "transport.get_state")
+    #expect(operations.filter { $0 == "transport.stop" }.count == 1)
+    #expect(operations.filter { $0 == "transport.get_state" }.count == 13)
+    #expect(operations.dropFirst(2).allSatisfy { $0 == "transport.get_state" })
 }
