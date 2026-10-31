@@ -3,15 +3,21 @@
 
 from __future__ import annotations
 
+import io
+import json
 import unittest
+from contextlib import redirect_stdout
+from unittest import mock
 
+import logic_free_tempo_modal as free_tempo_module
 from logic_free_tempo_modal import DEFAULT_FREE_TEMPO_POLICY, resolve_free_tempo_modal
 
 
 class FakeRunner:
-    def __init__(self, snapshots, click_status="clicked"):
+    def __init__(self, snapshots, click_status="clicked", click_write_attempted=True):
         self.snapshots = list(snapshots)
         self.click_status = click_status
+        self.click_write_attempted = click_write_attempted
         self.detect_calls = 0
         self.clicks = []
 
@@ -22,7 +28,12 @@ class FakeRunner:
 
     def click(self, role, name):
         self.clicks.append((role, name))
-        return {"status": self.click_status, "role": role, "name": name}
+        return {
+            "status": self.click_status,
+            "role": role,
+            "name": name,
+            "write_attempted": self.click_write_attempted,
+        }
 
 
 def present_snapshot(
@@ -54,6 +65,10 @@ class ResolveFreeTempoModalTests(unittest.TestCase):
         self.assertEqual(result["status"], "not_present")
         self.assertEqual(result["policy_id"], DEFAULT_FREE_TEMPO_POLICY["policy_id"])
         self.assertEqual(runner.clicks, [])
+        self.assertIs(result["terminal"], False)
+        self.assertIs(result["human_intervention_required"], False)
+        self.assertEqual(result["human_intervention_requests"], 0)
+        self.assertEqual(result["human_dependent_transitions"], 0)
 
     def test_resolve_clicks_selection_checkbox_and_confirm(self):
         runner = FakeRunner(
@@ -75,6 +90,9 @@ class ResolveFreeTempoModalTests(unittest.TestCase):
         self.assertEqual(result["decision"]["selection"], DEFAULT_FREE_TEMPO_POLICY["selection_labels"][0])
         self.assertEqual(result["decision"]["suppress_future_prompts"], "requested")
         self.assertEqual(result["decision"]["confirm"], "OK")
+        self.assertIs(result["terminal"], False)
+        self.assertIs(result["write_attempted"], True)
+        self.assertEqual(result["human_dependent_transitions"], 0)
 
     def test_selection_button_is_clicked_when_policy_option_is_a_button(self):
         label = "Don't analyze region tempo or change project tempo"
@@ -129,6 +147,12 @@ class ResolveFreeTempoModalTests(unittest.TestCase):
         self.assertEqual(result["status"], "blocked")
         self.assertEqual(result["reason"], "selection_control_missing")
         self.assertEqual(runner.clicks, [])
+        self.assertIs(result["terminal"], True)
+        self.assertIs(result["write_attempted"], False)
+        self.assertIs(result["human_intervention_required"], False)
+        self.assertEqual(result["human_intervention_requests"], 0)
+        self.assertEqual(result["human_dependent_transitions"], 0)
+        self.assertNotIn("terminal_scope", result)
 
     def test_modal_still_visible_after_actions_blocks(self):
         runner = FakeRunner(
@@ -140,6 +164,57 @@ class ResolveFreeTempoModalTests(unittest.TestCase):
         result = resolve_free_tempo_modal(runner=runner, pause=lambda _: None)
         self.assertEqual(result["status"], "blocked")
         self.assertEqual(result["reason"], "modal_still_visible")
+        self.assertIs(result["terminal"], True)
+        self.assertIs(result["write_attempted"], True)
+        self.assertEqual(result["human_dependent_transitions"], 0)
+
+    def test_detection_error_terminates_without_human_fallback(self):
+        runner = FakeRunner([{"status": "error", "reason": "osascript_failed"}])
+        result = resolve_free_tempo_modal(runner=runner, pause=lambda _: None)
+
+        self.assertEqual(result["status"], "error")
+        self.assertIs(result["terminal"], True)
+        self.assertIs(result["write_attempted"], False)
+        self.assertIs(result["human_intervention_required"], False)
+        self.assertEqual(result["human_intervention_requests"], 0)
+        self.assertEqual(result["human_dependent_transitions"], 0)
+
+    def test_lookup_failure_does_not_claim_a_click_attempt(self):
+        runner = FakeRunner([present_snapshot(), {"status": "present"}],
+                            click_status="error", click_write_attempted=False)
+        result = resolve_free_tempo_modal(runner=runner, pause=lambda _: None)
+
+        self.assertEqual(result["status"], "blocked")
+        self.assertEqual(result["reason"], "click_failed")
+        self.assertIs(result["write_attempted"], False)
+
+    def test_matched_click_failure_preserves_the_attempt(self):
+        runner = FakeRunner([present_snapshot(), {"status": "present"}],
+                            click_status="error", click_write_attempted=True)
+        result = resolve_free_tempo_modal(runner=runner, pause=lambda _: None)
+
+        self.assertEqual(result["status"], "blocked")
+        self.assertEqual(result["reason"], "click_failed")
+        self.assertIs(result["write_attempted"], True)
+
+    def test_standalone_failures_preserve_status_and_exit_nonzero(self):
+        cases = [
+            ("detect", "detect_free_tempo_modal", {"status": "error", "reason": "osascript_failed"}),
+            ("resolve", "resolve_free_tempo_modal", {"status": "blocked", "reason": "click_failed"}),
+        ]
+
+        for command, target, payload in cases:
+            with self.subTest(command=command):
+                output = io.StringIO()
+                with mock.patch.object(free_tempo_module, target, return_value=payload), redirect_stdout(output):
+                    self.assertEqual(free_tempo_module._main(["script", command]), 1)
+                published = json.loads(output.getvalue())
+                self.assertEqual(published["status"], payload["status"])
+                self.assertIs(published["terminal"], True)
+                self.assertIs(published["human_intervention_required"], False)
+                self.assertEqual(published["human_intervention_requests"], 0)
+                self.assertEqual(published["human_dependent_transitions"], 0)
+                self.assertNotIn("terminal_scope", published)
 
     def test_resolve_handles_korean_localized_modal(self):
         runner = FakeRunner(

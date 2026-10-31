@@ -171,7 +171,7 @@ private func makeAppleScriptRuntime(
     #expect(result.message.contains("Missing 'path'"))
 }
 
-@Test func testAppleScriptProjectOpenUsesInjectedWorkspaceOpenResult() async {
+@Test func testAppleScriptProjectOpenUsesInjectedWorkspaceOpenResult() async throws {
     let openRecorder = OpenFileRecorder()
     let scriptRecorder = AppleScriptRecorder()
     let path = "/tmp/session.logicx"
@@ -203,8 +203,17 @@ private func makeAppleScriptRuntime(
     await scriptRecorder.setResult(.error("front document never changed"))
     let verifyFailed = await channel.execute(operation: "project.open", params: ["path": path])
     #expect(!verifyFailed.isSuccess)
-    #expect(verifyFailed.message.contains("Failed to verify opened project"))
-    #expect(verifyFailed.message.contains(path))
+    let verifyFailure = try #require(JSONSerialization.jsonObject(
+        with: Data(verifyFailed.message.utf8), options: []
+    ) as? [String: Any])
+    #expect(verifyFailure["error"] as? String == "unsupported_state")
+    #expect(verifyFailure["identity_classification"] as? String == "front_document_identity_unavailable")
+    let closeAttempted = try #require(verifyFailure["close_attempted"] as? Bool)
+    #expect(!closeAttempted)
+    try requireUnknownOpenEffect(verifyFailure, frontDocumentObserved: false)
+    #expect(openRecorder.snapshot() == [path, path])
+    let scriptsAfterFailure = await scriptRecorder.snapshot()
+    #expect(!scriptsAfterFailure.contains(where: { $0.contains("close front document saving no") }))
 
     openRecorder.result = false
     let failed = await channel.execute(operation: "project.open", params: ["path": path])
@@ -212,8 +221,9 @@ private func makeAppleScriptRuntime(
     #expect(failed.message == "Failed to open: \(path)")
 }
 
-@Test func testAppleScriptProjectOpenRetriesAfterClosingCurrentDocument() async {
+@Test func testAppleScriptProjectOpenRefusesToCloseDifferentSavedDocument() async throws {
     let openRecorder = OpenFileRecorder()
+    let scriptRecorder = AppleScriptRecorder()
     let path = "/tmp/reopen.logicx"
     let identities = ScriptResponseQueue([
         .success("/tmp/other.logicx\u{001F}Previous Project"),
@@ -223,6 +233,7 @@ private func makeAppleScriptRuntime(
             isLogicProRunning: { true },
             openFile: { openRecorder.open($0) },
             runScript: { source in
+                _ = await scriptRecorder.run(source)
                 if source.contains("character id 31") {
                     return await identities.next()
                 }
@@ -244,13 +255,26 @@ private func makeAppleScriptRuntime(
     )
 
     let result = await channel.execute(operation: "project.open", params: ["path": path])
-    #expect(result.isSuccess)
-    // v3.1.1 (P2-2) — wrapped HC State B envelope; raw legacy text inside.
-    #expect(result.message.contains("\"success\":true"))
-    #expect(result.message.contains("\"verified\":false"))
-    #expect(result.message.contains("\"operation\":\"project.open\""))
-    #expect(result.message.contains("Opened: \\/tmp\\/reopen.logicx"))
-    #expect(openRecorder.snapshot() == [path, path])
+    #expect(!result.isSuccess)
+    let obj = try #require(JSONSerialization.jsonObject(
+        with: Data(result.message.utf8), options: []
+    ) as? [String: Any])
+    #expect(obj["error"] as? String == "unsupported_state")
+    let terminal = try #require(obj["terminal"] as? Bool)
+    #expect(terminal)
+    let humanInterventionRequired = try #require(obj["human_intervention_required"] as? Bool)
+    #expect(!humanInterventionRequired)
+    #expect(obj["human_intervention_requests"] as? Int == 0)
+    #expect(obj["human_dependent_transitions"] as? Int == 0)
+    let closeAttempted = try #require(obj["close_attempted"] as? Bool)
+    #expect(!closeAttempted)
+    let safeToRetry = try #require(obj["safe_to_retry"] as? Bool)
+    #expect(!safeToRetry)
+    #expect(obj["front_document_path_status"] as? String == "different_path_observed")
+    try requireUnknownOpenEffect(obj, frontDocumentObserved: true)
+    #expect(openRecorder.snapshot() == [path])
+    let scripts = await scriptRecorder.snapshot()
+    #expect(!scripts.contains(where: { $0.contains("close front document saving no") }))
 }
 
 private func projectOpenWithUnavailableFrontPath(
@@ -290,6 +314,23 @@ private func projectOpenWithUnavailableFrontPath(
     return (result, path, openRecorder.snapshot(), await recorder.snapshot())
 }
 
+private func requireUnknownOpenEffect(
+    _ obj: [String: Any],
+    frontDocumentObserved: Bool
+) throws {
+    #expect(obj["terminal_scope"] as? String == "mcp_request_only")
+    #expect(obj["open_effect_status"] as? String == "unknown_after_verification_failure")
+    let underlyingStopped = try #require(obj["underlying_operation_stopped"] as? Bool)
+    #expect(!underlyingStopped)
+    #expect(obj["document_preserved"] == nil)
+    if frontDocumentObserved {
+        let observed = try #require(obj["front_document_observed_after_verification_failure"] as? Bool)
+        #expect(observed)
+    } else {
+        #expect(obj["front_document_observed_after_verification_failure"] == nil)
+    }
+}
+
 private func requireTerminalPathUnavailableReceipt(
     _ result: ChannelResult
 ) throws -> [String: Any] {
@@ -317,13 +358,7 @@ private func requireTerminalPathUnavailableReceipt(
     #expect(openRequestAttempted)
     let closeAttempted = try #require(obj["close_attempted"] as? Bool)
     #expect(!closeAttempted)
-    #expect(obj["terminal_scope"] as? String == "mcp_request_only")
-    #expect(obj["open_effect_status"] as? String == "unknown_after_verification_failure")
-    let underlyingStopped = try #require(obj["underlying_operation_stopped"] as? Bool)
-    #expect(!underlyingStopped)
-    #expect(obj["document_preserved"] == nil)
-    let observed = try #require(obj["front_document_observed_after_verification_failure"] as? Bool)
-    #expect(observed)
+    try requireUnknownOpenEffect(obj, frontDocumentObserved: true)
     #expect(obj["front_document_path_status"] as? String == "unavailable")
     #expect(obj["unsaved_document_preserved"] == nil)
     return obj
@@ -346,6 +381,10 @@ private func requireTerminalPathUnavailableReceipt(
 @Test func testAppleScriptProjectOpenReportsUnknownEffectWhenAcceptedOpenLandsAfterReply() async throws {
     let landing = DelayedOpenLandingProbe()
     let path = "/tmp/delayed.logicx"
+    let previous = "/tmp/current.logicx"
+    let identities = ScriptResponseQueue([
+        .success("\(previous)\u{001F}Current Project"),
+    ])
     let channel = AppleScriptChannel(
         runtime: .init(
             isLogicProRunning: { true },
@@ -355,7 +394,7 @@ private func requireTerminalPathUnavailableReceipt(
             },
             runScript: { source in
                 if source.contains("character id 31") {
-                    return .success("\u{001F}Saved Project")
+                    return await identities.next()
                 }
                 if source.contains("path of front document as text") {
                     return .error("verification deadline elapsed")
@@ -367,7 +406,10 @@ private func requireTerminalPathUnavailableReceipt(
     )
 
     let result = await channel.execute(operation: "project.open", params: ["path": path])
-    _ = try requireTerminalPathUnavailableReceipt(result)
+    let obj = try #require(JSONSerialization.jsonObject(
+        with: Data(result.message.utf8), options: []
+    ) as? [String: Any])
+    try requireUnknownOpenEffect(obj, frontDocumentObserved: true)
     let landedBeforeReply = await landing.hasLanded()
     #expect(!landedBeforeReply)
 
@@ -380,7 +422,64 @@ private func requireTerminalPathUnavailableReceipt(
     #expect(landedAfterReply)
 }
 
-@Test func testAppleScriptProjectOpenRestoresPreviousSavedProjectAfterRetryFailure() async {
+@Test func testAppleScriptProjectOpenReportsNeutralUnknownEffectForImmediateVerificationFailure() async throws {
+    let path = "/tmp/immediate-failure.logicx"
+    let previous = "/tmp/current.logicx"
+    let identities = ScriptResponseQueue([
+        .success("\(previous)\u{001F}Current Project"),
+    ])
+    let channel = AppleScriptChannel(
+        runtime: .init(
+            isLogicProRunning: { true },
+            openFile: { _ in true },
+            runScript: { source in
+                if source.contains("character id 31") {
+                    return await identities.next()
+                }
+                return .error("osascript failed before polling")
+            },
+            executeTransportAction: { _ in .success("OK") }
+        )
+    )
+
+    let result = await channel.execute(operation: "project.open", params: ["path": path])
+    let obj = try #require(JSONSerialization.jsonObject(
+        with: Data(result.message.utf8), options: []
+    ) as? [String: Any])
+    try requireUnknownOpenEffect(obj, frontDocumentObserved: true)
+    #expect(obj["initial_verification_error"] as? String == "osascript failed before polling")
+}
+
+@Test func testAppleScriptProjectOpenReportsUnknownEffectWhenAcceptedOpenHasNotLaunchedLogicYet() async throws {
+    let path = "/tmp/launch-pending.logicx"
+    let openRecorder = OpenFileRecorder()
+    let channel = AppleScriptChannel(
+        runtime: .init(
+            isLogicProRunning: { false },
+            openFile: { openRecorder.open($0) },
+            runScript: { _ in .error("Logic Pro is not running") },
+            executeTransportAction: { _ in .success("OK") }
+        )
+    )
+
+    let result = await channel.execute(operation: "project.open", params: ["path": path])
+    let obj = try #require(JSONSerialization.jsonObject(
+        with: Data(result.message.utf8), options: []
+    ) as? [String: Any])
+
+    #expect(!result.isSuccess)
+    try requireUnknownOpenEffect(obj, frontDocumentObserved: false)
+    #expect(obj["identity_classification"] as? String == "logic_process_not_observed")
+    #expect(obj["initial_verification_error"] as? String == "Logic Pro is not running")
+    #expect(!(try #require(obj["safe_to_retry"] as? Bool)))
+    #expect(try #require(obj["terminal"] as? Bool))
+    #expect(!(try #require(obj["human_intervention_required"] as? Bool)))
+    #expect(obj["human_intervention_requests"] as? Int == 0)
+    #expect(obj["human_dependent_transitions"] as? Int == 0)
+    #expect(openRecorder.snapshot() == [path])
+}
+
+@Test func testAppleScriptProjectOpenDoesNotRetryOrRestoreAfterUnsafeCloseRefusal() async throws {
     let openRecorder = OpenFileRecorder()
     let path = "/tmp/failed.logicx"
     let previous = "/tmp/previous.logicx"
@@ -412,7 +511,15 @@ private func requireTerminalPathUnavailableReceipt(
 
     let result = await channel.execute(operation: "project.open", params: ["path": path])
     #expect(!result.isSuccess)
-    #expect(openRecorder.snapshot() == [path, path, previous])
+    let obj = try #require(JSONSerialization.jsonObject(
+        with: Data(result.message.utf8), options: []
+    ) as? [String: Any])
+    #expect(obj["identity_classification"] as? String == "different_path_observed")
+    let closeAttempted = try #require(obj["close_attempted"] as? Bool)
+    #expect(!closeAttempted)
+    #expect(openRecorder.snapshot() == [path])
+    let scripts = await recorder.snapshot()
+    #expect(!scripts.contains(where: { $0.contains("close front document saving no") }))
 }
 
 // Regression: the front-document identity readback delimiter (U+001F) must

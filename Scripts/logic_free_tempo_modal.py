@@ -40,6 +40,29 @@ DEFAULT_FREE_TEMPO_POLICY: dict[str, Any] = {
 }
 
 
+def _with_local_terminal_receipt(payload: dict[str, Any]) -> dict[str, Any]:
+    result = dict(payload)
+    result["terminal"] = result.get("status") in {"blocked", "error"}
+    result["human_intervention_required"] = False
+    result["human_intervention_requests"] = 0
+    result["human_dependent_transitions"] = 0
+    if "write_attempted" not in result:
+        actions = result.get("actions")
+        if isinstance(actions, list) and actions:
+            attempt_evidence = [
+                action.get("write_attempted")
+                for action in actions
+                if isinstance(action, dict) and isinstance(action.get("write_attempted"), bool)
+            ]
+            if any(attempt_evidence):
+                result["write_attempted"] = True
+            elif len(attempt_evidence) == len(actions):
+                result["write_attempted"] = False
+        elif not actions:
+            result["write_attempted"] = False
+    return result
+
+
 def _normalize_label(value: str) -> str:
     return " ".join(value.replace("…", "...").replace("\u00a0", " ").split()).casefold()
 
@@ -276,7 +299,7 @@ const targetName = {json.dumps(name, ensure_ascii=False)};
 const target = findModal();
 
 if (!target) {{
-  JSON.stringify({{ status: "not_present" }});
+  JSON.stringify({{ status: "not_present", write_attempted: false }});
 }} else {{
   const candidates = collection(target.container, targetRole);
   let matched = null;
@@ -288,22 +311,22 @@ if (!target) {{
   }}
 
   if (!matched) {{
-    JSON.stringify({{ status: "error", message: "control not found" }});
+    JSON.stringify({{ status: "error", message: "control not found", write_attempted: false }});
   }} else {{
     try {{
       matched.click();
-      JSON.stringify({{ status: "clicked" }});
+      JSON.stringify({{ status: "clicked", write_attempted: true }});
     }} catch (clickError) {{
       try {{
         const actions = safe(() => matched.actions(), []);
         if (actions.length > 0) {{
           actions[0].perform();
-          JSON.stringify({{ status: "clicked" }});
+          JSON.stringify({{ status: "clicked", write_attempted: true }});
         }} else {{
-          JSON.stringify({{ status: "error", message: str(clickError) }});
+          JSON.stringify({{ status: "error", message: str(clickError), write_attempted: true }});
         }}
       }} catch (fallbackError) {{
-        JSON.stringify({{ status: "error", message: str(fallbackError) }});
+        JSON.stringify({{ status: "error", message: str(fallbackError), write_attempted: true }});
       }}
     }}
   }}
@@ -311,7 +334,16 @@ if (!target) {{
 """
         try:
             result = self._osascript(script)
-        except (FileNotFoundError, subprocess.TimeoutExpired) as error:
+        except FileNotFoundError as error:
+            return {
+                "status": "error",
+                "role": role,
+                "name": name,
+                "reason": "osascript_failed",
+                "message": str(error),
+                "write_attempted": False,
+            }
+        except subprocess.TimeoutExpired as error:
             return {
                 "status": "error",
                 "role": role,
@@ -327,6 +359,8 @@ if (!target) {{
         }
         if "message" in parsed:
             payload["message"] = parsed["message"]
+        if isinstance(parsed.get("write_attempted"), bool):
+            payload["write_attempted"] = parsed["write_attempted"]
         if result.returncode != 0 and payload["status"] == "error":
             payload["message"] = (result.stderr or "").strip() or payload.get("message", "")
         return payload
@@ -357,14 +391,14 @@ def resolve_free_tempo_modal(
         result["status"] = before.get("status", "error")
         if before.get("reason"):
             result["reason"] = before["reason"]
-        return result
+        return _with_local_terminal_receipt(result)
 
     plan = _build_action_plan(before, active_policy)
     result["decision"] = plan.get("decision", {})
     if plan.get("status") != "actionable":
         result["status"] = "blocked"
         result["reason"] = plan.get("reason", "plan_blocked")
-        return result
+        return _with_local_terminal_receipt(result)
 
     for step in plan["steps"]:
         click_result = active_runner.click(step["role"], step["name"])
@@ -374,7 +408,7 @@ def resolve_free_tempo_modal(
             result["status"] = "blocked"
             result["reason"] = "click_failed"
             result["after"] = active_runner.detect()
-            return result
+            return _with_local_terminal_receipt(result)
         pause(0.2)
 
     after = active_runner.detect()
@@ -387,7 +421,7 @@ def resolve_free_tempo_modal(
         result["reason"] = after.get("reason", "postcheck_failed")
     else:
         result["status"] = "dismissed"
-    return result
+    return _with_local_terminal_receipt(result)
 
 
 def _main(argv: list[str]) -> int:
@@ -399,8 +433,9 @@ def _main(argv: list[str]) -> int:
     else:
         print("usage: logic_free_tempo_modal.py [detect|resolve]", file=sys.stderr)
         return 2
+    payload = _with_local_terminal_receipt(payload)
     print(json.dumps(payload, ensure_ascii=False, indent=2))
-    return 0
+    return 1 if payload["terminal"] else 0
 
 
 if __name__ == "__main__":

@@ -1592,7 +1592,13 @@ extension AccessibilityChannel {
                     "reason": "marker_list_identity_unverified",
                     "operation": "nav.get_markers",
                     "failure_stage": "marker_list_identity_unverified",
+                    "terminal": true,
+                    "terminal_scope": "mcp_request_only",
+                    "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                    "human_dependent_transitions": 0,
                     "write_attempted": false,
+                    "safe_to_retry": false,
                 ]
             ))
         }
