@@ -1704,6 +1704,18 @@ extension AccessibilityChannel {
                 return encodeResult(legacyMarkers)
             }
         }
+        if AXLogicProElements.hasUnverifiedMarkerListWindow(runtime: runtime) {
+            return .error(HonestContract.encodeStateC(
+                error: .readbackUnavailable,
+                hint: "Marker List window identity could not be verified; marker enumeration terminated without a UI action.",
+                extras: [
+                    "reason": "marker_list_identity_unverified",
+                    "terminal": true,
+                    "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                ]
+            ))
+        }
         return .error(HonestContract.encodeStateC(
             error: .elementNotFound,
             hint: "No Marker List window was observed; marker enumeration terminated without a UI action.",

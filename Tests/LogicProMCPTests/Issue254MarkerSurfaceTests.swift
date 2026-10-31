@@ -50,6 +50,34 @@ private func issue254Envelope(_ result: ReadResource.Result) throws -> [String: 
     #expect(hint == "No Marker List window was observed; marker enumeration terminated without a UI action.")
 }
 
+@Test func issue254UnboundOpenMarkerListPreservesIdentityFailure() throws {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(25_405)
+    let arrange = builder.element(25_406)
+    let unboundList = builder.element(25_407)
+    builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
+    builder.setAttribute(app, kAXWindowsAttribute as String, [arrange, unboundList])
+    builder.setAttribute(arrange, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(arrange, kAXTitleAttribute as String, "Issue254 - Tracks")
+    builder.setAttribute(arrange, kAXDocumentAttribute as String, "/Issue254.logicx")
+    builder.setAttribute(unboundList, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(unboundList, kAXTitleAttribute as String, "Issue254 - Marker List")
+
+    let result = AccessibilityChannel.defaultGetMarkers(
+        runtime: builder.makeLogicRuntime(appElement: app)
+    )
+
+    #expect(!result.isSuccess)
+    let envelope = try #require(
+        JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
+    )
+    #expect(envelope["error"] as? String == HonestContract.FailureError.readbackUnavailable.rawValue)
+    #expect(envelope["reason"] as? String == "marker_list_identity_unverified")
+    #expect(try #require(envelope["terminal"] as? Bool))
+    #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+    #expect(try #require(envelope["human_intervention_requests"] as? Int) == 0)
+}
+
 @Test func issue254OpenEmptyMarkerListIsVerifiedEmpty() throws {
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(25_410)
