@@ -7,8 +7,16 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 INSTALL_DIR="${LOGIC_PRO_MCP_INSTALL_DIR:-/usr/local/bin}"
 SKIP_SUDO="${LOGIC_PRO_MCP_SKIP_SUDO:-0}"
 
+terminal_uninstall_receipt() {
+    echo "terminal=true"
+    echo "human_intervention_required=false"
+    echo "human_intervention_requests=0"
+    echo "human_dependent_transitions=0"
+}
+
 fail_uninstall() {
     echo "Error: $1"
+    terminal_uninstall_receipt
     exit 1
 }
 
@@ -24,7 +32,7 @@ fail_path_validation() {
 if [ -f "$SCRIPT_DIR/install-common.sh" ]; then
     source "$SCRIPT_DIR/install-common.sh"
 else
-    fail_uninstall "install-common.sh not found next to uninstall.sh ($SCRIPT_DIR); run uninstall.sh from a full checkout that includes Scripts/install-common.sh"
+    fail_uninstall "install-common.sh not found next to uninstall.sh ($SCRIPT_DIR)."
 fi
 
 if [ -n "${LOGIC_PRO_MCP_APPROVAL_STORE:-}" ]; then

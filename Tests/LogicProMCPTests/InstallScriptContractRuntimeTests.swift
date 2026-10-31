@@ -78,6 +78,28 @@ import Testing
     #expect(FileManager.default.fileExists(atPath: fixture.shareDir.appendingPathComponent("logic_ui_jxa.py").path))
 }
 
+@Test func testUninstallScriptMissingCommonTerminatesWithoutHumanContinuation() throws {
+    let standaloneDir = try makeInstallScriptTempDir("logicpromcp-uninstall-standalone-\(UUID().uuidString)")
+    let standaloneScript = standaloneDir.appendingPathComponent("uninstall.sh")
+    try writeExecutable(standaloneScript, contents: try scriptContents("Scripts/uninstall.sh"))
+
+    let result = try runProcess(
+        executable: "/bin/bash",
+        arguments: [standaloneScript.path],
+        currentDirectoryURL: standaloneDir
+    )
+
+    #expect(result.exitCode != 0)
+    #expect(result.combinedOutput.contains("install-common.sh not found next to uninstall.sh"))
+    #expect(result.combinedOutput.contains("terminal=true"))
+    #expect(result.combinedOutput.contains("human_intervention_required=false"))
+    #expect(result.combinedOutput.contains("human_intervention_requests=0"))
+    #expect(result.combinedOutput.contains("human_dependent_transitions=0"))
+    #expect(!result.combinedOutput.contains("run uninstall.sh"))
+    #expect(!result.combinedOutput.localizedCaseInsensitiveContains("manually"))
+    #expect(!result.combinedOutput.localizedCaseInsensitiveContains("restart"))
+}
+
 @Test func testInstallScriptSupportsPublishedV371ArchiveWithoutProjectHelpers() throws {
     let fixture = try makeInstallerFixture(
         includeProjectHelperScripts: false,
@@ -609,6 +631,10 @@ private func makeUninstallLaunchAgentFixture(
 
     #expect(result.exitCode != 0)
     #expect(result.combinedOutput.contains("launch agent service state could not be established"))
+    #expect(result.combinedOutput.contains("terminal=true"))
+    #expect(result.combinedOutput.contains("human_intervention_required=false"))
+    #expect(result.combinedOutput.contains("human_intervention_requests=0"))
+    #expect(result.combinedOutput.contains("human_dependent_transitions=0"))
     #expect(FileManager.default.fileExists(atPath: fixture.launchAgent.path))
     #expect(FileManager.default.fileExists(atPath: fixture.installRoot.appendingPathComponent("LogicProMCP").path))
 }
