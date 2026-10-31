@@ -45,8 +45,9 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO, "Scripts"))
 
 from locale_labels import localised_canonicals  # noqa: E402
-from verify import runner as fixed_runner  # noqa: E402
 from verify import verify as fixed_verifier  # noqa: E402
+from verify import runner as fixed_runner  # noqa: E402
+from verify import runner_live as fixed_runner_live  # noqa: E402
 from verify.predicates import parse_path  # noqa: E402
 
 VERIFY = os.path.join(REPO, "Scripts", "verify", "verify.py")
@@ -107,6 +108,7 @@ def acceptance_queue_problems(directory: str, admitted: set) -> tuple[list, int]
     problems = [f"{path}: {problem}" for problem in fixed_verifier.queue_problems(queue)]
     if problems:
         return problems, 0
+    live = fixed_runner_live.LiveLifecycle(repo=os.environ.get("LPM_VERIFY_REPO") or REPO)
 
     for index, entry in enumerate(queue["entries"]):
         prefix = f"{path}: entries[{index}]"
@@ -118,6 +120,13 @@ def acceptance_queue_problems(directory: str, admitted: set) -> tuple[list, int]
             )
             continue
         base = declared[len(ACCEPTANCE_PREFIX):]
+        canonical = ACCEPTANCE_PREFIX + base
+        if entry["spec"] != canonical:
+            problems.append(
+                f"{prefix}: spec {entry['spec']!r} is not the canonical repository acceptance "
+                f"path {canonical!r} that batch will open"
+            )
+            continue
         local_path = os.path.join(directory, base)
         if base not in admitted or not os.path.isfile(local_path):
             problems.append(
@@ -129,10 +138,16 @@ def acceptance_queue_problems(directory: str, admitted: set) -> tuple[list, int]
         except (OSError, ValueError) as exc:
             problems.append(f"{prefix}: {local_path}: {exc}")
             continue
+        admission = fixed_runner.admit(spec, entry.get("locales"))
         problems += [
             f"{prefix}: {problem}"
-            for problem in fixed_runner.admit(spec, entry.get("locales"))
+            for problem in admission
         ]
+        if not admission:
+            problems += [
+                f"{prefix}: {problem}"
+                for problem in live.fixture_problems(fixed_runner.declaration(spec))
+            ]
         if not _head_is_commit(entry["head"]):
             problems.append(
                 f"{prefix}: head {entry['head'][:12]} is not a commit of this repository"

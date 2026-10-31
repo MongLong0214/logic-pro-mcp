@@ -131,6 +131,13 @@ class Guard(unittest.TestCase):
         self._refused(self._tree({PILOT: _pilot(), QUEUE: _queue(spec="missing.json")}),
                       "entries[0]", "docs/acceptance/missing.json", "not a present acceptance spec")
 
+    def test_a_queue_spec_path_must_be_the_exact_path_batch_will_open(self):
+        for raw in ["missing/../1020.json", "1020.json/."]:
+            with self.subTest(raw=raw):
+                self._refused(self._tree({PILOT: _pilot(), QUEUE: _queue(spec=raw)}),
+                              "entries[0]", f"docs/acceptance/{raw}",
+                              "not the canonical repository acceptance path")
+
     def test_a_queue_head_must_be_a_commit_of_this_repository(self):
         self._refused(self._tree({PILOT: _pilot(), QUEUE: _queue(head="0" * 40)}),
                       "entries[0]", "head 000000000000", "not a commit of this repository")
@@ -141,6 +148,12 @@ class Guard(unittest.TestCase):
             with self.subTest(locales=locales):
                 self._refused(self._tree({PILOT: _pilot(), QUEUE: _queue(locales=locales)}),
                               "entries[0]", needle)
+
+    def test_a_selftest_only_fixture_is_not_admitted_for_the_live_queue(self):
+        spec = _pilot()
+        spec["fixture"] = {"id": "selftest-two-tracks", "note": "self-test only"}
+        self._refused(self._tree({PILOT: spec, QUEUE: _queue()}),
+                      "entries[0]", "has no live declaration", "only the self-test drives it")
 
     # check-spec -------------------------------------------------------------------------------
 
