@@ -509,7 +509,7 @@ extension TrackDispatcher {
                 for key in [
                     "file_open_dialog_seen", "tempo_dialog_seen", "missing_element", "osascript_stderr",
                     "permission", "safe_to_retry",
-                    "automatic_permission_attempts_exhausted", "terminal",
+                    "automatic_permission_attempts_exhausted", "terminal", "terminal_scope",
                     "human_intervention_required", "human_intervention_requests",
                     "human_dependent_transitions",
                 ] {

@@ -726,10 +726,12 @@ private func recordSequenceJSONObject(_ result: CallTool.Result) -> [String: Any
     #expect(hint == expectedHint)
     let humanInterventionRequired = try #require(object["human_intervention_required"] as? Bool)
     let terminal = try #require(object["terminal"] as? Bool)
+    let terminalScope = try #require(object["terminal_scope"] as? String)
     #expect(!humanInterventionRequired)
     #expect(object["human_intervention_requests"] as? Int == 0)
     #expect(object["human_dependent_transitions"] as? Int == 0)
     #expect(terminal)
+    #expect(terminalScope == "mcp_request_only")
     let writeAttempted = try #require(object["write_attempted"] as? Bool)
     #expect(writeAttempted, "the outer result must retain its completed playhead write")
 }
