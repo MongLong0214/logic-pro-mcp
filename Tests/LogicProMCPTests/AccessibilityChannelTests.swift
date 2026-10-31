@@ -4796,9 +4796,11 @@ private final class ScanEnteredSignal: @unchecked Sendable {
 private func makeLibraryPanelLogicRuntime(
     panelInitiallyOpen: Bool = true,
     openCalls: CallCounter? = nil,
-    openSucceeds: Bool = true
+    openSucceeds: Bool = true,
+    inventoryReadable: Bool = true
 ) -> AXLogicProElements.Runtime {
     let builder = FakeAXRuntimeBuilder()
+    let windowChildrenReads = CallCounter()
     let app = builder.element(20_000)
     let window = builder.element(20_001)
     let browser = builder.element(20_002)
@@ -4824,7 +4826,10 @@ private func makeLibraryPanelLogicRuntime(
     builder.setAttribute(browser, kAXRoleAttribute as String, kAXBrowserRole as String)
     builder.setAttribute(browser, kAXDescriptionAttribute as String, "Library")
     builder.setAttribute(browser, kAXParentAttribute as String, window)
-    builder.setChildren(browser, [categoryList, presetList, horizontalScrollBar])
+    builder.setChildren(
+        browser,
+        inventoryReadable ? [categoryList, presetList, horizontalScrollBar] : [horizontalScrollBar]
+    )
 
     builder.setAttribute(categoryList, kAXRoleAttribute as String, kAXListRole as String)
     builder.setChildren(categoryList, [bass, drums])
@@ -4852,6 +4857,13 @@ private func makeLibraryPanelLogicRuntime(
 
     return builder.makeLogicRuntime(
         appElement: app,
+        childrenHandler: { element in
+            guard !inventoryReadable,
+                  builder.elementID(element) == builder.elementID(window) else { return nil }
+            windowChildrenReads.inc()
+            guard windowChildrenReads.count >= 3 else { return nil }
+            return []
+        },
         setAttributeHandler: nil,
         performActionHandler: { element, action in
             guard action == kAXPressAction as String else { return true }
@@ -4934,6 +4946,61 @@ func testLibraryScanPanelOpenExhaustionIsTerminal() async throws {
     #expect(object["human_intervention_requests"] as? Int == 0)
     #expect(object["human_dependent_transitions"] as? Int == 0)
     #expect(!result.message.contains("Open Library"))
+}
+
+@Test("library.scan_all disk fallback never opens the Library panel")
+func testLibraryDiskFallbackDoesNotOpenClosedPanel() async throws {
+    let openCalls = CallCounter()
+    let runtime = AccessibilityChannel.Runtime.axBacked(
+        isTrusted: { true },
+        isLogicProRunning: { true },
+        hasVisibleWindow: { true },
+        logicRuntime: makeLibraryPanelLogicRuntime(
+            panelInitiallyOpen: false,
+            openCalls: openCalls
+        ),
+        scanLibraryDisk: {
+            throw NSError(domain: "LibraryDiskScannerTests", code: 1)
+        }
+    )
+    let channel = AccessibilityChannel(runtime: runtime)
+
+    let result = await channel.execute(operation: "library.scan_all", params: ["mode": "disk"])
+    let object = decodeAccessibilityJSON(result.message)
+
+    #expect(!result.isSuccess)
+    #expect(openCalls.count == 0)
+    #expect(object["error"] as? String == "library_panel_unavailable")
+    #expect(object["precondition"] as? String == "panel_closed_without_automatic_open")
+    let panelOpenAttempted = try #require(object["panel_open_attempted"] as? Bool)
+    #expect(!panelOpenAttempted)
+    #expect(object["human_intervention_requests"] as? Int == 0)
+}
+
+@Test("library.scan_all reports an automatic open before unreadable-root termination")
+func testLibraryScanUnreadableRootReportsAutomaticOpenAttempt() async throws {
+    let openCalls = CallCounter()
+    let runtime = AccessibilityChannel.Runtime.axBacked(
+        isTrusted: { true },
+        isLogicProRunning: { true },
+        hasVisibleWindow: { true },
+        logicRuntime: makeLibraryPanelLogicRuntime(
+            panelInitiallyOpen: false,
+            openCalls: openCalls,
+            inventoryReadable: false
+        )
+    )
+    let channel = AccessibilityChannel(runtime: runtime)
+
+    let result = await channel.execute(operation: "library.scan_all", params: ["mode": "ax"])
+    let object = decodeAccessibilityJSON(result.message)
+
+    #expect(!result.isSuccess)
+    #expect(openCalls.count == 1)
+    #expect(object["precondition"] as? String == "inventory_root_unavailable")
+    let panelOpenAttempted = try #require(object["panel_open_attempted"] as? Bool)
+    #expect(panelOpenAttempted)
+    #expect(object["human_intervention_requests"] as? Int == 0)
 }
 
 /// Restores the pre-split cross-exclusion between `library.scan_all` and
