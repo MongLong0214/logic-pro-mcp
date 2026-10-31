@@ -4863,10 +4863,14 @@ private actor TransportStateSequenceChannel: Channel {
     #expect(json["refresh_error"] as? String == "element_not_found")
     #expect(json["cached_source"] as? String == "cache")
     #expect((json["cache_age_sec"] as? Double ?? 0) > 0)
+    #expect(try #require(json["write_attempted"] as? Bool))
     let terminal = try #require(json["terminal"] as? Bool)
     #expect(terminal)
+    #expect(try #require(json["terminal_scope"] as? String) == "mcp_request_only")
     let humanInterventionRequired = try #require(json["human_intervention_required"] as? Bool)
     #expect(!humanInterventionRequired)
+    #expect(try #require(json["human_intervention_requests"] as? Int) == 0)
+    #expect(try #require(json["human_dependent_transitions"] as? Int) == 0)
     let attemptsExhausted = try #require(json["automatic_read_attempts_exhausted"] as? Bool)
     #expect(attemptsExhausted)
     let hint = json["hint"] as? String ?? ""
@@ -4877,7 +4881,7 @@ private actor TransportStateSequenceChannel: Channel {
     }
 }
 
-@Test func testTransportDispatcherStopFailsClosedWhenLiveStateStillReportsPlayback() async {
+@Test func testTransportDispatcherStopFailsClosedWhenLiveStateStillReportsPlayback() async throws {
     let router = ChannelRouter()
     let ax = ScriptedTransportChannel(id: .accessibility, results: [
         "transport.stop": .success(HonestContract.encodeStateB(
@@ -4908,6 +4912,17 @@ private actor TransportStateSequenceChannel: Channel {
     #expect((json["observed_isRecording"] as? Bool)!)
     #expect(json["observed_position"] as? String == "96.1.1.1")
     #expect((json["safe_to_retry"] as? Bool)!)
+    #expect(try #require(json["terminal"] as? Bool))
+    #expect(try #require(json["terminal_scope"] as? String) == "mcp_request_only")
+    #expect(try #require(json["automatic_read_attempts_exhausted"] as? Bool))
+    #expect(!(try #require(json["human_intervention_required"] as? Bool)))
+    #expect(try #require(json["human_intervention_requests"] as? Int) == 0)
+    #expect(try #require(json["human_dependent_transitions"] as? Int) == 0)
+    let hint = try #require(json["hint"] as? String)
+    #expect(hint.localizedCaseInsensitiveContains("terminated"))
+    for request in ["focus", "dismiss", "click", "run "] {
+        #expect(!hint.lowercased().contains(request))
+    }
 
     let cached = await cache.getTransport()
     #expect(cached.isPlaying)

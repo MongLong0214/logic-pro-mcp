@@ -330,9 +330,13 @@ struct TransportDispatcher: OperationTraceDispatching {
             )
             extras["poll_attempts"] = attempts
             extras["write_result"] = writePayload
+            extras["write_attempted"] = true
             extras["automatic_read_attempts_exhausted"] = true
             extras["human_intervention_required"] = false
+            extras["human_intervention_requests"] = 0
+            extras["human_dependent_transitions"] = 0
             extras["terminal"] = true
+            extras["terminal_scope"] = "mcp_request_only"
             return toolTextResult(HonestContract.encodeStateC(
                 error: .readbackUnavailable,
                 hint: "transport.stop exhausted 12 automatic live readback attempts; the command terminated with the stop effect unverified and no further writes.",
@@ -346,9 +350,15 @@ struct TransportDispatcher: OperationTraceDispatching {
             writePayload: writePayload
         )
         observedExtras["safe_to_retry"] = true
+        observedExtras["automatic_read_attempts_exhausted"] = true
+        observedExtras["human_intervention_required"] = false
+        observedExtras["human_intervention_requests"] = 0
+        observedExtras["human_dependent_transitions"] = 0
+        observedExtras["terminal"] = true
+        observedExtras["terminal_scope"] = "mcp_request_only"
         return toolTextResult(HonestContract.encodeStateC(
             error: .readbackMismatch,
-            hint: "transport.stop executed, but live transport state still reports playback or recording",
+            hint: "transport.stop executed, but live transport state still reports playback or recording after 12 automatic readback attempts; this MCP request terminated.",
             extras: observedExtras
         ), isError: true)
     }
