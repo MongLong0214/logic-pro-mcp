@@ -65,7 +65,7 @@ struct OperationTraceTests {
             sleep: { _ in }
         )
 
-        let expected = #"{"operation":"transport.play","poll_attempts":12,"reason":"readback_unavailable","state":"B","success":true,"verified":false,"verify_source":"transport_state","write_attempted":true,"write_result":"Mock: transport.play"}"#
+        let expected = #"{"automatic_read_attempts_exhausted":true,"hint":"transport.play was sent and its resulting state could not be read in 12 automatic attempts; the effect remains unknown and this MCP request terminated.","human_dependent_transitions":0,"human_intervention_requests":0,"human_intervention_required":false,"operation":"transport.play","poll_attempts":12,"reason":"readback_unavailable","safe_to_retry":false,"state":"B","success":true,"terminal":true,"terminal_scope":"mcp_request_only","verified":false,"verify_source":"transport_state","write_attempted":true,"write_result":"Mock: transport.play"}"#
         #expect(sharedToolText(result) == expected)
         let resultIsError = result.isError ?? false
         #expect(resultIsError)
