@@ -7,11 +7,10 @@ import Foundation
 /// hand). They are unified here so the taxonomy and its `remediation` wire shape
 /// (`{"type": <rawValue>, "value": <String>}`) can never drift.
 ///
-/// The doctor uses the full set — `.systemSettings` is emitted for the
-/// permission checks; the lifecycle planner only ever emits
-/// command/docs/manual/none, but sharing the type keeps both surfaces reading
-/// with the same vocabulary. Sharing a superset does NOT change either JSON
-/// shape: the cases a surface never emits simply never appear in its output.
+/// `.systemSettings` is retained as legacy wire vocabulary, but neither the
+/// doctor nor lifecycle planner emits it: unavailable permissions now terminate
+/// without asking a person to change settings. Sharing a superset does NOT
+/// change either JSON shape; cases a surface never emits do not appear.
 enum SetupRemediationType: String, Codable, Sendable {
     case command
     case docs

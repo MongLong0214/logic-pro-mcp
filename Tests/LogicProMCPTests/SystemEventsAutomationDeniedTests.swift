@@ -3,7 +3,7 @@ import Testing
 @testable import LogicProMCP
 
 private let systemEventsAutomationDeniedHint =
-    "System Events Automation is denied for the process responsible for launching this server (a launcher-permission gap, not a Logic limitation). Grant it in System Settings > Privacy & Security > Automation, or run the server/harness under a responsible app that already has it (Terminal, iTerm, or your editor). Logic Pro automation being granted is separate and not sufficient."
+    "System Events Automation is unavailable for the process responsible for launching this server (a launcher-permission gap, not a Logic limitation). The current operation terminated before further action; Logic Pro automation being granted is separate and not sufficient."
 
 @Test func testSystemEventsAutomationDeniedClassifierMatchesKnownSignals() {
     let deniedMessages = [
@@ -56,10 +56,25 @@ private let systemEventsAutomationDeniedHint =
     let error = try #require(object["error"] as? String)
     let hint = try #require(object["hint"] as? String)
     let osascriptStderr = try #require(object["osascript_stderr"] as? String)
+    let safeToRetry = try #require(object["safe_to_retry"] as? Bool)
+    let automaticAttemptsExhausted = try #require(object["automatic_permission_attempts_exhausted"] as? Bool)
+    let terminal = try #require(object["terminal"] as? Bool)
+    let humanInterventionRequired = try #require(object["human_intervention_required"] as? Bool)
+    let humanInterventionRequests = try #require(object["human_intervention_requests"] as? Int)
+    let humanDependentTransitions = try #require(object["human_dependent_transitions"] as? Int)
     #expect(!success)
     #expect(state == "C")
     #expect(error == "system_events_automation_denied")
     #expect(hint == systemEventsAutomationDeniedHint)
+    #expect(!hint.localizedCaseInsensitiveContains("Grant it"))
+    #expect(!hint.localizedCaseInsensitiveContains("System Settings"))
+    #expect(!hint.localizedCaseInsensitiveContains("run the server"))
+    #expect(!safeToRetry)
+    #expect(automaticAttemptsExhausted)
+    #expect(terminal)
+    #expect(!humanInterventionRequired)
+    #expect(humanInterventionRequests == 0)
+    #expect(humanDependentTransitions == 0)
     #expect(osascriptStderr == stderr)
 }
 

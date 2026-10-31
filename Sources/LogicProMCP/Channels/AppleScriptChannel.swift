@@ -510,7 +510,9 @@ actor AppleScriptChannel: Channel {
                 return .error(HonestContract.encodeStateC(
                     error: .systemEventsAutomationDenied,
                     hint: AppleScriptErrorClassifier.systemEventsAutomationDeniedHint,
-                    extras: ["osascript_stderr": output.stderr]
+                    extras: AppleScriptErrorClassifier.systemEventsAutomationTerminalExtras([
+                        "osascript_stderr": output.stderr,
+                    ])
                 ))
             }
 

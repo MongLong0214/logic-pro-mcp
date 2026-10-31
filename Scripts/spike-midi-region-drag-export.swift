@@ -170,8 +170,8 @@ func validatedArmedExportDirPath(_ raw: String?, source: Point?, destination: Po
     return standardizedPath
 }
 
-let systemEventsAutomationDeniedRemediation =
-    "System Events Automation is denied for the process responsible for launching this server (a launcher-permission gap, not a Logic limitation). Grant it in System Settings > Privacy & Security > Automation, or run the server/harness under a responsible app that already has it (Terminal, iTerm, or your editor). Logic Pro automation being granted is separate and not sufficient."
+let systemEventsAutomationDeniedTerminalNote =
+    "System Events Automation is unavailable for the process responsible for launching this server (a launcher-permission gap, not a Logic limitation). The current operation terminated before further action; Logic Pro automation being granted is separate and not sufficient."
 
 let systemEventsAutomationDeniedCoreMatchTokens = ["-1743", "errAEEventNotPermitted", "not authorized to send Apple events to System Events", "not allowed to send Apple events to System Events", "System Events", "systemevents"]
 
@@ -341,7 +341,7 @@ if systemEventsAutomationDeniedEvidence() != nil {
         source: pointLabel(source),
         destination: pointLabel(destination),
         path: nil,
-        note: systemEventsAutomationDeniedRemediation
+        note: systemEventsAutomationDeniedTerminalNote
     ))
     exit(2)
 }

@@ -2475,11 +2475,20 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     #expect(!((obj["write_attempted"] as? Bool)!))
     #expect(!((obj["safe_to_retry"] as? Bool)!))
     let hint = try #require(obj["hint"] as? String)
-    #expect(hint == "System Events Automation is denied for the process responsible for launching this server (a launcher-permission gap, not a Logic limitation). Grant it in System Settings > Privacy & Security > Automation, or run the server/harness under a responsible app that already has it (Terminal, iTerm, or your editor). Logic Pro automation being granted is separate and not sufficient.")
+    #expect(hint == "System Events Automation is unavailable for the process responsible for launching this server (a launcher-permission gap, not a Logic limitation). The current operation terminated before further action; Logic Pro automation being granted is separate and not sufficient.")
+    let humanInterventionRequired = try #require(obj["human_intervention_required"] as? Bool)
+    let automaticAttemptsExhausted = try #require(obj["automatic_permission_attempts_exhausted"] as? Bool)
+    let terminal = try #require(obj["terminal"] as? Bool)
+    #expect(!humanInterventionRequired)
+    #expect(obj["human_intervention_requests"] as? Int == 0)
+    #expect(obj["human_dependent_transitions"] as? Int == 0)
+    #expect(automaticAttemptsExhausted)
+    #expect(terminal)
+    #expect(obj["remediation"] == nil)
 }
 
 @Test func testImportMIDIFilePropagatesSystemEventsAutomationDeniedFromOsascript() async throws {
-    let expectedHint = "System Events Automation is denied for the process responsible for launching this server (a launcher-permission gap, not a Logic limitation). Grant it in System Settings > Privacy & Security > Automation, or run the server/harness under a responsible app that already has it (Terminal, iTerm, or your editor). Logic Pro automation being granted is separate and not sufficient."
+    let expectedHint = "System Events Automation is unavailable for the process responsible for launching this server (a launcher-permission gap, not a Logic limitation). The current operation terminated before further action; Logic Pro automation being granted is separate and not sufficient."
     let tempFile = FileManager.default.temporaryDirectory
         .appendingPathComponent("LogicProMCP-se-runtime-denied-\(UUID().uuidString).mid")
     try Data([0x4D, 0x54, 0x68, 0x64]).write(to: tempFile)
@@ -2489,7 +2498,9 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     let denied = HonestContract.encodeStateC(
         error: .systemEventsAutomationDenied,
         hint: expectedHint,
-        extras: ["osascript_stderr": stderr]
+        extras: AppleScriptErrorClassifier.systemEventsAutomationTerminalExtras([
+            "osascript_stderr": stderr,
+        ])
     )
 
     let result = await AccessibilityChannel.defaultImportMIDIFile(
@@ -2507,6 +2518,12 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     let hint = try #require(obj["hint"] as? String)
     #expect(hint == expectedHint)
     #expect(obj["osascript_stderr"] as? String == stderr)
+    let humanInterventionRequired = try #require(obj["human_intervention_required"] as? Bool)
+    let terminal = try #require(obj["terminal"] as? Bool)
+    #expect(!humanInterventionRequired)
+    #expect(obj["human_intervention_requests"] as? Int == 0)
+    #expect(obj["human_dependent_transitions"] as? Int == 0)
+    #expect(terminal)
     #expect(!(hint.contains("midi.import_file osascript failed")))
 }
 
@@ -3686,6 +3703,52 @@ private func makeTempoSliderFixture(
 }
 
 // MARK: - #131/#135/#141 set_instrument hardening (deterministic guards)
+
+@Test func testSetInstrumentPermissionRefusalIsTerminalBeforeAnyUIAction() async throws {
+    let fixture = makeSetInstrumentFixture()
+    let activationCalls = CallCounter()
+    let openCalls = CallCounter()
+    let resolveCalls = CallCounter()
+
+    let result = await AccessibilityChannel.setTrackInstrument(
+        params: ["index": "1", "path": "Bass/Sub Bass"],
+        runtime: fixture.builder.makeLogicRuntime(appElement: fixture.app),
+        staging: AccessibilityChannel.LibraryPanelStaging(
+            isPanelOpen: { _ in true },
+            openPanel: { _ in openCalls.inc() },
+            resolvePath: { _ in resolveCalls.inc(); return true }
+        ),
+        canPostEvents: { false },
+        activateLogicPro: { activationCalls.inc(); return true }
+    )
+
+    #expect(!result.isSuccess)
+    let obj = decodeAccessibilityJSON(result.message)
+    #expect(obj["error"] as? String == "permission_denied")
+    #expect(obj["operation"] as? String == "track.set_instrument")
+    #expect(obj["precondition"] as? String == "event_post_permission_unavailable")
+    #expect(obj["target_track_index"] as? Int == 1)
+    #expect(obj["target_track_name"] as? String == "Bass Track")
+    #expect(obj["events_posted"] as? Int == 0)
+    let writeAttempted = try #require(obj["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
+    let safeToRetry = try #require(obj["safe_to_retry"] as? Bool)
+    #expect(!safeToRetry)
+    let automaticAttemptsExhausted = try #require(obj["automatic_permission_attempts_exhausted"] as? Bool)
+    #expect(automaticAttemptsExhausted)
+    let terminal = try #require(obj["terminal"] as? Bool)
+    #expect(terminal)
+    let humanInterventionRequired = try #require(obj["human_intervention_required"] as? Bool)
+    #expect(!humanInterventionRequired)
+    #expect(obj["human_intervention_requests"] as? Int == 0)
+    let hint = try #require(obj["hint"] as? String)
+    #expect(!hint.localizedCaseInsensitiveContains("grant"))
+    #expect(!hint.localizedCaseInsensitiveContains("retry"))
+    #expect(activationCalls.count == 0)
+    #expect(fixture.builder.actionCalls.isEmpty)
+    #expect(openCalls.count == 0)
+    #expect(resolveCalls.count == 0)
+}
 
 /// Build a set_instrument fixture whose target track (index 1) carries a
 /// GM Device signal so `inferTrackType` classifies it as `.externalMIDI`.

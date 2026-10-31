@@ -647,7 +647,10 @@ extension AccessibilityChannel {
         params: [String: String],
         runtime: AXLogicProElements.Runtime = .production,
         staging: LibraryPanelStaging = .production,
-        canPostEvents: @escaping @Sendable () -> Bool = { CGPreflightPostEventAccess() }
+        canPostEvents: @escaping @Sendable () -> Bool = { CGPreflightPostEventAccess() },
+        activateLogicPro: @escaping @Sendable () -> Bool = {
+            ProcessUtils.Runtime.production.activateLogicPro()
+        }
     ) async -> ChannelResult {
         // Resolve path-OR-legacy. Path wins when both provided.
         let pathParam = params["path"].flatMap { $0.isEmpty ? nil : $0 }
@@ -698,14 +701,6 @@ extension AccessibilityChannel {
             requestedTrackIndex = nil
         }
 
-        // v3.0.3+ — select target track via the Apple-public AX-first
-        // selection ladder (AXPress → AXSelected → child AXPress → coord
-        // click fallback). Logic must be frontmost for the last step to
-        // register, so activate first regardless of which step ends up
-        // committing.
-        _ = ProcessUtils.Runtime.production.activateLogicPro()
-        try? await Task.sleep(nanoseconds: 150_000_000)   // window raise settle
-
         var targetTrackIndex = requestedTrackIndex
         var targetTrackName: Any = NSNull()
 
@@ -726,9 +721,41 @@ extension AccessibilityChannel {
             if let name = AXLogicProElements.trackName(at: index, runtime: runtime) {
                 targetTrackName = name
             }
-            if !canPostEvents() {
-                return .error("Event-post permission required (Accessibility → Input Monitoring). Grant in System Settings.")
+            guard canPostEvents() else {
+                return .error(HonestContract.encodeStateC(
+                    error: .permissionDenied,
+                    hint: "The bounded track-selection ladder may require a keyboard event, but this process "
+                        + "is not authorized to post one. set_instrument terminated before application activation, "
+                        + "track selection, or Library navigation.",
+                    extras: setInstrumentBaseExtras(
+                        requestedPath: resolvedPath,
+                        category: category,
+                        preset: preset,
+                        targetTrackIndex: index,
+                        targetTrackName: targetTrackName
+                    ).merging([
+                        "operation": "track.set_instrument",
+                        "precondition": "event_post_permission_unavailable",
+                        "events_posted": 0,
+                        "write_attempted": false,
+                        "safe_to_retry": false,
+                        "automatic_permission_attempts_exhausted": true,
+                        "terminal": true,
+                        "human_intervention_required": false,
+                        "human_intervention_requests": 0,
+                    ]) { _, new in new }
+                ))
             }
+        }
+
+        // v3.0.3+ — select target track via the Apple-public AX-first
+        // selection ladder (AXPress → AXSelected → child AXPress → coord
+        // click fallback). Permission is resolved above before activating
+        // Logic, so an unavailable event-post capability has no UI effect.
+        _ = activateLogicPro()
+        try? await Task.sleep(nanoseconds: 150_000_000)   // window raise settle
+
+        if let index = requestedTrackIndex {
             guard AXLogicProElements.selectTrackViaAX(at: index, runtime: runtime) else {
                 return .error(HonestContract.encodeStateC(
                     error: .axWriteFailed,

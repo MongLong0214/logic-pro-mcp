@@ -169,13 +169,11 @@ extension AccessibilityChannel {
             return .error(HonestContract.encodeStateC(
                 error: .systemEventsAutomationDenied,
                 hint: AppleScriptErrorClassifier.systemEventsAutomationDeniedHint,
-                extras: [
+                extras: AppleScriptErrorClassifier.systemEventsAutomationTerminalExtras([
                     "permission": "automation_system_events",
                     "failure_stage": "preflight_system_events_permission",
                     "write_attempted": false,
-                    "safe_to_retry": false,
-                    "remediation": AppleScriptErrorClassifier.systemEventsAutomationDeniedHint,
-                ]
+                ])
             ))
         }
         let readTrackCount = trackCount ?? { AXLogicProElements.allTrackHeaders(runtime: runtime).count }

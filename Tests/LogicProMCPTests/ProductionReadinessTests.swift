@@ -318,7 +318,8 @@ import Testing
     )
     #expect(!(notGranted.allGranted))
     #expect(notGranted.summary.contains("NOT GRANTED"))
-    #expect(notGranted.summary.contains("System Settings"))
+    #expect(notGranted.summary.contains("Outcome: terminal"))
+    #expect(!(notGranted.summary.contains("System Settings")))
 }
 
 // MARK: - Helpers
