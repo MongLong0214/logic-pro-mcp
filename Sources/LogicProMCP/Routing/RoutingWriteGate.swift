@@ -59,6 +59,25 @@ func evaluate(
             )
         )
     }
+    if graph.complete && graph.isConsistent {
+        let mainOutputSources = Set(
+            graph.edges.lazy
+                .filter { $0.kind == .mainOutput }
+                .map(\.source)
+        )
+        let classificationContradictsMainOutput = graph.nodes.contains { node in
+            mainOutputSources.contains(node.id)
+                && (node.outputClassification == .noOutput
+                    || node.outputClassification == .physicalOutput)
+        }
+        if classificationContradictsMainOutput {
+            rejections.append(
+                .partialGraphUnsafe(
+                    reason: "source output classification contradicts its main-output edge"
+                )
+            )
+        }
+    }
     if !routingPhysicalSendSlots.contains(request.physicalSlot) {
         rejections.append(.slotOutOfRange(slot: request.physicalSlot))
     }

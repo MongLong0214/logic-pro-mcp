@@ -21,7 +21,24 @@ struct RoutingGraphTests {
         let candidate = graph(nodes: [source, busNode(1)], edges: edges)
         let expected: RoutingPathState = kind == "contradiction" ? .unverified
             : kind == "send_only" ? .connected : .disconnected
+        let decision = evaluate(
+            request(physicalSlot: 1, destinationBusNumber: 1),
+            against: candidate
+        )
+
         #expect(routingPath(from: sourceRef, to: "bus-1", in: candidate) == expected)
+        if kind == "contradiction" {
+            #expect(!decision.allowed)
+            #expect(decision.rejections == [
+                .partialGraphUnsafe(
+                    reason: "source output classification contradicts its main-output edge"
+                ),
+            ])
+        } else {
+            #expect(decision.allowed)
+            #expect(decision.rejections.isEmpty)
+        }
+        #expect(!decision.writeAttempted)
     }
 
     @Test(arguments: [nil, -1, 0, 257] as [Int?])
