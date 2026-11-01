@@ -234,6 +234,7 @@ struct SessionPlanSafetyTests {
             intent: intent,
             catalog: catalog
         ).first)
+        #expect(track.suggestedInstrument == "Unresolved guitar instrument")
         #expect(track.limitations.contains("Instrument catalog #31 is unavailable in this build; automatic patch assignment is unavailable."))
         #expect(!track.limitations.joined(separator: " ").lowercased().contains("manual"))
     }
