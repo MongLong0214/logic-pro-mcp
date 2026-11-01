@@ -442,6 +442,42 @@ struct TempoMapAXTests {
         #expect(fixture.writeElementIDs.count == 1)
     }
 
+    @Test("an unmeasured selected-tempo jump that lands on target still refuses")
+    func selectedTempoJumpDuringSettleRefusesWithoutRestore() throws {
+        let fixture = TempoListFixture(
+            tempo: 118,
+            steps: [.toward],
+            targetDriftPhase: .firstSettleAfterFirstAcceptedWrite
+        )
+
+        let outcome = TempoMapAX.setExistingTempo(
+            at: 0,
+            to: 120,
+            in: fixture.window,
+            localeIdentifier: "ko-KR",
+            runtime: fixture.runtime()
+        )
+        let refusedOutcome = try #require(refusal(from: outcome))
+
+        #expect(refusedOutcome.failure == .unmeasuredStep(
+            previous: 118,
+            observed: 120,
+            target: 120
+        ))
+        #expect(refusedOutcome.forward == .init(
+            attempts: 1,
+            acceptedWrites: 1,
+            finalObserved: 120
+        ))
+        #expect(refusedOutcome.rollback == .failed(
+            failure: .unmeasuredStep(previous: 118, observed: 120, target: 120),
+            writes: 0,
+            finalObserved: 120
+        ))
+        #expect(fixture.currentTempo == 120)
+        #expect(fixture.writeElementIDs.count == 1)
+    }
+
     @Test("selected tempo drift at rollback entry preserves the primary failure")
     func selectedTempoDriftAtRollbackEntryPreservesPrimaryFailure() throws {
         let fixture = TempoListFixture(
@@ -1007,6 +1043,7 @@ private final class TempoListFixture: @unchecked Sendable {
     enum TargetDriftPhase {
         case beforeFirstFreshWrite
         case beforeSecondFreshWrite
+        case firstSettleAfterFirstAcceptedWrite
         case rollbackEntryAfterSecondAcceptedWrite
     }
 
@@ -1459,6 +1496,9 @@ private final class TempoListFixture: @unchecked Sendable {
         case .beforeSecondFreshWrite:
             shouldDrift = acceptedWriteCount == 1
                 && inventoryPassesSinceLastAcceptedWrite >= 4
+        case .firstSettleAfterFirstAcceptedWrite:
+            shouldDrift = acceptedWriteCount == 1
+                && inventoryPassesSinceLastAcceptedWrite == 0
         case .rollbackEntryAfterSecondAcceptedWrite:
             shouldDrift = acceptedWriteCount == 2
                 && inventoryPassesSinceLastAcceptedWrite >= 4
