@@ -74,9 +74,9 @@ struct TempoMapAXTests {
         #expect(refusedOutcome.rollback == .notNeeded(writes: 0, finalObserved: 118))
     }
 
-    @Test("a write that moves away from the target refuses")
+    @Test("a one-BPM move away from the target refuses without restoration")
     func writeThatMovesAwayRefuses() throws {
-        let fixture = TempoListFixture(tempo: 118, steps: [.away, .toward])
+        let fixture = TempoListFixture(tempo: 118, steps: [.away])
 
         let outcome = TempoMapAX.setExistingTempo(
             at: 0,
@@ -89,8 +89,14 @@ struct TempoMapAXTests {
 
         #expect(refusedOutcome.failure == .movedAway(previous: 118, observed: 117, target: 120))
         #expect(refusedOutcome.failure.description.contains("moved away"))
-        #expect(refusedOutcome.rollback == .restored(writes: 1, finalObserved: 118))
-        #expect(fixture.currentTempo == 118)
+        #expect(refusedOutcome.forward == .init(attempts: 1, acceptedWrites: 1, finalObserved: 117))
+        #expect(refusedOutcome.rollback == .failed(
+            failure: .movedAway(previous: 118, observed: 117, target: 120),
+            writes: 0,
+            finalObserved: 117
+        ))
+        #expect(fixture.writeElementIDs.count == 1)
+        #expect(fixture.currentTempo == 117)
     }
 
     @Test("already-at-target is a distinguished zero-write success")
@@ -107,6 +113,411 @@ struct TempoMapAXTests {
 
         #expect(outcome == .alreadyAtTarget(observed: 120))
         #expect(fixture.writeElementIDs.isEmpty)
+    }
+
+    @Test("duplicate positions refuse before an index can authorize a write")
+    func duplicatePositionsCannotAuthorizeIndexWrite() throws {
+        let fixture = TempoListFixture(
+            tempo: 118,
+            reportedCountText: "2개의 이벤트",
+            steps: [.toward, .toward],
+            duplicatePositionTempo: 130
+        )
+
+        let outcome = TempoMapAX.setExistingTempo(
+            at: 0,
+            to: 120,
+            in: fixture.window,
+            localeIdentifier: "ko-KR",
+            runtime: fixture.runtime()
+        )
+        let refusedOutcome = try #require(refusal(from: outcome))
+
+        #expect(refusedOutcome.failure == .ambiguousPosition(
+            position: "1 1 1 1 ",
+            matches: 2
+        ))
+        #expect(refusedOutcome.forward == .none)
+        #expect(refusedOutcome.rollback == .notNeeded(writes: 0, finalObserved: nil))
+        #expect(fixture.currentTempo == 118)
+        #expect(fixture.writeElementIDs.isEmpty)
+    }
+
+    @Test("a duplicate introduced after the initial snapshot refuses the fresh pre-write inventory")
+    func duplicateBeforeFreshWriteCannotAuthorizeIndexWrite() throws {
+        let fixture = TempoListFixture(
+            tempo: 118,
+            steps: [.toward, .toward],
+            duplicatePositionTempo: 130,
+            duplicateInjectionPhase: .beforeFirstFreshWrite
+        )
+
+        let outcome = TempoMapAX.setExistingTempo(
+            at: 0,
+            to: 120,
+            in: fixture.window,
+            localeIdentifier: "ko-KR",
+            runtime: fixture.runtime()
+        )
+        let refusedOutcome = try #require(refusal(from: outcome))
+
+        #expect(refusedOutcome.failure == .ambiguousPosition(
+            position: "1 1 1 1 ",
+            matches: 2
+        ))
+        #expect(refusedOutcome.forward == .init(
+            attempts: 0,
+            acceptedWrites: 0,
+            finalObserved: 118
+        ))
+        #expect(refusedOutcome.rollback == .notNeeded(writes: 0, finalObserved: 118))
+        #expect(fixture.currentTempo == 118)
+        #expect(fixture.writeElementIDs.isEmpty)
+    }
+
+    @Test("a duplicate introduced after an accepted write refuses during settle")
+    func duplicateDuringSettleCannotBeReportedAsConverged() throws {
+        let fixture = TempoListFixture(
+            tempo: 118,
+            steps: [.toward],
+            duplicatePositionTempo: 130,
+            duplicateInjectionPhase: .firstSettle
+        )
+
+        let outcome = TempoMapAX.setExistingTempo(
+            at: 0,
+            to: 119,
+            in: fixture.window,
+            localeIdentifier: "ko-KR",
+            runtime: fixture.runtime()
+        )
+        let refusedOutcome = try #require(refusal(from: outcome))
+
+        #expect(refusedOutcome.failure == .ambiguousPosition(
+            position: "1 1 1 1 ",
+            matches: 2
+        ))
+        #expect(refusedOutcome.forward == .init(
+            attempts: 1,
+            acceptedWrites: 1,
+            finalObserved: 119
+        ))
+        #expect(refusedOutcome.rollback == .restored(writes: 1, finalObserved: 118))
+        #expect(fixture.currentTempo == 118)
+        #expect(fixture.writeElementIDs.count == 2)
+    }
+
+    @Test("a transient duplicate at rollback entry refuses before a restore write")
+    func duplicateAtRollbackEntryPreservesPrimaryFailure() throws {
+        let fixture = TempoListFixture(
+            tempo: 118,
+            steps: [.toward, .stuck, .toward],
+            duplicatePositionTempo: 130,
+            duplicateInjectionPhase: .rollbackEntryAfterSecondAcceptedWrite
+        )
+
+        let outcome = TempoMapAX.setExistingTempo(
+            at: 0,
+            to: 121,
+            in: fixture.window,
+            localeIdentifier: "ko-KR",
+            runtime: fixture.runtime()
+        )
+        let refusedOutcome = try #require(refusal(from: outcome))
+
+        #expect(refusedOutcome.failure == .didNotMove(
+            previous: 119,
+            observed: 119,
+            target: 121
+        ))
+        #expect(refusedOutcome.forward == .init(
+            attempts: 2,
+            acceptedWrites: 2,
+            finalObserved: 119
+        ))
+        #expect(refusedOutcome.rollback == .failed(
+            failure: .ambiguousPosition(position: "1 1 1 1 ", matches: 2),
+            writes: 0,
+            finalObserved: 119
+        ))
+        #expect(fixture.currentTempo == 119)
+        #expect(fixture.writeElementIDs.count == 2)
+    }
+
+    @Test("an unrelated tempo change before the first fresh write refuses without mutation")
+    func unrelatedTempoDriftBeforeFreshWriteRefusesWithoutMutation() throws {
+        let fixture = TempoListFixture(
+            tempo: 118,
+            reportedCountText: "2개의 이벤트",
+            steps: [.toward, .toward],
+            peerTempo: 130,
+            peerDriftPhase: .beforeFirstFreshWrite
+        )
+
+        let outcome = TempoMapAX.setExistingTempo(
+            at: 0,
+            to: 120,
+            in: fixture.window,
+            localeIdentifier: "ko-KR",
+            runtime: fixture.runtime()
+        )
+        let refusedOutcome = try #require(refusal(from: outcome))
+        let expected = [TempoMapAX.UnrelatedEventWitness(
+            index: 1,
+            position: "2 1 1 1 ",
+            tempo: 130
+        )]
+        let observed = [TempoMapAX.UnrelatedEventWitness(
+            index: 1,
+            position: "2 1 1 1 ",
+            tempo: 137
+        )]
+
+        #expect(refusedOutcome.failure == .unrelatedEventsChanged(
+            expected: expected,
+            observed: observed
+        ))
+        #expect(refusedOutcome.forward == .init(
+            attempts: 0,
+            acceptedWrites: 0,
+            finalObserved: 118
+        ))
+        #expect(refusedOutcome.rollback == .notNeeded(writes: 0, finalObserved: 118))
+        #expect(fixture.currentTempo == 118)
+        #expect(fixture.writeElementIDs.isEmpty)
+    }
+
+    @Test("unrelated tempo drift during settle refuses and authorizes no restore write")
+    func unrelatedTempoDriftDuringSettleRefusesAdditionalWrites() throws {
+        let fixture = TempoListFixture(
+            tempo: 118,
+            reportedCountText: "2개의 이벤트",
+            steps: [.toward],
+            peerTempo: 130,
+            peerDriftPhase: .firstSettle
+        )
+
+        let outcome = TempoMapAX.setExistingTempo(
+            at: 0,
+            to: 119,
+            in: fixture.window,
+            localeIdentifier: "ko-KR",
+            runtime: fixture.runtime()
+        )
+        let refusedOutcome = try #require(refusal(from: outcome))
+        let expected = [TempoMapAX.UnrelatedEventWitness(
+            index: 1,
+            position: "2 1 1 1 ",
+            tempo: 130
+        )]
+        let observed = [TempoMapAX.UnrelatedEventWitness(
+            index: 1,
+            position: "2 1 1 1 ",
+            tempo: 137
+        )]
+
+        #expect(refusedOutcome.failure == .unrelatedEventsChanged(
+            expected: expected,
+            observed: observed
+        ))
+        #expect(refusedOutcome.forward == .init(
+            attempts: 1,
+            acceptedWrites: 1,
+            finalObserved: 119
+        ))
+        #expect(refusedOutcome.rollback == .failed(
+            failure: .unrelatedEventsChanged(expected: expected, observed: observed),
+            writes: 0,
+            finalObserved: 119
+        ))
+        #expect(fixture.currentTempo == 119)
+        #expect(fixture.writeElementIDs.count == 1)
+    }
+
+    @Test("unrelated tempo drift at rollback entry preserves the primary failure")
+    func unrelatedTempoDriftAtRollbackEntryPreservesPrimaryFailure() throws {
+        let fixture = TempoListFixture(
+            tempo: 118,
+            reportedCountText: "2개의 이벤트",
+            steps: [.toward, .stuck, .toward],
+            peerTempo: 130,
+            peerDriftPhase: .rollbackEntryAfterSecondAcceptedWrite
+        )
+
+        let outcome = TempoMapAX.setExistingTempo(
+            at: 0,
+            to: 121,
+            in: fixture.window,
+            localeIdentifier: "ko-KR",
+            runtime: fixture.runtime()
+        )
+        let refusedOutcome = try #require(refusal(from: outcome))
+        let expected = [TempoMapAX.UnrelatedEventWitness(
+            index: 1,
+            position: "2 1 1 1 ",
+            tempo: 130
+        )]
+        let observed = [TempoMapAX.UnrelatedEventWitness(
+            index: 1,
+            position: "2 1 1 1 ",
+            tempo: 137
+        )]
+
+        #expect(refusedOutcome.failure == .didNotMove(
+            previous: 119,
+            observed: 119,
+            target: 121
+        ))
+        #expect(refusedOutcome.forward == .init(
+            attempts: 2,
+            acceptedWrites: 2,
+            finalObserved: 119
+        ))
+        #expect(refusedOutcome.rollback == .failed(
+            failure: .unrelatedEventsChanged(expected: expected, observed: observed),
+            writes: 0,
+            finalObserved: 119
+        ))
+        #expect(fixture.currentTempo == 119)
+        #expect(fixture.writeElementIDs.count == 2)
+    }
+
+    @Test("selected tempo drift before the first fresh write refuses without mutation")
+    func selectedTempoDriftBeforeFreshWriteRefusesWithoutMutation() throws {
+        let fixture = TempoListFixture(
+            tempo: 118,
+            steps: [.toward],
+            targetDriftPhase: .beforeFirstFreshWrite
+        )
+
+        let outcome = TempoMapAX.setExistingTempo(
+            at: 0,
+            to: 120,
+            in: fixture.window,
+            localeIdentifier: "ko-KR",
+            runtime: fixture.runtime()
+        )
+        let refusedOutcome = try #require(refusal(from: outcome))
+
+        #expect(refusedOutcome.failure == .selectedEventChanged(
+            expectedTempo: 118,
+            observedTempo: 119
+        ))
+        #expect(refusedOutcome.forward == .init(
+            attempts: 0,
+            acceptedWrites: 0,
+            finalObserved: 119
+        ))
+        #expect(refusedOutcome.rollback == .notNeeded(writes: 0, finalObserved: 119))
+        #expect(fixture.currentTempo == 119)
+        #expect(fixture.writeElementIDs.isEmpty)
+    }
+
+    @Test("selected tempo drift before a later fresh write authorizes no restore write")
+    func selectedTempoDriftBeforeLaterWriteRefusesAdditionalWrites() throws {
+        let fixture = TempoListFixture(
+            tempo: 118,
+            steps: [.toward, .toward],
+            targetDriftPhase: .beforeSecondFreshWrite
+        )
+
+        let outcome = TempoMapAX.setExistingTempo(
+            at: 0,
+            to: 121,
+            in: fixture.window,
+            localeIdentifier: "ko-KR",
+            runtime: fixture.runtime()
+        )
+        let refusedOutcome = try #require(refusal(from: outcome))
+
+        #expect(refusedOutcome.failure == .selectedEventChanged(
+            expectedTempo: 119,
+            observedTempo: 120
+        ))
+        #expect(refusedOutcome.forward == .init(
+            attempts: 1,
+            acceptedWrites: 1,
+            finalObserved: 120
+        ))
+        #expect(refusedOutcome.rollback == .failed(
+            failure: .selectedEventChanged(expectedTempo: 119, observedTempo: 120),
+            writes: 0,
+            finalObserved: 120
+        ))
+        #expect(fixture.currentTempo == 120)
+        #expect(fixture.writeElementIDs.count == 1)
+    }
+
+    @Test("an unmeasured selected-tempo jump that lands on target still refuses")
+    func selectedTempoJumpDuringSettleRefusesWithoutRestore() throws {
+        let fixture = TempoListFixture(
+            tempo: 118,
+            steps: [.toward],
+            targetDriftPhase: .firstSettleAfterFirstAcceptedWrite
+        )
+
+        let outcome = TempoMapAX.setExistingTempo(
+            at: 0,
+            to: 120,
+            in: fixture.window,
+            localeIdentifier: "ko-KR",
+            runtime: fixture.runtime()
+        )
+        let refusedOutcome = try #require(refusal(from: outcome))
+
+        #expect(refusedOutcome.failure == .unmeasuredStep(
+            previous: 118,
+            observed: 120,
+            target: 120
+        ))
+        #expect(refusedOutcome.forward == .init(
+            attempts: 1,
+            acceptedWrites: 1,
+            finalObserved: 120
+        ))
+        #expect(refusedOutcome.rollback == .failed(
+            failure: .unmeasuredStep(previous: 118, observed: 120, target: 120),
+            writes: 0,
+            finalObserved: 120
+        ))
+        #expect(fixture.currentTempo == 120)
+        #expect(fixture.writeElementIDs.count == 1)
+    }
+
+    @Test("selected tempo drift at rollback entry preserves the primary failure")
+    func selectedTempoDriftAtRollbackEntryPreservesPrimaryFailure() throws {
+        let fixture = TempoListFixture(
+            tempo: 118,
+            steps: [.toward, .stuck, .toward],
+            targetDriftPhase: .rollbackEntryAfterSecondAcceptedWrite
+        )
+
+        let outcome = TempoMapAX.setExistingTempo(
+            at: 0,
+            to: 121,
+            in: fixture.window,
+            localeIdentifier: "ko-KR",
+            runtime: fixture.runtime()
+        )
+        let refusedOutcome = try #require(refusal(from: outcome))
+
+        #expect(refusedOutcome.failure == .didNotMove(
+            previous: 119,
+            observed: 119,
+            target: 121
+        ))
+        #expect(refusedOutcome.forward == .init(
+            attempts: 2,
+            acceptedWrites: 2,
+            finalObserved: 119
+        ))
+        #expect(refusedOutcome.rollback == .failed(
+            failure: .selectedEventChanged(expectedTempo: 119, observedTempo: 120),
+            writes: 0,
+            finalObserved: 120
+        ))
+        #expect(fixture.currentTempo == 120)
+        #expect(fixture.writeElementIDs.count == 2)
     }
 
     @Test("post-write readback re-finds a re-rendered group instead of reading stale nil")
@@ -550,7 +961,7 @@ struct TempoMapAXTests {
         #expect(fixture.currentTempo == 118)
     }
 
-    @Test("a step that crosses the target refuses instead of becoming oscillating progress")
+    @Test("an unmeasured step that crosses the target refuses without restoration")
     func crossingTargetRefuses() throws {
         let fixture = TempoListFixture(tempo: 118, steps: [.crossing])
 
@@ -563,10 +974,39 @@ struct TempoMapAXTests {
         )
         let refusedOutcome = try #require(refusal(from: outcome))
 
-        #expect(refusedOutcome.failure == .crossedTarget(previous: 118, observed: 121, target: 120))
+        #expect(refusedOutcome.failure == .unmeasuredStep(previous: 118, observed: 121, target: 120))
         #expect(refusedOutcome.forward == .init(attempts: 1, acceptedWrites: 1, finalObserved: 121))
-        #expect(refusedOutcome.rollback == .restored(writes: 3, finalObserved: 118))
-        #expect(fixture.currentTempo == 118)
+        #expect(refusedOutcome.rollback == .failed(
+            failure: .unmeasuredStep(previous: 118, observed: 121, target: 120),
+            writes: 0,
+            finalObserved: 121
+        ))
+        #expect(fixture.writeElementIDs.count == 1)
+        #expect(fixture.currentTempo == 121)
+    }
+
+    @Test("a large step away from the target refuses without restoration")
+    func largeMovedAwayStepRefusesWithoutRestore() throws {
+        let fixture = TempoListFixture(tempo: 118, steps: [.largeAway])
+
+        let outcome = TempoMapAX.setExistingTempo(
+            at: 0,
+            to: 120,
+            in: fixture.window,
+            localeIdentifier: "ko-KR",
+            runtime: fixture.runtime()
+        )
+        let refusedOutcome = try #require(refusal(from: outcome))
+
+        #expect(refusedOutcome.failure == .unmeasuredStep(previous: 118, observed: 116, target: 120))
+        #expect(refusedOutcome.forward == .init(attempts: 1, acceptedWrites: 1, finalObserved: 116))
+        #expect(refusedOutcome.rollback == .failed(
+            failure: .unmeasuredStep(previous: 118, observed: 116, target: 120),
+            writes: 0,
+            finalObserved: 116
+        ))
+        #expect(fixture.writeElementIDs.count == 1)
+        #expect(fixture.currentTempo == 116)
     }
 
     @Test("a rollback that drifts carries its write count and final observed tempo")
@@ -611,6 +1051,7 @@ private final class TempoListFixture: @unchecked Sendable {
         case toward
         case stuck
         case away
+        case largeAway
         case crossing
     }
 
@@ -620,6 +1061,26 @@ private final class TempoListFixture: @unchecked Sendable {
         case tempoCellChildren
         case tempoDescription
         case itemCountValue
+    }
+
+    enum DuplicateInjectionPhase {
+        case initial
+        case beforeFirstFreshWrite
+        case firstSettle
+        case rollbackEntryAfterSecondAcceptedWrite
+    }
+
+    enum PeerDriftPhase {
+        case beforeFirstFreshWrite
+        case firstSettle
+        case rollbackEntryAfterSecondAcceptedWrite
+    }
+
+    enum TargetDriftPhase {
+        case beforeFirstFreshWrite
+        case beforeSecondFreshWrite
+        case firstSettleAfterFirstAcceptedWrite
+        case rollbackEntryAfterSecondAcceptedWrite
     }
 
     struct WitnessPair {
@@ -655,6 +1116,20 @@ private final class TempoListFixture: @unchecked Sendable {
     private var postWriteAXRowsReads = 0
     private let postWriteAXRowsReadFailureAt: Int?
     private let postWriteAXRowsReadFailureDelay: TimeInterval
+    private let duplicatePositionTempo: Double?
+    private let duplicateInjectionPhase: DuplicateInjectionPhase
+    private let reportedCountText: String
+    private var duplicateVisible: Bool
+    private var duplicateWasInjected = false
+    private var duplicateInventoryPassesRemaining: Int?
+    private var inventoryPassesObserved = 0
+    private var inventoryPassesSinceLastAcceptedWrite = 0
+    private var acceptedWriteCount = 0
+    private var peerTempo: Double?
+    private let peerDriftPhase: PeerDriftPhase?
+    private var peerDriftInjected = false
+    private let targetDriftPhase: TargetDriftPhase?
+    private var targetDriftInjected = false
     private var postWriteAXRowsResultReads = 0
     private var pendingRenderAXRowsReads = 0
     private var renderPending = false
@@ -679,7 +1154,12 @@ private final class TempoListFixture: @unchecked Sendable {
         postWriteAXRowsReadDelayAt: Int? = nil,
         postWriteAXRowsReadDelay: TimeInterval = 0,
         postWriteAXRowsReadFailureAt: Int? = nil,
-        postWriteAXRowsReadFailureDelay: TimeInterval = 0
+        postWriteAXRowsReadFailureDelay: TimeInterval = 0,
+        duplicatePositionTempo: Double? = nil,
+        duplicateInjectionPhase: DuplicateInjectionPhase = .initial,
+        peerTempo: Double? = nil,
+        peerDriftPhase: PeerDriftPhase? = nil,
+        targetDriftPhase: TargetDriftPhase? = nil
     ) {
         self.currentTempo = tempo
         self.steps = steps
@@ -694,6 +1174,14 @@ private final class TempoListFixture: @unchecked Sendable {
         self.postWriteAXRowsReadDelay = postWriteAXRowsReadDelay
         self.postWriteAXRowsReadFailureAt = postWriteAXRowsReadFailureAt
         self.postWriteAXRowsReadFailureDelay = postWriteAXRowsReadFailureDelay
+        self.duplicatePositionTempo = duplicatePositionTempo
+        self.duplicateInjectionPhase = duplicateInjectionPhase
+        self.reportedCountText = reportedCountText
+        self.duplicateVisible = duplicatePositionTempo != nil && duplicateInjectionPhase == .initial
+        self.duplicateInventoryPassesRemaining = duplicateInjectionPhase == .initial ? nil : 0
+        self.peerTempo = peerTempo
+        self.peerDriftPhase = peerDriftPhase
+        self.targetDriftPhase = targetDriftPhase
         app = builder.element(90_000)
         window = builder.element(90_001)
         table = builder.element(90_002)
@@ -743,6 +1231,9 @@ private final class TempoListFixture: @unchecked Sendable {
                         }
                     }
                     advancePendingRenderIfNeeded()
+                    prepareDuplicateForInventoryIfNeeded()
+                    prepareTargetDriftForInventoryIfNeeded()
+                    preparePeerDriftForInventoryIfNeeded()
                     if !witnessPairs.isEmpty {
                         let pair = witnessPairs[min(witnessPairIndex, witnessPairs.count - 1)]
                         let rows = pair.rowVisible ? activeRow.map { [$0] } ?? [] : []
@@ -753,6 +1244,17 @@ private final class TempoListFixture: @unchecked Sendable {
                     let pair = witnessPairs[min(witnessPairIndex, witnessPairs.count - 1)]
                     witnessPairIndex += 1
                     return .some(pair.reportedCountText as NSString)
+                }
+                if attribute == (kAXValueAttribute as String),
+                   CFEqual(element, countText),
+                   duplicatePositionTempo != nil || peerTempo != nil || targetDriftPhase != nil {
+                    let observedCount = duplicateVisible ? "2개의 이벤트" : reportedCountText
+                    inventoryPassesObserved += 1
+                    inventoryPassesSinceLastAcceptedWrite += 1
+                    if let remaining = duplicateInventoryPassesRemaining, remaining > 0 {
+                        duplicateInventoryPassesRemaining = remaining - 1
+                    }
+                    return .some(observedCount as NSString)
                 }
                 guard attribute == (kAXDescriptionAttribute as String),
                       staleTempoGroupIDs.contains(builder.elementID(element)) else {
@@ -834,11 +1336,15 @@ private final class TempoListFixture: @unchecked Sendable {
                     break
                 case .away:
                     currentTempo += requested.doubleValue > currentTempo ? -1 : 1
+                case .largeAway:
+                    currentTempo += requested.doubleValue > currentTempo ? -2 : 2
                 case .crossing:
                     currentTempo = requested.doubleValue > currentTempo
                         ? requested.doubleValue + 1
                         : requested.doubleValue - 1
                 }
+                acceptedWriteCount += 1
+                inventoryPassesSinceLastAcceptedWrite = 0
                 scheduleCurrentRowRender()
                 if decreasingWrite, decreasingWriteDelay > 0 {
                     Thread.sleep(forTimeInterval: decreasingWriteDelay)
@@ -877,11 +1383,169 @@ private final class TempoListFixture: @unchecked Sendable {
         builder.setChildren(tempoCell, [tempoGroup])
         builder.setChildren(smpteCell, [smpteGroup])
         builder.setChildren(row, [positionCell, tempoCell, smpteCell])
-        builder.setChildren(table, [row])
-        builder.setAttribute(table, "AXRows", [row])
+        var rows = [row]
+        if duplicateVisible, let duplicatePositionTempo {
+            let duplicateBase = base + 100_000
+            let duplicateRow = builder.element(duplicateBase)
+            let duplicatePositionCell = builder.element(duplicateBase + 1)
+            let duplicateTempoCell = builder.element(duplicateBase + 2)
+            let duplicateSMPTECell = builder.element(duplicateBase + 3)
+            let duplicatePositionGroup = builder.element(duplicateBase + 4)
+            let duplicateTempoGroup = builder.element(duplicateBase + 5)
+            let duplicateSMPTEGroup = builder.element(duplicateBase + 6)
+
+            builder.setRole(duplicateRow, kAXRowRole as String)
+            for cell in [duplicatePositionCell, duplicateTempoCell, duplicateSMPTECell] {
+                builder.setRole(cell, kAXCellRole as String)
+            }
+            for group in [duplicatePositionGroup, duplicateTempoGroup, duplicateSMPTEGroup] {
+                builder.setRole(group, kAXGroupRole as String)
+            }
+            builder.setAttribute(
+                duplicatePositionGroup,
+                kAXDescriptionAttribute as String,
+                "1 1 1 1 "
+            )
+            builder.setAttribute(
+                duplicateTempoGroup,
+                kAXDescriptionAttribute as String,
+                String(format: "%.4f", duplicatePositionTempo)
+            )
+            builder.setAttribute(
+                duplicateSMPTEGroup,
+                kAXDescriptionAttribute as String,
+                "01:00:00:00.00"
+            )
+            builder.setChildren(duplicatePositionCell, [duplicatePositionGroup])
+            builder.setChildren(duplicateTempoCell, [duplicateTempoGroup])
+            builder.setChildren(duplicateSMPTECell, [duplicateSMPTEGroup])
+            builder.setChildren(
+                duplicateRow,
+                [duplicatePositionCell, duplicateTempoCell, duplicateSMPTECell]
+            )
+            rows.append(duplicateRow)
+        }
+        if let peerTempo {
+            let peerBase = base + 200_000
+            let peerRow = builder.element(peerBase)
+            let peerPositionCell = builder.element(peerBase + 1)
+            let peerTempoCell = builder.element(peerBase + 2)
+            let peerSMPTECell = builder.element(peerBase + 3)
+            let peerPositionGroup = builder.element(peerBase + 4)
+            let peerTempoGroup = builder.element(peerBase + 5)
+            let peerSMPTEGroup = builder.element(peerBase + 6)
+
+            builder.setRole(peerRow, kAXRowRole as String)
+            for cell in [peerPositionCell, peerTempoCell, peerSMPTECell] {
+                builder.setRole(cell, kAXCellRole as String)
+            }
+            for group in [peerPositionGroup, peerTempoGroup, peerSMPTEGroup] {
+                builder.setRole(group, kAXGroupRole as String)
+            }
+            builder.setAttribute(
+                peerPositionGroup,
+                kAXDescriptionAttribute as String,
+                "2 1 1 1 "
+            )
+            builder.setAttribute(
+                peerTempoGroup,
+                kAXDescriptionAttribute as String,
+                String(format: "%.4f", peerTempo)
+            )
+            builder.setAttribute(
+                peerSMPTEGroup,
+                kAXDescriptionAttribute as String,
+                "01:00:02:00.00"
+            )
+            builder.setChildren(peerPositionCell, [peerPositionGroup])
+            builder.setChildren(peerTempoCell, [peerTempoGroup])
+            builder.setChildren(peerSMPTECell, [peerSMPTEGroup])
+            builder.setChildren(
+                peerRow,
+                [peerPositionCell, peerTempoCell, peerSMPTECell]
+            )
+            rows.append(peerRow)
+        }
+        builder.setChildren(table, rows)
+        builder.setAttribute(table, "AXRows", rows)
         activeRow = row
         activeTempoCell = tempoCell
         activeTempoGroup = tempoGroup
+    }
+
+    private func prepareDuplicateForInventoryIfNeeded() {
+        if duplicateVisible, duplicateInventoryPassesRemaining == 0 {
+            duplicateVisible = false
+            renderCurrentRow()
+        }
+        guard duplicatePositionTempo != nil, !duplicateWasInjected, !duplicateVisible else {
+            return
+        }
+
+        let shouldInject: Bool
+        switch duplicateInjectionPhase {
+        case .initial:
+            shouldInject = false
+        case .beforeFirstFreshWrite:
+            shouldInject = acceptedWriteCount == 0 && inventoryPassesObserved >= 2
+        case .firstSettle:
+            shouldInject = acceptedWriteCount == 1
+                && inventoryPassesSinceLastAcceptedWrite == 0
+        case .rollbackEntryAfterSecondAcceptedWrite:
+            shouldInject = acceptedWriteCount == 2
+                && inventoryPassesSinceLastAcceptedWrite >= 4
+        }
+        guard shouldInject else { return }
+
+        duplicateWasInjected = true
+        duplicateVisible = true
+        duplicateInventoryPassesRemaining = 2
+        renderCurrentRow()
+    }
+
+    private func preparePeerDriftForInventoryIfNeeded() {
+        guard !peerDriftInjected, let peerDriftPhase, let peerTempo else { return }
+
+        let shouldDrift: Bool
+        switch peerDriftPhase {
+        case .beforeFirstFreshWrite:
+            shouldDrift = acceptedWriteCount == 0 && inventoryPassesObserved >= 2
+        case .firstSettle:
+            shouldDrift = acceptedWriteCount == 1
+                && inventoryPassesSinceLastAcceptedWrite == 0
+        case .rollbackEntryAfterSecondAcceptedWrite:
+            shouldDrift = acceptedWriteCount == 2
+                && inventoryPassesSinceLastAcceptedWrite >= 4
+        }
+        guard shouldDrift else { return }
+
+        peerDriftInjected = true
+        self.peerTempo = peerTempo + 7
+        renderCurrentRow()
+    }
+
+    private func prepareTargetDriftForInventoryIfNeeded() {
+        guard !targetDriftInjected, let targetDriftPhase else { return }
+
+        let shouldDrift: Bool
+        switch targetDriftPhase {
+        case .beforeFirstFreshWrite:
+            shouldDrift = acceptedWriteCount == 0 && inventoryPassesObserved >= 2
+        case .beforeSecondFreshWrite:
+            shouldDrift = acceptedWriteCount == 1
+                && inventoryPassesSinceLastAcceptedWrite >= 4
+        case .firstSettleAfterFirstAcceptedWrite:
+            shouldDrift = acceptedWriteCount == 1
+                && inventoryPassesSinceLastAcceptedWrite == 0
+        case .rollbackEntryAfterSecondAcceptedWrite:
+            shouldDrift = acceptedWriteCount == 2
+                && inventoryPassesSinceLastAcceptedWrite >= 4
+        }
+        guard shouldDrift else { return }
+
+        targetDriftInjected = true
+        currentTempo += 1
+        renderCurrentRow()
     }
 
     private func shouldFail(
