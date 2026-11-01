@@ -1683,7 +1683,10 @@ def check_probes_implemented(case: dict, where: dict):
             return f"probe {name!r} takes {params}, not ctx and its declared args {list(declared['args'])}"
     acceptance = os.path.join(ROOT, "docs", "acceptance")
     for name in sorted(os.listdir(acceptance)):
-        if not name.endswith(".json"):
+        # QUEUE.json is the fixed verifier's batch input, not an acceptance
+        # document.  Its entries point at admitted specs; it has no `rows` of
+        # its own for the probe registry to inspect.
+        if name == "QUEUE.json" or not name.endswith(".json"):
             continue
         path = os.path.join(acceptance, name)
         with open(path, encoding="utf-8") as handle:
