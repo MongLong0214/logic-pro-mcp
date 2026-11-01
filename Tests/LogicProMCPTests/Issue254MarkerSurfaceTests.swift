@@ -11,6 +11,20 @@ private func issue254Envelope(_ result: ReadResource.Result) throws -> [String: 
     )
 }
 
+private final class Issue254WindowReadSequence: @unchecked Sendable {
+    private let lock = NSLock()
+    private var reads = 0
+
+    func next(main: AXUIElement, unboundMarkerList: AXUIElement) -> [AXUIElement] {
+        lock.withLock {
+            reads += 1
+            return reads < 3 ? [main] : [main, unboundMarkerList]
+        }
+    }
+
+    var count: Int { lock.withLock { reads } }
+}
+
 @Test func issue254CreateMarkerRoutesAccessibilityFirst() {
     let route = ChannelRouter.routingTable["nav.create_marker"]
     #expect(route?.first == .accessibility)
@@ -58,6 +72,77 @@ private func issue254Envelope(_ result: ReadResource.Result) throws -> [String: 
     let hint = try #require(envelope["hint"] as? String)
     #expect(hint.contains("capture_markers"))
     #expect(!hint.lowercased().contains("open navigate"))
+}
+
+@Test func issue254UnboundOpenMarkerListPreservesIdentityFailure() throws {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(25_405)
+    let arrange = builder.element(25_406)
+    let unboundList = builder.element(25_407)
+    builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
+    builder.setAttribute(app, kAXWindowsAttribute as String, [arrange, unboundList])
+    builder.setAttribute(arrange, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(arrange, kAXTitleAttribute as String, "Issue254 - Tracks")
+    builder.setAttribute(arrange, kAXDocumentAttribute as String, "/Issue254.logicx")
+    builder.setAttribute(unboundList, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(unboundList, kAXTitleAttribute as String, "Issue254 - Marker List")
+
+    let result = AccessibilityChannel.defaultGetMarkers(
+        runtime: builder.makeLogicRuntime(appElement: app)
+    )
+
+    #expect(!result.isSuccess)
+    let envelope = try #require(
+        JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
+    )
+    #expect(envelope["error"] as? String == HonestContract.FailureError.readbackUnavailable.rawValue)
+    #expect(envelope["reason"] as? String == "marker_list_identity_unverified")
+    #expect(try #require(envelope["terminal"] as? Bool))
+    #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+    #expect(try #require(envelope["human_intervention_requests"] as? Int) == 0)
+}
+
+@Test func issue254MarkerListAppearingDuringLegacyReadKeepsCompleteTerminalReceipt() throws {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(25_408)
+    let main = builder.element(25_409)
+    let unboundList = builder.element(25_439)
+    builder.setAttribute(app, kAXMainWindowAttribute as String, main)
+    builder.setAttribute(main, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(main, kAXTitleAttribute as String, "Issue254 - Tracks")
+    builder.setAttribute(main, kAXDocumentAttribute as String, "/Issue254.logicx")
+    builder.setAttribute(unboundList, kAXRoleAttribute as String, kAXWindowRole as String)
+    builder.setAttribute(unboundList, kAXTitleAttribute as String, "Issue254 - Marker List")
+    let windows = Issue254WindowReadSequence()
+
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        attributeValueHandler: { element, attribute in
+            guard CFEqual(element, app), attribute == kAXWindowsAttribute as String else {
+                return nil
+            }
+            return .some(NSArray(array: windows.next(main: main, unboundMarkerList: unboundList)))
+        },
+        setAttributeHandler: nil,
+        performActionHandler: nil
+    )
+    let result = AccessibilityChannel.defaultGetMarkers(runtime: runtime)
+    let envelope = try #require(
+        JSONSerialization.jsonObject(with: Data(result.message.utf8)) as? [String: Any]
+    )
+
+    #expect(!result.isSuccess)
+    #expect(windows.count == 5)
+    #expect(envelope["reason"] as? String == "marker_list_identity_unverified")
+    #expect(envelope["operation"] as? String == "nav.get_markers")
+    #expect(envelope["failure_stage"] as? String == "marker_list_identity_unverified")
+    #expect(try #require(envelope["terminal"] as? Bool))
+    #expect(envelope["terminal_scope"] as? String == "mcp_request_only")
+    #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+    #expect(envelope["human_intervention_requests"] as? Int == 0)
+    #expect(envelope["human_dependent_transitions"] as? Int == 0)
+    #expect(!(try #require(envelope["write_attempted"] as? Bool)))
+    #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
 }
 
 @Test func issue254OpenEmptyMarkerListIsVerifiedEmpty() throws {
