@@ -244,6 +244,9 @@ struct SessionPlanSafetyTests {
             let plan = SessionPlanGenerator.plan(prompt: prompt)
             #expect(plan.status == "unsupported", "prompt \"\(prompt)\" must be unsupported")
             #expect(plan.executionMode == "dry_run_only")
+            #expect(plan.nextSafeAction == "none_terminal")
+            #expect(plan.workflowSteps.isEmpty)
+            #expect(plan.requiredConfirmations.isEmpty)
             let empty = plan.unsupportedOrRiskySteps.first { $0.operation == "empty_prompt" }
             #expect(empty != nil)
             let outcome = empty?.safeAlternative.lowercased() ?? ""
@@ -251,7 +254,6 @@ struct SessionPlanSafetyTests {
             for request in ["ask", "provide", "reply", "retry", "manually"] {
                 #expect(!outcome.contains(request))
             }
-            #expect(plan.workflowSteps.allSatisfy { !$0.executed })
         }
     }
 
