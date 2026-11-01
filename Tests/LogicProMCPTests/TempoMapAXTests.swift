@@ -238,6 +238,144 @@ struct TempoMapAXTests {
         #expect(fixture.writeElementIDs.count == 2)
     }
 
+    @Test("an unrelated tempo change before the first fresh write refuses without mutation")
+    func unrelatedTempoDriftBeforeFreshWriteRefusesWithoutMutation() throws {
+        let fixture = TempoListFixture(
+            tempo: 118,
+            reportedCountText: "2개의 이벤트",
+            steps: [.toward, .toward],
+            peerTempo: 130,
+            peerDriftPhase: .beforeFirstFreshWrite
+        )
+
+        let outcome = TempoMapAX.setExistingTempo(
+            at: 0,
+            to: 120,
+            in: fixture.window,
+            localeIdentifier: "ko-KR",
+            runtime: fixture.runtime()
+        )
+        let refusedOutcome = try #require(refusal(from: outcome))
+        let expected = [TempoMapAX.UnrelatedEventWitness(
+            index: 1,
+            position: "2 1 1 1 ",
+            tempo: 130
+        )]
+        let observed = [TempoMapAX.UnrelatedEventWitness(
+            index: 1,
+            position: "2 1 1 1 ",
+            tempo: 137
+        )]
+
+        #expect(refusedOutcome.failure == .unrelatedEventsChanged(
+            expected: expected,
+            observed: observed
+        ))
+        #expect(refusedOutcome.forward == .init(
+            attempts: 0,
+            acceptedWrites: 0,
+            finalObserved: 118
+        ))
+        #expect(refusedOutcome.rollback == .notNeeded(writes: 0, finalObserved: 118))
+        #expect(fixture.currentTempo == 118)
+        #expect(fixture.writeElementIDs.isEmpty)
+    }
+
+    @Test("unrelated tempo drift during settle refuses and authorizes no restore write")
+    func unrelatedTempoDriftDuringSettleRefusesAdditionalWrites() throws {
+        let fixture = TempoListFixture(
+            tempo: 118,
+            reportedCountText: "2개의 이벤트",
+            steps: [.toward],
+            peerTempo: 130,
+            peerDriftPhase: .firstSettle
+        )
+
+        let outcome = TempoMapAX.setExistingTempo(
+            at: 0,
+            to: 119,
+            in: fixture.window,
+            localeIdentifier: "ko-KR",
+            runtime: fixture.runtime()
+        )
+        let refusedOutcome = try #require(refusal(from: outcome))
+        let expected = [TempoMapAX.UnrelatedEventWitness(
+            index: 1,
+            position: "2 1 1 1 ",
+            tempo: 130
+        )]
+        let observed = [TempoMapAX.UnrelatedEventWitness(
+            index: 1,
+            position: "2 1 1 1 ",
+            tempo: 137
+        )]
+
+        #expect(refusedOutcome.failure == .unrelatedEventsChanged(
+            expected: expected,
+            observed: observed
+        ))
+        #expect(refusedOutcome.forward == .init(
+            attempts: 1,
+            acceptedWrites: 1,
+            finalObserved: 119
+        ))
+        #expect(refusedOutcome.rollback == .failed(
+            failure: .unrelatedEventsChanged(expected: expected, observed: observed),
+            writes: 0,
+            finalObserved: 119
+        ))
+        #expect(fixture.currentTempo == 119)
+        #expect(fixture.writeElementIDs.count == 1)
+    }
+
+    @Test("unrelated tempo drift at rollback entry preserves the primary failure")
+    func unrelatedTempoDriftAtRollbackEntryPreservesPrimaryFailure() throws {
+        let fixture = TempoListFixture(
+            tempo: 118,
+            reportedCountText: "2개의 이벤트",
+            steps: [.toward, .stuck, .toward],
+            peerTempo: 130,
+            peerDriftPhase: .rollbackEntryAfterSecondAcceptedWrite
+        )
+
+        let outcome = TempoMapAX.setExistingTempo(
+            at: 0,
+            to: 121,
+            in: fixture.window,
+            localeIdentifier: "ko-KR",
+            runtime: fixture.runtime()
+        )
+        let refusedOutcome = try #require(refusal(from: outcome))
+        let expected = [TempoMapAX.UnrelatedEventWitness(
+            index: 1,
+            position: "2 1 1 1 ",
+            tempo: 130
+        )]
+        let observed = [TempoMapAX.UnrelatedEventWitness(
+            index: 1,
+            position: "2 1 1 1 ",
+            tempo: 137
+        )]
+
+        #expect(refusedOutcome.failure == .didNotMove(
+            previous: 119,
+            observed: 119,
+            target: 121
+        ))
+        #expect(refusedOutcome.forward == .init(
+            attempts: 2,
+            acceptedWrites: 2,
+            finalObserved: 119
+        ))
+        #expect(refusedOutcome.rollback == .failed(
+            failure: .unrelatedEventsChanged(expected: expected, observed: observed),
+            writes: 0,
+            finalObserved: 119
+        ))
+        #expect(fixture.currentTempo == 119)
+        #expect(fixture.writeElementIDs.count == 2)
+    }
+
     @Test("post-write readback re-finds a re-rendered group instead of reading stale nil")
     func staleElementReadIsNotTreatedAsChange() throws {
         let fixture = TempoListFixture(tempo: 118, steps: [.toward, .toward])
@@ -758,6 +896,12 @@ private final class TempoListFixture: @unchecked Sendable {
         case rollbackEntryAfterSecondAcceptedWrite
     }
 
+    enum PeerDriftPhase {
+        case beforeFirstFreshWrite
+        case firstSettle
+        case rollbackEntryAfterSecondAcceptedWrite
+    }
+
     struct WitnessPair {
         let rowVisible: Bool
         let reportedCountText: String
@@ -800,6 +944,9 @@ private final class TempoListFixture: @unchecked Sendable {
     private var inventoryPassesObserved = 0
     private var inventoryPassesSinceLastAcceptedWrite = 0
     private var acceptedWriteCount = 0
+    private var peerTempo: Double?
+    private let peerDriftPhase: PeerDriftPhase?
+    private var peerDriftInjected = false
     private var postWriteAXRowsResultReads = 0
     private var pendingRenderAXRowsReads = 0
     private var renderPending = false
@@ -826,7 +973,9 @@ private final class TempoListFixture: @unchecked Sendable {
         postWriteAXRowsReadFailureAt: Int? = nil,
         postWriteAXRowsReadFailureDelay: TimeInterval = 0,
         duplicatePositionTempo: Double? = nil,
-        duplicateInjectionPhase: DuplicateInjectionPhase = .initial
+        duplicateInjectionPhase: DuplicateInjectionPhase = .initial,
+        peerTempo: Double? = nil,
+        peerDriftPhase: PeerDriftPhase? = nil
     ) {
         self.currentTempo = tempo
         self.steps = steps
@@ -846,6 +995,8 @@ private final class TempoListFixture: @unchecked Sendable {
         self.reportedCountText = reportedCountText
         self.duplicateVisible = duplicatePositionTempo != nil && duplicateInjectionPhase == .initial
         self.duplicateInventoryPassesRemaining = duplicateInjectionPhase == .initial ? nil : 0
+        self.peerTempo = peerTempo
+        self.peerDriftPhase = peerDriftPhase
         app = builder.element(90_000)
         window = builder.element(90_001)
         table = builder.element(90_002)
@@ -896,6 +1047,7 @@ private final class TempoListFixture: @unchecked Sendable {
                     }
                     advancePendingRenderIfNeeded()
                     prepareDuplicateForInventoryIfNeeded()
+                    preparePeerDriftForInventoryIfNeeded()
                     if !witnessPairs.isEmpty {
                         let pair = witnessPairs[min(witnessPairIndex, witnessPairs.count - 1)]
                         let rows = pair.rowVisible ? activeRow.map { [$0] } ?? [] : []
@@ -909,7 +1061,7 @@ private final class TempoListFixture: @unchecked Sendable {
                 }
                 if attribute == (kAXValueAttribute as String),
                    CFEqual(element, countText),
-                   duplicatePositionTempo != nil {
+                   duplicatePositionTempo != nil || peerTempo != nil {
                     let observedCount = duplicateVisible ? "2개의 이벤트" : reportedCountText
                     inventoryPassesObserved += 1
                     inventoryPassesSinceLastAcceptedWrite += 1
@@ -1085,6 +1237,47 @@ private final class TempoListFixture: @unchecked Sendable {
             )
             rows.append(duplicateRow)
         }
+        if let peerTempo {
+            let peerBase = base + 200_000
+            let peerRow = builder.element(peerBase)
+            let peerPositionCell = builder.element(peerBase + 1)
+            let peerTempoCell = builder.element(peerBase + 2)
+            let peerSMPTECell = builder.element(peerBase + 3)
+            let peerPositionGroup = builder.element(peerBase + 4)
+            let peerTempoGroup = builder.element(peerBase + 5)
+            let peerSMPTEGroup = builder.element(peerBase + 6)
+
+            builder.setRole(peerRow, kAXRowRole as String)
+            for cell in [peerPositionCell, peerTempoCell, peerSMPTECell] {
+                builder.setRole(cell, kAXCellRole as String)
+            }
+            for group in [peerPositionGroup, peerTempoGroup, peerSMPTEGroup] {
+                builder.setRole(group, kAXGroupRole as String)
+            }
+            builder.setAttribute(
+                peerPositionGroup,
+                kAXDescriptionAttribute as String,
+                "2 1 1 1 "
+            )
+            builder.setAttribute(
+                peerTempoGroup,
+                kAXDescriptionAttribute as String,
+                String(format: "%.4f", peerTempo)
+            )
+            builder.setAttribute(
+                peerSMPTEGroup,
+                kAXDescriptionAttribute as String,
+                "01:00:02:00.00"
+            )
+            builder.setChildren(peerPositionCell, [peerPositionGroup])
+            builder.setChildren(peerTempoCell, [peerTempoGroup])
+            builder.setChildren(peerSMPTECell, [peerSMPTEGroup])
+            builder.setChildren(
+                peerRow,
+                [peerPositionCell, peerTempoCell, peerSMPTECell]
+            )
+            rows.append(peerRow)
+        }
         builder.setChildren(table, rows)
         builder.setAttribute(table, "AXRows", rows)
         activeRow = row
@@ -1119,6 +1312,27 @@ private final class TempoListFixture: @unchecked Sendable {
         duplicateWasInjected = true
         duplicateVisible = true
         duplicateInventoryPassesRemaining = 2
+        renderCurrentRow()
+    }
+
+    private func preparePeerDriftForInventoryIfNeeded() {
+        guard !peerDriftInjected, let peerDriftPhase, let peerTempo else { return }
+
+        let shouldDrift: Bool
+        switch peerDriftPhase {
+        case .beforeFirstFreshWrite:
+            shouldDrift = acceptedWriteCount == 0 && inventoryPassesObserved >= 2
+        case .firstSettle:
+            shouldDrift = acceptedWriteCount == 1
+                && inventoryPassesSinceLastAcceptedWrite == 0
+        case .rollbackEntryAfterSecondAcceptedWrite:
+            shouldDrift = acceptedWriteCount == 2
+                && inventoryPassesSinceLastAcceptedWrite >= 4
+        }
+        guard shouldDrift else { return }
+
+        peerDriftInjected = true
+        self.peerTempo = peerTempo + 7
         renderCurrentRow()
     }
 
