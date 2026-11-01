@@ -5,29 +5,35 @@ import Testing
 @Suite("RoutingGraphTests")
 struct RoutingGraphTests {
     @Test(arguments: [.noOutput, .physicalOutput] as [RoutingOutputClassification],
-          ["contradiction", "send_only", "disconnected"])
+          ["contradiction", "physical_output", "send_only", "disconnected"])
     func nonBusOutputPathEvidenceCannotHideAContradictoryMainEdge(
         _ classification: RoutingOutputClassification, _ kind: String
     ) {
         let source = RoutingNode(id: "track-1", kind: .track, displayName: "Same",
             busNumber: nil, targetRef: sourceRef, outputClassification: classification)
+        let output = RoutingNode(id: "output-1", kind: .output, displayName: "Stereo Out",
+            busNumber: nil, targetRef: nil)
+        var nodes = [source, busNode(1)]
         var edges: [RoutingEdge] = []
         if kind == "contradiction" {
             edges.append(assignment(.mainOutput, source: source.id, destination: "bus-1"))
+        } else if kind == "physical_output" {
+            nodes.append(output)
+            edges.append(assignment(.mainOutput, source: source.id, destination: output.id))
         }
         if kind != "disconnected" {
             edges.append(sendEdge(send(slot: 0, bus: 1, level: 0), destination: "bus-1"))
         }
-        let candidate = graph(nodes: [source, busNode(1)], edges: edges)
-        let expected: RoutingPathState = kind == "contradiction" ? .unverified
-            : kind == "send_only" ? .connected : .disconnected
+        let candidate = graph(nodes: nodes, edges: edges)
+        let expected: RoutingPathState = ["contradiction", "physical_output"].contains(kind) ? .unverified
+            : kind == "disconnected" ? .disconnected : .connected
         let decision = evaluate(
             request(physicalSlot: 1, destinationBusNumber: 1),
             against: candidate
         )
 
         #expect(routingPath(from: sourceRef, to: "bus-1", in: candidate) == expected)
-        if kind == "contradiction" {
+        if kind == "contradiction" || (classification == .noOutput && kind == "physical_output") {
             #expect(!decision.allowed)
             #expect(decision.rejections == [
                 .partialGraphUnsafe(

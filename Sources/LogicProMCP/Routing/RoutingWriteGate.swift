@@ -60,15 +60,16 @@ func evaluate(
         )
     }
     if graph.complete && graph.isConsistent {
-        let mainOutputSources = Set(
-            graph.edges.lazy
-                .filter { $0.kind == .mainOutput }
-                .map(\.source)
-        )
-        let classificationContradictsMainOutput = graph.nodes.contains { node in
-            mainOutputSources.contains(node.id)
-                && (node.outputClassification == .noOutput
-                    || node.outputClassification == .physicalOutput)
+        let nodesByID = Dictionary(uniqueKeysWithValues: graph.nodes.map { ($0.id, $0) })
+        let classificationContradictsMainOutput = graph.edges.contains { edge in
+            guard edge.kind == .mainOutput,
+                  let source = nodesByID[edge.source],
+                  let destination = nodesByID[edge.destination] else { return false }
+            switch source.outputClassification {
+            case .noOutput: return true
+            case .physicalOutput: return destination.kind != .output
+            default: return false
+            }
         }
         if classificationContradictsMainOutput {
             rejections.append(
