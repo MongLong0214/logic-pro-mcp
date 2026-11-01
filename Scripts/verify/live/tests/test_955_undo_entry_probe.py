@@ -169,10 +169,11 @@ class ParameterPlanAcceptanceCounterexampleTests(unittest.TestCase):
             return {**common, "state": "A", "complete": True, "entries": [
                 {"param": "threshold", "status": "change", "read_observations": [1, 2]},
                 {"param": "limiter_on", "status": "unchanged", "read_observations": [1, 2]},
+                {"param": "ratio", "status": "change", "read_observations": [1, 2]},
             ]}
         requested = {
             "unsupported-field-refuses-without-false-completeness":
-                {"param": "ratio", "value": 2, "unit": "raw_ax_value"},
+                {"param": "gain", "value": 2, "unit": "raw_ax_value"},
             "missing-field-refuses-without-false-completeness":
                 {"value": 1, "unit": "boolean"},
             "extra-field-refuses-without-false-completeness":
@@ -181,7 +182,7 @@ class ParameterPlanAcceptanceCounterexampleTests(unittest.TestCase):
         status = "unsupported" if row_id.startswith("unsupported-") else "invalid_request"
         entry = {"status": status, "read_observations": [], "requested": requested}
         if status == "unsupported":
-            entry["param"] = "ratio"
+            entry["param"] = "gain"
         return {**common, "state": "C", "complete": False, "entries": [entry]}
 
     def values(self, row):

@@ -151,6 +151,26 @@ struct Issue955SupportedParameterPlanTests {
         }
     }
 
+    @Test func parameterPlanRejectsAReaderWhosePublicUnitDiffersFromItsRawReadbackUnitBeforeReading() async throws {
+        let router = ChannelRouter(), gate = VerifiedOpGate()
+        let channel = ParameterPlanReadChannel(gate: gate)
+        await router.register(channel)
+        let result = await PluginsDispatcher.parameterPlan(
+            changes: [request("gain", .int(0), "dB")],
+            pluginID: "logic.stock.effect.gain",
+            readParams: ["track": "0", "insert": "6"],
+            router: router,
+            contextIsCurrent: { true })
+        let object = try #require(decodedJSONObject(result.message))
+        #expect(object["state"] as? String == "C")
+        #expect(!((try #require(object["complete"] as? Bool))))
+        let entry = try #require((object["entries"] as? [[String: Any]])?.first)
+        #expect(entry["param"] as? String == "gain")
+        #expect(entry["status"] as? String == "unsupported")
+        #expect(try #require(entry["read_observations"] as? [[String: Any]]).isEmpty)
+        #expect(await channel.calls.isEmpty)
+    }
+
     @Test(arguments: ["missing_unit", "out_of_range", "extra_field", "duplicate"])
     func invalidLaterChangeRefusesWholePlanBeforeAnyRead(fault: String) async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {

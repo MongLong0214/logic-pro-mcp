@@ -42,8 +42,13 @@ extension PluginsDispatcher {
                     && metadata.controlsViewControlRole == "AXCheckBox" && metadata.controlsViewRowLabel != nil
                 // This operation is a read-only diff and always returns
                 // `application_authorized:false`; a qualified reader does not
-                // need a writer merely to compare the requested value.
-                if !(directSlider || controlsViewSlider || checkbox) { status = "unsupported" }
+                // need a writer merely to compare the requested value. The
+                // plan compares raw values, so a reader whose raw unit differs
+                // from the public parameter unit stays unsupported here.
+                let readbackUnitMatchesPlanUnit = (metadata.readbackUnit ?? metadata.unit) == metadata.unit
+                if !(directSlider || controlsViewSlider || checkbox) || !readbackUnitMatchesPlanUnit {
+                    status = "unsupported"
+                }
                 else {
                     let unit = fields["unit"]?.stringValue
                     // Only Compressor's declared percent aliases share the raw scale.
