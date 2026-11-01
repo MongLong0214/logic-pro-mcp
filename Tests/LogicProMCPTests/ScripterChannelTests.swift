@@ -119,7 +119,7 @@ private func decodeScripterJSON(_ s: String) -> [String: Any] {
     #expect(((obj["hint"] as? String)?.contains("only handles plugin.set_param"))!)
 }
 
-@Test func testScripterExecuteSurfacesTransportSendFailure() async {
+@Test func testScripterExecuteSurfacesTransportSendFailure() async throws {
     let transport = MockScripterTransport()
     await transport.setSendError(.sendFailed)
     let channel = ScripterChannel(transport: transport)
@@ -134,6 +134,13 @@ private func decodeScripterJSON(_ s: String) -> [String: Any] {
     #expect(!((obj["success"] as? Bool)!))
     #expect(obj["error"] as? String == "port_unavailable")
     #expect(((obj["hint"] as? String)?.contains("Failed to send Scripter param 1"))!)
+    #expect(try #require(obj["terminal"] as? Bool))
+    #expect(obj["terminal_scope"] as? String == "mcp_request_only")
+    #expect(!(try #require(obj["human_intervention_required"] as? Bool)))
+    #expect(obj["human_intervention_requests"] as? Int == 0)
+    #expect(obj["human_dependent_transitions"] as? Int == 0)
+    #expect(!(try #require(obj["safe_to_retry"] as? Bool)))
+    #expect(try #require(obj["write_attempted"] as? Bool))
 }
 
 @Test func testScripterRejectsUnsupportedInsertAndOutOfRangeParam() async {
