@@ -648,6 +648,13 @@ func outputAssignmentRefusesAnUnreadableCurrentOutput() async throws {
     #expect(envelope["error"] as? String == "readback_unavailable")
     let written = try #require(envelope["write_attempted"] as? Bool)
     #expect(!written)
+    #expect(try #require(envelope["terminal"] as? Bool))
+    #expect(envelope["terminal_scope"] as? String == "mcp_request_only")
+    #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+    #expect(try #require(envelope["automatic_precondition_attempts_exhausted"] as? Bool))
+    #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+    #expect(envelope["human_intervention_requests"] as? Int == 0)
+    #expect(envelope["human_dependent_transitions"] as? Int == 0)
     #expect(fixture.presses.isEmpty)
 }
 
@@ -660,6 +667,14 @@ func outputAssignmentRefusesAnUnclassifiableCurrentOutput() async throws {
     #expect(envelope["state"] as? String == "C")
     #expect(envelope["error"] as? String == "readback_unavailable")
     #expect(envelope["observed_label"] as? String == "Surround")
+    #expect(!(try #require(envelope["write_attempted"] as? Bool)))
+    #expect(try #require(envelope["terminal"] as? Bool))
+    #expect(envelope["terminal_scope"] as? String == "mcp_request_only")
+    #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+    #expect(try #require(envelope["automatic_precondition_attempts_exhausted"] as? Bool))
+    #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+    #expect(envelope["human_intervention_requests"] as? Int == 0)
+    #expect(envelope["human_dependent_transitions"] as? Int == 0)
     #expect(fixture.presses.isEmpty)
 }
 

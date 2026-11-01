@@ -174,7 +174,8 @@ extension AccessibilityChannel {
         // cannot classify cannot be compared with anything, so both refuse.
         guard let beforeLabel = AXLogicProElements.outputSlotDestination(in: strip, runtime: runtime.ax) else {
             return refusal(.readbackUnavailable, "The strip's current output did not read. Unreadable is "
-                + "not absent, so there is nothing to compare the request with; nothing was pressed.")
+                + "not absent, so there is nothing to compare the request with; nothing was pressed.",
+                terminalPreconditionFields)
         }
         if let physical, physical.currentIndex(runtime: runtime) != index {
             return refusal(.staleTargetReference, "The referenced source changed during its current output read; nothing was pressed.")
@@ -182,7 +183,7 @@ extension AccessibilityChannel {
         guard let before = OutputAssignment.observed(slotLabel: beforeLabel) else {
             return refusal(.readbackUnavailable, "The strip's current output reads as a label this "
                 + "operation cannot classify, so it cannot be compared; nothing was pressed.",
-                ["observed_label": beforeLabel])
+                terminalPreconditionFields.merging(["observed_label": beforeLabel]) { _, new in new })
         }
         extras["before"] = before.json
         if let expected, expected != before {
