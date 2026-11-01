@@ -109,7 +109,31 @@ actor AppleScriptChannel: Channel {
             return Self.wrapMutatingResult(raw, operation: operation, extras: ["path": path])
 
         case "project.close":
-            let saving = params["saving"] ?? "yes"
+            let requestedSaving = (params["saving"] ?? "yes").lowercased()
+            let saving: String
+            switch requestedSaving {
+            case "yes", "true":
+                saving = "yes"
+            case "no", "false":
+                saving = "no"
+            default:
+                return .error(HonestContract.encodeStateC(
+                    error: .invalidParams,
+                    hint: "project.close 'saving' must be yes or no; interactive save prompts are unsupported and this request has terminated.",
+                    extras: [
+                        "operation": operation,
+                        "method": "applescript",
+                        "saving": requestedSaving,
+                        "terminal": true,
+                        "terminal_scope": "mcp_request_only",
+                        "human_intervention_required": false,
+                        "human_intervention_requests": 0,
+                        "human_dependent_transitions": 0,
+                        "write_attempted": false,
+                        "safe_to_retry": false,
+                    ]
+                ))
+            }
             let raw = await runScript(closeProjectScript(saving: saving))
             return Self.wrapMutatingResult(raw, operation: operation, extras: ["saving": saving])
 
@@ -626,10 +650,9 @@ actor AppleScriptChannel: Channel {
     }
 
     private func closeProjectScript(saving: String) -> String {
-        let saveClause = closeProjectSaveClause(saving: saving)
         return """
         \(LogicProTarget.appleScriptTarget().tellApplicationByBundleID)
-            close front document \(saveClause)
+            close front document saving \(saving)
         end tell
         """
     }
@@ -757,17 +780,6 @@ actor AppleScriptChannel: Channel {
             return message
         }
         return value
-    }
-
-    private func closeProjectSaveClause(saving: String) -> String {
-        switch saving.lowercased() {
-        case "no", "false":
-            return "saving no"
-        case "ask":
-            return "saving ask"
-        default:
-            return "saving yes"
-        }
     }
 
     private func saveProjectScript() -> String {

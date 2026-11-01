@@ -582,7 +582,7 @@ private func requireTerminalPathUnavailableReceipt(
     #expect(!unverifiable.isSuccess)
 }
 
-@Test func testAppleScriptProjectCommandsGenerateExpectedScripts() async {
+@Test func testAppleScriptProjectCommandsGenerateExpectedScripts() async throws {
     let recorder = AppleScriptRecorder()
     let identities = ScriptResponseQueue([
         .success("/Users/x/Song.logicx\u{001F}Song"),
@@ -622,19 +622,27 @@ private func requireTerminalPathUnavailableReceipt(
     #expect(saveProject.isSuccess)
     #expect(saveAsProject.isSuccess)
     #expect(closeDefault.isSuccess)
-    #expect(closeAsk.isSuccess)
+    #expect(!closeAsk.isSuccess)
     #expect(closeNo.isSuccess)
 
+    let closeAskBody = try #require(JSONSerialization.jsonObject(
+        with: Data(closeAsk.message.utf8), options: []
+    ) as? [String: Any])
+    #expect(closeAskBody["error"] as? String == "invalid_params")
+    #expect(closeAskBody["terminal"] as? Bool == true)
+    #expect(closeAskBody["human_intervention_requests"] as? Int == 0)
+    #expect(closeAskBody["human_dependent_transitions"] as? Int == 0)
+    #expect(closeAskBody["write_attempted"] as? Bool == false)
+
     let scripts = await recorder.snapshot()
-    #expect(scripts.count == 6)
+    #expect(scripts.count == 5)
     #expect(scripts[0].contains("click menu item 1 of menu 1 of menu bar item 3"))
     #expect(scripts[0].contains("return name of window 1"))
     #expect(scripts[1].contains("save front document"))
     #expect(scripts[2].contains("save front document in (POSIX file"))
     #expect(scripts[2].contains("/tmp/export.logicx"))
     #expect(scripts[3].contains("close front document saving yes"))
-    #expect(scripts[4].contains("close front document saving ask"))
-    #expect(scripts[5].contains("close front document saving no"))
+    #expect(scripts[4].contains("close front document saving no"))
 }
 
 @Test func testAppleScriptSaveAsRejectsAbsoluteTraversalBeforeScript() async {
