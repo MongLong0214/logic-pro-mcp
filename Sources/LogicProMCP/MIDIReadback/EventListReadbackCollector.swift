@@ -736,15 +736,15 @@ enum EventListReadbackCollector {
         )
     }
 
-    private static let filterTitles: [(title: String, id: FilterControlID)] = [
-        ("Notes", .noteEvents),
-        ("Progr. Change", .programChange),
-        ("Pitch Bend", .pitchBend),
-        ("Controller", .controller),
-        ("Aftertouch", .aftertouch),
-        ("Poly Aftertouch", .polyAftertouch),
-        ("Syst. Exclusive", .systemExclusive),
-        ("Additional Info", .additionalInfo),
+    private static let filterTitles: [(labels: AXLocalePolicy.LabelSet, id: FilterControlID)] = [
+        (AXLocalePolicy.eventListFilterNotes, .noteEvents),
+        (AXLocalePolicy.eventListFilterProgramChange, .programChange),
+        (AXLocalePolicy.eventListFilterPitchBend, .pitchBend),
+        (AXLocalePolicy.eventListFilterController, .controller),
+        (AXLocalePolicy.eventListFilterAftertouch, .aftertouch),
+        (AXLocalePolicy.eventListFilterPolyAftertouch, .polyAftertouch),
+        (AXLocalePolicy.eventListFilterSystemExclusive, .systemExclusive),
+        (AXLocalePolicy.eventListFilterAdditionalInfo, .additionalInfo),
     ]
 
     private static func readFilters(
@@ -759,11 +759,15 @@ enum EventListReadbackCollector {
         )
         var evidence: [FilterEvidence.Checkbox] = []
         for filter in filterTitles {
-            let matches = controls.filter { AXHelpers.getTitle($0, runtime: runtime) == filter.title }
+            let matches = controls.filter {
+                filter.labels.matches(AXHelpers.getTitle($0, runtime: runtime))
+            }
             guard matches.count == 1, let control = matches.first,
                   let checked = AXValueExtractors.extractButtonState(control, runtime: runtime)
             else {
-                throw EventListReadbackCollectorError.filterEvidenceIncomplete(title: filter.title)
+                throw EventListReadbackCollectorError.filterEvidenceIncomplete(
+                    title: filter.labels.canonical
+                )
             }
             evidence.append(.init(id: filter.id.rawValue, checked: checked))
         }
