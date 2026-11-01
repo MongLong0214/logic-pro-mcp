@@ -3,8 +3,8 @@ import Testing
 
 @testable import LogicProMCP
 
-@Test("Issue497: ambiguity hint names the working index rename route")
-func Issue497AmbiguityHintNamesIndexRenameRoute() async throws {
+@Test("Issue497: ambiguous target reference terminates without a human route")
+func Issue497AmbiguousTargetReferenceTerminatesWithoutHumanRoute() async throws {
     let name = "Studio Grand"
     let liveNames: [Int: String] = [
         1: name,
@@ -36,8 +36,27 @@ func Issue497AmbiguityHintNamesIndexRenameRoute() async throws {
         )
 
         let body = try #require(sharedJSONObject(sharedToolText(result)))
+        let isError = try #require(result.isError as Bool?)
+        #expect(isError)
+        #expect(body["error"] as? String == "ambiguous_target_name")
+        guard let writeAttempted = body["write_attempted"] as? Bool,
+              let safeToRetry = body["safe_to_retry"] as? Bool,
+              let terminal = body["terminal"] as? Bool,
+              let humanInterventionRequired = body["human_intervention_required"] as? Bool else {
+            Issue.record("ambiguous target reference omitted a required terminal Boolean field")
+            return
+        }
+        #expect(!writeAttempted)
+        #expect(!safeToRetry)
+        #expect(terminal)
+        #expect(body["terminal_scope"] as? String == "mcp_request_only")
+        #expect(!humanInterventionRequired)
+        #expect(body["human_intervention_requests"] as? Int == 0)
+        #expect(body["human_dependent_transitions"] as? Int == 0)
+        #expect(body["ambiguous_track_indices"] as? [Int] == [1, 5, 6])
         let hint = try #require(body["hint"] as? String)
-        #expect(hint.contains("rename {name, index}"))
-        #expect(!hint.contains("or address the track by an unambiguous name"))
+        #expect(!hint.localizedCaseInsensitiveContains("rename {name, index}"))
+        #expect(!hint.localizedCaseInsensitiveContains("unambiguous name"))
+        #expect(!hint.localizedCaseInsensitiveContains("select by index"))
     }
 }
