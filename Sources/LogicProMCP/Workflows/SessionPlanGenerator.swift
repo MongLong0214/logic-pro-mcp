@@ -235,7 +235,7 @@ enum SessionPlanGenerator {
                     SessionUnsupportedStep(
                         operation: "empty_prompt",
                         reason: "A non-empty musical prompt is required for session planning.",
-                        safeAlternative: "Ask for a concrete idea such as '16-bar funk in E minor at 110 BPM'."
+                        safeAlternative: "Session planning terminated because no musical prompt was supplied; no tool or project action was attempted and no human intervention was requested."
                     ),
                 ]
             )
