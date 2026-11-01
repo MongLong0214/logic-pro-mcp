@@ -5,6 +5,58 @@ import Testing
 
 @Suite("ADR-018 Controls-view parameter enumerator")
 struct ControlsViewParameterEnumeratorTests {
+    @Test func traversalDepthBoundaryRefusesInsteadOfHidingANestedControl() {
+        let fixture = makeControlsFixture(depthBoundaryIndex: 7)
+        let result = ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: fixture.runtime
+        )
+
+        #expect(result == nil)
+    }
+
+    @Test func emptyTraversalDepthBoundaryRemainsACompleteLeaf() throws {
+        let fixture = makeControlsFixture(
+            depthBoundaryIndex: 7,
+            depthBoundaryChildren: .empty
+        )
+
+        #expect(try #require(ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: fixture.runtime
+        )).manifest.parameters.count == 16)
+    }
+
+    @Test(arguments: [AXError.attributeUnsupported, AXError.noValue])
+    func definitiveAbsenceAtTraversalDepthBoundaryRemainsACompleteLeaf(_ error: AXError) throws {
+        let fixture = makeControlsFixture(
+            depthBoundaryIndex: 7,
+            depthBoundaryChildren: .readError(error)
+        )
+
+        #expect(try #require(ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: fixture.runtime
+        )).manifest.parameters.count == 16)
+    }
+
+    @Test func unreadableTraversalDepthBoundaryRefusesTheManifest() {
+        let fixture = makeControlsFixture(
+            depthBoundaryIndex: 7,
+            depthBoundaryChildren: .boundaryReadError(.failure)
+        )
+
+        #expect(ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: fixture.runtime
+        ) == nil)
+        #expect(fixture.depthBoundaryReadFailure?.readCount == 2)
+    }
+
     @Test func definitiveLeafChildAbsenceDoesNotMakeTheCompleteTreeUnreadable() {
         for error in [AXError.attributeUnsupported, AXError.noValue] {
             let fixture = makeControlsFixture(leafChildrenReadError: error)
@@ -454,6 +506,7 @@ private struct ControlsFixture {
     let builder: FakeAXRuntimeBuilder
     let window: AXUIElement
     let runtime: AXHelpers.Runtime
+    let depthBoundaryReadFailure: DepthBoundaryReadFailure?
 }
 
 private struct RowFixture {
@@ -507,6 +560,45 @@ private enum PluginTextPlacement {
     case nested
 }
 
+private enum DepthBoundaryChildrenFixture {
+    case empty
+    case nonempty
+    case readError(AXError)
+    case boundaryReadError(AXError)
+}
+
+private final class LockedDepthBoundaryReadCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+
+    func next() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        value += 1
+        return value
+    }
+
+    var current: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
+}
+
+private struct DepthBoundaryReadFailure: @unchecked Sendable {
+    let elementID: Int
+    let error: AXError
+    let failOnRead: Int?
+    let reads = LockedDepthBoundaryReadCounter()
+
+    var readCount: Int { reads.current }
+
+    func shouldFailThisRead() -> Bool {
+        let read = reads.next()
+        return failOnRead == nil || failOnRead == read
+    }
+}
+
 private func makeControlsFixture(
     pluginName: String = "Raum",
     trackName: String = "Audio 1",
@@ -521,6 +613,8 @@ private func makeControlsFixture(
     unreadableControlValueIndexes: Set<Int> = [],
     unreadableAdditionalControlRoleIndexes: Set<Int> = [],
     unreadableCellChildIndexes: Set<Int> = [],
+    depthBoundaryIndex: Int? = nil,
+    depthBoundaryChildren: DepthBoundaryChildrenFixture = .nonempty,
     leafChildrenReadError: AXError? = nil,
     unreadableDirectHeaderRole: Bool = false,
     windowIdentifierReadError: AXError? = nil
@@ -536,6 +630,7 @@ private func makeControlsFixture(
     var controlElementIDs: [Int] = []
     var additionalControlElementIDs: [Int: Int] = [:]
     var unreadableCellChildElementIDs: [Int] = []
+    var depthBoundaryReadFailure: DepthBoundaryReadFailure?
     let rowElements = rows.enumerated().map { rowIndex, rowFixture -> AXUIElement in
         let base = 90_100 + rowIndex * 20
         let row = builder.element(base)
@@ -571,6 +666,36 @@ private func makeControlsFixture(
             let cell = builder.element(base + 4)
             builder.setRole(cell, kAXCellRole as String)
             var cellChildren = [label] + controls
+            if depthBoundaryIndex == rowIndex {
+                let groups = (0..<4).map { builder.element(base + 7 + $0) }
+                let hiddenControl = builder.element(base + 11)
+                groups.forEach { builder.setRole($0, kAXGroupRole as String) }
+                builder.setRole(hiddenControl, GenericParameterControlRole.slider.rawValue)
+                builder.setChildren(groups[0], [groups[1]])
+                switch depthBoundaryChildren {
+                case .empty:
+                    builder.setChildren(groups[1], [])
+                case .nonempty:
+                    builder.setChildren(groups[1], [groups[2]])
+                    builder.setChildren(groups[2], [groups[3]])
+                    builder.setChildren(groups[3], [hiddenControl])
+                case .readError(let error):
+                    builder.setChildren(groups[1], [])
+                    depthBoundaryReadFailure = DepthBoundaryReadFailure(
+                        elementID: builder.elementID(groups[1]),
+                        error: error,
+                        failOnRead: nil
+                    )
+                case .boundaryReadError(let error):
+                    builder.setChildren(groups[1], [])
+                    depthBoundaryReadFailure = DepthBoundaryReadFailure(
+                        elementID: builder.elementID(groups[1]),
+                        error: error,
+                        failOnRead: 2
+                    )
+                }
+                cellChildren.append(groups[0])
+            }
             if unreadableCellChildIndexes.contains(rowIndex) {
                 let unreadableDescendant = builder.element(base + 6)
                 builder.setRole(unreadableDescendant, kAXGroupRole as String)
@@ -656,12 +781,14 @@ private func makeControlsFixture(
     )
     let windowID = builder.elementID(window)
     let headerDecorationID = builder.elementID(headerDecoration)
+    let depthBoundaryFailure = depthBoundaryReadFailure
     let runtime: AXHelpers.Runtime
     if !unreadableLabelElementIDs.isEmpty
         || unreadableWindowTitle
         || !unreadableControlValueElementIDs.isEmpty
         || !unreadableAdditionalControlRoleElementIDs.isEmpty
         || !unreadableCellElementIDs.isEmpty
+        || depthBoundaryFailure != nil
         || leafChildrenReadError != nil
         || unreadableDirectHeaderRole
         || windowIdentifierReadError != nil {
@@ -696,6 +823,13 @@ private func makeControlsFixture(
             },
             childrenResultHandler: { element in
                 let elementID = builder.elementID(element)
+                if let depthBoundaryFailure,
+                   elementID == depthBoundaryFailure.elementID,
+                   depthBoundaryFailure.shouldFailThisRead() {
+                    return .failure(AXHelpers.AXStatusError(
+                        raw: depthBoundaryFailure.error.rawValue
+                    ))
+                }
                 if unreadableCellElementIDs.contains(elementID) {
                     return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
                 }
@@ -710,7 +844,12 @@ private func makeControlsFixture(
     } else {
         runtime = builder.makeAXRuntime()
     }
-    return ControlsFixture(builder: builder, window: window, runtime: runtime)
+    return ControlsFixture(
+        builder: builder,
+        window: window,
+        runtime: runtime,
+        depthBoundaryReadFailure: depthBoundaryFailure
+    )
 }
 
 private func configure(

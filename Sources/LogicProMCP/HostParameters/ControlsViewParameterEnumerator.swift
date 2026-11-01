@@ -647,7 +647,19 @@ enum ControlsViewParameterEnumerator {
         runtime: AXHelpers.Runtime,
         into found: inout [DescendantRead]
     ) -> Bool {
-        guard maxDepth > 0 else { return true }
+        guard maxDepth > 0 else {
+            // The depth limit bounds work; it does not prove that the subtree
+            // ended. Refuse a truncated scan instead of silently hiding a
+            // deeper label, control, cell, or competing table.
+            switch AXHelpers.childrenResult(element, runtime: runtime) {
+            case .success(let children):
+                return children.isEmpty
+            case .failure(let error) where error.isDefinitiveAbsence:
+                return true
+            case .failure:
+                return false
+            }
+        }
         let children: [AXUIElement]
         switch AXHelpers.childrenResult(
             element,
