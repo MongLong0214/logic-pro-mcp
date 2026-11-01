@@ -491,6 +491,14 @@ enum ProductionReadinessContractEvaluator {
             "QUALIFICATION_EVIDENCE_SHA256": "${{secrets.qualification_evidence_sha256}}",
             "TRUSTED_QUALIFICATION_PUBLIC_KEY": "${{secrets.trusted_qualification_public_key}}",
         ]
+        let releaseFiles = [
+            "LogicProMCP",
+            "LogicProMCP-macOS-universal.tar.gz",
+            "LogicProMCP-macOS-arm64.tar.gz",
+            "RELEASE-METADATA.json",
+            "SHA256SUMS.txt",
+            "qualification-public.json",
+        ]
         guard stepMapping("env", in: package.body) == packageEnvironment,
               stepMapping("env", in: manifest.body) == nil,
               stepMapping("env", in: upload.body) == nil,
@@ -515,7 +523,9 @@ enum ProductionReadinessContractEvaluator {
               stepScalar("working-directory", in: installReverify.body) == "${{runner.temp}}/artifact",
               let installReverifyScript = stepBlockScalar("run", in: installReverify.body),
               let installerScript = stepBlockScalar("run", in: installer.body),
-              stepScalar("uses", in: publication.body) == releaseAction else {
+              stepScalar("uses", in: publication.body) == releaseAction,
+              nestedStepBlockScalarLines("files", under: "with", in: publication.body)
+                == releaseFiles else {
             return false
         }
 
