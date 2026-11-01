@@ -18,6 +18,15 @@ enum TempoMapAX {
         let smpte: String
     }
 
+    /// The stable, non-target portion of one Tempo List inventory. SMPTE is deliberately absent:
+    /// it is derived from the tempo map and can legitimately change when the selected event's BPM
+    /// changes, so treating it as unrelated state would reject the measured write itself.
+    struct UnrelatedEventWitness: Equatable, Sendable {
+        let index: Int
+        let position: String
+        let tempo: Double
+    }
+
     /// A stable Tempo List reading. `reportedEventCount` comes from the AXStaticText that
     /// `AXLocalePolicy.tempoListNumberOfItemsLabel` names in every locale Logic ships, while `events` comes from the table's AXRows. Construction is private
     /// to `read`: it requires those two witnesses to agree in each of two consecutive passes.
@@ -109,12 +118,19 @@ enum TempoMapAX {
     enum WriteFailure: Error, Equatable, Sendable, CustomStringConvertible {
         case invalidTarget(Double)
         case eventIndexOutOfRange(index: Int, count: Int)
+        case ambiguousPosition(position: String, matches: Int)
         case positionChanged(expected: String, observed: String)
+        case selectedEventChanged(expectedTempo: Double, observedTempo: Double)
+        case unrelatedEventsChanged(
+            expected: [UnrelatedEventWitness],
+            observed: [UnrelatedEventWitness]
+        )
         case axWriteFailed
         case readFailed(ReadRefusal)
         case didNotMove(previous: Double, observed: Double, target: Double)
         case movedAway(previous: Double, observed: Double, target: Double)
         case crossedTarget(previous: Double, observed: Double, target: Double)
+        case unmeasuredStep(previous: Double, observed: Double, target: Double)
         case attemptBudgetExhausted(observed: Double, target: Double, budget: Int)
         case deadlineExceeded(observed: Double, target: Double)
 
@@ -124,8 +140,14 @@ enum TempoMapAX {
                 return "Tempo target \(target) is not a whole BPM in Logic's supported 5...999 range."
             case let .eventIndexOutOfRange(index, count):
                 return "Tempo event index \(index) is out of range for \(count) event(s)."
+            case let .ambiguousPosition(position, matches):
+                return "Tempo position '\(position)' is ambiguous (\(matches) matching events); refusing to authorize an index write."
             case let .positionChanged(expected, observed):
                 return "Tempo row changed position from '\(expected)' to '\(observed)'; refusing to write a different event."
+            case let .selectedEventChanged(expectedTempo, observedTempo):
+                return "Selected Tempo List event changed from \(expectedTempo) to \(observedTempo) outside the owned write observation."
+            case let .unrelatedEventsChanged(expected, observed):
+                return "Unrelated Tempo List events changed during the selected-event write: expected \(expected), observed \(observed)."
             case .axWriteFailed:
                 return "Tempo List AXValue write failed before a new value could be observed."
             case let .readFailed(refusal):
@@ -136,10 +158,21 @@ enum TempoMapAX {
                 return "Tempo write moved away from \(target): \(previous) became \(observed)."
             case let .crossedTarget(previous, observed, target):
                 return "Tempo write crossed \(target): \(previous) became \(observed), so the measured integer walk is no longer authorized."
+            case let .unmeasuredStep(previous, observed, target):
+                return "Tempo write observed an unmeasured transition while targeting \(target): \(previous) became \(observed), not one BPM."
             case let .attemptBudgetExhausted(observed, target, budget):
                 return "Tempo write spent its bounded budget of \(budget) step(s) and stopped at \(observed), not \(target)."
             case let .deadlineExceeded(observed, target):
                 return "Tempo write reached its wall-clock deadline at \(observed), not \(target)."
+            }
+        }
+
+        var disprovesSelectedEventCustody: Bool {
+            switch self {
+            case .selectedEventChanged, .movedAway, .unmeasuredStep:
+                return true
+            default:
+                return false
             }
         }
     }
@@ -298,6 +331,8 @@ enum TempoMapAX {
         }
 
         let initial: Event
+        let initialPositionMatches: Int
+        let unrelatedEvents: [UnrelatedEventWitness]
         do {
             let snapshot = try read(in: window, localeIdentifier: localeIdentifier, runtime: runtime)
             guard snapshot.events.indices.contains(index) else {
@@ -308,6 +343,11 @@ enum TempoMapAX {
                 )
             }
             initial = snapshot.events[index]
+            initialPositionMatches = positionMatchCount(
+                initial.position,
+                in: snapshot.events
+            )
+            unrelatedEvents = unrelatedEventWitnesses(in: snapshot.events, excluding: index)
         } catch let refusal as ReadRefusal {
             return .refused(
                 failure: .readFailed(refusal),
@@ -322,6 +362,17 @@ enum TempoMapAX {
             )
         }
 
+        guard initialPositionMatches == 1 else {
+            return .refused(
+                failure: .ambiguousPosition(
+                    position: initial.position,
+                    matches: initialPositionMatches
+                ),
+                forward: .none,
+                rollback: .notNeeded(writes: 0, finalObserved: nil)
+            )
+        }
+
         guard initial.tempo != target else {
             return .alreadyAtTarget(observed: initial.tempo)
         }
@@ -330,6 +381,7 @@ enum TempoMapAX {
             at: index,
             from: initial,
             to: target,
+            expectedUnrelatedEvents: unrelatedEvents,
             in: window,
             localeIdentifier: localeIdentifier,
             runtime: runtime,
@@ -342,10 +394,20 @@ enum TempoMapAX {
             let rollback: RollbackOutcome
             if receipt.acceptedWrites == 0 {
                 rollback = .notNeeded(writes: 0, finalObserved: receipt.finalObserved)
+            } else if failure.disprovesSelectedEventCustody {
+                // A fresh pre-write inventory disproved target custody. Its observed value is not
+                // ours to restore. The same applies when settle observes a transition outside the
+                // only measured one-BPM writer, even if that transition landed on the target.
+                rollback = .failed(
+                    failure: failure,
+                    writes: 0,
+                    finalObserved: receipt.finalObserved
+                )
             } else {
                 rollback = rollbackToInitialTempo(
                     at: index,
                     initial: initial,
+                    expectedUnrelatedEvents: unrelatedEvents,
                     in: window,
                     localeIdentifier: localeIdentifier,
                     runtime: runtime,
@@ -689,6 +751,7 @@ enum TempoMapAX {
         at index: Int,
         from initial: Event,
         to target: Double,
+        expectedUnrelatedEvents: [UnrelatedEventWitness],
         in window: AXUIElement,
         localeIdentifier: String?,
         runtime: AXLogicProElements.Runtime,
@@ -747,9 +810,44 @@ enum TempoMapAX {
                 )
             }
             let freshEvent = fresh.snapshot.events[index]
+            let positionMatches = positionMatchCount(
+                freshEvent.position,
+                in: fresh.snapshot.events
+            )
+            guard positionMatches == 1 else {
+                return .failure(
+                    .ambiguousPosition(
+                        position: freshEvent.position,
+                        matches: positionMatches
+                    ),
+                    receipt: receipt(finalObserved: freshEvent.tempo)
+                )
+            }
             guard freshEvent.position == initial.position else {
                 return .failure(
                     .positionChanged(expected: initial.position, observed: freshEvent.position),
+                    receipt: receipt(finalObserved: freshEvent.tempo)
+                )
+            }
+            guard freshEvent.tempo == current.tempo else {
+                return .failure(
+                    .selectedEventChanged(
+                        expectedTempo: current.tempo,
+                        observedTempo: freshEvent.tempo
+                    ),
+                    receipt: receipt(finalObserved: freshEvent.tempo)
+                )
+            }
+            let observedUnrelatedEvents = unrelatedEventWitnesses(
+                in: fresh.snapshot.events,
+                excluding: index
+            )
+            guard observedUnrelatedEvents == expectedUnrelatedEvents else {
+                return .failure(
+                    .unrelatedEventsChanged(
+                        expected: expectedUnrelatedEvents,
+                        observed: observedUnrelatedEvents
+                    ),
                     receipt: receipt(finalObserved: freshEvent.tempo)
                 )
             }
@@ -781,6 +879,7 @@ enum TempoMapAX {
                 expectedPosition: initial.position,
                 after: current,
                 toward: target,
+                expectedUnrelatedEvents: expectedUnrelatedEvents,
                 in: window,
                 localeIdentifier: localeIdentifier,
                 runtime: runtime,
@@ -791,12 +890,19 @@ enum TempoMapAX {
             case let .failure(failure, lastObserved):
                 return .failure(failure, receipt: receipt(finalObserved: lastObserved))
             }
-            if next.tempo == target {
-                return .success(observed: next.tempo, writes: acceptedWrites)
-            }
             if next.tempo == current.tempo {
                 return .failure(
                     .didNotMove(previous: current.tempo, observed: next.tempo, target: target),
+                    receipt: receipt(finalObserved: next.tempo)
+                )
+            }
+            guard distance(current.tempo, next.tempo) == 1 else {
+                return .failure(
+                    .unmeasuredStep(
+                        previous: current.tempo,
+                        observed: next.tempo,
+                        target: target
+                    ),
                     receipt: receipt(finalObserved: next.tempo)
                 )
             }
@@ -811,6 +917,9 @@ enum TempoMapAX {
                     .movedAway(previous: current.tempo, observed: next.tempo, target: target),
                     receipt: receipt(finalObserved: next.tempo)
                 )
+            }
+            if next.tempo == target {
+                return .success(observed: next.tempo, writes: acceptedWrites)
             }
             current = next
         }
@@ -831,6 +940,7 @@ enum TempoMapAX {
         expectedPosition: String,
         after current: Event,
         toward target: Double,
+        expectedUnrelatedEvents: [UnrelatedEventWitness],
         in window: AXUIElement,
         localeIdentifier: String?,
         runtime: AXLogicProElements.Runtime,
@@ -853,9 +963,35 @@ enum TempoMapAX {
                 }
                 let observed = reread.events[index]
                 lastObservedTempo = observed.tempo
+                let positionMatches = positionMatchCount(
+                    observed.position,
+                    in: reread.events
+                )
+                guard positionMatches == 1 else {
+                    return .failure(
+                        .ambiguousPosition(
+                            position: observed.position,
+                            matches: positionMatches
+                        ),
+                        lastObserved: observed.tempo
+                    )
+                }
                 guard observed.position == expectedPosition else {
                     return .failure(
                         .positionChanged(expected: expectedPosition, observed: observed.position),
+                        lastObserved: observed.tempo
+                    )
+                }
+                let observedUnrelatedEvents = unrelatedEventWitnesses(
+                    in: reread.events,
+                    excluding: index
+                )
+                guard observedUnrelatedEvents == expectedUnrelatedEvents else {
+                    return .failure(
+                        .unrelatedEventsChanged(
+                            expected: expectedUnrelatedEvents,
+                            observed: observedUnrelatedEvents
+                        ),
                         lastObserved: observed.tempo
                     )
                 }
@@ -888,6 +1024,7 @@ enum TempoMapAX {
     private static func rollbackToInitialTempo(
         at index: Int,
         initial: Event,
+        expectedUnrelatedEvents: [UnrelatedEventWitness],
         in window: AXUIElement,
         localeIdentifier: String?,
         runtime: AXLogicProElements.Runtime,
@@ -895,6 +1032,7 @@ enum TempoMapAX {
         fallbackObserved: Double?
     ) -> RollbackOutcome {
         let current: Event
+        let observedUnrelatedEvents: [UnrelatedEventWitness]
         do {
             let snapshot = try read(
                 in: window,
@@ -909,6 +1047,24 @@ enum TempoMapAX {
                 )
             }
             current = snapshot.events[index]
+            let positionMatches = positionMatchCount(
+                current.position,
+                in: snapshot.events
+            )
+            guard positionMatches == 1 else {
+                return .failed(
+                    failure: .ambiguousPosition(
+                        position: current.position,
+                        matches: positionMatches
+                    ),
+                    writes: 0,
+                    finalObserved: current.tempo
+                )
+            }
+            observedUnrelatedEvents = unrelatedEventWitnesses(
+                in: snapshot.events,
+                excluding: index
+            )
         } catch let refusal as ReadRefusal {
             return .failed(failure: .readFailed(refusal), writes: 0, finalObserved: fallbackObserved)
         } catch {
@@ -926,6 +1082,26 @@ enum TempoMapAX {
                 finalObserved: current.tempo
             )
         }
+        if let fallbackObserved, current.tempo != fallbackObserved {
+            return .failed(
+                failure: .selectedEventChanged(
+                    expectedTempo: fallbackObserved,
+                    observedTempo: current.tempo
+                ),
+                writes: 0,
+                finalObserved: current.tempo
+            )
+        }
+        guard observedUnrelatedEvents == expectedUnrelatedEvents else {
+            return .failed(
+                failure: .unrelatedEventsChanged(
+                    expected: expectedUnrelatedEvents,
+                    observed: observedUnrelatedEvents
+                ),
+                writes: 0,
+                finalObserved: current.tempo
+            )
+        }
         guard current.tempo != initial.tempo else {
             return .notNeeded(writes: 0, finalObserved: current.tempo)
         }
@@ -934,6 +1110,7 @@ enum TempoMapAX {
             at: index,
             from: current,
             to: initial.tempo,
+            expectedUnrelatedEvents: expectedUnrelatedEvents,
             in: window,
             localeIdentifier: localeIdentifier,
             runtime: runtime,
@@ -946,6 +1123,26 @@ enum TempoMapAX {
                 failure: failure,
                 writes: receipt.acceptedWrites,
                 finalObserved: receipt.finalObserved
+            )
+        }
+    }
+
+    private static func positionMatchCount(_ position: String, in events: [Event]) -> Int {
+        events.reduce(into: 0) { count, event in
+            if event.position == position { count += 1 }
+        }
+    }
+
+    private static func unrelatedEventWitnesses(
+        in events: [Event],
+        excluding targetIndex: Int
+    ) -> [UnrelatedEventWitness] {
+        events.enumerated().compactMap { index, event in
+            guard index != targetIndex else { return nil }
+            return UnrelatedEventWitness(
+                index: index,
+                position: event.position,
+                tempo: event.tempo
             )
         }
     }

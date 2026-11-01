@@ -1160,6 +1160,25 @@ struct LPMCPPRD001ProductionReadinessREDTests {
         #expect(wrongPinReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
         #expect(wrongPinReport.openDebts.contains(.independentProvenanceNotEnforced))
 
+        let unverifiedReleaseFile = workflow.replacingOccurrences(
+            of: "            qualification-public.json\n",
+            with: "            qualification-public.json\n"
+                + "            trusted-verifier-src/.build/release/trusted-verifier\n",
+            options: [],
+            range: workflow.range(of: "      - name: Create GitHub Release")
+                .map { $0.lowerBound..<workflow.endIndex }
+        )
+        #expect(unverifiedReleaseFile != workflow)
+        let unverifiedReleaseFileReport = evaluate(unverifiedReleaseFile, consumer)
+        #expect(
+            unverifiedReleaseFileReport.openDebts.contains(
+                .releaseWorkflowMissingIndependentQualification
+            )
+        )
+        #expect(
+            unverifiedReleaseFileReport.openDebts.contains(.independentProvenanceNotEnforced)
+        )
+
         let unverifiedPublicCandidate = consumer.replacingOccurrences(
             of: "verify_candidate \"$public/LogicProMCP\"",
             with: ": # public candidate verification removed"
