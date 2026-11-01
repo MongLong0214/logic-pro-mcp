@@ -135,8 +135,8 @@ extension AccessibilityChannel {
         let lookup: AXLogicProElements.MixerAreaLookup = physical.map { .found($0.mixer) }
             ?? AXLogicProElements.mixerAreaLookup(runtime: runtime)
         guard let mixer = lookup.mixer else {
-            return refusal(.elementNotFound, "Cannot locate the visible Mixer. Show it so the strip's "
-                + "output slot can be read; nothing was pressed.")
+            return refusal(.elementNotFound, "A readable visible Mixer was unavailable; this request "
+                + "terminated before any output-slot read or press.", terminalPreconditionFields)
         }
         guard let enumeration = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime.ax) else {
             return refusal(.elementNotFound, "The Mixer's children did not read, so no strip can be "

@@ -88,6 +88,7 @@ private final class R2Fixture: @unchecked Sendable {
         var alwaysCreatesStrip = false
         var play: Bool? = false
         var record: Bool? = false
+        var mixerVisible = true
         var duplicateSubmenuStereoOutput = false
         var duplicateBusOne = false
         var answeringRead: AnsweringRead?
@@ -169,7 +170,7 @@ private final class R2Fixture: @unchecked Sendable {
         let (stereoOut, _) = strip(output: nil, input: nil)
         strips = [audio, aux, stereoOut]
         b.setChildren(mixer, strips)
-        b.setChildren(window, [controlBar, mixer])
+        b.setChildren(window, options.mixerVisible ? [controlBar, mixer] : [controlBar])
         buildPopup(current: current)
         if options.preexistingPopupOpen { menuOpen = true }
         switch options.failingRead {
@@ -561,6 +562,29 @@ func outputAssignmentNoOpPressesNothing() async throws {
 }
 
 // MARK: - Refusals before any press
+
+@Test("an unavailable Mixer terminates without asking a person to reveal it or retry")
+func outputAssignmentTerminatesWhenMixerIsUnavailable() async throws {
+    let fixture = R2Fixture(.init(mixerVisible: false))
+    let envelope = try await runChannel(fixture, destination: .bus(1))
+
+    #expect(envelope["state"] as? String == "C")
+    #expect(envelope["error"] as? String == "element_not_found")
+    #expect(!(try #require(envelope["write_attempted"] as? Bool)))
+    #expect(try #require(envelope["terminal"] as? Bool))
+    #expect(envelope["terminal_scope"] as? String == "mcp_request_only")
+    #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+    #expect(try #require(envelope["automatic_precondition_attempts_exhausted"] as? Bool))
+    #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+    #expect(envelope["human_intervention_requests"] as? Int == 0)
+    #expect(envelope["human_dependent_transitions"] as? Int == 0)
+    let hint = try #require(envelope["hint"] as? String)
+    for forbiddenRequest in ["show", "open", "click", "manually", "retry"] {
+        #expect(!hint.localizedCaseInsensitiveContains(forbiddenRequest))
+    }
+    #expect(fixture.presses.isEmpty)
+    #expect(fixture.escapeCount == 0)
+}
 
 /// Kills M07: reading an unreadable current output as "not equal" and pressing anyway.
 @Test("an unreadable current output refuses, nothing pressed")
