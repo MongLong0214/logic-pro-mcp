@@ -35,10 +35,15 @@ extension PluginsDispatcher {
             if request.objectValue == nil || param == nil || param == "" { status = "invalid_request" }
             else if metadata == nil { status = "unknown_parameter" }
             else if let metadata {
-                let slider = metadata.readbackMethod == "ax_slider_axvalue" && metadata.axDescription != nil
+                let directSlider = metadata.readbackMethod == "ax_slider_axvalue" && metadata.axDescription != nil
+                let controlsViewSlider = metadata.readbackMethod == "ax_controls_view_slider_display"
+                    && metadata.controlsViewControlRole == "AXSlider" && metadata.controlsViewRowLabel != nil
                 let checkbox = metadata.readbackMethod == "ax_controls_view_checkbox_value"
                     && metadata.controlsViewControlRole == "AXCheckBox" && metadata.controlsViewRowLabel != nil
-                if !(slider || checkbox) || metadata.writeMethod == nil { status = "unsupported" }
+                // This operation is a read-only diff and always returns
+                // `application_authorized:false`; a qualified reader does not
+                // need a writer merely to compare the requested value.
+                if !(directSlider || controlsViewSlider || checkbox) { status = "unsupported" }
                 else {
                     let unit = fields["unit"]?.stringValue
                     // Only Compressor's declared percent aliases share the raw scale.
