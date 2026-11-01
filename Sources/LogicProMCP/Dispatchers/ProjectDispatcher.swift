@@ -623,7 +623,7 @@ struct ProjectDispatcher: OperationTraceDispatching {
                 return refused("names must be at most 32 unique declared target/name objects with valid scalar names; no partial plan was created")
             }
             guard let options = ProjectSessionAudit.PlanningOptions.parse(params) else {
-                return refused("on_ambiguity must be ask or report_only, and allow_create_aux, allow_stack_membership_change and allow_replace_send must be booleans; no plan was created")
+                return refused("on_ambiguity must be terminate or report_only (legacy ask is a terminal alias), and allow_create_aux, allow_stack_membership_change and allow_replace_send must be booleans; no plan was created")
             }
             do {
                 let plan = try ProjectSessionAudit.buildCanonicalRepairPlan(

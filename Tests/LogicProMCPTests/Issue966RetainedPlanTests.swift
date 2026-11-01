@@ -47,7 +47,7 @@ struct Issue966RetainedPlanTests {
             let isError = try #require(result.isError)
             #expect(!isError)
             let body = try #require(sharedJSONObject(sharedToolText(result)))
-            #expect(body["schema"] as? String == "logic_pro_mcp_session_repair_plan.v1")
+            #expect(body["schema"] as? String == "logic_pro_mcp_session_repair_plan.v2")
             #expect(body["baseline_snapshot_id"] as? String == snapshot)
             let readOnly = try #require(body["read_only"] as? Bool)
             #expect(readOnly)

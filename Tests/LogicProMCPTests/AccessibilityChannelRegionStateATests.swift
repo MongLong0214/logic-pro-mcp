@@ -1049,11 +1049,38 @@ func moveToPlayheadRefusesAMultiRegionSelection() async throws {
     )
 
     let obj = decodeJSON(result.message)
-    #expect(obj["state"] as? String == "B")
-    let refusedVerified = try #require(obj["verified"] as? Bool)
-    #expect(!refusedVerified)
+    let isError: Bool
+    switch result {
+    case .error:
+        isError = true
+    case .success:
+        isError = false
+    }
+    #expect(isError)
+    #expect(obj["state"] as? String == "C")
+    guard let success = obj["success"] as? Bool,
+          let writeAttempted = obj["write_attempted"] as? Bool,
+          let safeToRetry = obj["safe_to_retry"] as? Bool,
+          let terminal = obj["terminal"] as? Bool,
+          let humanInterventionRequired = obj["human_intervention_required"] as? Bool else {
+        Issue.record("terminal refusal omitted a required Boolean field")
+        return
+    }
+    #expect(!success)
+    #expect(obj["error"] as? String == "unsupported_state")
+    #expect(obj["operation"] as? String == "region.move_to_playhead")
+    #expect(!writeAttempted)
+    #expect(!safeToRetry)
+    #expect(terminal)
+    #expect(obj["terminal_scope"] as? String == "mcp_request_only")
+    #expect(!humanInterventionRequired)
+    #expect(obj["human_intervention_requests"] as? Int == 0)
+    #expect(obj["human_dependent_transitions"] as? Int == 0)
     #expect(obj["selected_count"] as? Int == 2)
     #expect((obj["selected_names"] as? [String])?.sorted() == ["RegionA", "RegionB"])
+    let hint = try #require(obj["hint"] as? String)
+    #expect(!hint.localizedCaseInsensitiveContains("select a single region"))
+    #expect(!hint.localizedCaseInsensitiveContains("retry"))
     // Refused BEFORE the menu is driven: the operation must not move what it cannot certify.
     #expect(!menu.ran, "the menu was driven for a selection this readback cannot verify")
 }

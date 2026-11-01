@@ -164,12 +164,19 @@ struct TrackDispatcher: OperationTraceDispatching {
                 if matchingTracks.count > 1 {
                     return toolStateCResult(
                         .ambiguousTargetName,
-                        hint: "'\(name)' matches more than one live track, so the target cannot be identified. Use an unambiguous name or select by index.",
+                        hint: "'\(name)' matches more than one live track, so this MCP request "
+                            + "terminated before any write.",
                         extras: [
                             "operation": "track.select",
                             "requested_name": name,
                             "ambiguous_track_indices": matchingTracks.map(\.id).sorted(),
                             "write_attempted": false,
+                            "safe_to_retry": false,
+                            "terminal": true,
+                            "terminal_scope": "mcp_request_only",
+                            "human_intervention_required": false,
+                            "human_intervention_requests": 0,
+                            "human_dependent_transitions": 0,
                         ]
                     )
                 }

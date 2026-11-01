@@ -515,14 +515,21 @@ extension AccessibilityChannel {
         let preSelection = selectedRegionInfos(runtime: runtime)
         let pre = preSelection?.count == 1 ? preSelection?.first : nil
         if let selection = preSelection, selection.count > 1 {
-            return .success(HonestContract.encodeStateB(
-                reason: .readbackUnavailable,
+            return .error(HonestContract.encodeStateC(
+                error: .unsupportedState,
+                hint: "A multi-region move cannot be certified by this verifier; "
+                    + "this MCP request terminated before any write.",
                 extras: [
                     "operation": "region.move_to_playhead",
                     "selected_count": selection.count,
                     "selected_names": selection.map(\.name),
-                    "note": "Logic moves the whole selection; this readback corroborates one region "
-                        + "and cannot certify the rest. Select a single region to get State A.",
+                    "write_attempted": false,
+                    "safe_to_retry": false,
+                    "terminal": true,
+                    "terminal_scope": "mcp_request_only",
+                    "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                    "human_dependent_transitions": 0,
                 ]
             ))
         }

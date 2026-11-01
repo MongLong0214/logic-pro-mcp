@@ -705,7 +705,7 @@ enum SessionPlanGenerator {
         case "bass":
             spec = ("Studio Bass", "logic://stock-instruments/logic.stock.instrument.studio_bass", "software_instrument", [])
         case "guitar":
-            spec = ("Manual Library guitar patch", nil, "software_instrument", ["No catalog-backed stock guitar instrument is available in this build."])
+            spec = ("Unresolved guitar instrument", nil, "software_instrument", ["No catalog-backed stock guitar instrument is available in this build."])
         case "keys":
             spec = ("Vintage Electric Piano", "logic://stock-instruments/logic.stock.instrument.vintage_electric_piano", "software_instrument", [])
         case "strings":

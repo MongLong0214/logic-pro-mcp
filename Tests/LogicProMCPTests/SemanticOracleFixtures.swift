@@ -525,7 +525,7 @@ enum SemanticOracleFixtures {
         // Mock draft shape only; this fixture is not an observation or mutation receipt.
         .projectPlanSessionRepair: SemanticOracleFixture(
             response: """
-                {"schema":"logic_pro_mcp_session_repair_plan.v1","read_only":true,
+                {"schema":"logic_pro_mcp_session_repair_plan.v2","read_only":true,
                 "requires_plan_confirmation":true,"executable":false}
                 """,
             readback: "{}"

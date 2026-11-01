@@ -3,7 +3,7 @@ import Foundation
 import MCP
 
 extension ProjectSessionAudit {
-    static let sessionRepairPlanSchema = "logic_pro_mcp_session_repair_plan.v1"
+    static let sessionRepairPlanSchema = "logic_pro_mcp_session_repair_plan.v2"
 
     struct ApprovedName: Sendable {
         let target: String
@@ -31,15 +31,16 @@ extension ProjectSessionAudit {
 
     /// ADR-021 section 3's planning inputs beside the policy. Each permits *planning* an effect,
     /// never executing it, and each defaults to the narrower choice. Neither ambiguity mode
-    /// permits guessing: `ask` returns the questions, `report_only` returns the same report and
-    /// marks the plan not executable whatever it holds.
+    /// permits guessing: `terminate` returns unresolved inputs as diagnostics and ends that ambiguous plan;
+    /// `report_only` returns the same report and marks the plan non-executable whatever it holds.
+    /// Legacy `ask` input is accepted only as an alias for `terminate`; no reply is awaited.
     struct PlanningOptions: Equatable, Sendable {
         enum OnAmbiguity: String, Sendable {
-            case ask
+            case terminate
             case reportOnly = "report_only"
         }
 
-        var onAmbiguity: OnAmbiguity = .ask
+        var onAmbiguity: OnAmbiguity = .terminate
         var allowCreateAux = false
         var allowStackMembershipChange = false
         var allowReplaceSend = false
@@ -52,8 +53,13 @@ extension ProjectSessionAudit {
         static func parse(_ params: [String: Value]) -> PlanningOptions? {
             var options = PlanningOptions()
             if let raw = params["on_ambiguity"] {
-                guard case .string(let word) = raw, let mode = OnAmbiguity(rawValue: word) else { return nil }
-                options.onAmbiguity = mode
+                guard case .string(let word) = raw else { return nil }
+                if word == "ask" {
+                    options.onAmbiguity = .terminate
+                } else {
+                    guard let mode = OnAmbiguity(rawValue: word) else { return nil }
+                    options.onAmbiguity = mode
+                }
             }
             for (key, path) in [
                 ("allow_create_aux", \PlanningOptions.allowCreateAux),
