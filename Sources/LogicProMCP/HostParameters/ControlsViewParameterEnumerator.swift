@@ -115,6 +115,7 @@ enum ControlsViewParameterEnumerator {
         var parameters: [GenericPluginParameter] = []
         var observations: [RowObservation] = []
         var rowSignatures: [RowSignature] = []
+        var observedLabels: [AXUIElement] = []
         var observedControls: [AXUIElement] = []
 
         for (rowIndex, row) in rows.enumerated() {
@@ -123,6 +124,14 @@ enum ControlsViewParameterEnumerator {
             // manifest: hashing `nil` would alias distinct unreadable labels.
             guard let rowRead = readRow(row, runtime: runtime) else {
                 return nil
+            }
+            for label in rowRead.labelElements {
+                guard !observedLabels.contains(where: {
+                    CFEqual($0, label)
+                }) else {
+                    return nil
+                }
+                observedLabels.append(label)
             }
             for control in rowRead.controls {
                 guard !observedControls.contains(where: {
@@ -347,6 +356,7 @@ enum ControlsViewParameterEnumerator {
         runtime: AXHelpers.Runtime
     ) -> RowRead? {
         var labelValues: [String] = []
+        var labelElements: [AXUIElement] = []
         var controlsInRow: [ControlObservation] = []
         var pairedCandidates: [PairedCandidate] = []
 
@@ -360,6 +370,7 @@ enum ControlsViewParameterEnumerator {
             let cellLabels = contents.labels
             let cellControls = contents.controls
             labelValues.append(contentsOf: cellLabels)
+            labelElements.append(contentsOf: contents.labelElements)
             controlsInRow.append(contentsOf: cellControls)
             if let label = cellLabels.only, let control = cellControls.only {
                 pairedCandidates.append(PairedCandidate(label: label, control: control))
@@ -367,6 +378,7 @@ enum ControlsViewParameterEnumerator {
         }
         return RowRead(
             labels: labelValues,
+            labelElements: labelElements,
             controls: controlsInRow,
             pairedCandidates: pairedCandidates
         )
@@ -399,6 +411,9 @@ enum ControlsViewParameterEnumerator {
         }
         return CellContents(
             labels: labels,
+            labelElements: scanned.filter {
+                $0.role == (kAXStaticTextRole as String)
+            }.map(\.element),
             controls: controls(in: scanned, runtime: runtime)
         )
     }
@@ -730,6 +745,7 @@ enum ControlsViewParameterEnumerator {
 
     private struct CellContents {
         let labels: [String]
+        let labelElements: [AXUIElement]
         let controls: [ControlObservation]
     }
 
@@ -748,6 +764,7 @@ enum ControlsViewParameterEnumerator {
 
     private struct RowRead {
         let labels: [String]
+        let labelElements: [AXUIElement]
         let controls: [ControlObservation]
         let pairedCandidates: [PairedCandidate]
     }

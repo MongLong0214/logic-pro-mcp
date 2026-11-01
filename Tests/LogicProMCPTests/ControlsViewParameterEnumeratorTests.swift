@@ -5,6 +5,16 @@ import Testing
 
 @Suite("ADR-018 Controls-view parameter enumerator")
 struct ControlsViewParameterEnumeratorTests {
+    @Test func duplicatePhysicalLabelsAcrossRowsCannotMintDistinctParameterReferences() {
+        let fixture = makeControlsFixture(duplicateLabelSourceIndex: 6)
+
+        #expect(ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: fixture.runtime
+        ) == nil)
+    }
+
     @Test func duplicatePhysicalControlsAcrossRowsCannotMintDistinctParameterReferences() {
         let fixture = makeControlsFixture(duplicateControlSourceIndex: 6)
 
@@ -627,6 +637,7 @@ private func makeControlsFixture(
     exposesRowsAttribute: Bool = true,
     includesNonRowTableChild: Bool = false,
     duplicateRowIndex: Int? = nil,
+    duplicateLabelSourceIndex: Int? = nil,
     duplicateControlSourceIndex: Int? = nil,
     cellBinding: CellBinding = .paired,
     pluginTextPlacement: PluginTextPlacement = .direct,
@@ -654,10 +665,18 @@ private func makeControlsFixture(
     var unreadableCellChildElementIDs: [Int] = []
     var depthBoundaryReadFailure: DepthBoundaryReadFailure?
     var primaryControlElements: [AXUIElement] = []
+    var primaryLabelElements: [AXUIElement] = []
     let rowElements = rows.enumerated().map { rowIndex, rowFixture -> AXUIElement in
         let base = 90_100 + rowIndex * 20
         let row = builder.element(base)
-        let label = builder.element(base + 1)
+        let label: AXUIElement
+        if let duplicateLabelSourceIndex,
+           rowIndex == duplicateLabelSourceIndex + 1,
+           primaryLabelElements.indices.contains(duplicateLabelSourceIndex) {
+            label = primaryLabelElements[duplicateLabelSourceIndex]
+        } else {
+            label = builder.element(base + 1)
+        }
         let control: AXUIElement
         if let duplicateControlSourceIndex,
            rowIndex == duplicateControlSourceIndex + 1,
@@ -673,6 +692,7 @@ private func makeControlsFixture(
             )
         }
         primaryControlElements.append(control)
+        primaryLabelElements.append(label)
         labelElementIDs.append(builder.elementID(label))
         controlElementIDs.append(builder.elementID(control))
         builder.setRole(row, kAXRowRole as String)
