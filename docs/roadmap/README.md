@@ -46,7 +46,7 @@ claims dated by the "measured" line, and only issue numbers and open/closed are 
 24 open issues and 4 open pull requests after paginated GitHub API reads · issue bodies and owner comments remain the acceptance authority
 ```
 
-Current delivery readback for that census (this block controls when an older snapshot below names a
+Historical delivery readback for the 2026-10-28 census (this block controls when an older snapshot below names a
 pre-integration head):
 
 - Twenty pull requests have been merged during this consolidation. The two newest readbacks are #1435 → `3aff0c93` with exact tree `5064104b`, and #1447 → `16f6cc69` with exact tree `97c707b4`; both target the #1437 integration branch, not `main`.
