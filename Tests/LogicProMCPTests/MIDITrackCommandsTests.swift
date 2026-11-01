@@ -211,7 +211,8 @@ func midiTrackCommandsRejectMalformedRequestsBeforeTheProvider(fault: String) as
     #expect(body["human_intervention_requests"] as? Int == 0)
     #expect(body["human_dependent_transitions"] as? Int == 0)
     #expect(!(try #require(body["safe_to_retry"] as? Bool)))
-    #expect(body["write_attempted"] as? Bool == false)
+    let writeAttempted = try #require(body["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
     #expect(context.traceID != nil)
 }
 
