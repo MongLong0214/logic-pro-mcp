@@ -10060,6 +10060,13 @@ struct Issue965HeldSelectionAssociationTests {
                 f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String,
                     condition.hasPrefix("force_fresh_rail_") || coldRailInput ? f.rail
                         : condition == "unselected_pair" ? f.strips[0] : replacement)
+                if condition == "retired_original_focus" {
+                    f.inputRetiredSourceReadable = true
+                    f.setInputGeometry(top: 50, renewed: true)
+                    f.builder.setAttributeSettable(replacement, kAXFocusedAttribute as String, true)
+                    f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.strips[1])
+                    f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [replacement])
+                }
                 if coldRailInput {
                     f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [replacement])
                 }
@@ -10160,6 +10167,19 @@ struct Issue965HeldSelectionAssociationTests {
                 }
             }
         }
+        if condition == "retired_original_focus" {
+            // Match Logic's reciprocal pre-popup selected-child relationship.
+            // Cancel replaces that child but can leave the old strip CF focused.
+            f.configureDelayedReceiverMixerGeometry()
+            if let geometryOwner = f.routingDelayedMixerOwner {
+                f.builder.setRole(geometryOwner, kAXGroupRole as String)
+                f.builder.setAttribute(geometryOwner, kAXDescriptionAttribute as String, "Mixer")
+                f.builder.setChildren(geometryOwner, [f.mixer])
+                f.builder.setChildren(f.window, [f.rail, geometryOwner, f.builder.element(1_965_720)])
+            }
+            f.selectionKeepsPassiveRailFocus = true
+            f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[1]])
+        }
         f.routingRead = { element, attribute in
             if condition == "transient_cancel_geometry", f.routingReplacement != nil,
                f.selections.count > (graph ? 4 : 2) {
@@ -10213,7 +10233,8 @@ struct Issue965HeldSelectionAssociationTests {
         }
         let before = try await inspect(f, cache: cache, registry: registry,
             scope: hasUnrequestedPeer ? "selection" : "whole_project")
-        let id = try #require(before["snapshot_id"] as? String)
+        let id = try #require(before["snapshot_id"] as? String,
+            "Initial held capture must succeed: \(before)")
         let capture = try #require(await cache.retainedInspection(id: id)).capture
         let row = try #require(capture.channelStrips.indices.first {
             capture.channelStrips[$0].physicalBinding.map { CFEqual($0.strip, f.strips[1]) } == true
@@ -10502,7 +10523,7 @@ struct Issue965HeldSelectionAssociationTests {
             #expect(f.inputMenuPresses == 1 && f.inputMenuCancels == 1,
                 "Registered acquisition must execute Cancel's real physical retirement")
             #expect(source.currentIndex(runtime: f.builder.makeLogicRuntime(appElement: f.app)) == nil)
-            if condition != "paired" && condition != "retirement_census_lag" && condition != "unpaired_bus" && condition != "whole_census_retirement" && condition != "transient_cancel_geometry" {
+            if condition != "paired" && condition != "retirement_census_lag" && condition != "unpaired_bus" && condition != "whole_census_retirement" && condition != "transient_cancel_geometry" && condition != "retired_original_focus" {
                 #expect(edges.isEmpty, "Lost original authority must not publish a bus input")
                 #expect(!f.routingWrongSourcePressed && f.routingDestinationPresses == 0 && f.scrollWrites.isEmpty)
                 if ["partial_restore", "deciding_read", "deciding_control_replaced", "whole_census_late_reorder"].contains(condition) {
@@ -10510,7 +10531,13 @@ struct Issue965HeldSelectionAssociationTests {
                 }
                 return
             }
-            let fresh = try #require(retained)
+            if condition == "retired_original_focus" {
+                #expect(f.inputRetiredSourceReadable)
+                #expect((f.builder.attributeValue(f.mixer,
+                    kAXSelectedChildrenAttribute as String) as? [AXUIElement])?.count == 1)
+            }
+            let fresh = try #require(retained,
+                "Actual original-header recovery after Cancel retains retired focus: \(body)")
             if condition == "transient_cancel_geometry" {
                 #expect(f.inputTransientGeometrySettled, "Reach the actual post-Cancel selection settling")
                 #expect(f.scrollWrites.isEmpty, "Already-restored pre-popup geometry needs no scroll inverse")
@@ -12129,6 +12156,11 @@ struct Issue965HeldSelectionAssociationTests {
     @Test(arguments: [1, 256])
     func registeredRoutingCapturePublishesRenewedInputReceiver(number: Int) async throws {
         try await assertInputBusRenewal(number: number, condition: "paired", graph: true)
+    }
+
+    @Test("Owned input Cancel may retire the focused strip while retaining its old focus CF")
+    func registeredInputRecoveryStartsFromRetiredOriginalFocus() async throws {
+        try await assertInputBusRenewal(number: 1, condition: "retired_original_focus", graph: true)
     }
 
     @Test("Input renewal restores pre-popup geometry, not a transient post-Cancel layout")

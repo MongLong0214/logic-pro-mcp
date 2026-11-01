@@ -690,15 +690,35 @@ def dismiss_safe_logic_dialog():
         return {"status": "probe_failed"}
     if not snapshot.blocking_dialog_present:
         return {"status": "not_present"}
+
+    def post_cleanup_readback(method):
+        try:
+            latest = collect_ui_snapshot()
+        except Exception as error:
+            return {
+                "status": "probe_failed",
+                "method": method,
+                "reason": type(error).__name__,
+            }
+        if not latest.blocking_dialog_present:
+            return {"status": "dismissed", "method": method}
+        return {
+            "status": "blocked",
+            "method": method,
+            "windows": latest.logic_window_names,
+        }
+
     if _click_safe_dialog_cancel_button():
         time.sleep(0.5)
-        return {"status": "dismissed", "method": "cancel_button"}
+        return post_cleanup_readback("cancel_button")
     if _send_escape_key():
         time.sleep(0.5)
-        latest = collect_ui_snapshot()
-        if not latest.blocking_dialog_present:
-            return {"status": "dismissed", "method": "escape"}
+        return post_cleanup_readback("escape")
     return {"status": "blocked", "windows": snapshot.logic_window_names}
+
+
+def safe_dialog_cleanup_is_clear(result):
+    return isinstance(result, dict) and result.get("status") in {"not_present", "dismissed"}
 
 
 def cycle_range_result_ok(resp):
@@ -2320,12 +2340,34 @@ def main():
     # Save (non-destructive — Logic Pro will show dialog if no project)
     r = call_tool(client, "logic_project", "save")
     T("project.save dispatches", r, lambda _: len(tool_text(r)) > 0)
-    dismiss_safe_logic_dialog()
+    save_cleanup = (
+        dismiss_safe_logic_dialog()
+        if live_logic_ready or STRICT_LIVE
+        else {"status": "skipped"}
+    )
+    T_LIVE(
+        "project.save leaves no blocking dialog",
+        save_cleanup,
+        safe_dialog_cleanup_is_clear,
+        live_logic_ready,
+        "Logic Pro + Accessibility are required",
+    )
 
     # Bounce
     r = call_tool(client, "logic_project", "bounce")
     T("project.bounce dispatches", r, lambda _: len(tool_text(r)) > 0)
-    dismiss_safe_logic_dialog()
+    bounce_cleanup = (
+        dismiss_safe_logic_dialog()
+        if live_logic_ready or STRICT_LIVE
+        else {"status": "skipped"}
+    )
+    T_LIVE(
+        "project.bounce leaves no blocking dialog",
+        bounce_cleanup,
+        safe_dialog_cleanup_is_clear,
+        live_logic_ready,
+        "Logic Pro + Accessibility are required",
+    )
 
     # Launch (already running — should succeed)
     r = call_tool(client, "logic_project", "launch")
