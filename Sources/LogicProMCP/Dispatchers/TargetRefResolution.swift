@@ -415,11 +415,16 @@ enum TargetRefResolver {
             extras["ambiguous_live_track_name"] = true
             extras["ambiguous_track_indices"] = ambiguousIndices
             extras["what_was_observed"] = "live track name '\(expected)' also appeared at indices \(ambiguousIndices.map(String.init).joined(separator: ", "))"
+            extras["terminal"] = true
+            extras["terminal_scope"] = "mcp_request_only"
+            extras["human_intervention_required"] = false
+            extras["human_intervention_requests"] = 0
+            extras["human_dependent_transitions"] = 0
             return toolStateCResult(
                 .ambiguousTargetName,
-                hint: "'\(expected)' names more than one live track, so the target cannot be "
-                    + "identified. Rename it with rename {name, index} — the index form is not "
-                    + "blocked by name ambiguity — then retry with the new name.",
+                hint: "'\(expected)' names more than one live track, so the target could not be "
+                    + "identified and this MCP request terminated without a write or a "
+                    + "human-intervention request.",
                 extras: extras
             )
         }
