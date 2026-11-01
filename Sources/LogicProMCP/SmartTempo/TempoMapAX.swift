@@ -130,6 +130,7 @@ enum TempoMapAX {
         case didNotMove(previous: Double, observed: Double, target: Double)
         case movedAway(previous: Double, observed: Double, target: Double)
         case crossedTarget(previous: Double, observed: Double, target: Double)
+        case unmeasuredStep(previous: Double, observed: Double, target: Double)
         case attemptBudgetExhausted(observed: Double, target: Double, budget: Int)
         case deadlineExceeded(observed: Double, target: Double)
 
@@ -157,10 +158,21 @@ enum TempoMapAX {
                 return "Tempo write moved away from \(target): \(previous) became \(observed)."
             case let .crossedTarget(previous, observed, target):
                 return "Tempo write crossed \(target): \(previous) became \(observed), so the measured integer walk is no longer authorized."
+            case let .unmeasuredStep(previous, observed, target):
+                return "Tempo write observed an unmeasured step toward \(target): \(previous) became \(observed), not one BPM."
             case let .attemptBudgetExhausted(observed, target, budget):
                 return "Tempo write spent its bounded budget of \(budget) step(s) and stopped at \(observed), not \(target)."
             case let .deadlineExceeded(observed, target):
                 return "Tempo write reached its wall-clock deadline at \(observed), not \(target)."
+            }
+        }
+
+        var disprovesSelectedEventCustody: Bool {
+            switch self {
+            case .selectedEventChanged, .unmeasuredStep:
+                return true
+            default:
+                return false
             }
         }
     }
@@ -382,9 +394,10 @@ enum TempoMapAX {
             let rollback: RollbackOutcome
             if receipt.acceptedWrites == 0 {
                 rollback = .notNeeded(writes: 0, finalObserved: receipt.finalObserved)
-            } else if case .selectedEventChanged = failure {
+            } else if failure.disprovesSelectedEventCustody {
                 // A fresh pre-write inventory disproved target custody. Its observed value is not
-                // ours to restore, even when an earlier step in this request was accepted.
+                // ours to restore. The same applies when settle observes a transition outside the
+                // only measured one-BPM writer, even if that transition landed on the target.
                 rollback = .failed(
                     failure: failure,
                     writes: 0,
@@ -877,9 +890,6 @@ enum TempoMapAX {
             case let .failure(failure, lastObserved):
                 return .failure(failure, receipt: receipt(finalObserved: lastObserved))
             }
-            if next.tempo == target {
-                return .success(observed: next.tempo, writes: acceptedWrites)
-            }
             if next.tempo == current.tempo {
                 return .failure(
                     .didNotMove(previous: current.tempo, observed: next.tempo, target: target),
@@ -897,6 +907,19 @@ enum TempoMapAX {
                     .movedAway(previous: current.tempo, observed: next.tempo, target: target),
                     receipt: receipt(finalObserved: next.tempo)
                 )
+            }
+            guard distance(current.tempo, next.tempo) == 1 else {
+                return .failure(
+                    .unmeasuredStep(
+                        previous: current.tempo,
+                        observed: next.tempo,
+                        target: target
+                    ),
+                    receipt: receipt(finalObserved: next.tempo)
+                )
+            }
+            if next.tempo == target {
+                return .success(observed: next.tempo, writes: acceptedWrites)
             }
             current = next
         }
