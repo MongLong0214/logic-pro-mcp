@@ -33,7 +33,11 @@ extension MIDIDispatcher {
         guard let export else {
             return await finalizeTrace(midiFilePayload(["error": "native_export_unavailable", "success": false,
                 "verified": false, "state": "C", "operation": "midi.\(command)",
-                "hint": "This command requires the registered request-owned native export provider."], isError: true), traceID: traceID)
+                "terminal": true, "terminal_scope": "mcp_request_only",
+                "human_intervention_required": false, "human_intervention_requests": 0,
+                "human_dependent_transitions": 0, "safe_to_retry": false, "write_attempted": false,
+                "hint": "No request-owned native export provider is registered; this MCP request terminated before any write."],
+                isError: true), traceID: traceID)
         }
         let result: CallTool.Result
         do {

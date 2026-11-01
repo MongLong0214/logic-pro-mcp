@@ -205,6 +205,13 @@ func midiTrackCommandsRejectMalformedRequestsBeforeTheProvider(fault: String) as
     let body = try #require(sharedJSONObject(sharedToolText(result)))
     #expect(body["error"] as? String == "native_export_unavailable")
     #expect(body["state"] as? String == "C")
+    #expect(try #require(body["terminal"] as? Bool))
+    #expect(body["terminal_scope"] as? String == "mcp_request_only")
+    #expect(!(try #require(body["human_intervention_required"] as? Bool)))
+    #expect(body["human_intervention_requests"] as? Int == 0)
+    #expect(body["human_dependent_transitions"] as? Int == 0)
+    #expect(!(try #require(body["safe_to_retry"] as? Bool)))
+    #expect(body["write_attempted"] as? Bool == false)
     #expect(context.traceID != nil)
 }
 
