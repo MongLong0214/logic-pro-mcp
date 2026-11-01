@@ -42,6 +42,9 @@ import Testing
         rowCount: Int = 2,
         hollowRows: Set<Int> = [],
         omittedFilterTitle: String? = nil,
+        filterControls: [(String, FilterControlID)] = Self.filterControls,
+        uncheckedFilterTitle: String? = nil,
+        extraCheckboxTitles: [String] = [],
         timeMark: String = "",
         positionText: String = "1 1 1 1",
         viewMenuInitiallyOpen: Bool = true,
@@ -174,6 +177,19 @@ import Testing
             let checkbox = element()
             builder.setRole(checkbox, kAXCheckBoxRole as String)
             builder.setAttribute(checkbox, kAXTitleAttribute as String, filterTitle)
+            builder.setAttribute(
+                checkbox,
+                kAXValueAttribute as String,
+                filterTitle == uncheckedFilterTitle ? 0 : 1
+            )
+            builder.setAttribute(checkbox, kAXParentAttribute as String, pane)
+            builder.setChildren(pane, AXHelpers.getChildren(pane, runtime: builder.makeAXRuntime()) + [checkbox])
+        }
+
+        for title in extraCheckboxTitles {
+            let checkbox = element()
+            builder.setRole(checkbox, kAXCheckBoxRole as String)
+            builder.setAttribute(checkbox, kAXTitleAttribute as String, title)
             builder.setAttribute(checkbox, kAXValueAttribute as String, 1)
             builder.setAttribute(checkbox, kAXParentAttribute as String, pane)
             builder.setChildren(pane, AXHelpers.getChildren(pane, runtime: builder.makeAXRuntime()) + [checkbox])
@@ -230,6 +246,17 @@ import Testing
         ("Poly Aftertouch", FilterControlID.polyAftertouch),
         ("Syst. Exclusive", FilterControlID.systemExclusive),
         ("Additional Info", FilterControlID.additionalInfo),
+    ]
+
+    private static let koreanFilterControls = [
+        ("노트", FilterControlID.noteEvents),
+        ("프로그램 체인지", FilterControlID.programChange),
+        ("피치 벤드", FilterControlID.pitchBend),
+        ("컨트롤러", FilterControlID.controller),
+        ("애프터터치", FilterControlID.aftertouch),
+        ("폴리포닉 애프터터치", FilterControlID.polyAftertouch),
+        ("시스템 고유", FilterControlID.systemExclusive),
+        ("추가 정보", FilterControlID.additionalInfo),
     ]
 
     private static func collect(
@@ -811,6 +838,19 @@ import Testing
         #expect(throws: EventListReadbackCollectorError.filterEvidenceIncomplete(title: "Controller")) {
             try Self.collect(fixture, runtime: Self.toggleEventTabRuntime(fixture))
         }
+    }
+
+    @Test func koreanEventTypeFilterTitlesAreCollected() throws {
+        let fixture = Self.fixture(
+            filterControls: Self.koreanFilterControls,
+            uncheckedFilterTitle: "추가 정보",
+            extraCheckboxTitles: ["재생헤드 캐치", "MIDI 입력", "MIDI 출력"]
+        )
+
+        let evidence = try Self.collect(fixture, runtime: Self.toggleEventTabRuntime(fixture))
+
+        #expect(evidence.filter.checkboxes.map(\.id) == FilterControlID.allCases.map(\.rawValue))
+        #expect(evidence.filter.checkboxes.map(\.checked) == [true, true, true, true, true, true, true, false])
     }
 
     @Test func paneAndRowsAreRestoredAfterAnError() throws {
