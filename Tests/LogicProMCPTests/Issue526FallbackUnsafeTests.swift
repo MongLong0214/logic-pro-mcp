@@ -312,12 +312,19 @@ private func issue526MarkerDeleteReadbackRuntime(
         with: Data(refusal.message.utf8)
     ) as? [String: Any])
     let selectionWriteAttempted = try #require(receipt["selection_write_attempted"] as? Bool)
+    let terminal = try #require(receipt["terminal"] as? Bool)
+    let humanInterventionRequired = try #require(receipt["human_intervention_required"] as? Bool)
 
     // Mutation applied once: set `selection_write_attempted` false when AXSelectedRows cannot
     // confirm the write. This fixture accepts AXSelected before that failed confirmation, so the
     // false provenance claim fails here.
     #expect(!refusal.isSuccess)
     #expect(selectionWriteAttempted)
+    #expect(terminal)
+    #expect(receipt["terminal_scope"] as? String == "mcp_request_only")
+    #expect(!humanInterventionRequired)
+    #expect(receipt["human_intervention_requests"] as? Int == 0)
+    #expect(receipt["human_dependent_transitions"] as? Int == 0)
     let router = ChannelRouter()
     let accessibility = Issue526ErrorChannel(id: .accessibility, envelope: refusal.message)
     let keyCommands = Issue526SuccessProbeChannel(id: .midiKeyCommands)
