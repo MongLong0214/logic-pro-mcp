@@ -46,6 +46,13 @@ struct ProjectExportPlannerTests {
         #expect(!plan.unsupportedOrBlockedSteps.map(\.operation).contains("export_run"))
         #expect(plan.unsupportedOrBlockedSteps.map(\.operation).contains("export_resume"))
         #expect(plan.unsupportedOrBlockedSteps.map(\.operation) == ["cloud_delivery", "export_resume"])
+        let stemResume = try #require(
+            plan.unsupportedOrBlockedSteps.first { $0.operation == "export_resume" }
+        )
+        #expect(
+            stemResume.safeAlternative
+                == "No automatic resume is available; partial stem artifacts remain unchanged and this request terminates."
+        )
         #expect(plan.baselineVerification.contains("artifact_exists"))
         #expect(plan.baselineVerification.contains("no_silent_overwrite"))
 
