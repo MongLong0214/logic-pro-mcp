@@ -1133,12 +1133,20 @@ struct TargetRefResolutionTests {
             #expect(errorCode(result) == "ambiguous_target_name")
             let hint = try #require(body(result)["hint"] as? String)
             #expect(hint.contains("more than one live track"))
-            // #497: the hint used to stop at "address the track by an unambiguous name", and a
-            // caller following that literally was refused twice — `rename {name, target_ref}` hits
-            // this same guard. It must name the one form that is not blocked.
-            #expect(hint.contains("rename {name, index}"))
+            #expect(hint.localizedCaseInsensitiveContains("terminated"))
+            #expect(!hint.localizedCaseInsensitiveContains("rename"))
+            #expect(!hint.localizedCaseInsensitiveContains("retry"))
             let v1 = try #require(body(result)["write_attempted"] as? Bool)
             #expect(!v1)
+            let terminal = try #require(body(result)["terminal"] as? Bool)
+            #expect(terminal)
+            #expect(body(result)["terminal_scope"] as? String == "mcp_request_only")
+            let safeToRetry = try #require(body(result)["safe_to_retry"] as? Bool)
+            #expect(!safeToRetry)
+            let humanRequired = try #require(body(result)["human_intervention_required"] as? Bool)
+            #expect(!humanRequired)
+            #expect(body(result)["human_intervention_requests"] as? Int == 0)
+            #expect(body(result)["human_dependent_transitions"] as? Int == 0)
             #expect(body(result)["expected_track_name"] as? String == "Bass")
             let v2 = try #require(body(result)["ambiguous_live_track_name"] as? Bool)
             #expect(v2)
@@ -1147,13 +1155,12 @@ struct TargetRefResolutionTests {
         }
     }
 
-    /// #497: the remedy the ambiguity hint names must not be refused by the guard that printed it.
+    /// #497: explicit index-based rename remains available to callers that already have independent
+    /// authority for that mutation; the ambiguity refusal itself no longer assigns follow-up work.
     ///
-    /// Asserting that the hint mentions `rename {name, index}` only proves the sentence changed. The
-    /// defect was a hint recommending a form the same guard rejected, so the remedy is exercised
-    /// here under exactly the ambiguity that produces the hint: three live tracks share a name.
+    /// The explicit form is exercised here under the same ambiguity: three live tracks share a name.
     @Test
-    func testAmbiguousNameDoesNotBlockTheRenameByIndexTheHintRecommends() async throws {
+    func testAmbiguousNameDoesNotBlockExplicitRenameByIndex() async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             let cache = StateCache()
             await cache.updateTracks([
@@ -1171,7 +1178,7 @@ struct TargetRefResolutionTests {
                 liveTrackNames: { [0: "Drums", 1: "Bass", 2: "Bass"] }
             )
             #expect(errorCode(result) != "ambiguous_target_name",
-                    "the hint recommends this exact form; the guard must not refuse it")
+                    "explicit index-based rename must remain independent of name ambiguity")
         }
     }
 
