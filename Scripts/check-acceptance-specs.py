@@ -43,12 +43,13 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, os.path.join(REPO, "Scripts"))
+sys.path.insert(0, os.path.join(REPO, "Scripts", "verify"))
 
 from locale_labels import localised_canonicals  # noqa: E402
-from verify import verify as fixed_verifier  # noqa: E402
-from verify import runner as fixed_runner  # noqa: E402
-from verify import runner_live as fixed_runner_live  # noqa: E402
-from verify.predicates import parse_path  # noqa: E402
+import runner as fixed_runner  # noqa: E402
+import runner_live as fixed_runner_live  # noqa: E402
+import verify as fixed_verifier  # noqa: E402
+from predicates import parse_path  # noqa: E402
 
 VERIFY = os.path.join(REPO, "Scripts", "verify", "verify.py")
 QUEUE_BASENAME = "QUEUE.json"
