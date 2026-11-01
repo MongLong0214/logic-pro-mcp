@@ -120,6 +120,7 @@ enum TempoMapAX {
         case eventIndexOutOfRange(index: Int, count: Int)
         case ambiguousPosition(position: String, matches: Int)
         case positionChanged(expected: String, observed: String)
+        case selectedEventChanged(expectedTempo: Double, observedTempo: Double)
         case unrelatedEventsChanged(
             expected: [UnrelatedEventWitness],
             observed: [UnrelatedEventWitness]
@@ -142,6 +143,8 @@ enum TempoMapAX {
                 return "Tempo position '\(position)' is ambiguous (\(matches) matching events); refusing to authorize an index write."
             case let .positionChanged(expected, observed):
                 return "Tempo row changed position from '\(expected)' to '\(observed)'; refusing to write a different event."
+            case let .selectedEventChanged(expectedTempo, observedTempo):
+                return "Selected Tempo List event changed from \(expectedTempo) to \(observedTempo) outside the owned write observation."
             case let .unrelatedEventsChanged(expected, observed):
                 return "Unrelated Tempo List events changed during the selected-event write: expected \(expected), observed \(observed)."
             case .axWriteFailed:
@@ -379,6 +382,14 @@ enum TempoMapAX {
             let rollback: RollbackOutcome
             if receipt.acceptedWrites == 0 {
                 rollback = .notNeeded(writes: 0, finalObserved: receipt.finalObserved)
+            } else if case .selectedEventChanged = failure {
+                // A fresh pre-write inventory disproved target custody. Its observed value is not
+                // ours to restore, even when an earlier step in this request was accepted.
+                rollback = .failed(
+                    failure: failure,
+                    writes: 0,
+                    finalObserved: receipt.finalObserved
+                )
             } else {
                 rollback = rollbackToInitialTempo(
                     at: index,
@@ -805,6 +816,15 @@ enum TempoMapAX {
                     receipt: receipt(finalObserved: freshEvent.tempo)
                 )
             }
+            guard freshEvent.tempo == current.tempo else {
+                return .failure(
+                    .selectedEventChanged(
+                        expectedTempo: current.tempo,
+                        observedTempo: freshEvent.tempo
+                    ),
+                    receipt: receipt(finalObserved: freshEvent.tempo)
+                )
+            }
             let observedUnrelatedEvents = unrelatedEventWitnesses(
                 in: fresh.snapshot.events,
                 excluding: index
@@ -1035,6 +1055,16 @@ enum TempoMapAX {
         guard current.position == initial.position else {
             return .failed(
                 failure: .positionChanged(expected: initial.position, observed: current.position),
+                writes: 0,
+                finalObserved: current.tempo
+            )
+        }
+        if let fallbackObserved, current.tempo != fallbackObserved {
+            return .failed(
+                failure: .selectedEventChanged(
+                    expectedTempo: fallbackObserved,
+                    observedTempo: current.tempo
+                ),
                 writes: 0,
                 finalObserved: current.tempo
             )
