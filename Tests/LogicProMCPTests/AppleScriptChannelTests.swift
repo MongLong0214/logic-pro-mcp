@@ -478,7 +478,6 @@ private func requireTerminalPathUnavailableReceipt(
     #expect(obj["human_dependent_transitions"] as? Int == 0)
     #expect(openRecorder.snapshot() == [path])
 }
-
 @Test func testAppleScriptProjectOpenDoesNotRetryOrRestoreAfterUnsafeCloseRefusal() async throws {
     let openRecorder = OpenFileRecorder()
     let path = "/tmp/failed.logicx"
