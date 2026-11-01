@@ -513,7 +513,7 @@ actor MCUChannel: Channel {
         if ingress.overflowed {
             return .unavailable(
                 "MCU feedback overflow: dropped \(ingress.droppedEventCount) event(s); "
-                    + "MCU feedback processing is terminally unavailable for this process; "
+                    + "the current MCU channel session has terminated; "
                     + "no human intervention is requested"
             )
         }

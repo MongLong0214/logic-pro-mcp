@@ -122,7 +122,8 @@ struct Issue683MCUFeedbackLivenessTests {
         ))
         #expect(!health.available)
         #expect(health.detail.contains("dropped 3 event(s)"))
-        #expect(health.detail.contains("terminally unavailable for this process"))
+        #expect(health.detail.contains("current MCU channel session has terminated"))
+        #expect(!health.detail.contains("unavailable for this process"))
         #expect(health.detail.contains("no human intervention is requested"))
         #expect(!health.detail.contains("restart"))
     }
