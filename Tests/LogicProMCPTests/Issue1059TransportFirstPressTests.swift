@@ -128,6 +128,23 @@ private func issue1059Object(_ raw: String) -> [String: Any]? {
     return try? JSONSerialization.jsonObject(with: data) as? [String: Any]
 }
 
+private final class Issue1059ActionLog: @unchecked Sendable {
+    private let lock = NSLock()
+    private var actions: [String] = []
+
+    func record(_ action: String) {
+        lock.lock()
+        actions.append(action)
+        lock.unlock()
+    }
+
+    var recorded: [String] {
+        lock.lock()
+        defer { lock.unlock() }
+        return actions
+    }
+}
+
 @Suite("Issue #1059 — conditional transport checkboxes stop at a delivered press")
 struct Issue1059TransportFirstPressTests {
     @Test("Play and Record do not press again or fall through when readback lags", arguments: [
@@ -218,6 +235,87 @@ struct Issue1059TransportFirstPressTests {
         #expect(try #require(envelope["terminal"] as? Bool))
         #expect(envelope["terminal_scope"] as? String == "mcp_request_only")
         #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+        #expect(envelope["human_intervention_requests"] as? Int == 0)
+        #expect(envelope["human_dependent_transitions"] as? Int == 0)
+    }
+
+    @Test(
+        "Stop preserves the preceding Record-clear receipt when its legacy press is uncertain",
+        arguments: [true, false]
+    )
+    func stopLegacyPressFailurePreservesRecordClearReceipt(recordClearApplied: Bool) async throws {
+        let record = Issue1059Checkbox(
+            initial: true,
+            readback: recordClearApplied ? .pressFailsThenConfirmChanges : .staysAtInitial
+        )
+        let stopActions = Issue1059ActionLog()
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(10_595)
+        let window = builder.element(10_596)
+        let controlBar = builder.element(10_597)
+        let recordCheckbox = builder.element(10_598)
+        let transport = builder.element(10_599)
+        let stopButton = builder.element(10_600)
+        builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+        builder.setChildren(window, [controlBar, transport])
+        builder.setAttribute(controlBar, kAXRoleAttribute as String, kAXGroupRole as String)
+        builder.setAttribute(controlBar, kAXDescriptionAttribute as String, "컨트롤 막대")
+        builder.setChildren(controlBar, [recordCheckbox])
+        builder.setAttribute(recordCheckbox, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+        builder.setAttribute(recordCheckbox, kAXDescriptionAttribute as String, "녹음")
+        builder.setAttribute(transport, kAXRoleAttribute as String, kAXGroupRole as String)
+        builder.setAttribute(transport, kAXIdentifierAttribute as String, "Transport")
+        builder.setChildren(transport, [stopButton])
+        builder.setAttribute(stopButton, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(stopButton, kAXDescriptionAttribute as String, "Stop")
+        let logicRuntime = builder.makeLogicRuntime(
+            appElement: app,
+            attributeValueHandler: { element, attribute in
+                guard element == recordCheckbox, attribute == kAXValueAttribute as String else { return nil }
+                return .some(record.value())
+            },
+            setAttributeHandler: nil,
+            performActionHandler: { element, action in
+                if element == recordCheckbox { return record.perform(action) }
+                guard element == stopButton else { return false }
+                stopActions.record(action)
+                return false
+            }
+        )
+        let router = ChannelRouter()
+        let accessibility = AccessibilityChannel(runtime: .axBacked(
+            isTrusted: { true },
+            isLogicProRunning: { true },
+            logicRuntime: logicRuntime,
+            controlBarMouseRuntime: issue1059NoMouse
+        ))
+        let later = MockChannel(id: .mcu)
+        await router.register(accessibility)
+        await router.register(later)
+
+        let result = await router.route(operation: "transport.stop", params: [:])
+
+        #expect(record.performed == (recordClearApplied
+            ? [kAXPressAction as String, kAXConfirmAction as String]
+            : [kAXPressAction as String]))
+        #expect(stopActions.recorded == [kAXPressAction as String])
+        #expect(await later.executedOps.isEmpty)
+        #expect(!result.isSuccess)
+        let envelope = try #require(issue1059Object(result.message))
+        #expect(envelope["state"] as? String == "C")
+        #expect(envelope["error"] as? String == "ax_write_failed")
+        #expect(try #require(envelope["write_attempted"] as? Bool))
+        #expect(try #require(envelope["fallback_unsafe"] as? Bool))
+        #expect(envelope["record_clear_outcome"] as? String == (
+            recordClearApplied ? "applied" : "unconfirmed_after_write"
+        ))
+        if recordClearApplied {
+            #expect(try #require(envelope["record_clear_applied"] as? Bool))
+        } else {
+            #expect(envelope["record_clear_applied"] == nil)
+        }
+        #expect(try #require(envelope["terminal"] as? Bool))
+        #expect(envelope["terminal_scope"] as? String == "mcp_request_only")
         #expect(envelope["human_intervention_requests"] as? Int == 0)
         #expect(envelope["human_dependent_transitions"] as? Int == 0)
     }

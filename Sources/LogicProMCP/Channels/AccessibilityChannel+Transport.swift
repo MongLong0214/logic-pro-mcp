@@ -197,10 +197,30 @@ extension AccessibilityChannel {
             ))
         }
         guard AXHelpers.performAction(button, kAXPressAction, runtime: runtime.ax) else {
+            var extras: [String: Any] = [
+                "button": name,
+                "action": "axpress",
+                "write_attempted": true,
+                "safe_to_retry": false,
+                "fallback_unsafe": true,
+                "terminal": true,
+                "terminal_scope": "mcp_request_only",
+                "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
+            ]
+            if stopRecordPreAction.writeAttempted {
+                extras["record_clear_outcome"] = stopRecordPreAction.applied
+                    ? "applied"
+                    : "unconfirmed_after_write"
+            }
+            if stopRecordPreAction.applied {
+                extras["record_clear_applied"] = true
+            }
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
-                hint: "AXPress failed on transport button '\(name)'",
-                extras: ["button": name]
+                hint: "AXPress was attempted on transport button '\(name)', but its return value does not prove whether the action landed. Automatic handling terminated without another write.",
+                extras: extras
             ))
         }
         return .success(HonestContract.encodeStateB(

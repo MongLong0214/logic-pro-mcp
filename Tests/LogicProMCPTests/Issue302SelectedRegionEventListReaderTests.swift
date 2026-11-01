@@ -56,6 +56,95 @@ import Testing
         #expect(!result.canonicalNotesComplete)
         #expect(result.partialReason == .identityTimingAndTraversalUnproven)
         #expect(!result.writeAttempted)
+        #expect(!result.rowSelectionWriteAttempted)
+        #expect(result.rowSelectionRestored)
+    }
+
+    @Test func harvestedAttemptPublishesWriteAndRestoreTelemetryWithoutClaimingCompleteness() throws {
+        let selection = SelectedRegionEventListReader.SelectionObservation(
+            scopeComplete: true,
+            selected: [Self.region]
+        )
+        let observed = EventListReadbackCollector.ProbeObservation(
+            liveHeaderTitles: ["L", "M", "Position", "Status", "Ch", "Num", "Val", "Length/Info"],
+            rows: [Self.row()],
+            verificationRows: [Self.row()],
+            firstRowCellChildren: [:],
+            rawItemCountText: "1 Event",
+            rawRegionPath: "Selected MIDI"
+        )
+
+        let result = try SelectedRegionEventListReader.read(
+            selection: { selection },
+            collectAttempt: {
+                .init(
+                    result: .success(observed),
+                    rowSelectionWriteAttempted: true,
+                    rowSelectionRestored: true
+                )
+            }
+        )
+
+        #expect(result.writeAttempted)
+        #expect(result.rowSelectionWriteAttempted)
+        #expect(result.rowSelectionRestored)
+        #expect(!result.canonicalNotesComplete)
+    }
+
+    @Test func selectionDriftOverridesFailedHarvestAfterUnconditionalReadback() {
+        var reads = 0
+        let changed = SelectedRegionEventListReader.RegionIdentity(
+            name: "Another MIDI Region",
+            trackIndex: 4,
+            startBar: 13,
+            endBar: 16,
+            kind: "midi"
+        )
+
+        do {
+            _ = try SelectedRegionEventListReader.read(
+                selection: {
+                    defer { reads += 1 }
+                    return .init(
+                        scopeComplete: true,
+                        selected: [reads == 0 ? Self.region : changed]
+                    )
+                },
+                collectAttempt: {
+                    .init(
+                        result: .failure(EventListReadbackCollectorError.rowsUnavailable),
+                        rowSelectionWriteAttempted: true,
+                        rowSelectionRestored: true
+                    )
+                }
+            )
+            Issue.record("Expected the changed Arrange selection to refuse the partial read")
+        } catch let failure as SelectedRegionEventListReader.ReadAttemptFailure {
+            #expect(failure.refusal == .selectionChanged)
+            #expect(failure.rowSelectionWriteAttempted)
+            #expect(failure.rowSelectionRestored)
+        } catch {
+            Issue.record("Unexpected error: \(error)")
+        }
+        #expect(reads == 2)
+    }
+
+    @Test func refusalJSONPreservesHarvestWriteAndRestoreTelemetry() throws {
+        let failure = SelectedRegionEventListReader.ReadAttemptFailure(
+            refusal: .eventListObservationUnavailable,
+            rowSelectionWriteAttempted: true,
+            rowSelectionRestored: false
+        )
+
+        let body = try #require(sharedJSONObject(
+            SelectedRegionEventListReader.refusalJSON(failure)
+        ))
+
+        #expect(body["state"] as? String == "C")
+        #expect(body["reason"] as? String == "event_list_observation_unavailable")
+        #expect(try #require(body["write_attempted"] as? Bool))
+        #expect(try #require(body["row_selection_write_attempted"] as? Bool))
+        #expect(!(try #require(body["row_selection_restored"] as? Bool)))
     }
 
     @Test func rowContentDriftDuringCollectionRefuses() {
@@ -217,6 +306,10 @@ import Testing
         #expect(!canonicalNotesComplete)
         #expect(!eventListOwnerProven)
         #expect(!writeAttempted)
+        let rowSelectionWriteAttempted = try #require(body["row_selection_write_attempted"] as? Bool)
+        let rowSelectionRestored = try #require(body["row_selection_restored"] as? Bool)
+        #expect(!rowSelectionWriteAttempted)
+        #expect(rowSelectionRestored)
         #expect(body["event_list_item_count_text"] as? String == "1 Event")
         #expect(body["event_list_region_path"] as? String == "Selected MIDI")
         let observedRowsContentStable = try #require(body["observed_rows_content_stable"] as? Bool)

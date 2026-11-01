@@ -455,7 +455,7 @@ import Testing
         #expect(counter.selectedIndices.first == 1)
     }
 
-    @Test func virtualizedWindowsAreAccumulatedAcrossTwoIndependentPasses() throws {
+    @Test func publicPartialObserverHarvestsVirtualizedWindowsAcrossTwoIndependentPasses() throws {
         let fixture = Self.fixture(rowCount: 96, hollowRows: Set(32..<96))
         let counter = SelectionCounter()
         let builder = fixture.builder
@@ -510,17 +510,143 @@ import Testing
             }
         )
 
-        let evidence = try Self.collect(fixture, runtime: runtime)
+        builder.setAttribute(eventTab, kAXValueAttribute as String, 1)
+        let attempt = EventListReadbackCollector.observeHarvestedNoteTable(runtime: runtime)
+        let observation = try attempt.result.get()
 
-        #expect(evidence.harvest.orderedRowKeys.map(\.index) == Array(0..<96))
-        #expect(evidence.harvest.passA.count == 96)
-        #expect(evidence.harvest.passB.count == 96)
-        #expect(!evidence.harvest.exhaustion.isProven)
+        #expect(observation.rows.count == 96)
+        #expect(observation.verificationRows.count == 96)
+        #expect(observation.rows == observation.verificationRows)
+        #expect(attempt.rowSelectionWriteAttempted)
+        #expect(attempt.rowSelectionRestored)
         // Pass A materializes 32 then 64. Pass B starts from the last visible window,
         // independently wraps to 0 then 32, and restoration finally selects the original row 0.
         // A collector that aliases pass B to pass A produces only [32, 64, 0].
         #expect(counter.writes == 5)
         #expect(counter.selectedIndices == [32, 64, 0, 32, 0])
+    }
+
+    @Test func publicPartialObserverDoesNotWriteWhenEveryRowIsAlreadyMaterialized() throws {
+        let fixture = Self.fixture(rowCount: 3)
+        let counter = SelectionCounter()
+        fixture.builder.setAttribute(fixture.eventTab, kAXValueAttribute as String, 1)
+        let runtime = fixture.builder.makeLogicRuntime(
+            appElement: fixture.app,
+            setAttributeHandler: { _, _, _ in
+                counter.writes += 1
+                return true
+            },
+            performActionHandler: { _, _ in true }
+        )
+
+        let attempt = EventListReadbackCollector.observeHarvestedNoteTable(runtime: runtime)
+        let observation = try attempt.result.get()
+
+        #expect(observation.rows.count == 3)
+        #expect(observation.rows == observation.verificationRows)
+        #expect(counter.writes == 0)
+        #expect(!attempt.rowSelectionWriteAttempted)
+        #expect(attempt.rowSelectionRestored)
+    }
+
+    @Test func publicPartialObserverReportsUnreadableBaselineBeforeAnyWrite() {
+        let fixture = Self.fixture(rowCount: 3, hollowRows: [1, 2])
+        let counter = SelectionCounter()
+        fixture.builder.setAttribute(fixture.eventTab, kAXValueAttribute as String, 1)
+        let runtime = fixture.builder.makeLogicRuntime(
+            appElement: fixture.app,
+            attributeValueResultHandler: { element, attribute in
+                if element == fixture.table,
+                   attribute == (kAXSelectedRowsAttribute as String) {
+                    return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                }
+                return nil
+            },
+            setAttributeHandler: { _, _, _ in
+                counter.writes += 1
+                return true
+            },
+            performActionHandler: { _, _ in true }
+        )
+
+        let attempt = EventListReadbackCollector.observeHarvestedNoteTable(runtime: runtime)
+
+        #expect(throws: EventListReadbackCollectorError.rowSelectionBaselineUnavailable(
+            status: AXError.cannotComplete.rawValue
+        )) {
+            _ = try attempt.result.get()
+        }
+        #expect(counter.writes == 0)
+        #expect(!attempt.rowSelectionWriteAttempted)
+        #expect(!attempt.rowSelectionRestored)
+    }
+
+    @Test func publicPartialObserverReportsMalformedBaselineBeforeAnyWrite() {
+        let fixture = Self.fixture(rowCount: 3, hollowRows: [1, 2])
+        let counter = SelectionCounter()
+        fixture.builder.setAttribute(fixture.eventTab, kAXValueAttribute as String, 1)
+        let runtime = fixture.builder.makeLogicRuntime(
+            appElement: fixture.app,
+            attributeValueResultHandler: { element, attribute in
+                if element == fixture.table,
+                   attribute == (kAXSelectedRowsAttribute as String) {
+                    return .success("not rows" as NSString)
+                }
+                return nil
+            },
+            setAttributeHandler: { _, _, _ in
+                counter.writes += 1
+                return true
+            },
+            performActionHandler: { _, _ in true }
+        )
+
+        let attempt = EventListReadbackCollector.observeHarvestedNoteTable(runtime: runtime)
+
+        #expect(throws: EventListReadbackCollectorError.rowSelectionBaselineMalformed) {
+            _ = try attempt.result.get()
+        }
+        #expect(counter.writes == 0)
+        #expect(!attempt.rowSelectionWriteAttempted)
+        #expect(!attempt.rowSelectionRestored)
+    }
+
+    @Test func publicPartialObserverReportsRestorationReadbackFailure() {
+        let fixture = Self.fixture(rowCount: 3, hollowRows: [1, 2])
+        let builder = fixture.builder
+        let counter = SelectionCounter()
+        builder.setAttribute(fixture.eventTab, kAXValueAttribute as String, 1)
+        let runtime = builder.makeLogicRuntime(
+            appElement: fixture.app,
+            setAttributeHandler: { element, attribute, value in
+                guard element == fixture.table,
+                      attribute == (kAXSelectedRowsAttribute as String) else {
+                    builder.setAttribute(element, attribute, value)
+                    return true
+                }
+                counter.writes += 1
+                // The first write materializes the table. The restoration write reports success
+                // without changing the selection, so exact readback must fail the whole attempt.
+                guard counter.writes == 1 else { return true }
+                builder.setAttribute(element, attribute, value)
+                for field in fixture.rowFields {
+                    builder.setAttribute(field.position, kAXDescriptionAttribute as String, "1 1 1 1")
+                    builder.setAttribute(field.number, kAXValueAttribute as String, 60)
+                    builder.setAttribute(field.value, kAXValueDescriptionAttribute as String, "100")
+                }
+                return true
+            },
+            performActionHandler: { _, _ in true }
+        )
+
+        let attempt = EventListReadbackCollector.observeHarvestedNoteTable(runtime: runtime)
+
+        #expect(throws: EventListReadbackCollectorError.rowSelectionRestorationFailed(primary: nil)) {
+            _ = try attempt.result.get()
+        }
+        #expect(attempt.rowSelectionWriteAttempted)
+        #expect(!attempt.rowSelectionRestored)
+        #expect(counter.writes == 2)
     }
 
     @Test func unreadableOriginalRowSelectionRefusesBeforeAnyActuation() throws {

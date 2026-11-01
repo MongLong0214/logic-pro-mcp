@@ -24,6 +24,25 @@ import Testing
     #expect(VerifiedPluginCatalog.canonicalPluginID(from: "Definitely Not A Plugin") == nil)
 }
 
+@Test func testIssue1430StockEffectDisplayNamesResolveToCatalogIdentity() {
+    let expected = [
+        "ChromaVerb": "logic.stock.effect.chromaverb",
+        "Space Designer": "logic.stock.effect.space_designer",
+        "Tape Delay": "logic.stock.effect.tape_delay",
+        "Stereo Delay": "logic.stock.effect.stereo_delay",
+        "Overdrive": "logic.stock.effect.overdrive",
+    ]
+
+    for (displayName, pluginID) in expected {
+        #expect(StockPluginCatalog.entry(id: pluginID)?.displayName == displayName)
+        #expect(VerifiedPluginCatalog.canonicalPluginID(from: displayName) == pluginID)
+        #expect(VerifiedPluginCatalog.canonicalPluginID(from: pluginID) == pluginID)
+        #expect(VerifiedPluginCatalog.pluginID(forObservedName: displayName) == pluginID)
+        #expect(VerifiedPluginCatalog.canonicalParamKey(pluginID: pluginID, alias: "unmeasured_parameter") == nil)
+        #expect(VerifiedPluginCatalog.paramCapability(pluginID: pluginID, paramKey: "unmeasured_parameter") == .unknownParameter)
+    }
+}
+
 // MARK: - Parameter key alias resolution (R5: gain → gain_db)
 
 @Test func testCanonicalParamKeyMapsGainAlias() {
