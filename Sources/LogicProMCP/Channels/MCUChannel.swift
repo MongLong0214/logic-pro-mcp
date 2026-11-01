@@ -513,7 +513,8 @@ actor MCUChannel: Channel {
         if ingress.overflowed {
             return .unavailable(
                 "MCU feedback overflow: dropped \(ingress.droppedEventCount) event(s); "
-                    + "MCU is unavailable until the server restarts"
+                    + "MCU feedback processing is terminally unavailable for this process; "
+                    + "no human intervention is requested"
             )
         }
         let workBudgetDetail = ingress.callbackWorkBudgetDroppedEventCount > 0
