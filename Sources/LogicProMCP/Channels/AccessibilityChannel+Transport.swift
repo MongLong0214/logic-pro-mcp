@@ -1335,6 +1335,11 @@ extension AccessibilityChannel {
                 "menu_state": classification.menuObservation.rawValue,
                 "safe_to_retry": false,
                 "fallback_unsafe": true,
+                "terminal": true,
+                "terminal_scope": "mcp_request_only",
+                "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
             ]) { _, new in new }
             switch classification.globalInputEvidence {
             case .attempted:
@@ -1402,6 +1407,11 @@ extension AccessibilityChannel {
                     "write_attempted": false,
                     "safe_to_retry": false,
                     "fallback_unsafe": true,
+                    "terminal": true,
+                    "terminal_scope": "mcp_request_only",
+                    "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                    "human_dependent_transitions": 0,
                 ]) { _, new in new }
             ))
         }
