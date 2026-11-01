@@ -136,8 +136,7 @@ extension AccessibilityChannel {
             // exact Marker List table.
             extras["selection_write_attempted"] = false
             extras["write_attempted"] = false
-            extras["safe_to_retry"] = true
-            extras["fallback_unsafe"] = true
+            markMarkerDeleteTerminalFallback(&extras, safeToRetry: true)
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
                 hint: "Marker index \(index) could not be selected, so nothing was pressed",
@@ -157,8 +156,7 @@ extension AccessibilityChannel {
             // it. The destructive menu route must not proceed, but the receipt must retain the
             // write attempt rather than claiming the visible selection was untouched.
             extras["write_attempted"] = false
-            extras["safe_to_retry"] = true
-            extras["fallback_unsafe"] = true
+            markMarkerDeleteTerminalFallback(&extras, safeToRetry: true)
             if let confirmationError = selection.confirmationError {
                 extras["selection_state"] = "unreadable"
                 extras["selection_ax_status"] = Int(confirmationError.raw)
@@ -228,8 +226,7 @@ extension AccessibilityChannel {
                 // AXShowMenu may have left an unobservable menu on screen. This is not a table
                 // focus failure, and no other deletion actuator may be attempted.
                 extras["write_attempted"] = false
-                extras["safe_to_retry"] = false
-                extras["fallback_unsafe"] = true
+                markMarkerDeleteTerminalFallback(&extras, safeToRetry: false)
                 extras["menu_state"] = menuState
                 if let menuCancelActionState {
                     extras["menu_cancel_action_state"] = menuCancelActionState
@@ -244,8 +241,7 @@ extension AccessibilityChannel {
             // element route into a key post: a PID only identifies Logic, not its current key
             // responder, so the input could delete an unrelated Logic object.
             extras["write_attempted"] = false
-            extras["safe_to_retry"] = true
-            extras["fallback_unsafe"] = true
+            markMarkerDeleteTerminalFallback(&extras, safeToRetry: true)
             return .error(HonestContract.encodeStateC(
                 error: failure.error,
                 hint: failure.hint + " No deletion was issued because no element-targeted Marker List route is available.",
@@ -542,6 +538,19 @@ extension AccessibilityChannel {
             return .success(HonestContract.encodeStateB(reason: .readbackMismatch, extras: extras))
         }
         return .success(HonestContract.encodeStateA(extras: extras))
+    }
+
+    private static func markMarkerDeleteTerminalFallback(
+        _ extras: inout [String: Any],
+        safeToRetry: Bool
+    ) {
+        extras["safe_to_retry"] = safeToRetry
+        extras["fallback_unsafe"] = true
+        extras["terminal"] = true
+        extras["terminal_scope"] = "mcp_request_only"
+        extras["human_intervention_required"] = false
+        extras["human_intervention_requests"] = 0
+        extras["human_dependent_transitions"] = 0
     }
 
     /// The inventory records only position occurrences. A duplicate position is a readable
