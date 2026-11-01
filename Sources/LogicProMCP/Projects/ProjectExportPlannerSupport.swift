@@ -139,7 +139,7 @@ extension ProjectExportPlanner {
             steps.append(ProjectExportBlockedStep(
                 operation: "export_resume",
                 reason: "Stem filenames are assigned by Logic after export, so existing artifact identity cannot be established before a run.",
-                safeAlternative: "Re-run stem export into a clean destination; partial stem export cannot be resumed."
+                safeAlternative: "No automatic resume is available; partial stem artifacts remain unchanged and this request terminates."
             ))
         }
         return steps
