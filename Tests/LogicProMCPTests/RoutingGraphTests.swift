@@ -296,6 +296,53 @@ struct RoutingGraphTests {
         #expect(!refused.writeAttempted)
     }
 
+    @Test func completeGraphRefusesCompetingMainOutputsForOneSource() {
+        let first = assignment(.mainOutput, source: trackNode.id, destination: "bus-1")
+        let competing = assignment(.mainOutput, source: trackNode.id, destination: "bus-2")
+        let singleOutput = graph(nodes: [trackNode, busNode(1), busNode(2)], edges: [first])
+        #expect(singleOutput.isConsistent)
+        #expect(evaluate(request(), against: singleOutput).allowed)
+
+        let peer = RoutingNode(
+            id: "track-2",
+            kind: .track,
+            displayName: "Peer",
+            busNumber: nil,
+            targetRef: TargetReference(rawValue: "trk_peer")
+        )
+        let oneOutputPerSource = graph(
+            nodes: [trackNode, peer, busNode(1), busNode(2)],
+            edges: [first, assignment(.mainOutput, source: peer.id, destination: "bus-2")]
+        )
+        #expect(oneOutputPerSource.isConsistent)
+
+        let noOutput = RoutingNode(
+            id: "track-no-output",
+            kind: .track,
+            displayName: "No Output",
+            busNumber: nil,
+            targetRef: TargetReference(rawValue: "trk_no_output"),
+            outputClassification: .noOutput
+        )
+        let explicitNoOutput = graph(
+            nodes: [trackNode, noOutput, busNode(1), busNode(2)],
+            edges: [first]
+        )
+        #expect(explicitNoOutput.isConsistent, "No Output is valid without an invented main-output edge")
+
+        let invalid = graph(
+            nodes: [trackNode, busNode(1), busNode(2)],
+            edges: [first, competing]
+        )
+        #expect(!invalid.isConsistent)
+        let refused = evaluate(request(), against: invalid)
+        #expect(!refused.allowed)
+        #expect(refused.rejections.contains(
+            .partialGraphUnsafe(reason: "routing graph is incomplete or inconsistent")
+        ))
+        #expect(!refused.writeAttempted)
+    }
+
     @Test(arguments: [false, true])
     func inputDiffPairsTheSameReceiverWhenItsBusChanges(reversed: Bool) {
         let old = assignment(.inputAssignment, source: "bus-1", destination: "receiver-a")

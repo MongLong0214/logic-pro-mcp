@@ -812,21 +812,23 @@ struct Issue966IntentAssessmentTests {
     // violation, or take the first of several edges.
     @Test func aBusSourceWithoutExactlyOneBusEdgeIsUnverified() throws {
         let trackDestination = trackNode(1, name: "Drum Bus")
-        let cases: [(RoutingGraph, Bool)] = [
-            (graph(nodes: [trackNode(0), drumBus], edges: []), false),
+        let cases: [(RoutingGraph, Audit.IntentReason, Int?, Bool)] = [
+            (graph(nodes: [trackNode(0), drumBus], edges: []), .outputEdgeAmbiguous, 0, false),
             (graph(nodes: [trackNode(0), drumBus, reverbBus],
-                   edges: [mainOutput(from: 0, to: drumBus.id), mainOutput(from: 0, to: reverbBus.id)]), true),
-            (graph(nodes: [trackNode(0), trackDestination], edges: [mainOutput(from: 0, to: trackDestination.id)]), true),
+                   edges: [mainOutput(from: 0, to: drumBus.id), mainOutput(from: 0, to: reverbBus.id)]),
+             .routingGraphInconsistent, nil, false),
+            (graph(nodes: [trackNode(0), trackDestination], edges: [mainOutput(from: 0, to: trackDestination.id)]),
+             .outputEdgeAmbiguous, 0, true),
         ]
-        for (routing, edgeObserved) in cases {
+        for (routing, reason, trackIndex, edgeObserved) in cases {
             let assessment = Audit.assessIntent(policy: try kickPolicy(bus: 3), capture: threeTrackCapture, graph: routing)
             let finding = try onlyFinding(assessment)
 
             #expect(finding.status == .unverified)
             #expect(finding.severity == .info)
-            #expect(finding.reasons == [.outputEdgeAmbiguous])
+            #expect(finding.reasons == [reason])
             #expect(finding.observed == nil)
-            #expect(finding.target.trackIndex == 0)
+            #expect(finding.target.trackIndex == trackIndex)
             #expect(finding.coverage.outputEdgeObserved == edgeObserved)
             #expect(!finding.coverage.destinationBusObserved)
             #expect(!assessment.changeRequired)
