@@ -90,6 +90,76 @@ import Testing
         )
     }
 
+    private static func probeCallSiteOffenders(
+        fileName: String,
+        strictProbeReferences: Int,
+        harvestedProbeReferences: Int
+    ) -> [String] {
+        var offenders: [String] = []
+        if strictProbeReferences > 0,
+           fileName != probeEntryFile,
+           fileName != collectorFile {
+            offenders.append("\(fileName): references observeNoteTable")
+        }
+        if harvestedProbeReferences > 0,
+           fileName != partialReaderFile,
+           fileName != collectorFile {
+            offenders.append("\(fileName): references observeHarvestedNoteTable")
+        }
+        return offenders
+    }
+
+    private struct FileCensus {
+        let offenders: [String]
+        let proofMintInAssessment: Int?
+        let assessmentReferencesInProvider: Int?
+        let strictProbeReferencesInEntrypoint: Int?
+        let harvestedProbeReferencesInPartialReader: Int?
+    }
+
+    private static func fileCensus(
+        fileName: String,
+        isAssessment: Bool,
+        scan: (
+            proofMints: Int,
+            assessmentReferences: Int,
+            strictProbeReferences: Int,
+            harvestedProbeReferences: Int
+        )
+    ) -> FileCensus {
+        var offenders = probeCallSiteOffenders(
+            fileName: fileName,
+            strictProbeReferences: scan.strictProbeReferences,
+            harvestedProbeReferences: scan.harvestedProbeReferences
+        )
+        if isAssessment {
+            return FileCensus(
+                offenders: offenders,
+                proofMintInAssessment: scan.proofMints,
+                assessmentReferencesInProvider: nil,
+                strictProbeReferencesInEntrypoint: nil,
+                harvestedProbeReferencesInPartialReader: nil
+            )
+        }
+
+        let providerReferenceCount = fileName == providerFile ? scan.assessmentReferences : nil
+        if scan.assessmentReferences > 0, providerReferenceCount == nil {
+            offenders.append("\(fileName): references assessReadback")
+        }
+        if scan.proofMints > 0 {
+            offenders.append("\(fileName): mints CompleteProof outside its file")
+        }
+        return FileCensus(
+            offenders: offenders,
+            proofMintInAssessment: nil,
+            assessmentReferencesInProvider: providerReferenceCount,
+            strictProbeReferencesInEntrypoint:
+                fileName == probeEntryFile ? scan.strictProbeReferences : nil,
+            harvestedProbeReferencesInPartialReader:
+                fileName == partialReaderFile ? scan.harvestedProbeReferences : nil
+        )
+    }
+
     @Test func combinedScanParsesOnceAndRetainsSyntaxBoundaries() {
         let source = ##"""
         // assessReadback observeNoteTable observeHarvestedNoteTable CompleteProof()
@@ -115,6 +185,21 @@ import Testing
         #expect(result.strictProbeReferences == 3)
         #expect(result.harvestedProbeReferences == 3)
         #expect(result.proofMints == 2)
+    }
+
+    @Test func assessmentFileCannotBypassProbeCallSiteCensus() {
+        let scan = Self.scan("let strict = observeNoteTable; let harvest = observeHarvestedNoteTable")
+        let census = Self.fileCensus(
+            fileName: Self.assessmentFile,
+            isAssessment: true,
+            scan: scan
+        )
+
+        #expect(census.offenders == [
+            "\(Self.assessmentFile): references observeNoteTable",
+            "\(Self.assessmentFile): references observeHarvestedNoteTable",
+        ])
+        #expect(census.proofMintInAssessment == 0)
     }
 
     @Test func onlyEventListProviderMayAssessReadbackAndProofMintIsExact() throws {
@@ -154,32 +239,24 @@ import Testing
             }
             let isAssessment = url.standardizedFileURL.path == assessmentPath
             let scan = Self.scan(text)
-            let proofMints = scan.proofMints
-            if isAssessment {
+            let census = Self.fileCensus(
+                fileName: url.lastPathComponent,
+                isAssessment: isAssessment,
+                scan: scan
+            )
+            offenders.append(contentsOf: census.offenders)
+            if let count = census.proofMintInAssessment {
                 sawAssessmentFile = true
-                proofMintInAssessment = proofMints
-                continue
+                proofMintInAssessment = count
             }
-            let assessmentReferences = scan.assessmentReferences
-            if url.lastPathComponent == Self.providerFile {
-                assessmentReferencesInProvider = assessmentReferences
-            } else if assessmentReferences > 0 {
-                offenders.append("\(url.lastPathComponent): references assessReadback")
+            if let count = census.assessmentReferencesInProvider {
+                assessmentReferencesInProvider = count
             }
-            let strictProbeReferences = scan.strictProbeReferences
-            if url.lastPathComponent == Self.probeEntryFile {
-                strictProbeReferencesInEntrypoint = strictProbeReferences
-            } else if strictProbeReferences > 0, url.lastPathComponent != Self.collectorFile {
-                offenders.append("\(url.lastPathComponent): references observeNoteTable")
+            if let count = census.strictProbeReferencesInEntrypoint {
+                strictProbeReferencesInEntrypoint = count
             }
-            let harvestedProbeReferences = scan.harvestedProbeReferences
-            if url.lastPathComponent == Self.partialReaderFile {
-                harvestedProbeReferencesInPartialReader = harvestedProbeReferences
-            } else if harvestedProbeReferences > 0, url.lastPathComponent != Self.collectorFile {
-                offenders.append("\(url.lastPathComponent): references observeHarvestedNoteTable")
-            }
-            if proofMints > 0 {
-                offenders.append("\(url.lastPathComponent): mints CompleteProof outside its file")
+            if let count = census.harvestedProbeReferencesInPartialReader {
+                harvestedProbeReferencesInPartialReader = count
             }
         }
 
