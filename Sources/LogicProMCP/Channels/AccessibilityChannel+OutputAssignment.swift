@@ -223,7 +223,10 @@ extension AccessibilityChannel {
         guard let playing, let recording else {
             return refusal(.transportStateUnknown, "The transport's Play or Record state did not read, "
                 + "so it cannot be shown stopped; nothing was pressed.",
-                ["transport_play_read": playing != nil, "transport_record_read": recording != nil])
+                terminalPreconditionFields.merging([
+                    "transport_play_read": playing != nil,
+                    "transport_record_read": recording != nil,
+                ]) { _, new in new })
         }
         if playing || recording {
             let state = recording ? "recording" : "playing"
