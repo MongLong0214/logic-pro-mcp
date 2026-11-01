@@ -159,7 +159,7 @@ enum TempoMapAX {
             case let .crossedTarget(previous, observed, target):
                 return "Tempo write crossed \(target): \(previous) became \(observed), so the measured integer walk is no longer authorized."
             case let .unmeasuredStep(previous, observed, target):
-                return "Tempo write observed an unmeasured step toward \(target): \(previous) became \(observed), not one BPM."
+                return "Tempo write observed an unmeasured transition while targeting \(target): \(previous) became \(observed), not one BPM."
             case let .attemptBudgetExhausted(observed, target, budget):
                 return "Tempo write spent its bounded budget of \(budget) step(s) and stopped at \(observed), not \(target)."
             case let .deadlineExceeded(observed, target):
@@ -896,6 +896,16 @@ enum TempoMapAX {
                     receipt: receipt(finalObserved: next.tempo)
                 )
             }
+            guard distance(current.tempo, next.tempo) == 1 else {
+                return .failure(
+                    .unmeasuredStep(
+                        previous: current.tempo,
+                        observed: next.tempo,
+                        target: target
+                    ),
+                    receipt: receipt(finalObserved: next.tempo)
+                )
+            }
             if crossedTarget(from: current.tempo, to: next.tempo, target: target) {
                 return .failure(
                     .crossedTarget(previous: current.tempo, observed: next.tempo, target: target),
@@ -905,16 +915,6 @@ enum TempoMapAX {
             guard movesTowardTarget(from: current.tempo, to: next.tempo, target: target) else {
                 return .failure(
                     .movedAway(previous: current.tempo, observed: next.tempo, target: target),
-                    receipt: receipt(finalObserved: next.tempo)
-                )
-            }
-            guard distance(current.tempo, next.tempo) == 1 else {
-                return .failure(
-                    .unmeasuredStep(
-                        previous: current.tempo,
-                        observed: next.tempo,
-                        target: target
-                    ),
                     receipt: receipt(finalObserved: next.tempo)
                 )
             }
