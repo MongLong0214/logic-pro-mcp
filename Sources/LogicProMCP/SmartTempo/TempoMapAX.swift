@@ -169,7 +169,7 @@ enum TempoMapAX {
 
         var disprovesSelectedEventCustody: Bool {
             switch self {
-            case .selectedEventChanged, .unmeasuredStep:
+            case .selectedEventChanged, .movedAway, .unmeasuredStep:
                 return true
             default:
                 return false

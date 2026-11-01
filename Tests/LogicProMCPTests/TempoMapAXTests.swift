@@ -74,9 +74,9 @@ struct TempoMapAXTests {
         #expect(refusedOutcome.rollback == .notNeeded(writes: 0, finalObserved: 118))
     }
 
-    @Test("a write that moves away from the target refuses")
+    @Test("a one-BPM move away from the target refuses without restoration")
     func writeThatMovesAwayRefuses() throws {
-        let fixture = TempoListFixture(tempo: 118, steps: [.away, .toward])
+        let fixture = TempoListFixture(tempo: 118, steps: [.away])
 
         let outcome = TempoMapAX.setExistingTempo(
             at: 0,
@@ -89,8 +89,14 @@ struct TempoMapAXTests {
 
         #expect(refusedOutcome.failure == .movedAway(previous: 118, observed: 117, target: 120))
         #expect(refusedOutcome.failure.description.contains("moved away"))
-        #expect(refusedOutcome.rollback == .restored(writes: 1, finalObserved: 118))
-        #expect(fixture.currentTempo == 118)
+        #expect(refusedOutcome.forward == .init(attempts: 1, acceptedWrites: 1, finalObserved: 117))
+        #expect(refusedOutcome.rollback == .failed(
+            failure: .movedAway(previous: 118, observed: 117, target: 120),
+            writes: 0,
+            finalObserved: 117
+        ))
+        #expect(fixture.writeElementIDs.count == 1)
+        #expect(fixture.currentTempo == 117)
     }
 
     @Test("already-at-target is a distinguished zero-write success")
