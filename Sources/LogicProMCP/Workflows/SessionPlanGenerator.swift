@@ -235,9 +235,10 @@ enum SessionPlanGenerator {
                     SessionUnsupportedStep(
                         operation: "empty_prompt",
                         reason: "A non-empty musical prompt is required for session planning.",
-                        safeAlternative: "Ask for a concrete idea such as '16-bar funk in E minor at 110 BPM'."
+                        safeAlternative: "Session planning terminated because no musical prompt was supplied; no tool or project action was attempted and no human intervention was requested."
                     ),
-                ]
+                ],
+                terminal: true
             )
         }
 
@@ -412,12 +413,13 @@ enum SessionPlanGenerator {
         status: String,
         intent: SessionParsedIntent,
         catalog: SessionInstrumentCatalogStatus,
-        unsupported: [SessionUnsupportedStep]
+        unsupported: [SessionUnsupportedStep],
+        terminal: Bool = false
     ) -> SessionPlan {
         let sections = sections(for: intent.totalBars, genre: intent.genre)
         let chords = chordPlan(for: intent)
         let tracks = trackPlan(for: prompt, intent: intent, catalog: catalog)
-        let steps = workflowSteps(for: intent, tracks: tracks)
+        let steps = terminal ? [] : workflowSteps(for: intent, tracks: tracks)
         let validation = validateWorkflowSteps(steps)
 
         return SessionPlan(
@@ -440,7 +442,7 @@ enum SessionPlanGenerator {
                 SessionPlanProvenance(field: "chord_plan", source: "diatonic_progression_heuristic", confidence: "medium"),
                 SessionPlanProvenance(field: "workflow_steps", source: "current_mcp_public_command_census", confidence: "high"),
             ],
-            nextSafeAction: "review_plan"
+            nextSafeAction: terminal ? "none_terminal" : "review_plan"
         )
     }
 
