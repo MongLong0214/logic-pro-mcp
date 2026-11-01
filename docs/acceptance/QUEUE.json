@@ -1,0 +1,9 @@
+{
+  "format": "lpm-queue/1",
+  "entries": [
+    {
+      "spec": "docs/acceptance/291.json",
+      "head": "24d6c6f56ca3f902a78ac3627b9d1cd6b5c9d2dc"
+    }
+  ]
+}
