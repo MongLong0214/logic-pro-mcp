@@ -33,6 +33,34 @@ enum SelectedRegionEventListReader {
         let canonicalNotesComplete: Bool
         let partialReason: PartialReason
         let writeAttempted: Bool
+        let rowSelectionWriteAttempted: Bool
+        let rowSelectionRestored: Bool
+
+        init(
+            selectedRegionObservation: RegionIdentity,
+            rawRows: [RawEventRow],
+            liveHeaderTitles: [String],
+            rawItemCountText: String,
+            rawRegionPath: String,
+            observedRowsContentStable: Bool,
+            canonicalNotesComplete: Bool,
+            partialReason: PartialReason,
+            writeAttempted: Bool,
+            rowSelectionWriteAttempted: Bool? = nil,
+            rowSelectionRestored: Bool? = nil
+        ) {
+            self.selectedRegionObservation = selectedRegionObservation
+            self.rawRows = rawRows
+            self.liveHeaderTitles = liveHeaderTitles
+            self.rawItemCountText = rawItemCountText
+            self.rawRegionPath = rawRegionPath
+            self.observedRowsContentStable = observedRowsContentStable
+            self.canonicalNotesComplete = canonicalNotesComplete
+            self.partialReason = partialReason
+            self.writeAttempted = writeAttempted
+            self.rowSelectionWriteAttempted = rowSelectionWriteAttempted ?? writeAttempted
+            self.rowSelectionRestored = rowSelectionRestored ?? !writeAttempted
+        }
     }
 
     enum Refusal: Error, Equatable, Sendable {
@@ -41,6 +69,13 @@ enum SelectedRegionEventListReader {
         case selectedRegionCount(Int)
         case selectionChanged
         case eventRowsChanged
+        case eventListObservationUnavailable
+    }
+
+    struct ReadAttemptFailure: Error {
+        let refusal: Refusal
+        let rowSelectionWriteAttempted: Bool
+        let rowSelectionRestored: Bool
     }
 
     static func readProduction(
@@ -53,7 +88,7 @@ enum SelectedRegionEventListReader {
                 }
                 return observation
             },
-            collect: { try EventListReadbackCollector.observeNoteTable(runtime: runtime) }
+            collectAttempt: { EventListReadbackCollector.observeHarvestedNoteTable(runtime: runtime) }
         )
     }
 
@@ -85,7 +120,80 @@ enum SelectedRegionEventListReader {
             observedRowsContentStable: true,
             canonicalNotesComplete: false,
             partialReason: .identityTimingAndTraversalUnproven,
-            writeAttempted: false
+            writeAttempted: false,
+            rowSelectionWriteAttempted: false,
+            rowSelectionRestored: true
+        )
+    }
+
+    /// Production partial read. The Arrange selection is read after the collection attempt even
+    /// when Event List harvesting failed, so selection drift cannot be hidden by the earlier error.
+    static func read(
+        selection: () throws -> SelectionObservation,
+        collectAttempt: () -> EventListReadbackCollector.PartialProbeAttempt
+    ) throws -> PartialRead {
+        let before = try selection()
+        guard before.scopeComplete else { throw Refusal.selectionScopeIncomplete }
+        guard before.selected.count == 1, let region = before.selected.first else {
+            throw Refusal.selectedRegionCount(before.selected.count)
+        }
+
+        let attempt = collectAttempt()
+        let after: SelectionObservation
+        do {
+            after = try selection()
+        } catch {
+            throw ReadAttemptFailure(
+                refusal: (error as? Refusal) ?? .selectionUnreadable,
+                rowSelectionWriteAttempted: attempt.rowSelectionWriteAttempted,
+                rowSelectionRestored: attempt.rowSelectionRestored
+            )
+        }
+        guard after.scopeComplete else {
+            throw ReadAttemptFailure(
+                refusal: .selectionScopeIncomplete,
+                rowSelectionWriteAttempted: attempt.rowSelectionWriteAttempted,
+                rowSelectionRestored: attempt.rowSelectionRestored
+            )
+        }
+        guard after.selected == [region] else {
+            throw ReadAttemptFailure(
+                refusal: .selectionChanged,
+                rowSelectionWriteAttempted: attempt.rowSelectionWriteAttempted,
+                rowSelectionRestored: attempt.rowSelectionRestored
+            )
+        }
+
+        let observation: EventListReadbackCollector.ProbeObservation
+        do {
+            observation = try attempt.result.get()
+        } catch {
+            throw ReadAttemptFailure(
+                refusal: .eventListObservationUnavailable,
+                rowSelectionWriteAttempted: attempt.rowSelectionWriteAttempted,
+                rowSelectionRestored: attempt.rowSelectionRestored
+            )
+        }
+        guard observation.rows == observation.verificationRows else {
+            throw ReadAttemptFailure(
+                refusal: .eventRowsChanged,
+                rowSelectionWriteAttempted: attempt.rowSelectionWriteAttempted,
+                rowSelectionRestored: attempt.rowSelectionRestored
+            )
+        }
+
+        return PartialRead(
+            selectedRegionObservation: region,
+            rawRows: observation.rows,
+            liveHeaderTitles: observation.liveHeaderTitles,
+            rawItemCountText: observation.rawItemCountText,
+            rawRegionPath: observation.rawRegionPath,
+            observedRowsContentStable: true,
+            canonicalNotesComplete: false,
+            partialReason: .identityTimingAndTraversalUnproven,
+            writeAttempted: attempt.rowSelectionWriteAttempted,
+            rowSelectionWriteAttempted: attempt.rowSelectionWriteAttempted,
+            rowSelectionRestored: attempt.rowSelectionRestored
         )
     }
 
@@ -124,12 +232,16 @@ enum SelectedRegionEventListReader {
             "event_list_owner_proven": false,
             "canonical_notes_complete": result.canonicalNotesComplete,
             "write_attempted": result.writeAttempted,
+            "row_selection_write_attempted": result.rowSelectionWriteAttempted,
+            "row_selection_restored": result.rowSelectionRestored,
         ])
     }
 
     static func refusalJSON(_ error: Error) -> String {
+        let attemptFailure = error as? ReadAttemptFailure
+        let reportedError: Error = attemptFailure?.refusal ?? error
         let reason: String
-        switch error {
+        switch reportedError {
         case Refusal.selectionUnreadable:
             reason = "selection_unreadable"
         case Refusal.selectionScopeIncomplete:
@@ -140,6 +252,8 @@ enum SelectedRegionEventListReader {
             reason = "selection_changed_during_collection"
         case Refusal.eventRowsChanged:
             reason = "event_rows_changed_during_collection"
+        case Refusal.eventListObservationUnavailable:
+            reason = "event_list_observation_unavailable"
         default:
             reason = "event_list_observation_unavailable"
         }
@@ -148,7 +262,9 @@ enum SelectedRegionEventListReader {
             "state": "C",
             "error": "selected_region_event_read_unavailable",
             "reason": reason,
-            "write_attempted": false,
+            "write_attempted": attemptFailure?.rowSelectionWriteAttempted ?? false,
+            "row_selection_write_attempted": attemptFailure?.rowSelectionWriteAttempted ?? false,
+            "row_selection_restored": attemptFailure?.rowSelectionRestored ?? false,
         ])
     }
 }
