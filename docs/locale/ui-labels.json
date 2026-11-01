@@ -2263,7 +2263,7 @@
     "附加信息",
     "附加資訊"
    ],
-   "rationale": "Event List additional-info filter; Korean read from docs/observations/2026-09-13-the-event-list-resolves-its-columns-and-follows-the-selected-region.json.",
+   "rationale": "Event List additional-info filter; ten-locale titles derived from the cited Apple row.",
    "match": "exact",
    "coverage": {
     "en-US": "derived",
@@ -2286,7 +2286,7 @@
     "触后",
     "後觸"
    ],
-   "rationale": "Event List aftertouch filter; Korean read from docs/observations/2026-09-13-the-event-list-resolves-its-columns-and-follows-the-selected-region.json.",
+   "rationale": "Event List aftertouch filter; ten-locale titles derived from the cited Apple row.",
    "match": "exact",
    "coverage": {
     "en-US": "derived",
@@ -2310,7 +2310,7 @@
     "Contrôleur",
     "控制器"
    ],
-   "rationale": "Event List controller filter; Korean read from docs/observations/2026-09-13-the-event-list-resolves-its-columns-and-follows-the-selected-region.json.",
+   "rationale": "Event List controller filter; ten-locale titles derived from the cited Apple row.",
    "match": "exact",
    "coverage": {
     "en-US": "derived",
@@ -2335,7 +2335,7 @@
     "Note",
     "音符"
    ],
-   "rationale": "Event List note-event filter; Korean read from docs/observations/2026-09-13-the-event-list-resolves-its-columns-and-follows-the-selected-region.json.",
+   "rationale": "Event List note-event filter; ten-locale titles derived from the cited Apple row.",
    "match": "exact",
    "coverage": {
     "en-US": "derived",
@@ -2360,7 +2360,7 @@
     "弯音",
     "滑音"
    ],
-   "rationale": "Event List pitch-bend filter; Korean read from docs/observations/2026-09-13-the-event-list-resolves-its-columns-and-follows-the-selected-region.json.",
+   "rationale": "Event List pitch-bend filter; ten-locale titles derived from the cited Apple row.",
    "match": "exact",
    "coverage": {
     "en-US": "derived",
@@ -2387,7 +2387,7 @@
     "复音触后",
     "多重後觸"
    ],
-   "rationale": "Event List polyphonic-aftertouch filter; Korean read from docs/observations/2026-09-13-the-event-list-resolves-its-columns-and-follows-the-selected-region.json.",
+   "rationale": "Event List polyphonic-aftertouch filter; ten-locale titles derived from the cited Apple row.",
    "match": "exact",
    "coverage": {
     "en-US": "derived",
@@ -2413,7 +2413,7 @@
     "音色变化",
     "程式更動"
    ],
-   "rationale": "Event List program-change filter; Korean read from docs/observations/2026-09-13-the-event-list-resolves-its-columns-and-follows-the-selected-region.json.",
+   "rationale": "Event List program-change filter; ten-locale titles derived from the cited Apple row.",
    "match": "exact",
    "coverage": {
     "en-US": "derived",
@@ -2438,7 +2438,7 @@
     "系统专用",
     "系統保留"
    ],
-   "rationale": "Event List system-exclusive filter; Korean read from docs/observations/2026-09-13-the-event-list-resolves-its-columns-and-follows-the-selected-region.json.",
+   "rationale": "Event List system-exclusive filter; ten-locale titles derived from the cited Apple row.",
    "match": "exact",
    "coverage": {
     "en-US": "derived",
