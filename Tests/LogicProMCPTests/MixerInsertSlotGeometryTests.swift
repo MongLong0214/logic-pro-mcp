@@ -441,7 +441,7 @@ func invalidMultiSlotGeometryIsNotAnAddressableOrder(_ caseName: String) {
     #expect(plugins.map { $0["insert"] as? Int } == [0, 1, 2])
     #expect(plugins.map { $0["name"] as? String } == ["Channel EQ", "Compressor", "ChromaVerb"])
     #expect(plugins.map { $0["plugin_id"] as? String }
-        == ["logic.stock.effect.channel_eq", "logic.stock.effect.compressor", nil])
+        == ["logic.stock.effect.channel_eq", "logic.stock.effect.compressor", "logic.stock.effect.chromaverb"])
     #expect(!plugins.contains { $0["read_status"] as? String == "empty" })
 }
 
