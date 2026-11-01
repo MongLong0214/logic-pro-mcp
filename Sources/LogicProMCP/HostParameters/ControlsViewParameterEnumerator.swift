@@ -300,6 +300,13 @@ enum ControlsViewParameterEnumerator {
               }) else {
             return nil
         }
+        for (index, candidate) in candidates.enumerated() {
+            guard !candidates[..<index].contains(where: {
+                CFEqual($0, candidate)
+            }) else {
+                return nil
+            }
+        }
         return candidates
     }
 

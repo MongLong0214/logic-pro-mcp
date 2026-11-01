@@ -5,6 +5,16 @@ import Testing
 
 @Suite("ADR-018 Controls-view parameter enumerator")
 struct ControlsViewParameterEnumeratorTests {
+    @Test func duplicatePhysicalRowsCannotMintDistinctParameterReferences() {
+        let fixture = makeControlsFixture(duplicateRowIndex: 7)
+
+        #expect(ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: fixture.runtime
+        ) == nil)
+    }
+
     @Test func traversalDepthBoundaryRefusesInsteadOfHidingANestedControl() {
         let fixture = makeControlsFixture(depthBoundaryIndex: 7)
         let result = ControlsViewParameterEnumerator.enumerate(
@@ -606,6 +616,7 @@ private func makeControlsFixture(
     rows: [RowFixture] = measuredRows,
     exposesRowsAttribute: Bool = true,
     includesNonRowTableChild: Bool = false,
+    duplicateRowIndex: Int? = nil,
     cellBinding: CellBinding = .paired,
     pluginTextPlacement: PluginTextPlacement = .direct,
     unreadableLabelIndexes: Set<Int> = [],
@@ -731,6 +742,9 @@ private func makeControlsFixture(
         return row
     }
     var tableChildren = rowElements
+    if let duplicateRowIndex, rowElements.indices.contains(duplicateRowIndex) {
+        tableChildren.insert(rowElements[duplicateRowIndex], at: duplicateRowIndex + 1)
+    }
     if includesNonRowTableChild {
         let unrelatedChild = builder.element(91_000)
         builder.setRole(unrelatedChild, kAXGroupRole as String)
@@ -738,7 +752,7 @@ private func makeControlsFixture(
     }
     builder.setChildren(table, tableChildren)
     if exposesRowsAttribute {
-        builder.setAttribute(table, kAXRowsAttribute as String, rowElements)
+        builder.setAttribute(table, kAXRowsAttribute as String, tableChildren)
     }
 
     let pluginText = builder.element(90_010)
