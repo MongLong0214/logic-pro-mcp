@@ -4017,12 +4017,12 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             'supplied', candidate=sys.argv[1], bundle_path=sys.argv[2], verifier=sys.argv[3],
             trusted_key=sys.argv[4], commit=sys.argv[5], entrypoint=entry,
             signing_key=sys.argv[7],
-            # Keep the tight liveness bound for every planted FIFO. Healthy
-            # controls perform real archive/signature verification and use the
-            # helper's ordinary bounded budget instead of the FIFO probe's.
+            # Keep the tight liveness bound for every planted FIFO. Other
+            # checksum mutations and healthy controls use the helper's ordinary
+            # bounded budget instead of the FIFO probe's.
             public_input_shape=target, checksum_mutation=checksum,
-            reverify_timeout=5 if target is not None or (
-                checksum is not None and checksum not in ('sums_reordered', 'manifest_reordered')) else 30)
+            reverify_timeout=5 if target is not None or checksum in (
+                'sums_fifo', 'manifest_fifo') else 30)
         print(json.dumps({'exit': result.returncode, 'timed_out': result.timed_out,
                           'calls': calls, 'stdout': result.stdout, 'stderr': result.stderr}))
         """, fixture.executableURL.path, fixture.directory.path, verifier.path,
