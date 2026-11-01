@@ -26,11 +26,11 @@ enum VerifiedPluginCatalog {
 
     /// Display-name / alias → canonical `logic.stock.*` id table.
     ///
-    /// MVP scope (R5): the three allowlisted stock plugins. Compressor
-    /// `threshold` and named Channel EQ parameters have distinct catalog write
-    /// methods; Gain parameter access is read-only. Display
-    /// names are accepted as user-facing aliases but never become the identity
-    /// themselves (requirements §5.2 "display name은 identity가 아니라 alias").
+    /// Verified parameter capabilities remain independently allowlisted below.
+    /// Additional catalog-backed identities may resolve here without implying
+    /// that any of their parameters are readable or writable. Display names are
+    /// accepted as user-facing aliases; canonical catalog IDs remain the
+    /// identities themselves.
     private static let pluginAliases: [String: String] = [
         "gain": "logic.stock.effect.gain",
         "logic.stock.effect.gain": "logic.stock.effect.gain",
@@ -46,6 +46,16 @@ enum VerifiedPluginCatalog {
         "sampledelay": "logic.stock.effect.sample_delay",
         "smpledly": "logic.stock.effect.sample_delay",
         "logic.stock.effect.sample_delay": "logic.stock.effect.sample_delay",
+        "chromaverb": "logic.stock.effect.chromaverb",
+        "logic.stock.effect.chromaverb": "logic.stock.effect.chromaverb",
+        "space designer": "logic.stock.effect.space_designer",
+        "logic.stock.effect.space_designer": "logic.stock.effect.space_designer",
+        "tape delay": "logic.stock.effect.tape_delay",
+        "logic.stock.effect.tape_delay": "logic.stock.effect.tape_delay",
+        "stereo delay": "logic.stock.effect.stereo_delay",
+        "logic.stock.effect.stereo_delay": "logic.stock.effect.stereo_delay",
+        "overdrive": "logic.stock.effect.overdrive",
+        "logic.stock.effect.overdrive": "logic.stock.effect.overdrive",
     ]
 
     /// Per-plugin parameter-key alias table: caller key → canonical catalog
