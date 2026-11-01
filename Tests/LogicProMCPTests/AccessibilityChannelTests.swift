@@ -2414,8 +2414,18 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     let pressFailure = await failingChannel.execute(operation: "transport.toggle_metronome", params: [:])
     #expect(!pressFailure.isSuccess)
     #expect(pressFailure.message.contains("\"error\":\"ax_write_failed\""))
-    #expect(pressFailure.message.contains("AXPress failed on transport button 'Metronome'"))
-    #expect(!HonestContract.isTerminalStateC(pressFailure.message))
+    #expect(pressFailure.message.contains("AXPress was attempted on transport button 'Metronome'"))
+    #expect(HonestContract.isFallbackUnsafeStateC(pressFailure.message))
+    let pressFailureObject = try #require(sharedJSONObject(pressFailure.message))
+    #expect(try #require(pressFailureObject["terminal"] as? Bool))
+    #expect(try #require(pressFailureObject["write_attempted"] as? Bool))
+    #expect(try #require(pressFailureObject["fallback_unsafe"] as? Bool))
+    #expect(!(try #require(pressFailureObject["safe_to_retry"] as? Bool)))
+    #expect(pressFailureObject["action"] as? String == "axpress")
+    #expect(pressFailureObject["terminal_scope"] as? String == "mcp_request_only")
+    #expect(!(try #require(pressFailureObject["human_intervention_required"] as? Bool)))
+    #expect(pressFailureObject["human_intervention_requests"] as? Int == 0)
+    #expect(pressFailureObject["human_dependent_transitions"] as? Int == 0)
 }
 
 @Test func testAccessibilityChannelAXBackedTempoFallbackCanBeInjected() async throws {

@@ -40,7 +40,22 @@ extension AccessibilityChannel {
         guard AXHelpers.performAction(menuItem, kAXPressAction, runtime: runtime.ax) else {
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
-                hint: "AXPress failed on Window > Step Input Keyboard."
+                hint: "AXPress was attempted on Window > Step Input Keyboard, but its return value "
+                    + "does not prove whether the toggle landed. Automatic handling terminated "
+                    + "without another write.",
+                extras: [
+                    "operation": "edit.toggle_step_input",
+                    "previous_open": previousOpen,
+                    "action": "axpress",
+                    "write_attempted": true,
+                    "safe_to_retry": false,
+                    "fallback_unsafe": true,
+                    "terminal": true,
+                    "terminal_scope": "mcp_request_only",
+                    "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                    "human_dependent_transitions": 0,
+                ]
             ))
         }
 
