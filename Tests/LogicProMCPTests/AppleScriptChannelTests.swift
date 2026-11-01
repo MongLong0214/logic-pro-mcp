@@ -629,10 +629,12 @@ private func requireTerminalPathUnavailableReceipt(
         with: Data(closeAsk.message.utf8), options: []
     ) as? [String: Any])
     #expect(closeAskBody["error"] as? String == "invalid_params")
-    #expect(closeAskBody["terminal"] as? Bool == true)
+    let closeAskTerminal = try #require(closeAskBody["terminal"] as? Bool)
+    #expect(closeAskTerminal)
     #expect(closeAskBody["human_intervention_requests"] as? Int == 0)
     #expect(closeAskBody["human_dependent_transitions"] as? Int == 0)
-    #expect(closeAskBody["write_attempted"] as? Bool == false)
+    let closeAskWriteAttempted = try #require(closeAskBody["write_attempted"] as? Bool)
+    #expect(!closeAskWriteAttempted)
 
     let scripts = await recorder.snapshot()
     #expect(scripts.count == 5)
