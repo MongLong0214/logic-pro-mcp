@@ -13,12 +13,16 @@ struct Issue966PlanningOptionsTests {
 
     /// Mutation this kills: an unknown mode or a non-Bool flag read as the default, which would
     /// plan under options the client did not send.
-    @Test func optionsParseStrictlyAndDefaultToTheNarrowerChoice() throws {
+    @Test func optionsParseStrictlyAndDefaultToTerminalAmbiguity() throws {
         let defaults = try #require(Audit.PlanningOptions.parse([:]))
         #expect(defaults == Audit.PlanningOptions())
-        let isAsk = defaults.onAmbiguity == .ask
-        #expect(isAsk)
+        #expect(defaults.wire.objectValue?["on_ambiguity"]?.stringValue == "terminate")
         #expect(!defaults.allowCreateAux && !defaults.allowStackMembershipChange && !defaults.allowReplaceSend)
+
+        let legacyAsk = try #require(Audit.PlanningOptions.parse([
+            "on_ambiguity": .string("ask"),
+        ]))
+        #expect(legacyAsk.wire.objectValue?["on_ambiguity"]?.stringValue == "terminate")
 
         let all = try #require(Audit.PlanningOptions.parse([
             "on_ambiguity": .string("report_only"), "allow_create_aux": .bool(true),
@@ -173,21 +177,21 @@ struct Issue966PlanningOptionsTests {
     @Test func reportOnlyIsRecordedDigestedAndNeverExecutable() async throws {
         let (cache, registry, snapshot, reference) = try await fixture()
         let base: [String: Value] = ["snapshot_id": .string(snapshot), "policy": policy(reference, bus: 3)]
-        let ask = try #require(try await plan(base, cache: cache, registry: registry))
+        let terminal = try #require(try await plan(base, cache: cache, registry: registry))
         var reportParams = base
         reportParams["on_ambiguity"] = .string("report_only")
         let report = try #require(try await plan(reportParams, cache: cache, registry: registry))
 
         let reportOptions = try #require(report["planning_options"] as? [String: Any])
         #expect(reportOptions["on_ambiguity"] as? String == "report_only")
-        let askOptions = try #require(ask["planning_options"] as? [String: Any])
-        #expect(askOptions["on_ambiguity"] as? String == "ask")
-        let digestsDiffer = (report["digest"] as? String) != (ask["digest"] as? String)
+        let terminalOptions = try #require(terminal["planning_options"] as? [String: Any])
+        #expect(terminalOptions["on_ambiguity"] as? String == "terminate")
+        let digestsDiffer = (report["digest"] as? String) != (terminal["digest"] as? String)
         #expect(digestsDiffer)
         let reportReasons = try #require(report["reasons"] as? [String])
         #expect(reportReasons.contains("report_only_requested"))
-        let askReasons = try #require(ask["reasons"] as? [String])
-        #expect(!askReasons.contains("report_only_requested"))
+        let terminalReasons = try #require(terminal["reasons"] as? [String])
+        #expect(!terminalReasons.contains("report_only_requested"))
         let executable = try #require(report["executable"] as? Bool)
         #expect(!executable)
     }
