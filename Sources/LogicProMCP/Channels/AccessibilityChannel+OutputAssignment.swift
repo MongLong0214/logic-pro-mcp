@@ -135,19 +135,21 @@ extension AccessibilityChannel {
         let lookup: AXLogicProElements.MixerAreaLookup = physical.map { .found($0.mixer) }
             ?? AXLogicProElements.mixerAreaLookup(runtime: runtime)
         guard let mixer = lookup.mixer else {
-            return refusal(.elementNotFound, "Cannot locate the visible Mixer. Show it so the strip's "
-                + "output slot can be read; nothing was pressed.")
+            return refusal(.elementNotFound, "A readable visible Mixer was unavailable; this request "
+                + "terminated before any output-slot read or press.", terminalPreconditionFields)
         }
         guard let enumeration = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime.ax) else {
             return refusal(.elementNotFound, "The Mixer's children did not read, so no strip can be "
                 + "addressed. They are unknown, not absent; nothing was pressed.",
-                ["mixer_children_unread": true])
+                terminalPreconditionFields.merging(["mixer_children_unread": true]) { _, new in new })
         }
         guard enumeration.unreadableChildren == 0 else {
             return refusal(.elementNotFound, "\(enumeration.unreadableChildren) Mixer child(ren) would "
                 + "not report a role, so the strip at index \(index) cannot be trusted to be that "
                 + "track's strip; nothing was pressed.",
-                ["unreadable_mixer_children": enumeration.unreadableChildren])
+                terminalPreconditionFields.merging([
+                    "unreadable_mixer_children": enumeration.unreadableChildren,
+                ]) { _, new in new })
         }
         let strips = enumeration.strips
         extras["strip_count_before"] = strips.count
@@ -163,7 +165,9 @@ extension AccessibilityChannel {
             strip = physical.strip
         } else {
             guard index < strips.count else {
-                return refusal(.elementNotFound, "track index out of range for the visible Mixer; nothing was pressed.")
+                return refusal(.elementNotFound,
+                    "track index out of range for the visible Mixer; nothing was pressed.",
+                    terminalPreconditionFields)
             }
             strip = strips[index]
         }
@@ -172,7 +176,8 @@ extension AccessibilityChannel {
         // cannot classify cannot be compared with anything, so both refuse.
         guard let beforeLabel = AXLogicProElements.outputSlotDestination(in: strip, runtime: runtime.ax) else {
             return refusal(.readbackUnavailable, "The strip's current output did not read. Unreadable is "
-                + "not absent, so there is nothing to compare the request with; nothing was pressed.")
+                + "not absent, so there is nothing to compare the request with; nothing was pressed.",
+                terminalPreconditionFields)
         }
         if let physical, physical.currentIndex(runtime: runtime) != index {
             return refusal(.staleTargetReference, "The referenced source changed during its current output read; nothing was pressed.")
@@ -180,7 +185,7 @@ extension AccessibilityChannel {
         guard let before = OutputAssignment.observed(slotLabel: beforeLabel) else {
             return refusal(.readbackUnavailable, "The strip's current output reads as a label this "
                 + "operation cannot classify, so it cannot be compared; nothing was pressed.",
-                ["observed_label": beforeLabel])
+                terminalPreconditionFields.merging(["observed_label": beforeLabel]) { _, new in new })
         }
         extras["before"] = before.json
         if let expected, expected != before {
@@ -220,7 +225,10 @@ extension AccessibilityChannel {
         guard let playing, let recording else {
             return refusal(.transportStateUnknown, "The transport's Play or Record state did not read, "
                 + "so it cannot be shown stopped; nothing was pressed.",
-                ["transport_play_read": playing != nil, "transport_record_read": recording != nil])
+                terminalPreconditionFields.merging([
+                    "transport_play_read": playing != nil,
+                    "transport_record_read": recording != nil,
+                ]) { _, new in new })
         }
         if playing || recording {
             let state = recording ? "recording" : "playing"
