@@ -141,13 +141,15 @@ extension AccessibilityChannel {
         guard let enumeration = AXLogicProElements.stripEnumeration(in: mixer, runtime: runtime.ax) else {
             return refusal(.elementNotFound, "The Mixer's children did not read, so no strip can be "
                 + "addressed. They are unknown, not absent; nothing was pressed.",
-                ["mixer_children_unread": true])
+                terminalPreconditionFields.merging(["mixer_children_unread": true]) { _, new in new })
         }
         guard enumeration.unreadableChildren == 0 else {
             return refusal(.elementNotFound, "\(enumeration.unreadableChildren) Mixer child(ren) would "
                 + "not report a role, so the strip at index \(index) cannot be trusted to be that "
                 + "track's strip; nothing was pressed.",
-                ["unreadable_mixer_children": enumeration.unreadableChildren])
+                terminalPreconditionFields.merging([
+                    "unreadable_mixer_children": enumeration.unreadableChildren,
+                ]) { _, new in new })
         }
         let strips = enumeration.strips
         extras["strip_count_before"] = strips.count

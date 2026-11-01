@@ -64,7 +64,10 @@ private final class R2Fixture: @unchecked Sendable {
     enum AfterPress { case applies, doesNothing, slotGoesBlank }
     enum AuxSend { case none, empty, occupied }
     /// A read that fails with -25204, which is not an answer.
-    enum FailingRead { case sourceInputRole, thirdStripChildren, secondBusOneTitle, nestedBusItemChildren }
+    enum FailingRead {
+        case mixerChildren, sourceStripRole, sourceInputRole, thirdStripChildren
+        case secondBusOneTitle, nestedBusItemChildren
+    }
     /// A read of the second `Bus 1` entry that ANSWERS with an AX status (#1062 review R2-03):
     /// -25212 or -25205, injected explicitly, because the builder reads an unset attribute as
     /// success-and-nil and that would not exercise the status path.
@@ -156,6 +159,10 @@ private final class R2Fixture: @unchecked Sendable {
         b.setChildren(controlBar, [play, record])
 
         mixer = make(role: "AXLayoutArea", description: "Mixer")
+        if case .mixerChildren = options.failingRead {
+            b.setAttribute(mixer, kAXRoleAttribute as String, kAXGroupRole as String)
+            b.setAttribute(mixer, kAXIdentifierAttribute as String, "Mixer")
+        }
         let current: String
         switch options.current {
         case .stereo: current = language.stereoOutput
@@ -174,6 +181,8 @@ private final class R2Fixture: @unchecked Sendable {
         buildPopup(current: current)
         if options.preexistingPopupOpen { menuOpen = true }
         switch options.failingRead {
+        case .mixerChildren: failingChildren.insert(id(mixer))
+        case .sourceStripRole: failingAttribute[id(audio)] = kAXRoleAttribute as String
         case .sourceInputRole: failingAttribute[id(stripChildren[id(audio)]![0])] = kAXRoleAttribute as String
         case .thirdStripChildren: failingChildren.insert(id(stereoOut))
         case .secondBusOneTitle, .nestedBusItemChildren, nil: break
@@ -184,7 +193,10 @@ private final class R2Fixture: @unchecked Sendable {
         let base = b.makeLogicRuntime(
             pid: r2PID,
             appElement: app,
-            attributeValueHandler: { [self] element, _ -> AnyObject?? in isGone(element) ? .some(nil) : .none },
+            attributeValueHandler: { [self] element, attribute -> AnyObject?? in
+                if isGone(element) || failingAttribute[id(element)] == attribute { return .some(nil) }
+                return .none
+            },
             attributeValueResultHandler: { [self] element, attribute in
                 if isGone(element) { return .failure(r2InvalidElement) }
                 if let (answered, status) = answeringAttribute[id(element)], answered == attribute {
@@ -584,6 +596,46 @@ func outputAssignmentTerminatesWhenMixerIsUnavailable() async throws {
     }
     #expect(fixture.presses.isEmpty)
     #expect(fixture.escapeCount == 0)
+}
+
+private func expectTerminalMixerReadFailure(_ failingRead: R2Fixture.FailingRead) async throws {
+    let fixture = R2Fixture(.init(failingRead: failingRead))
+    let envelope = try await runChannel(fixture, destination: .bus(1))
+
+    #expect(envelope["state"] as? String == "C")
+    #expect(envelope["error"] as? String == "element_not_found")
+    #expect(!(try #require(envelope["write_attempted"] as? Bool)))
+    #expect(try #require(envelope["terminal"] as? Bool))
+    #expect(envelope["terminal_scope"] as? String == "mcp_request_only")
+    #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+    #expect(try #require(envelope["automatic_precondition_attempts_exhausted"] as? Bool))
+    #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+    #expect(envelope["human_intervention_requests"] as? Int == 0)
+    #expect(envelope["human_dependent_transitions"] as? Int == 0)
+    switch failingRead {
+    case .mixerChildren:
+        #expect(try #require(envelope["mixer_children_unread"] as? Bool))
+    case .sourceStripRole:
+        #expect(envelope["unreadable_mixer_children"] as? Int == 1)
+    default:
+        Issue.record("unexpected Mixer failure fixture")
+    }
+    let hint = try #require(envelope["hint"] as? String)
+    for forbiddenRequest in ["show", "open", "click", "manually", "retry"] {
+        #expect(!hint.localizedCaseInsensitiveContains(forbiddenRequest))
+    }
+    #expect(fixture.presses.isEmpty)
+    #expect(fixture.escapeCount == 0)
+}
+
+@Test("unreadable Mixer children terminate without a human continuation")
+func outputAssignmentTerminatesWhenMixerChildrenAreUnreadable() async throws {
+    try await expectTerminalMixerReadFailure(.mixerChildren)
+}
+
+@Test("a Mixer child with an unreadable role terminates without a human continuation")
+func outputAssignmentTerminatesWhenMixerChildRoleIsUnreadable() async throws {
+    try await expectTerminalMixerReadFailure(.sourceStripRole)
 }
 
 /// Kills M07: reading an unreadable current output as "not equal" and pressing anyway.
