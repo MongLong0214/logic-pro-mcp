@@ -200,4 +200,70 @@ struct Issue1042ToggleSecondPressTests {
             #expect(!hint.lowercased().contains(request.lowercased()))
         }
     }
+
+    /// AX action return codes do not prove whether Logic applied an action. This fixture lands the
+    /// window toggle but reports `false`, so the router must treat the first write as an unknown
+    /// effect instead of handing the same toggle to another channel.
+    @Test("a Step Input AXPress failure after a landed toggle terminates the routing ladder")
+    func failedStepInputPressThatLandedIsNotPressedAgain() async throws {
+        let actions = Issue1042AXActions()
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(10_440)
+        let tracksWindow = builder.element(10_441)
+        let stepWindow = builder.element(10_442)
+        let menuBar = builder.element(10_443)
+        let windowMenu = builder.element(10_444)
+        let menu = builder.element(10_445)
+        let stepInput = builder.element(10_446)
+        builder.setAttribute(app, kAXMainWindowAttribute as String, tracksWindow)
+        builder.setAttribute(app, kAXWindowsAttribute as String, [tracksWindow])
+        builder.setAttribute(app, kAXMenuBarAttribute as String, menuBar)
+        builder.setAttribute(tracksWindow, kAXRoleAttribute as String, kAXWindowRole as String)
+        builder.setAttribute(tracksWindow, kAXTitleAttribute as String, "Untitled - Tracks")
+        builder.setAttribute(stepWindow, kAXRoleAttribute as String, kAXWindowRole as String)
+        builder.setAttribute(stepWindow, kAXTitleAttribute as String, "Step Input Keyboard")
+        builder.setChildren(menuBar, [windowMenu])
+        builder.setAttribute(windowMenu, kAXRoleAttribute as String, kAXMenuBarItemRole as String)
+        builder.setAttribute(windowMenu, kAXTitleAttribute as String, "Window")
+        builder.setChildren(windowMenu, [menu])
+        builder.setAttribute(menu, kAXRoleAttribute as String, kAXMenuRole as String)
+        builder.setChildren(menu, [stepInput])
+        builder.setAttribute(stepInput, kAXRoleAttribute as String, kAXMenuItemRole as String)
+        builder.setAttribute(stepInput, kAXTitleAttribute as String, "Step Input Keyboard")
+        builder.setAttribute(stepInput, kAXEnabledAttribute as String, NSNumber(value: true))
+        let logicRuntime = builder.makeLogicRuntime(
+            appElement: app,
+            setAttributeHandler: nil,
+            performActionHandler: { element, action in
+                guard element == stepInput else { return false }
+                actions.record(action)
+                builder.setAttribute(app, kAXWindowsAttribute as String, [tracksWindow, stepWindow])
+                return false
+            }
+        )
+        let ladder = await issue1042Ladder(logicRuntime: logicRuntime)
+
+        let result = await ladder.router.route(operation: "edit.toggle_step_input", params: [:])
+
+        #expect(actions.performed == [kAXPressAction as String])
+        let windows: [AXUIElement] = AXHelpers.getAttribute(
+            app, kAXWindowsAttribute as String, runtime: logicRuntime.ax
+        ) ?? []
+        #expect(windows.contains { CFEqual($0, stepWindow) }, "the failed return can follow a landed toggle")
+        let later = await ladder.laterRungPresses()
+        #expect(later == 0, "no later rung may repeat a toggle after an attempted AXPress")
+        #expect(!result.isSuccess)
+        let envelope = try #require(issue1042Object(result.message))
+        #expect(envelope["state"] as? String == "C")
+        #expect(envelope["error"] as? String == "ax_write_failed")
+        #expect(try #require(envelope["write_attempted"] as? Bool))
+        #expect(try #require(envelope["fallback_unsafe"] as? Bool))
+        #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+        #expect(envelope["action"] as? String == "axpress")
+        #expect(try #require(envelope["terminal"] as? Bool))
+        #expect(envelope["terminal_scope"] as? String == "mcp_request_only")
+        #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+        #expect(envelope["human_intervention_requests"] as? Int == 0)
+        #expect(envelope["human_dependent_transitions"] as? Int == 0)
+    }
 }
