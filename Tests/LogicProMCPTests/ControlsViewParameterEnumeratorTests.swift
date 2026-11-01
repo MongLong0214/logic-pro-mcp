@@ -5,6 +5,19 @@ import Testing
 
 @Suite("ADR-018 Controls-view parameter enumerator")
 struct ControlsViewParameterEnumeratorTests {
+    @Test func duplicatePhysicalEmptyCellsAcrossRowsCannotMintSeparateObservations() {
+        let fixture = makeControlsFixture(
+            duplicateCellSourceIndex: 6,
+            emptyCellIndexes: [6, 7]
+        )
+
+        #expect(ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: fixture.runtime
+        ) == nil)
+    }
+
     @Test func duplicatePhysicalLabelsAcrossRowsCannotMintDistinctParameterReferences() {
         let fixture = makeControlsFixture(duplicateLabelSourceIndex: 6)
 
@@ -637,6 +650,7 @@ private func makeControlsFixture(
     exposesRowsAttribute: Bool = true,
     includesNonRowTableChild: Bool = false,
     duplicateRowIndex: Int? = nil,
+    duplicateCellSourceIndex: Int? = nil,
     duplicateLabelSourceIndex: Int? = nil,
     duplicateControlSourceIndex: Int? = nil,
     cellBinding: CellBinding = .paired,
@@ -646,6 +660,7 @@ private func makeControlsFixture(
     unreadableControlValueIndexes: Set<Int> = [],
     unreadableAdditionalControlRoleIndexes: Set<Int> = [],
     unreadableCellChildIndexes: Set<Int> = [],
+    emptyCellIndexes: Set<Int> = [],
     depthBoundaryIndex: Int? = nil,
     depthBoundaryChildren: DepthBoundaryChildrenFixture = .nonempty,
     leafChildrenReadError: AXError? = nil,
@@ -666,6 +681,7 @@ private func makeControlsFixture(
     var depthBoundaryReadFailure: DepthBoundaryReadFailure?
     var primaryControlElements: [AXUIElement] = []
     var primaryLabelElements: [AXUIElement] = []
+    var primaryCellElements: [AXUIElement] = []
     let rowElements = rows.enumerated().map { rowIndex, rowFixture -> AXUIElement in
         let base = 90_100 + rowIndex * 20
         let row = builder.element(base)
@@ -714,7 +730,14 @@ private func makeControlsFixture(
 
         switch cellBinding {
         case .paired:
-            let cell = builder.element(base + 4)
+            let cell: AXUIElement
+            if let duplicateCellSourceIndex,
+               rowIndex == duplicateCellSourceIndex + 1,
+               primaryCellElements.indices.contains(duplicateCellSourceIndex) {
+                cell = primaryCellElements[duplicateCellSourceIndex]
+            } else {
+                cell = builder.element(base + 4)
+            }
             builder.setRole(cell, kAXCellRole as String)
             var cellChildren = [label] + controls
             if depthBoundaryIndex == rowIndex {
@@ -753,8 +776,9 @@ private func makeControlsFixture(
                 cellChildren.append(unreadableDescendant)
                 unreadableCellChildElementIDs.append(builder.elementID(unreadableDescendant))
             }
-            builder.setChildren(cell, cellChildren)
+            builder.setChildren(cell, emptyCellIndexes.contains(rowIndex) ? [] : cellChildren)
             builder.setChildren(row, [cell])
+            primaryCellElements.append(cell)
         case .absent:
             builder.setChildren(row, [label] + controls)
         case .separateLabelAndControl(let targetIndex) where targetIndex == rowIndex:

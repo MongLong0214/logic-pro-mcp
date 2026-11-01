@@ -115,6 +115,7 @@ enum ControlsViewParameterEnumerator {
         var parameters: [GenericPluginParameter] = []
         var observations: [RowObservation] = []
         var rowSignatures: [RowSignature] = []
+        var observedCells: [AXUIElement] = []
         var observedLabels: [AXUIElement] = []
         var observedControls: [AXUIElement] = []
 
@@ -124,6 +125,14 @@ enum ControlsViewParameterEnumerator {
             // manifest: hashing `nil` would alias distinct unreadable labels.
             guard let rowRead = readRow(row, runtime: runtime) else {
                 return nil
+            }
+            for cell in rowRead.cells {
+                guard !observedCells.contains(where: {
+                    CFEqual($0, cell)
+                }) else {
+                    return nil
+                }
+                observedCells.append(cell)
             }
             for label in rowRead.labelElements {
                 guard !observedLabels.contains(where: {
@@ -377,6 +386,7 @@ enum ControlsViewParameterEnumerator {
             }
         }
         return RowRead(
+            cells: cells,
             labels: labelValues,
             labelElements: labelElements,
             controls: controlsInRow,
@@ -763,6 +773,7 @@ enum ControlsViewParameterEnumerator {
     }
 
     private struct RowRead {
+        let cells: [AXUIElement]
         let labels: [String]
         let labelElements: [AXUIElement]
         let controls: [ControlObservation]
