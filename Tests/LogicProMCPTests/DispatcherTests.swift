@@ -3447,7 +3447,7 @@ func testEditDispatcherQuantizeCarriesTheExactValidAlias(_ input: String) async 
     await router.register(appleScript)
     let cache = StateCache()
 
-    for saving in ["yes", "no", "ask"] {
+    for saving in ["yes", "no"] {
         let result = await ProjectDispatcher.handle(
             command: "close",
             params: ["saving": .string(saving), "confirmed": .bool(true)],
@@ -3456,6 +3456,15 @@ func testEditDispatcherQuantizeCarriesTheExactValidAlias(_ input: String) async 
         )
         #expect(!result.isError!)
     }
+
+    let askResult = await ProjectDispatcher.handle(
+        command: "close",
+        params: ["saving": .string("ask"), "confirmed": .bool(true)],
+        router: router,
+        cache: cache
+    )
+    #expect(askResult.isError!)
+    #expect(dispatcherText(askResult).contains("yes, no"))
 
     let invalidResult = await ProjectDispatcher.handle(
         command: "close",
@@ -3469,7 +3478,6 @@ func testEditDispatcherQuantizeCarriesTheExactValidAlias(_ input: String) async 
     expectExecutedOps(ops, equals: [
         ("project.close", ["saving": "yes"]),
         ("project.close", ["saving": "no"]),
-        ("project.close", ["saving": "ask"]),
     ])
 }
 
