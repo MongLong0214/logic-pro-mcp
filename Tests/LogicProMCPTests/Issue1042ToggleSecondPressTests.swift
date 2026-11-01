@@ -298,10 +298,10 @@ struct Issue1042ToggleSecondPressTests {
         let result = await ladder.router.route(operation: "transport.toggle_metronome", params: [:])
 
         #expect(actions.performed == [kAXPressAction as String])
-        let landed: NSNumber? = AXHelpers.getAttribute(
+        let landed: NSNumber = try #require(AXHelpers.getAttribute(
             metronome, kAXValueAttribute as String, runtime: logicRuntime.ax
-        )
-        #expect(landed?.boolValue == true, "a false AX return can follow a landed legacy transport press")
+        ))
+        #expect(landed.boolValue, "a false AX return can follow a landed legacy transport press")
         let later = await ladder.laterRungPresses()
         #expect(later == 0, "no later rung may repeat a transport toggle after an attempted AXPress")
         #expect(!result.isSuccess)

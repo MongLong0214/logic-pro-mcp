@@ -29,8 +29,8 @@ enum VerifiedPluginCatalog {
     /// Verified parameter capabilities remain independently allowlisted below.
     /// Additional catalog-backed identities may resolve here without implying
     /// that any of their parameters are readable or writable. Display names are
-    /// accepted as user-facing aliases but never become the identity themselves
-    /// (requirements §5.2 "display name은 identity가 아니라 alias").
+    /// accepted as user-facing aliases; canonical catalog IDs remain the
+    /// identities themselves.
     private static let pluginAliases: [String: String] = [
         "gain": "logic.stock.effect.gain",
         "logic.stock.effect.gain": "logic.stock.effect.gain",

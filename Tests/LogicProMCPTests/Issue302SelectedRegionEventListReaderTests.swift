@@ -142,9 +142,9 @@ import Testing
 
         #expect(body["state"] as? String == "C")
         #expect(body["reason"] as? String == "event_list_observation_unavailable")
-        #expect(body["write_attempted"] as? Bool == true)
-        #expect(body["row_selection_write_attempted"] as? Bool == true)
-        #expect(body["row_selection_restored"] as? Bool == false)
+        #expect(try #require(body["write_attempted"] as? Bool))
+        #expect(try #require(body["row_selection_write_attempted"] as? Bool))
+        #expect(!(try #require(body["row_selection_restored"] as? Bool)))
     }
 
     @Test func rowContentDriftDuringCollectionRefuses() {
