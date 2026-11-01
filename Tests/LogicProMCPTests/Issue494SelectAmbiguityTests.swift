@@ -47,6 +47,23 @@ func issue494SelectByAmbiguousNameFailsClosed() async throws {
     let response = try #require(sharedJSONObject(sharedToolText(result)))
     #expect(response["error"] as? String == "ambiguous_target_name")
     #expect(response["ambiguous_track_indices"] as? [Int] == [1, 4])
+    guard let writeAttempted = response["write_attempted"] as? Bool,
+          let safeToRetry = response["safe_to_retry"] as? Bool,
+          let terminal = response["terminal"] as? Bool,
+          let humanInterventionRequired = response["human_intervention_required"] as? Bool else {
+        Issue.record("ambiguous selection omitted a required terminal Boolean field")
+        return
+    }
+    #expect(!writeAttempted)
+    #expect(!safeToRetry)
+    #expect(terminal)
+    #expect(response["terminal_scope"] as? String == "mcp_request_only")
+    #expect(!humanInterventionRequired)
+    #expect(response["human_intervention_requests"] as? Int == 0)
+    #expect(response["human_dependent_transitions"] as? Int == 0)
+    let hint = try #require(response["hint"] as? String)
+    #expect(!hint.localizedCaseInsensitiveContains("use an unambiguous name"))
+    #expect(!hint.localizedCaseInsensitiveContains("select by index"))
     #expect(await channel.executedOps.isEmpty, "ambiguous selection must not reach the router")
 }
 
