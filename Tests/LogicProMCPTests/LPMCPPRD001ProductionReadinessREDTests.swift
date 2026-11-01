@@ -973,25 +973,12 @@ struct LPMCPPRD001ProductionReadinessREDTests {
     }
 
     /// Aggregate production-readiness bar — the honest debt set on the current tree.
-    /// R-PUB (release assets are owner-replaceable; no immutable/transparency
-    /// publication exists) and R-SEM (semantic coverage is 0/108 — no operation has
-    /// live qualification or a governed waiver; a registered validator is inventory,
-    /// not coverage, per #409) remain open as before. In addition, ADR-001 release-time
-    /// enforcement is DEFERRED behind the `ADR001_QUALIFICATION_ENFORCED` repository
-    /// variable (owner decision, 2026-07-21) until the qualification pipeline lands at
-    /// #284 / roadmap T5: `release.yml` no longer *unconditionally* runs the
-    /// pinned-verifier qualification/provenance steps, so the release-enforced
-    /// contracts R-REL, R-MATRIX, R-MUT, and R-PROV are honestly open too. The
-    /// fixtures themselves still exist as SHA-bound content on disk —
-    /// `managedFixtureManifestSHAsBindActualContent` stays green; what is deferred is
-    /// their *enforcement at release*, not their presence. Flipping the variable to
-    /// `true` makes the gate run again at release time, but does NOT re-close these
-    /// static contracts on its own: the evaluator matches the workflow text and the
-    /// deferral `if:` conditions remain, so `blockingStep` still treats the steps as
-    /// conditional. Re-closing all four happens at #284 / T5, which removes the
-    /// deferral (restoring the unconditional pinned-verifier gate) and provisions the
-    /// QUALIFICATION_* evidence/secrets. This assertion is the tripwire: it fails if
-    /// the debt set drifts from this honestly-tracked state in either direction.
+    /// The current `build-release`/`publish` chain unconditionally consumes owner-staged
+    /// final bytes through the authenticated pinned verifier and re-verifies the exact
+    /// downloaded public candidate before publication. That closes the static release,
+    /// matrix, mutation and provenance wiring debts. R-PUB remains open until publication
+    /// is immutable or transparency-bound (authenticated retrieval alone is insufficient),
+    /// and R-SEM remains open until a current final candidate supplies live credited operations.
     @Test func productionReadinessContractsAreSatisfiedOnCurrentTree() throws {
         let report = try ProductionReadinessContractEvaluator.evaluateRepositoryRoot(
             repositoryRoot,
@@ -999,26 +986,355 @@ struct LPMCPPRD001ProductionReadinessREDTests {
         )
         #expect(
             report.openDebts == [
-                .managedFixtureMatrixUnbound,
-                .mutationRestoreCompensationMissing,
-                .independentProvenanceNotEnforced,
                 .publishedImmutableEvidenceMissing,
-                .releaseWorkflowMissingIndependentQualification,
                 .semanticCoverageIncomplete,
             ],
             "LPMCP-PRD-001 open debts: \(report.openDebts.map(\.rawValue).joined(separator: ",")) — \(report.findings.map(\.detail).joined(separator: " | "))"
         )
     }
 
-    // MARK: - R-MATRIX managed fixtures (present on disk; release enforcement deferred)
+    @Test func currentFinalArtifactReleaseWiringFailsClosedOnTrustBoundaryMutants() throws {
+        let workflow = try String(
+            contentsOf: repositoryRoot.appendingPathComponent(
+                ProductionReadinessContractEvaluator.releaseWorkflowRelativePath
+            ),
+            encoding: .utf8
+        )
+        let consumer = try String(
+            contentsOf: repositoryRoot.appendingPathComponent("Scripts/release-consume-final.sh"),
+            encoding: .utf8
+        )
+
+        func evaluate(_ candidateWorkflow: String, _ candidateConsumer: String) -> ProductionReadinessContractReport {
+            ProductionReadinessContractEvaluator.evaluate(
+                releaseWorkflowYAML: candidateWorkflow,
+                registeredOperationIDs: ["system.health"],
+                semanticValidatorOperationIDs: ["system.health"],
+                requiredMatrixAxisCount: QualificationAxis.requiredCombinations.count,
+                debtBoardMarkdown: "Exact base: \(expectedBaseSHA)",
+                expectedAuthorityBaseSHA: expectedBaseSHA,
+                publishedReleaseEvidencePresent: false,
+                mutationRestoreCompensationEvidencePresent: false,
+                independentProvenanceEnforced: false,
+                managedFixturesPresent: true,
+                releaseConsumerScript: candidateConsumer
+            )
+        }
+
+        let valid = evaluate(workflow, consumer)
+        #expect(!valid.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+        #expect(!valid.openDebts.contains(.managedFixtureMatrixUnbound))
+        #expect(!valid.openDebts.contains(.mutationRestoreCompensationMissing))
+        #expect(!valid.openDebts.contains(.independentProvenanceNotEnforced))
+
+        let publishDefaultShellWithReplacement = workflow
+            .replacingOccurrences(
+                of: "    permissions:\n      contents: write\n    steps:",
+                with: """
+                    permissions:
+                      contents: write
+                    defaults:
+                      run:
+                        shell: "/usr/bin/true {0}"
+                    steps:
+                """
+            )
+            .replacingOccurrences(
+                of: "      - name: Create release artifact SHA256 manifest",
+                with: """
+                      - name: Replace qualified candidate before hashing
+                        run: cp /tmp/forged LogicProMCP
+                      - name: Create release artifact SHA256 manifest
+                """
+            )
+        let publishDefaultReport = evaluate(publishDefaultShellWithReplacement, consumer)
+        #expect(publishDefaultReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+        #expect(publishDefaultReport.openDebts.contains(.independentProvenanceNotEnforced))
+
+        let buildJobEnvironment = workflow.replacingOccurrences(
+            of: "  build-release:\n    runs-on: macos-15\n    permissions:",
+            with: """
+              build-release:
+                runs-on: macos-15
+                env:
+                  BASH_ENV: /tmp/skip-verification
+                permissions:
+            """
+        )
+        let buildEnvironmentReport = evaluate(buildJobEnvironment, consumer)
+        #expect(buildEnvironmentReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+        #expect(buildEnvironmentReport.openDebts.contains(.independentProvenanceNotEnforced))
+
+        let workflowDefaultShell = workflow.replacingOccurrences(
+            of: "jobs:\n",
+            with: "defaults:\n  run:\n    shell: \"/usr/bin/true {0}\"\njobs:\n"
+        )
+        let workflowDefaultReport = evaluate(workflowDefaultShell, consumer)
+        #expect(workflowDefaultReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+        #expect(workflowDefaultReport.openDebts.contains(.independentProvenanceNotEnforced))
+
+        let workflowEnvironment = workflow.replacingOccurrences(
+            of: "jobs:\n",
+            with: "env:\n  BASH_ENV: /tmp/skip-verification\njobs:\n"
+        )
+        let workflowEnvironmentReport = evaluate(workflowEnvironment, consumer)
+        #expect(workflowEnvironmentReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+        #expect(workflowEnvironmentReport.openDebts.contains(.independentProvenanceNotEnforced))
+
+        let alternateRepositoryCheckout = workflow.replacingOccurrences(
+            of: "      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683\n",
+            with: """
+                  - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+                    with:
+                      repository: attacker/unreviewed-release-scripts
+                      ref: main
+            """ + "\n"
+        )
+        let alternateCheckoutReport = evaluate(alternateRepositoryCheckout, consumer)
+        #expect(alternateCheckoutReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+        #expect(alternateCheckoutReport.openDebts.contains(.independentProvenanceNotEnforced))
+
+        let verifierBuildPathOverride = workflow.replacingOccurrences(
+            of: "        working-directory: trusted-verifier-src\n        run: |",
+            with: "        env:\n"
+                + "          PATH: ${{ github.workspace }}/attacker-bin:${{ env.PATH }}\n"
+                + "        working-directory: trusted-verifier-src\n"
+                + "        run: |"
+        )
+        #expect(verifierBuildPathOverride != workflow)
+        #expect(
+            verifierBuildPathOverride.components(
+                separatedBy: "          PATH: ${{ github.workspace }}/attacker-bin:${{ env.PATH }}"
+            ).count - 1 == 2
+        )
+        let verifierBuildPathOverrideReport = evaluate(verifierBuildPathOverride, consumer)
+        #expect(
+            verifierBuildPathOverrideReport.openDebts.contains(
+                .releaseWorkflowMissingIndependentQualification
+            )
+        )
+        #expect(
+            verifierBuildPathOverrideReport.openDebts.contains(.independentProvenanceNotEnforced)
+        )
+
+        let installReverifyPathOverride = workflow.replacingOccurrences(
+            of: "        working-directory: ${{ runner.temp }}/artifact\n        run: |",
+            with: "        env:\n"
+                + "          PATH: ${{ github.workspace }}/attacker-bin:${{ env.PATH }}\n"
+                + "        working-directory: ${{ runner.temp }}/artifact\n"
+                + "        run: |"
+        )
+        #expect(installReverifyPathOverride != workflow)
+        let installReverifyPathOverrideReport = evaluate(installReverifyPathOverride, consumer)
+        #expect(
+            installReverifyPathOverrideReport.openDebts.contains(
+                .releaseWorkflowMissingIndependentQualification
+            )
+        )
+        #expect(
+            installReverifyPathOverrideReport.openDebts.contains(.independentProvenanceNotEnforced)
+        )
+
+        let installerEnvironmentOverride = workflow.replacingOccurrences(
+            of: "        env:\n          LOGIC_PRO_MCP_VERSION:",
+            with: "        env:\n"
+                + "          BASH_ENV: ${{ github.workspace }}/attacker-env\n"
+                + "          LOGIC_PRO_MCP_VERSION:"
+        )
+        #expect(installerEnvironmentOverride != workflow)
+        let installerEnvironmentOverrideReport = evaluate(installerEnvironmentOverride, consumer)
+        #expect(
+            installerEnvironmentOverrideReport.openDebts.contains(
+                .releaseWorkflowMissingIndependentQualification
+            )
+        )
+        #expect(
+            installerEnvironmentOverrideReport.openDebts.contains(.independentProvenanceNotEnforced)
+        )
+
+        let wrongPin = workflow.replacingOccurrences(
+            of: "fa7d4430b4e42e15902ab82ca2b7e67380ca56ff",
+            with: String(repeating: "0", count: 40)
+        )
+        let wrongPinReport = evaluate(wrongPin, consumer)
+        #expect(wrongPinReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+        #expect(wrongPinReport.openDebts.contains(.independentProvenanceNotEnforced))
+
+        let unverifiedPublicCandidate = consumer.replacingOccurrences(
+            of: "verify_candidate \"$public/LogicProMCP\"",
+            with: ": # public candidate verification removed"
+        )
+        let unverifiedReport = evaluate(workflow, unverifiedPublicCandidate)
+        #expect(unverifiedReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+        #expect(unverifiedReport.openDebts.contains(.mutationRestoreCompensationMissing))
+        #expect(unverifiedReport.openDebts.contains(.independentProvenanceNotEnforced))
+
+        let publishWithoutInstallGate = workflow.replacingOccurrences(
+            of: "needs: [build-release, validate-install]",
+            with: "needs: build-release"
+        )
+        let ungatedReport = evaluate(publishWithoutInstallGate, consumer)
+        #expect(ungatedReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+
+        let extraEarlyPublisher = workflow + """
+
+          publish-early:
+            runs-on: macos-15
+            permissions:
+              contents: write
+            steps:
+              - name: Publish before qualification
+                uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191
+        """
+        let earlyPublisherReport = evaluate(extraEarlyPublisher, consumer)
+        #expect(earlyPublisherReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+
+        let earlyShellPublisher = workflow.replacingOccurrences(
+            of: "      - name: Reverify downloaded release artifact\n",
+            with: """
+                  - name: Publish early through the CLI
+                    env:
+                      GH_TOKEN: ${{ github.token }}
+                    run: gh release create "$GITHUB_REF_NAME" unverified-file
+                  - name: Reverify downloaded release artifact
+            """
+        )
+        let earlyShellPublisherReport = evaluate(earlyShellPublisher, consumer)
+        #expect(earlyShellPublisherReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+
+        let writeAllPublisher = workflow + """
+
+          publish-through-cli:
+            runs-on: macos-15
+            permissions: write-all
+            steps:
+              - name: Publish before qualification
+                env:
+                  GH_TOKEN: ${{ github.token }}
+                run: gh release create "$GITHUB_REF_NAME" unverified-file
+        """
+        let writeAllPublisherReport = evaluate(writeAllPublisher, consumer)
+        #expect(writeAllPublisherReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+
+        let noOpPackageVerification = workflow
+            .replacingOccurrences(
+                of: "bash Scripts/release-consume-final.sh verify-public \"${GITHUB_REF_NAME#v}\" \"$GITHUB_SHA\" \\",
+                with: ": # bash Scripts/release-consume-final.sh verify-public \"${GITHUB_REF_NAME#v}\" \"$GITHUB_SHA\""
+            )
+            .replacingOccurrences(
+                of: "\"$private/LogicProMCP\" \"$private/bundle\" \\",
+                with: ": # \"$private/LogicProMCP\" \"$private/bundle\""
+            )
+            .replacingOccurrences(
+                of: "\"$PWD/trusted-verifier-src/.build/release/trusted-verifier\" \"$private/public\"",
+                with: ": # \"$PWD/trusted-verifier-src/.build/release/trusted-verifier\" \"$private/public\""
+            )
+        let noOpPackageReport = evaluate(noOpPackageVerification, consumer)
+        #expect(noOpPackageReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+
+        let packageVerificationBlock = """
+                  bash Scripts/release-consume-final.sh verify-public "${GITHUB_REF_NAME#v}" "$GITHUB_SHA" \\
+                    "$private/LogicProMCP" "$private/bundle" \\
+                    "$PWD/trusted-verifier-src/.build/release/trusted-verifier" "$private/public"
+        """
+        let unreachablePackageVerification = workflow.replacingOccurrences(
+            of: packageVerificationBlock,
+            with: """
+                  if false; then
+            \(packageVerificationBlock)
+                  fi
+            """
+        )
+        let unreachablePackageReport = evaluate(unreachablePackageVerification, consumer)
+        #expect(unreachablePackageReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+
+        let shortCircuitedPackageVerification = workflow.replacingOccurrences(
+            of: packageVerificationBlock,
+            with: """
+                  true || {
+            \(packageVerificationBlock)
+                  }
+            """
+        )
+        let shortCircuitedPackageReport = evaluate(shortCircuitedPackageVerification, consumer)
+        #expect(shortCircuitedPackageReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+
+        let bypassedConsumer = consumer.replacingOccurrences(
+            of: "verify_candidate() {",
+            with: "verify_candidate() {\n  return 0"
+        )
+        let bypassedConsumerReport = evaluate(workflow, bypassedConsumer)
+        #expect(bypassedConsumerReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+        #expect(bypassedConsumerReport.openDebts.contains(.mutationRestoreCompensationMissing))
+        #expect(bypassedConsumerReport.openDebts.contains(.independentProvenanceNotEnforced))
+
+        let unreachablePrivateVerification = consumer.replacingOccurrences(
+            of: "verify_candidate \"$private/LogicProMCP\"",
+            with: "if false; then\n  verify_candidate \"$private/LogicProMCP\"\nfi"
+        )
+        let unreachablePrivateReport = evaluate(workflow, unreachablePrivateVerification)
+        #expect(unreachablePrivateReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+        #expect(unreachablePrivateReport.openDebts.contains(.mutationRestoreCompensationMissing))
+        #expect(unreachablePrivateReport.openDebts.contains(.independentProvenanceNotEnforced))
+
+        let shortCircuitedPrivateVerification = consumer.replacingOccurrences(
+            of: "verify_candidate \"$private/LogicProMCP\"",
+            with: "true || {\n  verify_candidate \"$private/LogicProMCP\"\n}"
+        )
+        let shortCircuitedPrivateReport = evaluate(workflow, shortCircuitedPrivateVerification)
+        #expect(shortCircuitedPrivateReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+        #expect(shortCircuitedPrivateReport.openDebts.contains(.mutationRestoreCompensationMissing))
+        #expect(shortCircuitedPrivateReport.openDebts.contains(.independentProvenanceNotEnforced))
+
+        let redefinedBash = workflow.replacingOccurrences(
+            of: "          set -euo pipefail\n          private=$(mktemp -d)",
+            with: "          set -euo pipefail\n          bash() { return 0; }\n          private=$(mktemp -d)",
+            options: [],
+            range: workflow.range(of: "      - name: Package")
+                .map { $0.lowerBound..<workflow.endIndex }
+        )
+        let redefinedBashReport = evaluate(redefinedBash, consumer)
+        #expect(redefinedBashReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+
+        let contributorControlledKey = workflow.replacingOccurrences(
+            of: "${{ secrets.TRUSTED_QUALIFICATION_PUBLIC_KEY }}",
+            with: "candidate-controlled-key"
+        )
+        let contributorKeyReport = evaluate(contributorControlledKey, consumer)
+        #expect(contributorKeyReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+        #expect(contributorKeyReport.openDebts.contains(.independentProvenanceNotEnforced))
+
+        let noOpInstallGate = workflow
+            .replacingOccurrences(
+                of: "bash Scripts/install.sh | tee install.log",
+                with: ": # bash Scripts/install.sh | tee install.log"
+            )
+            .replacingOccurrences(
+                of: "bash Scripts/uninstall.sh | tee uninstall.log",
+                with: ": # bash Scripts/uninstall.sh | tee uninstall.log"
+            )
+        let noOpInstallReport = evaluate(noOpInstallGate, consumer)
+        #expect(noOpInstallReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+
+        let shortCircuitedInstallGate = workflow
+            .replacingOccurrences(
+                of: "bash Scripts/install.sh | tee install.log",
+                with: "true || {\n            bash Scripts/install.sh | tee install.log\n          }"
+            )
+            .replacingOccurrences(
+                of: "bash Scripts/uninstall.sh | tee uninstall.log",
+                with: "true || {\n            bash Scripts/uninstall.sh | tee uninstall.log\n          }"
+            )
+        let shortCircuitedInstallReport = evaluate(shortCircuitedInstallGate, consumer)
+        #expect(shortCircuitedInstallReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
+    }
+
+    // MARK: - R-MATRIX managed fixtures
 
     /// The managed-fixture manifest and fixture bodies exist as SHA-bound content on
-    /// disk — the substance of R-MATRIX — and `managedFixturesPresent` still recognizes
-    /// them. While ADR-001 release enforcement is deferred behind
-    /// `ADR001_QUALIFICATION_ENFORCED` (until #284 / T5), `release.yml` does not wire
-    /// that matrix into publication, so R-MATRIX is an honestly-open, release-enforced
-    /// debt even though the fixtures are present. Re-enabling the gate re-closes it.
-    @Test func managedFixturesPresentOnDiskWhileRMatrixReleaseEnforcementDeferred() throws {
+    /// disk, and the current final-artifact consumer binds the accepted private bundle
+    /// and public projection into publication. Both halves are required to close R-MATRIX.
+    @Test func managedFixturesAndCurrentReleaseEnforcementCloseRMatrix() throws {
         #expect(ProductionReadinessContractEvaluator.managedFixturesPresent(
             atRepositoryRoot: repositoryRoot
         ))
@@ -1026,7 +1342,7 @@ struct LPMCPPRD001ProductionReadinessREDTests {
             repositoryRoot,
             expectedAuthorityBaseSHA: expectedBaseSHA
         )
-        #expect(report.openDebts.contains(.managedFixtureMatrixUnbound))
+        #expect(!report.openDebts.contains(.managedFixtureMatrixUnbound))
     }
 
     /// Every manifest SHA-256 binds the actual fixture bytes on disk. Tampering
