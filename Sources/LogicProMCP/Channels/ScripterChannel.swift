@@ -40,46 +40,64 @@ actor ScripterChannel: KeyCmdCCChannel {
         Log.info("Scripter channel stopped", subsystem: "scripter")
     }
 
+    private static func terminalFailure(
+        _ error: HonestContract.FailureError,
+        hint: String,
+        extras: [String: Any],
+        writeAttempted: Bool = false
+    ) -> ChannelResult {
+        let receipt = extras.merging([
+            "terminal": true,
+            "terminal_scope": "mcp_request_only",
+            "human_intervention_required": false,
+            "human_intervention_requests": 0,
+            "human_dependent_transitions": 0,
+            "safe_to_retry": false,
+            "write_attempted": writeAttempted,
+        ]) { _, terminalValue in terminalValue }
+        return .error(HonestContract.encodeStateC(error: error, hint: hint, extras: receipt))
+    }
+
     func execute(operation: String, params: [String: String]) async -> ChannelResult {
         guard operation == "plugin.set_param" || operation == "mixer.set_plugin_param" else {
-            return .error(HonestContract.encodeStateC(
-                error: .notImplemented,
+            return Self.terminalFailure(
+                .notImplemented,
                 hint: "Scripter only handles plugin.set_param",
                 extras: ["operation": operation]
-            ))
+            )
         }
 
         let insert = Int(params["insert"] ?? "0") ?? 0
         guard insert == 0 else {
-            return .error(HonestContract.encodeStateC(
-                error: .notImplemented,
+            return Self.terminalFailure(
+                .notImplemented,
                 hint: "Scripter only supports insert 0 on the selected track",
                 extras: [
                     "operation": operation,
                     "insert": insert,
                 ]
-            ))
+            )
         }
         guard let paramRaw = params["param"], let paramIndex = Int(paramRaw) else {
-            return .error(HonestContract.encodeStateC(
-                error: .invalidParams,
+            return Self.terminalFailure(
+                .invalidParams,
                 hint: "Scripter requires explicit integer 'param'",
                 extras: ["operation": operation]
-            ))
+            )
         }
         guard let valueRaw = params["value"], let value = Double(valueRaw) else {
-            return .error(HonestContract.encodeStateC(
-                error: .invalidParams,
+            return Self.terminalFailure(
+                .invalidParams,
                 hint: "Scripter requires explicit numeric 'value'",
                 extras: [
                     "operation": operation,
                     "param": paramIndex,
                 ]
-            ))
+            )
         }
         guard (0.0...1.0).contains(value) else {
-            return .error(HonestContract.encodeStateC(
-                error: .invalidParams,
+            return Self.terminalFailure(
+                .invalidParams,
                 hint: "Scripter 'value' must be in 0.0..1.0 (got \(value))",
                 extras: [
                     "operation": operation,
@@ -87,19 +105,19 @@ actor ScripterChannel: KeyCmdCCChannel {
                     "param": paramIndex,
                     "requested": value,
                 ]
-            ))
+            )
         }
 
         guard let cc = Self.ccForParam(paramIndex) else {
-            return .error(HonestContract.encodeStateC(
-                error: .invalidParams,
+            return Self.terminalFailure(
+                .invalidParams,
                 hint: "Param index out of range (0-17): \(paramIndex)",
                 extras: [
                     "operation": operation,
                     "insert": insert,
                     "param": paramIndex,
                 ]
-            ))
+            )
         }
 
         let midiVal = Self.midiValue(for: value)
@@ -107,8 +125,8 @@ actor ScripterChannel: KeyCmdCCChannel {
         do {
             try await transport.send(bytes)
         } catch {
-            return .error(HonestContract.encodeStateC(
-                error: .portUnavailable,
+            return Self.terminalFailure(
+                .portUnavailable,
                 hint: "Failed to send Scripter param \(paramIndex): \(error)",
                 extras: [
                     "operation": operation,
@@ -117,8 +135,9 @@ actor ScripterChannel: KeyCmdCCChannel {
                     "requested": value,
                     "cc": Int(cc),
                     "applied_midi_value": Int(midiVal),
-                ]
-            ))
+                ],
+                writeAttempted: true
+            )
         }
 
         var extras: [String: Any] = [

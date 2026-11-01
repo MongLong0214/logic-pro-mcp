@@ -33,7 +33,11 @@ extension MIDIDispatcher {
         guard let export else {
             return await finalizeTrace(midiFilePayload(["error": "native_export_unavailable", "success": false,
                 "verified": false, "state": "C", "operation": "midi.\(command)",
-                "hint": "This command requires the registered request-owned native export provider."], isError: true), traceID: traceID)
+                "terminal": true, "terminal_scope": "mcp_request_only",
+                "human_intervention_required": false, "human_intervention_requests": 0,
+                "human_dependent_transitions": 0, "safe_to_retry": false, "write_attempted": false,
+                "hint": "No request-owned native export provider is registered; this MCP request terminated before any write."],
+                isError: true), traceID: traceID)
         }
         let result: CallTool.Result
         do {
@@ -153,8 +157,8 @@ extension MIDIDispatcher {
 
     private static func midiFilePayload(_ payload: [String: Any], isError: Bool = false) -> CallTool.Result {
         guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]) else {
-            return .init(content: [.text("{\"error\":\"midi_result_encoding_failed\"}")], isError: true)
+            return toolTextResult("{\"error\":\"midi_result_encoding_failed\"}", isError: true)
         }
-        return .init(content: [.text(String(decoding: data, as: UTF8.self))], isError: isError)
+        return toolTextResult(String(decoding: data, as: UTF8.self), isError: isError)
     }
 }

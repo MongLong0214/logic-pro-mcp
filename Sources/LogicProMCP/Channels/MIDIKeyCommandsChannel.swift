@@ -116,6 +116,28 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel {
         Log.info("MIDIKeyCommands channel stopped", subsystem: "keycmd")
     }
 
+    private static func mappedTerminalFailure(
+        _ error: HonestContract.FailureError,
+        operation: String,
+        hint: String,
+        writeAttempted: Bool
+    ) -> ChannelResult {
+        .error(HonestContract.encodeStateC(
+            error: error,
+            hint: hint,
+            extras: [
+                "operation": operation,
+                "terminal": true,
+                "terminal_scope": "mcp_request_only",
+                "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
+                "safe_to_retry": false,
+                "write_attempted": writeAttempted,
+            ]
+        ))
+    }
+
     func execute(operation: String, params: [String: String]) async -> ChannelResult {
         // T6 (PRD Issue#1 §4.3 / AC-1.1) — direct MIDI send path for the
         // 7 "midi.*.keycmd" ops. These bypass the CC mapping table and
@@ -127,7 +149,12 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel {
         }
 
         guard let cc = Self.mappingTable[operation] else {
-            return .error("No MIDI Key Command mapping for: \(operation)")
+            return Self.mappedTerminalFailure(
+                .notImplemented,
+                operation: operation,
+                hint: "No MIDI Key Command mapping for: \(operation)",
+                writeAttempted: false
+            )
         }
 
         // CC message on channel 16: 0xBF = CC status on ch15 (zero-indexed)
@@ -139,7 +166,12 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel {
             // Send CC value 0 to "release" (some Logic Pro commands need note-off style)
             try await transport.send(releaseBytes)
         } catch {
-            return .error("Failed to send key command for \(operation): \(error)")
+            return Self.mappedTerminalFailure(
+                .axWriteFailed,
+                operation: operation,
+                hint: "Failed to send key command for \(operation): \(error)",
+                writeAttempted: true
+            )
         }
 
         // v3.1.1 (P2-3) — wrap success in a Honest Contract State B envelope

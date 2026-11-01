@@ -12,6 +12,10 @@ private func manualValidationStoreURL(prefix: String) -> URL {
         .appendingPathExtension("json")
 }
 
+private func decodeKeyCommandJSON(_ text: String) -> [String: Any] {
+    (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] ?? [:]
+}
+
 @Test func testKeyCommandMappingUndo() {
     let mapping = MIDIKeyCommandsChannel.mappingTable
     #expect(mapping["edit.undo"] == 30)
@@ -51,13 +55,24 @@ private func manualValidationStoreURL(prefix: String) -> URL {
     #expect(sent[1][2] == 0x00)
 }
 
-@Test func testKeyCommandUnknownOperation() async {
+@Test func testKeyCommandUnknownOperation() async throws {
     let transport = MockKeyCmdTransport()
     let channel = MIDIKeyCommandsChannel(transport: transport)
 
     let result = await channel.execute(operation: "nonexistent.command", params: [:])
     #expect(!result.isSuccess)
-    #expect(result.message.contains("No MIDI Key Command mapping"))
+    let body = decodeKeyCommandJSON(result.message)
+    #expect(body["error"] as? String == "not_implemented")
+    let hint = try #require(body["hint"] as? String)
+    #expect(hint.contains("No MIDI Key Command mapping"))
+    #expect(try #require(body["terminal"] as? Bool))
+    #expect(body["terminal_scope"] as? String == "mcp_request_only")
+    #expect(!(try #require(body["human_intervention_required"] as? Bool)))
+    #expect(body["human_intervention_requests"] as? Int == 0)
+    #expect(body["human_dependent_transitions"] as? Int == 0)
+    #expect(!(try #require(body["safe_to_retry"] as? Bool)))
+    #expect(!(try #require(body["write_attempted"] as? Bool)))
+    #expect(await transport.sentBytes.isEmpty)
 }
 
 @Test func testKeyCommandMappingCount() {
@@ -103,7 +118,7 @@ private func manualValidationStoreURL(prefix: String) -> URL {
     #expect(!(afterApproval.detail.lowercased().contains("operator")))
 }
 
-@Test func testKeyCommandExecuteSurfacesTransportSendFailure() async {
+@Test func testKeyCommandExecuteSurfacesTransportSendFailure() async throws {
     let transport = MockKeyCmdTransport()
     await transport.setSendError(.sendFailed)
     let channel = MIDIKeyCommandsChannel(transport: transport)
@@ -111,7 +126,18 @@ private func manualValidationStoreURL(prefix: String) -> URL {
     let result = await channel.execute(operation: "edit.undo", params: [:])
 
     #expect(!result.isSuccess)
-    #expect(result.message.contains("Failed to send key command"))
+    let body = decodeKeyCommandJSON(result.message)
+    #expect(body["error"] as? String == "ax_write_failed")
+    let hint = try #require(body["hint"] as? String)
+    #expect(hint.contains("Failed to send key command"))
+    #expect(try #require(body["terminal"] as? Bool))
+    #expect(body["terminal_scope"] as? String == "mcp_request_only")
+    #expect(!(try #require(body["human_intervention_required"] as? Bool)))
+    #expect(body["human_intervention_requests"] as? Int == 0)
+    #expect(body["human_dependent_transitions"] as? Int == 0)
+    #expect(!(try #require(body["safe_to_retry"] as? Bool)))
+    #expect(try #require(body["write_attempted"] as? Bool))
+    #expect(await transport.sendAttempts == 1)
 }
 
 // MARK: - Mock
