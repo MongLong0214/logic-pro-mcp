@@ -37,10 +37,13 @@ private actor ToggleSurface: MCUTransportProtocol {
 
     private(set) var sentBytes: [[UInt8]] = []
     private(set) var bank = 0
+    private(set) var selectedTrack = 0
     private var states: [FlagKey: Bool]
     private let response: Response
     private let windows: [String]?
     private let absorbedBankPresses: Set<Int>
+    private let ignoreSelectPresses: Bool
+    private let failedAXSelections: Set<Int>
     private var bankPressesSeen = 0
     private var channel: MCUChannel?
 
@@ -48,12 +51,16 @@ private actor ToggleSurface: MCUTransportProtocol {
         response: Response = .toggles,
         states: [FlagKey: Bool] = [:],
         windows: [String]? = nil,
-        absorbedBankPresses: Set<Int> = []
+        absorbedBankPresses: Set<Int> = [],
+        ignoreSelectPresses: Bool = false,
+        failedAXSelections: Set<Int> = []
     ) {
         self.response = response
         self.states = states
         self.windows = windows
         self.absorbedBankPresses = absorbedBankPresses
+        self.ignoreSelectPresses = ignoreSelectPresses
+        self.failedAXSelections = failedAXSelections
     }
 
     func attach(channel: MCUChannel) {
@@ -64,6 +71,28 @@ private actor ToggleSurface: MCUTransportProtocol {
     func seedUpperRow() async {
         guard let windows else { return }
         await deliverUpperRow(windows[bank])
+    }
+
+    /// Logic can move the surface window without this server sending a bank
+    /// press (for example, after a selection change). Keep MCUChannel's
+    /// bookkeeping untouched while exposing the new row through its real
+    /// feedback path.
+    func externallyRebank(to bank: Int) async {
+        guard let windows, windows.indices.contains(bank) else { return }
+        self.bank = bank
+        await deliverUpperRow(windows[bank])
+    }
+
+    /// Models the exact AX selection used to restore a strip probe. Logic keeps the selected
+    /// track visible, so this also re-banks the surface and emits the resulting upper row.
+    func selectTrackViaAX(_ track: Int) async -> Bool {
+        guard track >= 0, !failedAXSelections.contains(track) else { return false }
+        selectedTrack = track
+        if let windows {
+            bank = min(track / 8, windows.count - 1)
+            await deliverUpperRow(windows[bank])
+        }
+        return true
     }
 
     func send(_ bytes: [UInt8]) async {
@@ -90,6 +119,9 @@ private actor ToggleSurface: MCUTransportProtocol {
             case .unreadableAfterPress:
                 states[key] = nil
             }
+        case .select:
+            guard !ignoreSelectPresses else { return }
+            selectedTrack = bank * 8 + button.strip
         default:
             break
         }
@@ -115,10 +147,21 @@ private struct SetRig {
     let sleeper: CountingSleeper
 }
 
-private func readback(of surface: ToggleSurface) -> MCUChannel.AXReadback {
-    MCUChannel.AXReadback(
+private func readback(
+    of surface: ToggleSurface,
+    exactSelectionBinding: Bool = false
+) -> MCUChannel.AXReadback {
+    let selectTrack: (@Sendable (Int) async -> Bool)?
+    if exactSelectionBinding {
+        selectTrack = { @Sendable track in await surface.selectTrackViaAX(track) }
+    } else {
+        selectTrack = nil
+    }
+    return MCUChannel.AXReadback(
         readVolume: { _ in nil },
         readPan: { _ in nil },
+        readSelectedTrack: { await surface.selectedTrack },
+        selectTrack: selectTrack,
         readMuted: { track in await surface.read(.mute, track: track) },
         readSoloed: { track in await surface.read(.solo, track: track) },
         readArmed: { track in await surface.read(.recArm, track: track) }
@@ -150,14 +193,24 @@ private let threeWindows = (0..<3).map(windowRow)
 private func makeBankedSetRig(
     states: [FlagKey: Bool],
     absorbedBankPresses: Set<Int> = [],
-    seedUpperRow: Bool = true
+    seedUpperRow: Bool = true,
+    exactSelectionBinding: Bool = false,
+    windows: [String] = threeWindows,
+    ignoreSelectPresses: Bool = false,
+    failedAXSelections: Set<Int> = []
 ) async -> SetRig {
-    let surface = ToggleSurface(states: states, windows: threeWindows, absorbedBankPresses: absorbedBankPresses)
+    let surface = ToggleSurface(
+        states: states,
+        windows: windows,
+        absorbedBankPresses: absorbedBankPresses,
+        ignoreSelectPresses: ignoreSelectPresses,
+        failedAXSelections: failedAXSelections
+    )
     let sleeper = CountingSleeper()
     let channel = MCUChannel(
         transport: surface,
         cache: StateCache(),
-        axReadback: readback(of: surface),
+        axReadback: readback(of: surface, exactSelectionBinding: exactSelectionBinding),
         sleep: sleeper.closure
     )
     await surface.attach(channel: channel)
@@ -354,6 +407,143 @@ private func runOverlapping(
 
 @Suite("Issue1020MCUStripButtonSetTests")
 struct Issue1020MCUStripButtonSetTests {
+    @Test("An already-selected track cannot certify an ignored Select probe")
+    func unchangedSelectionIsNotFreshStripBindingEvidence() async throws {
+        let target = FlagKey(function: .recArm, track: 3)
+        let wrong = FlagKey(function: .recArm, track: 11)
+        let rig = await makeBankedSetRig(
+            states: [target: false, wrong: false],
+            exactSelectionBinding: true,
+            windows: Array(repeating: threeWindows[0], count: 3),
+            ignoreSelectPresses: true
+        )
+        #expect(await rig.surface.selectTrackViaAX(3))
+        await rig.surface.externallyRebank(to: 1)
+
+        let result = await rig.channel.execute(
+            operation: "track.set_arm", params: ["index": "3", "enabled": "true"]
+        )
+
+        #expect(bit(await rig.surface.read(.recArm, track: 3)) == "off")
+        #expect(bit(await rig.surface.read(.recArm, track: 11)) == "off")
+        #expect(stripToggleBytes(await rig.surface.sentBytes).isEmpty)
+        let object = try setEnvelope(result)
+        #expect(object["state"] as? String == "C")
+        let writeAttempted = try #require(object["write_attempted"] as? Bool)
+        #expect(!writeAttempted)
+        #expect(object["selection_before"] as? Int == 3)
+    }
+
+    @Test("A failed AX bank-zero anchor latches every strip-relative writer closed")
+    func failedAXAnchorLeavesStripAddressingUntrusted() async throws {
+        let target = FlagKey(function: .recArm, track: 3)
+        let wrong = FlagKey(function: .recArm, track: 11)
+        let rig = await makeBankedSetRig(
+            states: [target: false, wrong: false],
+            exactSelectionBinding: true,
+            windows: Array(repeating: threeWindows[0], count: 3),
+            failedAXSelections: [0]
+        )
+        await rig.surface.externallyRebank(to: 1)
+
+        let refusal = await rig.channel.execute(
+            operation: "track.set_arm", params: ["index": "3", "enabled": "true"]
+        )
+        let refusalObject = try setEnvelope(refusal)
+        #expect(refusalObject["state"] as? String == "C")
+        let selectionRestored = try #require(refusalObject["selection_restored"] as? Bool)
+        #expect(!selectionRestored)
+        let bytesAfterFailedAnchor = await rig.surface.sentBytes.count
+
+        let laterResults = [
+            await rig.channel.execute(
+                operation: "mixer.set_volume", params: ["index": "3", "volume": "0.5"]
+            ),
+            await rig.channel.execute(
+                operation: "mixer.set_pan", params: ["index": "3", "pan": "0.25"]
+            ),
+            await rig.channel.execute(operation: "track.select", params: ["index": "3"]),
+            await rig.channel.execute(
+                operation: "track.set_automation", params: ["index": "3", "mode": "read"]
+            ),
+        ]
+
+        #expect(await rig.surface.sentBytes.count == bytesAfterFailedAnchor)
+        for result in laterResults {
+            let object = try setEnvelope(result)
+            #expect(object["state"] as? String == "C")
+            #expect(object["error"] as? String == "bank_walk_unverified")
+        }
+    }
+
+    @Test("A Logic-side re-bank cannot redirect a same-bank strip toggle")
+    func externallyRebankedWindowRefusesBeforeTheToggle() async throws {
+        let target = FlagKey(function: .recArm, track: 3)
+        let wrong = FlagKey(function: .recArm, track: 11)
+        let rig = await makeBankedSetRig(
+            states: [target: false, wrong: false],
+            exactSelectionBinding: true,
+            windows: Array(repeating: threeWindows[0], count: 3)
+        )
+        await rig.surface.externallyRebank(to: 1)
+
+        let result = await rig.channel.execute(
+            operation: "track.set_arm", params: ["index": "3", "enabled": "true"]
+        )
+
+        #expect(bit(await rig.surface.read(.recArm, track: 3)) == "off")
+        #expect(bit(await rig.surface.read(.recArm, track: 11)) == "off",
+            "The stale currentBank fast path must not toggle the strip Logic now maps to track 11")
+        #expect(stripToggleBytes(await rig.surface.sentBytes).isEmpty)
+        #expect(await rig.surface.selectedTrack == 0)
+        #expect(await rig.surface.bank == 0)
+        let object = try setEnvelope(result)
+        #expect(object["state"] as? String == "C")
+        let writeAttempted = try #require(object["write_attempted"] as? Bool)
+        #expect(!writeAttempted)
+        #expect(object["selection_before"] as? Int == 0)
+        let selectionRestored = try #require(object["selection_restored"] as? Bool)
+        #expect(selectionRestored)
+
+        let sentAfterRefusal = await rig.surface.sentBytes.count
+        let followup = await rig.channel.execute(
+            operation: "track.set_arm", params: ["index": "3", "enabled": "true"]
+        )
+        let followupBytes = Array((await rig.surface.sentBytes).dropFirst(sentAfterRefusal))
+        #expect(followupBytes == pressPair(.select, strip: 3)
+            + pressPair(.recArm, strip: 3) + pressPair(.select, strip: 0))
+        #expect(bit(await rig.surface.read(.recArm, track: 3)) == "on")
+        #expect(bit(await rig.surface.read(.recArm, track: 11)) == "off")
+        let followupObject = try setEnvelope(followup)
+        #expect(followupObject["state"] as? String == "A")
+        let followupWriteAttempted = try #require(followupObject["write_attempted"] as? Bool)
+        #expect(followupWriteAttempted)
+    }
+
+    @Test("An exact strip probe permits the intended toggle and restores selection")
+    func exactStripProbePermitsTheIntendedToggle() async throws {
+        let target = FlagKey(function: .recArm, track: 3)
+        let rig = await makeBankedSetRig(
+            states: [target: false], exactSelectionBinding: true
+        )
+
+        let result = await rig.channel.execute(
+            operation: "track.set_arm", params: ["index": "3", "enabled": "true"]
+        )
+
+        #expect(await rig.surface.sentBytes == pressPair(.select, strip: 3)
+            + pressPair(.recArm, strip: 3) + pressPair(.select, strip: 0))
+        #expect(bit(await rig.surface.read(.recArm, track: 3)) == "on")
+        #expect(await rig.surface.selectedTrack == 0)
+        let object = try setEnvelope(result)
+        #expect(object["state"] as? String == "A")
+        let writeAttempted = try #require(object["write_attempted"] as? Bool)
+        #expect(writeAttempted)
+        #expect(object["selection_probe_observed"] as? Int == 3)
+        let selectionRestored = try #require(object["selection_restored"] as? Bool)
+        #expect(selectionRestored)
+    }
+
     @Test(arguments: toggles, [true, false])
     func alreadyInTheRequestedStateSendsNothingAndAnswersStateA(_ toggle: Issue1020Toggle, enabled: Bool) async throws {
         let rig = makeSetRig(states: [FlagKey(function: toggle.function, track: 2): enabled])

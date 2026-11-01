@@ -179,6 +179,12 @@ actor MCUChannel: Channel {
         let readPan: @Sendable (Int) async -> Double?
         let readAutomationMode: @Sendable (Int) async -> AutomationMode?
         let readSelectedTrack: @Sendable () async -> Int?
+        /// Exact AX selection used only to restore the selection that a strip-identity probe
+        /// temporarily changes. When this closure is present, strip-button writes select the
+        /// candidate MCU strip and require `readSelectedTrack` to name the caller's exact track
+        /// before sending the toggle. That makes an externally re-banked surface fail closed
+        /// instead of trusting stale `currentBank` bookkeeping (#862).
+        let selectTrack: (@Sendable (Int) async -> Bool)?
         /// Whether a track's Mute / Solo / Record button reads as on in its AX track header
         /// (#1020). The MCU strip buttons toggle, so `track.set_mute` / `set_solo` / `set_arm`
         /// compare against these before pressing. `nil` is "could not read" and is never taken
@@ -199,6 +205,7 @@ actor MCUChannel: Channel {
             readPan: @escaping @Sendable (Int) async -> Double?,
             readAutomationMode: @escaping @Sendable (Int) async -> AutomationMode? = { _ in nil },
             readSelectedTrack: @escaping @Sendable () async -> Int? = { nil },
+            selectTrack: (@Sendable (Int) async -> Bool)? = nil,
             readMuted: @escaping @Sendable (Int) async -> Bool? = { _ in nil },
             readSoloed: @escaping @Sendable (Int) async -> Bool? = { _ in nil },
             readArmed: @escaping @Sendable (Int) async -> Bool? = { _ in nil },
@@ -208,6 +215,7 @@ actor MCUChannel: Channel {
             self.readPan = readPan
             self.readAutomationMode = readAutomationMode
             self.readSelectedTrack = readSelectedTrack
+            self.selectTrack = selectTrack
             self.readMuted = readMuted
             self.readSoloed = readSoloed
             self.readArmed = readArmed
@@ -235,6 +243,10 @@ actor MCUChannel: Channel {
     /// `withBanking` refuses before sending anything. Cleared only by a `mixer.bank` left walk that
     /// ends on an unchanged redraw (Logic at its left end) with `currentBank` at 0.
     private var windowOffsetUnaligned = false
+    /// An exact AX selection can re-bank Logic without an MCU bank press. While AX recovery has not
+    /// re-anchored track 0 and restored the prior selection through witnessed MCU bank walks,
+    /// `currentBank` is no longer an address and every strip-relative operation refuses.
+    private var bankPositionUntrusted = false
 
     // The CoreMIDI callback only calls `MCUFeedbackIngress.yield`, which is a
     // non-suspending bounded hand-off. A single task drains it in arrival order;
@@ -926,7 +938,67 @@ actor MCUChannel: Channel {
                 return .success(HonestContract.encodeStateA(extras: extras))
             }
 
-            return await bankedStripWrite(targetTrack: track, operation: operation) { strip in
+            var originalSelectedTrack: Int?
+            var selectionProbeAttempted = false
+            var observedSelectedTrack: Int?
+            var bindingRefusal: (strip: Int, observed: Int?, reason: String)?
+            let result = await bankedStripWrite(targetTrack: track, operation: operation) { strip in
+                if self.axReadback?.selectTrack != nil {
+                    originalSelectedTrack = await self.axReadback?.readSelectedTrack()
+                    guard originalSelectedTrack != nil else {
+                        return await self.stripBindingRefusal(
+                            operation: operation,
+                            track: track,
+                            strip: strip,
+                            selectionProbeAttempted: false,
+                            observedSelectedTrack: nil,
+                            reason: "the original selected track could not be read, so probing the MCU "
+                                + "strip could not be restored safely"
+                        )
+                    }
+                    guard originalSelectedTrack != track else {
+                        return await self.stripBindingRefusal(
+                            operation: operation,
+                            track: track,
+                            strip: strip,
+                            selectionProbeAttempted: false,
+                            observedSelectedTrack: originalSelectedTrack,
+                            selectionBefore: originalSelectedTrack,
+                            selectionRestored: true,
+                            reason: "track \(track) was already selected before the candidate Select "
+                                + "press, so an unchanged selection could not prove the press landed "
+                                + "or bind strip \(strip) to that track"
+                        )
+                    }
+
+                    selectionProbeAttempted = true
+                    await self.pressButton(.select, strip: strip)
+                    for attempt in 0..<Self.stripButtonReadbackPollBudget {
+                        observedSelectedTrack = await self.axReadback?.readSelectedTrack()
+                        if observedSelectedTrack == track { break }
+                        if attempt < Self.stripButtonReadbackPollBudget - 1 {
+                            await self.sleep(.milliseconds(Self.stripButtonReadbackPollMilliseconds))
+                        }
+                    }
+                    guard observedSelectedTrack == track else {
+                        let observedLabel = observedSelectedTrack.map { String($0) } ?? "unreadable"
+                        bindingRefusal = (
+                            strip: strip,
+                            observed: observedSelectedTrack,
+                            reason: "selecting candidate strip \(strip) selected track "
+                                + "\(observedLabel) rather than "
+                                + "the requested track \(track); currentBank is stale or the strip identity "
+                                + "cannot be bound"
+                        )
+                        // `bankedStripWrite` must still finish its witnessed walk home before AX
+                        // restoration can safely establish a new bank-zero anchor. This internal
+                        // success is replaced by the State C binding receipt below; no toggle ran.
+                        return .success(HonestContract.encodeStateA(extras: [
+                            "write_attempted": false,
+                        ]))
+                    }
+                }
+
                 await self.pressButton(function, strip: strip)
                 extras["write_attempted"] = true
                 var observed: Bool?
@@ -955,7 +1027,148 @@ actor MCUChannel: Channel {
                 }
                 return .success(HonestContract.encodeStateA(extras: extras))
             }
+
+            var selectionRestored: Bool?
+            if selectionProbeAttempted, let originalSelectedTrack {
+                selectionRestored = await self.restoreStripProbeSelection(
+                    originalTrack: originalSelectedTrack,
+                    operation: operation,
+                    bankWasBound: bindingRefusal == nil && result.isSuccess
+                )
+            }
+
+            if let bindingRefusal {
+                return await self.stripBindingRefusal(
+                    operation: operation,
+                    track: track,
+                    strip: bindingRefusal.strip,
+                    selectionProbeAttempted: true,
+                    observedSelectedTrack: bindingRefusal.observed,
+                    selectionBefore: originalSelectedTrack,
+                    selectionRestored: selectionRestored,
+                    reason: bindingRefusal.reason
+                )
+            }
+            guard case .success(let message) = result else { return result }
+            guard selectionProbeAttempted else { return result }
+            return .success(HonestContract.addExtras([
+                "selection_probe_attempted": true,
+                "selection_before": originalSelectedTrack.map { $0 as Any } ?? NSNull(),
+                "selection_probe_observed": observedSelectedTrack.map { $0 as Any } ?? NSNull(),
+                "selection_restored": selectionRestored ?? false,
+            ], into: message))
         }
+    }
+
+    /// A strip select is a non-destructive identity probe; the actual mute / solo / arm toggle was
+    /// not sent. This error is intentionally non-terminal so the router may use another channel.
+    private func stripBindingRefusal(
+        operation: String,
+        track: Int,
+        strip: Int,
+        selectionProbeAttempted: Bool,
+        observedSelectedTrack: Int?,
+        selectionBefore: Int? = nil,
+        selectionRestored: Bool? = nil,
+        reason: String
+    ) async -> ChannelResult {
+        var extras: [String: Any] = [
+            "operation": operation,
+            "channel": "MCU",
+            "track": track,
+            "strip": strip,
+            "write_attempted": false,
+            "selection_probe_attempted": selectionProbeAttempted,
+            "observed_selected_track": observedSelectedTrack.map { $0 as Any } ?? NSNull(),
+        ]
+        if let selectionBefore { extras["selection_before"] = selectionBefore }
+        if let selectionRestored { extras["selection_restored"] = selectionRestored }
+        for (key, value) in await mcuConnectionExtras() { extras[key] = value }
+        return .error(HonestContract.encodeStateC(
+            error: .bankWalkUnverified,
+            hint: "\(operation) sent no strip toggle: \(reason). Another channel may still set it.",
+            extras: extras
+        ))
+    }
+
+    /// Restore a probe's original selection without leaving `currentBank` stale. A successful
+    /// strip write proved the candidate bank, and `bankedStripWrite` has already walked home, so
+    /// the original track can be selected through the same witnessed walk and that walk can return
+    /// home again. If the write refused because the starting bank was already stale, only the
+    /// exact AX selector can restore the UI; that may re-bank Logic, so bookkeeping is marked
+    /// untrusted and later strip-relative operations refuse until an explicit left-edge reset.
+    private func restoreStripProbeSelection(
+        originalTrack: Int,
+        operation: String,
+        bankWasBound: Bool
+    ) async -> Bool {
+        if await axReadback?.readSelectedTrack() == originalTrack { return true }
+
+        if bankWasBound,
+           await restoreSelectionWithMCU(track: originalTrack, operation: operation) {
+            return true
+        }
+
+        guard let selectTrack = axReadback?.selectTrack else {
+            bankPositionUntrusted = true
+            return false
+        }
+        bankPositionUntrusted = true
+        // Six-character LCD rows can be identical across banks, so an unchanged bank-left redraw
+        // cannot prove the left edge from an unknown starting point. Exact AX selection of track 0
+        // is the only available anchor: Logic must show the first window to keep track 0 visible.
+        guard await selectTrack(0), await pollSelectedTrack(0) else {
+            _ = await selectTrack(originalTrack)
+            _ = await pollSelectedTrack(originalTrack)
+            return false
+        }
+        currentBank = Self.bankIndexRange.lowerBound
+        windowOffsetUnaligned = false
+        bankPositionUntrusted = false
+
+        if originalTrack == 0 { return true }
+        if await restoreSelectionWithMCU(track: originalTrack, operation: operation) { return true }
+
+        // The banked restore did not establish the original selection. Preserve the user's exact
+        // selection through AX, but keep bank addressing untrusted because AX may re-bank again.
+        bankPositionUntrusted = true
+        guard await selectTrack(originalTrack) else { return false }
+        return await pollSelectedTrack(originalTrack)
+    }
+
+    private func restoreSelectionWithMCU(track: Int, operation: String) async -> Bool {
+        let restored = await bankedStripWrite(
+            targetTrack: track,
+            operation: "\(operation).restore_selection"
+        ) { strip in
+            await self.pressButton(.select, strip: strip)
+            guard await self.pollSelectedTrack(track) else {
+                return await self.stripBindingRefusal(
+                    operation: operation,
+                    track: track,
+                    strip: strip,
+                    selectionProbeAttempted: true,
+                    observedSelectedTrack: await self.axReadback?.readSelectedTrack(),
+                    reason: "the MCU selection restore did not select the original track"
+                )
+            }
+            return .success(HonestContract.encodeStateA(extras: [
+                "operation": operation,
+                "selection_restored": true,
+            ]))
+        }
+        guard case .success = restored else { return false }
+        return await axReadback?.readSelectedTrack() == track
+    }
+
+    private func pollSelectedTrack(_ track: Int) async -> Bool {
+        for attempt in 0..<Self.stripButtonReadbackPollBudget {
+            if await axReadback?.readSelectedTrack() == track { return true }
+            if attempt < Self.stripButtonReadbackPollBudget - 1 {
+                await sleep(.milliseconds(Self.stripButtonReadbackPollMilliseconds))
+            }
+        }
+        return false
     }
 
     private func executeAutomation(_ params: [String: String]) async -> ChannelResult {
@@ -1746,6 +1959,15 @@ actor MCUChannel: Channel {
 
         // Decided under the lock: read outside it, `currentBank` can be the bank a suspended
         // `executeBank` walk has already left.
+        if bankPositionUntrusted {
+            return await bankWalkRefusal(
+                operation: operation, track: targetTrack, strip: strip,
+                requested: abs(targetBank - currentBank), out: BankWalkLeg(), back: BankWalkLeg(),
+                reason: "AX selection recovery could not re-anchor bank zero and restore the prior "
+                    + "selection through witnessed MCU walks, so currentBank no longer names the "
+                    + "visible window; nothing was sent"
+            )
+        }
         if windowOffsetUnaligned, currentBank != Self.bankIndexRange.lowerBound {
             return await bankWalkRefusal(
                 operation: operation, track: targetTrack, strip: strip,
