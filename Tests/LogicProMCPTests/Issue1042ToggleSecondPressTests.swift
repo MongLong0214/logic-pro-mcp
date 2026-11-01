@@ -266,4 +266,56 @@ struct Issue1042ToggleSecondPressTests {
         #expect(envelope["human_intervention_requests"] as? Int == 0)
         #expect(envelope["human_dependent_transitions"] as? Int == 0)
     }
+
+    @Test("a legacy transport AXPress failure after a landed toggle terminates the routing ladder")
+    func failedLegacyTransportPressThatLandedIsNotPressedAgain() async throws {
+        let actions = Issue1042AXActions()
+        let builder = FakeAXRuntimeBuilder()
+        let app = builder.element(10_450)
+        let window = builder.element(10_451)
+        let transport = builder.element(10_452)
+        let metronome = builder.element(10_453)
+        builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+        builder.setChildren(window, [transport])
+        builder.setAttribute(transport, kAXRoleAttribute as String, kAXGroupRole as String)
+        builder.setAttribute(transport, kAXIdentifierAttribute as String, "Transport")
+        builder.setChildren(transport, [metronome])
+        builder.setAttribute(metronome, kAXRoleAttribute as String, kAXButtonRole as String)
+        builder.setAttribute(metronome, kAXDescriptionAttribute as String, "Metronome")
+        builder.setAttribute(metronome, kAXValueAttribute as String, NSNumber(value: false))
+        let logicRuntime = builder.makeLogicRuntime(
+            appElement: app,
+            setAttributeHandler: nil,
+            performActionHandler: { element, action in
+                guard element == metronome else { return false }
+                actions.record(action)
+                builder.setAttribute(metronome, kAXValueAttribute as String, NSNumber(value: true))
+                return false
+            }
+        )
+        let ladder = await issue1042Ladder(logicRuntime: logicRuntime)
+
+        let result = await ladder.router.route(operation: "transport.toggle_metronome", params: [:])
+
+        #expect(actions.performed == [kAXPressAction as String])
+        let landed: NSNumber? = AXHelpers.getAttribute(
+            metronome, kAXValueAttribute as String, runtime: logicRuntime.ax
+        )
+        #expect(landed?.boolValue == true, "a false AX return can follow a landed legacy transport press")
+        let later = await ladder.laterRungPresses()
+        #expect(later == 0, "no later rung may repeat a transport toggle after an attempted AXPress")
+        #expect(!result.isSuccess)
+        let envelope = try #require(issue1042Object(result.message))
+        #expect(envelope["state"] as? String == "C")
+        #expect(envelope["error"] as? String == "ax_write_failed")
+        #expect(try #require(envelope["write_attempted"] as? Bool))
+        #expect(try #require(envelope["fallback_unsafe"] as? Bool))
+        #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+        #expect(envelope["action"] as? String == "axpress")
+        #expect(try #require(envelope["terminal"] as? Bool))
+        #expect(envelope["terminal_scope"] as? String == "mcp_request_only")
+        #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+        #expect(envelope["human_intervention_requests"] as? Int == 0)
+        #expect(envelope["human_dependent_transitions"] as? Int == 0)
+    }
 }
