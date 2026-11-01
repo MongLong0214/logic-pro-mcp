@@ -119,7 +119,7 @@ private func decodeScripterJSON(_ s: String) -> [String: Any] {
     #expect(((obj["hint"] as? String)?.contains("only handles plugin.set_param"))!)
 }
 
-@Test func testScripterExecuteSurfacesTransportSendFailure() async {
+@Test func testScripterExecuteSurfacesTransportSendFailure() async throws {
     let transport = MockScripterTransport()
     await transport.setSendError(.sendFailed)
     let channel = ScripterChannel(transport: transport)
@@ -134,6 +134,13 @@ private func decodeScripterJSON(_ s: String) -> [String: Any] {
     #expect(!((obj["success"] as? Bool)!))
     #expect(obj["error"] as? String == "port_unavailable")
     #expect(((obj["hint"] as? String)?.contains("Failed to send Scripter param 1"))!)
+    #expect(try #require(obj["terminal"] as? Bool))
+    #expect(obj["terminal_scope"] as? String == "mcp_request_only")
+    #expect(!(try #require(obj["human_intervention_required"] as? Bool)))
+    #expect(obj["human_intervention_requests"] as? Int == 0)
+    #expect(obj["human_dependent_transitions"] as? Int == 0)
+    #expect(!(try #require(obj["safe_to_retry"] as? Bool)))
+    #expect(try #require(obj["write_attempted"] as? Bool))
 }
 
 @Test func testScripterRejectsUnsupportedInsertAndOutOfRangeParam() async {
@@ -181,6 +188,34 @@ private func decodeScripterJSON(_ s: String) -> [String: Any] {
     #expect(decodeScripterJSON(high.message)["error"] as? String == "invalid_params")
     let sent = await transport.sentBytes
     #expect(sent.isEmpty, "out-of-range values must fail closed, not clamp and send")
+}
+
+@Test func testScripterPreflightRefusalsTerminateWithoutHumanOrWrite() async throws {
+    let transport = MockScripterTransport()
+    let channel = ScripterChannel(transport: transport)
+    let cases: [(String, [String: String])] = [
+        ("plugin.insert", [:]),
+        ("plugin.set_param", ["insert": "1", "param": "0", "value": "0.5"]),
+        ("plugin.set_param", ["insert": "0", "value": "0.5"]),
+        ("plugin.set_param", ["insert": "0", "param": "0"]),
+        ("plugin.set_param", ["insert": "0", "param": "0", "value": "1.1"]),
+        ("plugin.set_param", ["insert": "0", "param": "18", "value": "0.5"]),
+    ]
+
+    for (operation, params) in cases {
+        let result = await channel.execute(operation: operation, params: params)
+        #expect(!result.isSuccess)
+        let body = decodeScripterJSON(result.message)
+        #expect(try #require(body["terminal"] as? Bool))
+        #expect(body["terminal_scope"] as? String == "mcp_request_only")
+        #expect(!(try #require(body["human_intervention_required"] as? Bool)))
+        #expect(body["human_intervention_requests"] as? Int == 0)
+        #expect(body["human_dependent_transitions"] as? Int == 0)
+        #expect(!(try #require(body["safe_to_retry"] as? Bool)))
+        #expect(!(try #require(body["write_attempted"] as? Bool)))
+    }
+
+    #expect(await transport.sentBytes.isEmpty)
 }
 
 // MARK: - Mock
