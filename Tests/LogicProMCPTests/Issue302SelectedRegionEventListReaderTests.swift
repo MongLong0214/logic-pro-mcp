@@ -142,6 +142,12 @@ import Testing
 
         #expect(body["state"] as? String == "C")
         #expect(body["reason"] as? String == "event_list_observation_unavailable")
+        #expect(try #require(body["terminal"] as? Bool))
+        #expect(body["terminal_scope"] as? String == "mcp_request_only")
+        #expect(!(try #require(body["human_intervention_required"] as? Bool)))
+        #expect(body["human_intervention_requests"] as? Int == 0)
+        #expect(body["human_dependent_transitions"] as? Int == 0)
+        #expect(!(try #require(body["safe_to_retry"] as? Bool)))
         #expect(try #require(body["write_attempted"] as? Bool))
         #expect(try #require(body["row_selection_write_attempted"] as? Bool))
         #expect(!(try #require(body["row_selection_restored"] as? Bool)))
