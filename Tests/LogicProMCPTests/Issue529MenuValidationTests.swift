@@ -1377,6 +1377,11 @@ struct Issue529MenuValidationTests {
         #expect(try #require(envelope["dialog_route_outcome"] as? String) == "unexpected_result")
         #expect(try #require(envelope["fallback_unsafe"] as? Bool))
         #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+        #expect(try #require(envelope["terminal"] as? Bool))
+        #expect(envelope["terminal_scope"] as? String == "mcp_request_only")
+        #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+        #expect(envelope["human_intervention_requests"] as? Int == 0)
+        #expect(envelope["human_dependent_transitions"] as? Int == 0)
         #expect(sliderWrites.value == 0)
     }
 
@@ -1983,6 +1988,11 @@ struct Issue529MenuValidationTests {
         #expect(envelope["write_attempted"] == nil)
         #expect(try #require(envelope["dialog_submission_indeterminate"] as? Bool))
         #expect(try #require(envelope["fallback_unsafe"] as? Bool))
+        #expect(try #require(envelope["terminal"] as? Bool))
+        #expect(envelope["terminal_scope"] as? String == "mcp_request_only")
+        #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+        #expect(envelope["human_intervention_requests"] as? Int == 0)
+        #expect(envelope["human_dependent_transitions"] as? Int == 0)
         #expect(sliderWrites.value == 0)
     }
 

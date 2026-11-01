@@ -109,13 +109,30 @@ private func parseEnvelope(_ message: String) -> [String: Any]? {
     #expect(raw.contains("CC 30"))
 }
 
-@Test func testMIDIKeyCommandErrorPathStaysFreeText() async {
+@Test func testMIDIKeyCommandSendFailureReturnsTerminalHCEnvelope() async throws {
     let transport = MockKeyCmdTransport()
     await transport.setSendError(.sendFailed)
     let channel = MIDIKeyCommandsChannel(transport: transport)
 
     let result = await channel.execute(operation: "edit.undo", params: [:])
     #expect(!result.isSuccess)
-    #expect(result.message.contains("Failed to send key command"))
-    #expect(parseEnvelope(result.message) == nil)
+    let env = try #require(parseEnvelope(result.message))
+    let success = try #require(env["success"] as? Bool)
+    let terminal = try #require(env["terminal"] as? Bool)
+    let humanInterventionRequired = try #require(env["human_intervention_required"] as? Bool)
+    let writeAttempted = try #require(env["write_attempted"] as? Bool)
+    let safeToRetry = try #require(env["safe_to_retry"] as? Bool)
+    let hint = try #require(env["hint"] as? String)
+    #expect(!success)
+    #expect(env["state"] as? String == "C")
+    #expect(env["error"] as? String == "ax_write_failed")
+    #expect(env["operation"] as? String == "edit.undo")
+    #expect(terminal)
+    #expect(env["terminal_scope"] as? String == "mcp_request_only")
+    #expect(!humanInterventionRequired)
+    #expect(env["human_intervention_requests"] as? Int == 0)
+    #expect(env["human_dependent_transitions"] as? Int == 0)
+    #expect(writeAttempted)
+    #expect(!safeToRetry)
+    #expect(hint.contains("Failed to send key command"))
 }
