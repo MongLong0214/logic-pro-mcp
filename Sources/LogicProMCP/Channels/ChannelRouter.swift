@@ -582,6 +582,12 @@ actor ChannelRouter {
             extras: [
                 "operation": operation,
                 "last_error": lastError,
+                "terminal": true,
+                "terminal_scope": "mcp_request_only",
+                "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
+                "safe_to_retry": false,
             ]
         ))
     }

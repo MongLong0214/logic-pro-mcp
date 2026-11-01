@@ -602,7 +602,7 @@ private func verifiedReadbackMismatchEnvelope() -> String {
     #expect(obj?["last_error"] == nil)
 }
 
-@Test func testSingleChannelFreeFormErrorStillWrapsAsChannelsExhausted() async {
+@Test func testSingleChannelFreeFormErrorStillWrapsAsChannelsExhausted() async throws {
     // Companion guard for the fix's `stateCErrorCode != nil` scope clause: a
     // single-channel op whose only channel produces a FREE-FORM (non-State-C)
     // error — or never executes — must still fall through to the structured
@@ -625,6 +625,12 @@ private func verifiedReadbackMismatchEnvelope() -> String {
     )
     #expect(obj["operation"] as? String == "transport.set_tempo")
     #expect(obj["last_error"] as? String == "free-form: AX subsystem hiccup")
+    #expect(try #require(obj["terminal"] as? Bool))
+    #expect(obj["terminal_scope"] as? String == "mcp_request_only")
+    #expect(!(try #require(obj["human_intervention_required"] as? Bool)))
+    #expect(obj["human_intervention_requests"] as? Int == 0)
+    #expect(obj["human_dependent_transitions"] as? Int == 0)
+    #expect(!(try #require(obj["safe_to_retry"] as? Bool)))
 }
 
 @Test func testFreeFormErrorStillFallsThrough() async {
