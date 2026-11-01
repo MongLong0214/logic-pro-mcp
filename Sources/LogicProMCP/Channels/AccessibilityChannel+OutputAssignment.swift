@@ -165,7 +165,9 @@ extension AccessibilityChannel {
             strip = physical.strip
         } else {
             guard index < strips.count else {
-                return refusal(.elementNotFound, "track index out of range for the visible Mixer; nothing was pressed.")
+                return refusal(.elementNotFound,
+                    "track index out of range for the visible Mixer; nothing was pressed.",
+                    terminalPreconditionFields)
             }
             strip = strips[index]
         }

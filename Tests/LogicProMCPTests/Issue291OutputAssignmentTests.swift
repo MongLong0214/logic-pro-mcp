@@ -449,9 +449,10 @@ private final class R2Fixture: @unchecked Sendable {
 private func runChannel(
     _ fixture: R2Fixture,
     destination: OutputAssignment,
-    expected: OutputAssignment? = nil
+    expected: OutputAssignment? = nil,
+    index: Int = 0
 ) async throws -> [String: Any] {
-    var params = ["index": "0", "destination": destination.token]
+    var params = ["index": String(index), "destination": destination.token]
     if let expected { params["expected_current"] = expected.token }
     let result = await AccessibilityChannel.setOutputVerified(
         params: params, runtime: fixture.runtime, timing: .immediate
@@ -594,6 +595,27 @@ func outputAssignmentTerminatesWhenMixerIsUnavailable() async throws {
     for forbiddenRequest in ["show", "open", "click", "manually", "retry"] {
         #expect(!hint.localizedCaseInsensitiveContains(forbiddenRequest))
     }
+    #expect(fixture.presses.isEmpty)
+    #expect(fixture.escapeCount == 0)
+}
+
+@Test("an out-of-range Mixer index terminates without asking for another target")
+func outputAssignmentTerminatesWhenMixerIndexIsOutOfRange() async throws {
+    let fixture = R2Fixture()
+    let envelope = try await runChannel(fixture, destination: .bus(1), index: 99)
+
+    #expect(envelope["state"] as? String == "C")
+    #expect(envelope["error"] as? String == "element_not_found")
+    #expect(!(try #require(envelope["write_attempted"] as? Bool)))
+    #expect(try #require(envelope["terminal"] as? Bool))
+    #expect(envelope["terminal_scope"] as? String == "mcp_request_only")
+    #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+    #expect(try #require(envelope["automatic_precondition_attempts_exhausted"] as? Bool))
+    #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+    #expect(envelope["human_intervention_requests"] as? Int == 0)
+    #expect(envelope["human_dependent_transitions"] as? Int == 0)
+    let hint = try #require(envelope["hint"] as? String)
+    #expect(!hint.localizedCaseInsensitiveContains("retry"))
     #expect(fixture.presses.isEmpty)
     #expect(fixture.escapeCount == 0)
 }
