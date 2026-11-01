@@ -396,6 +396,9 @@ actor LogicProServer {
                 }
                 return selected.count == 1 ? selected[0] : nil
             },
+            selectTrack: { track in
+                AXLogicProElements.selectTrackViaAX(at: track)
+            },
             // #1020: the same track-header button the Accessibility channel reads for its own
             // mute / solo / arm. `extractButtonState` answers nil for a failed read and for a mixed
             // value alike; `readTrackStates()` would fold both into `false`, which is why the
