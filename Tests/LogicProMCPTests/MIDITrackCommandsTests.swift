@@ -216,6 +216,44 @@ func midiTrackCommandsRejectMalformedRequestsBeforeTheProvider(fault: String) as
     #expect(context.traceID != nil)
 }
 
+@Test func midiTrackCommandsMissingProviderRemainStructuredWhenTracingIsDisabled() async throws {
+    let flag = "LOGIC_MCP_ADR005_OPERATION_TRACE"
+    let previous = getenv(flag).map { String(cString: $0) }
+    setenv(flag, "0", 1)
+    defer {
+        if let previous { setenv(flag, previous, 1) } else { unsetenv(flag) }
+    }
+
+    for command in ["export_track_midi", "read_track_notes"] {
+        var params: [String: Value] = [
+            "project_ref": .string(midiCommandProject),
+            "target_ref": .string(midiCommandTrack),
+        ]
+        if command == "export_track_midi" { params["path"] = .string("/tmp/target.mid") }
+        let context = OperationTraceContext()
+        let result = await OperationTraceContext.$current.withValue(context) {
+            await MIDIDispatcher.handle(
+                command: command,
+                params: params,
+                router: ChannelRouter(),
+                cache: StateCache()
+            )
+        }
+
+        #expect(context.traceID == nil)
+        let text = sharedToolText(result)
+        #expect(result.structuredContent == structuredContentValue(fromToolText: text))
+        guard case .object(let fields) = try #require(result.structuredContent) else {
+            Issue.record("expected a structured missing-provider receipt for \(command)")
+            continue
+        }
+        #expect(fields["error"] == .string("native_export_unavailable"))
+        #expect(fields["terminal"] == .bool(true))
+        #expect(fields["human_intervention_requests"] == .int(0))
+        #expect(fields["human_dependent_transitions"] == .int(0))
+    }
+}
+
 @Test func midiTrackCommandsDeclareExclusiveRefRequiredNeverRetryOperations() throws {
     for command in ["export_track_midi", "read_track_notes"] {
         let spec = try #require(OperationRegistry.specs.first { $0.tool == .logicMidi && $0.command == command })

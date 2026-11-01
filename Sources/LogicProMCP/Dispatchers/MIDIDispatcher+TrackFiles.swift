@@ -157,8 +157,8 @@ extension MIDIDispatcher {
 
     private static func midiFilePayload(_ payload: [String: Any], isError: Bool = false) -> CallTool.Result {
         guard let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]) else {
-            return .init(content: [.text("{\"error\":\"midi_result_encoding_failed\"}")], isError: true)
+            return toolTextResult("{\"error\":\"midi_result_encoding_failed\"}", isError: true)
         }
-        return .init(content: [.text(String(decoding: data, as: UTF8.self))], isError: isError)
+        return toolTextResult(String(decoding: data, as: UTF8.self), isError: isError)
     }
 }
