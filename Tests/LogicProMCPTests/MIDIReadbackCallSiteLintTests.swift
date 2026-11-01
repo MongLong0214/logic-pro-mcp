@@ -20,10 +20,11 @@ import Testing
 @Suite struct MIDIReadbackCallSiteLintTests {
     private static let assessmentFile = "MIDIReadbackAssessment.swift"
     private static let providerFile = "EventListMIDINoteReadbackProvider.swift"
-    // `observeNoteTable` is the one release-constructible way into the collector's read path.
-    // Its containment was previously just today's call graph: it is `internal`, so any file in
-    // the module could have grown a second caller silently. These files are its whole census —
-    // the file that declares it, the CLI probe branch, and the public partial reader.
+    // The strict read-only probe and the bounded/restoring partial harvest are the two
+    // release-constructible ways into the collector's raw-row path. Their containment would
+    // otherwise be just today's call graph: both are `internal`, so any file in the module could
+    // grow another caller silently. The CLI owns the strict probe; the public State-B reader owns
+    // the restoring harvest. The collector file declares both.
     private static let collectorFile = "EventListReadbackCollector.swift"
     private static let probeEntryFile = "MainEntrypoint.swift"
     private static let partialReaderFile = "SelectedRegionEventListReader.swift"
@@ -62,29 +63,114 @@ import Testing
     private static func scan(
         _ source: String,
         parse: (String) -> SourceFileSyntax = { Parser.parse(source: $0) }
-    ) -> (proofMints: Int, assessmentReferences: Int, probeReferences: Int) {
+    ) -> (
+        proofMints: Int,
+        assessmentReferences: Int,
+        strictProbeReferences: Int,
+        harvestedProbeReferences: Int
+    ) {
         let tree = parse(source)
         let counter = CompleteProofMintCounter(viewMode: .sourceAccurate)
         counter.walk(tree)
         var assessmentReferences = 0
-        var probeReferences = 0
+        var strictProbeReferences = 0
+        var harvestedProbeReferences = 0
         for token in tree.tokens(viewMode: .sourceAccurate) {
             if isIdentifierRef(token, "assessReadback") { assessmentReferences += 1 }
-            if isIdentifierRef(token, "observeNoteTable") { probeReferences += 1 }
+            if isIdentifierRef(token, "observeNoteTable") { strictProbeReferences += 1 }
+            if isIdentifierRef(token, "observeHarvestedNoteTable") {
+                harvestedProbeReferences += 1
+            }
         }
-        return (counter.count, assessmentReferences, probeReferences)
+        return (
+            counter.count,
+            assessmentReferences,
+            strictProbeReferences,
+            harvestedProbeReferences
+        )
+    }
+
+    private static func probeCallSiteOffenders(
+        fileName: String,
+        strictProbeReferences: Int,
+        harvestedProbeReferences: Int
+    ) -> [String] {
+        var offenders: [String] = []
+        if strictProbeReferences > 0,
+           fileName != probeEntryFile,
+           fileName != collectorFile {
+            offenders.append("\(fileName): references observeNoteTable")
+        }
+        if harvestedProbeReferences > 0,
+           fileName != partialReaderFile,
+           fileName != collectorFile {
+            offenders.append("\(fileName): references observeHarvestedNoteTable")
+        }
+        return offenders
+    }
+
+    private struct FileCensus {
+        let offenders: [String]
+        let proofMintInAssessment: Int?
+        let assessmentReferencesInProvider: Int?
+        let strictProbeReferencesInEntrypoint: Int?
+        let harvestedProbeReferencesInPartialReader: Int?
+    }
+
+    private static func fileCensus(
+        fileName: String,
+        isAssessment: Bool,
+        scan: (
+            proofMints: Int,
+            assessmentReferences: Int,
+            strictProbeReferences: Int,
+            harvestedProbeReferences: Int
+        )
+    ) -> FileCensus {
+        var offenders = probeCallSiteOffenders(
+            fileName: fileName,
+            strictProbeReferences: scan.strictProbeReferences,
+            harvestedProbeReferences: scan.harvestedProbeReferences
+        )
+        if isAssessment {
+            return FileCensus(
+                offenders: offenders,
+                proofMintInAssessment: scan.proofMints,
+                assessmentReferencesInProvider: nil,
+                strictProbeReferencesInEntrypoint: nil,
+                harvestedProbeReferencesInPartialReader: nil
+            )
+        }
+
+        let providerReferenceCount = fileName == providerFile ? scan.assessmentReferences : nil
+        if scan.assessmentReferences > 0, providerReferenceCount == nil {
+            offenders.append("\(fileName): references assessReadback")
+        }
+        if scan.proofMints > 0 {
+            offenders.append("\(fileName): mints CompleteProof outside its file")
+        }
+        return FileCensus(
+            offenders: offenders,
+            proofMintInAssessment: nil,
+            assessmentReferencesInProvider: providerReferenceCount,
+            strictProbeReferencesInEntrypoint:
+                fileName == probeEntryFile ? scan.strictProbeReferences : nil,
+            harvestedProbeReferencesInPartialReader:
+                fileName == partialReaderFile ? scan.harvestedProbeReferences : nil
+        )
     }
 
     @Test func combinedScanParsesOnceAndRetainsSyntaxBoundaries() {
         let source = ##"""
-        // assessReadback observeNoteTable CompleteProof()
-        /* /* nested */ assessReadback observeNoteTable */
-        let text = "assessReadback observeNoteTable CompleteProof()"
-        let raw = #"assessReadback observeNoteTable CompleteProof()"#
+        // assessReadback observeNoteTable observeHarvestedNoteTable CompleteProof()
+        /* /* nested */ assessReadback observeNoteTable observeHarvestedNoteTable */
+        let text = "assessReadback observeNoteTable observeHarvestedNoteTable CompleteProof()"
+        let raw = #"assessReadback observeNoteTable observeHarvestedNoteTable CompleteProof()"#
         let assessment = `assessReadback`
         let probe = observeNoteTable
-        let interpolation = "\(assessReadback(evidence)) \(observeNoteTable())"
-        let rawInterpolation = #"\#(assessReadback(evidence)) \#(observeNoteTable())"#
+        let harvest = observeHarvestedNoteTable
+        let interpolation = "\(assessReadback(evidence)) \(observeNoteTable()) \(observeHarvestedNoteTable())"
+        let rawInterpolation = #"\#(assessReadback(evidence)) \#(observeNoteTable()) \#(observeHarvestedNoteTable())"#
         let proof = CompleteProof(contentBinding: binding)
         let contextual = .complete(.init(contentBinding: binding))
         let unrelated = .init(other: binding)
@@ -96,8 +182,24 @@ import Testing
         }
         #expect(parserCalls == 1)
         #expect(result.assessmentReferences == 3)
-        #expect(result.probeReferences == 3)
+        #expect(result.strictProbeReferences == 3)
+        #expect(result.harvestedProbeReferences == 3)
         #expect(result.proofMints == 2)
+    }
+
+    @Test func assessmentFileCannotBypassProbeCallSiteCensus() {
+        let scan = Self.scan("let strict = observeNoteTable; let harvest = observeHarvestedNoteTable")
+        let census = Self.fileCensus(
+            fileName: Self.assessmentFile,
+            isAssessment: true,
+            scan: scan
+        )
+
+        #expect(census.offenders == [
+            "\(Self.assessmentFile): references observeNoteTable",
+            "\(Self.assessmentFile): references observeHarvestedNoteTable",
+        ])
+        #expect(census.proofMintInAssessment == 0)
     }
 
     @Test func onlyEventListProviderMayAssessReadbackAndProofMintIsExact() throws {
@@ -121,8 +223,8 @@ import Testing
         var offenders: [String] = []
         var proofMintInAssessment = 0
         var assessmentReferencesInProvider = 0
-        var probeReferencesInEntrypoint = 0
-        var probeReferencesInPartialReader = 0
+        var strictProbeReferencesInEntrypoint = 0
+        var harvestedProbeReferencesInPartialReader = 0
         let enumerator = fm.enumerator(at: sources, includingPropertiesForKeys: nil)
         while let url = enumerator?.nextObject() as? URL {
             guard url.pathExtension == "swift" else { continue }
@@ -137,28 +239,24 @@ import Testing
             }
             let isAssessment = url.standardizedFileURL.path == assessmentPath
             let scan = Self.scan(text)
-            let proofMints = scan.proofMints
-            if isAssessment {
+            let census = Self.fileCensus(
+                fileName: url.lastPathComponent,
+                isAssessment: isAssessment,
+                scan: scan
+            )
+            offenders.append(contentsOf: census.offenders)
+            if let count = census.proofMintInAssessment {
                 sawAssessmentFile = true
-                proofMintInAssessment = proofMints
-                continue
+                proofMintInAssessment = count
             }
-            let assessmentReferences = scan.assessmentReferences
-            if url.lastPathComponent == Self.providerFile {
-                assessmentReferencesInProvider = assessmentReferences
-            } else if assessmentReferences > 0 {
-                offenders.append("\(url.lastPathComponent): references assessReadback")
+            if let count = census.assessmentReferencesInProvider {
+                assessmentReferencesInProvider = count
             }
-            let probeReferences = scan.probeReferences
-            if url.lastPathComponent == Self.probeEntryFile {
-                probeReferencesInEntrypoint = probeReferences
-            } else if url.lastPathComponent == Self.partialReaderFile {
-                probeReferencesInPartialReader = probeReferences
-            } else if probeReferences > 0, url.lastPathComponent != Self.collectorFile {
-                offenders.append("\(url.lastPathComponent): references observeNoteTable")
+            if let count = census.strictProbeReferencesInEntrypoint {
+                strictProbeReferencesInEntrypoint = count
             }
-            if proofMints > 0 {
-                offenders.append("\(url.lastPathComponent): mints CompleteProof outside its file")
+            if let count = census.harvestedProbeReferencesInPartialReader {
+                harvestedProbeReferencesInPartialReader = count
             }
         }
 
@@ -167,10 +265,10 @@ import Testing
         #expect(offenders.isEmpty, "dark-core call-site lint offenders: \(offenders)")
         #expect(assessmentReferencesInProvider == 1,
                 "\(Self.providerFile) must be the sole adapter call site for assessReadback")
-        #expect(probeReferencesInEntrypoint == 1,
+        #expect(strictProbeReferencesInEntrypoint == 1,
                 "\(Self.probeEntryFile) must contain the one CLI probe call to observeNoteTable")
-        #expect(probeReferencesInPartialReader == 1,
-                "\(Self.partialReaderFile) must contain the one public partial-read call to observeNoteTable")
+        #expect(harvestedProbeReferencesInPartialReader == 1,
+                "\(Self.partialReaderFile) must contain the one public partial-read call to observeHarvestedNoteTable")
         #expect(proofMintInAssessment == Self.expectedProofMintSites,
                 "CompleteProof mint sites in \(Self.assessmentFile) = \(proofMintInAssessment), expected \(Self.expectedProofMintSites)")
     }

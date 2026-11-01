@@ -45,6 +45,19 @@ enum EventListReadbackCollector {
         let rawRegionPath: String
     }
 
+    /// The public partial observer may move the Event List row selection only to materialize
+    /// virtualized rows. Keep the observation result and the write/restore facts together so a
+    /// failure cannot erase evidence that the probe actuated the table before refusing.
+    struct PartialProbeAttempt {
+        let result: Result<ProbeObservation, Error>
+        let rowSelectionWriteAttempted: Bool
+        let rowSelectionRestored: Bool
+    }
+
+    private struct RowSelectionTelemetry {
+        var writeAttempted = false
+    }
+
     static func observeNoteTable(
         runtime: AXLogicProElements.Runtime = .production
     ) throws -> ProbeObservation {
@@ -87,6 +100,138 @@ enum EventListReadbackCollector {
             } ?? [:],
             rawItemCountText: rawItemCountText,
             rawRegionPath: rawRegionPath
+        )
+    }
+
+    /// Performs the bounded two-pass virtual-row harvest for the public State-B observer.
+    ///
+    /// This still mints no owner, timing, exhaustion, or completeness proof. Unlike the strict
+    /// read-only probe above, it may temporarily select rows to materialize their cells, so the
+    /// exact baseline is required before the first write and is restored and read back on every
+    /// exit after that baseline is known.
+    static func observeHarvestedNoteTable(
+        runtime: AXLogicProElements.Runtime = .production
+    ) -> PartialProbeAttempt {
+        func refusal(_ error: Error) -> PartialProbeAttempt {
+            PartialProbeAttempt(
+                result: .failure(error),
+                rowSelectionWriteAttempted: false,
+                rowSelectionRestored: false
+            )
+        }
+
+        let mainWindow: AXUIElement
+        guard let observedMainWindow = AXLogicProElements.mainWindow(runtime: runtime) else {
+            return refusal(EventListReadbackCollectorError.mainWindowUnavailable)
+        }
+        mainWindow = observedMainWindow
+
+        let eventTab: AXUIElement
+        let paneAndTable: (pane: AXUIElement, table: AXUIElement)
+        do {
+            eventTab = try findEventTab(in: mainWindow, runtime: runtime.ax)
+            guard try checkedState(of: eventTab, runtime: runtime.ax) else {
+                return refusal(EventListProbeRefusal.eventTabNotSelected)
+            }
+            paneAndTable = try findEventPaneAndTable(
+                for: eventTab,
+                in: mainWindow,
+                runtime: runtime.ax
+            )
+        } catch {
+            return refusal(error)
+        }
+
+        let originalRows: [AXUIElement]
+        let originalSelectionRead: Result<AnyObject?, AXHelpers.AXStatusError> =
+            AXHelpers.getAttributeResult(
+                paneAndTable.table,
+                kAXSelectedRowsAttribute,
+                runtime: runtime.ax
+            )
+        switch originalSelectionRead {
+        case .success(nil):
+            originalRows = []
+        case .success(let value):
+            guard let rows = value as? [AXUIElement] else {
+                return refusal(EventListReadbackCollectorError.rowSelectionBaselineMalformed)
+            }
+            originalRows = rows
+        case .failure(let error):
+            return refusal(
+                EventListReadbackCollectorError.rowSelectionBaselineUnavailable(status: error.raw)
+            )
+        }
+
+        var telemetry = RowSelectionTelemetry()
+        let result = Result<ProbeObservation, Error> {
+            let rawItemCountText = try readStaticText(
+                label: AXLocalePolicy.eventListItemCountHelp,
+                in: paneAndTable.pane,
+                runtime: runtime.ax
+            )
+            let rawRegionPath = try readStaticText(
+                label: AXLocalePolicy.eventListRegionPathHelp,
+                in: paneAndTable.pane,
+                runtime: runtime.ax
+            )
+            guard !rawRegionPath.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+                throw EventListReadbackCollectorError.regionPathMissing
+            }
+
+            let headers = try readHeaders(of: paneAndTable.table, runtime: runtime.ax)
+            let rowElements: [AXUIElement] = AXHelpers.getAttribute(
+                paneAndTable.table,
+                "AXRows",
+                runtime: runtime.ax
+            ) ?? []
+            let firstRowCellChildren = rowElements.first.map {
+                cellChildCounts(of: $0, headers: headers, runtime: runtime.ax)
+            } ?? [:]
+            let harvest = try harvestRows(
+                from: paneAndTable.table,
+                headers: headers,
+                runtime: runtime.ax,
+                telemetry: &telemetry
+            )
+            let rows = harvest.orderedRowKeys.compactMap { harvest.passA[$0] }
+            let verificationRows = harvest.orderedRowKeys.compactMap { harvest.passB[$0] }
+
+            return ProbeObservation(
+                liveHeaderTitles: sortButtonTitles(of: paneAndTable.table, runtime: runtime.ax),
+                rows: rows,
+                verificationRows: verificationRows,
+                firstRowCellChildren: firstRowCellChildren,
+                rawItemCountText: rawItemCountText,
+                rawRegionPath: rawRegionPath
+            )
+        }
+
+        let restored = restoreRowSelection(
+            originalRows,
+            table: paneAndTable.table,
+            runtime: runtime.ax,
+            telemetry: &telemetry
+        )
+        guard restored else {
+            let primary: EventListReadbackCollectorError?
+            if case let .failure(error as EventListReadbackCollectorError) = result {
+                primary = error
+            } else {
+                primary = nil
+            }
+            return PartialProbeAttempt(
+                result: .failure(
+                    EventListReadbackCollectorError.rowSelectionRestorationFailed(primary: primary)
+                ),
+                rowSelectionWriteAttempted: telemetry.writeAttempted,
+                rowSelectionRestored: false
+            )
+        }
+        return PartialProbeAttempt(
+            result: result,
+            rowSelectionWriteAttempted: telemetry.writeAttempted,
+            rowSelectionRestored: true
         )
     }
 
@@ -355,6 +500,7 @@ enum EventListReadbackCollector {
         case .failure(let error):
             throw EventListReadbackCollectorError.rowSelectionBaselineUnavailable(status: error.raw)
         }
+        var rowSelectionTelemetry = RowSelectionTelemetry()
         let result = Result<EventListReadbackEvidence, Error> {
             try selectEventTabIfNeeded(eventTab, wasSelected: eventTabWasSelected, runtime: runtime.ax)
 
@@ -381,7 +527,8 @@ enum EventListReadbackCollector {
             let harvest = try harvestRows(
                 from: paneAndTable.table,
                 headers: headers,
-                runtime: runtime.ax
+                runtime: runtime.ax,
+                telemetry: &rowSelectionTelemetry
             )
             try refuseTimeDisplayIfNeeded(
                 pane: paneAndTable.pane,
@@ -425,7 +572,8 @@ enum EventListReadbackCollector {
         guard restoreRowSelection(
             originalRows,
             table: paneAndTable.table,
-            runtime: runtime.ax
+            runtime: runtime.ax,
+            telemetry: &rowSelectionTelemetry
         ) else {
             let primary: EventListReadbackCollectorError?
             if case let .failure(error as EventListReadbackCollectorError) = result {
@@ -655,7 +803,8 @@ enum EventListReadbackCollector {
     private static func restoreRowSelection(
         _ originalRows: [AXUIElement],
         table: AXUIElement,
-        runtime: AXHelpers.Runtime
+        runtime: AXHelpers.Runtime,
+        telemetry: inout RowSelectionTelemetry
     ) -> Bool {
         let currentRows: [AXUIElement]? = AXHelpers.getAttribute(
             table,
@@ -665,6 +814,7 @@ enum EventListReadbackCollector {
         if let currentRows, rowSelectionsMatch(currentRows, originalRows) {
             return true
         }
+        telemetry.writeAttempted = true
         guard AXHelpers.setAttribute(
             table,
             kAXSelectedRowsAttribute,
@@ -804,7 +954,8 @@ enum EventListReadbackCollector {
     private static func harvestRows(
         from table: AXUIElement,
         headers: HeaderBinding,
-        runtime: AXHelpers.Runtime
+        runtime: AXHelpers.Runtime,
+        telemetry: inout RowSelectionTelemetry
     ) throws -> RowHarvest {
         guard let rows: [AXUIElement] = AXHelpers.getAttribute(table, "AXRows", runtime: runtime) else {
             throw EventListReadbackCollectorError.rowsUnavailable
@@ -813,13 +964,15 @@ enum EventListReadbackCollector {
             rows: rows,
             table: table,
             headers: headers,
-            runtime: runtime
+            runtime: runtime,
+            telemetry: &telemetry
         )
         let passB = try harvestVirtualWindowPass(
             rows: rows,
             table: table,
             headers: headers,
-            runtime: runtime
+            runtime: runtime,
+            telemetry: &telemetry
         )
         return try stitchVirtualWindows([passA, passB])
     }
@@ -828,7 +981,8 @@ enum EventListReadbackCollector {
         rows: [AXUIElement],
         table: AXUIElement,
         headers: HeaderBinding,
-        runtime: AXHelpers.Runtime
+        runtime: AXHelpers.Runtime,
+        telemetry: inout RowSelectionTelemetry
     ) throws -> [VirtualWindowObservation] {
         var windows: [VirtualWindowObservation] = []
         var observedKeys: Set<RowKey> = []
@@ -856,6 +1010,7 @@ enum EventListReadbackCollector {
                     passes: selections
                 )
             }
+            telemetry.writeAttempted = true
             guard AXHelpers.setAttribute(
                 table,
                 kAXSelectedRowsAttribute,
