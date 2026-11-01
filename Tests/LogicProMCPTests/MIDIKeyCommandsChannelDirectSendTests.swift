@@ -33,6 +33,26 @@ private func decodeEnvelope(_ message: String) -> [String: Any]? {
     return dict
 }
 
+private func requireTerminalPartialSend(
+    _ envelope: [String: Any],
+    noteOnCountSent: Int,
+    cleanupStatus: String,
+    cleanupSendFailures: Int
+) throws {
+    #expect(try #require(envelope["terminal"] as? Bool))
+    #expect(envelope["terminal_scope"] as? String == "mcp_request_only")
+    #expect(!(try #require(envelope["safe_to_retry"] as? Bool)))
+    #expect(try #require(envelope["fallback_unsafe"] as? Bool))
+    #expect(try #require(envelope["write_attempted"] as? Bool))
+    #expect(!(try #require(envelope["human_intervention_required"] as? Bool)))
+    #expect(envelope["human_intervention_requests"] as? Int == 0)
+    #expect(envelope["human_dependent_transitions"] as? Int == 0)
+    #expect(envelope["note_on_count_sent"] as? Int == noteOnCountSent)
+    #expect(try #require(envelope["note_cleanup_attempted"] as? Bool))
+    #expect(envelope["note_cleanup_status"] as? String == cleanupStatus)
+    #expect(envelope["note_cleanup_send_failures"] as? Int == cleanupSendFailures)
+}
+
 // MARK: - 1. CC
 
 @Test func testKeycmdChannelHandlesSendCCKeycmdOp() async throws {
@@ -114,9 +134,16 @@ private func decodeEnvelope(_ message: String) -> [String: Any]? {
     let noteOnSent = try #require(envelope["note_on_sent"] as? Bool)
     #expect(noteOffFailed)
     #expect(noteOnSent)
+    try requireTerminalPartialSend(
+        envelope,
+        noteOnCountSent: 1,
+        cleanupStatus: "sent_no_readback",
+        cleanupSendFailures: 1
+    )
     // Note-on (attempt 1) succeeded; the reliable note-off (attempt 2) failed and
     // is reported as note_off_failed; the best-effort retry note-off (attempt 3)
-    // then succeeds and is recorded, so the note is still silenced.
+    // then succeeds and is recorded. The send-only channel cannot confirm that
+    // Logic actually silenced the note, so the receipt remains unverified.
     #expect(await transport.sentBytes == [[0x90, 60, 100], [0x80, 60, 0]])
 }
 
@@ -138,6 +165,79 @@ private func decodeEnvelope(_ message: String) -> [String: Any]? {
     #expect(sent[0] == [0x90, 60, 80])
     #expect(sent[1] == [0x90, 64, 80])
     #expect(sent[2] == [0x90, 67, 80])
+}
+
+@Test func testKeycmdSendChordPartialNoteOnFailureCleansStartedNotesAndTerminates() async throws {
+    let (channel, transport) = try await makeStartedChannel()
+    await transport.setFailOnSendAttempts([2])
+
+    let result = await channel.execute(operation: "midi.send_chord.keycmd", params: [
+        "notes": "60,64,67",
+        "velocity": "80",
+        "channel": "0",
+        "duration_ms": "1",
+    ])
+
+    #expect(!result.isSuccess)
+    let envelope = try #require(decodeEnvelope(result.message))
+    #expect(envelope["error"] as? String == "ax_write_failed")
+    #expect(envelope["operation"] as? String == "midi.send_chord.keycmd")
+    #expect(envelope["note_on_count_requested"] as? Int == 3)
+    #expect(HonestContract.isFallbackUnsafeStateC(result.message))
+    try requireTerminalPartialSend(
+        envelope,
+        noteOnCountSent: 1,
+        cleanupStatus: "sent_no_readback",
+        cleanupSendFailures: 0
+    )
+    #expect(await transport.sentBytes == [[0x90, 60, 80], [0x80, 60, 0]])
+}
+
+@Test func testKeycmdSendChordPartialFailureReportsCleanupSendFailure() async throws {
+    let (channel, transport) = try await makeStartedChannel()
+    await transport.setFailOnSendAttempts([2, 3])
+
+    let result = await channel.execute(operation: "midi.send_chord.keycmd", params: [
+        "notes": "60,64,67",
+        "velocity": "80",
+        "channel": "0",
+        "duration_ms": "1",
+    ])
+
+    let envelope = try #require(decodeEnvelope(result.message))
+    try requireTerminalPartialSend(
+        envelope,
+        noteOnCountSent: 1,
+        cleanupStatus: "send_failed",
+        cleanupSendFailures: 1
+    )
+    #expect(await transport.sentBytes == [[0x90, 60, 80]])
+}
+
+@Test func testKeycmdSendChordNoteOffFailureRetriesCleanupAndTerminates() async throws {
+    let (channel, transport) = try await makeStartedChannel()
+    await transport.setFailOnSendAttempts([4])
+
+    let result = await channel.execute(operation: "midi.send_chord.keycmd", params: [
+        "notes": "60,64,67",
+        "velocity": "80",
+        "channel": "0",
+        "duration_ms": "1",
+    ])
+
+    #expect(!result.isSuccess)
+    let envelope = try #require(decodeEnvelope(result.message))
+    #expect(envelope["failed_note_off_count"] as? Int == 1)
+    try requireTerminalPartialSend(
+        envelope,
+        noteOnCountSent: 3,
+        cleanupStatus: "sent_no_readback",
+        cleanupSendFailures: 1
+    )
+    let sent = await transport.sentBytes
+    #expect(sent.filter { $0 == [0x80, 60, 0] }.count == 1)
+    #expect(sent.filter { $0 == [0x80, 64, 0] }.count == 2)
+    #expect(sent.filter { $0 == [0x80, 67, 0] }.count == 2)
 }
 
 // MARK: - 4. Program Change
@@ -233,7 +333,42 @@ private func decodeEnvelope(_ message: String) -> [String: Any]? {
     #expect(noteOffFailed)
     #expect(envelope["failed_note_off_count"] as? Int == 1)
     #expect(envelope["note_on_count"] as? Int == 1)
-    #expect(await transport.sentBytes == [[0x90, 60, 100]])
+    try requireTerminalPartialSend(
+        envelope,
+        noteOnCountSent: 1,
+        cleanupStatus: "sent_no_readback",
+        cleanupSendFailures: 1
+    )
+    #expect(await transport.sentBytes == [[0x90, 60, 100], [0x80, 60, 0]])
+}
+
+@Test func testKeycmdPlaySequencePartialNoteOnFailureCleansStartedNotesAndTerminates() async throws {
+    let (channel, transport) = try await makeStartedChannel()
+    // The second Note On fails, followed by the first event's scheduled Note
+    // Off. The bounded cleanup retry must still run and the receipt must expose
+    // both the partial write and the failed scheduled cleanup.
+    await transport.setFailOnSendAttempts([2, 3])
+
+    let result = await channel.execute(operation: "midi.play_sequence.keycmd", params: [
+        "notes": "60,0,1,100,1;64,0,1,100,1",
+    ])
+
+    #expect(!result.isSuccess)
+    let envelope = try #require(decodeEnvelope(result.message))
+    #expect(envelope["error"] as? String == "ax_write_failed")
+    #expect(envelope["operation"] as? String == "midi.play_sequence.keycmd")
+    #expect(envelope["phase"] as? String == "note_on")
+    #expect(try #require(envelope["note_on_failed"] as? Bool))
+    #expect(envelope["note_on_count_requested"] as? Int == 2)
+    #expect(envelope["failed_note_off_count"] as? Int == 1)
+    #expect(HonestContract.isFallbackUnsafeStateC(result.message))
+    try requireTerminalPartialSend(
+        envelope,
+        noteOnCountSent: 1,
+        cleanupStatus: "sent_no_readback",
+        cleanupSendFailures: 1
+    )
+    #expect(await transport.sentBytes == [[0x90, 60, 100], [0x80, 60, 0]])
 }
 
 // MARK: - 8. Play Sequence (parser failure)

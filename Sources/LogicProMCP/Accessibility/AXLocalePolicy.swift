@@ -417,6 +417,52 @@ enum AXLocalePolicy {
             + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Length%2FInfo#value")
 
+    /// Event-type filter titles derived from the cited rows in Apple's Localizable.strings. The
+    /// Event pane also carries three non-filter checkboxes, so the collector still binds each
+    /// filter by its audited title instead of treating every checkbox in the pane as filter
+    /// evidence. The 2026-09-13 Event List record includes matching Korean spellings but also an
+    /// English-only limit, so it is not credited here as a Korean live measurement.
+    static let eventListFilterNotes = LabelSet(
+        canonical: "Notes", variants: ["노트", "ノート", "Noten", "Notas", "Note", "音符"],
+        rationale: "Event List note-event filter; ten-locale titles derived from the cited Apple row.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Notes#value"
+    )
+    static let eventListFilterProgramChange = LabelSet(
+        canonical: "Progr. Change", variants: ["프로그램 체인지", "Cambio de progr.", "Changement de progr.", "Modifica di programma", "Mudança de Prog.", "音色变化", "程式更動"],
+        rationale: "Event List program-change filter; ten-locale titles derived from the cited Apple row.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Progr.%20Change#value"
+    )
+    static let eventListFilterPitchBend = LabelSet(
+        canonical: "Pitch Bend", variants: ["피치 벤드", "ピッチベンド", "Pitchbend", "Inflexión de tono", "弯音", "滑音"],
+        rationale: "Event List pitch-bend filter; ten-locale titles derived from the cited Apple row.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Pitch%20Bend#value"
+    )
+    static let eventListFilterController = LabelSet(
+        canonical: "Controller", variants: ["컨트롤러", "コントローラ", "Controlador", "Contrôleur", "控制器"],
+        rationale: "Event List controller filter; ten-locale titles derived from the cited Apple row.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Controller#value"
+    )
+    static let eventListFilterAftertouch = LabelSet(
+        canonical: "Aftertouch", variants: ["애프터터치", "アフタータッチ", "触后", "後觸"],
+        rationale: "Event List aftertouch filter; ten-locale titles derived from the cited Apple row.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Aftertouch#value"
+    )
+    static let eventListFilterPolyAftertouch = LabelSet(
+        canonical: "Poly Aftertouch", variants: ["폴리포닉 애프터터치", "ポリアフタータッチ", "Aftertouch polifónico", "Aftertouch poly.", "Aftertouch polifonico", "Aftertouch Polif.", "复音触后", "多重後觸"],
+        rationale: "Event List polyphonic-aftertouch filter; ten-locale titles derived from the cited Apple row.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Poly%20Aftertouch#value"
+    )
+    static let eventListFilterSystemExclusive = LabelSet(
+        canonical: "Syst. Exclusive", variants: ["시스템 고유", "SysEx", "Exclusivo sist.", "Esclusivo del sistema", "系统专用", "系統保留"],
+        rationale: "Event List system-exclusive filter; ten-locale titles derived from the cited Apple row.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Syst.%20Exclusive#value"
+    )
+    static let eventListFilterAdditionalInfo = LabelSet(
+        canonical: "Additional Info", variants: ["추가 정보", "追加情報", "Weitere Infos", "Inform. adicional", "Infos complémentaires", "Informazioni aggiuntive", "Informações Adicionais", "附加信息", "附加資訊"],
+        rationale: "Event List additional-info filter; ten-locale titles derived from the cited Apple row.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Additional%20Info#value"
+    )
+
     /// The region-level header, which is how the collector tells "you are looking at the wrong level"
     /// apart from "Logic changed its columns". Measured in Korean as
     /// `["L","M","위치","이름","트랙","길이"]`.
@@ -3627,6 +3673,14 @@ enum AXLocalePolicy {
         eventListColumnNumber,
         eventListColumnValue,
         eventListColumnLengthInfo,
+        eventListFilterNotes,
+        eventListFilterProgramChange,
+        eventListFilterPitchBend,
+        eventListFilterController,
+        eventListFilterAftertouch,
+        eventListFilterPolyAftertouch,
+        eventListFilterSystemExclusive,
+        eventListFilterAdditionalInfo,
         eventListColumnName,
         mixerStripNameField,
         eventListColumnTrack,

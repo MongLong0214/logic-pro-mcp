@@ -109,6 +109,7 @@ enum TempoMapAX {
     enum WriteFailure: Error, Equatable, Sendable, CustomStringConvertible {
         case invalidTarget(Double)
         case eventIndexOutOfRange(index: Int, count: Int)
+        case ambiguousPosition(position: String, matches: Int)
         case positionChanged(expected: String, observed: String)
         case axWriteFailed
         case readFailed(ReadRefusal)
@@ -124,6 +125,8 @@ enum TempoMapAX {
                 return "Tempo target \(target) is not a whole BPM in Logic's supported 5...999 range."
             case let .eventIndexOutOfRange(index, count):
                 return "Tempo event index \(index) is out of range for \(count) event(s)."
+            case let .ambiguousPosition(position, matches):
+                return "Tempo position '\(position)' is ambiguous (\(matches) matching events); refusing to authorize an index write."
             case let .positionChanged(expected, observed):
                 return "Tempo row changed position from '\(expected)' to '\(observed)'; refusing to write a different event."
             case .axWriteFailed:
@@ -298,6 +301,7 @@ enum TempoMapAX {
         }
 
         let initial: Event
+        let initialPositionMatches: Int
         do {
             let snapshot = try read(in: window, localeIdentifier: localeIdentifier, runtime: runtime)
             guard snapshot.events.indices.contains(index) else {
@@ -308,6 +312,10 @@ enum TempoMapAX {
                 )
             }
             initial = snapshot.events[index]
+            initialPositionMatches = positionMatchCount(
+                initial.position,
+                in: snapshot.events
+            )
         } catch let refusal as ReadRefusal {
             return .refused(
                 failure: .readFailed(refusal),
@@ -317,6 +325,17 @@ enum TempoMapAX {
         } catch {
             return .refused(
                 failure: .readFailed(.tempoListWindowUnavailable),
+                forward: .none,
+                rollback: .notNeeded(writes: 0, finalObserved: nil)
+            )
+        }
+
+        guard initialPositionMatches == 1 else {
+            return .refused(
+                failure: .ambiguousPosition(
+                    position: initial.position,
+                    matches: initialPositionMatches
+                ),
                 forward: .none,
                 rollback: .notNeeded(writes: 0, finalObserved: nil)
             )
@@ -747,6 +766,19 @@ enum TempoMapAX {
                 )
             }
             let freshEvent = fresh.snapshot.events[index]
+            let positionMatches = positionMatchCount(
+                freshEvent.position,
+                in: fresh.snapshot.events
+            )
+            guard positionMatches == 1 else {
+                return .failure(
+                    .ambiguousPosition(
+                        position: freshEvent.position,
+                        matches: positionMatches
+                    ),
+                    receipt: receipt(finalObserved: freshEvent.tempo)
+                )
+            }
             guard freshEvent.position == initial.position else {
                 return .failure(
                     .positionChanged(expected: initial.position, observed: freshEvent.position),
@@ -853,6 +885,19 @@ enum TempoMapAX {
                 }
                 let observed = reread.events[index]
                 lastObservedTempo = observed.tempo
+                let positionMatches = positionMatchCount(
+                    observed.position,
+                    in: reread.events
+                )
+                guard positionMatches == 1 else {
+                    return .failure(
+                        .ambiguousPosition(
+                            position: observed.position,
+                            matches: positionMatches
+                        ),
+                        lastObserved: observed.tempo
+                    )
+                }
                 guard observed.position == expectedPosition else {
                     return .failure(
                         .positionChanged(expected: expectedPosition, observed: observed.position),
@@ -909,6 +954,20 @@ enum TempoMapAX {
                 )
             }
             current = snapshot.events[index]
+            let positionMatches = positionMatchCount(
+                current.position,
+                in: snapshot.events
+            )
+            guard positionMatches == 1 else {
+                return .failed(
+                    failure: .ambiguousPosition(
+                        position: current.position,
+                        matches: positionMatches
+                    ),
+                    writes: 0,
+                    finalObserved: current.tempo
+                )
+            }
         } catch let refusal as ReadRefusal {
             return .failed(failure: .readFailed(refusal), writes: 0, finalObserved: fallbackObserved)
         } catch {
@@ -947,6 +1006,12 @@ enum TempoMapAX {
                 writes: receipt.acceptedWrites,
                 finalObserved: receipt.finalObserved
             )
+        }
+    }
+
+    private static func positionMatchCount(_ position: String, in events: [Event]) -> Int {
+        events.reduce(into: 0) { count, event in
+            if event.position == position { count += 1 }
         }
     }
 

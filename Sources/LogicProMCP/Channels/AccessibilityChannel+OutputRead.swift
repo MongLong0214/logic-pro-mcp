@@ -498,7 +498,9 @@ extension AccessibilityChannel {
         observingRenewedFocus: @escaping @Sendable (HeldSelectionAssociation) -> Void = { _ in },
         refreshingOriginalSourceAfterCleanup: Bool = false,
         observingPeerHeaders: [AXTrackBinding.Binding]? = nil,
-        readingOriginalScope: HeldSelectionAssociation? = nil) async -> CheckedOutputReading {
+        readingOriginalScope: HeldSelectionAssociation? = nil,
+        recoveringRetiredFocusFrom focusBaseline: HeldSelectionAssociation.OriginalHeaderFocusBaseline? = nil
+    ) async -> CheckedOutputReading {
         await getCheckedRoutingDestination(params: [:], sendOrdinal: nil, inputBusOnly: true,
             runtime: runtime, timing: timing, restoringMixerGeometry: restoringMixerGeometry,
             observingPopupFocus: observingPopupFocus,
@@ -506,7 +508,8 @@ extension AccessibilityChannel {
             requiringOriginalInputControl: requiringOriginalInputControl,
             refreshingOriginalSourceAfterCleanup: refreshingOriginalSourceAfterCleanup,
             observingPeerHeaders: observingPeerHeaders,
-            readingOriginalScope: readingOriginalScope)
+            readingOriginalScope: readingOriginalScope,
+            recoveringRetiredFocusFrom: focusBaseline)
     }
 
     static func getCheckedInputObservation(runtime: AXLogicProElements.Runtime,
@@ -516,14 +519,17 @@ extension AccessibilityChannel {
         observingRenewedFocus: @escaping @Sendable (HeldSelectionAssociation) -> Void = { _ in },
         refreshingOriginalSourceAfterCleanup: Bool = false,
         observingPeerHeaders: [AXTrackBinding.Binding]? = nil,
-        readingOriginalScope: HeldSelectionAssociation? = nil) async -> CheckedOutputReading {
+        readingOriginalScope: HeldSelectionAssociation? = nil,
+        recoveringRetiredFocusFrom focusBaseline: HeldSelectionAssociation.OriginalHeaderFocusBaseline? = nil
+    ) async -> CheckedOutputReading {
         await getCheckedRoutingDestination(params: [:], sendOrdinal: nil, inputBusOnly: true,
             includingNonBusInputs: true, runtime: runtime, timing: timing,
             restoringMixerGeometry: restoringMixerGeometry,
             observingPopupFocus: observingPopupFocus, observingRenewedFocus: observingRenewedFocus,
             refreshingOriginalSourceAfterCleanup: refreshingOriginalSourceAfterCleanup,
             observingPeerHeaders: observingPeerHeaders,
-            readingOriginalScope: readingOriginalScope)
+            readingOriginalScope: readingOriginalScope,
+            recoveringRetiredFocusFrom: focusBaseline)
     }
 
     /// Shares the exact owned reader; wire receipt decoding never supplies graph identity.
@@ -553,7 +559,8 @@ extension AccessibilityChannel {
         requiringOriginalInputControl: AXMixerInputSlotBinding? = nil,
         refreshingOriginalSourceAfterCleanup: Bool = false,
         observingPeerHeaders: [AXTrackBinding.Binding]? = nil,
-        readingOriginalScope: HeldSelectionAssociation? = nil
+        readingOriginalScope: HeldSelectionAssociation? = nil,
+        recoveringRetiredFocusFrom focusBaseline: HeldSelectionAssociation.OriginalHeaderFocusBaseline? = nil
     ) async -> CheckedOutputReading {
         let operation = sendReplacement?.modeChange != nil ? "mixer.set_send_mode_verified" : sendReplacement != nil ? "mixer.set_send_output_verified" :
             (inputBusOnly ? "mixer.get_input_bus_verified" : (sendOrdinal == nil ? "mixer.get_output_verified" : "mixer.get_send_destination_verified"))
@@ -1739,11 +1746,21 @@ extension AccessibilityChannel {
                 // This reader need not select its target before opening the popup.
                 // Only an actually re-observed original-header pair can renew it;
                 // the helper still inverses the selection it found on entry.
+                let retiredFocusBaseline: HeldSelectionAssociation.OriginalHeaderFocusBaseline?
+                if let baseline = focusBaseline,
+                   let focus: AXUIElement = AXHelpers.getAttribute(baseline.app,
+                        kAXFocusedUIElementAttribute as String, runtime: runtime.ax),
+                   CFEqual(focus, baseline.focus) {
+                    retiredFocusBaseline = baseline
+                } else {
+                    retiredFocusBaseline = nil
+                }
                 let observed = await renewSourceThroughOriginalHeader(originalPair, original: physical,
                     runtime: runtime, selectedHeaderRequired: false,
                     sourceDisposition: refreshingOriginalSourceAfterCleanup ? .readObservation : .retiredOriginal,
                     restoringMixerGeometry: restoringMixerGeometry, observingReadFocus: observingRenewedFocus,
-                    observingPeerHeaders: observingPeerHeaders)
+                    observingPeerHeaders: observingPeerHeaders,
+                    recoveringRetiredFocusFrom: retiredFocusBaseline)
                 renewalEffects = observed.effects
                 extras["ui_effects"] = ["navigation_performed": observed.effects.navigationPerformed,
                     "attempted": observed.effects.attempted, "changed": observed.effects.changed,

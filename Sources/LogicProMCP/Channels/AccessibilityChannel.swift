@@ -566,6 +566,8 @@ actor AccessibilityChannel: Channel {
                 // Only the selected capture's actual association may supply
                 // fresh popup membership without rediscovery.
                 var routingReadScope = request.scope == .selection ? association : nil
+                let focusedOriginalHeaderBaseline = association?.originalHeaderFocusBaseline(
+                    observedPairs: population.selectionAssociations)
                 stripReads: for strip in population.strips ?? [] {
                     guard !stop(), await navigationReferenceIsCurrent() else {
                         try SessionPopulationObservation.requireOwnedAcquisition()
@@ -607,6 +609,9 @@ actor AccessibilityChannel: Channel {
                         }
                         let owner = heldOwner
                         let pair = heldPair
+                        let ownerFocusBaseline = focusedOriginalHeaderBaseline.flatMap {
+                            CFEqual($0.focus, owner.strip) ? $0 : nil
+                        }
                         let capturedPeerHeaders = request.scope == .selection && pair != nil
                             ? population.selectionAssociations.map(\.track) : nil
                         // A selection request qualifies only its captured pairs,
@@ -630,14 +635,16 @@ actor AccessibilityChannel: Channel {
                                             observingPopupFocus: { readFocusScope?.retainRoutingPopupFocus($0) },
                                             observingRenewedFocus: { readFocusScope?.retainAssociation($0) },
                                             observingPeerHeaders: capturedPeerHeaders,
-                                            readingOriginalScope: readingScope)
+                                            readingOriginalScope: readingScope,
+                                            recoveringRetiredFocusFrom: ownerFocusBaseline)
                                     }
                                     return await Self.getInputBusObservation(runtime: runtime.logicRuntime,
                                         restoringMixerGeometry: inputRestorationGeometry,
                                         observingPopupFocus: { readFocusScope?.retainRoutingPopupFocus($0) },
                                         observingRenewedFocus: { readFocusScope?.retainAssociation($0) },
                                         observingPeerHeaders: capturedPeerHeaders,
-                                        readingOriginalScope: readingScope)
+                                        readingOriginalScope: readingScope,
+                                        recoveringRetiredFocusFrom: ownerFocusBaseline)
                                 }
                             }
                             return await AXMixerStripBinding.$outputAssociation.withValue(pair) {

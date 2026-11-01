@@ -13,7 +13,8 @@ extension AccessibilityChannel {
         }
 
         /// Immutable before-image for one bounded focus handoff after Logic
-        /// replaces every Mixer strip while retaining the selected Track header.
+        /// replaces the focused selected strip, or the complete Mixer-strip census,
+        /// while retaining the selected Track header.
         /// The header/selected-child relationship is the identity witness; row
         /// position, names and routing captions are deliberately absent.
         struct OriginalHeaderFocusBaseline: @unchecked Sendable {
@@ -1016,9 +1017,11 @@ extension AccessibilityChannel {
         /// association state after a redraw.
         func originalHeaderFocusBaseline(observedPairs: [Pair]) -> OriginalHeaderFocusBaseline? {
             guard expectedIndex == originalIndex, CFEqual(expectedFocus, originalFocus) else { return nil }
-            guard let originalSelectedChild, let expectedSelectedChild,
-                  CFEqual(originalSelectedChild, originalFocus),
-                  CFEqual(expectedSelectedChild, originalFocus) else { return nil }
+            if originalSelectedChild != nil || expectedSelectedChild != nil {
+                guard let originalSelectedChild, let expectedSelectedChild,
+                      CFEqual(originalSelectedChild, originalFocus),
+                      CFEqual(expectedSelectedChild, originalFocus) else { return nil }
+            }
             guard case .observed(let child) = selectedChildRead(), CFEqual(child, originalFocus) else { return nil }
             guard permitsRead() else { return nil }
             guard let currentViewport = currentViewport(),
@@ -1041,8 +1044,9 @@ extension AccessibilityChannel {
         }
 
         /// Move keyboard focus once to Logic's exact current selected-child
-        /// successor. This is not source discovery: the ordinary retained-header
-        /// observation below must still establish every current pair and inverse.
+        /// successor after a bounded focused-strip or complete-census retirement.
+        /// This is not source discovery: the ordinary retained-header observation
+        /// below must still establish every current pair and inverse.
         static func reacquireRetiredOriginalHeaderFocus(
             _ baseline: OriginalHeaderFocusBaseline,
             runtime: AXLogicProElements.Runtime,
@@ -1159,13 +1163,25 @@ extension AccessibilityChannel {
                       AXLogicProElements.isMixerContainerRole(AXHelpers.getRole(
                         baseline.mixer, runtime: runtime.ax)) else { return nil }
                 scopeStage = "census"
-                guard
-                      let census = AXLogicProElements.mixerChannelStripsIfCompletelyRead(
+                guard let census = AXLogicProElements.mixerChannelStripsIfCompletelyRead(
                         in: baseline.mixer, runtime: runtime.ax),
-                      census.strips.count == baseline.strips.count,
-                      baseline.strips.allSatisfy({ old in
-                          !census.strips.contains(where: { CFEqual($0, old) })
-                      }) else { return nil }
+                      census.strips.count == baseline.strips.count else { return nil }
+                let completeRetirement = baseline.strips.allSatisfy { old in
+                    !census.strips.contains(where: { CFEqual($0, old) })
+                }
+                let focusedRetirement: Bool = {
+                    guard let focusedIndex = baseline.strips.firstIndex(where: {
+                        CFEqual($0, baseline.focus)
+                    }), !census.strips.contains(where: { CFEqual($0, baseline.focus) }) else {
+                        return false
+                    }
+                    return baseline.strips.indices.allSatisfy { index in
+                        index == focusedIndex || CFEqual(baseline.strips[index], census.strips[index])
+                    } && census.strips.filter { current in
+                        !baseline.strips.contains(where: { CFEqual($0, current) })
+                    }.count == 1
+                }()
+                guard completeRetirement || focusedRetirement else { return nil }
                 scopeStage = "selected_child"
                 guard
                       let child = currentSelectedChild(in: census.strips),

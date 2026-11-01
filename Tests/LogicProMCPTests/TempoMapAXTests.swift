@@ -109,6 +109,135 @@ struct TempoMapAXTests {
         #expect(fixture.writeElementIDs.isEmpty)
     }
 
+    @Test("duplicate positions refuse before an index can authorize a write")
+    func duplicatePositionsCannotAuthorizeIndexWrite() throws {
+        let fixture = TempoListFixture(
+            tempo: 118,
+            reportedCountText: "2개의 이벤트",
+            steps: [.toward, .toward],
+            duplicatePositionTempo: 130
+        )
+
+        let outcome = TempoMapAX.setExistingTempo(
+            at: 0,
+            to: 120,
+            in: fixture.window,
+            localeIdentifier: "ko-KR",
+            runtime: fixture.runtime()
+        )
+        let refusedOutcome = try #require(refusal(from: outcome))
+
+        #expect(refusedOutcome.failure == .ambiguousPosition(
+            position: "1 1 1 1 ",
+            matches: 2
+        ))
+        #expect(refusedOutcome.forward == .none)
+        #expect(refusedOutcome.rollback == .notNeeded(writes: 0, finalObserved: nil))
+        #expect(fixture.currentTempo == 118)
+        #expect(fixture.writeElementIDs.isEmpty)
+    }
+
+    @Test("a duplicate introduced after the initial snapshot refuses the fresh pre-write inventory")
+    func duplicateBeforeFreshWriteCannotAuthorizeIndexWrite() throws {
+        let fixture = TempoListFixture(
+            tempo: 118,
+            steps: [.toward, .toward],
+            duplicatePositionTempo: 130,
+            duplicateInjectionPhase: .beforeFirstFreshWrite
+        )
+
+        let outcome = TempoMapAX.setExistingTempo(
+            at: 0,
+            to: 120,
+            in: fixture.window,
+            localeIdentifier: "ko-KR",
+            runtime: fixture.runtime()
+        )
+        let refusedOutcome = try #require(refusal(from: outcome))
+
+        #expect(refusedOutcome.failure == .ambiguousPosition(
+            position: "1 1 1 1 ",
+            matches: 2
+        ))
+        #expect(refusedOutcome.forward == .init(
+            attempts: 0,
+            acceptedWrites: 0,
+            finalObserved: 118
+        ))
+        #expect(refusedOutcome.rollback == .notNeeded(writes: 0, finalObserved: 118))
+        #expect(fixture.currentTempo == 118)
+        #expect(fixture.writeElementIDs.isEmpty)
+    }
+
+    @Test("a duplicate introduced after an accepted write refuses during settle")
+    func duplicateDuringSettleCannotBeReportedAsConverged() throws {
+        let fixture = TempoListFixture(
+            tempo: 118,
+            steps: [.toward],
+            duplicatePositionTempo: 130,
+            duplicateInjectionPhase: .firstSettle
+        )
+
+        let outcome = TempoMapAX.setExistingTempo(
+            at: 0,
+            to: 119,
+            in: fixture.window,
+            localeIdentifier: "ko-KR",
+            runtime: fixture.runtime()
+        )
+        let refusedOutcome = try #require(refusal(from: outcome))
+
+        #expect(refusedOutcome.failure == .ambiguousPosition(
+            position: "1 1 1 1 ",
+            matches: 2
+        ))
+        #expect(refusedOutcome.forward == .init(
+            attempts: 1,
+            acceptedWrites: 1,
+            finalObserved: 119
+        ))
+        #expect(refusedOutcome.rollback == .restored(writes: 1, finalObserved: 118))
+        #expect(fixture.currentTempo == 118)
+        #expect(fixture.writeElementIDs.count == 2)
+    }
+
+    @Test("a transient duplicate at rollback entry refuses before a restore write")
+    func duplicateAtRollbackEntryPreservesPrimaryFailure() throws {
+        let fixture = TempoListFixture(
+            tempo: 118,
+            steps: [.toward, .stuck, .toward],
+            duplicatePositionTempo: 130,
+            duplicateInjectionPhase: .rollbackEntryAfterSecondAcceptedWrite
+        )
+
+        let outcome = TempoMapAX.setExistingTempo(
+            at: 0,
+            to: 121,
+            in: fixture.window,
+            localeIdentifier: "ko-KR",
+            runtime: fixture.runtime()
+        )
+        let refusedOutcome = try #require(refusal(from: outcome))
+
+        #expect(refusedOutcome.failure == .didNotMove(
+            previous: 119,
+            observed: 119,
+            target: 121
+        ))
+        #expect(refusedOutcome.forward == .init(
+            attempts: 2,
+            acceptedWrites: 2,
+            finalObserved: 119
+        ))
+        #expect(refusedOutcome.rollback == .failed(
+            failure: .ambiguousPosition(position: "1 1 1 1 ", matches: 2),
+            writes: 0,
+            finalObserved: 119
+        ))
+        #expect(fixture.currentTempo == 119)
+        #expect(fixture.writeElementIDs.count == 2)
+    }
+
     @Test("post-write readback re-finds a re-rendered group instead of reading stale nil")
     func staleElementReadIsNotTreatedAsChange() throws {
         let fixture = TempoListFixture(tempo: 118, steps: [.toward, .toward])
@@ -622,6 +751,13 @@ private final class TempoListFixture: @unchecked Sendable {
         case itemCountValue
     }
 
+    enum DuplicateInjectionPhase {
+        case initial
+        case beforeFirstFreshWrite
+        case firstSettle
+        case rollbackEntryAfterSecondAcceptedWrite
+    }
+
     struct WitnessPair {
         let rowVisible: Bool
         let reportedCountText: String
@@ -655,6 +791,15 @@ private final class TempoListFixture: @unchecked Sendable {
     private var postWriteAXRowsReads = 0
     private let postWriteAXRowsReadFailureAt: Int?
     private let postWriteAXRowsReadFailureDelay: TimeInterval
+    private let duplicatePositionTempo: Double?
+    private let duplicateInjectionPhase: DuplicateInjectionPhase
+    private let reportedCountText: String
+    private var duplicateVisible: Bool
+    private var duplicateWasInjected = false
+    private var duplicateInventoryPassesRemaining: Int?
+    private var inventoryPassesObserved = 0
+    private var inventoryPassesSinceLastAcceptedWrite = 0
+    private var acceptedWriteCount = 0
     private var postWriteAXRowsResultReads = 0
     private var pendingRenderAXRowsReads = 0
     private var renderPending = false
@@ -679,7 +824,9 @@ private final class TempoListFixture: @unchecked Sendable {
         postWriteAXRowsReadDelayAt: Int? = nil,
         postWriteAXRowsReadDelay: TimeInterval = 0,
         postWriteAXRowsReadFailureAt: Int? = nil,
-        postWriteAXRowsReadFailureDelay: TimeInterval = 0
+        postWriteAXRowsReadFailureDelay: TimeInterval = 0,
+        duplicatePositionTempo: Double? = nil,
+        duplicateInjectionPhase: DuplicateInjectionPhase = .initial
     ) {
         self.currentTempo = tempo
         self.steps = steps
@@ -694,6 +841,11 @@ private final class TempoListFixture: @unchecked Sendable {
         self.postWriteAXRowsReadDelay = postWriteAXRowsReadDelay
         self.postWriteAXRowsReadFailureAt = postWriteAXRowsReadFailureAt
         self.postWriteAXRowsReadFailureDelay = postWriteAXRowsReadFailureDelay
+        self.duplicatePositionTempo = duplicatePositionTempo
+        self.duplicateInjectionPhase = duplicateInjectionPhase
+        self.reportedCountText = reportedCountText
+        self.duplicateVisible = duplicatePositionTempo != nil && duplicateInjectionPhase == .initial
+        self.duplicateInventoryPassesRemaining = duplicateInjectionPhase == .initial ? nil : 0
         app = builder.element(90_000)
         window = builder.element(90_001)
         table = builder.element(90_002)
@@ -743,6 +895,7 @@ private final class TempoListFixture: @unchecked Sendable {
                         }
                     }
                     advancePendingRenderIfNeeded()
+                    prepareDuplicateForInventoryIfNeeded()
                     if !witnessPairs.isEmpty {
                         let pair = witnessPairs[min(witnessPairIndex, witnessPairs.count - 1)]
                         let rows = pair.rowVisible ? activeRow.map { [$0] } ?? [] : []
@@ -753,6 +906,17 @@ private final class TempoListFixture: @unchecked Sendable {
                     let pair = witnessPairs[min(witnessPairIndex, witnessPairs.count - 1)]
                     witnessPairIndex += 1
                     return .some(pair.reportedCountText as NSString)
+                }
+                if attribute == (kAXValueAttribute as String),
+                   CFEqual(element, countText),
+                   duplicatePositionTempo != nil {
+                    let observedCount = duplicateVisible ? "2개의 이벤트" : reportedCountText
+                    inventoryPassesObserved += 1
+                    inventoryPassesSinceLastAcceptedWrite += 1
+                    if let remaining = duplicateInventoryPassesRemaining, remaining > 0 {
+                        duplicateInventoryPassesRemaining = remaining - 1
+                    }
+                    return .some(observedCount as NSString)
                 }
                 guard attribute == (kAXDescriptionAttribute as String),
                       staleTempoGroupIDs.contains(builder.elementID(element)) else {
@@ -839,6 +1003,8 @@ private final class TempoListFixture: @unchecked Sendable {
                         ? requested.doubleValue + 1
                         : requested.doubleValue - 1
                 }
+                acceptedWriteCount += 1
+                inventoryPassesSinceLastAcceptedWrite = 0
                 scheduleCurrentRowRender()
                 if decreasingWrite, decreasingWriteDelay > 0 {
                     Thread.sleep(forTimeInterval: decreasingWriteDelay)
@@ -877,11 +1043,83 @@ private final class TempoListFixture: @unchecked Sendable {
         builder.setChildren(tempoCell, [tempoGroup])
         builder.setChildren(smpteCell, [smpteGroup])
         builder.setChildren(row, [positionCell, tempoCell, smpteCell])
-        builder.setChildren(table, [row])
-        builder.setAttribute(table, "AXRows", [row])
+        var rows = [row]
+        if duplicateVisible, let duplicatePositionTempo {
+            let duplicateBase = base + 100_000
+            let duplicateRow = builder.element(duplicateBase)
+            let duplicatePositionCell = builder.element(duplicateBase + 1)
+            let duplicateTempoCell = builder.element(duplicateBase + 2)
+            let duplicateSMPTECell = builder.element(duplicateBase + 3)
+            let duplicatePositionGroup = builder.element(duplicateBase + 4)
+            let duplicateTempoGroup = builder.element(duplicateBase + 5)
+            let duplicateSMPTEGroup = builder.element(duplicateBase + 6)
+
+            builder.setRole(duplicateRow, kAXRowRole as String)
+            for cell in [duplicatePositionCell, duplicateTempoCell, duplicateSMPTECell] {
+                builder.setRole(cell, kAXCellRole as String)
+            }
+            for group in [duplicatePositionGroup, duplicateTempoGroup, duplicateSMPTEGroup] {
+                builder.setRole(group, kAXGroupRole as String)
+            }
+            builder.setAttribute(
+                duplicatePositionGroup,
+                kAXDescriptionAttribute as String,
+                "1 1 1 1 "
+            )
+            builder.setAttribute(
+                duplicateTempoGroup,
+                kAXDescriptionAttribute as String,
+                String(format: "%.4f", duplicatePositionTempo)
+            )
+            builder.setAttribute(
+                duplicateSMPTEGroup,
+                kAXDescriptionAttribute as String,
+                "01:00:00:00.00"
+            )
+            builder.setChildren(duplicatePositionCell, [duplicatePositionGroup])
+            builder.setChildren(duplicateTempoCell, [duplicateTempoGroup])
+            builder.setChildren(duplicateSMPTECell, [duplicateSMPTEGroup])
+            builder.setChildren(
+                duplicateRow,
+                [duplicatePositionCell, duplicateTempoCell, duplicateSMPTECell]
+            )
+            rows.append(duplicateRow)
+        }
+        builder.setChildren(table, rows)
+        builder.setAttribute(table, "AXRows", rows)
         activeRow = row
         activeTempoCell = tempoCell
         activeTempoGroup = tempoGroup
+    }
+
+    private func prepareDuplicateForInventoryIfNeeded() {
+        if duplicateVisible, duplicateInventoryPassesRemaining == 0 {
+            duplicateVisible = false
+            renderCurrentRow()
+        }
+        guard duplicatePositionTempo != nil, !duplicateWasInjected, !duplicateVisible else {
+            return
+        }
+
+        let shouldInject: Bool
+        switch duplicateInjectionPhase {
+        case .initial:
+            shouldInject = false
+        case .beforeFirstFreshWrite:
+            shouldInject = acceptedWriteCount == 0 && inventoryPassesObserved >= 2
+        case .firstSettle:
+            shouldInject = acceptedWriteCount == 1
+                && inventoryPassesSinceLastAcceptedWrite == 0
+        case .rollbackEntryAfterSecondAcceptedWrite:
+            shouldInject = acceptedWriteCount == 2
+                && inventoryPassesSinceLastAcceptedWrite >= 4
+        }
+        guard shouldInject else { return }
+
+        duplicateWasInjected = true
+        duplicateVisible = true
+        duplicateInventoryPassesRemaining = 2
+        renderCurrentRow()
     }
 
     private func shouldFail(
