@@ -5,6 +5,16 @@ import Testing
 
 @Suite("ADR-018 Controls-view parameter enumerator")
 struct ControlsViewParameterEnumeratorTests {
+    @Test func duplicatePhysicalControlsAcrossRowsCannotMintDistinctParameterReferences() {
+        let fixture = makeControlsFixture(duplicateControlSourceIndex: 6)
+
+        #expect(ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: fixture.runtime
+        ) == nil)
+    }
+
     @Test func duplicatePhysicalRowsCannotMintDistinctParameterReferences() {
         let fixture = makeControlsFixture(duplicateRowIndex: 7)
 
@@ -617,6 +627,7 @@ private func makeControlsFixture(
     exposesRowsAttribute: Bool = true,
     includesNonRowTableChild: Bool = false,
     duplicateRowIndex: Int? = nil,
+    duplicateControlSourceIndex: Int? = nil,
     cellBinding: CellBinding = .paired,
     pluginTextPlacement: PluginTextPlacement = .direct,
     unreadableLabelIndexes: Set<Int> = [],
@@ -642,22 +653,31 @@ private func makeControlsFixture(
     var additionalControlElementIDs: [Int: Int] = [:]
     var unreadableCellChildElementIDs: [Int] = []
     var depthBoundaryReadFailure: DepthBoundaryReadFailure?
+    var primaryControlElements: [AXUIElement] = []
     let rowElements = rows.enumerated().map { rowIndex, rowFixture -> AXUIElement in
         let base = 90_100 + rowIndex * 20
         let row = builder.element(base)
         let label = builder.element(base + 1)
-        let control = builder.element(base + 2)
+        let control: AXUIElement
+        if let duplicateControlSourceIndex,
+           rowIndex == duplicateControlSourceIndex + 1,
+           primaryControlElements.indices.contains(duplicateControlSourceIndex) {
+            control = primaryControlElements[duplicateControlSourceIndex]
+        } else {
+            control = builder.element(base + 2)
+            configure(
+                control,
+                fixture: rowFixture,
+                role: rowFixture.controlRole,
+                builder: builder
+            )
+        }
+        primaryControlElements.append(control)
         labelElementIDs.append(builder.elementID(label))
         controlElementIDs.append(builder.elementID(control))
         builder.setRole(row, kAXRowRole as String)
         builder.setRole(label, kAXStaticTextRole as String)
         builder.setAttribute(label, kAXValueAttribute as String, rowFixture.label)
-        configure(
-            control,
-            fixture: rowFixture,
-            role: rowFixture.controlRole,
-            builder: builder
-        )
 
         var controls = rowFixture.includesControl ? [control] : []
         if let additionalControlRole = rowFixture.additionalControlRole {

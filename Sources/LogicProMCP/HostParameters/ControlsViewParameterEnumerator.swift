@@ -115,6 +115,7 @@ enum ControlsViewParameterEnumerator {
         var parameters: [GenericPluginParameter] = []
         var observations: [RowObservation] = []
         var rowSignatures: [RowSignature] = []
+        var observedControls: [AXUIElement] = []
 
         for (rowIndex, row) in rows.enumerated() {
             // A failed AXValue read for a label has neither established an
@@ -122,6 +123,14 @@ enum ControlsViewParameterEnumerator {
             // manifest: hashing `nil` would alias distinct unreadable labels.
             guard let rowRead = readRow(row, runtime: runtime) else {
                 return nil
+            }
+            for control in rowRead.controls {
+                guard !observedControls.contains(where: {
+                    CFEqual($0, control.element)
+                }) else {
+                    return nil
+                }
+                observedControls.append(control.element)
             }
 
             let classification: RowClassification
@@ -430,6 +439,7 @@ enum ControlsViewParameterEnumerator {
                 return nil
             }
             return ControlObservation(
+                element: descendant.element,
                 role: role,
                 valueIsReadable: valueIsReadable(on: descendant.element, runtime: runtime),
                 valueDescription: valueDescription(on: descendant.element, runtime: runtime),
@@ -724,6 +734,7 @@ enum ControlsViewParameterEnumerator {
     }
 
     private struct ControlObservation {
+        let element: AXUIElement
         let role: GenericParameterControlRole
         let valueIsReadable: Bool
         let valueDescription: String?
