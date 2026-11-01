@@ -3,7 +3,7 @@ import Foundation
 import MCP
 
 extension ProjectSessionAudit {
-    static let sessionRepairPlanSchema = "logic_pro_mcp_session_repair_plan.v1"
+    static let sessionRepairPlanSchema = "logic_pro_mcp_session_repair_plan.v2"
 
     struct ApprovedName: Sendable {
         let target: String

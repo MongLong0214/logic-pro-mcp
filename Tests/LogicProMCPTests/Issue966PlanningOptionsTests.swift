@@ -9,6 +9,21 @@ import Testing
 struct Issue966PlanningOptionsTests {
     typealias Audit = ProjectSessionAudit
 
+    /// The enum shipped by `logic_pro_mcp_session_repair_plan.v1`. Keeping this decoder frozen
+    /// makes a response enum change visible instead of silently redefining the v1 contract.
+    private struct FrozenV1PlanningOptions: Decodable {
+        enum OnAmbiguity: String, Decodable {
+            case ask
+            case reportOnly = "report_only"
+        }
+
+        let onAmbiguity: OnAmbiguity
+
+        enum CodingKeys: String, CodingKey {
+            case onAmbiguity = "on_ambiguity"
+        }
+    }
+
     // MARK: - Parsing
 
     /// Mutation this kills: an unknown mode or a non-Bool flag read as the default, which would
@@ -39,6 +54,25 @@ struct Issue966PlanningOptionsTests {
         ] {
             #expect(Audit.PlanningOptions.parse(bad) == nil, "\(bad)")
         }
+    }
+
+    /// Mutation this kills: publishing `terminate` under the old v1 schema even though a strict
+    /// v1 consumer accepts only the originally shipped `ask` and `report_only` values.
+    @Test func terminalAmbiguityUsesANewSchemaInsteadOfRedefiningV1() throws {
+        let decoder = JSONDecoder()
+        let frozenV1 = try decoder.decode(
+            FrozenV1PlanningOptions.self,
+            from: Data(#"{"on_ambiguity":"ask"}"#.utf8)
+        )
+        #expect(frozenV1.onAmbiguity == .ask)
+
+        #expect(throws: DecodingError.self) {
+            _ = try decoder.decode(
+                FrozenV1PlanningOptions.self,
+                from: Data(#"{"on_ambiguity":"terminate"}"#.utf8)
+            )
+        }
+        #expect(Audit.sessionRepairPlanSchema == "logic_pro_mcp_session_repair_plan.v2")
     }
 
     // MARK: - Receiving aux
