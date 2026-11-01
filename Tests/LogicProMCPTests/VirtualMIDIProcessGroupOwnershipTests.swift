@@ -3,11 +3,14 @@ import Testing
 @testable import LogicProMCP
 
 struct VirtualMIDIProcessGroupOwnershipTests {
-    @Test func bothCreatorErrorsExplainGroupOwnershipAndRestart() {
+    @Test func bothCreatorErrorsTerminateWithoutARequestedHumanRestart() {
         for message in [MIDIEngineError.ownershipLockHeld(name: "fixture").description,
                         MIDIPortError.ownershipLockHeld(name: "fixture").description] {
             #expect(message.contains("port group"))
-            #expect(message.contains("restart"))
+            #expect(message.contains("creation terminated"))
+            #expect(message.contains("without requesting human intervention"))
+            #expect(!message.contains("restart"))
+            #expect(!message.contains("stop competing"))
         }
     }
 

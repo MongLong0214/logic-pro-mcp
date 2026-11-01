@@ -31,13 +31,28 @@ private actor ParameterPlanReadChannel: Channel {
         }
         let changed = fault == "external_edit" && calls.count > 2
         if fault == "context_lost", calls.count == 3, let registry { await registry.bumpTopologyGeneration() }
+        let observedRaw: Any
+        let rawUnit: String
+        let observedDisplay: String
+        switch param {
+        case "threshold":
+            observedRaw = changed ? 52 : 51
+            rawUnit = "normalized"
+            observedDisplay = "51 %"
+        case "ratio":
+            observedRaw = 18
+            rawUnit = "raw_ax_value"
+            observedDisplay = "2.1:1"
+        default:
+            observedRaw = true
+            rawUnit = "boolean"
+            observedDisplay = "On"
+        }
         return .success(HonestContract.encodeV2StateA(extras: [
             "operation": "logic_plugins.get_param_verified", "param": param,
             "target_identity": ["track_index": 0, "insert": 6, "plugin_id": "logic.stock.effect.compressor"],
             "parameter_read_status": "read", "observation_scope": "current_insert_parameter",
-            "observed_raw": param == "threshold" ? (changed ? 52 : 51) as Any : true as Any,
-            "raw_unit": param == "threshold" ? "normalized" : "boolean",
-            "observed_display": param == "threshold" ? "51 %" : "On",
+            "observed_raw": observedRaw, "raw_unit": rawUnit, "observed_display": observedDisplay,
             "verify_source": "ax_plugin_window", "write_attempted": false,
             "plugin_view_restore_observed": true,
             "verified": fault != "unverified",
@@ -109,6 +124,51 @@ struct Issue955SupportedParameterPlanTests {
             #expect(gate.tryAcquire())
             gate.release()
         }
+    }
+
+    @Test func parameterPlanCanDiffAReadOnlyScalarWithoutGrantingApplicationAuthority() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let (cache, registry, reference, router, channel, gate) = await fixture()
+            let result = await PluginsDispatcher.handle(verifiedGate: gate, command: "plan_parameter_changes",
+                params: ["target_ref": .string(reference.rawValue), "changes": .array([
+                    request("ratio", .int(25), "raw_ax_value"),
+                ])], router: router, cache: cache, targetRegistry: registry)
+            let object = try #require(sharedJSONObject(sharedToolText(result)))
+            #expect(object["state"] as? String == "A")
+            #expect(try #require(object["complete"] as? Bool))
+            #expect(!((try #require(object["application_authorized"] as? Bool))))
+            #expect(!((try #require(object["write_attempted"] as? Bool))))
+            let entry = try #require((object["entries"] as? [[String: Any]])?.first)
+            #expect(entry["param"] as? String == "ratio")
+            #expect(entry["raw_unit"] as? String == "raw_ax_value")
+            #expect(entry["observed_before"] as? Double == 18)
+            #expect(entry["requested_value"] as? Double == 25)
+            #expect(entry["delta"] as? Double == 7)
+            #expect(entry["status"] as? String == "change")
+            #expect(await channel.calls.count == 2)
+            #expect(gate.tryAcquire())
+            gate.release()
+        }
+    }
+
+    @Test func parameterPlanRejectsAReaderWhosePublicUnitDiffersFromItsRawReadbackUnitBeforeReading() async throws {
+        let router = ChannelRouter(), gate = VerifiedOpGate()
+        let channel = ParameterPlanReadChannel(gate: gate)
+        await router.register(channel)
+        let result = await PluginsDispatcher.parameterPlan(
+            changes: [request("gain", .int(0), "dB")],
+            pluginID: "logic.stock.effect.gain",
+            readParams: ["track": "0", "insert": "6"],
+            router: router,
+            contextIsCurrent: { true })
+        let object = try #require(decodedJSONObject(result.message))
+        #expect(object["state"] as? String == "C")
+        #expect(!((try #require(object["complete"] as? Bool))))
+        let entry = try #require((object["entries"] as? [[String: Any]])?.first)
+        #expect(entry["param"] as? String == "gain")
+        #expect(entry["status"] as? String == "unsupported")
+        #expect(try #require(entry["read_observations"] as? [[String: Any]]).isEmpty)
+        #expect(await channel.calls.isEmpty)
     }
 
     @Test(arguments: ["missing_unit", "out_of_range", "extra_field", "duplicate"])

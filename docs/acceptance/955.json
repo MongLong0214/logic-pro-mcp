@@ -33,7 +33,7 @@
     {"as": "pre_arm", "probe": {"name": "track_armed", "args": {"index": 0}}},
     {"as": "pre_mute", "probe": {"name": "track_muted", "args": {"index": 0}}},
     {"as": "pre_undo", "probe": {"name": "undo_entry", "args": {}}},
-    {"as": "plan", "call": {"tool": "logic_plugins", "command": "plan_parameter_changes", "params": {"target_ref": {"$observation": "inventory.plugins[insert=0].plugin_insert_ref"}, "changes": [{"param": "threshold", "value": 38, "unit": "percent"}, {"param": "limiter_on", "value": false, "unit": "boolean"}]}}},
+    {"as": "plan", "call": {"tool": "logic_plugins", "command": "plan_parameter_changes", "params": {"target_ref": {"$observation": "inventory.plugins[insert=0].plugin_insert_ref"}, "changes": [{"param": "threshold", "value": 38, "unit": "percent"}, {"param": "limiter_on", "value": false, "unit": "boolean"}, {"param": "ratio", "value": 25, "unit": "raw_ax_value"}]}}},
     {"as": "post_arm", "probe": {"name": "track_armed", "args": {"index": 0}}},
     {"as": "post_mute", "probe": {"name": "track_muted", "args": {"index": 0}}},
     {"as": "post_undo", "probe": {"name": "undo_entry", "args": {}}}
@@ -51,20 +51,22 @@
     {"path": "plan.write_attempted", "op": "eq", "value": false},
     {"path": "plan.application_authorized", "op": "eq", "value": false},
     {"path": "plan.atomic_snapshot", "op": "eq", "value": false},
-    {"path": "plan.entries", "op": "count_eq", "value": 2},
+    {"path": "plan.entries", "op": "count_eq", "value": 3},
     {"path": "plan.entries[param=threshold].status", "op": "in", "value": ["change", "unchanged"]},
     {"path": "plan.entries[param=threshold].read_observations", "op": "count_eq", "value": 2},
     {"path": "plan.entries[param=limiter_on].status", "op": "in", "value": ["change", "unchanged"]},
     {"path": "plan.entries[param=limiter_on].read_observations", "op": "count_eq", "value": 2},
+    {"path": "plan.entries[param=ratio].status", "op": "in", "value": ["change", "unchanged"]},
+    {"path": "plan.entries[param=ratio].read_observations", "op": "count_eq", "value": 2},
     {"path": "plan.target_identity.plugin_id", "op": "eq", "value": "logic.stock.effect.compressor"},
     {"path": "post_arm.armed", "op": "unchanged", "ref": {"obs": "pre_arm.armed"}},
     {"path": "post_mute.muted", "op": "unchanged", "ref": {"obs": "pre_mute.muted"}},
     {"path": "post_undo.title", "op": "unchanged", "ref": {"obs": "pre_undo.title"}}
    ],
    "counterexample": [
-    {"observation": "as_found_arm", "replaces": "post_arm", "must_fail": [17]},
-    {"observation": "seed_mute_read", "replaces": "post_mute", "must_fail": [18]},
-    {"observation": "counterexample_undo", "replaces": "post_undo", "must_fail": [19]}
+    {"observation": "as_found_arm", "replaces": "post_arm", "must_fail": [19]},
+    {"observation": "seed_mute_read", "replaces": "post_mute", "must_fail": [20]},
+    {"observation": "counterexample_undo", "replaces": "post_undo", "must_fail": [21]}
    ],
    "restore": [
     {"as": "undo_setup", "call": {"tool": "logic_tracks", "command": "arm", "params": {"index": 0, "enabled": false}}},
@@ -95,7 +97,7 @@
     {"as": "pre_arm", "probe": {"name": "track_armed", "args": {"index": 0}}},
     {"as": "pre_mute", "probe": {"name": "track_muted", "args": {"index": 0}}},
     {"as": "pre_undo", "probe": {"name": "undo_entry", "args": {}}},
-    {"as": "reject", "call": {"tool": "logic_plugins", "command": "plan_parameter_changes", "params": {"target_ref": {"$observation": "inventory.plugins[insert=0].plugin_insert_ref"}, "changes": [{"param": "ratio", "value": 2, "unit": "raw_ax_value"}]}}},
+    {"as": "reject", "call": {"tool": "logic_plugins", "command": "plan_parameter_changes", "params": {"target_ref": {"$observation": "inventory.plugins[insert=0].plugin_insert_ref"}, "changes": [{"param": "gain", "value": 2, "unit": "raw_ax_value"}]}}},
     {"as": "post_arm", "probe": {"name": "track_armed", "args": {"index": 0}}},
     {"as": "post_mute", "probe": {"name": "track_muted", "args": {"index": 0}}},
     {"as": "post_undo", "probe": {"name": "undo_entry", "args": {}}}
@@ -114,9 +116,9 @@
     {"path": "reject.application_authorized", "op": "eq", "value": false},
     {"path": "reject.atomic_snapshot", "op": "eq", "value": false},
     {"path": "reject.entries", "op": "count_eq", "value": 1},
-    {"path": "reject.entries[param=ratio].status", "op": "eq", "value": "unsupported"},
-    {"path": "reject.entries[param=ratio].read_observations", "op": "count_eq", "value": 0},
-    {"path": "reject.entries[param=ratio].requested", "op": "eq", "value": {"param": "ratio", "value": 2, "unit": "raw_ax_value"}},
+    {"path": "reject.entries[param=gain].status", "op": "eq", "value": "unsupported"},
+    {"path": "reject.entries[param=gain].read_observations", "op": "count_eq", "value": 0},
+    {"path": "reject.entries[param=gain].requested", "op": "eq", "value": {"param": "gain", "value": 2, "unit": "raw_ax_value"}},
     {"path": "reject.target_identity.plugin_id", "op": "eq", "value": "logic.stock.effect.compressor"},
     {"path": "post_arm.armed", "op": "unchanged", "ref": {"obs": "pre_arm.armed"}},
     {"path": "post_mute.muted", "op": "unchanged", "ref": {"obs": "pre_mute.muted"}},

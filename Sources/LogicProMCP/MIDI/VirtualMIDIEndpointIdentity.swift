@@ -269,7 +269,7 @@ final class VirtualMIDIEndpointProcessOwnership: @unchecked Sendable {
 
 /// A process-safe token for the cross-process virtual-endpoint ownership lock.
 final class VirtualMIDIEndpointOwnershipLock: @unchecked Sendable {
-    static let heldHint = "this process did not acquire the virtual MIDI port group or endpoint creation lock; stop competing instances and restart the intended server"
+    static let heldHint = "this process did not acquire the virtual MIDI port group or endpoint creation lock; creation terminated without requesting human intervention"
 
     enum Acquisition: Sendable {
         case acquired(VirtualMIDIEndpointOwnershipLock)
