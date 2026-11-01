@@ -955,7 +955,7 @@ struct TempoMapAXTests {
         #expect(fixture.currentTempo == 118)
     }
 
-    @Test("a step that crosses the target refuses instead of becoming oscillating progress")
+    @Test("an unmeasured step that crosses the target refuses without restoration")
     func crossingTargetRefuses() throws {
         let fixture = TempoListFixture(tempo: 118, steps: [.crossing])
 
@@ -968,10 +968,39 @@ struct TempoMapAXTests {
         )
         let refusedOutcome = try #require(refusal(from: outcome))
 
-        #expect(refusedOutcome.failure == .crossedTarget(previous: 118, observed: 121, target: 120))
+        #expect(refusedOutcome.failure == .unmeasuredStep(previous: 118, observed: 121, target: 120))
         #expect(refusedOutcome.forward == .init(attempts: 1, acceptedWrites: 1, finalObserved: 121))
-        #expect(refusedOutcome.rollback == .restored(writes: 3, finalObserved: 118))
-        #expect(fixture.currentTempo == 118)
+        #expect(refusedOutcome.rollback == .failed(
+            failure: .unmeasuredStep(previous: 118, observed: 121, target: 120),
+            writes: 0,
+            finalObserved: 121
+        ))
+        #expect(fixture.writeElementIDs.count == 1)
+        #expect(fixture.currentTempo == 121)
+    }
+
+    @Test("a large step away from the target refuses without restoration")
+    func largeMovedAwayStepRefusesWithoutRestore() throws {
+        let fixture = TempoListFixture(tempo: 118, steps: [.largeAway])
+
+        let outcome = TempoMapAX.setExistingTempo(
+            at: 0,
+            to: 120,
+            in: fixture.window,
+            localeIdentifier: "ko-KR",
+            runtime: fixture.runtime()
+        )
+        let refusedOutcome = try #require(refusal(from: outcome))
+
+        #expect(refusedOutcome.failure == .unmeasuredStep(previous: 118, observed: 116, target: 120))
+        #expect(refusedOutcome.forward == .init(attempts: 1, acceptedWrites: 1, finalObserved: 116))
+        #expect(refusedOutcome.rollback == .failed(
+            failure: .unmeasuredStep(previous: 118, observed: 116, target: 120),
+            writes: 0,
+            finalObserved: 116
+        ))
+        #expect(fixture.writeElementIDs.count == 1)
+        #expect(fixture.currentTempo == 116)
     }
 
     @Test("a rollback that drifts carries its write count and final observed tempo")
@@ -1016,6 +1045,7 @@ private final class TempoListFixture: @unchecked Sendable {
         case toward
         case stuck
         case away
+        case largeAway
         case crossing
     }
 
@@ -1300,6 +1330,8 @@ private final class TempoListFixture: @unchecked Sendable {
                     break
                 case .away:
                     currentTempo += requested.doubleValue > currentTempo ? -1 : 1
+                case .largeAway:
+                    currentTempo += requested.doubleValue > currentTempo ? -2 : 2
                 case .crossing:
                     currentTempo = requested.doubleValue > currentTempo
                         ? requested.doubleValue + 1
