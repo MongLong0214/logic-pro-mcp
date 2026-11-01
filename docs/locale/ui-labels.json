@@ -2250,6 +2250,209 @@
     "en-US": "title"
    }
   },
+  "eventListFilterAdditionalInfo": {
+   "canonical": "Additional Info",
+   "variants": [
+    "추가 정보",
+    "追加情報",
+    "Weitere Infos",
+    "Inform. adicional",
+    "Infos complémentaires",
+    "Informazioni aggiuntive",
+    "Informações Adicionais",
+    "附加信息",
+    "附加資訊"
+   ],
+   "rationale": "Event List additional-info filter; Korean read from docs/observations/2026-09-13-the-event-list-resolves-its-columns-and-follows-the-selected-region.json.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
+  "eventListFilterAftertouch": {
+   "canonical": "Aftertouch",
+   "variants": [
+    "애프터터치",
+    "アフタータッチ",
+    "触后",
+    "後觸"
+   ],
+   "rationale": "Event List aftertouch filter; Korean read from docs/observations/2026-09-13-the-event-list-resolves-its-columns-and-follows-the-selected-region.json.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
+  "eventListFilterController": {
+   "canonical": "Controller",
+   "variants": [
+    "컨트롤러",
+    "コントローラ",
+    "Controlador",
+    "Contrôleur",
+    "控制器"
+   ],
+   "rationale": "Event List controller filter; Korean read from docs/observations/2026-09-13-the-event-list-resolves-its-columns-and-follows-the-selected-region.json.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
+  "eventListFilterNotes": {
+   "canonical": "Notes",
+   "variants": [
+    "노트",
+    "ノート",
+    "Noten",
+    "Notas",
+    "Note",
+    "音符"
+   ],
+   "rationale": "Event List note-event filter; Korean read from docs/observations/2026-09-13-the-event-list-resolves-its-columns-and-follows-the-selected-region.json.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
+  "eventListFilterPitchBend": {
+   "canonical": "Pitch Bend",
+   "variants": [
+    "피치 벤드",
+    "ピッチベンド",
+    "Pitchbend",
+    "Inflexión de tono",
+    "弯音",
+    "滑音"
+   ],
+   "rationale": "Event List pitch-bend filter; Korean read from docs/observations/2026-09-13-the-event-list-resolves-its-columns-and-follows-the-selected-region.json.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
+  "eventListFilterPolyAftertouch": {
+   "canonical": "Poly Aftertouch",
+   "variants": [
+    "폴리포닉 애프터터치",
+    "ポリアフタータッチ",
+    "Aftertouch polifónico",
+    "Aftertouch poly.",
+    "Aftertouch polifonico",
+    "Aftertouch Polif.",
+    "复音触后",
+    "多重後觸"
+   ],
+   "rationale": "Event List polyphonic-aftertouch filter; Korean read from docs/observations/2026-09-13-the-event-list-resolves-its-columns-and-follows-the-selected-region.json.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
+  "eventListFilterProgramChange": {
+   "canonical": "Progr. Change",
+   "variants": [
+    "프로그램 체인지",
+    "Cambio de progr.",
+    "Changement de progr.",
+    "Modifica di programma",
+    "Mudança de Prog.",
+    "音色变化",
+    "程式更動"
+   ],
+   "rationale": "Event List program-change filter; Korean read from docs/observations/2026-09-13-the-event-list-resolves-its-columns-and-follows-the-selected-region.json.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
+  "eventListFilterSystemExclusive": {
+   "canonical": "Syst. Exclusive",
+   "variants": [
+    "시스템 고유",
+    "SysEx",
+    "Exclusivo sist.",
+    "Esclusivo del sistema",
+    "系统专用",
+    "系統保留"
+   ],
+   "rationale": "Event List system-exclusive filter; Korean read from docs/observations/2026-09-13-the-event-list-resolves-its-columns-and-follows-the-selected-region.json.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
   "eventListItemCountHelp": {
    "canonical": "Number of Items",
    "variants": [
