@@ -1786,24 +1786,46 @@ def check_971_contract(case: dict, where: dict):
     if target.get("track_ref") != {
             "$observation": "inspection.associations.rows[track_index=1].track_ref"}:
         return f"the combined Output/Send target is not bound to the inspected track: {target!r}"
-    restore_target = combined["restore"][1]["call"]["params"]["policy"]["targets"][0]
-    if restore_target.get("track_ref") != {
-            "$observation": "restore_inspection.associations.rows[track_index=1].track_ref"}:
-        return f"the restore target is not bound to the fresh restored inspection: {restore_target!r}"
-    stale_restore = copy.deepcopy(spec)
-    stale_row = next(row for row in stale_restore["rows"] if row["id"] == combined["id"])
-    stale_row["restore"][1]["call"]["params"]["snapshot_id"] = {
-        "$observation": "inspection.snapshot_id",
-    }
-    if not any("not bound before" in problem for problem in engine.validate_spec(stale_restore)):
-        return "the restore plan can reuse the operation-side inspection handle"
-    stale_restore = copy.deepcopy(spec)
-    stale_row = next(row for row in stale_restore["rows"] if row["id"] == combined["id"])
-    stale_row["restore"][2]["call"]["params"]["plan_id"] = {
-        "$observation": "plan.plan_id",
-    }
-    if not any("not bound before" in problem for problem in engine.validate_spec(stale_restore)):
-        return "the restore apply can reuse the operation-side plan handle"
+    restore = {step["as"]: step for step in combined["restore"]}
+    expected_restore = [
+        "restore_output_inspection", "restore_output_plan", "restore_output_apply",
+        "restore_send_inspection", "restore_send_plan", "restore_send_apply", "restored",
+    ]
+    if list(restore) != expected_restore:
+        return f"the combined row does not carry the two exact fresh restore chains: {list(restore)!r}"
+    for kind in ("output", "send"):
+        plan_name = f"restore_{kind}_plan"
+        apply_name = f"restore_{kind}_apply"
+        inspection_name = f"restore_{kind}_inspection"
+        restore_target = restore[plan_name]["call"]["params"]["policy"]["targets"][0]
+        if restore_target.get("track_ref") != {
+                "$observation":
+                f"{inspection_name}.associations.rows[track_index=1].track_ref"}:
+            return (f"the {kind} restore target is not bound to its fresh restored inspection: "
+                    f"{restore_target!r}")
+        if restore[plan_name]["call"]["params"].get("snapshot_id") != {
+                "$observation": f"{inspection_name}.snapshot_id"}:
+            return f"the {kind} restore plan does not use its fresh inspection snapshot"
+        apply_params = restore[apply_name]["call"]["params"]
+        if (apply_params.get("plan_id") != {"$observation": f"{plan_name}.plan_id"}
+                or apply_params.get("digest") != {"$observation": f"{plan_name}.digest"}):
+            return f"the {kind} restore apply does not use its fresh plan"
+
+        stale_restore = copy.deepcopy(spec)
+        stale_row = next(row for row in stale_restore["rows"] if row["id"] == combined["id"])
+        stale_step = next(step for step in stale_row["restore"] if step["as"] == plan_name)
+        stale_step["call"]["params"]["snapshot_id"] = {"$observation": "inspection.snapshot_id"}
+        if not any("not bound before" in problem
+                   for problem in engine.validate_spec(stale_restore)):
+            return f"the {kind} restore plan can reuse the operation-side inspection handle"
+
+        stale_restore = copy.deepcopy(spec)
+        stale_row = next(row for row in stale_restore["rows"] if row["id"] == combined["id"])
+        stale_step = next(step for step in stale_row["restore"] if step["as"] == apply_name)
+        stale_step["call"]["params"]["plan_id"] = {"$observation": "plan.plan_id"}
+        if not any("not bound before" in problem
+                   for problem in engine.validate_spec(stale_restore)):
+            return f"the {kind} restore apply can reuse the operation-side plan handle"
 
     def run(found, failures=None, nodes=None, frontier=None):
         return {"observation": {"readable": True, "mixer_found": found,

@@ -229,11 +229,45 @@ def select_send_stereo(lproj, strip_index):
             record["cause"] = "the element at the path is not the send slot the probe read"
             record["help_at_path"] = help_text
             return record
+        fresh = probes.run("routing_slots_ax", {"lproj": lproj})
+        fresh_observation = fresh.get("observation") or {}
+        fresh_strips = fresh_observation.get("strips") or []
+        record["pre_press"] = {k: fresh.get(k) for k in ("t", "elapsed_s")}
+        if len(fresh_strips) != len(strips) or strip_index >= len(fresh_strips):
+            record["cause"] = "the pre-press routing walk no longer has the same strip membership"
+            return record
+        fresh_sends = fresh_strips[strip_index].get("sends") or []
+        if len(fresh_sends) != 1 or fresh_sends[0].get("occupied") is not False:
+            record["cause"] = "the pre-press routing walk no longer has one sole empty Send slot"
+            return record
+        fresh_send = fresh_sends[0]
+        record["pre_press"]["send_slot"] = {
+            k: fresh_send.get(k) for k in ("description", "help", "path", "occupied")
+        }
+        compared = ("description", "help", "path", "occupied")
+        if any(fresh_send.get(key) != send.get(key) for key in compared):
+            record["cause"] = "the pre-press Send slot no longer matches the initially read slot"
+            return record
+        fresh_found = ax.element_at(fresh_send["path"])
+        if fresh_found["element"] is None:
+            record["cause"] = "the pre-press Send slot path no longer resolves"
+            record["pre_press"]["resolve"] = {
+                k: fresh_found[k] for k in fresh_found if k != "element"
+            }
+            return record
+        fresh_help, _ = cfbridge.text_of(ax.value(fresh_found["element"], "AXHelp"))
+        if fresh_help != fresh_send["help"]:
+            record["cause"] = "the pre-press element does not carry the Send slot's help"
+            record["pre_press"]["help_at_path"] = fresh_help
+            return record
+        if not ax.same(found["element"], fresh_found["element"]):
+            record["cause"] = "the pre-press Send slot identity replaced the initially read element"
+            return record
         started = obs.now()
         # Even a failing AXPress may have opened the menu. From this boundary every exit measures
         # and cleans the screen before the actuator can return a usable record.
         pressed = True
-        record["press"] = {"status": ax.perform(found["element"], "AXPress"),
+        record["press"] = {"status": ax.perform(fresh_found["element"], "AXPress"),
                            "elapsed_s": obs.now() - started}
         ax.close()
         ax = None

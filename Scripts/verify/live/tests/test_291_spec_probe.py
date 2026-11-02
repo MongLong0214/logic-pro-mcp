@@ -397,6 +397,9 @@ class RoutingSpecProbeTests(PinnedRoutingRowsTestCase):
                 selected.append((element, action))
                 return 0
 
+            def same(self, left, right):
+                return left == right
+
             def close(self):
                 pass
 
@@ -446,6 +449,9 @@ class RoutingSpecProbeTests(PinnedRoutingRowsTestCase):
 
             def perform(self, element, action):
                 return 0
+
+            def same(self, left, right):
+                return left == right
 
             def close(self):
                 pass
@@ -497,6 +503,9 @@ class RoutingSpecProbeTests(PinnedRoutingRowsTestCase):
 
             def perform(self, element, action):
                 return 0
+
+            def same(self, left, right):
+                return left == right
 
             def close(self):
                 pass
@@ -561,6 +570,106 @@ class RoutingSpecProbeTests(PinnedRoutingRowsTestCase):
             record = spec_probes.controls.select_send_stereo("en", 1)
         self.assertNotIn("selected", record)
         self.assertIn("sole empty", record["cause"])
+        self.assertEqual(pressed, [])
+
+    def test_stereo_send_control_refuses_same_help_slot_occupied_before_press(self):
+        pressed = []
+
+        class SlotAX:
+            def __init__(self, _pid):
+                pass
+
+            def element_at(self, path):
+                return {"element": "slot", "status": 0}
+
+            def value(self, element, attribute):
+                return {"status": 0, "value": "Send slot"}
+
+            def perform(self, element, action):
+                pressed.append((element, action))
+                return 0
+
+            def same(self, left, right):
+                return left == right
+
+            def close(self):
+                pass
+
+        initial = {"t": 1.0, "elapsed_s": 0.1, "observation": {"strips": [
+            {"sends": []},
+            {"sends": [{"path": [1, 2], "help": "Send slot",
+                         "description": "Send", "occupied": False}]},
+        ]}}
+        occupied = {"t": 1.1, "elapsed_s": 0.1, "observation": {"strips": [
+            {"sends": []},
+            {"sends": [{"path": [1, 2], "help": "Send slot",
+                         "description": "Stereo Output", "occupied": True}]},
+        ]}}
+        menu = mock.Mock()
+        menu.perform.return_value = 0
+        items = [{"title": "Stereo Output", "enabled": True, "element": "stereo"}]
+        with mock.patch.object(spec_probes.controls.probes, "_single_logic_pid",
+                               return_value={"readable": True, "value": 123}), \
+             mock.patch.object(spec_probes.controls.live_locale, "apple_row",
+                               return_value={"readable": True, "value": "Stereo Output"}), \
+             mock.patch.object(spec_probes.controls.probes, "run",
+                               side_effect=[initial, occupied]) as run, \
+             mock.patch.object(spec_probes.controls.cfbridge, "AX", SlotAX), \
+             mock.patch.object(spec_probes.controls, "_menu_items",
+                               return_value=(menu, 1, items)), \
+             mock.patch.object(spec_probes.controls.screen, "settle_to_clean",
+                               return_value={"final": {"dirt": []}, "escapes_sent": 0}):
+            record = spec_probes.controls.select_send_stereo("en", 1)
+        self.assertEqual(run.call_count, 2)
+        self.assertNotIn("selected", record)
+        self.assertIn("pre-press", record["cause"])
+        self.assertEqual(pressed, [])
+
+    def test_stereo_send_control_refuses_same_help_replacement_before_press(self):
+        pressed = []
+
+        class SlotAX:
+            def __init__(self, _pid):
+                self.resolutions = iter(("slot-old", "slot-new"))
+
+            def element_at(self, path):
+                return {"element": next(self.resolutions), "status": 0}
+
+            def value(self, element, attribute):
+                return {"status": 0, "value": "Send slot"}
+
+            def perform(self, element, action):
+                pressed.append((element, action))
+                return 0
+
+            def same(self, left, right):
+                return left == right
+
+            def close(self):
+                pass
+
+        reading = {"t": 1.0, "elapsed_s": 0.1, "observation": {"strips": [
+            {"sends": []},
+            {"sends": [{"path": [1, 2], "help": "Send slot",
+                         "description": "Send", "occupied": False}]},
+        ]}}
+        menu = mock.Mock()
+        menu.perform.return_value = 0
+        items = [{"title": "Stereo Output", "enabled": True, "element": "stereo"}]
+        with mock.patch.object(spec_probes.controls.probes, "_single_logic_pid",
+                               return_value={"readable": True, "value": 123}), \
+             mock.patch.object(spec_probes.controls.live_locale, "apple_row",
+                               return_value={"readable": True, "value": "Stereo Output"}), \
+             mock.patch.object(spec_probes.controls.probes, "run", return_value=reading) as run, \
+             mock.patch.object(spec_probes.controls.cfbridge, "AX", SlotAX), \
+             mock.patch.object(spec_probes.controls, "_menu_items",
+                               return_value=(menu, 1, items)), \
+             mock.patch.object(spec_probes.controls.screen, "settle_to_clean",
+                               return_value={"final": {"dirt": []}, "escapes_sent": 0}):
+            record = spec_probes.controls.select_send_stereo("en", 1)
+        self.assertEqual(run.call_count, 2)
+        self.assertNotIn("selected", record)
+        self.assertIn("identity", record["cause"])
         self.assertEqual(pressed, [])
 
 

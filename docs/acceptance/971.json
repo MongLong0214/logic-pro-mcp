@@ -131,35 +131,55 @@
     {"path": "apply.saga_state", "op": "eq", "value": "completed"},
     {"path": "apply.final_disposition", "op": "eq", "value": "completed_verified"},
     {"path": "post.occupied_strips", "op": "eq", "value": []},
-    {"path": "post.outputs[1].kind", "op": "eq", "value": "physical"},
-    {"path": "post.outputs[1].ports", "op": "eq", "value": [3, 4]}
+    {"path": "post.outputs[1]", "op": "eq", "value": {"kind": "physical", "ports": [3, 4]}}
    ],
    "counterexample": [
-    {"observation": "baseline_apply", "replaces": "apply", "must_fail": [12, 13, 14, 15]},
-    {"observation": "pre", "replaces": "post", "must_fail": [16, 17, 18]}
+    {"observation": "pre", "replaces": "post", "must_fail": [16, 17]}
    ],
    "restore": [
-    {"as": "restore_inspection", "call": {"tool": "logic_project", "command": "inspect_session", "params": {
+    {"as": "restore_output_inspection", "call": {"tool": "logic_project", "command": "inspect_session", "params": {
      "domains": ["strips", "associations", "routing"],
      "allow_ui_navigation": true
     }}},
-    {"as": "restore_plan", "call": {"tool": "logic_project", "command": "plan_session_repair", "params": {
-     "snapshot_id": {"$observation": "restore_inspection.snapshot_id"},
+    {"as": "restore_output_plan", "call": {"tool": "logic_project", "command": "plan_session_repair", "params": {
+     "snapshot_id": {"$observation": "restore_output_inspection.snapshot_id"},
      "policy": {
       "schema": "logic_pro_mcp_repair_policy.v1",
-      "project_ref": {"$observation": "restore_inspection.project.project_ref"},
+      "project_ref": {"$observation": "restore_output_inspection.project.project_ref"},
       "targets": [{
        "handle": "source",
-       "track_ref": {"$observation": "restore_inspection.associations.rows[track_index=1].track_ref"}
+       "track_ref": {"$observation": "restore_output_inspection.associations.rows[track_index=1].track_ref"}
       }],
       "outputs": [{"target": "source", "output": {"kind": "stereo_output"}}]
      }
     }}},
-    {"as": "restore_apply", "call": {"tool": "logic_project", "command": "apply_session_repair", "params": {
-     "plan_id": {"$observation": "restore_plan.plan_id"},
-     "digest": {"$observation": "restore_plan.digest"},
+    {"as": "restore_output_apply", "call": {"tool": "logic_project", "command": "apply_session_repair", "params": {
+     "plan_id": {"$observation": "restore_output_plan.plan_id"},
+     "digest": {"$observation": "restore_output_plan.digest"},
      "confirmed": true,
-     "idempotency_key": "acceptance-971-combined-restore"
+     "idempotency_key": "acceptance-971-combined-restore-output"
+    }}},
+    {"as": "restore_send_inspection", "call": {"tool": "logic_project", "command": "inspect_session", "params": {
+     "domains": ["strips", "associations", "routing"],
+     "allow_ui_navigation": true
+    }}},
+    {"as": "restore_send_plan", "call": {"tool": "logic_project", "command": "plan_session_repair", "params": {
+     "snapshot_id": {"$observation": "restore_send_inspection.snapshot_id"},
+     "policy": {
+      "schema": "logic_pro_mcp_repair_policy.v1",
+      "project_ref": {"$observation": "restore_send_inspection.project.project_ref"},
+      "targets": [{
+       "handle": "source",
+       "track_ref": {"$observation": "restore_send_inspection.associations.rows[track_index=1].track_ref"}
+      }],
+      "sends": [{"target": "source", "observed_ordinal": 1, "remove": true}]
+     }
+    }}},
+    {"as": "restore_send_apply", "call": {"tool": "logic_project", "command": "apply_session_repair", "params": {
+     "plan_id": {"$observation": "restore_send_plan.plan_id"},
+     "digest": {"$observation": "restore_send_plan.digest"},
+     "confirmed": true,
+     "idempotency_key": "acceptance-971-combined-restore-send"
     }}},
     {"as": "restored", "wait": {"probe": {"name": "routing_slots", "args": {}}, "until": {"path": "outputs[1].kind", "op": "eq", "value": "stereo_output"}, "timeout_ms": 60000, "interval_ms": 500}}
    ],

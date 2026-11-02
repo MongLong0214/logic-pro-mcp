@@ -215,8 +215,142 @@ class AcceptanceContractTests(unittest.TestCase):
         self.assertEqual(row["steps"][1]["probe"]["name"],
                          "routing_send_assign_stereo")
         self.assertEqual(row["restore"][-1]["wait"]["probe"]["name"], "routing_slots")
+        self.assertEqual([step["as"] for step in row["restore"]], [
+            "restore_output_inspection", "restore_output_plan", "restore_output_apply",
+            "restore_send_inspection", "restore_send_plan", "restore_send_apply", "restored",
+        ])
+        output_policy = row["restore"][1]["call"]["params"]["policy"]
+        send_policy = row["restore"][4]["call"]["params"]["policy"]
+        self.assertEqual(output_policy["outputs"], [
+            {"target": "source", "output": {"kind": "stereo_output"}},
+        ])
+        self.assertEqual(send_policy["sends"], [
+            {"target": "source", "observed_ordinal": 1, "remove": True},
+        ])
         self.assertTrue(row["counterexample"])
-        self.assertTrue(row["restore_counterexample"])
+        self.assertEqual({counterexample["observation"]
+                          for counterexample in row["restore_counterexample"]}, {"post"})
+
+    def run_combined_row(self, row, *, fail_inspection=False):
+        class Life:
+            def __init__(self):
+                self.clock = 0.0
+                self.send_occupied = False
+                self.output = {"kind": "stereo_output"}
+
+            def now(self):
+                return self.clock
+
+            def sleep(self, seconds):
+                self.clock += seconds
+
+            def problems(self, _ctx, _when):
+                return []
+
+            def probe(self, name, _ctx, _args):
+                if name == "routing_send_assign_stereo":
+                    self.send_occupied = True
+                    return json.dumps({"selected": "Stereo Output", "strip": 1})
+                if name != "routing_slots":
+                    raise AssertionError(name)
+                return json.dumps({
+                    "strip_count": 2,
+                    "occupied_strips": [1] if self.send_occupied else [],
+                    "send_counts": [0, 1],
+                    "inputs": [None, {"kind": "physical", "ports": [1]}],
+                    "outputs": [None, self.output],
+                }, sort_keys=True)
+
+        class Session:
+            def __init__(self, life):
+                self.life = life
+                self.ctx = None
+                self.calls = []
+
+            def call(self, tool, command, params, timeout_s):
+                step = self.ctx["step"]["as"]
+                self.calls.append((step, tool, command, params, timeout_s))
+                if step == "inspection" and fail_inspection:
+                    raise runner.StepUnreadable("forced failure before apply")
+                if command == "inspect_session":
+                    return json.dumps({
+                        "snapshot_id": f"snapshot-{step}",
+                        "project": {"project_ref": f"project-{step}"},
+                        "associations": {"rows": [
+                            {"track_index": 1, "track_ref": f"track-{step}"},
+                        ]},
+                    })
+                if command == "plan_session_repair":
+                    if step == "restore_send_plan" and not self.life.send_occupied:
+                        return json.dumps({"state": "C", "write_attempted": False,
+                                           "executable": False})
+                    reply = {"plan_id": f"plan-{step}", "digest": f"digest-{step}"}
+                    if step == "plan":
+                        reply.update({"executable": True, "steps": [
+                            {"kind": "local_output"},
+                            {"kind": "local_send_removal", "observed_ordinal": 1},
+                        ]})
+                    return json.dumps(reply)
+                if command == "apply_session_repair":
+                    if step == "baseline_apply":
+                        return json.dumps({"state": "C", "write_attempted": False})
+                    if step == "apply":
+                        self.life.output = {"kind": "physical", "ports": [3, 4]}
+                        self.life.send_occupied = False
+                        return json.dumps({"state": "A", "write_attempted": True,
+                                           "saga_state": "completed",
+                                           "final_disposition": "completed_verified"})
+                    if step == "restore_output_apply":
+                        self.life.output = {"kind": "stereo_output"}
+                    if step == "restore_send_apply":
+                        self.life.send_occupied = False
+                    return json.dumps({"state": "A", "write_attempted": True})
+                raise AssertionError((tool, command))
+
+        life = Life()
+        session = Session(life)
+        ctx = {"life": life, "session": session, "row": row["id"], "lproj": "en", "log": []}
+        session.ctx = ctx
+        steps = row["steps"]
+        if fail_inspection:
+            steps = [row["steps"][0], row["steps"][1], row["steps"][3]]
+        result = runner.run_row(ctx, {"steps": steps, "restore": row["restore"]})
+        return result, session
+
+    def test_setup_send_is_removed_when_inspection_fails_before_apply(self):
+        spec = self.spec()
+        row = next(row for row in spec["rows"]
+                   if row["id"] == "approved-output-and-send-are-independently-final")
+        self.assertEqual(row["steps"][3]["as"], "inspection")
+        result, session = self.run_combined_row(row, fail_inspection=True)
+
+        self.assertIn("forced failure before apply", result["observations"]["inspection"]["unreadable"])
+        restored = json.loads(result["observations"]["restored"]["raw"])
+        as_found = json.loads(result["observations"]["as_found"]["raw"])
+        self.assertEqual(restored, as_found)
+        self.assertEqual([call[0] for call in session.calls[1:]], [
+            "restore_output_inspection", "restore_output_plan", "restore_output_apply",
+            "restore_send_inspection", "restore_send_plan", "restore_send_apply",
+        ])
+
+    def test_success_still_confirms_full_restore_when_send_cleanup_is_already_satisfied(self):
+        import engine
+
+        spec = self.spec()
+        row = next(row for row in spec["rows"]
+                   if row["id"] == "approved-output-and-send-are-independently-final")
+        result, session = self.run_combined_row(row)
+
+        send_plan = json.loads(result["observations"]["restore_send_plan"]["raw"])
+        self.assertEqual(send_plan["state"], "C")
+        self.assertNotIn("plan_id", send_plan)
+        self.assertIn("no such key", result["observations"]["restore_send_apply"]["unreadable"])
+        restored = json.loads(result["observations"]["restored"]["raw"])
+        as_found = json.loads(result["observations"]["as_found"]["raw"])
+        self.assertEqual(restored, as_found)
+        self.assertNotIn("restore_send_apply", [call[0] for call in session.calls])
+        verdict = engine.evaluate_row(row, result, "en")
+        self.assertEqual(verdict["verdict"], "PASS", verdict)
 
 
 if __name__ == "__main__":
