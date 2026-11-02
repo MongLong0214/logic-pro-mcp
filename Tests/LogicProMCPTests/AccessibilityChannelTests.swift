@@ -2117,8 +2117,9 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
 @Test func testAccessibilityChannelTrackSelectFailsClosedWhenEveryAXStepRejected() async throws {
     // ADR-001: track.select's Step-5 coordinate click is gone. When the header's
     // parent group is not AXSelectedChildren-writable AND Steps 2-4 (AXSelected /
-    // AXPress) are all rejected, selectTrackViaAX fails and the op returns honest
-    // State C ax_write_failed — never a silent success, never a coordinate click.
+    // AXPress) all report rejection, selectTrackViaAX fails. An AX write can still
+    // take effect before reporting failure, so the refusal must terminate routing
+    // rather than let the MCU channel issue a second selection.
     // The header carries a real frame so a re-introduced Step-5 would actuate it.
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(620)
@@ -2136,10 +2137,18 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     builder.setAttribute(header, kAXPositionAttribute as String, axPoint(10, 100))
     builder.setAttribute(header, kAXSizeAttribute as String, axSize(180, 40))
 
-    // Every AX setter and action is rejected, including the runtime-threaded first two rungs.
+    // The primary setter lands the selection but reports failure. Every later AX
+    // setter/action also reports rejection.
     let logicRuntime = builder.makeLogicRuntime(
         appElement: app,
-        setAttributeHandler: { _, _, _ in false },
+        setAttributeHandler: { element, attribute, _ in
+            if element == trackList,
+               attribute == (kAXSelectedChildrenAttribute as String) {
+                builder.setAttribute(trackList, attribute, [header])
+                builder.setAttribute(header, kAXSelectedAttribute as String, true)
+            }
+            return false
+        },
         performActionHandler: { _, _ in false }
     )
     let channel = makeAXBackedAccessibilityChannel(builder: builder, app: app, logicRuntime: logicRuntime)
@@ -2150,6 +2159,16 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     #expect(!result.isSuccess)
     #expect(try #require(object["state"] as? String) == "C")
     #expect(try #require(object["error"] as? String) == "ax_write_failed")
+    #expect(try #require(builder.attributeValue(header, kAXSelectedAttribute as String) as? Bool))
+    #expect(try #require(object["write_attempted"] as? Bool))
+    #expect(try #require(object["fallback_unsafe"] as? Bool))
+    #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(try #require(object["terminal_scope"] as? String) == "mcp_request_only")
+    #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(try #require(object["human_intervention_requests"] as? Int) == 0)
+    #expect(try #require(object["human_dependent_transitions"] as? Int) == 0)
+    #expect(HonestContract.isFallbackUnsafeStateC(result.message))
 }
 
 @Test func testAccessibilityChannelControlBarToggleDoesNotTrustNoopAXPress() async {
