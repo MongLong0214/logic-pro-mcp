@@ -1366,6 +1366,45 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         return true
     }
 
+    /// A removal receipt has no assigned Send control left to retain. Its
+    /// request-local empty-slot proof still has to carry the aggregate Output
+    /// and protected footprint check at the same final read boundary.
+    func retainCombinedSendRemovalRead(_ removed: AccessibilityChannel.RemovedSendObservation) async -> Bool {
+        let source = removed.source
+        guard requiresCombinedOutputSendHandoff, let output = outputTask, let task = sendTask,
+              task.desired == nil, outputAttempted, outputApplied, !outputInverseConsumed,
+              let prior = outputPair, source.original.matches(prior.strip),
+              source.originalTrack.matches(prior.track), source.pair.track.matches(task.pair.track),
+              removed.checkedDestination == task.before,
+              removed.nonRoutingChecks == ["Post Fader"] || removed.nonRoutingChecks == ["포스트 페이더"],
+              task.footprint.contains(removed.before), removed.before.ordinal == task.ordinal,
+              source.permits(runtime: source.pair.track.runtime),
+              removed.permits(runtime: source.pair.track.runtime) else { return false }
+        let previousPair = outputPair, previousRenewal = outputRenewal, previousProof = outputProof
+        outputPair = source.pair; outputRenewal = source; outputProof = source.observation
+        var accepted = false
+        defer {
+            if !accepted {
+                outputPair = previousPair; outputRenewal = previousRenewal; outputProof = previousProof
+            }
+        }
+        guard outputFootprintHeld(pair: source.pair, assignment: output.desired,
+                taskOverride: output, ownedSendRemoval: removed) else { return false }
+        let checked = await AXMixerStripBinding.$current.withValue(source.pair.strip) {
+            await AXMixerStripBinding.$outputAssociation.withValue(source.pair) {
+                await AccessibilityChannel.getOutputObservation(runtime: source.pair.track.runtime)
+            }
+        }
+        guard checked.assignment == output.desired,
+              outputFootprintHeld(pair: source.pair, assignment: output.desired,
+                taskOverride: output, ownedSendRemoval: removed),
+              source.permits(runtime: source.pair.track.runtime),
+              removed.permits(runtime: source.pair.track.runtime),
+              await projectIsCurrent(allowPendingCancellation: true) else { return false }
+        accepted = true
+        return true
+    }
+
     /// Discover header witnesses in the existing independent read budget, not
     /// the route-write budget. These are hints for a later actual input read,
     /// never cached Bus values, renewed public references or write authority.
@@ -2258,7 +2297,8 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                                      ownedStripNamePreview: [String]? = nil,
                                      verifiedNameEffect: ExactTrackNameAdapter.VerifiedNameEffect? = nil,
                                      taskOverride: OutputTask? = nil,
-                                     ownedSendChange: AccessibilityChannel.ChangedSendObservation? = nil) -> Bool {
+                                     ownedSendChange: AccessibilityChannel.ChangedSendObservation? = nil,
+                                     ownedSendRemoval: AccessibilityChannel.RemovedSendObservation? = nil) -> Bool {
         outputPeerReadbackUnavailable = false
         var stage = "retained_task", accepted = false
         defer {
@@ -2376,6 +2416,20 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                 }
                 return value
             }
+        }
+        if let ownedSendRemoval {
+            stage = "owned_send_removal_effect"
+            guard taskOverride != nil, ownedSendChange == nil, let sendTask, sendTask.desired == nil,
+                  ownedSendRemoval.checkedDestination == sendTask.before,
+                  ownedSendRemoval.before.ordinal == sendTask.ordinal,
+                  ownedSendRemoval.source.pair.track.matches(pair.track),
+                  ownedSendRemoval.permits(runtime: runtime),
+                  let captured = expected[index].sendSlots, let current = strips[index].sendSlots,
+                  captured.count == 2, captured.contains(ownedSendRemoval.before),
+                  current == [.init(ordinal: 0, state: .observedEmpty)] else { return false }
+            // The request-local removal proof authenticates this exact singleton
+            // empty footprint. No other captured or peer field may change.
+            expected[index].sendSlots = current
         }
         var expectedTrackRows = AccessibilityChannel.soloPresentationSafeTrackStates(task.capture.tracks)
             ?? task.capture.tracks
