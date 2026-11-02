@@ -115,6 +115,10 @@ enum ControlsViewParameterEnumerator {
         var parameters: [GenericPluginParameter] = []
         var observations: [RowObservation] = []
         var rowSignatures: [RowSignature] = []
+        var observedRowStructures: [PhysicalRowStructure] = []
+        var observedCells: [AXUIElement] = []
+        var observedLabels: [AXUIElement] = []
+        var observedControls: [AXUIElement] = []
 
         for (rowIndex, row) in rows.enumerated() {
             // A failed AXValue read for a label has neither established an
@@ -122,6 +126,31 @@ enum ControlsViewParameterEnumerator {
             // manifest: hashing `nil` would alias distinct unreadable labels.
             guard let rowRead = readRow(row, runtime: runtime) else {
                 return nil
+            }
+            observedRowStructures.append(rowRead.physicalStructure)
+            for cell in rowRead.cells {
+                guard !observedCells.contains(where: {
+                    CFEqual($0, cell)
+                }) else {
+                    return nil
+                }
+                observedCells.append(cell)
+            }
+            for label in rowRead.labelElements {
+                guard !observedLabels.contains(where: {
+                    CFEqual($0, label)
+                }) else {
+                    return nil
+                }
+                observedLabels.append(label)
+            }
+            for control in rowRead.controls {
+                guard !observedControls.contains(where: {
+                    CFEqual($0, control.element)
+                }) else {
+                    return nil
+                }
+                observedControls.append(control.element)
             }
 
             let classification: RowClassification
@@ -198,6 +227,25 @@ enum ControlsViewParameterEnumerator {
                 // refusing '-' rows must never renumber later parameters.
                 index: rowIndex
             ))
+        }
+
+        // A manifest spans several AX reads. Re-read the table's physical rows,
+        // cells, labels, and controls after the scan so a virtualized/re-rendered
+        // table cannot combine observations from one structure with a `complete`
+        // claim for another. Dynamic parameter values remain outside this
+        // identity check.
+        guard let finalRows = Self.rows(in: table, runtime: runtime),
+              finalRows.count == rows.count,
+              zip(rows, finalRows).allSatisfy({ original, final in
+                  CFEqual(original, final)
+              }),
+              zip(finalRows, observedRowStructures).allSatisfy({ row, initial in
+                  guard let final = physicalRowStructure(in: row, runtime: runtime) else {
+                      return false
+                  }
+                  return samePhysicalStructure(initial, final)
+              }) else {
+            return nil
         }
 
         // This covers row label changes AND every observed trait that changes
@@ -300,6 +348,13 @@ enum ControlsViewParameterEnumerator {
               }) else {
             return nil
         }
+        for (index, candidate) in candidates.enumerated() {
+            guard !candidates[..<index].contains(where: {
+                CFEqual($0, candidate)
+            }) else {
+                return nil
+            }
+        }
         return candidates
     }
 
@@ -331,8 +386,10 @@ enum ControlsViewParameterEnumerator {
         runtime: AXHelpers.Runtime
     ) -> RowRead? {
         var labelValues: [String] = []
+        var labelElements: [AXUIElement] = []
         var controlsInRow: [ControlObservation] = []
         var pairedCandidates: [PairedCandidate] = []
+        var physicalCells: [PhysicalCellStructure] = []
 
         guard let cells = rowCells(in: row, runtime: runtime) else {
             return nil
@@ -344,15 +401,24 @@ enum ControlsViewParameterEnumerator {
             let cellLabels = contents.labels
             let cellControls = contents.controls
             labelValues.append(contentsOf: cellLabels)
+            labelElements.append(contentsOf: contents.labelElements)
             controlsInRow.append(contentsOf: cellControls)
+            physicalCells.append(PhysicalCellStructure(
+                cell: cell,
+                labels: contents.labelElements,
+                controls: cellControls.map(\.element)
+            ))
             if let label = cellLabels.only, let control = cellControls.only {
                 pairedCandidates.append(PairedCandidate(label: label, control: control))
             }
         }
         return RowRead(
+            cells: cells,
             labels: labelValues,
+            labelElements: labelElements,
             controls: controlsInRow,
-            pairedCandidates: pairedCandidates
+            pairedCandidates: pairedCandidates,
+            physicalStructure: PhysicalRowStructure(cells: physicalCells)
         )
     }
 
@@ -365,6 +431,61 @@ enum ControlsViewParameterEnumerator {
             maxDepth: 3,
             runtime: runtime
         )?.compactMap { $0.role == (kAXCellRole as String) ? $0.element : nil }
+    }
+
+    private static func physicalRowStructure(
+        in row: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> PhysicalRowStructure? {
+        guard let cells = rowCells(in: row, runtime: runtime) else {
+            return nil
+        }
+        var physicalCells: [PhysicalCellStructure] = []
+        for cell in cells {
+            guard let scanned = descendants(
+                of: cell,
+                maxDepth: 4,
+                runtime: runtime
+            ) else {
+                return nil
+            }
+            let labels = scanned.compactMap { descendant in
+                descendant.role == (kAXStaticTextRole as String)
+                    ? descendant.element
+                    : nil
+            }
+            let controls = scanned.compactMap { descendant in
+                GenericParameterControlRole(rawValue: descendant.role) == nil
+                    ? nil
+                    : descendant.element
+            }
+            physicalCells.append(PhysicalCellStructure(
+                cell: cell,
+                labels: labels,
+                controls: controls
+            ))
+        }
+        return PhysicalRowStructure(cells: physicalCells)
+    }
+
+    private static func samePhysicalStructure(
+        _ initial: PhysicalRowStructure,
+        _ final: PhysicalRowStructure
+    ) -> Bool {
+        initial.cells.count == final.cells.count
+            && zip(initial.cells, final.cells).allSatisfy { initialCell, finalCell in
+                CFEqual(initialCell.cell, finalCell.cell)
+                    && samePhysicalElements(initialCell.labels, finalCell.labels)
+                    && samePhysicalElements(initialCell.controls, finalCell.controls)
+            }
+    }
+
+    private static func samePhysicalElements(
+        _ initial: [AXUIElement],
+        _ final: [AXUIElement]
+    ) -> Bool {
+        initial.count == final.count
+            && zip(initial, final).allSatisfy { CFEqual($0, $1) }
     }
 
     /// Scans the complete cell subtree once, retaining the status of every
@@ -383,6 +504,9 @@ enum ControlsViewParameterEnumerator {
         }
         return CellContents(
             labels: labels,
+            labelElements: scanned.filter {
+                $0.role == (kAXStaticTextRole as String)
+            }.map(\.element),
             controls: controls(in: scanned, runtime: runtime)
         )
     }
@@ -423,6 +547,7 @@ enum ControlsViewParameterEnumerator {
                 return nil
             }
             return ControlObservation(
+                element: descendant.element,
                 role: role,
                 valueIsReadable: valueIsReadable(on: descendant.element, runtime: runtime),
                 valueDescription: valueDescription(on: descendant.element, runtime: runtime),
@@ -647,7 +772,19 @@ enum ControlsViewParameterEnumerator {
         runtime: AXHelpers.Runtime,
         into found: inout [DescendantRead]
     ) -> Bool {
-        guard maxDepth > 0 else { return true }
+        guard maxDepth > 0 else {
+            // The depth limit bounds work; it does not prove that the subtree
+            // ended. Refuse a truncated scan instead of silently hiding a
+            // deeper label, control, cell, or competing table.
+            switch AXHelpers.childrenResult(element, runtime: runtime) {
+            case .success(let children):
+                return children.isEmpty
+            case .failure(let error) where error.isDefinitiveAbsence:
+                return true
+            case .failure:
+                return false
+            }
+        }
         let children: [AXUIElement]
         switch AXHelpers.childrenResult(
             element,
@@ -701,10 +838,12 @@ enum ControlsViewParameterEnumerator {
 
     private struct CellContents {
         let labels: [String]
+        let labelElements: [AXUIElement]
         let controls: [ControlObservation]
     }
 
     private struct ControlObservation {
+        let element: AXUIElement
         let role: GenericParameterControlRole
         let valueIsReadable: Bool
         let valueDescription: String?
@@ -717,9 +856,22 @@ enum ControlsViewParameterEnumerator {
     }
 
     private struct RowRead {
+        let cells: [AXUIElement]
         let labels: [String]
+        let labelElements: [AXUIElement]
         let controls: [ControlObservation]
         let pairedCandidates: [PairedCandidate]
+        let physicalStructure: PhysicalRowStructure
+    }
+
+    private struct PhysicalRowStructure {
+        let cells: [PhysicalCellStructure]
+    }
+
+    private struct PhysicalCellStructure {
+        let cell: AXUIElement
+        let labels: [AXUIElement]
+        let controls: [AXUIElement]
     }
 
     private struct RowSignature: Encodable {
