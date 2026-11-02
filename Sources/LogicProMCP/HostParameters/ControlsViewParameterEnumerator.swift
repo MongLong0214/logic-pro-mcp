@@ -115,6 +115,7 @@ enum ControlsViewParameterEnumerator {
         var parameters: [GenericPluginParameter] = []
         var observations: [RowObservation] = []
         var rowSignatures: [RowSignature] = []
+        var observedRowCells: [[AXUIElement]] = []
         var observedCells: [AXUIElement] = []
         var observedLabels: [AXUIElement] = []
         var observedControls: [AXUIElement] = []
@@ -126,6 +127,7 @@ enum ControlsViewParameterEnumerator {
             guard let rowRead = readRow(row, runtime: runtime) else {
                 return nil
             }
+            observedRowCells.append(rowRead.cells)
             for cell in rowRead.cells {
                 guard !observedCells.contains(where: {
                     CFEqual($0, cell)
@@ -227,13 +229,23 @@ enum ControlsViewParameterEnumerator {
             ))
         }
 
-        // A manifest spans several AX reads. Re-read the table's physical row
-        // list after the scan so a virtualized/re-rendered table cannot combine
-        // observations from one row set with a `complete` claim for another.
+        // A manifest spans several AX reads. Re-read the table's physical rows
+        // and cells after the scan so a virtualized/re-rendered table cannot
+        // combine observations from one structure with a `complete` claim for
+        // another. Dynamic parameter values remain outside this identity check.
         guard let finalRows = Self.rows(in: table, runtime: runtime),
               finalRows.count == rows.count,
               zip(rows, finalRows).allSatisfy({ original, final in
                   CFEqual(original, final)
+              }),
+              zip(finalRows, observedRowCells).allSatisfy({ row, initialCells in
+                  guard let finalCells = rowCells(in: row, runtime: runtime),
+                        finalCells.count == initialCells.count else {
+                      return false
+                  }
+                  return zip(initialCells, finalCells).allSatisfy({ initial, final in
+                      CFEqual(initial, final)
+                  })
               }) else {
             return nil
         }

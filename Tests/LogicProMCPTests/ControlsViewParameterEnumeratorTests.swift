@@ -81,6 +81,19 @@ struct ControlsViewParameterEnumeratorTests {
         #expect(fixture.rowListReadCounter?.current == 2)
     }
 
+    @Test func replacingAPhysicalCellAfterTheRowScanCannotProduceACompleteManifest() {
+        let fixture = makeControlsFixture(
+            rowStructureMutation: .replaceCell(rowIndex: 7)
+        )
+
+        #expect(ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: fixture.runtime
+        ) == nil)
+        #expect(fixture.rowStructureReadCounter?.current == 4)
+    }
+
     @Test func traversalDepthBoundaryRefusesInsteadOfHidingANestedControl() {
         let fixture = makeControlsFixture(depthBoundaryIndex: 7)
         let result = ControlsViewParameterEnumerator.enumerate(
@@ -584,6 +597,7 @@ private struct ControlsFixture {
     let runtime: AXHelpers.Runtime
     let depthBoundaryReadFailure: DepthBoundaryReadFailure?
     let rowListReadCounter: LockedRowListReadCounter?
+    let rowStructureReadCounter: LockedRowStructureReadCounter?
 }
 
 private struct RowFixture {
@@ -650,6 +664,10 @@ private enum RowListMutation: Sendable {
     case swap(Int, Int)
 }
 
+private enum RowStructureMutation: Sendable {
+    case replaceCell(rowIndex: Int)
+}
+
 private final class LockedDepthBoundaryReadCounter: @unchecked Sendable {
     private let lock = NSLock()
     private var value = 0
@@ -669,6 +687,24 @@ private final class LockedDepthBoundaryReadCounter: @unchecked Sendable {
 }
 
 private final class LockedRowListReadCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+
+    func next() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        value += 1
+        return value
+    }
+
+    var current: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
+}
+
+private final class LockedRowStructureReadCounter: @unchecked Sendable {
     private let lock = NSLock()
     private var value = 0
 
@@ -724,7 +760,8 @@ private func makeControlsFixture(
     leafChildrenReadError: AXError? = nil,
     unreadableDirectHeaderRole: Bool = false,
     windowIdentifierReadError: AXError? = nil,
-    rowListMutation: RowListMutation? = nil
+    rowListMutation: RowListMutation? = nil,
+    rowStructureMutation: RowStructureMutation? = nil
 ) -> ControlsFixture {
     let builder = FakeAXRuntimeBuilder()
     let window = builder.element(90_000)
@@ -924,6 +961,28 @@ private func makeControlsFixture(
     let replacementRow = builder.element(92_000)
     builder.setRole(replacementRow, kAXRowRole as String)
     let rowListReadCounter = rowListMutation == nil ? nil : LockedRowListReadCounter()
+    let rowStructureMutationData: (rowID: Int, replacementCell: AXUIElement)?
+    switch rowStructureMutation {
+    case .replaceCell(let rowIndex)
+        where rowElements.indices.contains(rowIndex)
+            && primaryLabelElements.indices.contains(rowIndex)
+            && primaryControlElements.indices.contains(rowIndex):
+        let replacementCell = builder.element(93_000)
+        builder.setRole(replacementCell, kAXCellRole as String)
+        builder.setChildren(replacementCell, [
+            primaryLabelElements[rowIndex],
+            primaryControlElements[rowIndex],
+        ])
+        rowStructureMutationData = (
+            rowID: builder.elementID(rowElements[rowIndex]),
+            replacementCell: replacementCell
+        )
+    case .replaceCell, nil:
+        rowStructureMutationData = nil
+    }
+    let rowStructureReadCounter = rowStructureMutationData == nil
+        ? nil
+        : LockedRowStructureReadCounter()
     let runtime: AXHelpers.Runtime
     if !unreadableLabelElementIDs.isEmpty
         || unreadableWindowTitle
@@ -934,7 +993,8 @@ private func makeControlsFixture(
         || leafChildrenReadError != nil
         || unreadableDirectHeaderRole
         || windowIdentifierReadError != nil
-        || rowListMutation != nil {
+        || rowListMutation != nil
+        || rowStructureMutationData != nil {
         runtime = builder.makeAXRuntime(
             attributeValueResultHandler: { element, attribute in
                 let elementID = builder.elementID(element)
@@ -982,6 +1042,13 @@ private func makeControlsFixture(
             },
             childrenResultHandler: { element in
                 let elementID = builder.elementID(element)
+                if let rowStructureMutationData, let rowStructureReadCounter,
+                   elementID == rowStructureMutationData.rowID {
+                    let read = rowStructureReadCounter.next()
+                    if read >= 4 {
+                        return .success([rowStructureMutationData.replacementCell])
+                    }
+                }
                 if let depthBoundaryFailure,
                    elementID == depthBoundaryFailure.elementID,
                    depthBoundaryFailure.shouldFailThisRead() {
@@ -1008,7 +1075,8 @@ private func makeControlsFixture(
         window: window,
         runtime: runtime,
         depthBoundaryReadFailure: depthBoundaryFailure,
-        rowListReadCounter: rowListReadCounter
+        rowListReadCounter: rowListReadCounter,
+        rowStructureReadCounter: rowStructureReadCounter
     )
 }
 
