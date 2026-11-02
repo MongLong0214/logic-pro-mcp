@@ -1017,8 +1017,16 @@ struct SystemDispatcher: OperationTraceDispatching {
             let canonicalInputConfirmed = approvedSessionRepair?.plan == plan && inputBus != nil
             if pluginPlan || (containsSend && !canonicalSendConfirmed) || containsMode || containsLevel || (containsInput && !canonicalInputConfirmed), params["confirmed_plan_hash"]?.stringValue != SagaJournal.planHash(plan) {
                 return await finalizeTrace(SagaWire.scopedStateC(.invalidParams,
-                    hint: "Confirm this exact plan_hash before applying the selected workflow",
-                    extras: ["write_attempted": false]), traceID: traceID)
+                    hint: "confirmed_plan_hash must equal the exact plan_hash returned by saga_preflight for this workflow",
+                    extras: [
+                        "write_attempted": false,
+                        "safe_to_retry": true,
+                        "terminal": true,
+                        "terminal_scope": "mcp_request_only",
+                        "human_intervention_required": false,
+                        "human_intervention_requests": 0,
+                        "human_dependent_transitions": 0,
+                    ]), traceID: traceID)
             }
             switch await sagaJournal.begin(plan) {
             case .inProgress:
