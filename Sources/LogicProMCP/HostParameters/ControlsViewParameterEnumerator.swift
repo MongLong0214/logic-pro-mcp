@@ -648,10 +648,16 @@ enum ControlsViewParameterEnumerator {
         into found: inout [DescendantRead]
     ) -> Bool {
         guard maxDepth > 0 else { return true }
-        guard case .success(let children) = AXHelpers.childrenResult(
+        let children: [AXUIElement]
+        switch AXHelpers.childrenResult(
             element,
             runtime: runtime
-        ) else {
+        ) {
+        case .success(let observed):
+            children = observed
+        case .failure(let error) where error.isDefinitiveAbsence:
+            return true
+        case .failure:
             return false
         }
         for child in children {

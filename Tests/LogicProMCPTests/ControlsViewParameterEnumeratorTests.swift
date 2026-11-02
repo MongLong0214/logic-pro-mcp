@@ -5,6 +5,17 @@ import Testing
 
 @Suite("ADR-018 Controls-view parameter enumerator")
 struct ControlsViewParameterEnumeratorTests {
+    @Test func definitiveLeafChildAbsenceDoesNotMakeTheCompleteTreeUnreadable() {
+        for error in [AXError.attributeUnsupported, AXError.noValue] {
+            let fixture = makeControlsFixture(leafChildrenReadError: error)
+            #expect(ControlsViewParameterEnumerator.enumerate(
+                in: fixture.window,
+                buildFingerprint: "Logic-12.x",
+                runtime: fixture.runtime
+            ) != nil, "AXChildren status \(error.rawValue)")
+        }
+    }
+
     @Test func manifestUsesTheMeasuredRaumRowsRolesAndReadbacks() throws {
         let fixture = makeControlsFixture()
         let result = try #require(ControlsViewParameterEnumerator.enumerate(
@@ -510,6 +521,7 @@ private func makeControlsFixture(
     unreadableControlValueIndexes: Set<Int> = [],
     unreadableAdditionalControlRoleIndexes: Set<Int> = [],
     unreadableCellChildIndexes: Set<Int> = [],
+    leafChildrenReadError: AXError? = nil,
     unreadableDirectHeaderRole: Bool = false,
     windowIdentifierReadError: AXError? = nil
 ) -> ControlsFixture {
@@ -632,6 +644,16 @@ private func makeControlsFixture(
         unreadableAdditionalControlRoleIndexes.compactMap { additionalControlElementIDs[$0] }
     )
     let unreadableCellElementIDs = Set(unreadableCellChildElementIDs)
+    let leafElementIDs = Set(
+        labelElementIDs
+            + controlElementIDs
+            + Array(additionalControlElementIDs.values)
+            + [
+                builder.elementID(pluginText),
+                builder.elementID(trackText),
+                builder.elementID(headerDecoration),
+            ]
+    )
     let windowID = builder.elementID(window)
     let headerDecorationID = builder.elementID(headerDecoration)
     let runtime: AXHelpers.Runtime
@@ -640,6 +662,7 @@ private func makeControlsFixture(
         || !unreadableControlValueElementIDs.isEmpty
         || !unreadableAdditionalControlRoleElementIDs.isEmpty
         || !unreadableCellElementIDs.isEmpty
+        || leafChildrenReadError != nil
         || unreadableDirectHeaderRole
         || windowIdentifierReadError != nil {
         runtime = builder.makeAXRuntime(
@@ -672,10 +695,14 @@ private func makeControlsFixture(
                 return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
             },
             childrenResultHandler: { element in
-                guard unreadableCellElementIDs.contains(builder.elementID(element)) else {
-                    return nil
+                let elementID = builder.elementID(element)
+                if unreadableCellElementIDs.contains(elementID) {
+                    return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
                 }
-                return .failure(AXHelpers.AXStatusError(raw: AXError.failure.rawValue))
+                if leafElementIDs.contains(elementID), let leafChildrenReadError {
+                    return .failure(AXHelpers.AXStatusError(raw: leafChildrenReadError.rawValue))
+                }
+                return nil
             },
             setAttributeHandler: nil,
             performActionHandler: nil
