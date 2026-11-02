@@ -520,6 +520,89 @@ struct TempoMapAXTests {
         #expect(fixture.writeElementIDs.count == 2)
     }
 
+    @Test("an already-cancelled tempo request refuses before any AX write")
+    func alreadyCancelledRequestRefusesBeforeWrite() async throws {
+        let fixture = TempoListFixture(tempo: 118, steps: [.toward, .toward])
+
+        let outcome = await Task { () -> TempoMapAX.WriteOutcome in
+            withUnsafeCurrentTask { $0?.cancel() }
+            return TempoMapAX.setExistingTempo(
+                at: 0,
+                to: 120,
+                in: fixture.window,
+                localeIdentifier: "ko-KR",
+                runtime: fixture.runtime()
+            )
+        }.value
+        let refusedOutcome = try #require(refusal(from: outcome))
+
+        #expect(refusedOutcome.failure == .cancelled)
+        #expect(refusedOutcome.forward == .none)
+        #expect(refusedOutcome.rollback == .notNeeded(writes: 0, finalObserved: nil))
+        #expect(fixture.currentTempo == 118)
+        #expect(fixture.writeElementIDs.isEmpty)
+    }
+
+    @Test("cancellation after one owned step blocks the next forward write and restores")
+    func cancellationBeforeSecondForwardWriteRestoresOwnedStep() async throws {
+        let fixture = TempoListFixture(
+            tempo: 118,
+            steps: [.toward, .toward],
+            cancelAfterAcceptedWriteCount: 1
+        )
+
+        let outcome = await Task {
+            TempoMapAX.setExistingTempo(
+                at: 0,
+                to: 120,
+                in: fixture.window,
+                localeIdentifier: "ko-KR",
+                runtime: fixture.runtime()
+            )
+        }.value
+        let refusedOutcome = try #require(refusal(from: outcome))
+
+        #expect(refusedOutcome.failure == .cancelled)
+        #expect(refusedOutcome.forward == .init(
+            attempts: 1,
+            acceptedWrites: 1,
+            finalObserved: 119
+        ))
+        #expect(refusedOutcome.rollback == .restored(writes: 1, finalObserved: 118))
+        #expect(fixture.currentTempo == 118)
+        #expect(fixture.writeElementIDs.count == 2)
+    }
+
+    @Test("cancellation at the target prevents forward success and restores")
+    func cancellationBeforeForwardSuccessRestoresOwnedStep() async throws {
+        let fixture = TempoListFixture(
+            tempo: 118,
+            steps: [.toward, .toward],
+            cancelAfterAcceptedWriteCount: 1
+        )
+
+        let outcome = await Task {
+            TempoMapAX.setExistingTempo(
+                at: 0,
+                to: 119,
+                in: fixture.window,
+                localeIdentifier: "ko-KR",
+                runtime: fixture.runtime()
+            )
+        }.value
+        let refusedOutcome = try #require(refusal(from: outcome))
+
+        #expect(refusedOutcome.failure == .cancelled)
+        #expect(refusedOutcome.forward == .init(
+            attempts: 1,
+            acceptedWrites: 1,
+            finalObserved: 119
+        ))
+        #expect(refusedOutcome.rollback == .restored(writes: 1, finalObserved: 118))
+        #expect(fixture.currentTempo == 118)
+        #expect(fixture.writeElementIDs.count == 2)
+    }
+
     @Test("post-write readback re-finds a re-rendered group instead of reading stale nil")
     func staleElementReadIsNotTreatedAsChange() throws {
         let fixture = TempoListFixture(tempo: 118, steps: [.toward, .toward])
@@ -1129,6 +1212,7 @@ private final class TempoListFixture: @unchecked Sendable {
     private let peerDriftPhase: PeerDriftPhase?
     private var peerDriftInjected = false
     private let targetDriftPhase: TargetDriftPhase?
+    private let cancelAfterAcceptedWriteCount: Int?
     private var targetDriftInjected = false
     private var postWriteAXRowsResultReads = 0
     private var pendingRenderAXRowsReads = 0
@@ -1159,7 +1243,8 @@ private final class TempoListFixture: @unchecked Sendable {
         duplicateInjectionPhase: DuplicateInjectionPhase = .initial,
         peerTempo: Double? = nil,
         peerDriftPhase: PeerDriftPhase? = nil,
-        targetDriftPhase: TargetDriftPhase? = nil
+        targetDriftPhase: TargetDriftPhase? = nil,
+        cancelAfterAcceptedWriteCount: Int? = nil
     ) {
         self.currentTempo = tempo
         self.steps = steps
@@ -1182,6 +1267,7 @@ private final class TempoListFixture: @unchecked Sendable {
         self.peerTempo = peerTempo
         self.peerDriftPhase = peerDriftPhase
         self.targetDriftPhase = targetDriftPhase
+        self.cancelAfterAcceptedWriteCount = cancelAfterAcceptedWriteCount
         app = builder.element(90_000)
         window = builder.element(90_001)
         table = builder.element(90_002)
@@ -1344,6 +1430,9 @@ private final class TempoListFixture: @unchecked Sendable {
                         : requested.doubleValue - 1
                 }
                 acceptedWriteCount += 1
+                if acceptedWriteCount == cancelAfterAcceptedWriteCount {
+                    withUnsafeCurrentTask { $0?.cancel() }
+                }
                 inventoryPassesSinceLastAcceptedWrite = 0
                 scheduleCurrentRowRender()
                 if decreasingWrite, decreasingWriteDelay > 0 {

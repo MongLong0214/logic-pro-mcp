@@ -174,11 +174,18 @@ struct Issue112CommandDeadlineTests {
             toolTextResult("{\"unexpected\":true}")
         }
         #expect(refused.isError!)
-        #expect(json(refused)?["error"] as? String == "mutating_operation_in_progress")
-        #expect(json(refused)?["active_operation"] as? String == "logic_project.export_run")
+        let refusal = try #require(json(refused))
+        #expect(refusal["error"] as? String == "mutating_operation_in_progress")
+        #expect(refusal["active_operation"] as? String == "logic_project.export_run")
         // No write was attempted — the gate refused before dispatch — so the
         // refusal is retryable once the in-flight op releases the gate.
-        #expect((json(refused)?["safe_to_retry"] as? Bool)!)
+        #expect(try #require(refusal["safe_to_retry"] as? Bool))
+        #expect(try #require(refusal["terminal"] as? Bool))
+        #expect(refusal["terminal_scope"] as? String == "mcp_request_only")
+        #expect(!(try #require(refusal["human_intervention_required"] as? Bool)))
+        #expect(refusal["human_intervention_requests"] as? Int == 0)
+        #expect(refusal["human_dependent_transitions"] as? Int == 0)
+        #expect(!(try #require(refusal["write_attempted"] as? Bool)))
 
         blocker.unblock()
         await runner.value
