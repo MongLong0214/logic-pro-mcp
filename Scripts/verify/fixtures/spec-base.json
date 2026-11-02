@@ -47,6 +47,9 @@
    "restore_expect": [
     {"path": "restored.armed", "op": "eq", "value": false}
    ],
+   "restore_counterexample": [
+    {"observation": "post", "replaces": "restored", "must_fail": [0]}
+   ],
    "independence": ["pre", "post"]
   }
  ]
