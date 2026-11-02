@@ -51,6 +51,68 @@ struct VerifiedOpGateSharedTests {
     #expect(!attempted)
 }
 
+@Test func mixerVerifiedGateRefusalsAreRequestTerminal() async throws {
+    let gate = VerifiedOpGate()
+    try #require(gate.tryAcquire())
+    defer { gate.release() }
+
+    let target: [String: Value] = ["target_ref": .string("mix_held")]
+    let busOne: Value = .object(["kind": .string("bus"), "number": .int(1)])
+    let busTwo: Value = .object(["kind": .string("bus"), "number": .int(2)])
+    let stereo: Value = .object(["kind": .string("stereo_output")])
+    let requests: [(String, [String: Value])] = [
+        ("set_send_level_verified", target.merging([
+            "ordinal": .int(0), "level_db": .string("-6"), "expected_current": .string("-95"),
+        ]) { _, new in new }),
+        ("get_send_bypass_verified", target.merging(["ordinal": .int(0)]) { _, new in new }),
+        ("set_send_bypass_verified", target.merging([
+            "ordinal": .int(0), "bypassed": .bool(true), "expected_current": .bool(false),
+        ]) { _, new in new }),
+        ("set_send_mode_verified", target.merging([
+            "ordinal": .int(0), "mode": .string("post_pan"), "expected_current": .string("post_fader"),
+        ]) { _, new in new }),
+        ("set_send_output_verified", target.merging([
+            "ordinal": .int(0), "destination": stereo, "expected_current": stereo,
+            "replace_existing": .bool(true),
+        ]) { _, new in new }),
+        ("set_input_bus_verified", target.merging([
+            "destination": busTwo, "expected_current": busOne, "replace_existing": .bool(true),
+        ]) { _, new in new }),
+        ("get_output_verified", target),
+        ("get_input_bus_verified", target),
+        ("get_send_destination_verified", target.merging(["ordinal": .int(0)]) { _, new in new }),
+    ]
+
+    for (command, params) in requests {
+        let result = await MixerDispatcher.handle(
+            command: command,
+            params: params,
+            router: ChannelRouter(),
+            cache: StateCache(),
+            verifiedGate: gate
+        )
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+        let failed = try #require(result.isError)
+        let verified = try #require(body["verified"] as? Bool)
+        let writeAttempted = try #require(body["write_attempted"] as? Bool)
+        let safeToRetry = try #require(body["safe_to_retry"] as? Bool)
+        let terminal = try #require(body["terminal"] as? Bool)
+        let humanRequired = try #require(body["human_intervention_required"] as? Bool)
+        #expect(failed, "\(command): \(sharedToolText(result))")
+        #expect(body["state"] as? String == "C", "\(command): \(sharedToolText(result))")
+        #expect(body["error"] as? String == "verified_op_in_progress")
+        #expect(body["operation"] as? String == "mixer.\(command)")
+        #expect(!verified)
+        #expect(!writeAttempted)
+        #expect(safeToRetry)
+        #expect(terminal)
+        #expect(body["terminal_scope"] as? String == "mcp_request_only")
+        #expect(!humanRequired)
+        #expect(body["human_intervention_requests"] as? Int == 0)
+        #expect(body["human_dependent_transitions"] as? Int == 0)
+    }
+}
+
 @Test func differentVerifiedCommandsContendWhileAChannelIsRunning() async throws {
     let gate = VerifiedOpGate()
     let router = ChannelRouter()
