@@ -6461,6 +6461,289 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         }, "\(verification.stdout)")
     }
 
+    @Test func matrixEnvelopeBindsTwoIntactAxisBundlesAndRejectsChildMutation() async throws {
+        let specs = [try #require(OperationRegistry.specs.first { $0.id == .systemHealth })]
+        let executableData = Data("matrix-envelope-candidate".utf8)
+        let commitSHA = String(repeating: "b", count: 40)
+        let en = try Fixture(
+            specs: specs,
+            executableData: executableData,
+            commitSHA: commitSHA,
+            drive: { _ in Self.driveResult(specs: specs, observedLocale: "en-US") }
+        )
+        let ko = try Fixture(
+            specs: specs,
+            executableData: executableData,
+            commitSHA: commitSHA,
+            drive: { _ in Self.driveResult(specs: specs, observedLocale: "ko-KR") }
+        )
+        let matrix = FileManager.default.temporaryDirectory
+            .appendingPathComponent("qualification-matrix-\(UUID().uuidString)", isDirectory: true)
+        defer {
+            en.remove()
+            ko.remove()
+            try? FileManager.default.removeItem(at: matrix)
+        }
+
+        try #require((await en.runQualification(mutateOpenProject: false)).exitCode == 0)
+        let koResult = await ko.runner.run(arguments: [
+            "LogicProMCP", "--qualify",
+            "--out", ko.attestationURL.path,
+            "--release-version", "1.2.3",
+            "--locale", "ko",
+        ])
+        try #require(koResult.exitCode == 0, "\(koResult.stdout)\(koResult.stderr)")
+
+        try FileManager.default.createDirectory(at: matrix, withIntermediateDirectories: false)
+        try FileManager.default.copyItem(at: en.directory, to: matrix.appendingPathComponent("en"))
+        try FileManager.default.copyItem(at: ko.directory, to: matrix.appendingPathComponent("ko"))
+        let input: [String: Any] = [
+            "schema": "qualification-matrix-input/v1",
+            "runs": [["path": "en"], ["path": "ko"]],
+        ]
+        try JSONSerialization.data(withJSONObject: input, options: [.prettyPrinted, .sortedKeys])
+            .write(to: matrix.appendingPathComponent("qualification-matrix-input.json"))
+
+        let excessiveInputMatrix = FileManager.default.temporaryDirectory
+            .appendingPathComponent("qualification-matrix-excessive-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.copyItem(at: matrix, to: excessiveInputMatrix)
+        defer { try? FileManager.default.removeItem(at: excessiveInputMatrix) }
+        try Self.mutateJSONObject(
+            at: excessiveInputMatrix.appendingPathComponent("qualification-matrix-input.json")
+        ) { object in
+            var runs = try #require(object["runs"] as? [[String: Any]])
+            runs.append(["path": "missing"])
+            object["runs"] = runs
+        }
+        let excessiveInput = QualificationRunner.signTrustedMatrix(
+            candidateURL: en.executableURL,
+            matrixURL: excessiveInputMatrix,
+            releaseVersion: "1.2.3",
+            expectedCommitSHA: commitSHA,
+            signingPrivateKeyData: en.signingKeyData,
+            requiredArtifacts: [],
+            requiredOperationIDs: en.requiredOperationIDs
+        )
+        let excessiveInputReasons = Self.rejectionReasons(try Self.resultObject(excessiveInput))
+        #expect(excessiveInputReasons.contains("evidenceBindingMismatch"), "\(excessiveInput.stdout)")
+        #expect(!excessiveInputReasons.contains("matrixSignerFailure"), "\(excessiveInput.stdout)")
+
+        let duplicateRunMatrix = FileManager.default.temporaryDirectory
+            .appendingPathComponent("qualification-matrix-duplicate-run-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.copyItem(at: matrix, to: duplicateRunMatrix)
+        defer { try? FileManager.default.removeItem(at: duplicateRunMatrix) }
+        let duplicateRunID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
+        try Self.mutateJSONObject(at: duplicateRunMatrix.appendingPathComponent(
+            "en/release-qualification-attestation.json"
+        )) { object in
+            var provenance = try #require(object["provenance"] as? [String: Any])
+            provenance["runID"] = duplicateRunID
+            object["provenance"] = provenance
+        }
+        try Self.mutateJSONObject(at: duplicateRunMatrix.appendingPathComponent(
+            "ko/release-qualification-attestation.json"
+        )) { object in
+            var provenance = try #require(object["provenance"] as? [String: Any])
+            provenance["runID"] = duplicateRunID.uppercased()
+            object["provenance"] = provenance
+        }
+        let duplicateRun = QualificationRunner.signTrustedMatrix(
+            candidateURL: en.executableURL,
+            matrixURL: duplicateRunMatrix,
+            releaseVersion: "1.2.3",
+            expectedCommitSHA: commitSHA,
+            signingPrivateKeyData: en.signingKeyData,
+            requiredArtifacts: [],
+            requiredOperationIDs: en.requiredOperationIDs
+        )
+        let duplicateRunReasons = Self.rejectionReasons(try Self.resultObject(duplicateRun))
+        #expect(duplicateRunReasons.contains("evidenceBindingMismatch"), "\(duplicateRun.stdout)")
+
+        let custodyMatrix = FileManager.default.temporaryDirectory
+            .appendingPathComponent("qualification-matrix-custody-\(UUID().uuidString)", isDirectory: true)
+        let displacedMatrix = FileManager.default.temporaryDirectory
+            .appendingPathComponent("qualification-matrix-displaced-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.copyItem(at: matrix, to: custodyMatrix)
+        let replacer = MatrixDirectoryReplacement(
+            requested: custodyMatrix,
+            displaced: displacedMatrix
+        )
+        defer {
+            try? FileManager.default.removeItem(at: custodyMatrix)
+            try? FileManager.default.removeItem(at: displacedMatrix)
+        }
+        let custodyRefusal = QualificationRunner.signTrustedMatrix(
+            candidateURL: en.executableURL,
+            matrixURL: custodyMatrix,
+            releaseVersion: "1.2.3",
+            expectedCommitSHA: commitSHA,
+            signingPrivateKeyData: en.signingKeyData,
+            requiredArtifacts: [],
+            requiredOperationIDs: en.requiredOperationIDs,
+            beforeMatrixAttestationPublish: replacer.replace
+        )
+        #expect(replacer.didReplace)
+        #expect(custodyRefusal.exitCode == 1, "\(custodyRefusal.stdout)\(custodyRefusal.stderr)")
+        let custodyRejections = try #require(
+            try Self.resultObject(custodyRefusal)["rejections"] as? [[String: Any]]
+        )
+        #expect(custodyRejections.contains {
+            $0["reason"] as? String == "matrixSignerFailure"
+                && ($0["actual"] as? String)?.contains(
+                    "Matrix directory changed before publication"
+                ) == true
+        }, "\(custodyRefusal.stdout)")
+        for directory in [custodyMatrix, displacedMatrix] {
+            #expect(!FileManager.default.fileExists(atPath: directory.appendingPathComponent(
+                "release-qualification-matrix.json"
+            ).path))
+        }
+
+        let signing = QualificationRunner.signTrustedMatrix(
+            candidateURL: en.executableURL,
+            matrixURL: matrix,
+            releaseVersion: "1.2.3",
+            expectedCommitSHA: commitSHA,
+            signingPrivateKeyData: en.signingKeyData,
+            requiredArtifacts: [],
+            requiredOperationIDs: en.requiredOperationIDs
+        )
+        try #require(signing.exitCode == 0, "\(signing.stdout)")
+        let accepted = QualificationRunner.verifyTrustedMatrix(
+            candidateURL: en.executableURL,
+            matrixURL: matrix,
+            releaseVersion: "1.2.3",
+            expectedCommitSHA: commitSHA,
+            trustedPublicKeyData: en.trustedPublicKeyData,
+            requiredArtifacts: [],
+            requiredOperationIDs: en.requiredOperationIDs
+        )
+        #expect(accepted.exitCode == 0, "\(accepted.stdout)")
+
+        let envelopeURL = matrix.appendingPathComponent("release-qualification-matrix.json")
+        let signedEnvelopeData = try Data(contentsOf: envelopeURL)
+        try Self.mutateJSONObject(at: envelopeURL) { object in
+            var runs = try #require(object["runs"] as? [[String: Any]])
+            runs[0]["path"] = "missing"
+            object["runs"] = runs
+        }
+        let invalidRoot = QualificationRunner.verifyTrustedMatrix(
+            candidateURL: en.executableURL,
+            matrixURL: matrix,
+            releaseVersion: "1.2.3",
+            expectedCommitSHA: commitSHA,
+            trustedPublicKeyData: en.trustedPublicKeyData,
+            requiredArtifacts: [],
+            requiredOperationIDs: en.requiredOperationIDs
+        )
+        let invalidRootReasons = Self.rejectionReasons(try Self.resultObject(invalidRoot))
+        #expect(invalidRootReasons.contains("matrixSignatureInvalid"), "\(invalidRoot.stdout)")
+        #expect(!invalidRootReasons.contains("matrixVerifierFailure"), "\(invalidRoot.stdout)")
+        try signedEnvelopeData.write(to: envelopeURL, options: .atomic)
+
+        let signedEnvelope = try JSONDecoder().decode(
+            ReleaseQualificationMatrixAttestation.self,
+            from: signedEnvelopeData
+        )
+        let firstRun = try #require(signedEnvelope.runs.first)
+        let excessiveRuns = signedEnvelope.runs + [ReleaseQualificationMatrixAttestation.Run(
+            axis: firstRun.axis,
+            path: "missing",
+            childAttestationSHA256: String(repeating: "0", count: 64)
+        )]
+        let excessiveUnsigned = ReleaseQualificationMatrixAttestation(
+            schema: signedEnvelope.schema,
+            releaseVersion: signedEnvelope.releaseVersion,
+            commitSHA: signedEnvelope.commitSHA,
+            binarySHA256: signedEnvelope.binarySHA256,
+            logicVersion: signedEnvelope.logicVersion,
+            profile: signedEnvelope.profile,
+            cache: signedEnvelope.cache,
+            fixture: signedEnvelope.fixture,
+            operationCatalogSHA256: signedEnvelope.operationCatalogSHA256,
+            runs: excessiveRuns,
+            signature: nil
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        let signingKey = try Curve25519.Signing.PrivateKey(rawRepresentation: en.signingKeyData)
+        let excessiveSignature = QualificationProvenanceSignature(
+            algorithm: "ed25519",
+            keyID: SupportBundleBuilder.sha256(signingKey.publicKey.rawRepresentation),
+            value: try signingKey.signature(for: encoder.encode(excessiveUnsigned.payload))
+                .base64EncodedString()
+        )
+        let excessiveEnvelope = ReleaseQualificationMatrixAttestation(
+            schema: excessiveUnsigned.schema,
+            releaseVersion: excessiveUnsigned.releaseVersion,
+            commitSHA: excessiveUnsigned.commitSHA,
+            binarySHA256: excessiveUnsigned.binarySHA256,
+            logicVersion: excessiveUnsigned.logicVersion,
+            profile: excessiveUnsigned.profile,
+            cache: excessiveUnsigned.cache,
+            fixture: excessiveUnsigned.fixture,
+            operationCatalogSHA256: excessiveUnsigned.operationCatalogSHA256,
+            runs: excessiveUnsigned.runs,
+            signature: excessiveSignature
+        )
+        try encoder.encode(excessiveEnvelope).write(to: envelopeURL, options: .atomic)
+        let excessiveRoot = QualificationRunner.verifyTrustedMatrix(
+            candidateURL: en.executableURL,
+            matrixURL: matrix,
+            releaseVersion: "1.2.3",
+            expectedCommitSHA: commitSHA,
+            trustedPublicKeyData: en.trustedPublicKeyData,
+            requiredArtifacts: [],
+            requiredOperationIDs: en.requiredOperationIDs
+        )
+        let excessiveRootReasons = Self.rejectionReasons(try Self.resultObject(excessiveRoot))
+        #expect(excessiveRootReasons.contains("evidenceBindingMismatch"), "\(excessiveRoot.stdout)")
+        #expect(!excessiveRootReasons.contains("matrixVerifierFailure"), "\(excessiveRoot.stdout)")
+        try signedEnvelopeData.write(to: envelopeURL, options: .atomic)
+
+        let childAttestation = matrix.appendingPathComponent(
+            "en/release-qualification-attestation.json"
+        )
+        var mutated = try Data(contentsOf: childAttestation)
+        mutated[mutated.startIndex] = 0x5b
+        try mutated.write(to: childAttestation, options: .atomic)
+
+        let rejected = QualificationRunner.verifyTrustedMatrix(
+            candidateURL: en.executableURL,
+            matrixURL: matrix,
+            releaseVersion: "1.2.3",
+            expectedCommitSHA: commitSHA,
+            trustedPublicKeyData: en.trustedPublicKeyData,
+            requiredArtifacts: [],
+            requiredOperationIDs: en.requiredOperationIDs
+        )
+        #expect(rejected.exitCode == 1)
+        let rejections = try #require(
+            try Self.resultObject(rejected)["rejections"] as? [[String: Any]]
+        )
+        #expect(rejections.contains {
+            $0["reason"] as? String == "matrixChildDigestMismatch"
+                && $0["key"] as? String == "en"
+        }, "\(rejected.stdout)")
+    }
+
+    @Test func trustedCLIDispatchesMatrixVerificationThroughTheMatrixBoundary() throws {
+        let missing = FileManager.default.temporaryDirectory
+            .appendingPathComponent("missing-qualification-matrix-\(UUID().uuidString)")
+        let result = QualificationRunner.runTrusted(arguments: [
+            "trusted-verifier", "verify-matrix",
+            "--candidate", missing.appendingPathComponent("LogicProMCP").path,
+            "--matrix-index", missing.appendingPathComponent("qualification-matrix-input.json").path,
+            "--release-version", "1.2.3",
+            "--expected-commit", String(repeating: "c", count: 40),
+        ], environment: [
+            "LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY": Data(repeating: 1, count: 32)
+                .base64EncodedString(),
+        ])
+
+        try Self.expectRejection(result, reason: "matrixVerifierFailure")
+    }
+
     @Test func inProcessCasesMatchRegistryHandlersAndTraces() async throws {
         let fixture = try Fixture(specs: OperationRegistry.specs)
         defer { fixture.remove() }
@@ -7693,6 +7976,36 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                     return
                 }
                 swapped = true
+            }
+        }
+    }
+
+    private final class MatrixDirectoryReplacement: @unchecked Sendable {
+        private let requested: URL
+        private let displaced: URL
+        private let lock = NSLock()
+        private var replaced = false
+
+        init(requested: URL, displaced: URL) {
+            self.requested = requested
+            self.displaced = displaced
+        }
+
+        var didReplace: Bool {
+            lock.withLock { replaced }
+        }
+
+        func replace() {
+            lock.withLock {
+                guard !replaced,
+                      (try? FileManager.default.moveItem(at: requested, to: displaced)) != nil,
+                      (try? FileManager.default.createDirectory(
+                          at: requested,
+                          withIntermediateDirectories: false
+                      )) != nil else {
+                    return
+                }
+                replaced = true
             }
         }
     }
