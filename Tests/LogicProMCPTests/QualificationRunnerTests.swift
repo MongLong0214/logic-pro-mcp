@@ -6266,6 +6266,201 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(verification.exitCode == 0)
     }
 
+    @Test func singleAxisSignerRejectsForeignLiveAxisEvenWhenSplicedFilesAreInternallyConsistent() async throws {
+        let specs = [try #require(OperationRegistry.specs.first { $0.id == .systemHealth })]
+        let executableData = Data("matrix-splice-candidate".utf8)
+        let commitSHA = String(repeating: "a", count: 40)
+        let enDrive = Self.driveResult(specs: specs, observedLocale: "en-US")
+        let koDrive = Self.driveResult(specs: specs, observedLocale: "ko-KR")
+        let en = try Fixture(
+            specs: specs,
+            executableData: executableData,
+            commitSHA: commitSHA,
+            drive: { _ in enDrive }
+        )
+        let ko = try Fixture(
+            specs: specs,
+            executableData: executableData,
+            commitSHA: commitSHA,
+            drive: { _ in koDrive }
+        )
+        defer {
+            en.remove()
+            ko.remove()
+        }
+
+        let koAxis = QualificationAxis(
+            variant: .desktop,
+            locale: .koKR,
+            profile: .core,
+            cache: .cold,
+            fixture: .empty
+        )
+        let enAxis = QualificationAxis(
+            variant: .desktop,
+            locale: .enUS,
+            profile: .core,
+            cache: .cold,
+            fixture: .empty
+        )
+        let enResult = await en.runQualification(mutateOpenProject: false)
+        let koResult = await ko.runner.run(arguments: [
+            "LogicProMCP", "--qualify",
+            "--out", ko.attestationURL.path,
+            "--release-version", "1.2.3",
+            "--locale", "ko",
+        ])
+        try #require(enResult.exitCode == 0, "\(enResult.stdout)\(enResult.stderr)")
+        try #require(koResult.exitCode == 0, "\(koResult.stdout)\(koResult.stderr)")
+
+        let decoder = JSONDecoder()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        let enAttestation = try decoder.decode(
+            ReleaseQualificationAttestation.self,
+            from: Data(contentsOf: en.attestationURL)
+        )
+        let koAttestation = try decoder.decode(
+            ReleaseQualificationAttestation.self,
+            from: Data(contentsOf: ko.attestationURL)
+        )
+        let foreignIndex = try #require(enAttestation.cases.firstIndex { $0.id == koAxis.key })
+        let koLiveCaseWithSharedArtifacts = try #require(koAttestation.cases.first {
+            $0.id == koAxis.key && $0.status == .passed && $0.verified
+        })
+        let sharedObservedArtifacts = Set([
+            "raw-transcript.json",
+            "public-transcript.json",
+            "mutation-restore-compensation.json",
+        ])
+        let koLiveCase = QualificationCase(
+            id: koLiveCaseWithSharedArtifacts.id,
+            status: koLiveCaseWithSharedArtifacts.status,
+            tool: koLiveCaseWithSharedArtifacts.tool,
+            command: koLiveCaseWithSharedArtifacts.command,
+            traceID: koLiveCaseWithSharedArtifacts.traceID,
+            verified: koLiveCaseWithSharedArtifacts.verified,
+            evidenceFiles: koLiveCaseWithSharedArtifacts.evidenceFiles.filter {
+                !sharedObservedArtifacts.contains($0)
+            },
+            reason: koLiveCaseWithSharedArtifacts.reason,
+            binarySHA256: koLiveCaseWithSharedArtifacts.binarySHA256,
+            axis: koLiveCaseWithSharedArtifacts.axis,
+            operationID: koLiveCaseWithSharedArtifacts.operationID,
+            operationRequestID: koLiveCaseWithSharedArtifacts.operationRequestID,
+            verificationKind: koLiveCaseWithSharedArtifacts.verificationKind,
+            deferral: koLiveCaseWithSharedArtifacts.deferral,
+            readback: koLiveCaseWithSharedArtifacts.readback,
+            restore: koLiveCaseWithSharedArtifacts.restore,
+            availabilityReason: koLiveCaseWithSharedArtifacts.availabilityReason,
+            availabilityObservation: koLiveCaseWithSharedArtifacts.availabilityObservation
+        )
+        #expect(enAttestation.cases.contains {
+            $0.id == enAxis.key && $0.status == .passed && $0.verified
+        })
+        #expect(enAttestation.cases[foreignIndex].status == .notQualified)
+
+        var splicedCases = enAttestation.cases
+        splicedCases[foreignIndex] = koLiveCase
+        let splicedCaseJSON = try JSONSerialization.jsonObject(with: encoder.encode(splicedCases))
+        try Self.mutateJSONObject(at: en.caseManifestURL) { object in
+            object["cases"] = splicedCaseJSON
+        }
+
+        let replacementCases = [koLiveCase]
+        for replacementCase in replacementCases {
+            for relativePath in replacementCase.evidenceFiles {
+                let source = ko.directory.appendingPathComponent(relativePath)
+                let destination = en.directory.appendingPathComponent(relativePath)
+                try FileManager.default.createDirectory(
+                    at: destination.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try Data(contentsOf: source).write(to: destination, options: .atomic)
+            }
+        }
+
+        let koManifest = try #require(
+            JSONSerialization.jsonObject(with: Data(contentsOf: ko.manifestURL)) as? [String: Any]
+        )
+        let replacementIDs = Set(replacementCases.map(\.id))
+        let koEntries = try #require(koManifest["files"] as? [[String: Any]])
+            .filter { entry in
+                guard let caseID = entry["case_id"] as? String else { return false }
+                guard let path = entry["path"] as? String else { return false }
+                return replacementIDs.contains(caseID)
+                    && koLiveCase.evidenceFiles.contains(path)
+            }
+        try #require(!koEntries.isEmpty)
+        let caseManifestData = try Data(contentsOf: en.caseManifestURL)
+        try Self.mutateJSONObject(at: en.manifestURL) { object in
+            var entries = try #require(object["files"] as? [[String: Any]])
+            entries.removeAll { entry in
+                guard let caseID = entry["case_id"] as? String else { return false }
+                return replacementIDs.contains(caseID)
+            }
+            entries.append(contentsOf: koEntries)
+            entries.sort { ($0["path"] as? String ?? "") < ($1["path"] as? String ?? "") }
+            object["files"] = entries
+            object["case_manifest_sha256"] = SupportBundleBuilder.sha256(caseManifestData)
+        }
+
+        let manifestSHA256 = SupportBundleBuilder.sha256(try Data(contentsOf: en.manifestURL))
+        let counts = QualificationSummaryCounts(cases: splicedCases)
+        let splicedManifest = try #require(
+            JSONSerialization.jsonObject(with: Data(contentsOf: en.manifestURL)) as? [String: Any]
+        )
+        let splicedEntries = try #require(splicedManifest["files"] as? [[String: Any]])
+        let manifestPaths = splicedEntries.compactMap { $0["path"] as? String }
+        let expectedPaths = Set(splicedCases.flatMap(\.evidenceFiles))
+        let actualPaths = Set(manifestPaths)
+        let duplicatePaths = Dictionary(grouping: manifestPaths, by: { $0 })
+            .filter { $0.value.count > 1 }
+            .keys
+            .sorted()
+        #expect(duplicatePaths.isEmpty, "duplicates=\(duplicatePaths)")
+        #expect(
+            actualPaths == expectedPaths,
+            "missing=\(expectedPaths.subtracting(actualPaths).sorted()) extra=\(actualPaths.subtracting(expectedPaths).sorted())"
+        )
+        try Self.mutateJSONObject(at: en.attestationURL) { object in
+            object["cases"] = splicedCaseJSON
+            object["total"] = counts.total
+            object["passed"] = counts.passed
+            object["failed"] = counts.failed
+            object["waived"] = counts.waived
+            object["evidenceManifestSHA256"] = manifestSHA256
+            var provenance = try #require(object["provenance"] as? [String: Any])
+            provenance["evidenceManifestSHA256"] = manifestSHA256
+            object["provenance"] = provenance
+        }
+
+        let signing = QualificationRunner.signTrusted(
+            candidateURL: en.executableURL,
+            bundleURL: en.directory,
+            releaseVersion: "1.2.3",
+            expectedCommitSHA: commitSHA,
+            signingPrivateKeyData: en.signingKeyData,
+            requiredArtifacts: [],
+            requiredOperationIDs: en.requiredOperationIDs
+        )
+        #expect(signing.exitCode == 1, "a single-run signer must not bless another run's live axis")
+        let rejections = try #require(try Self.resultObject(signing)["rejections"] as? [[String: Any]])
+        #expect(rejections.contains {
+            $0["reason"] as? String == "foreignLiveAxisInSingleRun"
+        }, "\(signing.stdout)")
+
+        try en.forceSignForDiagnosticFixture()
+        let verification = await en.verify(expectedSHA256: en.binarySHA256)
+        #expect(verification.exitCode == 1)
+        let verificationRejections = try #require(
+            try Self.resultObject(verification)["rejections"] as? [[String: Any]]
+        )
+        #expect(verificationRejections.contains {
+            $0["reason"] as? String == "foreignLiveAxisInSingleRun"
+        }, "\(verification.stdout)")
+    }
+
     @Test func inProcessCasesMatchRegistryHandlersAndTraces() async throws {
         let fixture = try Fixture(specs: OperationRegistry.specs)
         defer { fixture.remove() }

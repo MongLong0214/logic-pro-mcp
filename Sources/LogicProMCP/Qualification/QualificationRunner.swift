@@ -1122,6 +1122,31 @@ package struct QualificationRunner: Sendable {
             operationCatalogEntries: operationCatalogEntries
         )
         var rejections = decision.rejections
+        let attestedAxis = QualificationAxis(
+            variant: attestation.logicVariant,
+            locale: attestation.locale,
+            profile: attestation.profile,
+            cache: attestation.cache,
+            fixture: attestation.fixture
+        )
+        let requiredAxes = QualificationAxis.requiredAxes(
+            profile: attestation.profile,
+            cache: attestation.cache,
+            fixture: attestation.fixture
+        )
+        for axis in requiredAxes where axis != attestedAxis {
+            if attestation.cases.contains(where: {
+                $0.id == axis.key
+                    && $0.axis == axis
+                    && $0.status == .passed
+                    && $0.verified
+                    && $0.verificationKind == .independentReadback
+                    && $0.deferral == nil
+                    && $0.readback?.verified == true
+            }) {
+                rejections.append(.foreignLiveAxisInSingleRun(key: axis.key))
+            }
+        }
         if let operationCatalogIssue {
             rejections.append(.evidenceBindingMismatch(detail: operationCatalogIssue))
         } else if let expectedOperationIDs,
@@ -1684,6 +1709,11 @@ package struct QualificationRunner: Sendable {
         case .requiredCombinationNotQualified(let key):
             VerificationOutput.Rejection(
                 reason: "requiredCombinationNotQualified", caseID: nil, key: key,
+                name: nil, expected: nil, actual: nil
+            )
+        case .foreignLiveAxisInSingleRun(let key):
+            VerificationOutput.Rejection(
+                reason: "foreignLiveAxisInSingleRun", caseID: nil, key: key,
                 name: nil, expected: nil, actual: nil
             )
         case .missingArtifact(let name):
