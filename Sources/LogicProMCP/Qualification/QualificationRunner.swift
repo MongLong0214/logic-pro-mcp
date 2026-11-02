@@ -72,6 +72,23 @@ package struct QualificationRunner: Sendable {
         let requiredArtifacts: Set<String>
     }
 
+    private struct MatrixChildSnapshot {
+        let path: String
+        let directory: URL
+        let attestationData: Data
+        let attestation: ReleaseQualificationAttestation
+
+        var axis: QualificationAxis {
+            QualificationAxis(
+                variant: attestation.logicVariant,
+                locale: attestation.locale,
+                profile: attestation.profile,
+                cache: attestation.cache,
+                fixture: attestation.fixture
+            )
+        }
+    }
+
     private struct VerificationOutput: Codable {
         struct Rejection: Codable {
             let reason: String
@@ -1056,7 +1073,8 @@ package struct QualificationRunner: Sendable {
         requiredOperationIDs expectedOperationIDs: Set<String>?,
         beforeEvidenceRead: @Sendable (URL) -> Void,
         signatureRequirement: SignatureRequirement,
-        operationCatalogSnapshot: Data? = nil
+        operationCatalogSnapshot: Data? = nil,
+        matrixChildAxis: QualificationAxis? = nil
     ) throws -> [PromotionRejectionReason] {
         let manifestArtifact = Self.manifestFilename
         let requiredArtifacts = requestedArtifacts.union([manifestArtifact])
@@ -1122,6 +1140,66 @@ package struct QualificationRunner: Sendable {
             operationCatalogEntries: operationCatalogEntries
         )
         var rejections = decision.rejections
+        let attestedAxis = QualificationAxis(
+            variant: attestation.logicVariant,
+            locale: attestation.locale,
+            profile: attestation.profile,
+            cache: attestation.cache,
+            fixture: attestation.fixture
+        )
+        let requiredAxes = QualificationAxis.requiredAxes(
+            profile: attestation.profile,
+            cache: attestation.cache,
+            fixture: attestation.fixture
+        )
+        if let matrixChildAxis {
+            if matrixChildAxis != attestedAxis {
+                rejections.append(.evidenceBindingMismatch(
+                    detail: "matrix child axis does not match its attestation"
+                ))
+            }
+            if attestation.provenanceSignature != nil {
+                rejections.append(.evidenceBindingMismatch(
+                    detail: "matrix child must remain unsigned"
+                ))
+            }
+            for axis in requiredAxes where axis != attestedAxis {
+                let matchingCases = attestation.cases.filter { $0.id == axis.key }
+                let isHonestPlaceholder = matchingCases.count == 1
+                    && matchingCases[0].axis == axis
+                    && matchingCases[0].binarySHA256 == attestation.binarySHA256
+                    && matchingCases[0].status == .notQualified
+                    && !matchingCases[0].verified
+                    && matchingCases[0].verificationKind == .typedDeferral
+                    && matchingCases[0].deferral?.code == .operationUnavailable
+                    && matchingCases[0].readback?.verified == false
+                    && matchingCases[0].availabilityReason != nil
+                    && !matchingCases[0].evidenceFiles.isEmpty
+                    && !attestation.waivers.contains { $0.caseID == axis.key }
+                if isHonestPlaceholder {
+                    rejections.removeAll {
+                        if case .requiredCombinationNotQualified(let key) = $0 {
+                            return key == axis.key
+                        }
+                        return false
+                    }
+                } else {
+                    rejections.append(.evidenceBindingMismatch(
+                        detail: "matrix child has an invalid foreign-axis placeholder: \(axis.key)"
+                    ))
+                }
+            }
+        }
+        for qualificationCase in attestation.cases
+        where qualificationCase.axis != attestedAxis
+            && qualificationCase.id == qualificationCase.axis.key
+            && qualificationCase.status == .passed
+            && qualificationCase.verified
+            && qualificationCase.verificationKind == .independentReadback
+            && qualificationCase.deferral == nil
+            && qualificationCase.readback?.verified == true {
+            rejections.append(.foreignLiveAxisInSingleRun(key: qualificationCase.axis.key))
+        }
         if let operationCatalogIssue {
             rejections.append(.evidenceBindingMismatch(detail: operationCatalogIssue))
         } else if let expectedOperationIDs,
@@ -1256,6 +1334,57 @@ package struct QualificationRunner: Sendable {
             if let command = arguments.dropFirst().first,
                command == "export-public" || command == "verify-public" {
                 return try runPublicCommand(command, arguments: Array(arguments.dropFirst(2)), environment: environment)
+            }
+            if let command = arguments.dropFirst().first,
+               command == "sign-matrix" || command == "verify-matrix" {
+                let values = try optionValues(Array(arguments.dropFirst(2)), allowed: [
+                    "--candidate", "--matrix-index", "--release-version", "--expected-commit",
+                ])
+                guard let candidate = values["--candidate"] else {
+                    throw RunnerError.missingOption("--candidate")
+                }
+                guard let matrixIndex = values["--matrix-index"] else {
+                    throw RunnerError.missingOption("--matrix-index")
+                }
+                guard let releaseVersion = values["--release-version"] else {
+                    throw RunnerError.missingOption("--release-version")
+                }
+                guard let expectedCommitSHA = values["--expected-commit"] else {
+                    throw RunnerError.missingOption("--expected-commit")
+                }
+                guard isCommitSHA(expectedCommitSHA) else {
+                    throw RunnerError.invalidOption("--expected-commit", expectedCommitSHA)
+                }
+                let matrixIndexURL = URL(fileURLWithPath: matrixIndex).standardizedFileURL
+                guard matrixIndexURL.lastPathComponent == matrixInputFilename else {
+                    throw RunnerError.invalidOption("--matrix-index", matrixIndex)
+                }
+                let candidateURL = URL(fileURLWithPath: candidate).standardizedFileURL
+                let matrixURL = matrixIndexURL.deletingLastPathComponent()
+                if command == "sign-matrix" {
+                    guard let encodedKey = environment[signingKeyEnvironmentKey] else {
+                        return try typedFailure("signingKeyUnavailable")
+                    }
+                    guard let keyData = Data(base64Encoded: encodedKey) else {
+                        return try typedFailure("invalidSigningKey")
+                    }
+                    return signTrustedMatrix(
+                        candidateURL: candidateURL,
+                        matrixURL: matrixURL,
+                        releaseVersion: releaseVersion,
+                        expectedCommitSHA: expectedCommitSHA,
+                        signingPrivateKeyData: keyData
+                    )
+                }
+                let trustedKeyData = environment[trustedPublicKeyEnvironmentKey]
+                    .flatMap { Data(base64Encoded: $0) }
+                return verifyTrustedMatrix(
+                    candidateURL: candidateURL,
+                    matrixURL: matrixURL,
+                    releaseVersion: releaseVersion,
+                    expectedCommitSHA: expectedCommitSHA,
+                    trustedPublicKeyData: trustedKeyData
+                )
             }
             guard let command = arguments.dropFirst().first,
                   command == "sign" || command == "verify" else {
@@ -1606,6 +1735,420 @@ package struct QualificationRunner: Sendable {
         }
     }
 
+    package static func signTrustedMatrix(
+        candidateURL: URL,
+        matrixURL: URL,
+        releaseVersion: String,
+        expectedCommitSHA: String,
+        signingPrivateKeyData: Data,
+        requiredArtifacts: Set<String> = trustedRequiredArtifacts,
+        requiredOperationIDs: Set<String>? = nil,
+        beforeMatrixAttestationPublish: @Sendable () -> Void = {}
+    ) -> QualificationCommandResult {
+        do {
+            guard let signingKey = try? Curve25519.Signing.PrivateKey(
+                rawRepresentation: signingPrivateKeyData
+            ) else {
+                return try typedFailure("invalidSigningKey")
+            }
+            let inputData = try readNoFollow(
+                relativePath: matrixInputFilename,
+                directory: matrixURL,
+                beforeRead: { _ in }
+            )
+            let input = try JSONDecoder().decode(QualificationMatrixInput.self, from: inputData)
+            guard input.schema == QualificationMatrixInput.currentSchema else {
+                return try typedFailure("matrixInputSchemaInvalid")
+            }
+            guard input.runs.count == QualificationAxis.requiredCombinations.count else {
+                return try verificationResult([.evidenceBindingMismatch(
+                    detail: "matrix input run count expected "
+                        + "\(QualificationAxis.requiredCombinations.count), got \(input.runs.count)"
+                )])
+            }
+            let paths = try validatedMatrixPaths(input.runs.map(\.path))
+            let children = try paths.map { try loadMatrixChild(path: $0, matrixURL: matrixURL) }
+            var rejections = try validateMatrixChildren(
+                children,
+                candidateURL: candidateURL,
+                releaseVersion: releaseVersion,
+                expectedCommitSHA: expectedCommitSHA,
+                requiredArtifacts: requiredArtifacts,
+                requiredOperationIDs: requiredOperationIDs
+            )
+            rejections.append(contentsOf: matrixCommonIdentityRejections(
+                children,
+                releaseVersion: releaseVersion,
+                expectedCommitSHA: expectedCommitSHA
+            ))
+            guard rejections.isEmpty, let first = children.first,
+                  let operationCatalogSHA256 = first.attestation.operationCatalogSHA256 else {
+                return try verificationResult(rejections.isEmpty ? [
+                    .evidenceBindingMismatch(detail: "matrix has no bound child operation catalog")
+                ] : rejections)
+            }
+            let runs = children.map {
+                ReleaseQualificationMatrixAttestation.Run(
+                    axis: $0.axis,
+                    path: $0.path,
+                    childAttestationSHA256: SupportBundleBuilder.sha256($0.attestationData)
+                )
+            }.sorted { $0.axis.key < $1.axis.key }
+            let unsigned = ReleaseQualificationMatrixAttestation(
+                schema: ReleaseQualificationMatrixAttestation.currentSchema,
+                releaseVersion: releaseVersion,
+                commitSHA: expectedCommitSHA,
+                binarySHA256: first.attestation.binarySHA256,
+                logicVersion: first.attestation.logicVersion,
+                profile: first.attestation.profile,
+                cache: first.attestation.cache,
+                fixture: first.attestation.fixture,
+                operationCatalogSHA256: operationCatalogSHA256,
+                runs: runs,
+                signature: nil
+            )
+            let signature = QualificationProvenanceSignature(
+                algorithm: "ed25519",
+                keyID: SupportBundleBuilder.sha256(signingKey.publicKey.rawRepresentation),
+                value: try signingKey.signature(for: encoded(unsigned.payload)).base64EncodedString()
+            )
+            let signed = ReleaseQualificationMatrixAttestation(
+                schema: unsigned.schema,
+                releaseVersion: unsigned.releaseVersion,
+                commitSHA: unsigned.commitSHA,
+                binarySHA256: unsigned.binarySHA256,
+                logicVersion: unsigned.logicVersion,
+                profile: unsigned.profile,
+                cache: unsigned.cache,
+                fixture: unsigned.fixture,
+                operationCatalogSHA256: unsigned.operationCatalogSHA256,
+                runs: unsigned.runs,
+                signature: signature
+            )
+            try writeNewMatrixAttestation(
+                encoded(signed),
+                directory: matrixURL,
+                beforePublish: beforeMatrixAttestationPublish
+            )
+            return try verificationResult([])
+        } catch {
+            return (try? typedFailure("matrixSignerFailure", actual: String(describing: error)))
+                ?? QualificationCommandResult(exitCode: 1, stdout: "", stderr: "matrix signer failed\n")
+        }
+    }
+
+    package static func verifyTrustedMatrix(
+        candidateURL: URL,
+        matrixURL: URL,
+        releaseVersion: String,
+        expectedCommitSHA: String,
+        trustedPublicKeyData: Data?,
+        requiredArtifacts: Set<String> = trustedRequiredArtifacts,
+        requiredOperationIDs: Set<String>? = nil
+    ) -> QualificationCommandResult {
+        do {
+            let envelopeData = try readNoFollow(
+                relativePath: matrixAttestationFilename,
+                directory: matrixURL,
+                beforeRead: { _ in }
+            )
+            let envelope = try JSONDecoder().decode(
+                ReleaseQualificationMatrixAttestation.self,
+                from: envelopeData
+            )
+            var rejections = try matrixEnvelopeRejections(
+                envelope,
+                candidateURL: candidateURL,
+                releaseVersion: releaseVersion,
+                expectedCommitSHA: expectedCommitSHA,
+                trustedPublicKeyData: trustedPublicKeyData
+            )
+            if rejections.contains(where: { rejection in
+                switch rejection {
+                case .matrixSignatureMissing, .matrixSignatureInvalid,
+                     .trustedProvenanceKeyUnavailable:
+                    return true
+                default:
+                    return false
+                }
+            }) {
+                return try verificationResult(rejections)
+            }
+            let expectedRunCount = QualificationAxis.requiredAxes(
+                profile: envelope.profile,
+                cache: envelope.cache,
+                fixture: envelope.fixture
+            ).count
+            guard envelope.runs.count == expectedRunCount else {
+                rejections.append(.evidenceBindingMismatch(
+                    detail: "matrix run count expected \(expectedRunCount), got \(envelope.runs.count)"
+                ))
+                return try verificationResult(rejections)
+            }
+            let paths = try validatedMatrixPaths(envelope.runs.map(\.path))
+            var children: [MatrixChildSnapshot] = []
+            for (run, path) in zip(envelope.runs, paths) {
+                let (directory, attestationData) = try readMatrixChildAttestation(
+                    path: path,
+                    matrixURL: matrixURL
+                )
+                guard SupportBundleBuilder.sha256(attestationData) == run.childAttestationSHA256 else {
+                    rejections.append(.matrixChildDigestMismatch(path: path))
+                    continue
+                }
+                let child = MatrixChildSnapshot(
+                    path: path,
+                    directory: directory,
+                    attestationData: attestationData,
+                    attestation: try JSONDecoder().decode(
+                        ReleaseQualificationAttestation.self,
+                        from: attestationData
+                    )
+                )
+                if child.axis != run.axis {
+                    rejections.append(.evidenceBindingMismatch(
+                        detail: "matrix run axis does not match child: \(path)"
+                    ))
+                }
+                children.append(child)
+            }
+            rejections.append(contentsOf: try validateMatrixChildren(
+                children,
+                candidateURL: candidateURL,
+                releaseVersion: releaseVersion,
+                expectedCommitSHA: expectedCommitSHA,
+                requiredArtifacts: requiredArtifacts,
+                requiredOperationIDs: requiredOperationIDs
+            ))
+            rejections.append(contentsOf: matrixCommonIdentityRejections(
+                children,
+                releaseVersion: envelope.releaseVersion,
+                expectedCommitSHA: envelope.commitSHA,
+                envelope: envelope
+            ))
+            return try verificationResult(rejections)
+        } catch {
+            return (try? typedFailure("matrixVerifierFailure", actual: String(describing: error)))
+                ?? QualificationCommandResult(exitCode: 1, stdout: "", stderr: "matrix verifier failed\n")
+        }
+    }
+
+    private static func validatedMatrixPaths(_ paths: [String]) throws -> [String] {
+        guard !paths.isEmpty,
+              Set(paths.map { $0.lowercased() }).count == paths.count,
+              paths.allSatisfy({ path in
+                  let components = path.split(separator: "/", omittingEmptySubsequences: false)
+                  return components.count == 1
+                      && !path.isEmpty
+                      && path != "."
+                      && path != ".."
+              }) else {
+            throw RunnerError.invalidArguments("Invalid matrix child paths")
+        }
+        return paths
+    }
+
+    private static func loadMatrixChild(
+        path: String,
+        matrixURL: URL
+    ) throws -> MatrixChildSnapshot {
+        let (directory, data) = try readMatrixChildAttestation(
+            path: path,
+            matrixURL: matrixURL
+        )
+        return MatrixChildSnapshot(
+            path: path,
+            directory: directory,
+            attestationData: data,
+            attestation: try JSONDecoder().decode(ReleaseQualificationAttestation.self, from: data)
+        )
+    }
+
+    private static func readMatrixChildAttestation(
+        path: String,
+        matrixURL: URL
+    ) throws -> (directory: URL, data: Data) {
+        let directory = matrixURL.appendingPathComponent(path, isDirectory: true)
+        let data = try readNoFollow(
+            relativePath: attestationFilename,
+            directory: directory,
+            beforeRead: { _ in }
+        )
+        return (directory, data)
+    }
+
+    private static func validateMatrixChildren(
+        _ children: [MatrixChildSnapshot],
+        candidateURL: URL,
+        releaseVersion: String,
+        expectedCommitSHA: String,
+        requiredArtifacts: Set<String>,
+        requiredOperationIDs: Set<String>?
+    ) throws -> [PromotionRejectionReason] {
+        var rejections: [PromotionRejectionReason] = []
+        for child in children {
+            rejections.append(contentsOf: try evaluateBundle(
+                attestation: child.attestation,
+                directory: child.directory,
+                candidateURL: candidateURL,
+                releaseVersion: releaseVersion,
+                expectedCommitSHA: expectedCommitSHA,
+                requiredArtifacts: requiredArtifacts,
+                requiredOperationIDs: requiredOperationIDs,
+                beforeEvidenceRead: { _ in },
+                signatureRequirement: .skipped,
+                matrixChildAxis: child.axis
+            ))
+        }
+        return rejections
+    }
+
+    private static func matrixCommonIdentityRejections(
+        _ children: [MatrixChildSnapshot],
+        releaseVersion: String,
+        expectedCommitSHA: String,
+        envelope: ReleaseQualificationMatrixAttestation? = nil
+    ) -> [PromotionRejectionReason] {
+        guard let first = children.first,
+              let catalogSHA256 = first.attestation.operationCatalogSHA256 else {
+            return [.evidenceBindingMismatch(detail: "matrix has no complete child set")]
+        }
+        var rejections: [PromotionRejectionReason] = []
+        let requiredAxes = Set(QualificationAxis.requiredAxes(
+            profile: first.attestation.profile,
+            cache: first.attestation.cache,
+            fixture: first.attestation.fixture
+        ))
+        if Set(children.map(\.axis)) != requiredAxes
+            || Set(children.map(\.axis)).count != children.count {
+            rejections.append(.evidenceBindingMismatch(detail: "matrix axis set is incomplete or duplicated"))
+        }
+        let runIDs = children.compactMap { child in
+            child.attestation.provenance.flatMap { UUID(uuidString: $0.runID) }
+        }
+        if runIDs.count != children.count || Set(runIDs).count != runIDs.count {
+            rejections.append(.evidenceBindingMismatch(detail: "matrix child run identities are missing or duplicated"))
+        }
+        for child in children {
+            let attestation = child.attestation
+            if attestation.serverVersion != releaseVersion
+                || attestation.commitSHA != expectedCommitSHA
+                || attestation.binarySHA256 != first.attestation.binarySHA256
+                || attestation.logicVersion != first.attestation.logicVersion
+                || attestation.profile != first.attestation.profile
+                || attestation.cache != first.attestation.cache
+                || attestation.fixture != first.attestation.fixture
+                || attestation.operationCatalogSHA256 != catalogSHA256 {
+                rejections.append(.evidenceBindingMismatch(
+                    detail: "matrix child identity differs: \(child.path)"
+                ))
+            }
+        }
+        if let envelope {
+            if envelope.schema != ReleaseQualificationMatrixAttestation.currentSchema
+                || envelope.releaseVersion != releaseVersion
+                || envelope.commitSHA != expectedCommitSHA
+                || envelope.binarySHA256 != first.attestation.binarySHA256
+                || envelope.logicVersion != first.attestation.logicVersion
+                || envelope.profile != first.attestation.profile
+                || envelope.cache != first.attestation.cache
+                || envelope.fixture != first.attestation.fixture
+                || envelope.operationCatalogSHA256 != catalogSHA256
+                || envelope.runs.map(\.axis) != envelope.runs.map(\.axis).sorted(by: { $0.key < $1.key }) {
+                rejections.append(.evidenceBindingMismatch(detail: "matrix envelope identity differs from its children"))
+            }
+        }
+        return rejections
+    }
+
+    private static func matrixEnvelopeRejections(
+        _ envelope: ReleaseQualificationMatrixAttestation,
+        candidateURL: URL,
+        releaseVersion: String,
+        expectedCommitSHA: String,
+        trustedPublicKeyData: Data?
+    ) throws -> [PromotionRejectionReason] {
+        var rejections: [PromotionRejectionReason] = []
+        if envelope.schema != ReleaseQualificationMatrixAttestation.currentSchema {
+            rejections.append(.evidenceBindingMismatch(detail: "matrix envelope schema"))
+        }
+        if envelope.releaseVersion != releaseVersion {
+            rejections.append(.releaseVersionMismatch(
+                expected: releaseVersion,
+                actual: envelope.releaseVersion
+            ))
+        }
+        if envelope.commitSHA != expectedCommitSHA {
+            rejections.append(.releaseCommitMismatch(
+                expected: expectedCommitSHA,
+                actual: envelope.commitSHA
+            ))
+        }
+        let candidateData = try readNoFollow(
+            relativePath: candidateURL.lastPathComponent,
+            directory: candidateURL.deletingLastPathComponent(),
+            beforeRead: { _ in },
+            maxBytes: 256 * 1024 * 1024
+        )
+        let candidateSHA256 = SupportBundleBuilder.sha256(candidateData)
+        if envelope.binarySHA256 != candidateSHA256 {
+            rejections.append(.binarySHAMismatch(
+                expected: candidateSHA256,
+                actual: envelope.binarySHA256
+            ))
+        }
+        guard let signature = envelope.signature else {
+            rejections.append(.matrixSignatureMissing)
+            return rejections
+        }
+        guard let trustedPublicKeyData,
+              let trustedKey = try? Curve25519.Signing.PublicKey(
+                  rawRepresentation: trustedPublicKeyData
+              ) else {
+            rejections.append(.trustedProvenanceKeyUnavailable)
+            return rejections
+        }
+        guard signature.algorithm == "ed25519",
+              signature.keyID == SupportBundleBuilder.sha256(trustedPublicKeyData),
+              let signatureData = Data(base64Encoded: signature.value),
+              trustedKey.isValidSignature(signatureData, for: try encoded(envelope.payload)) else {
+            rejections.append(.matrixSignatureInvalid)
+            return rejections
+        }
+        return rejections
+    }
+
+    private static func writeNewMatrixAttestation(
+        _ data: Data,
+        directory: URL,
+        beforePublish: @Sendable () -> Void
+    ) throws {
+        let root = open(directory.path, O_RDONLY | O_DIRECTORY | O_NOFOLLOW | O_CLOEXEC | O_NONBLOCK)
+        guard root >= 0 else { throw RunnerError.invalidArguments("Unable to open matrix directory") }
+        defer { close(root) }
+        var held = stat(), current = stat()
+        guard fstat(root, &held) == 0 else {
+            throw RunnerError.invalidArguments("Unable to inspect matrix directory")
+        }
+        let temporary = ".qualification-matrix-\(UUID().uuidString)"
+        let file = openat(root, temporary, O_WRONLY | O_CREAT | O_EXCL | O_NOFOLLOW | O_CLOEXEC, 0o600)
+        guard file >= 0 else { throw RunnerError.invalidArguments("Unable to create matrix attestation") }
+        defer {
+            close(file)
+            _ = unlinkat(root, temporary, 0)
+        }
+        try FileHandle(fileDescriptor: file, closeOnDealloc: false).write(contentsOf: data)
+        beforePublish()
+        guard lstat(directory.path, &current) == 0,
+              current.st_dev == held.st_dev,
+              current.st_ino == held.st_ino else {
+            throw RunnerError.invalidArguments("Matrix directory changed before publication")
+        }
+        guard linkat(root, temporary, root, matrixAttestationFilename, 0) == 0 else {
+            throw RunnerError.invalidArguments("Matrix attestation already exists")
+        }
+    }
+
     private static func loadTrustedAttestation(
         bundleURL: URL
     ) throws -> (URL, ReleaseQualificationAttestation) {
@@ -1684,6 +2227,26 @@ package struct QualificationRunner: Sendable {
         case .requiredCombinationNotQualified(let key):
             VerificationOutput.Rejection(
                 reason: "requiredCombinationNotQualified", caseID: nil, key: key,
+                name: nil, expected: nil, actual: nil
+            )
+        case .foreignLiveAxisInSingleRun(let key):
+            VerificationOutput.Rejection(
+                reason: "foreignLiveAxisInSingleRun", caseID: nil, key: key,
+                name: nil, expected: nil, actual: nil
+            )
+        case .matrixChildDigestMismatch(let path):
+            VerificationOutput.Rejection(
+                reason: "matrixChildDigestMismatch", caseID: nil, key: path,
+                name: nil, expected: nil, actual: nil
+            )
+        case .matrixSignatureMissing:
+            VerificationOutput.Rejection(
+                reason: "matrixSignatureMissing", caseID: nil, key: nil,
+                name: nil, expected: nil, actual: nil
+            )
+        case .matrixSignatureInvalid:
+            VerificationOutput.Rejection(
+                reason: "matrixSignatureInvalid", caseID: nil, key: nil,
                 name: nil, expected: nil, actual: nil
             )
         case .missingArtifact(let name):
@@ -1848,6 +2411,8 @@ package struct QualificationRunner: Sendable {
 
     private static let manifestFilename = "evidence-manifest.json"
     private static let attestationFilename = "release-qualification-attestation.json"
+    private static let matrixInputFilename = "qualification-matrix-input.json"
+    private static let matrixAttestationFilename = "release-qualification-matrix.json"
     private static let caseManifestFilename = "case-manifest.json"
     private static let operationCatalogFilename = "operation-catalog.json"
     private static let rawTranscriptFilename = "raw-transcript.json"
