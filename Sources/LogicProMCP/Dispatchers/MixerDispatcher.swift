@@ -225,9 +225,18 @@ struct MixerDispatcher: OperationTraceDispatching {
                 let currentPhysical: AXMixerStripBinding.Binding
                 if let checked = SendRemovalSagaAdapter.checkedSourcePair {
                     if let renewal = SendRemovalSagaAdapter.checkedReadRenewal {
-                        guard renewal.original.matches(physical), renewal.originalTrack.matches(checked.track),
+                        let direct = renewal.original.matches(physical)
+                            && renewal.originalTrack.matches(checked.track)
+                        let chained = SendRemovalSagaAdapter.checkedOutputHandoff.map { output in
+                            output.registered.strip.matches(physical)
+                                && output.current.strip.matches(renewal.original)
+                                && output.current.track.matches(renewal.originalTrack)
+                        } ?? false
+                        let registeredTrack = SendRemovalSagaAdapter.checkedOutputHandoff?.registered.track
+                            ?? checked.track
+                        guard (direct || chained),
                               renewal.pair.track.matches(checked.track), renewal.pair.strip.matches(checked.strip),
-                              cachedPair.map({ $0.strip.matches(physical) && $0.track.matches(checked.track) }) ?? true,
+                              cachedPair.map({ $0.strip.matches(physical) && $0.track.matches(registeredTrack) }) ?? true,
                               renewal.permits(runtime: checked.track.runtime) else {
                             return TargetRefResolver.staleTargetReferenceResult(reference.rawValue, operation: operation)
                         }
@@ -235,6 +244,17 @@ struct MixerDispatcher: OperationTraceDispatching {
                         // to its original header's current physical source only.
                         // Resolution, cache, TTL and the original ref stay untouched.
                         currentPhysical = renewal.pair.strip
+                    } else if let output = SendRemovalSagaAdapter.checkedOutputHandoff {
+                        guard output.registered.strip.matches(physical),
+                              output.current.track.matches(checked.track), output.current.strip.matches(checked.strip),
+                              cachedPair.map({ $0.strip.matches(physical)
+                                  && $0.track.matches(output.registered.track) }) ?? true,
+                              checked.track.currentIndex() != nil,
+                              checked.strip.currentIndex(runtime: checked.track.runtime) != nil,
+                              (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else {
+                            return TargetRefResolver.staleTargetReferenceResult(reference.rawValue, operation: operation)
+                        }
+                        currentPhysical = output.current.strip
                     } else {
                         guard checked.strip.matches(physical),
                           cachedPair.map({ $0.strip.matches(checked.strip) && $0.track.matches(checked.track) }) ?? true,

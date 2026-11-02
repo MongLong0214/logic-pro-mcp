@@ -731,6 +731,7 @@ struct Issue965HeldSelectionAssociationTests {
         var routingDocumentReadsAtFirstNameWrite: Int?
         var routingDocumentReadsAtFirstNameConfirm: Int?
         var routingDestinationPresses = 0
+        var routingMainOutputPresses = 0
         var canonicalOutputCaptureSelectionCount = 0
         var routingBeforeSendMenuOpens = 0
         var routingDecidingSendFaultInjected = false
@@ -6192,6 +6193,31 @@ struct Issue965HeldSelectionAssociationTests {
         }
     }
 
+    @Test("One captured source composes its existing direct Output and occupied Send without widening authority",
+          arguments: ["completed", "preflight_drift", "cancel_after_output", "post_output_send_drift",
+            "output_replacement_cancel_after_both", "main_output_drift_after_send",
+            "send_prewrite_refusal_after_renewal"])
+    func canonicalDirectOutputAndOccupiedSendShareOneBoundedSaga(_ outcome: String) async throws {
+        try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+            try await assertOccupiedSingleSendRenewal(existingBus: true, restoring: true, emptyModeMenu: true,
+                noOpDestination: .bus(1), canonicalSend: "forward", canonicalBus: true,
+                canonicalBusChange: true,
+                canonicalBusReceiverFault: outcome == "send_prewrite_refusal_after_renewal"
+                    ? "physical_source_read_renewal" : nil,
+                combinedOutputSend: outcome,
+                decidingSendFault: outcome == "send_prewrite_refusal_after_renewal"
+                    ? "late_leaf_refusal" : nil)
+        }
+    }
+
+    @Test func canonicalDirectOutputAndSendRemovalRechecksOutputAtTheRemovalReceipt() async throws {
+        try await FeatureFlags.withAdr004MutationSagaForTests(true) {
+            try await assertOccupiedSingleSendRenewal(removing: true, restoring: true,
+                emptyModeMenu: true, canonicalSend: "forward", canonicalBusChange: true,
+                combinedOutputSend: "main_output_drift_after_send_removal")
+        }
+    }
+
     @Test("An occupied Send forward uses its actual checked peer headers for source verification")
     func occupiedSendForwardUsesItsCheckedPeerHeaders() async throws {
         try await FeatureFlags.withAdr004MutationSagaForTests(true) {
@@ -6677,6 +6703,7 @@ struct Issue965HeldSelectionAssociationTests {
                                                canonicalBusReceiverFault: String? = nil,
                                                inverseHelpRole: Int = 1,
                                                canonicalName: Bool = false,
+                                               combinedOutputSend: String? = nil,
                                                stableDestinationControls: Bool = false,
                                                stableDestinationBulkReads: Bool = false,
                                                coupledMixerName: Bool = false,
@@ -6736,6 +6763,7 @@ struct Issue965HeldSelectionAssociationTests {
             let sourceInputReadRenewal = canonicalBusReceiverFault == "physical_source_read_renewal" || inverseInputReadRenewal
             f.measureNamedBusPreInput = measureNamedBusPreInput
             if stableDestinationBulkReads { f.useBulkReads = true }
+            if decidingSendFault == "late_leaf_refusal" { f.useBulkReads = true }
             let nameField = b.element(1_971_400)
             let inverseEditor = b.element(1_971_402), renameItem = b.element(1_971_406)
             if canonicalName {
@@ -7517,6 +7545,7 @@ struct Issue965HeldSelectionAssociationTests {
                 let physicalMenu = b.element(1_971_519), physicalLeaf = b.element(1_971_520)
                 let mainRoot = b.element(1_971_550), mainEcho = b.element(1_971_551)
                 let mainParent = b.element(1_971_552), mainMenu = b.element(1_971_553), mainLeaf = b.element(1_971_554)
+                let mainPhysical = b.element(1_971_555)
                 if canonicalBusReceiverFault?.contains("source") == true {
                     b.setButton(sourceInput, description: "Input 1",
                         help: "Input slot. Choose the channel strip input source.", x: 0, y: 0, width: 1, height: 1)
@@ -7571,18 +7600,22 @@ struct Issue965HeldSelectionAssociationTests {
                         }
                         b.setButton(output, description: "Stereo Output",
                             help: "Output slot. Choose the channel strip output.", x: 0, y: 0, width: 1, height: 1)
-                        b.setChildren(output, [])
+                        b.setChildren(output, []); b.setActionNames(output, [kAXPressAction as String])
                         b.setChildren(owner, b.makeAXRuntime().children(owner) + [volume, pan, output])
                     }
                     for node in [mainRoot, mainMenu] { b.setRole(node, kAXMenuRole as String) }
-                    for (node, title) in [(mainEcho, "Stereo Output"), (mainParent, "Output"), (mainLeaf, "Stereo Output")] {
+                    for (node, title) in [(mainEcho, "Stereo Output"), (mainParent, "Output"),
+                                          (mainLeaf, "Stereo Output"), (mainPhysical, "Output 3-4")] {
                         b.setRole(node, kAXMenuItemRole as String)
                         b.setAttribute(node, kAXTitleAttribute as String, title)
-                        b.setChildren(node, [])
+                        b.setAttribute(node, kAXEnabledAttribute as String, true)
+                        b.setChildren(node, []); b.setActionNames(node, [kAXPressAction as String])
                     }
                     for node in [mainEcho, mainLeaf] { b.setAttribute(node, "AXMenuItemMarkChar", "✓") }
+                    b.setAttribute(mainPhysical, "AXMenuItemMarkChar", "")
                     b.setChildren(mainRoot, [mainEcho, mainParent]); b.setChildren(mainParent, [mainMenu])
-                    b.setChildren(mainMenu, [mainLeaf]); b.setActionNames(mainRoot, [kAXCancelAction as String])
+                    b.setChildren(mainMenu, combinedOutputSend == nil ? [mainLeaf] : [mainLeaf, mainPhysical])
+                    b.setActionNames(mainRoot, [kAXCancelAction as String])
                 }
                 if canonicalBusReceiverFault == "missing_before" {
                     b.setChildren(f.strips[0], b.makeAXRuntime().children(f.strips[0]).filter {
@@ -7626,6 +7659,30 @@ struct Issue965HeldSelectionAssociationTests {
                                 f.routingOutputOpenDiscoveryStart = nil
                             }
                             b.setChildren(f.mixer, b.makeAXRuntime().children(f.mixer).filter { !CFEqual($0, mainRoot) })
+                            return true
+                        }
+                        if combinedOutputSend != nil, action == kAXPressAction as String,
+                           CFEqual(element, mainPhysical) || CFEqual(element, mainLeaf) {
+                            f.routingMainOutputPresses += 1
+                            let physical = CFEqual(element, mainPhysical)
+                            b.setAttribute(b.element(1_971_535), kAXDescriptionAttribute as String,
+                                physical ? "Output 3-4" : "Stereo Output")
+                            b.setAttribute(mainEcho, kAXTitleAttribute as String,
+                                physical ? "Output 3-4" : "Stereo Output")
+                            b.setAttribute(mainEcho, "AXMenuItemMarkChar", "✓")
+                            b.setAttribute(mainLeaf, "AXMenuItemMarkChar", physical ? "" : "✓")
+                            b.setAttribute(mainPhysical, "AXMenuItemMarkChar", physical ? "✓" : "")
+                            var rows = b.makeAXRuntime().children(f.mixer).filter { !CFEqual($0, mainRoot) }
+                            if combinedOutputSend == "output_replacement_cancel_after_both", physical {
+                                let retained = b.makeAXRuntime().children(f.strips[1]).filter { child in
+                                    !originalSend.contains(where: { CFEqual($0, child) })
+                                }
+                                b.setChildren(replacement, retained + renewedSend)
+                                f.routingReplacement = replacement
+                                rows = rows.map { CFEqual($0, f.strips[1]) ? replacement : $0 }
+                                b.setAttribute(f.app, kAXFocusedUIElementAttribute as String, replacement)
+                            }
+                            b.setChildren(f.mixer, rows)
                             return true
                         }
                     }
@@ -7729,7 +7786,8 @@ struct Issue965HeldSelectionAssociationTests {
                         return true
                     }
                     let forward = CFEqual(element, canonicalBusStereoReturn ? stereo : busTwo) && action == kAXPressAction as String
-                    let inverse = CFEqual(element, destination) && action == kAXPressAction as String
+                    let inverse = combinedOutputSend != "main_output_drift_after_send_removal"
+                        && CFEqual(element, destination) && action == kAXPressAction as String
                     if (forward && !canonicalBusStereoReturn) || inverse {
                         f.routingBusLeafPresses.append(forward ? 2 : 1)
                     }
@@ -7931,9 +7989,33 @@ struct Issue965HeldSelectionAssociationTests {
                     Issue.record("The capture must issue its actual project"); return
                 }
                 let target = try #require(capture.issued?.byRow[0])
-                let key = (canonicalPhysical ? "canonical-physical-send-" : "canonical-send-") + canonicalSend, journal = SagaJournal()
+                let key = combinedOutputSend.map { "canonical-output-send-" + $0 }
+                    ?? (canonicalPhysical ? "canonical-physical-send-" : "canonical-send-") + canonicalSend
+                let journal = SagaJournal()
                 await router.register(SendRemovalSagaResultBoundary(base: f.channel(), journal: journal,
-                    mode: canonicalSend == "cancel" ? "cancel" : "completed", idempotencyKey: key,
+                    mode: ["cancel_after_output", "output_replacement_cancel_after_both"].contains(combinedOutputSend ?? "") ? "cancel"
+                        : canonicalSend == "cancel" ? "cancel" : "completed",
+                    operation: combinedOutputSend == nil
+                        || ["output_replacement_cancel_after_both", "main_output_drift_after_send",
+                            "main_output_drift_after_send_removal"].contains(combinedOutputSend ?? "")
+                        ? "mixer.set_send_output_verified" : "mixer.set_output_verified",
+                    idempotencyKey: key,
+                    afterForward: {
+                        if combinedOutputSend == "post_output_send_drift" {
+                            b.setAttribute(mode, "AXMenuItemMarkChar", "")
+                            b.setAttribute(preFader, "AXMenuItemMarkChar", "✓")
+                            f.routingLateScopeInjected = true
+                        }
+                        if ["main_output_drift_after_send", "main_output_drift_after_send_removal"]
+                            .contains(combinedOutputSend ?? "") {
+                            b.setAttribute(b.element(1_971_535), kAXDescriptionAttribute as String, "Stereo Output")
+                            b.setAttribute(b.element(1_971_551), kAXTitleAttribute as String, "Stereo Output")
+                            b.setAttribute(b.element(1_971_551), "AXMenuItemMarkChar", "✓")
+                            b.setAttribute(b.element(1_971_554), "AXMenuItemMarkChar", "✓")
+                            b.setAttribute(b.element(1_971_555), "AXMenuItemMarkChar", "")
+                            f.routingLateScopeInjected = true
+                        }
+                    },
                     beforeForward: {
                         if canonicalName, canonicalSend == "late_name" {
                             b.setAttribute(nameField, kAXDescriptionAttribute as String, "External")
@@ -7956,7 +8038,9 @@ struct Issue965HeldSelectionAssociationTests {
                 let planHandler = try #require(OperationHandlerRegistry.handler(tool: "logic_project", command: "plan_session_repair"))
                 var sendIntent: [String: Value] = ["target": .string("source"),
                     canonicalSend == "physical_slot" ? "physical_slot" : "observed_ordinal": .int(1)]
-                if canonicalBusStereoReturn {
+                if combinedOutputSend == "main_output_drift_after_send_removal" {
+                    sendIntent["remove"] = .bool(true)
+                } else if canonicalBusStereoReturn {
                     sendIntent["output"] = .object(["kind": .string("stereo_output")])
                 } else if canonicalBus {
                     sendIntent["bus"] = .int(canonicalBusChange || canonicalSend == "nonmatching_bus" ? 2 : 1)
@@ -7972,6 +8056,11 @@ struct Issue965HeldSelectionAssociationTests {
                     "project_ref": .string(project.rawValue),
                     "targets": .array([.object(["handle": .string("source"), "track_ref": .string(target.rawValue)])]),
                     "sends": .array([.object(sendIntent)])]
+                if combinedOutputSend != nil {
+                    policy["outputs"] = .array([.object(["target": .string("source"),
+                        "output": .object(["kind": .string("physical"),
+                            "ports": .array([.int(3), .int(4)])])])])
+                }
                 if canonicalSend == "mixed" { policy["presentation"] = .object(["mixer_visible": .bool(true)]) }
                 if ["missing_witness", "decoded"].contains(canonicalSend) {
                     var fresh = capture.freshPopulation
@@ -8316,8 +8405,19 @@ struct Issue965HeldSelectionAssociationTests {
                     #expect(!gate.isHeldByEntitledHolder())
                     return
                 }
-                #expect(preview.count == 1 && preview[0]["kind"] as? String == (canonicalPhysical || canonicalBusChange ? "local_send_output" : "local_send_removal"))
-                #expect(preview[0]["observed_ordinal"] as? Int == 1 && preview[0]["physical_slot"] == nil)
+                if combinedOutputSend != nil {
+                    let sendKind = combinedOutputSend == "main_output_drift_after_send_removal"
+                        ? "local_send_removal" : "local_send_output"
+                    #expect(preview.map { $0["kind"] as? String } == ["local_output", sendKind])
+                    #expect(preview[0]["dependencies"] as? [String] == [])
+                    #expect(preview[1]["dependencies"] as? [String] == ["output_source"])
+                } else {
+                    let expectedKind = combinedOutputSend == "main_output_drift_after_send_removal"
+                        ? "local_send_removal" : canonicalPhysical || canonicalBusChange ? "local_send_output" : "local_send_removal"
+                    #expect(preview.count == 1 && preview[0]["kind"] as? String == expectedKind)
+                }
+                let sendPreview = try #require(preview.last)
+                #expect(sendPreview["observed_ordinal"] as? Int == 1 && sendPreview["physical_slot"] == nil)
                 if canonicalPhysical {
                     let before = try #require(preview[0]["before"] as? [String: Any])
                     let after = try #require(preview[0]["after"] as? [String: Any])
@@ -8364,6 +8464,11 @@ struct Issue965HeldSelectionAssociationTests {
                     "confirmed": .bool(true), "idempotency_key": .string(key)]
                 let result: CallTool.Result
                 let inputReadsBeforeApply = f.routingCanonicalInputBuses.count
+                if combinedOutputSend == "preflight_drift" {
+                    b.setAttribute(mode, "AXMenuItemMarkChar", "")
+                    b.setAttribute(preFader, "AXMenuItemMarkChar", "✓")
+                    f.routingLateScopeInjected = true
+                }
                 if decidingSendFault != nil { f.routingBeforeSendMenuOpens = 0 }
                 if let decidingSendFault, decidingSendFault.hasPrefix("late_") {
                     let priorActions = f.routingActionNames, priorRead = f.routingRead
@@ -8374,6 +8479,13 @@ struct Issue965HeldSelectionAssociationTests {
                     }
                     f.routingActionNames = { element in
                         let prior = priorActions?(element)
+                        if decidingSendFault == "late_leaf_refusal",
+                           f.routingInputReadRenewed,
+                           SendRemovalSagaAdapter.requiredBeforeState != nil,
+                           CFEqual(element, b.element(1_971_503)) {
+                            f.routingDecidingSendFaultInjected = true
+                            return .success([])
+                        }
                         if CFEqual(element, b.element(1_971_503)),
                            SendRemovalSagaAdapter.requiredBeforeState != nil,
                            f.routingDestinationPresses == 0 {
@@ -8404,6 +8516,104 @@ struct Issue965HeldSelectionAssociationTests {
                 let body = try #require(sharedJSONObject(sharedToolText(result)))
                 try f.expectCanonicalInverseMeasurements(body, measuringAssociations: measureInverseAssociations,
                     singleWriterPopup: singleInverseWriterPopup)
+                if let combinedOutputSend {
+                    switch combinedOutputSend {
+                    case "completed":
+                        #expect(body["saga_state"] as? String == "completed")
+                        #expect(body["final_disposition"] as? String == "completed_verified")
+                        #expect(f.routingMainOutputPresses == 1 && f.routingDestinationPresses == 1)
+                        #expect(f.routingBusLeafPresses == [2])
+                        let records = try #require(body["steps"] as? [[String: Any]])
+                        #expect(records.count == 2)
+                        #expect(records.allSatisfy {
+                            ($0["result"] as? [String: Any])?["write_boundary_crossed"] as? Bool == true
+                        })
+                        #expect(body["compensation"] == nil)
+                    case "preflight_drift":
+                        #expect(body["final_disposition"] as? String == "refused_before_write")
+                        #expect(f.routingMainOutputPresses == 0 && f.routingDestinationPresses == 0)
+                        #expect(f.routingBusLeafPresses.isEmpty)
+                        let availability = try #require(body["before_state_availability"] as? [[String: Any]])
+                        #expect(availability.count == 2)
+                        let outputAvailable = try #require(availability[0]["available"] as? Bool)
+                        let sendAvailable = try #require(availability[1]["available"] as? Bool)
+                        #expect(outputAvailable)
+                        #expect(!sendAvailable)
+                        #expect(body["compensation"] == nil)
+                    case "cancel_after_output":
+                        #expect(body["saga_state"] as? String == "fullyCompensated")
+                        #expect(body["final_disposition"] as? String == "stopped_fully_compensated")
+                        #expect(f.routingMainOutputPresses == 2 && f.routingDestinationPresses == 0)
+                        let summary = try #require((body["compensation"] as? [String: Any])?["journal_summary"] as? [String: Any])
+                        #expect(summary["record_count"] as? Int == 1)
+                        #expect(summary["forward_write_boundary_count"] as? Int == 1)
+                        #expect(summary["compensation_write_boundary_count"] as? Int == 1)
+                    case "post_output_send_drift":
+                        #expect(body["final_disposition"] as? String == "stopped_with_residuals")
+                        #expect(f.routingMainOutputPresses == 1 && f.routingDestinationPresses == 0)
+                        #expect(f.routingLateScopeInjected)
+                        let summary = try #require((body["compensation"] as? [String: Any])?["journal_summary"] as? [String: Any])
+                        #expect(summary["record_count"] as? Int == 2)
+                        #expect(summary["forward_write_boundary_count"] as? Int == 1)
+                        #expect(summary["compensation_write_boundary_count"] as? Int == 0)
+                    case "output_replacement_cancel_after_both":
+                        #expect(body["saga_state"] as? String == "fullyCompensated")
+                        #expect(body["final_disposition"] as? String == "stopped_fully_compensated")
+                        #expect(f.routingMainOutputPresses == 2 && f.routingDestinationPresses == 2)
+                        #expect(f.routingBusLeafPresses == [2, 1])
+                        let summary = try #require((body["compensation"] as? [String: Any])?["journal_summary"] as? [String: Any])
+                        #expect(summary["record_count"] as? Int == 2)
+                        #expect(summary["forward_write_boundary_count"] as? Int == 2)
+                        #expect(summary["compensation_write_boundary_count"] as? Int == 2)
+                    case "main_output_drift_after_send":
+                        #expect(body["saga_state"] as? String == "rollbackUncertain")
+                        #expect(body["final_disposition"] as? String == "stopped_with_residuals")
+                        #expect(f.routingMainOutputPresses == 1 && f.routingDestinationPresses == 1)
+                        #expect(f.routingBusLeafPresses == [2])
+                        #expect(f.routingLateScopeInjected)
+                        let summary = try #require((body["compensation"] as? [String: Any])?["journal_summary"] as? [String: Any])
+                        #expect(summary["record_count"] as? Int == 2)
+                        #expect(summary["forward_write_boundary_count"] as? Int == 2)
+                        #expect(summary["compensation_write_boundary_count"] as? Int == 0)
+                    case "main_output_drift_after_send_removal":
+                        #expect(body["saga_state"] as? String == "rollbackUncertain")
+                        #expect(body["final_disposition"] as? String == "stopped_with_residuals")
+                        #expect(f.routingMainOutputPresses == 1 && f.routingDestinationPresses == 1)
+                        #expect(f.routingBusLeafPresses.isEmpty)
+                        #expect(f.routingLateScopeInjected)
+                        let summary = try #require((body["compensation"] as? [String: Any])?["journal_summary"] as? [String: Any])
+                        #expect(summary["record_count"] as? Int == 2)
+                        #expect(summary["forward_write_boundary_count"] as? Int == 2)
+                        #expect(summary["compensation_write_boundary_count"] as? Int == 0)
+                    case "send_prewrite_refusal_after_renewal":
+                        #expect(f.routingInputReadRenewed,
+                            "Reach the exact source/control renewal before the deciding Send writer")
+                        #expect(f.routingDecidingSendFaultInjected,
+                            "Reach the deciding Send writer and refuse before its leaf")
+                        #expect(b.attributeValue(mode, "AXMenuItemMarkChar") as? String == "✓",
+                            "The refusal must not change the captured Send baseline")
+                        #expect(body["saga_state"] as? String == "fullyCompensated")
+                        #expect(body["final_disposition"] as? String == "stopped_fully_compensated")
+                        #expect(f.routingMainOutputPresses == 2 && f.routingDestinationPresses == 0)
+                        #expect(f.routingBusLeafPresses.isEmpty)
+                        let summary = try #require((body["compensation"] as? [String: Any])?["journal_summary"] as? [String: Any])
+                        #expect(summary["record_count"] as? Int == 2)
+                        #expect(summary["forward_write_boundary_count"] as? Int == 1)
+                        #expect(summary["compensation_write_boundary_count"] as? Int == 1)
+                    default:
+                        Issue.record("Unknown combined Output/Send outcome")
+                    }
+                    let mainWrites = f.routingMainOutputPresses
+                    let sendWrites = f.routingDestinationPresses
+                    let replay = await apply(dependencies, arguments)
+                    let replayBody = try #require(sharedJSONObject(sharedToolText(replay)))
+                    let duplicate = try #require(replayBody["duplicate"] as? Bool)
+                    #expect(duplicate)
+                    #expect(f.routingMainOutputPresses == mainWrites && f.routingDestinationPresses == sendWrites)
+                    #expect(replayBody["final_disposition"] as? String == body["final_disposition"] as? String)
+                    #expect(!gate.isHeldByEntitledHolder())
+                    return
+                }
                 if let decidingSendFault {
                     if decidingSendFault == "healthy" {
                         #expect(f.routingBeforeSendMenuOpens == 4,
