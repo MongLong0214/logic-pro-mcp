@@ -41,6 +41,7 @@
    ],
    "restore": [],
    "restore_expect": [],
+   "restore_counterexample": [],
    "independence": ["before", "after"]
   }
  ]

@@ -69,9 +69,10 @@ WHAT IS REFUSED (exit 2) -- `validate_spec`, the one place these rules live
         compared with. No restore check reads a call's reply, in `steps` or in `restore`: a reply
         is what a call says it did, not the state it left. A `restore` with no call restored
         nothing, so its `restore_expect` is empty; a `restore` with a call has at least one
-        restore check, since a write is credited only when its restore is verified (#984). A
-        restore check needs no counterexample, so nothing yet shows it can fail: a restoring call
-        that changes nothing passes these rules.
+        restore check, since a write is credited only when its restore is verified (#984). Such a
+        row also has a `restore_counterexample`: the post-operation reading of the same state,
+        substituted for a post-restore reading in at least one named check. Thus a restoring call
+        that changes nothing must make that check FAIL rather than receiving credit.
   * THE INDEPENDENCE RULE: a row with no effect over an independent step bound after the
     operation that a `must_fail` lists. An operation's own reply (a `call` step) is never
     independent. A row whose only falsifiable checks read the reply is self-report.
@@ -81,6 +82,8 @@ HOW A ROW IS JUDGED -- `evaluate_row`
 Every expectation is PASS, FAIL or UNREADABLE (see predicates.py). Then, with the counterexample
 observation substituted for the one it replaces, every `must_fail` expectation must FAIL; a PASS
 there is `counterexample_accepted`. Every `restore_expect` must PASS; a FAIL is `restore_failed`.
+With each restore counterexample substituted, its named restore expectations must FAIL; a PASS is
+`restore_counterexample_accepted`.
 An observation stored for a different step than the spec declares, or truncated, or not stored at
 all, is UNREADABLE. The row is FAIL if anything failed, else UNREADABLE if anything was unreadable,
 else PASS.
@@ -184,7 +187,7 @@ EXIT_CLEAN, EXIT_FAILED, EXIT_REFUSED, EXIT_INCOMPLETE = 0, 1, 2, 3
 
 #: The only parts of a stored verdict compared on recheck. `reasons` is prose for people, and an
 #: engine that words a reason better is not an engine that disagrees.
-VERDICT_KEYS = ("verdict", "expect", "counterexample", "restore")
+VERDICT_KEYS = ("verdict", "expect", "counterexample", "restore", "restore_counterexample")
 
 
 # ---------------------------------------------------------------------------------------------
@@ -274,9 +277,21 @@ def root_of(path: str) -> str:
     return P.parse_path(path)[0]
 
 
-def validate_spec(spec, schema: dict = None) -> list:
-    """Every reason this acceptance document is refused. Empty means it may be run."""
-    problems = shape_problems(spec, schema if schema is not None else load_schema())
+def validate_spec(spec, schema: dict = None, allow_legacy_restore_counterexample: bool = False) -> list:
+    """Every reason this acceptance document is refused. Empty means it may be run.
+
+    Historic evidence embeds the exact older spec bytes it ran against. An unattested command-line
+    recheck admits those embedded rows without the later `restore_counterexample` field so their
+    stored verdicts remain recheckable; every spec admitted for a new or attested run carries it.
+    """
+    effective_schema = schema if schema is not None else load_schema()
+    if allow_legacy_restore_counterexample:
+        effective_schema = copy.deepcopy(effective_schema)
+        required = effective_schema["$defs"]["row"]["required"]
+        effective_schema["$defs"]["row"]["required"] = [
+            key for key in required if key != "restore_counterexample"
+        ]
+    problems = shape_problems(spec, effective_schema)
     if problems:
         return problems
     out = []
@@ -287,7 +302,9 @@ def validate_spec(spec, schema: dict = None) -> list:
     ids = [row["id"] for row in spec["rows"]]
     out += [f"rows: id {i!r} appears twice" for i in sorted({i for i in ids if ids.count(i) > 1})]
     for row in spec["rows"]:
-        out += [f"rows[{row['id']}]: {p}" for p in row_problems(row, len(spec["sources"]))]
+        out += [f"rows[{row['id']}]: {p}" for p in row_problems(
+            row, len(spec["sources"]), allow_legacy_restore_counterexample
+        )]
     for where, text in _strings({"fixture": spec["fixture"], "rows": spec["rows"]}, "$"):
         if PRODUCT_SOURCE.search(text):
             out.append(f"{where}: {text!r} refers into product source. An expectation, step or "
@@ -323,7 +340,7 @@ def locale_problems(locales) -> list:
     return out
 
 
-def row_problems(row: dict, n_sources: int) -> list:
+def row_problems(row: dict, n_sources: int, allow_legacy_restore_counterexample: bool = False) -> list:
     out = []
     if row["criterion"] >= n_sources:
         out.append(f"criterion {row['criterion']} indexes past the {n_sources} source(s)")
@@ -449,6 +466,8 @@ def row_problems(row: dict, n_sources: int) -> list:
                 if root in independent and order[root] > at:
                     credited.add(i)
     out += restore_problems(row, order, at)
+    if "restore_counterexample" in row or not allow_legacy_restore_counterexample:
+        out += restore_counterexample_problems(row, steps, order, at)
     if not credited:
         out.append("no effect over an independent reading bound after the operation is listed in a "
                    "counterexample's must_fail. A row whose only falsifiable checks read the "
@@ -598,6 +617,62 @@ def restore_problems(row: dict, order: dict, at: int) -> list:
             # What remains: a reading after the restoring call, or a ref.obs reading bound before
             # the operation (the as-found baseline a restore check compares with). An unbound name
             # is refused by expectation_problems.
+    return out
+
+
+def restore_counterexample_problems(row: dict, steps: dict, order: dict, at: int) -> list:
+    """Why a restore's no-op witness cannot falsify every restore expectation.
+
+    The witness is a reading taken after the operation and before restoration. Replacing the
+    corresponding post-final-restore reading with it asks the exact question: would the check still
+    pass if restoration had done nothing? Runtime judgement requires the answer to be no.
+    """
+    counterexamples = row.get("restore_counterexample", [])
+    restore_steps = {step["as"]: step for step in row["restore"]}
+    last_call = max((i for i, step in enumerate(row["restore"]) if is_call(step)), default=None)
+    after_last_call = (set() if last_call is None else
+                       {step["as"] for step in row["restore"][last_call + 1:]})
+    listed = set()
+    out = []
+    for k, cx in enumerate(counterexamples):
+        observation, replaces = cx["observation"], cx["replaces"]
+        if observation not in steps:
+            out.append(f"restore_counterexample[{k}].observation {observation!r} is not a step of this row")
+        elif order[observation] <= at or is_call(steps[observation]):
+            out.append(f"restore_counterexample[{k}].observation {observation!r} is not a reading "
+                       f"bound after the operation {row['operation']!r}. It is the state a no-op "
+                       "restore would leave behind")
+        if replaces not in restore_steps:
+            out.append(f"restore_counterexample[{k}].replaces {replaces!r} is not a restore step of this row")
+        elif replaces not in after_last_call:
+            out.append(f"restore_counterexample[{k}].replaces {replaces!r} is not a reading after "
+                       "the final restoring call")
+        if observation == replaces:
+            out.append(f"restore_counterexample[{k}] replaces {replaces!r} with itself")
+        if observation in steps and replaces in restore_steps:
+            witness, replaced = reading_of(steps[observation]), reading_of(restore_steps[replaces])
+            if not P.same(witness, replaced):
+                out.append(f"restore_counterexample[{k}] puts {observation!r} ({_shown(witness)}) in "
+                           f"place of {replaces!r} ({_shown(replaced)}). A witness takes the same "
+                           "reading as the step it replaces")
+        if len(set(cx["must_fail"])) != len(cx["must_fail"]):
+            out.append(f"restore_counterexample[{k}].must_fail names a restore expectation twice")
+        for i in cx["must_fail"]:
+            if i >= len(row["restore_expect"]):
+                out.append(f"restore_counterexample[{k}].must_fail: restore_expect[{i}] does not exist")
+            elif _safe_root(row["restore_expect"][i]["path"]) != replaces:
+                out.append(f"restore_counterexample[{k}].must_fail: restore_expect[{i}] reads "
+                           f"{_safe_root(row['restore_expect'][i]['path'])!r}, not {replaces!r}, so "
+                           "the substitution cannot change its outcome")
+            elif ref_obs_root(row["restore_expect"][i]) == observation:
+                out.append(f"restore_counterexample[{k}].must_fail: restore_expect[{i}] compares "
+                           f"with {observation!r}, the restore counterexample's own observation, so "
+                           "the substitution compares a reading with itself")
+            else:
+                listed.add(i)
+    if row["restore_expect"] and not listed:
+        out.append("restore_expect is listed by no restore counterexample, so nothing shows a "
+                   "restore check can fail if restoration does nothing")
     return out
 
 
@@ -843,6 +918,15 @@ def evaluate_row(row: dict, run_row, locale: str, resolve_canon=resolve_canon_of
         for i in cx["must_fail"]:
             counter.append((k, i, _judge_one(row["expect"][i], cx_lookup, locale, resolve_canon)))
     restore = [_judge_one(e, lookup, locale, resolve_canon) for e in row["restore_expect"]]
+    restore_counter = []
+    for k, cx in enumerate(row.get("restore_counterexample", [])):
+        swapped = dict(values)
+        swapped[cx["replaces"]] = values[cx["observation"]]
+        cx_lookup = _lookup(swapped)
+        for i in cx["must_fail"]:
+            restore_counter.append(
+                (k, i, _judge_one(row["restore_expect"][i], cx_lookup, locale, resolve_canon))
+            )
 
     reasons, failed, unreadable = [], False, False
     for i, (outcome, detail) in enumerate(expect):
@@ -866,14 +950,29 @@ def evaluate_row(row: dict, run_row, locale: str, resolve_canon=resolve_canon_of
         elif outcome == P.UNREADABLE:
             reasons.append(f"restore UNREADABLE: restore_expect[{j}] -- {detail}")
             unreadable = True
+    for k, i, (outcome, detail) in restore_counter:
+        cx = row["restore_counterexample"][k]
+        if outcome == P.PASS:
+            reasons.append(f"restore_counterexample_accepted: restore_expect[{i}] PASSED with "
+                           f"{cx['observation']!r} in place of {cx['replaces']!r} -- {detail}")
+            failed = True
+        elif outcome == P.UNREADABLE:
+            reasons.append(f"restore counterexample UNREADABLE: restore_expect[{i}] on "
+                           f"{cx['observation']!r} -- {detail}")
+            unreadable = True
     verdict = P.FAIL if failed else P.UNREADABLE if unreadable else P.PASS
-    return {
+    result = {
         "verdict": verdict,
         "expect": [o for o, _ in expect],
         "counterexample": [o for _, _, (o, _) in counter],
         "restore": [o for o, _ in restore],
         "reasons": reasons,
     }
+    # Old evidence verdicts predate this field. Keeping their exact shape makes their immutable
+    # bytes recheckable; all newly admitted specs carry the field, even when its list is empty.
+    if "restore_counterexample" in row:
+        result["restore_counterexample"] = [o for _, _, (o, _) in restore_counter]
+    return result
 
 
 def evaluate_run(spec: dict, run: dict, locale: str, resolve_canon=resolve_canon_offline) -> dict:
@@ -1150,7 +1249,9 @@ def judge(doc, schema: dict = None, resolve_canon=resolve_canon_offline, expecte
     if not refusals and expected_spec is not None and not P.same(doc["spec"], expected_spec):
         refusals.append("the embedded spec is not the acceptance document given with --spec")
     if not refusals:
-        refusals += [f"spec: {p}" for p in validate_spec(doc["spec"], schema)]
+        refusals += [f"spec: {p}" for p in validate_spec(
+            doc["spec"], schema, allow_legacy_restore_counterexample=attestation is None
+        )]
     if refusals:
         result["refusals"] = refusals
         return result

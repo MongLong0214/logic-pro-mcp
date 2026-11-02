@@ -77,6 +77,9 @@
     {"path": "restored_arm.armed", "op": "eq", "ref": {"obs": "as_found_arm.armed"}},
     {"path": "restored_mute.muted", "op": "eq", "ref": {"obs": "as_found_mute.muted"}}
    ],
+   "restore_counterexample": [
+    {"observation": "post_arm", "replaces": "restored_arm", "must_fail": [0]}
+   ],
    "independence": ["as_found_arm", "as_found_mute", "seed_mute_read", "counterexample_undo", "unseed_mute_read", "pre_arm", "pre_mute", "pre_undo", "post_arm", "post_mute", "post_undo"]
   },
   {
@@ -137,6 +140,9 @@
    "restore_expect": [
     {"path": "restored_arm.armed", "op": "eq", "ref": {"obs": "as_found_arm.armed"}},
     {"path": "restored_mute.muted", "op": "eq", "ref": {"obs": "as_found_mute.muted"}}
+   ],
+   "restore_counterexample": [
+    {"observation": "post_arm", "replaces": "restored_arm", "must_fail": [0]}
    ],
    "independence": ["as_found_arm", "as_found_mute", "seed_mute_read", "counterexample_undo", "unseed_mute_read", "pre_arm", "pre_mute", "pre_undo", "post_arm", "post_mute", "post_undo"]
   },
@@ -199,6 +205,9 @@
     {"path": "restored_arm.armed", "op": "eq", "ref": {"obs": "as_found_arm.armed"}},
     {"path": "restored_mute.muted", "op": "eq", "ref": {"obs": "as_found_mute.muted"}}
    ],
+   "restore_counterexample": [
+    {"observation": "post_arm", "replaces": "restored_arm", "must_fail": [0]}
+   ],
    "independence": ["as_found_arm", "as_found_mute", "seed_mute_read", "counterexample_undo", "unseed_mute_read", "pre_arm", "pre_mute", "pre_undo", "post_arm", "post_mute", "post_undo"]
   },
   {
@@ -259,6 +268,9 @@
    "restore_expect": [
     {"path": "restored_arm.armed", "op": "eq", "ref": {"obs": "as_found_arm.armed"}},
     {"path": "restored_mute.muted", "op": "eq", "ref": {"obs": "as_found_mute.muted"}}
+   ],
+   "restore_counterexample": [
+    {"observation": "post_arm", "replaces": "restored_arm", "must_fail": [0]}
    ],
    "independence": ["as_found_arm", "as_found_mute", "seed_mute_read", "counterexample_undo", "unseed_mute_read", "pre_arm", "pre_mute", "pre_undo", "post_arm", "post_mute", "post_undo"]
   }
