@@ -2894,6 +2894,7 @@ extension AccessibilityChannel {
                 "row_index": row.rowIndex,
                 "observed_label": row.observedLabel ?? NSNull(),
                 "control_roles": row.controlRoles,
+                "observed_raw_value": row.observedRawValue?.jsonValue ?? NSNull(),
                 "value_description": row.valueDescription ?? NSNull(),
                 "value_is_settable": row.valueIsSettable.map { $0 as Any } ?? NSNull(),
                 "classification": classification,

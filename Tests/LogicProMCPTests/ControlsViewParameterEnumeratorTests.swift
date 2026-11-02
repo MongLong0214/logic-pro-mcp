@@ -5,6 +5,185 @@ import Testing
 
 @Suite("ADR-018 Controls-view parameter enumerator")
 struct ControlsViewParameterEnumeratorTests {
+    @Test func rowObservationsPreserveExactSupportedAXValueScalars() throws {
+        let stringFixture = makeControlsFixture()
+        let booleanFixture = makeControlsFixture()
+        booleanFixture.builder.setAttribute(
+            booleanFixture.builder.element(90_102),
+            kAXValueAttribute as String,
+            true
+        )
+        let numberFixture = makeControlsFixture()
+        numberFixture.builder.setAttribute(
+            numberFixture.builder.element(90_122),
+            kAXValueAttribute as String,
+            5_000.0
+        )
+
+        let stringResult = try #require(ControlsViewParameterEnumerator.enumerate(
+            in: stringFixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: stringFixture.runtime
+        ))
+        let booleanResult = try #require(ControlsViewParameterEnumerator.enumerate(
+            in: booleanFixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: booleanFixture.runtime
+        ))
+        let numberResult = try #require(ControlsViewParameterEnumerator.enumerate(
+            in: numberFixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: numberFixture.runtime
+        ))
+
+        #expect(stringResult.rowObservations[7].observedRawValue == .string("50.0 %"))
+        #expect(booleanResult.rowObservations[0].observedRawValue == .boolean(true))
+        #expect(numberResult.rowObservations[1].observedRawValue == .number(5_000.0))
+    }
+
+    @Test func unsupportedAXValueShapeCannotClaimReadableScalarEvidence() throws {
+        let fixture = makeControlsFixture()
+        fixture.builder.setAttribute(
+            fixture.builder.element(90_102),
+            kAXValueAttribute as String,
+            ["not", "a", "scalar"]
+        )
+
+        let result = try #require(ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: fixture.runtime
+        ))
+
+        #expect(result.rowObservations[0].observedRawValue == nil)
+        #expect(result.rowObservations[0].classification == .parameter(
+            controlRole: .checkBox,
+            valueIsReadable: false
+        ))
+    }
+
+    @Test func signedIntegerAXValuePreservesItsExactJSONRepresentation() throws {
+        let fixture = makeControlsFixture()
+        fixture.builder.setAttribute(
+            fixture.builder.element(90_102),
+            kAXValueAttribute as String,
+            Int64.max
+        )
+
+        let result = try #require(ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: fixture.runtime
+        ))
+        let raw = try #require(result.rowObservations[0].observedRawValue?.jsonValue as? Int64)
+
+        #expect(raw == Int64.max)
+        let data = try JSONSerialization.data(withJSONObject: ["value": raw])
+        #expect(String(decoding: data, as: UTF8.self).contains("9223372036854775807"))
+    }
+
+    @Test func unsignedIntegerAXValuePreservesItsExactJSONRepresentation() throws {
+        let fixture = makeControlsFixture()
+        fixture.builder.setAttribute(
+            fixture.builder.element(90_102),
+            kAXValueAttribute as String,
+            UInt64.max
+        )
+
+        let result = try #require(ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: fixture.runtime
+        ))
+        let raw = try #require(result.rowObservations[0].observedRawValue?.jsonValue as? UInt64)
+
+        #expect(raw == UInt64.max)
+        let data = try JSONSerialization.data(withJSONObject: ["value": raw])
+        #expect(String(decoding: data, as: UTF8.self).contains("18446744073709551615"))
+    }
+
+    @Test func decimalNumberWithoutAnExactBinaryRepresentationIsRefused() throws {
+        let fixture = makeControlsFixture()
+        let control = fixture.builder.element(90_102)
+        let runtime = fixture.builder.makeAXRuntime(
+            attributeValueResultHandler: { element, attribute in
+                guard CFEqual(element, control),
+                      attribute == (kAXValueAttribute as String) else {
+                    return nil
+                }
+                return .success(NSDecimalNumber(string: "0.1"))
+            },
+            setAttributeHandler: nil,
+            performActionHandler: nil
+        )
+
+        let result = try #require(ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: runtime
+        ))
+
+        #expect(result.rowObservations[0].observedRawValue == nil)
+        #expect(result.rowObservations[0].classification == .parameter(
+            controlRole: .checkBox,
+            valueIsReadable: false
+        ))
+    }
+
+    @Test func nonfiniteAXValuesAreRefused() throws {
+        for value in [Double.nan, Double.infinity, -Double.infinity] {
+            let fixture = makeControlsFixture()
+            fixture.builder.setAttribute(
+                fixture.builder.element(90_102),
+                kAXValueAttribute as String,
+                value
+            )
+
+            let result = try #require(ControlsViewParameterEnumerator.enumerate(
+                in: fixture.window,
+                buildFingerprint: "Logic-12.x",
+                runtime: fixture.runtime
+            ))
+
+            #expect(result.rowObservations[0].observedRawValue == nil)
+            #expect(result.rowObservations[0].classification == .parameter(
+                controlRole: .checkBox,
+                valueIsReadable: false
+            ))
+        }
+    }
+
+    @Test func dynamicRawValueDoesNotChangeManifestIdentity() throws {
+        let beforeFixture = makeControlsFixture()
+        beforeFixture.builder.setAttribute(
+            beforeFixture.builder.element(90_102),
+            kAXValueAttribute as String,
+            0.25
+        )
+        let afterFixture = makeControlsFixture()
+        afterFixture.builder.setAttribute(
+            afterFixture.builder.element(90_102),
+            kAXValueAttribute as String,
+            0.75
+        )
+
+        let before = try #require(ControlsViewParameterEnumerator.enumerate(
+            in: beforeFixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: beforeFixture.runtime
+        ))
+        let after = try #require(ControlsViewParameterEnumerator.enumerate(
+            in: afterFixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: afterFixture.runtime
+        ))
+
+        #expect(before.rowObservations[0].observedRawValue == .number(0.25))
+        #expect(after.rowObservations[0].observedRawValue == .number(0.75))
+        #expect(before.manifest.uiSignatureFingerprint == after.manifest.uiSignatureFingerprint)
+        #expect(before.manifest.manifestFingerprint == after.manifest.manifestFingerprint)
+    }
+
     @Test func duplicatePhysicalEmptyCellsAcrossRowsCannotMintSeparateObservations() {
         let fixture = makeControlsFixture(
             duplicateCellSourceIndex: 6,

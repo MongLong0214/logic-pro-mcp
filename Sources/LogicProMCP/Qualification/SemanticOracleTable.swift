@@ -935,6 +935,13 @@ enum SemanticOracleTable {
             guard let value else { return false }
             return value is NSNull || JSONInspector.isBoolean(value)
         }
+        func nullableObservedScalar(_ value: Any?) -> Bool {
+            guard let value else { return false }
+            if value is NSNull || value is String || JSONInspector.isBoolean(value) {
+                return true
+            }
+            return JSONInspector.number(of: value)?.isFinite == true
+        }
         func parameterName(from label: String) -> String {
             let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
             let withoutColon = trimmed.hasSuffix(":") ? String(trimmed.dropLast()) : trimmed
@@ -1024,10 +1031,15 @@ enum SemanticOracleTable {
                   row.keys.contains("observed_label"), nullableString(row["observed_label"]),
                   let controlRoles = row["control_roles"] as? [String],
                   controlRoles.allSatisfy(allowedRoles.contains),
+                  row.keys.contains("observed_raw_value"),
+                  nullableObservedScalar(row["observed_raw_value"]),
                   row.keys.contains("value_description"), nullableString(row["value_description"]),
                   row.keys.contains("value_is_settable"), nullableBoolean(row["value_is_settable"]),
                   let classification = nonEmptyString(row["classification"])
             else { return false }
+            guard controlRoles.count == 1 || row["observed_raw_value"] is NSNull else {
+                return false
+            }
 
             if classification.hasPrefix("parameter_readable_")
                 || classification.hasPrefix("parameter_unreadable_") {
@@ -1037,6 +1049,17 @@ enum SemanticOracleTable {
                 guard allowedRoles.contains(role), controlRoles == [role],
                       let label = nonEmptyString(row["observed_label"]),
                       parameterRows[position] == nil else { return false }
+                if readable {
+                    guard !(row["observed_raw_value"] is NSNull)
+                        || nonEmptyString(row["value_description"]) != nil else {
+                        return false
+                    }
+                } else {
+                    guard row["observed_raw_value"] is NSNull,
+                          row["value_description"] is NSNull else {
+                        return false
+                    }
+                }
                 parameterRows[position] = (role, readable, label)
                 continue
             }
@@ -1045,7 +1068,8 @@ enum SemanticOracleTable {
             refusedCount += 1
             switch classification {
             case "refused_no_control":
-                guard controlRoles.isEmpty else { return false }
+                guard controlRoles.isEmpty,
+                      row["observed_raw_value"] is NSNull else { return false }
             case "refused_unpaired_label_and_control":
                 guard controlRoles.count == 1 else { return false }
             case "refused_empty_label", "refused_placeholder_label", "refused_ambiguous_label":
@@ -1056,7 +1080,8 @@ enum SemanticOracleTable {
                 let roles = String(classification.dropFirst(prefix.count))
                     .split(separator: ",").map(String.init)
                 guard roles.count > 1, roles == controlRoles,
-                      roles.allSatisfy(allowedRoles.contains) else { return false }
+                      roles.allSatisfy(allowedRoles.contains),
+                      row["observed_raw_value"] is NSNull else { return false }
             }
         }
 

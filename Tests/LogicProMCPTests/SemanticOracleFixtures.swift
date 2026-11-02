@@ -137,6 +137,7 @@ enum SemanticOracleFixtures {
             "row_index": 0,
             "observed_label": "Compressor",
             "control_roles": [String](),
+            "observed_raw_value": NSNull(),
             "value_description": NSNull(),
             "value_is_settable": NSNull(),
             "classification": "refused_no_control",
@@ -145,6 +146,7 @@ enum SemanticOracleFixtures {
             "row_index": 1,
             "observed_label": "Limiter On",
             "control_roles": ["AXCheckBox"],
+            "observed_raw_value": true,
             "value_description": "1",
             "value_is_settable": true,
             "classification": "parameter_readable_AXCheckBox",
@@ -157,6 +159,23 @@ enum SemanticOracleFixtures {
             "page": 0,
             "index": 1,
         ]
+        let malformedValueRow = readableRow.merging([
+            "observed_raw_value": ["not", "a", "scalar"],
+        ]) { _, new in new }
+        let noControlRowWithRawValue = refusedRow.merging([
+            "observed_raw_value": true,
+        ]) { _, new in new }
+        let ambiguousControlRowWithRawValue = refusedRow.merging([
+            "control_roles": ["AXSlider", "AXSlider"],
+            "observed_raw_value": 0.5,
+            "classification": "refused_ambiguous_control_AXSlider,AXSlider",
+        ]) { _, new in new }
+        let ambiguousLabelRowWithRawValue = refusedRow.merging([
+            "observed_label": NSNull(),
+            "control_roles": ["AXSlider", "AXSlider"],
+            "observed_raw_value": 0.5,
+            "classification": "refused_ambiguous_label",
+        ]) { _, new in new }
         let extras: [String: Any] = [
             "operation": "logic_plugins.get_host_parameter_manifest",
             "target_ref": "ins_00000000-0000-0000-0000-000000000306",
@@ -200,6 +219,18 @@ enum SemanticOracleFixtures {
             .init(.wellFormedButWrong, response(["write_attempted": true])),
             .init(.wellFormedButWrong, response(["parameters": [Any]()])),
             .init(.wellFormedButWrong, response(["row_observations": [readableRow]])),
+            .init(.wellFormedButWrong, response([
+                "row_observations": [refusedRow, malformedValueRow],
+            ])),
+            .init(.wellFormedButWrong, response([
+                "row_observations": [noControlRowWithRawValue, readableRow],
+            ])),
+            .init(.wellFormedButWrong, response([
+                "row_observations": [ambiguousControlRowWithRawValue, readableRow],
+            ])),
+            .init(.wellFormedButWrong, response([
+                "row_observations": [ambiguousLabelRowWithRawValue, readableRow],
+            ])),
             .init(.wellFormedButWrong, response(["refused_row_count": 0])),
             .init(.wellFormedButWrong, response([
                 "target_identity": ["track_index": 0, "insert": 6, "plugin_id": "Other"],
