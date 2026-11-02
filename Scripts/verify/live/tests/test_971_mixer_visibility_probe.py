@@ -139,7 +139,8 @@ class SessionBindingTests(unittest.TestCase):
     def test_exact_session_fields_resolve_from_prior_call_replies(self):
         ctx = {"observations": {
             "inspection": self.observation("inspection", {
-                "snapshot_id": "snapshot-1", "project": {"project_ref": "project-1"}}),
+                "snapshot_id": "snapshot-1", "project": {"project_ref": "project-1"},
+                "associations": {"rows": [{"track_index": 1, "track_ref": "track-1"}]}}),
             "plan": self.observation("plan", {"plan_id": "plan-1", "digest": "digest-1"}),
         }}
         plan = runner._resolved_call_params(ctx, "logic_project", "plan_session_repair", {
@@ -147,12 +148,15 @@ class SessionBindingTests(unittest.TestCase):
             "policy": {
                 "schema": "logic_pro_mcp_repair_policy.v1",
                 "project_ref": {"$observation": "inspection.project.project_ref"},
-                "targets": [], "roles": [], "outputs": [],
+                "targets": [{"handle": "source", "track_ref": {
+                    "$observation": "inspection.associations.rows[track_index=1].track_ref"}}],
+                "roles": [], "outputs": [],
                 "presentation": {"mixer_visible": False},
             },
         })
         self.assertEqual(plan["snapshot_id"], "snapshot-1")
         self.assertEqual(plan["policy"]["project_ref"], "project-1")
+        self.assertEqual(plan["policy"]["targets"][0]["track_ref"], "track-1")
         apply = runner._resolved_call_params(ctx, "logic_project", "apply_session_repair", {
             "plan_id": {"$observation": "plan.plan_id"},
             "digest": {"$observation": "plan.digest"},
@@ -199,6 +203,20 @@ class AcceptanceContractTests(unittest.TestCase):
         self.assertEqual(declaration["live"], "locale_campaign_mixer")
         self.assertEqual(declaration["server_env"], {"LOGIC_MCP_ADR004_MUTATION_SAGA": "1"})
         self.assertEqual(declaration["gate"], ["fingerprint"])
+
+    def test_combined_output_and_send_row_is_falsifiable_and_restores(self):
+        import engine
+
+        spec = self.spec()
+        self.assertEqual(engine.validate_spec(spec), [])
+        row = next(row for row in spec["rows"]
+                   if row["id"] == "approved-output-and-send-are-independently-final")
+        self.assertEqual(row["operation"], "apply")
+        self.assertEqual(row["steps"][1]["probe"]["name"],
+                         "routing_send_assign_stereo")
+        self.assertEqual(row["restore"][-1]["wait"]["probe"]["name"], "routing_slots")
+        self.assertTrue(row["counterexample"])
+        self.assertTrue(row["restore_counterexample"])
 
 
 if __name__ == "__main__":

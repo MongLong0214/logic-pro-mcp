@@ -348,6 +348,221 @@ class RoutingSpecProbeTests(PinnedRoutingRowsTestCase):
             "record_sha256": "kept-sha", "selected": "Bus 256", "strip": 1})
         self.assertEqual(len(sidecars.kept), 1)
 
+    def test_stereo_send_actuator_uses_the_declared_strip_and_keeps_its_record(self):
+        sidecars = Sidecars()
+        saved = spec_probes.controls.select_send_stereo
+        spec_probes.controls.select_send_stereo = lambda lproj, strip: {
+            "strip": strip, "selected": "Stereo Output", "press": {"status": -25204},
+            "select_status": -25204,
+        }
+        try:
+            text = spec_probes.routing_send_assign_stereo(
+                {"life": sidecars, "lproj": "en",
+                 "decl": setups.declaration("lpm-locale-campaign-mixer-saga")}, strip=1)
+        finally:
+            spec_probes.controls.select_send_stereo = saved
+        self.assertEqual(json.loads(text), {
+            "record_sha256": "kept-sha", "selected": "Stereo Output", "strip": 1})
+        self.assertEqual(len(sidecars.kept), 1)
+
+    def test_stereo_send_actuator_refuses_a_failed_measured_cleanup(self):
+        saved = spec_probes.controls.select_send_stereo
+        spec_probes.controls.select_send_stereo = lambda lproj, strip: {
+            "strip": strip, "selected": "Stereo Output",
+            "cause": "measured menu cleanup did not reach a clean screen",
+        }
+        try:
+            with self.assertRaisesRegex(spec_probes.Unreadable, "cleanup"):
+                spec_probes.routing_send_assign_stereo(
+                    {"life": Sidecars(), "lproj": "en",
+                     "decl": setups.declaration("lpm-locale-campaign-mixer-saga")}, strip=1)
+        finally:
+            spec_probes.controls.select_send_stereo = saved
+
+    def test_stereo_send_control_selects_only_one_exact_localized_menu_row(self):
+        selected = []
+
+        class SlotAX:
+            def __init__(self, _pid):
+                pass
+
+            def element_at(self, path):
+                self.assert_path = path
+                return {"element": "slot", "status": 0}
+
+            def value(self, element, attribute):
+                return {"status": 0, "value": "Send slot"}
+
+            def perform(self, element, action):
+                selected.append((element, action))
+                return 0
+
+            def close(self):
+                pass
+
+        class MenuAX:
+            def perform(self, element, action):
+                selected.append((element, action))
+                return 0
+
+            def close(self):
+                pass
+
+        reading = {"t": 1.0, "elapsed_s": 0.1, "observation": {"strips": [
+            {"sends": []},
+            {"sends": [{"path": [1, 2], "help": "Send slot",
+                         "description": "Send", "occupied": False}]},
+        ]}}
+        menu = MenuAX()
+        items = [
+            {"title": "Bus 256", "enabled": True, "element": "bus"},
+            {"title": "Stereo Output", "enabled": True, "element": "stereo"},
+        ]
+        with mock.patch.object(spec_probes.controls.probes, "_single_logic_pid",
+                               return_value={"readable": True, "value": 123}), \
+             mock.patch.object(spec_probes.controls.live_locale, "apple_row",
+                               return_value={"readable": True, "value": "Stereo Output"}) as row, \
+             mock.patch.object(spec_probes.controls.probes, "run", return_value=reading), \
+             mock.patch.object(spec_probes.controls.cfbridge, "AX", SlotAX), \
+             mock.patch.object(spec_probes.controls, "_menu_items",
+                               return_value=(menu, 1, items)), \
+             mock.patch.object(spec_probes.controls.screen, "settle_to_clean",
+                               return_value={"final": {"dirt": []}, "escapes_sent": 0}):
+            record = spec_probes.controls.select_send_stereo("en", 1)
+        row.assert_called_once_with("en", "Stereo Output")
+        self.assertEqual(record["selected"], "Stereo Output")
+        self.assertEqual(selected, [("slot", "AXPress"), ("stereo", "AXPress")])
+
+    def test_stereo_send_control_refuses_a_duplicate_exact_menu_row(self):
+        class SlotAX:
+            def __init__(self, _pid):
+                pass
+
+            def element_at(self, path):
+                return {"element": "slot", "status": 0}
+
+            def value(self, element, attribute):
+                return {"status": 0, "value": "Send slot"}
+
+            def perform(self, element, action):
+                return 0
+
+            def close(self):
+                pass
+
+        class MenuAX:
+            def perform(self, element, action):
+                self.selected = element
+                return 0
+
+            def close(self):
+                pass
+
+        reading = {"t": 1.0, "elapsed_s": 0.1, "observation": {"strips": [
+            {"sends": []},
+            {"sends": [{"path": [1, 2], "help": "Send slot",
+                         "description": "Send", "occupied": False}]},
+        ]}}
+        menu = MenuAX()
+        items = [{"title": "Stereo Output", "enabled": True, "element": name}
+                 for name in ("first", "second")]
+        settled = {"final": {"dirt": []}, "escapes_sent": 1}
+        with mock.patch.object(spec_probes.controls.probes, "_single_logic_pid",
+                               return_value={"readable": True, "value": 123}), \
+             mock.patch.object(spec_probes.controls.live_locale, "apple_row",
+                               return_value={"readable": True, "value": "Stereo Output"}), \
+             mock.patch.object(spec_probes.controls.probes, "run", return_value=reading), \
+             mock.patch.object(spec_probes.controls.cfbridge, "AX", SlotAX), \
+             mock.patch.object(spec_probes.controls, "_menu_items",
+                               return_value=(menu, 1, items)), \
+             mock.patch.object(spec_probes.controls.screen, "settle_to_clean",
+                               return_value=settled) as cleanup:
+            record = spec_probes.controls.select_send_stereo("en", 1)
+        self.assertNotIn("selected", record)
+        self.assertIn("not unique", record["cause"])
+        self.assertFalse(hasattr(menu, "selected"))
+        cleanup.assert_called_once_with(timeout_s=8.0)
+        self.assertEqual(record["settle"], settled)
+
+    def test_stereo_send_control_reports_failed_measured_cleanup(self):
+        class SlotAX:
+            def __init__(self, _pid):
+                pass
+
+            def element_at(self, path):
+                return {"element": "slot", "status": 0}
+
+            def value(self, element, attribute):
+                return {"status": 0, "value": "Send slot"}
+
+            def perform(self, element, action):
+                return 0
+
+            def close(self):
+                pass
+
+        class MenuAX(SlotAX):
+            pass
+
+        reading = {"t": 1.0, "elapsed_s": 0.1, "observation": {"strips": [
+            {"sends": []},
+            {"sends": [{"path": [1, 2], "help": "Send slot",
+                         "description": "Send", "occupied": False}]},
+        ]}}
+        menu = MenuAX(123)
+        items = [{"title": "Stereo Output", "enabled": True, "element": "stereo"}]
+        dirty = {"final": {"dirt": [{"kind": "menu_open"}]}, "escapes_sent": 3}
+        with mock.patch.object(spec_probes.controls.probes, "_single_logic_pid",
+                               return_value={"readable": True, "value": 123}), \
+             mock.patch.object(spec_probes.controls.live_locale, "apple_row",
+                               return_value={"readable": True, "value": "Stereo Output"}), \
+             mock.patch.object(spec_probes.controls.probes, "run", return_value=reading), \
+             mock.patch.object(spec_probes.controls.cfbridge, "AX", SlotAX), \
+             mock.patch.object(spec_probes.controls, "_menu_items",
+                               return_value=(menu, 1, items)), \
+             mock.patch.object(spec_probes.controls.screen, "settle_to_clean",
+                               return_value=dirty):
+            record = spec_probes.controls.select_send_stereo("en", 1)
+        self.assertEqual(record["selected"], "Stereo Output")
+        self.assertIn("cleanup", record["cause"])
+        self.assertEqual(record["settle"], dirty)
+
+    def test_stereo_send_control_refuses_a_nonempty_setup_slot_before_pressing(self):
+        pressed = []
+
+        class SlotAX:
+            def __init__(self, _pid):
+                pass
+
+            def element_at(self, path):
+                return {"element": "slot", "status": 0}
+
+            def value(self, element, attribute):
+                return {"status": 0, "value": "Send slot"}
+
+            def perform(self, element, action):
+                pressed.append((element, action))
+                return 0
+
+            def close(self):
+                pass
+
+        reading = {"t": 1.0, "elapsed_s": 0.1, "observation": {"strips": [
+            {"sends": []},
+            {"sends": [{"path": [1, 2], "help": "Send slot",
+                         "description": "Stereo Output", "occupied": True}]},
+        ]}}
+        with mock.patch.object(spec_probes.controls.probes, "_single_logic_pid",
+                               return_value={"readable": True, "value": 123}), \
+             mock.patch.object(spec_probes.controls.live_locale, "apple_row",
+                               return_value={"readable": True, "value": "Stereo Output"}), \
+             mock.patch.object(spec_probes.controls.probes, "run", return_value=reading), \
+             mock.patch.object(spec_probes.controls.cfbridge, "AX", SlotAX):
+            record = spec_probes.controls.select_send_stereo("en", 1)
+        self.assertNotIn("selected", record)
+        self.assertIn("sole empty", record["cause"])
+        self.assertEqual(pressed, [])
+
 
 class MixerFixtureGateTests(PinnedRoutingRowsTestCase):
 

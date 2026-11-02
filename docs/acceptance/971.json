@@ -69,6 +69,111 @@
     {"observation": "post", "replaces": "restored", "must_fail": [0]}
    ],
    "independence": ["as_found", "pre", "post"]
+  },
+  {
+   "id": "approved-output-and-send-are-independently-final",
+   "criterion": 0,
+   "steps": [
+    {"as": "as_found", "probe": {"name": "routing_slots", "args": {}}},
+    {"as": "setup", "probe": {"name": "routing_send_assign_stereo", "args": {"strip": 1}}},
+    {"as": "baseline_apply", "call": {"tool": "logic_project", "command": "apply_session_repair", "params": {
+     "plan_id": "plan_unknown",
+     "digest": "0000000000000000000000000000000000000000000000000000000000000000",
+     "confirmed": true,
+     "idempotency_key": "acceptance-971-combined-baseline"
+    }}},
+    {"as": "inspection", "call": {"tool": "logic_project", "command": "inspect_session", "params": {
+     "domains": ["strips", "associations", "routing"],
+     "allow_ui_navigation": true
+    }}},
+    {"as": "plan", "call": {"tool": "logic_project", "command": "plan_session_repair", "params": {
+     "snapshot_id": {"$observation": "inspection.snapshot_id"},
+     "policy": {
+      "schema": "logic_pro_mcp_repair_policy.v1",
+      "project_ref": {"$observation": "inspection.project.project_ref"},
+      "targets": [{
+       "handle": "source",
+       "track_ref": {"$observation": "inspection.associations.rows[track_index=1].track_ref"}
+      }],
+      "outputs": [{"target": "source", "output": {"kind": "physical", "ports": [3, 4]}}],
+      "sends": [{"target": "source", "observed_ordinal": 1, "remove": true}]
+     }
+    }}},
+    {"as": "pre", "wait": {"probe": {"name": "routing_slots", "args": {}}, "until": {"path": "occupied_strips", "op": "eq", "value": [1]}, "timeout_ms": 60000, "interval_ms": 500}},
+    {"as": "apply", "call": {"tool": "logic_project", "command": "apply_session_repair", "params": {
+     "plan_id": {"$observation": "plan.plan_id"},
+     "digest": {"$observation": "plan.digest"},
+     "confirmed": true,
+     "idempotency_key": "acceptance-971-combined-output-send"
+    }}},
+    {"as": "post", "wait": {"probe": {"name": "routing_slots", "args": {}}, "until": {"path": "outputs[1].kind", "op": "eq", "value": "physical"}, "timeout_ms": 60000, "interval_ms": 500}}
+   ],
+   "operation": "apply",
+   "expect": [
+    {"path": "as_found.occupied_strips", "op": "eq", "value": [], "invariant": true},
+    {"path": "as_found.outputs[1].kind", "op": "eq", "value": "stereo_output", "invariant": true},
+    {"path": "setup.selected", "op": "matches_canon", "ref": {
+     "canon": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Stereo%20Output#value",
+     "locale": "$locale",
+     "quote": "Stereo Output"
+    }, "invariant": true},
+    {"path": "pre.occupied_strips", "op": "eq", "value": [1], "invariant": true},
+    {"path": "pre.outputs[1].kind", "op": "eq", "value": "stereo_output", "invariant": true},
+    {"path": "baseline_apply.state", "op": "eq", "value": "C", "invariant": true},
+    {"path": "baseline_apply.write_attempted", "op": "eq", "value": false, "invariant": true},
+    {"path": "plan.executable", "op": "eq", "value": true, "invariant": true},
+    {"path": "plan.steps", "op": "count_eq", "value": 2, "invariant": true},
+    {"path": "plan.steps[0].kind", "op": "eq", "value": "local_output", "invariant": true},
+    {"path": "plan.steps[1].kind", "op": "eq", "value": "local_send_removal", "invariant": true},
+    {"path": "plan.steps[1].observed_ordinal", "op": "eq", "value": 1, "invariant": true},
+    {"path": "apply.state", "op": "eq", "value": "A"},
+    {"path": "apply.write_attempted", "op": "eq", "value": true},
+    {"path": "apply.saga_state", "op": "eq", "value": "completed"},
+    {"path": "apply.final_disposition", "op": "eq", "value": "completed_verified"},
+    {"path": "post.occupied_strips", "op": "eq", "value": []},
+    {"path": "post.outputs[1].kind", "op": "eq", "value": "physical"},
+    {"path": "post.outputs[1].ports", "op": "eq", "value": [3, 4]}
+   ],
+   "counterexample": [
+    {"observation": "baseline_apply", "replaces": "apply", "must_fail": [12, 13, 14, 15]},
+    {"observation": "pre", "replaces": "post", "must_fail": [16, 17, 18]}
+   ],
+   "restore": [
+    {"as": "restore_inspection", "call": {"tool": "logic_project", "command": "inspect_session", "params": {
+     "domains": ["strips", "associations", "routing"],
+     "allow_ui_navigation": true
+    }}},
+    {"as": "restore_plan", "call": {"tool": "logic_project", "command": "plan_session_repair", "params": {
+     "snapshot_id": {"$observation": "restore_inspection.snapshot_id"},
+     "policy": {
+      "schema": "logic_pro_mcp_repair_policy.v1",
+      "project_ref": {"$observation": "restore_inspection.project.project_ref"},
+      "targets": [{
+       "handle": "source",
+       "track_ref": {"$observation": "restore_inspection.associations.rows[track_index=1].track_ref"}
+      }],
+      "outputs": [{"target": "source", "output": {"kind": "stereo_output"}}]
+     }
+    }}},
+    {"as": "restore_apply", "call": {"tool": "logic_project", "command": "apply_session_repair", "params": {
+     "plan_id": {"$observation": "restore_plan.plan_id"},
+     "digest": {"$observation": "restore_plan.digest"},
+     "confirmed": true,
+     "idempotency_key": "acceptance-971-combined-restore"
+    }}},
+    {"as": "restored", "wait": {"probe": {"name": "routing_slots", "args": {}}, "until": {"path": "outputs[1].kind", "op": "eq", "value": "stereo_output"}, "timeout_ms": 60000, "interval_ms": 500}}
+   ],
+   "restore_expect": [
+    {"path": "restored.strip_count", "op": "eq", "ref": {"obs": "as_found.strip_count"}},
+    {"path": "restored.occupied_strips", "op": "eq", "ref": {"obs": "as_found.occupied_strips"}},
+    {"path": "restored.send_counts", "op": "eq", "ref": {"obs": "as_found.send_counts"}},
+    {"path": "restored.inputs", "op": "eq", "ref": {"obs": "as_found.inputs"}},
+    {"path": "restored.outputs", "op": "eq", "ref": {"obs": "as_found.outputs"}}
+   ],
+   "restore_counterexample": [
+    {"observation": "post", "replaces": "restored", "must_fail": [4]}
+   ],
+   "independence": ["as_found", "pre", "post"]
   }
  ]
 }

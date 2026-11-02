@@ -484,3 +484,20 @@ def routing_send_assign(ctx: dict, strip: int) -> str:
     data = json.dumps(record, ensure_ascii=False, sort_keys=True, default=repr).encode("utf-8")
     return _text({"strip": strip, "selected": selected,
                   "record_sha256": ctx["life"].sidecar(data)})
+
+
+def routing_send_assign_stereo(ctx: dict, strip: int) -> str:
+    fx = fixture.FIXTURES[ctx["decl"]["live"]]
+    if strip != fx.get("input_strip"):
+        raise Unreadable(
+            f"routing_send_assign_stereo: strip {strip} is not the fixture's declared input strip")
+    record = controls.select_send_stereo(ctx["lproj"], strip)
+    selected = record.get("selected")
+    # The next independent routing_slots wait, not the AXPress status, establishes the effect.
+    if not isinstance(selected, str) or not selected or record.get("cause") is not None:
+        raise Unreadable(
+            "routing_send_assign_stereo: the Send was not selected: "
+            f"{record.get('cause') or record!r}")
+    data = json.dumps(record, ensure_ascii=False, sort_keys=True, default=repr).encode("utf-8")
+    return _text({"strip": strip, "selected": selected,
+                  "record_sha256": ctx["life"].sidecar(data)})

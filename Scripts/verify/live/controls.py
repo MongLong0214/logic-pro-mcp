@@ -191,6 +191,94 @@ def select_send_bus(lproj, strip_index):
     return record
 
 
+def select_send_stereo(lproj, strip_index):
+    """Press the strip's first send slot and choose Apple's exact Stereo Output row."""
+    record = {"strip": strip_index}
+    pid = probes._single_logic_pid(None)
+    record["pid"] = pid
+    stereo = live_locale.apple_row(lproj, "Stereo Output")
+    record["stereo_row"] = stereo
+    if not pid["readable"] or not stereo["readable"]:
+        record["cause"] = "no single Logic pid, or Apple's Stereo Output row did not resolve"
+        return record
+    before = probes.run("routing_slots_ax", {"lproj": lproj})
+    record["before"] = {k: before.get(k) for k in ("t", "elapsed_s")}
+    observation = before.get("observation") or {}
+    strips = observation.get("strips") or []
+    if strip_index >= len(strips) or not strips[strip_index]["sends"]:
+        record["cause"] = "the strip or its send slot is not in the probe's reading"
+        return record
+    sends = strips[strip_index]["sends"]
+    if len(sends) != 1 or sends[0].get("occupied") is not False:
+        record["cause"] = "the strip does not have exactly one sole empty Send setup slot"
+        return record
+    send = sends[0]
+    record["send_slot"] = {k: send.get(k) for k in ("description", "help", "path", "occupied")}
+    ax = None
+    sessions = []
+    pressed = False
+    try:
+        ax = cfbridge.AX(pid["value"])
+        found = ax.element_at(send["path"])
+        if found["element"] is None:
+            record["cause"] = "the send slot's path no longer resolves"
+            record["resolve"] = {k: found[k] for k in found if k != "element"}
+            return record
+        help_text, _ = cfbridge.text_of(ax.value(found["element"], "AXHelp"))
+        if help_text != send["help"]:
+            record["cause"] = "the element at the path is not the send slot the probe read"
+            record["help_at_path"] = help_text
+            return record
+        started = obs.now()
+        # Even a failing AXPress may have opened the menu. From this boundary every exit measures
+        # and cleans the screen before the actuator can return a usable record.
+        pressed = True
+        record["press"] = {"status": ax.perform(found["element"], "AXPress"),
+                           "elapsed_s": obs.now() - started}
+        ax.close()
+        ax = None
+
+        def stereo_items():
+            session, menus, items = _menu_items(pid["value"])
+            sessions.append(session)
+            matching = [item for item in items
+                        if item["enabled"] is True and item["title"] == stereo["value"]]
+            return ({"menus": menus, "items": len(items), "matching": matching}
+                    if matching else None)
+
+        waited = obs.wait_until(stereo_items, MENU_WAIT_S, interval_s=0.5)
+        record["menu_wait"] = {k: waited[k] for k in ("timed_out", "elapsed_s", "polls")}
+        found_menu = waited["last"]
+        if not isinstance(found_menu, dict) or "matching" not in found_menu:
+            record["cause"] = "no enabled Stereo Output item appeared in an open menu"
+            return record
+        chosen = found_menu["matching"]
+        record["menu"] = {"menus": found_menu["menus"], "items": found_menu["items"],
+                          "stereo_items": len(chosen)}
+        if len(chosen) != 1:
+            record["cause"] = "the Stereo Output title is not unique; a pick would be a guess"
+            return record
+        record["selected"] = chosen[0]["title"]
+        record["select_status"] = sessions[-1].perform(chosen[0]["element"], "AXPress")
+    finally:
+        if ax is not None:
+            ax.close()
+        for session in sessions:
+            session.close()
+        if pressed:
+            try:
+                settled = screen.settle_to_clean(timeout_s=8.0)
+                record["settle"] = settled
+                if (settled.get("final") or {}).get("dirt") != []:
+                    record["cause"] = (record.get("cause") or
+                                       "measured menu cleanup did not reach a clean screen")
+            except Exception as exc:  # noqa: BLE001 - cleanup failure is an unreadable record
+                record["settle"] = {"raised": repr(exc)}
+                record["cause"] = (record.get("cause") or
+                                   "measured menu cleanup could not be read")
+    return record
+
+
 def _occupied_strips(run):
     observation = (run or {}).get("observation") or {}
     return [index for index, strip in enumerate(observation.get("strips") or [])

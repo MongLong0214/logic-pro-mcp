@@ -1774,6 +1774,36 @@ def check_971_contract(case: dict, where: dict):
     if not any("not an admitted session field" in problem
                for problem in engine.validate_spec(mutant)):
         return "an observation can steer presentation.mixer_visible"
+    combined = [row for row in spec["rows"]
+                if row["id"] == "approved-output-and-send-are-independently-final"]
+    if len(combined) != 1:
+        return "the exact combined Output/Send row is missing"
+    combined = combined[0]
+    if not combined["counterexample"] or not combined["restore_counterexample"]:
+        return "the combined Output/Send row lacks a post or restore counterexample"
+    plan = next(step for step in combined["steps"] if step["as"] == "plan")
+    target = plan["call"]["params"]["policy"]["targets"][0]
+    if target.get("track_ref") != {
+            "$observation": "inspection.associations.rows[track_index=1].track_ref"}:
+        return f"the combined Output/Send target is not bound to the inspected track: {target!r}"
+    restore_target = combined["restore"][1]["call"]["params"]["policy"]["targets"][0]
+    if restore_target.get("track_ref") != {
+            "$observation": "restore_inspection.associations.rows[track_index=1].track_ref"}:
+        return f"the restore target is not bound to the fresh restored inspection: {restore_target!r}"
+    stale_restore = copy.deepcopy(spec)
+    stale_row = next(row for row in stale_restore["rows"] if row["id"] == combined["id"])
+    stale_row["restore"][1]["call"]["params"]["snapshot_id"] = {
+        "$observation": "inspection.snapshot_id",
+    }
+    if not any("not bound before" in problem for problem in engine.validate_spec(stale_restore)):
+        return "the restore plan can reuse the operation-side inspection handle"
+    stale_restore = copy.deepcopy(spec)
+    stale_row = next(row for row in stale_restore["rows"] if row["id"] == combined["id"])
+    stale_row["restore"][2]["call"]["params"]["plan_id"] = {
+        "$observation": "plan.plan_id",
+    }
+    if not any("not bound before" in problem for problem in engine.validate_spec(stale_restore)):
+        return "the restore apply can reuse the operation-side plan handle"
 
     def run(found, failures=None, nodes=None, frontier=None):
         return {"observation": {"readable": True, "mixer_found": found,

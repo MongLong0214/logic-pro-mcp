@@ -494,6 +494,7 @@ OBSERVATION_TARGET_PARAMS = frozenset({"target_ref"})
 OBSERVATION_SESSION_FIELDS = {
     ("logic_project", "plan_session_repair"): frozenset({
         ("snapshot_id",), ("policy", "project_ref"),
+        ("policy", "targets", 0, "track_ref"),
     }),
     ("logic_project", "apply_session_repair"): frozenset({
         ("plan_id",), ("digest",),
@@ -520,11 +521,13 @@ def observation_param_refs(value, path=()):
 
 def observation_param_problems(row: dict) -> list:
     """Validate the exact opaque-reference seams admitted between prior call replies."""
-    steps = {step["as"]: step for step in row["steps"]}
-    order = {step["as"]: i for i, step in enumerate(row["steps"])}
     operation = row["operation"]
     out = []
     for section, sequence in (("steps", row["steps"]), ("restore", row["restore"])):
+        # An opaque restore handle is valid only inside its fresh restore chain. Operation-side
+        # replies are historical by then and cannot be replayed as restore authority.
+        steps = {step["as"]: step for step in sequence}
+        order = {step["as"]: i for i, step in enumerate(sequence)}
         for step in sequence:
             if not is_call(step):
                 if contains_observation_param(step):
@@ -545,13 +548,9 @@ def observation_param_problems(row: dict) -> list:
                 session_call = (call["tool"], call["command"]) in OBSERVATION_SESSION_FIELDS
                 session_field = observation_session_field_allowed(
                     call["tool"], call["command"], path)
-                if section != "steps":
-                    if target_ref:
-                        out.append(f"{where}: only the operation {operation!r} may consume an "
-                                   f"$observation parameter")
-                    else:
-                        out.append(f"{where}: not an admitted session field for "
-                                   f"{call['tool']}.{call['command']}")
+                if section != "steps" and target_ref:
+                    out.append(f"{where}: only the operation {operation!r} may consume an "
+                               f"$observation parameter")
                     continue
                 if not (target_ref or session_field):
                     if session_call:
