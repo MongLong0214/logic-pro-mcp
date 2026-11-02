@@ -657,6 +657,73 @@ struct ReleaseQualificationAttestation: Codable, Equatable, Sendable {
     }
 }
 
+/// Operator-authored inventory of independently captured qualification runs.
+/// Paths are resolved below one matrix directory; the trusted signer never
+/// accepts absolute paths, parent traversal, or symlinked child directories.
+struct QualificationMatrixInput: Codable, Equatable, Sendable {
+    struct Run: Codable, Equatable, Sendable {
+        let path: String
+    }
+
+    static let currentSchema = "qualification-matrix-input/v1"
+
+    let schema: String
+    let runs: [Run]
+}
+
+/// One signature binds the exact, already-produced child attestations. Child
+/// attestations remain unsigned: the matrix signer is the sole trust authority
+/// and cannot silently rewrite or merge their per-run evidence.
+struct ReleaseQualificationMatrixAttestation: Codable, Equatable, Sendable {
+    struct Run: Codable, Equatable, Sendable {
+        let axis: QualificationAxis
+        let path: String
+        let childAttestationSHA256: String
+    }
+
+    struct Payload: Codable, Equatable, Sendable {
+        let schema: String
+        let releaseVersion: String
+        let commitSHA: String
+        let binarySHA256: String
+        let logicVersion: String
+        let profile: SetupProfile
+        let cache: CacheState
+        let fixture: ProjectFixture
+        let operationCatalogSHA256: String
+        let runs: [Run]
+    }
+
+    static let currentSchema = "release-qualification-matrix/v1"
+
+    let schema: String
+    let releaseVersion: String
+    let commitSHA: String
+    let binarySHA256: String
+    let logicVersion: String
+    let profile: SetupProfile
+    let cache: CacheState
+    let fixture: ProjectFixture
+    let operationCatalogSHA256: String
+    let runs: [Run]
+    let signature: QualificationProvenanceSignature?
+
+    var payload: Payload {
+        Payload(
+            schema: schema,
+            releaseVersion: releaseVersion,
+            commitSHA: commitSHA,
+            binarySHA256: binarySHA256,
+            logicVersion: logicVersion,
+            profile: profile,
+            cache: cache,
+            fixture: fixture,
+            operationCatalogSHA256: operationCatalogSHA256,
+            runs: runs
+        )
+    }
+}
+
 /// `total`, `passed`, `failed` and `waived` as a list of cases implies them.
 ///
 /// #373 Q4: the producer writes an attestation's counts through this type and the promotion gate

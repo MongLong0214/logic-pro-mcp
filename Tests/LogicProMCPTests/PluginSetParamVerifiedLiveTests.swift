@@ -5977,6 +5977,7 @@ func testIssue1396GainProtocolOracleChecksMeasuredRawTypeAndUnit(_ param: String
     #expect(object["refused_row_count"] as? Int == 1)
     #expect(rows[0]["classification"] as? String == "refused_no_control")
     #expect(rows[1]["classification"] as? String == "parameter_readable_AXCheckBox")
+    #expect(try #require(rows[1]["observed_raw_value"] as? Bool))
     #expect(!(try #require(object["write_attempted"] as? Bool)))
     #expect(!(try #require(object["plugin_view_restore_attempted"] as? Bool)))
     #expect(fixture.sliderWriteCount.value == 0)

@@ -1,0 +1,74 @@
+{
+ "format": "lpm-acceptance/1",
+ "issue": 971,
+ "surface": "mixer.channel_strips",
+ "sources": [
+  {
+   "doc": "issue:971",
+   "sha": null,
+   "quote": "Capture new actual final data and compare it with pre-approved policy and relevant before-state, not with echoed requested values or successful action returns."
+  }
+ ],
+ "fixture": {
+  "id": "lpm-locale-campaign-mixer-saga",
+  "note": "The 19-track locale-campaign project with every track flag clear, its exact declared Mixer topology, and the Mixer shown. The server starts with the existing approved-session-repair Saga opt-in. The lifecycle verifies the declared fixture before the row."
+ },
+ "locales": "all",
+ "rows": [
+  {
+   "id": "approved-hide-is-independently-visible-and-restored",
+   "criterion": 0,
+   "steps": [
+    {"as": "as_found", "probe": {"name": "mixer_visible", "args": {}}},
+    {"as": "inspection", "call": {"tool": "logic_project", "command": "inspect_session", "params": {"domains": ["strips"]}}},
+    {"as": "plan", "call": {"tool": "logic_project", "command": "plan_session_repair", "params": {
+     "snapshot_id": {"$observation": "inspection.snapshot_id"},
+     "policy": {
+      "schema": "logic_pro_mcp_repair_policy.v1",
+      "project_ref": {"$observation": "inspection.project.project_ref"},
+      "targets": [],
+      "roles": [],
+      "outputs": [],
+      "presentation": {"mixer_visible": false}
+     }
+    }}},
+    {"as": "pre", "probe": {"name": "mixer_visible", "args": {}}},
+    {"as": "apply", "call": {"tool": "logic_project", "command": "apply_session_repair", "params": {
+     "plan_id": {"$observation": "plan.plan_id"},
+     "digest": {"$observation": "plan.digest"},
+     "confirmed": true,
+     "idempotency_key": "acceptance-971-mixer-hidden"
+    }}},
+    {"as": "post", "probe": {"name": "mixer_visible", "args": {}}}
+   ],
+   "operation": "apply",
+   "expect": [
+    {"path": "as_found.visible", "op": "eq", "value": true, "invariant": true},
+    {"path": "pre.visible", "op": "eq", "value": true, "invariant": true},
+    {"path": "plan.executable", "op": "eq", "value": true, "invariant": true},
+    {"path": "plan.steps", "op": "count_eq", "value": 1, "invariant": true},
+    {"path": "plan.steps[0].kind", "op": "eq", "value": "mixer_visibility", "invariant": true},
+    {"path": "apply.state", "op": "eq", "value": "A"},
+    {"path": "apply.verified", "op": "eq", "value": true},
+    {"path": "apply.write_attempted", "op": "eq", "value": true},
+    {"path": "apply.saga_state", "op": "eq", "value": "completed"},
+    {"path": "apply.final_disposition", "op": "eq", "value": "completed_verified"},
+    {"path": "post.visible", "op": "eq", "value": false}
+   ],
+   "counterexample": [
+    {"observation": "pre", "replaces": "post", "must_fail": [10]}
+   ],
+   "restore": [
+    {"as": "restore", "call": {"tool": "logic_navigate", "command": "toggle_view", "params": {"view": "mixer", "visible": true}}},
+    {"as": "restored", "probe": {"name": "mixer_visible", "args": {}}}
+   ],
+   "restore_expect": [
+    {"path": "restored.visible", "op": "eq", "ref": {"obs": "as_found.visible"}}
+   ],
+   "restore_counterexample": [
+    {"observation": "post", "replaces": "restored", "must_fail": [0]}
+   ],
+   "independence": ["as_found", "pre", "post"]
+  }
+ ]
+}
