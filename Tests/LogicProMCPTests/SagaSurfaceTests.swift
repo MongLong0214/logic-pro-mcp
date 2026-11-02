@@ -494,6 +494,57 @@ struct SagaSurfaceTests {
         }
     }
 
+    @Test("preflight gate refusal is request-terminal and safe to retry without a write")
+    func preflightGateRefusalIsRequestTerminal() async throws {
+        try await withSagaFeatures {
+            let fixture = await makeFixture()
+            let gate = LogicMutationGate()
+            let held = try #require(gate.tryAcquire(operation: "test.preflight-holder"))
+            defer { gate.release(held) }
+            let sendLevelStep: Value = .object([
+                "operation_id": .string(OperationID.mixerSetSendLevelVerified.rawValue),
+                "target_ref": .string(fixture.targets[0].rawValue),
+                "params": .object([
+                    "ordinal": .int(0),
+                    "level_db": .string("-6"),
+                    "expected_current": .string("-∞"),
+                ]),
+                "expected_inverse": .object([
+                    "operation_id": .string(OperationID.mixerSetSendLevelVerified.rawValue),
+                    "value_parameter": .string("level_db"),
+                ]),
+            ])
+
+            let result = await dispatch(
+                command: "saga_preflight",
+                params: plan(idempotencyKey: "preflight-gate-busy", steps: [sendLevelStep]),
+                fixture: fixture,
+                mutationGate: gate
+            )
+            let body = try resultObject(result)
+            let failed = try #require(result.isError)
+            let verified = try #require(body["verified"] as? Bool)
+            let attempted = try #require(body["write_attempted"] as? Bool)
+            let retryable = try #require(body["safe_to_retry"] as? Bool)
+            let terminal = try #require(body["terminal"] as? Bool)
+            let humanRequired = try #require(body["human_intervention_required"] as? Bool)
+
+            #expect(failed)
+            #expect(body["state"] as? String == "C")
+            #expect(body["error"] as? String == "verified_op_in_progress")
+            #expect(body["operation"] as? String == OperationID.systemSagaPreflight.rawValue)
+            #expect(!verified)
+            #expect(!attempted)
+            #expect(retryable)
+            #expect(terminal)
+            #expect(body["terminal_scope"] as? String == "mcp_request_only")
+            #expect(!humanRequired)
+            #expect(body["human_intervention_requests"] as? Int == 0)
+            #expect(body["human_dependent_transitions"] as? Int == 0)
+            #expect(await fixture.channel.writeCount() == 0)
+        }
+    }
+
     @Test("saga_status registry keys match its in-process exact parser")
     func sagaStatusRegistryMatchesDispatcherValidation() async throws {
         // Deterministic saga parser only; AX/CGEvent parameter truth remains live qualification (B4).
