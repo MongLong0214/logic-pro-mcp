@@ -2,6 +2,9 @@ enum PromotionRejectionReason: Equatable, Sendable {
     case requiredCaseFailed(caseID: String)
     case requiredCombinationNotQualified(key: String)
     case foreignLiveAxisInSingleRun(key: String)
+    case matrixChildDigestMismatch(path: String)
+    case matrixSignatureMissing
+    case matrixSignatureInvalid
     case missingArtifact(name: String)
     case requiredArtifactSchemaInvalid(name: String)
     case binarySHAMismatch(expected: String, actual: String)
