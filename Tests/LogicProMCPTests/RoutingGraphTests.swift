@@ -47,6 +47,55 @@ struct RoutingGraphTests {
         #expect(!decision.writeAttempted)
     }
 
+    @Test func busOutputClassificationRequiresBusDestinationBeforeWrite() {
+        let source = RoutingNode(
+            id: "track-1",
+            kind: .track,
+            displayName: "Vocal",
+            busNumber: nil,
+            targetRef: sourceRef,
+            outputClassification: .bus
+        )
+        let output = RoutingNode(
+            id: "output-1",
+            kind: .output,
+            displayName: "Stereo Out",
+            busNumber: nil,
+            targetRef: nil
+        )
+        let bus = busNode(1)
+        let contradictory = graph(
+            nodes: [source, output, bus],
+            edges: [assignment(.mainOutput, source: source.id, destination: output.id)]
+        )
+
+        #expect(contradictory.isConsistent)
+        let refused = evaluate(
+            request(physicalSlot: 1, destinationBusNumber: 1),
+            against: contradictory
+        )
+        #expect(!refused.allowed)
+        #expect(refused.rejections == [
+            .partialGraphUnsafe(
+                reason: "source output classification contradicts its main-output edge"
+            ),
+        ])
+        #expect(!refused.writeAttempted)
+
+        let busToBus = graph(
+            nodes: [source, bus],
+            edges: [assignment(.mainOutput, source: source.id, destination: bus.id)]
+        )
+        let allowed = evaluate(
+            request(physicalSlot: 1, destinationBusNumber: 1),
+            against: busToBus
+        )
+        #expect(busToBus.isConsistent)
+        #expect(allowed.allowed)
+        #expect(allowed.rejections.isEmpty)
+        #expect(!allowed.writeAttempted)
+    }
+
     @Test(arguments: [nil, -1, 0, 257] as [Int?])
     func completeGraphsRejectInvalidLogicalBusNumbers(_ number: Int?) {
         let bus = RoutingNode(id: "invalid-bus", kind: .bus, displayName: "Bus",

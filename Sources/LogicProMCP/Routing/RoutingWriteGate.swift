@@ -67,6 +67,7 @@ func evaluate(
                   let destination = nodesByID[edge.destination] else { return false }
             switch source.outputClassification {
             case .noOutput: return true
+            case .bus: return destination.kind != .bus
             case .physicalOutput: return destination.kind != .output
             default: return false
             }
