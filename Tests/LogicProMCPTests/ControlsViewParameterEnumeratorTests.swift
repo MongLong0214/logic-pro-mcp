@@ -48,6 +48,17 @@ struct ControlsViewParameterEnumeratorTests {
         ) == nil)
     }
 
+    @Test func changingPhysicalRowListCannotProduceACompleteManifest() {
+        let fixture = makeControlsFixture(rowsChangeAfterFirstRead: true)
+
+        #expect(ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: fixture.runtime
+        ) == nil)
+        #expect(fixture.rowListReadCounter?.current == 2)
+    }
+
     @Test func traversalDepthBoundaryRefusesInsteadOfHidingANestedControl() {
         let fixture = makeControlsFixture(depthBoundaryIndex: 7)
         let result = ControlsViewParameterEnumerator.enumerate(
@@ -550,6 +561,7 @@ private struct ControlsFixture {
     let window: AXUIElement
     let runtime: AXHelpers.Runtime
     let depthBoundaryReadFailure: DepthBoundaryReadFailure?
+    let rowListReadCounter: LockedRowListReadCounter?
 }
 
 private struct RowFixture {
@@ -628,6 +640,24 @@ private final class LockedDepthBoundaryReadCounter: @unchecked Sendable {
     }
 }
 
+private final class LockedRowListReadCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var value = 0
+
+    func next() -> Int {
+        lock.lock()
+        defer { lock.unlock() }
+        value += 1
+        return value
+    }
+
+    var current: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return value
+    }
+}
+
 private struct DepthBoundaryReadFailure: @unchecked Sendable {
     let elementID: Int
     let error: AXError
@@ -665,7 +695,8 @@ private func makeControlsFixture(
     depthBoundaryChildren: DepthBoundaryChildrenFixture = .nonempty,
     leafChildrenReadError: AXError? = nil,
     unreadableDirectHeaderRole: Bool = false,
-    windowIdentifierReadError: AXError? = nil
+    windowIdentifierReadError: AXError? = nil,
+    rowsChangeAfterFirstRead: Bool = false
 ) -> ControlsFixture {
     let builder = FakeAXRuntimeBuilder()
     let window = builder.element(90_000)
@@ -858,8 +889,11 @@ private func makeControlsFixture(
             ]
     )
     let windowID = builder.elementID(window)
+    let tableID = builder.elementID(table)
     let headerDecorationID = builder.elementID(headerDecoration)
     let depthBoundaryFailure = depthBoundaryReadFailure
+    let observedTableChildren = tableChildren
+    let rowListReadCounter = rowsChangeAfterFirstRead ? LockedRowListReadCounter() : nil
     let runtime: AXHelpers.Runtime
     if !unreadableLabelElementIDs.isEmpty
         || unreadableWindowTitle
@@ -869,10 +903,19 @@ private func makeControlsFixture(
         || depthBoundaryFailure != nil
         || leafChildrenReadError != nil
         || unreadableDirectHeaderRole
-        || windowIdentifierReadError != nil {
+        || windowIdentifierReadError != nil
+        || rowsChangeAfterFirstRead {
         runtime = builder.makeAXRuntime(
             attributeValueResultHandler: { element, attribute in
                 let elementID = builder.elementID(element)
+                if attribute == (kAXRowsAttribute as String), elementID == tableID,
+                   let rowListReadCounter {
+                    let read = rowListReadCounter.next()
+                    let observedRows = read == 1
+                        ? observedTableChildren
+                        : Array(observedTableChildren.dropLast())
+                    return .success(observedRows as NSArray)
+                }
                 let unreadableLabel = attribute == (kAXValueAttribute as String)
                     && unreadableLabelElementIDs.contains(elementID)
                 let unreadableTitle = unreadableWindowTitle
@@ -926,7 +969,8 @@ private func makeControlsFixture(
         builder: builder,
         window: window,
         runtime: runtime,
-        depthBoundaryReadFailure: depthBoundaryFailure
+        depthBoundaryReadFailure: depthBoundaryFailure,
+        rowListReadCounter: rowListReadCounter
     )
 }
 

@@ -227,6 +227,17 @@ enum ControlsViewParameterEnumerator {
             ))
         }
 
+        // A manifest spans several AX reads. Re-read the table's physical row
+        // list after the scan so a virtualized/re-rendered table cannot combine
+        // observations from one row set with a `complete` claim for another.
+        guard let finalRows = Self.rows(in: table, runtime: runtime),
+              finalRows.count == rows.count,
+              zip(rows, finalRows).allSatisfy({ original, final in
+                  CFEqual(original, final)
+              }) else {
+            return nil
+        }
+
         // This covers row label changes AND every observed trait that changes
         // whether a row is a parameter: paired control roles, readable-value
         // state, and the explicit refusal state. Values themselves are not
