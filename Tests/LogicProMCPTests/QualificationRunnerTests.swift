@@ -6266,6 +6266,234 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(verification.exitCode == 0)
     }
 
+    @Test(arguments: [
+        QualificationAxis(
+            variant: .desktop,
+            locale: .koKR,
+            profile: .core,
+            cache: .cold,
+            fixture: .empty
+        ),
+        QualificationAxis(
+            variant: .desktop,
+            locale: .enUS,
+            profile: .full,
+            cache: .warm,
+            fixture: .empty
+        ),
+    ])
+    func singleAxisSignerRejectsForeignLiveAxisEvenWhenSplicedFilesAreInternallyConsistent(
+        foreignAxis: QualificationAxis
+    ) async throws {
+        let specs = [try #require(OperationRegistry.specs.first { $0.id == .systemHealth })]
+        let executableData = Data("matrix-splice-candidate".utf8)
+        let commitSHA = String(repeating: "a", count: 40)
+        let enDrive = Self.driveResult(specs: specs, observedLocale: "en-US")
+        let foreignDrive = Self.driveResult(
+            specs: specs,
+            observedLocale: foreignAxis.locale.rawValue
+        )
+        let en = try Fixture(
+            specs: specs,
+            executableData: executableData,
+            commitSHA: commitSHA,
+            drive: { _ in enDrive }
+        )
+        let foreign = try Fixture(
+            specs: specs,
+            executableData: executableData,
+            commitSHA: commitSHA,
+            drive: { _ in foreignDrive }
+        )
+        defer {
+            en.remove()
+            foreign.remove()
+        }
+
+        let enAxis = QualificationAxis(
+            variant: .desktop,
+            locale: .enUS,
+            profile: .core,
+            cache: .cold,
+            fixture: .empty
+        )
+        let enResult = await en.runQualification(mutateOpenProject: false)
+        let foreignResult = await foreign.runner.run(arguments: [
+            "LogicProMCP", "--qualify",
+            "--out", foreign.attestationURL.path,
+            "--release-version", "1.2.3",
+            "--locale", foreignAxis.locale == .koKR ? "ko" : "en",
+            "--profile", foreignAxis.profile.rawValue,
+            "--cache", foreignAxis.cache.rawValue,
+        ])
+        try #require(enResult.exitCode == 0, "\(enResult.stdout)\(enResult.stderr)")
+        try #require(
+            foreignResult.exitCode == 0,
+            "\(foreignResult.stdout)\(foreignResult.stderr)"
+        )
+
+        let decoder = JSONDecoder()
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        let enAttestation = try decoder.decode(
+            ReleaseQualificationAttestation.self,
+            from: Data(contentsOf: en.attestationURL)
+        )
+        let foreignAttestation = try decoder.decode(
+            ReleaseQualificationAttestation.self,
+            from: Data(contentsOf: foreign.attestationURL)
+        )
+        let existingForeignIndex = enAttestation.cases.firstIndex { $0.id == foreignAxis.key }
+        let foreignLiveCaseWithSharedArtifacts = try #require(foreignAttestation.cases.first {
+            $0.id == foreignAxis.key && $0.status == .passed && $0.verified
+        })
+        let sharedObservedArtifacts = Set([
+            "raw-transcript.json",
+            "public-transcript.json",
+            "mutation-restore-compensation.json",
+        ])
+        let foreignLiveCase = QualificationCase(
+            id: foreignLiveCaseWithSharedArtifacts.id,
+            status: foreignLiveCaseWithSharedArtifacts.status,
+            tool: foreignLiveCaseWithSharedArtifacts.tool,
+            command: foreignLiveCaseWithSharedArtifacts.command,
+            traceID: foreignLiveCaseWithSharedArtifacts.traceID,
+            verified: foreignLiveCaseWithSharedArtifacts.verified,
+            evidenceFiles: foreignLiveCaseWithSharedArtifacts.evidenceFiles.filter {
+                !sharedObservedArtifacts.contains($0)
+            },
+            reason: foreignLiveCaseWithSharedArtifacts.reason,
+            binarySHA256: foreignLiveCaseWithSharedArtifacts.binarySHA256,
+            axis: foreignLiveCaseWithSharedArtifacts.axis,
+            operationID: foreignLiveCaseWithSharedArtifacts.operationID,
+            operationRequestID: foreignLiveCaseWithSharedArtifacts.operationRequestID,
+            verificationKind: foreignLiveCaseWithSharedArtifacts.verificationKind,
+            deferral: foreignLiveCaseWithSharedArtifacts.deferral,
+            readback: foreignLiveCaseWithSharedArtifacts.readback,
+            restore: foreignLiveCaseWithSharedArtifacts.restore,
+            availabilityReason: foreignLiveCaseWithSharedArtifacts.availabilityReason,
+            availabilityObservation: foreignLiveCaseWithSharedArtifacts.availabilityObservation
+        )
+        #expect(enAttestation.cases.contains {
+            $0.id == enAxis.key && $0.status == .passed && $0.verified
+        })
+        if let existingForeignIndex {
+            #expect(enAttestation.cases[existingForeignIndex].status == .notQualified)
+        } else {
+            #expect(!QualificationAxis.requiredAxes(
+                profile: enAttestation.profile,
+                cache: enAttestation.cache,
+                fixture: enAttestation.fixture
+            ).contains(foreignAxis))
+        }
+
+        var splicedCases = enAttestation.cases
+        if let existingForeignIndex {
+            splicedCases[existingForeignIndex] = foreignLiveCase
+        } else {
+            splicedCases.append(foreignLiveCase)
+        }
+        let splicedCaseJSON = try JSONSerialization.jsonObject(with: encoder.encode(splicedCases))
+        try Self.mutateJSONObject(at: en.caseManifestURL) { object in
+            object["cases"] = splicedCaseJSON
+        }
+
+        let replacementCases = [foreignLiveCase]
+        for replacementCase in replacementCases {
+            for relativePath in replacementCase.evidenceFiles {
+                let source = foreign.directory.appendingPathComponent(relativePath)
+                let destination = en.directory.appendingPathComponent(relativePath)
+                try FileManager.default.createDirectory(
+                    at: destination.deletingLastPathComponent(),
+                    withIntermediateDirectories: true
+                )
+                try Data(contentsOf: source).write(to: destination, options: .atomic)
+            }
+        }
+
+        let foreignManifest = try #require(
+            JSONSerialization.jsonObject(
+                with: Data(contentsOf: foreign.manifestURL)
+            ) as? [String: Any]
+        )
+        let replacementIDs = Set(replacementCases.map(\.id))
+        let foreignEntries = try #require(foreignManifest["files"] as? [[String: Any]])
+            .filter { entry in
+                guard let caseID = entry["case_id"] as? String else { return false }
+                guard let path = entry["path"] as? String else { return false }
+                return replacementIDs.contains(caseID)
+                    && foreignLiveCase.evidenceFiles.contains(path)
+            }
+        try #require(!foreignEntries.isEmpty)
+        let caseManifestData = try Data(contentsOf: en.caseManifestURL)
+        try Self.mutateJSONObject(at: en.manifestURL) { object in
+            var entries = try #require(object["files"] as? [[String: Any]])
+            entries.removeAll { entry in
+                guard let caseID = entry["case_id"] as? String else { return false }
+                return replacementIDs.contains(caseID)
+            }
+            entries.append(contentsOf: foreignEntries)
+            entries.sort { ($0["path"] as? String ?? "") < ($1["path"] as? String ?? "") }
+            object["files"] = entries
+            object["case_manifest_sha256"] = SupportBundleBuilder.sha256(caseManifestData)
+        }
+
+        let manifestSHA256 = SupportBundleBuilder.sha256(try Data(contentsOf: en.manifestURL))
+        let counts = QualificationSummaryCounts(cases: splicedCases)
+        let splicedManifest = try #require(
+            JSONSerialization.jsonObject(with: Data(contentsOf: en.manifestURL)) as? [String: Any]
+        )
+        let splicedEntries = try #require(splicedManifest["files"] as? [[String: Any]])
+        let manifestPaths = splicedEntries.compactMap { $0["path"] as? String }
+        let expectedPaths = Set(splicedCases.flatMap(\.evidenceFiles))
+        let actualPaths = Set(manifestPaths)
+        let duplicatePaths = Dictionary(grouping: manifestPaths, by: { $0 })
+            .filter { $0.value.count > 1 }
+            .keys
+            .sorted()
+        #expect(duplicatePaths.isEmpty, "duplicates=\(duplicatePaths)")
+        #expect(
+            actualPaths == expectedPaths,
+            "missing=\(expectedPaths.subtracting(actualPaths).sorted()) extra=\(actualPaths.subtracting(expectedPaths).sorted())"
+        )
+        try Self.mutateJSONObject(at: en.attestationURL) { object in
+            object["cases"] = splicedCaseJSON
+            object["total"] = counts.total
+            object["passed"] = counts.passed
+            object["failed"] = counts.failed
+            object["waived"] = counts.waived
+            object["evidenceManifestSHA256"] = manifestSHA256
+            var provenance = try #require(object["provenance"] as? [String: Any])
+            provenance["evidenceManifestSHA256"] = manifestSHA256
+            object["provenance"] = provenance
+        }
+
+        let signing = QualificationRunner.signTrusted(
+            candidateURL: en.executableURL,
+            bundleURL: en.directory,
+            releaseVersion: "1.2.3",
+            expectedCommitSHA: commitSHA,
+            signingPrivateKeyData: en.signingKeyData,
+            requiredArtifacts: [],
+            requiredOperationIDs: en.requiredOperationIDs
+        )
+        #expect(signing.exitCode == 1, "a single-run signer must not bless another run's live axis")
+        let rejections = try #require(try Self.resultObject(signing)["rejections"] as? [[String: Any]])
+        #expect(rejections.contains {
+            $0["reason"] as? String == "foreignLiveAxisInSingleRun"
+        }, "\(signing.stdout)")
+
+        try en.forceSignForDiagnosticFixture()
+        let verification = await en.verify(expectedSHA256: en.binarySHA256)
+        #expect(verification.exitCode == 1)
+        let verificationRejections = try #require(
+            try Self.resultObject(verification)["rejections"] as? [[String: Any]]
+        )
+        #expect(verificationRejections.contains {
+            $0["reason"] as? String == "foreignLiveAxisInSingleRun"
+        }, "\(verification.stdout)")
+    }
+
     @Test func inProcessCasesMatchRegistryHandlersAndTraces() async throws {
         let fixture = try Fixture(specs: OperationRegistry.specs)
         defer { fixture.remove() }
