@@ -17,6 +17,7 @@ struct MIDINoteTransformChange: Equatable, Sendable {
 enum RegionTransformPlanWarning: Equatable, Sendable {
     case emptySelection
     case noChangesPredicted
+    case setVelocityClamped(requested: Int, applied: UInt8)
     case samePitchAndChannelOverlaps(count: Int)
 }
 
@@ -88,6 +89,11 @@ func planTransform(
         warnings.append(.emptySelection)
     } else if predictedChanges.isEmpty {
         warnings.append(.noChangesPredicted)
+    }
+    if case .setVelocity(let requested) = transform,
+       !(1...127).contains(requested),
+       let applied = transformedNotes.first?.velocity {
+        warnings.append(.setVelocityClamped(requested: requested, applied: applied))
     }
     if !predictedOverlapPairs.isEmpty {
         warnings.append(

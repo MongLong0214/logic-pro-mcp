@@ -133,6 +133,7 @@ enum TempoMapAX {
         case unmeasuredStep(previous: Double, observed: Double, target: Double)
         case attemptBudgetExhausted(observed: Double, target: Double, budget: Int)
         case deadlineExceeded(observed: Double, target: Double)
+        case cancelled
 
         var description: String {
             switch self {
@@ -164,6 +165,8 @@ enum TempoMapAX {
                 return "Tempo write spent its bounded budget of \(budget) step(s) and stopped at \(observed), not \(target)."
             case let .deadlineExceeded(observed, target):
                 return "Tempo write reached its wall-clock deadline at \(observed), not \(target)."
+            case .cancelled:
+                return "Tempo write was cancelled."
             }
         }
 
@@ -292,6 +295,9 @@ enum TempoMapAX {
     /// 120 → 120`. Fractional targets refuse. Every loop observation starts again from `window`; it
     /// never reads a cached row/group after Logic has re-rendered it, and every loop is bounded by
     /// both an iteration cap and a wall-clock deadline.
+    /// Task cancellation stops before the next forward write or success return. An already accepted
+    /// owned step is still reconciled through the bounded rollback; cancellation never suppresses
+    /// compensation for a write this request proved it made.
     ///
     /// `convergenceDeadlineOverride` exists so a test can decide WHICH of the two bounds it is
     /// measuring in both the forward walk and any rollback. With both left at their defaults the
@@ -325,6 +331,14 @@ enum TempoMapAX {
         guard isSupportedTempoTarget(target) else {
             return .refused(
                 failure: .invalidTarget(target),
+                forward: .none,
+                rollback: .notNeeded(writes: 0, finalObserved: nil)
+            )
+        }
+
+        guard !Task.isCancelled else {
+            return .refused(
+                failure: .cancelled,
                 forward: .none,
                 rollback: .notNeeded(writes: 0, finalObserved: nil)
             )
@@ -373,6 +387,14 @@ enum TempoMapAX {
             )
         }
 
+        guard !Task.isCancelled else {
+            return .refused(
+                failure: .cancelled,
+                forward: .none,
+                rollback: .notNeeded(writes: 0, finalObserved: nil)
+            )
+        }
+
         guard initial.tempo != target else {
             return .alreadyAtTarget(observed: initial.tempo)
         }
@@ -385,7 +407,8 @@ enum TempoMapAX {
             in: window,
             localeIdentifier: localeIdentifier,
             runtime: runtime,
-            deadline: Date().addingTimeInterval(convergenceDeadlineOverride ?? convergenceDeadline)
+            deadline: Date().addingTimeInterval(convergenceDeadlineOverride ?? convergenceDeadline),
+            observesCancellation: true
         )
         switch forward {
         case let .success(observed, writes):
@@ -755,7 +778,8 @@ enum TempoMapAX {
         in window: AXUIElement,
         localeIdentifier: String?,
         runtime: AXLogicProElements.Runtime,
-        deadline: Date
+        deadline: Date,
+        observesCancellation: Bool
     ) -> Convergence {
         guard let budget = attemptBudget(from: initial.tempo, to: target) else {
             return .failure(
@@ -780,6 +804,12 @@ enum TempoMapAX {
         }
 
         for _ in 0..<budget {
+            guard !observesCancellation || !Task.isCancelled else {
+                return .failure(
+                    .cancelled,
+                    receipt: receipt(finalObserved: current.tempo)
+                )
+            }
             guard Date() < deadline else {
                 return .failure(
                     .deadlineExceeded(observed: current.tempo, target: target),
@@ -853,9 +883,21 @@ enum TempoMapAX {
             }
             current = freshEvent
             if current.tempo == target {
+                guard !observesCancellation || !Task.isCancelled else {
+                    return .failure(
+                        .cancelled,
+                        receipt: receipt(finalObserved: current.tempo)
+                    )
+                }
                 return .success(observed: current.tempo, writes: acceptedWrites)
             }
 
+            guard !observesCancellation || !Task.isCancelled else {
+                return .failure(
+                    .cancelled,
+                    receipt: receipt(finalObserved: current.tempo)
+                )
+            }
             attempts += 1
             guard AXHelpers.setAttribute(
                 fresh.tempoGroups[index],
@@ -919,9 +961,22 @@ enum TempoMapAX {
                 )
             }
             if next.tempo == target {
+                guard !observesCancellation || !Task.isCancelled else {
+                    return .failure(
+                        .cancelled,
+                        receipt: receipt(finalObserved: next.tempo)
+                    )
+                }
                 return .success(observed: next.tempo, writes: acceptedWrites)
             }
             current = next
+        }
+
+        guard !observesCancellation || !Task.isCancelled else {
+            return .failure(
+                .cancelled,
+                receipt: receipt(finalObserved: current.tempo)
+            )
         }
 
         return .failure(
@@ -1114,7 +1169,10 @@ enum TempoMapAX {
             in: window,
             localeIdentifier: localeIdentifier,
             runtime: runtime,
-            deadline: Date().addingTimeInterval(convergenceDeadlineOverride ?? convergenceDeadline)
+            deadline: Date().addingTimeInterval(convergenceDeadlineOverride ?? convergenceDeadline),
+            // Forward cancellation has already won. Compensation remains bounded by the same
+            // deadline/budget and must observe its real result instead of being skipped.
+            observesCancellation: false
         ) {
         case let .success(observed, writes):
             return .restored(writes: writes, finalObserved: observed)
