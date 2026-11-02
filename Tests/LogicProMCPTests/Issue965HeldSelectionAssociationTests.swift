@@ -6194,7 +6194,8 @@ struct Issue965HeldSelectionAssociationTests {
     }
 
     @Test("One captured source composes its existing direct Output and occupied Send without widening authority",
-          arguments: ["completed", "preflight_drift", "cancel_after_output", "post_output_send_drift"])
+          arguments: ["completed", "preflight_drift", "cancel_after_output", "post_output_send_drift",
+            "output_replacement_cancel_after_both", "main_output_drift_after_send"])
     func canonicalDirectOutputAndOccupiedSendShareOneBoundedSaga(_ outcome: String) async throws {
         try await FeatureFlags.withAdr004MutationSagaForTests(true) {
             try await assertOccupiedSingleSendRenewal(existingBus: true, restoring: true, emptyModeMenu: true,
@@ -7656,7 +7657,17 @@ struct Issue965HeldSelectionAssociationTests {
                             b.setAttribute(mainEcho, "AXMenuItemMarkChar", "✓")
                             b.setAttribute(mainLeaf, "AXMenuItemMarkChar", physical ? "" : "✓")
                             b.setAttribute(mainPhysical, "AXMenuItemMarkChar", physical ? "✓" : "")
-                            b.setChildren(f.mixer, b.makeAXRuntime().children(f.mixer).filter { !CFEqual($0, mainRoot) })
+                            var rows = b.makeAXRuntime().children(f.mixer).filter { !CFEqual($0, mainRoot) }
+                            if combinedOutputSend == "output_replacement_cancel_after_both", physical {
+                                let retained = b.makeAXRuntime().children(f.strips[1]).filter { child in
+                                    !originalSend.contains(where: { CFEqual($0, child) })
+                                }
+                                b.setChildren(replacement, retained + renewedSend)
+                                f.routingReplacement = replacement
+                                rows = rows.map { CFEqual($0, f.strips[1]) ? replacement : $0 }
+                                b.setAttribute(f.app, kAXFocusedUIElementAttribute as String, replacement)
+                            }
+                            b.setChildren(f.mixer, rows)
                             return true
                         }
                     }
@@ -7966,14 +7977,24 @@ struct Issue965HeldSelectionAssociationTests {
                     ?? (canonicalPhysical ? "canonical-physical-send-" : "canonical-send-") + canonicalSend
                 let journal = SagaJournal()
                 await router.register(SendRemovalSagaResultBoundary(base: f.channel(), journal: journal,
-                    mode: combinedOutputSend == "cancel_after_output" ? "cancel"
+                    mode: ["cancel_after_output", "output_replacement_cancel_after_both"].contains(combinedOutputSend ?? "") ? "cancel"
                         : canonicalSend == "cancel" ? "cancel" : "completed",
-                    operation: combinedOutputSend == nil ? "mixer.set_send_output_verified" : "mixer.set_output_verified",
+                    operation: combinedOutputSend == nil
+                        || ["output_replacement_cancel_after_both", "main_output_drift_after_send"].contains(combinedOutputSend ?? "")
+                        ? "mixer.set_send_output_verified" : "mixer.set_output_verified",
                     idempotencyKey: key,
                     afterForward: {
                         if combinedOutputSend == "post_output_send_drift" {
                             b.setAttribute(mode, "AXMenuItemMarkChar", "")
                             b.setAttribute(preFader, "AXMenuItemMarkChar", "✓")
+                            f.routingLateScopeInjected = true
+                        }
+                        if combinedOutputSend == "main_output_drift_after_send" {
+                            b.setAttribute(b.element(1_971_535), kAXDescriptionAttribute as String, "Stereo Output")
+                            b.setAttribute(b.element(1_971_551), kAXTitleAttribute as String, "Stereo Output")
+                            b.setAttribute(b.element(1_971_551), "AXMenuItemMarkChar", "✓")
+                            b.setAttribute(b.element(1_971_554), "AXMenuItemMarkChar", "✓")
+                            b.setAttribute(b.element(1_971_555), "AXMenuItemMarkChar", "")
                             f.routingLateScopeInjected = true
                         }
                     },
@@ -8503,6 +8524,25 @@ struct Issue965HeldSelectionAssociationTests {
                         let summary = try #require((body["compensation"] as? [String: Any])?["journal_summary"] as? [String: Any])
                         #expect(summary["record_count"] as? Int == 2)
                         #expect(summary["forward_write_boundary_count"] as? Int == 1)
+                        #expect(summary["compensation_write_boundary_count"] as? Int == 0)
+                    case "output_replacement_cancel_after_both":
+                        #expect(body["saga_state"] as? String == "fullyCompensated")
+                        #expect(body["final_disposition"] as? String == "stopped_fully_compensated")
+                        #expect(f.routingMainOutputPresses == 2 && f.routingDestinationPresses == 2)
+                        #expect(f.routingBusLeafPresses == [2, 1])
+                        let summary = try #require((body["compensation"] as? [String: Any])?["journal_summary"] as? [String: Any])
+                        #expect(summary["record_count"] as? Int == 2)
+                        #expect(summary["forward_write_boundary_count"] as? Int == 2)
+                        #expect(summary["compensation_write_boundary_count"] as? Int == 2)
+                    case "main_output_drift_after_send":
+                        #expect(body["saga_state"] as? String == "rollbackUncertain")
+                        #expect(body["final_disposition"] as? String == "stopped_with_residuals")
+                        #expect(f.routingMainOutputPresses == 1 && f.routingDestinationPresses == 1)
+                        #expect(f.routingBusLeafPresses == [2])
+                        #expect(f.routingLateScopeInjected)
+                        let summary = try #require((body["compensation"] as? [String: Any])?["journal_summary"] as? [String: Any])
+                        #expect(summary["record_count"] as? Int == 2)
+                        #expect(summary["forward_write_boundary_count"] as? Int == 2)
                         #expect(summary["compensation_write_boundary_count"] as? Int == 0)
                     default:
                         Issue.record("Unknown combined Output/Send outcome")

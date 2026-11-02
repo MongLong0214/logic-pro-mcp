@@ -824,6 +824,8 @@ final class ApprovedSessionRepair: @unchecked Sendable {
     private var outputRefreshPerformed = false
     private var sendInputPeerHeaders: [AXTrackBinding.Binding]?
     private var sendInputPeerHeadersPrepared = false
+    private var combinedSendControl: AXLogicProElements.AssignedSendMenuControl?
+    private var combinedOutputWriterPair: AccessibilityChannel.HeldSelectionAssociation.Pair?
     private var sortSnapshot: TargetRegistrySnapshot?
     private var sortProject: TargetReference?
     private var sortApplied = false
@@ -1265,6 +1267,105 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         return (task.pair, task.control)
     }
 
+    var requiresCombinedOutputSendHandoff: Bool {
+        guard let output = outputTask, let send = sendTask else { return false }
+        return output.reference == send.reference && output.mixerRef == send.mixerRef
+            && output.pair.track.matches(send.pair.track) && output.pair.strip.matches(send.pair.strip)
+            && plan.steps.count == 2
+            && plan.steps[0].operationID == .mixerSetOutputVerified
+            && plan.steps[1].operationID == .mixerSetSendOutputVerified
+    }
+
+    var combinedOutputWasAttempted: Bool {
+        requiresCombinedOutputSendHandoff && outputAttempted
+    }
+
+    struct CombinedOutputSourceHandoff: Sendable {
+        let registered: AccessibilityChannel.HeldSelectionAssociation.Pair
+        let current: AccessibilityChannel.HeldSelectionAssociation.Pair
+    }
+
+    /// The Output writer may have retired the registry-bound source before the
+    /// mandatory Send writer runs. Preserve its exact typed original/current
+    /// effect as request-local history; the Send before-read must still renew
+    /// and revalidate the actual current source/control before its own write.
+    func combinedOutputSourceHandoffForSend() -> CombinedOutputSourceHandoff? {
+        guard requiresCombinedOutputSendHandoff, let output = outputTask,
+              outputAttempted, outputApplied, !outputInverseConsumed,
+              let writer = combinedOutputWriterPair, let current = outputPair,
+              let checked = checkedOutputEffect, checked.assignment == output.desired,
+              checked.effect.original.strip.matches(writer.strip),
+              checked.effect.original.track.matches(writer.track),
+              checked.effect.current.strip.matches(current.strip),
+              checked.effect.current.track.matches(current.track) else { return nil }
+        return .init(registered: output.pair, current: current)
+    }
+
+    /// The preceding Output step may redraw the exact approved source. Its
+    /// independently checked effect can hand only that renewed pair and the
+    /// still-captured Send footprint into the mandatory Send before-read.
+    func combinedSendCustodyAfterOwnedOutput() async -> (AccessibilityChannel.HeldSelectionAssociation.Pair,
+        AXLogicProElements.AssignedSendMenuControl)? {
+        guard requiresCombinedOutputSendHandoff, let output = outputTask, let task = sendTask,
+              outputAttempted, outputApplied, !outputInverseConsumed,
+              checkedOutputEffect?.assignment == output.desired,
+              let pair = outputPair, pair.track.matches(task.pair.track),
+              outputProof?.permitsRead() == true,
+              await outputReading() == output.desired,
+              let current = AXLogicProElements.assignedSendMenuControl(in: pair.strip.strip,
+                ordinal: task.ordinal, runtime: pair.track.runtime.ax),
+              let slots = AXLogicProElements.sendSlotObservations(in: pair.strip.strip,
+                runtime: pair.track.runtime.ax), slots == task.footprint,
+              await projectIsCurrent(allowPendingCancellation: true) else { return nil }
+        combinedSendControl = current
+        return (pair, current)
+    }
+
+    /// A Send after-read is the aggregate receipt for this two-step plan. Carry
+    /// its actual owned source/control into compensation only while the main
+    /// Output and every protected field remain exact at that same boundary.
+    func retainCombinedSendRead(
+        source: AccessibilityChannel.OriginalHeaderSourceRenewal,
+        control: AXLogicProElements.AssignedSendMenuControl,
+        ownedChange: AccessibilityChannel.ChangedSendObservation?
+    ) async -> Bool {
+        guard requiresCombinedOutputSendHandoff, let output = outputTask, let task = sendTask,
+              outputAttempted, outputApplied, !outputInverseConsumed,
+              let prior = outputPair, source.original.matches(prior.strip),
+              source.originalTrack.matches(prior.track), source.pair.track.matches(task.pair.track),
+              source.permits(runtime: source.pair.track.runtime), control.ordinal == task.ordinal,
+              let current = AXLogicProElements.assignedSendMenuControl(in: source.pair.strip.strip,
+                ordinal: task.ordinal, runtime: source.pair.track.runtime.ax), control.matches(current),
+              let slots = AXLogicProElements.sendSlotObservations(in: source.pair.strip.strip,
+                runtime: source.pair.track.runtime.ax),
+              AccessibilityChannel.ChangedSendObservation.protectedSlots(slots, ordinal: task.ordinal)
+                == AccessibilityChannel.ChangedSendObservation.protectedSlots(task.footprint, ordinal: task.ordinal)
+        else { return false }
+        let previousPair = outputPair, previousRenewal = outputRenewal, previousProof = outputProof
+        outputPair = source.pair; outputRenewal = source; outputProof = source.observation
+        var accepted = false
+        defer {
+            if !accepted {
+                outputPair = previousPair; outputRenewal = previousRenewal; outputProof = previousProof
+            }
+        }
+        guard outputFootprintHeld(pair: source.pair, assignment: output.desired,
+                taskOverride: output, ownedSendChange: ownedChange) else { return false }
+        let checked = await AXMixerStripBinding.$current.withValue(source.pair.strip) {
+            await AXMixerStripBinding.$outputAssociation.withValue(source.pair) {
+                await AccessibilityChannel.getOutputObservation(runtime: source.pair.track.runtime)
+            }
+        }
+        guard checked.assignment == output.desired,
+              outputFootprintHeld(pair: source.pair, assignment: output.desired,
+                taskOverride: output, ownedSendChange: ownedChange),
+              source.permits(runtime: source.pair.track.runtime),
+              await projectIsCurrent(allowPendingCancellation: true) else { return false }
+        combinedSendControl = current
+        accepted = true
+        return true
+    }
+
     /// Discover header witnesses in the existing independent read budget, not
     /// the route-write budget. These are hints for a later actual input read,
     /// never cached Bus values, renewed public references or write authority.
@@ -1672,8 +1773,9 @@ final class ApprovedSessionRepair: @unchecked Sendable {
               task.pair.track.matches(output.pair.track), task.pair.strip.matches(output.pair.strip),
               let pair = outputPair, pair.track.matches(task.pair.track),
               await projectIsCurrent(allowPendingCancellation: true),
+              let retainedControl = combinedSendControl ?? Optional(task.control),
               let current = AXLogicProElements.assignedSendMenuControl(in: pair.strip.strip,
-                ordinal: task.ordinal, runtime: pair.track.runtime.ax), task.control.matches(current),
+                ordinal: task.ordinal, runtime: pair.track.runtime.ax), retainedControl.matches(current),
               AXLogicProElements.sendSlotObservations(in: pair.strip.strip,
                 runtime: pair.track.runtime.ax) == task.footprint else { return false }
         let read = await AXMixerStripBinding.$current.withValue(pair.strip) {
@@ -3157,6 +3259,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             Log.info("Canonical output refused: retained source is no longer uniquely current", subsystem: "saga")
             return toolStateCResult(.staleTargetReference, extras: ["write_attempted": false])
         }
+        if !inverse, requiresCombinedOutputSendHandoff { combinedOutputWriterPair = pair }
         if inverse { outputInverseConsumed = true }
         let upstream = AccessibilityChannel.outputChangeObserver
         let response = await AccessibilityChannel.$outputChangeObserver.withValue({ [self] effect in

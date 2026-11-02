@@ -186,11 +186,15 @@ final class SendRemovalSagaAdapter: @unchecked Sendable {
     // operation's gate. Inspection-cache eviction cannot erase that tether.
     @TaskLocal static var checkedSourcePair: AccessibilityChannel.HeldSelectionAssociation.Pair?
     @TaskLocal static var checkedReadRenewal: AccessibilityChannel.OriginalHeaderSourceRenewal?
+    // Exact registered/current transition from the preceding owned Output
+    // write. This is history, not current authority; checkedReadRenewal and the
+    // Send writer still prove current source/control at their own boundary.
+    @TaskLocal static var checkedOutputHandoff: ApprovedSessionRepair.CombinedOutputSourceHandoff?
     // Receivers with actual checked inputs in this invocation supply only
     // discovery hints; post-write source custody is observed again.
     @TaskLocal static var checkedReadPeerHeaders: [AXTrackBinding.Binding]?
     let forward: SagaStep
-    private let capturedControl: AXLogicProElements.AssignedSendMenuControl?
+    private var currentControl: AXLogicProElements.AssignedSendMenuControl?
     private let approved: ApprovedSessionRepair?
     private var pair: AccessibilityChannel.HeldSelectionAssociation.Pair?
     private var footprint: [SendSlotObservation]?
@@ -245,7 +249,7 @@ final class SendRemovalSagaAdapter: @unchecked Sendable {
     init?(plan: SagaPlan) {
         guard Self.accepts(plan), let forward = plan.steps.first else { return nil }
         self.forward = forward
-        self.capturedControl = nil
+        self.currentControl = nil
         self.approved = nil
     }
 
@@ -255,7 +259,7 @@ final class SendRemovalSagaAdapter: @unchecked Sendable {
               let (pair, control) = approved.sendRemovalCustody(for: forward) else { return nil }
         self.forward = forward
         self.pair = pair
-        self.capturedControl = control
+        self.currentControl = control
         self.approved = approved
     }
 
@@ -308,12 +312,23 @@ final class SendRemovalSagaAdapter: @unchecked Sendable {
                 let checked = await AccessibilityChannel.readRestoredSendObservation(restored,
                     original: original, runtime: pair.track.runtime)
                 guard let assignment = checked.assignment else { return nil }
+                if self.approved?.requiresCombinedOutputSendHandoff == true {
+                    guard let retained = restored.restoredSend,
+                          await self.approved?.retainCombinedSendRead(source: retained.source,
+                            control: retained.control, ownedChange: nil) == true else { return nil }
+                    self.pair = retained.source.pair; self.currentControl = retained.control
+                }
                 token = assignment.token; source = .axSendMenuCheckmark
             } else if let changed = self.change {
                 guard !self.inverseConsumed else { return nil }
                 let checked = await AccessibilityChannel.readChangedSendObservation(changed,
                     runtime: changed.source.pair.track.runtime)
                 guard let assignment = checked.assignment else { return nil }
+                if self.approved?.requiresCombinedOutputSendHandoff == true {
+                    guard await self.approved?.retainCombinedSendRead(source: changed.source,
+                            control: changed.control, ownedChange: changed) == true else { return nil }
+                    self.pair = changed.source.pair; self.currentControl = changed.control
+                }
                 token = assignment.token; source = .axSendMenuCheckmark
             } else if let removed = self.removal {
                 guard !self.inverseConsumed, removed.permits(runtime: removed.source.pair.track.runtime) else { return nil }
@@ -321,17 +336,27 @@ final class SendRemovalSagaAdapter: @unchecked Sendable {
             } else {
                 guard !self.attempted, let reference = step.targetRef,
                       let binding = await registry.resolve(reference), binding.kind == .mixerStrip,
-                      let physical = binding.physicalMixerStrip else { return nil }
+                      let registered = binding.physicalMixerStrip else { return nil }
                 let held: AccessibilityChannel.HeldSelectionAssociation.Pair
-                if let captured = await cache.retainedMixerAssociation(reference: reference, source: physical,
-                    snapshot: await registry.currentSnapshot) {
-                    held = captured
-                } else if let owned = await self.approved?.sendReadPairAfterOwnedName(reference: reference, source: physical) {
-                    held = owned
-                    Log.info("Send before-read continued through its owned source-name effect", subsystem: "saga")
-                } else { return nil }
-                guard self.pair.map({ $0.strip.matches(held.strip) && $0.track.matches(held.track) }) ?? true,
-                      let ordinal = self.forward.params["ordinal"]?.intValue else { return nil }
+                let physical: AXMixerStripBinding.Binding
+                if let approved = self.approved, approved.combinedOutputWasAttempted {
+                    guard let custody = await approved.combinedSendCustodyAfterOwnedOutput() else { return nil }
+                    held = custody.0; physical = held.strip
+                    self.pair = held; self.currentControl = custody.1
+                } else {
+                    physical = registered
+                    if let captured = await cache.retainedMixerAssociation(reference: reference, source: physical,
+                        snapshot: await registry.currentSnapshot) {
+                        held = captured
+                    } else if let owned = await self.approved?.sendReadPairAfterOwnedName(reference: reference, source: physical) {
+                        held = owned
+                        Log.info("Send before-read continued through its owned source-name effect", subsystem: "saga")
+                    } else { return nil }
+                    guard self.pair.map({ $0.strip.matches(held.strip) && $0.track.matches(held.track) }) ?? true else {
+                        return nil
+                    }
+                }
+                guard let ordinal = self.forward.params["ordinal"]?.intValue else { return nil }
                 let runtime = held.track.runtime
                 if Self.isCreation(self.forward) {
                     guard ordinal == 0, AccessibilityChannel.soleEmptySend(in: physical.strip, runtime: runtime.ax) != nil,
@@ -343,7 +368,7 @@ final class SendRemovalSagaAdapter: @unchecked Sendable {
                     self.pair = held; self.footprint = slots
                     token = "no_send"; source = .axSendSlotFootprint
                 } else {
-                    if let captured = self.capturedControl {
+                    if let captured = self.currentControl {
                         guard let current = AXLogicProElements.assignedSendMenuControl(in: physical.strip,
                             ordinal: ordinal, runtime: runtime.ax), captured.matches(current) else { return nil }
                     }
@@ -356,7 +381,7 @@ final class SendRemovalSagaAdapter: @unchecked Sendable {
                         }
                     }
                     guard let before = Self.expectedBefore(self.forward), checked.assignment == before,
-                          self.capturedControl.map({ captured in checked.sendControl.map(captured.matches) == true }) ?? true,
+                          self.currentControl.map({ captured in checked.sendControl.map(captured.matches) == true }) ?? true,
                           checked.sendNonRoutingChecks == ["Post Fader"] || checked.sendNonRoutingChecks == ["포스트 페이더"],
                           let slots = AXLogicProElements.sendSlotObservations(in: physical.strip, runtime: runtime.ax),
                           slots.count == 2, slots.filter({ $0.state == .observedEmpty }).count == 1,
@@ -429,6 +454,10 @@ final class SendRemovalSagaAdapter: @unchecked Sendable {
                 guard !self.attempted else {
                     return .init(state: .stateC, writeBoundaryCrossed: false, detail: "Send was already attempted")
                 }
+                // Freeze the preceding Output's exact registered/current
+                // transition before this Send's prerequisite reads can renew
+                // that current source again.
+                let outputHandoff = self.approved?.combinedOutputSourceHandoffForSend()
                 let requiredBefore: RequiredBeforeState?
                 if Self.isCreation(self.forward) {
                     guard await self.read(self.forward, cache: cache, registry: registry) != nil else {
@@ -455,7 +484,7 @@ final class SendRemovalSagaAdapter: @unchecked Sendable {
                 }
                 var readRenewal: AccessibilityChannel.OriginalHeaderSourceRenewal?
                 var checkedPeerHeaders: [AXTrackBinding.Binding]?
-                var requiredControl = self.capturedControl
+                var requiredControl = self.currentControl
                 if let approved = self.approved, let control = requiredControl,
                    let expected = Self.expectedBefore(self.forward) {
                     guard let custody = await approved.sendBusInputsCurrent(at: held, control: control, expected: expected,
@@ -504,10 +533,12 @@ final class SendRemovalSagaAdapter: @unchecked Sendable {
                                 await Self.$requiredNameCheck.withValue(nameCheck) {
                                     await Self.$checkedSourcePair.withValue(held) {
                                         await Self.$checkedReadRenewal.withValue(readRenewal) {
-                                            await Self.$checkedReadPeerHeaders.withValue(checkedPeerHeaders) {
-                                                await Self.$requiredBeforeState.withValue(requiredBefore) {
-                                                    await MixerDispatcher.handle(command: "set_send_output_verified", params: params,
-                                                        router: router, cache: cache, targetRegistry: registry)
+                                            await Self.$checkedOutputHandoff.withValue(outputHandoff) {
+                                                await Self.$checkedReadPeerHeaders.withValue(checkedPeerHeaders) {
+                                                    await Self.$requiredBeforeState.withValue(requiredBefore) {
+                                                        await MixerDispatcher.handle(command: "set_send_output_verified", params: params,
+                                                            router: router, cache: cache, targetRegistry: registry)
+                                                    }
                                                 }
                                             }
                                         }
