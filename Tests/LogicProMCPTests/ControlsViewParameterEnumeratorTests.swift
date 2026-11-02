@@ -120,6 +120,20 @@ struct ControlsViewParameterEnumeratorTests {
         #expect(fixture.cellContentReadCounter?.current == 7)
     }
 
+    @Test func movingTheSamePhysicalEndpointsBetweenStableCellsCannotProduceACompleteManifest() {
+        let fixture = makeControlsFixture(
+            cellBinding: .separateLabelAndControl(rowIndex: 7),
+            cellContentMutation: .pairSeparatedEndpoints(rowIndex: 7)
+        )
+
+        #expect(ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: fixture.runtime
+        ) == nil)
+        #expect(fixture.cellAssociationReadCounters.map { $0.current } == [7, 7])
+    }
+
     @Test func traversalDepthBoundaryRefusesInsteadOfHidingANestedControl() {
         let fixture = makeControlsFixture(depthBoundaryIndex: 7)
         let result = ControlsViewParameterEnumerator.enumerate(
@@ -625,6 +639,7 @@ private struct ControlsFixture {
     let rowListReadCounter: LockedRowListReadCounter?
     let rowStructureReadCounter: LockedRowStructureReadCounter?
     let cellContentReadCounter: LockedRowStructureReadCounter?
+    let cellAssociationReadCounters: [LockedRowStructureReadCounter]
 }
 
 private struct RowFixture {
@@ -698,6 +713,7 @@ private enum RowStructureMutation: Sendable {
 private enum CellContentMutation: Sendable {
     case replaceLabel(rowIndex: Int)
     case replaceControl(rowIndex: Int)
+    case pairSeparatedEndpoints(rowIndex: Int)
 }
 
 private final class LockedDepthBoundaryReadCounter: @unchecked Sendable {
@@ -1048,12 +1064,40 @@ private func makeControlsFixture(
             cellID: builder.elementID(primaryCellElements[rowIndex]),
             children: [primaryLabelElements[rowIndex], replacementControl]
         )
-    case .replaceLabel, .replaceControl, nil:
+    case .replaceLabel, .replaceControl, .pairSeparatedEndpoints, nil:
         cellContentMutationData = nil
     }
     let cellContentReadCounter = cellContentMutationData == nil
         ? nil
         : LockedRowStructureReadCounter()
+    let cellAssociationMutationData: [(
+        cellID: Int,
+        children: [AXUIElement],
+        counter: LockedRowStructureReadCounter
+    )]
+    switch cellContentMutation {
+    case .pairSeparatedEndpoints(let rowIndex)
+        where primaryLabelElements.indices.contains(rowIndex)
+            && primaryControlElements.indices.contains(rowIndex):
+        let base = 90_100 + rowIndex * 20
+        cellAssociationMutationData = [
+            (
+                cellID: builder.elementID(builder.element(base + 4)),
+                children: [
+                    primaryLabelElements[rowIndex],
+                    primaryControlElements[rowIndex],
+                ],
+                counter: LockedRowStructureReadCounter()
+            ),
+            (
+                cellID: builder.elementID(builder.element(base + 5)),
+                children: [],
+                counter: LockedRowStructureReadCounter()
+            ),
+        ]
+    case .pairSeparatedEndpoints, .replaceLabel, .replaceControl, nil:
+        cellAssociationMutationData = []
+    }
     let runtime: AXHelpers.Runtime
     if !unreadableLabelElementIDs.isEmpty
         || unreadableWindowTitle
@@ -1066,7 +1110,8 @@ private func makeControlsFixture(
         || windowIdentifierReadError != nil
         || rowListMutation != nil
         || rowStructureMutationData != nil
-        || cellContentMutationData != nil {
+        || cellContentMutationData != nil
+        || !cellAssociationMutationData.isEmpty {
         runtime = builder.makeAXRuntime(
             attributeValueResultHandler: { element, attribute in
                 let elementID = builder.elementID(element)
@@ -1114,6 +1159,14 @@ private func makeControlsFixture(
             },
             childrenResultHandler: { element in
                 let elementID = builder.elementID(element)
+                if let mutation = cellAssociationMutationData.first(where: {
+                    $0.cellID == elementID
+                }) {
+                    let read = mutation.counter.next()
+                    if read >= 7 {
+                        return .success(mutation.children)
+                    }
+                }
                 if let cellContentMutationData, let cellContentReadCounter,
                    elementID == cellContentMutationData.cellID {
                     let read = cellContentReadCounter.next()
@@ -1156,7 +1209,8 @@ private func makeControlsFixture(
         depthBoundaryReadFailure: depthBoundaryFailure,
         rowListReadCounter: rowListReadCounter,
         rowStructureReadCounter: rowStructureReadCounter,
-        cellContentReadCounter: cellContentReadCounter
+        cellContentReadCounter: cellContentReadCounter,
+        cellAssociationReadCounters: cellAssociationMutationData.map(\.counter)
     )
 }
 

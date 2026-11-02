@@ -127,11 +127,7 @@ enum ControlsViewParameterEnumerator {
             guard let rowRead = readRow(row, runtime: runtime) else {
                 return nil
             }
-            observedRowStructures.append(PhysicalRowStructure(
-                cells: rowRead.cells,
-                labels: rowRead.labelElements,
-                controls: rowRead.controls.map(\.element)
-            ))
+            observedRowStructures.append(rowRead.physicalStructure)
             for cell in rowRead.cells {
                 guard !observedCells.contains(where: {
                     CFEqual($0, cell)
@@ -247,9 +243,7 @@ enum ControlsViewParameterEnumerator {
                   guard let final = physicalRowStructure(in: row, runtime: runtime) else {
                       return false
                   }
-                  return samePhysicalElements(initial.cells, final.cells)
-                      && samePhysicalElements(initial.labels, final.labels)
-                      && samePhysicalElements(initial.controls, final.controls)
+                  return samePhysicalStructure(initial, final)
               }) else {
             return nil
         }
@@ -395,6 +389,7 @@ enum ControlsViewParameterEnumerator {
         var labelElements: [AXUIElement] = []
         var controlsInRow: [ControlObservation] = []
         var pairedCandidates: [PairedCandidate] = []
+        var physicalCells: [PhysicalCellStructure] = []
 
         guard let cells = rowCells(in: row, runtime: runtime) else {
             return nil
@@ -408,6 +403,11 @@ enum ControlsViewParameterEnumerator {
             labelValues.append(contentsOf: cellLabels)
             labelElements.append(contentsOf: contents.labelElements)
             controlsInRow.append(contentsOf: cellControls)
+            physicalCells.append(PhysicalCellStructure(
+                cell: cell,
+                labels: contents.labelElements,
+                controls: cellControls.map(\.element)
+            ))
             if let label = cellLabels.only, let control = cellControls.only {
                 pairedCandidates.append(PairedCandidate(label: label, control: control))
             }
@@ -417,7 +417,8 @@ enum ControlsViewParameterEnumerator {
             labels: labelValues,
             labelElements: labelElements,
             controls: controlsInRow,
-            pairedCandidates: pairedCandidates
+            pairedCandidates: pairedCandidates,
+            physicalStructure: PhysicalRowStructure(cells: physicalCells)
         )
     }
 
@@ -439,8 +440,7 @@ enum ControlsViewParameterEnumerator {
         guard let cells = rowCells(in: row, runtime: runtime) else {
             return nil
         }
-        var labels: [AXUIElement] = []
-        var controls: [AXUIElement] = []
+        var physicalCells: [PhysicalCellStructure] = []
         for cell in cells {
             guard let scanned = descendants(
                 of: cell,
@@ -449,18 +449,35 @@ enum ControlsViewParameterEnumerator {
             ) else {
                 return nil
             }
-            labels.append(contentsOf: scanned.compactMap { descendant in
+            let labels = scanned.compactMap { descendant in
                 descendant.role == (kAXStaticTextRole as String)
                     ? descendant.element
                     : nil
-            })
-            controls.append(contentsOf: scanned.compactMap { descendant in
+            }
+            let controls = scanned.compactMap { descendant in
                 GenericParameterControlRole(rawValue: descendant.role) == nil
                     ? nil
                     : descendant.element
-            })
+            }
+            physicalCells.append(PhysicalCellStructure(
+                cell: cell,
+                labels: labels,
+                controls: controls
+            ))
         }
-        return PhysicalRowStructure(cells: cells, labels: labels, controls: controls)
+        return PhysicalRowStructure(cells: physicalCells)
+    }
+
+    private static func samePhysicalStructure(
+        _ initial: PhysicalRowStructure,
+        _ final: PhysicalRowStructure
+    ) -> Bool {
+        initial.cells.count == final.cells.count
+            && zip(initial.cells, final.cells).allSatisfy { initialCell, finalCell in
+                CFEqual(initialCell.cell, finalCell.cell)
+                    && samePhysicalElements(initialCell.labels, finalCell.labels)
+                    && samePhysicalElements(initialCell.controls, finalCell.controls)
+            }
     }
 
     private static func samePhysicalElements(
@@ -844,10 +861,15 @@ enum ControlsViewParameterEnumerator {
         let labelElements: [AXUIElement]
         let controls: [ControlObservation]
         let pairedCandidates: [PairedCandidate]
+        let physicalStructure: PhysicalRowStructure
     }
 
     private struct PhysicalRowStructure {
-        let cells: [AXUIElement]
+        let cells: [PhysicalCellStructure]
+    }
+
+    private struct PhysicalCellStructure {
+        let cell: AXUIElement
         let labels: [AXUIElement]
         let controls: [AXUIElement]
     }
