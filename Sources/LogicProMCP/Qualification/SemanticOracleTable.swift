@@ -1037,6 +1037,9 @@ enum SemanticOracleTable {
                   row.keys.contains("value_is_settable"), nullableBoolean(row["value_is_settable"]),
                   let classification = nonEmptyString(row["classification"])
             else { return false }
+            guard controlRoles.count == 1 || row["observed_raw_value"] is NSNull else {
+                return false
+            }
 
             if classification.hasPrefix("parameter_readable_")
                 || classification.hasPrefix("parameter_unreadable_") {

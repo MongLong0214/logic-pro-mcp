@@ -170,6 +170,12 @@ enum SemanticOracleFixtures {
             "observed_raw_value": 0.5,
             "classification": "refused_ambiguous_control_AXSlider,AXSlider",
         ]) { _, new in new }
+        let ambiguousLabelRowWithRawValue = refusedRow.merging([
+            "observed_label": NSNull(),
+            "control_roles": ["AXSlider", "AXSlider"],
+            "observed_raw_value": 0.5,
+            "classification": "refused_ambiguous_label",
+        ]) { _, new in new }
         let extras: [String: Any] = [
             "operation": "logic_plugins.get_host_parameter_manifest",
             "target_ref": "ins_00000000-0000-0000-0000-000000000306",
@@ -221,6 +227,9 @@ enum SemanticOracleFixtures {
             ])),
             .init(.wellFormedButWrong, response([
                 "row_observations": [ambiguousControlRowWithRawValue, readableRow],
+            ])),
+            .init(.wellFormedButWrong, response([
+                "row_observations": [ambiguousLabelRowWithRawValue, readableRow],
             ])),
             .init(.wellFormedButWrong, response(["refused_row_count": 0])),
             .init(.wellFormedButWrong, response([
