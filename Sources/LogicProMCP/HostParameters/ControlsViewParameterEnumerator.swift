@@ -76,16 +76,22 @@ enum ControlsViewParameterEnumerator {
     /// signature and manifest fingerprint and carries no unit or write claim.
     enum ObservedRawValue: Equatable, Sendable {
         case boolean(Bool)
+        case integer(Int64)
         case number(Double)
         case string(String)
+        case unsignedInteger(UInt64)
 
         var jsonValue: Any {
             switch self {
             case .boolean(let value):
                 return value
+            case .integer(let value):
+                return value
             case .number(let value):
                 return value
             case .string(let value):
+                return value
+            case .unsignedInteger(let value):
                 return value
             }
         }
@@ -616,8 +622,20 @@ enum ControlsViewParameterEnumerator {
             return .boolean(value)
         }
         if let value = raw as? NSNumber {
-            let number = value.doubleValue
-            return number.isFinite ? .number(number) : nil
+            guard !(value is NSDecimalNumber) else {
+                return nil
+            }
+            switch String(cString: value.objCType) {
+            case "c", "s", "i", "l", "q":
+                return .integer(value.int64Value)
+            case "C", "S", "I", "L", "Q":
+                return .unsignedInteger(value.uint64Value)
+            case "f", "d":
+                let number = value.doubleValue
+                return number.isFinite ? .number(number) : nil
+            default:
+                return nil
+            }
         }
         return nil
     }

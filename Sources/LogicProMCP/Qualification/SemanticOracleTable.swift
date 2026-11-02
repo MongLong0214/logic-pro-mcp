@@ -1065,7 +1065,8 @@ enum SemanticOracleTable {
             refusedCount += 1
             switch classification {
             case "refused_no_control":
-                guard controlRoles.isEmpty else { return false }
+                guard controlRoles.isEmpty,
+                      row["observed_raw_value"] is NSNull else { return false }
             case "refused_unpaired_label_and_control":
                 guard controlRoles.count == 1 else { return false }
             case "refused_empty_label", "refused_placeholder_label", "refused_ambiguous_label":
@@ -1076,7 +1077,8 @@ enum SemanticOracleTable {
                 let roles = String(classification.dropFirst(prefix.count))
                     .split(separator: ",").map(String.init)
                 guard roles.count > 1, roles == controlRoles,
-                      roles.allSatisfy(allowedRoles.contains) else { return false }
+                      roles.allSatisfy(allowedRoles.contains),
+                      row["observed_raw_value"] is NSNull else { return false }
             }
         }
 
