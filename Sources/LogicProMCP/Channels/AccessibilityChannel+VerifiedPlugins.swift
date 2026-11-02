@@ -3224,6 +3224,7 @@ extension AccessibilityChannel {
                     trackName: trackName,
                     pluginID: pluginID,
                     runtime: runtime,
+                    validatingObservedAbsence: { _ in acquisitionAllowed() },
                     allowingChanges: editorCloseAllowed
                 )
             }
@@ -3269,6 +3270,7 @@ extension AccessibilityChannel {
                 trackName: trackName,
                 pluginID: pluginID,
                 runtime: runtime,
+                validatingObservedAbsence: { _ in acquisitionAllowed() },
                 allowingChanges: { window in
                     guard editorCloseAllowed(window) else { return false }
                     closeAttempted = true
@@ -5696,6 +5698,7 @@ extension AccessibilityChannel {
         trackName: String,
         pluginID: String,
         runtime: AXLogicProElements.Runtime,
+        validatingObservedAbsence: (AXUIElement) -> Bool = { _ in true },
         allowingChanges: (AXUIElement) -> Bool = { _ in true }
     ) -> OwnedEditorCloseOutcome {
         var outcome = OwnedEditorCloseOutcome()
@@ -5742,6 +5745,7 @@ extension AccessibilityChannel {
                 // close control or attempting another mutation.
                 retainWindowMembership()
                 if outcome.windowMembership == "absent" {
+                    guard validatingObservedAbsence(window) else { return outcome }
                     outcome.observed = true
                     return outcome
                 }
@@ -5799,6 +5803,7 @@ extension AccessibilityChannel {
         trackName: String,
         pluginID: String,
         runtime: AXLogicProElements.Runtime,
+        validatingObservedAbsence: (AXUIElement) -> Bool = { _ in true },
         allowingChanges: (AXUIElement) -> Bool = { _ in true }
     ) -> [OwnedEditorCloseOutcome] {
         windows.map { window in
@@ -5807,6 +5812,7 @@ extension AccessibilityChannel {
                 trackName: trackName,
                 pluginID: pluginID,
                 runtime: runtime,
+                validatingObservedAbsence: validatingObservedAbsence,
                 allowingChanges: allowingChanges
             )
         }
