@@ -6266,36 +6266,50 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(verification.exitCode == 0)
     }
 
-    @Test func singleAxisSignerRejectsForeignLiveAxisEvenWhenSplicedFilesAreInternallyConsistent() async throws {
+    @Test(arguments: [
+        QualificationAxis(
+            variant: .desktop,
+            locale: .koKR,
+            profile: .core,
+            cache: .cold,
+            fixture: .empty
+        ),
+        QualificationAxis(
+            variant: .desktop,
+            locale: .enUS,
+            profile: .full,
+            cache: .warm,
+            fixture: .empty
+        ),
+    ])
+    func singleAxisSignerRejectsForeignLiveAxisEvenWhenSplicedFilesAreInternallyConsistent(
+        foreignAxis: QualificationAxis
+    ) async throws {
         let specs = [try #require(OperationRegistry.specs.first { $0.id == .systemHealth })]
         let executableData = Data("matrix-splice-candidate".utf8)
         let commitSHA = String(repeating: "a", count: 40)
         let enDrive = Self.driveResult(specs: specs, observedLocale: "en-US")
-        let koDrive = Self.driveResult(specs: specs, observedLocale: "ko-KR")
+        let foreignDrive = Self.driveResult(
+            specs: specs,
+            observedLocale: foreignAxis.locale.rawValue
+        )
         let en = try Fixture(
             specs: specs,
             executableData: executableData,
             commitSHA: commitSHA,
             drive: { _ in enDrive }
         )
-        let ko = try Fixture(
+        let foreign = try Fixture(
             specs: specs,
             executableData: executableData,
             commitSHA: commitSHA,
-            drive: { _ in koDrive }
+            drive: { _ in foreignDrive }
         )
         defer {
             en.remove()
-            ko.remove()
+            foreign.remove()
         }
 
-        let koAxis = QualificationAxis(
-            variant: .desktop,
-            locale: .koKR,
-            profile: .core,
-            cache: .cold,
-            fixture: .empty
-        )
         let enAxis = QualificationAxis(
             variant: .desktop,
             locale: .enUS,
@@ -6304,14 +6318,19 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             fixture: .empty
         )
         let enResult = await en.runQualification(mutateOpenProject: false)
-        let koResult = await ko.runner.run(arguments: [
+        let foreignResult = await foreign.runner.run(arguments: [
             "LogicProMCP", "--qualify",
-            "--out", ko.attestationURL.path,
+            "--out", foreign.attestationURL.path,
             "--release-version", "1.2.3",
-            "--locale", "ko",
+            "--locale", foreignAxis.locale == .koKR ? "ko" : "en",
+            "--profile", foreignAxis.profile.rawValue,
+            "--cache", foreignAxis.cache.rawValue,
         ])
         try #require(enResult.exitCode == 0, "\(enResult.stdout)\(enResult.stderr)")
-        try #require(koResult.exitCode == 0, "\(koResult.stdout)\(koResult.stderr)")
+        try #require(
+            foreignResult.exitCode == 0,
+            "\(foreignResult.stdout)\(foreignResult.stderr)"
+        )
 
         let decoder = JSONDecoder()
         let encoder = JSONEncoder()
@@ -6320,57 +6339,69 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             ReleaseQualificationAttestation.self,
             from: Data(contentsOf: en.attestationURL)
         )
-        let koAttestation = try decoder.decode(
+        let foreignAttestation = try decoder.decode(
             ReleaseQualificationAttestation.self,
-            from: Data(contentsOf: ko.attestationURL)
+            from: Data(contentsOf: foreign.attestationURL)
         )
-        let foreignIndex = try #require(enAttestation.cases.firstIndex { $0.id == koAxis.key })
-        let koLiveCaseWithSharedArtifacts = try #require(koAttestation.cases.first {
-            $0.id == koAxis.key && $0.status == .passed && $0.verified
+        let existingForeignIndex = enAttestation.cases.firstIndex { $0.id == foreignAxis.key }
+        let foreignLiveCaseWithSharedArtifacts = try #require(foreignAttestation.cases.first {
+            $0.id == foreignAxis.key && $0.status == .passed && $0.verified
         })
         let sharedObservedArtifacts = Set([
             "raw-transcript.json",
             "public-transcript.json",
             "mutation-restore-compensation.json",
         ])
-        let koLiveCase = QualificationCase(
-            id: koLiveCaseWithSharedArtifacts.id,
-            status: koLiveCaseWithSharedArtifacts.status,
-            tool: koLiveCaseWithSharedArtifacts.tool,
-            command: koLiveCaseWithSharedArtifacts.command,
-            traceID: koLiveCaseWithSharedArtifacts.traceID,
-            verified: koLiveCaseWithSharedArtifacts.verified,
-            evidenceFiles: koLiveCaseWithSharedArtifacts.evidenceFiles.filter {
+        let foreignLiveCase = QualificationCase(
+            id: foreignLiveCaseWithSharedArtifacts.id,
+            status: foreignLiveCaseWithSharedArtifacts.status,
+            tool: foreignLiveCaseWithSharedArtifacts.tool,
+            command: foreignLiveCaseWithSharedArtifacts.command,
+            traceID: foreignLiveCaseWithSharedArtifacts.traceID,
+            verified: foreignLiveCaseWithSharedArtifacts.verified,
+            evidenceFiles: foreignLiveCaseWithSharedArtifacts.evidenceFiles.filter {
                 !sharedObservedArtifacts.contains($0)
             },
-            reason: koLiveCaseWithSharedArtifacts.reason,
-            binarySHA256: koLiveCaseWithSharedArtifacts.binarySHA256,
-            axis: koLiveCaseWithSharedArtifacts.axis,
-            operationID: koLiveCaseWithSharedArtifacts.operationID,
-            operationRequestID: koLiveCaseWithSharedArtifacts.operationRequestID,
-            verificationKind: koLiveCaseWithSharedArtifacts.verificationKind,
-            deferral: koLiveCaseWithSharedArtifacts.deferral,
-            readback: koLiveCaseWithSharedArtifacts.readback,
-            restore: koLiveCaseWithSharedArtifacts.restore,
-            availabilityReason: koLiveCaseWithSharedArtifacts.availabilityReason,
-            availabilityObservation: koLiveCaseWithSharedArtifacts.availabilityObservation
+            reason: foreignLiveCaseWithSharedArtifacts.reason,
+            binarySHA256: foreignLiveCaseWithSharedArtifacts.binarySHA256,
+            axis: foreignLiveCaseWithSharedArtifacts.axis,
+            operationID: foreignLiveCaseWithSharedArtifacts.operationID,
+            operationRequestID: foreignLiveCaseWithSharedArtifacts.operationRequestID,
+            verificationKind: foreignLiveCaseWithSharedArtifacts.verificationKind,
+            deferral: foreignLiveCaseWithSharedArtifacts.deferral,
+            readback: foreignLiveCaseWithSharedArtifacts.readback,
+            restore: foreignLiveCaseWithSharedArtifacts.restore,
+            availabilityReason: foreignLiveCaseWithSharedArtifacts.availabilityReason,
+            availabilityObservation: foreignLiveCaseWithSharedArtifacts.availabilityObservation
         )
         #expect(enAttestation.cases.contains {
             $0.id == enAxis.key && $0.status == .passed && $0.verified
         })
-        #expect(enAttestation.cases[foreignIndex].status == .notQualified)
+        if let existingForeignIndex {
+            #expect(enAttestation.cases[existingForeignIndex].status == .notQualified)
+        } else {
+            #expect(!QualificationAxis.requiredAxes(
+                profile: enAttestation.profile,
+                cache: enAttestation.cache,
+                fixture: enAttestation.fixture
+            ).contains(foreignAxis))
+        }
 
         var splicedCases = enAttestation.cases
-        splicedCases[foreignIndex] = koLiveCase
+        if let existingForeignIndex {
+            splicedCases[existingForeignIndex] = foreignLiveCase
+        } else {
+            splicedCases.append(foreignLiveCase)
+        }
         let splicedCaseJSON = try JSONSerialization.jsonObject(with: encoder.encode(splicedCases))
         try Self.mutateJSONObject(at: en.caseManifestURL) { object in
             object["cases"] = splicedCaseJSON
         }
 
-        let replacementCases = [koLiveCase]
+        let replacementCases = [foreignLiveCase]
         for replacementCase in replacementCases {
             for relativePath in replacementCase.evidenceFiles {
-                let source = ko.directory.appendingPathComponent(relativePath)
+                let source = foreign.directory.appendingPathComponent(relativePath)
                 let destination = en.directory.appendingPathComponent(relativePath)
                 try FileManager.default.createDirectory(
                     at: destination.deletingLastPathComponent(),
@@ -6380,18 +6411,20 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             }
         }
 
-        let koManifest = try #require(
-            JSONSerialization.jsonObject(with: Data(contentsOf: ko.manifestURL)) as? [String: Any]
+        let foreignManifest = try #require(
+            JSONSerialization.jsonObject(
+                with: Data(contentsOf: foreign.manifestURL)
+            ) as? [String: Any]
         )
         let replacementIDs = Set(replacementCases.map(\.id))
-        let koEntries = try #require(koManifest["files"] as? [[String: Any]])
+        let foreignEntries = try #require(foreignManifest["files"] as? [[String: Any]])
             .filter { entry in
                 guard let caseID = entry["case_id"] as? String else { return false }
                 guard let path = entry["path"] as? String else { return false }
                 return replacementIDs.contains(caseID)
-                    && koLiveCase.evidenceFiles.contains(path)
+                    && foreignLiveCase.evidenceFiles.contains(path)
             }
-        try #require(!koEntries.isEmpty)
+        try #require(!foreignEntries.isEmpty)
         let caseManifestData = try Data(contentsOf: en.caseManifestURL)
         try Self.mutateJSONObject(at: en.manifestURL) { object in
             var entries = try #require(object["files"] as? [[String: Any]])
@@ -6399,7 +6432,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                 guard let caseID = entry["case_id"] as? String else { return false }
                 return replacementIDs.contains(caseID)
             }
-            entries.append(contentsOf: koEntries)
+            entries.append(contentsOf: foreignEntries)
             entries.sort { ($0["path"] as? String ?? "") < ($1["path"] as? String ?? "") }
             object["files"] = entries
             object["case_manifest_sha256"] = SupportBundleBuilder.sha256(caseManifestData)
