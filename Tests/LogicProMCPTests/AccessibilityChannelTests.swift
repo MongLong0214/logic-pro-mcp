@@ -2159,6 +2159,9 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     #expect(!result.isSuccess)
     #expect(try #require(object["state"] as? String) == "C")
     #expect(try #require(object["error"] as? String) == "ax_write_failed")
+    let hint = try #require(object["hint"] as? String)
+    #expect(hint.contains("whether selection landed is unknown"))
+    #expect(hint.contains("later channel fallback is blocked"))
     #expect(try #require(builder.attributeValue(header, kAXSelectedAttribute as String) as? Bool))
     #expect(try #require(object["write_attempted"] as? Bool))
     #expect(try #require(object["fallback_unsafe"] as? Bool))
@@ -2169,6 +2172,63 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     #expect(try #require(object["human_intervention_requests"] as? Int) == 0)
     #expect(try #require(object["human_dependent_transitions"] as? Int) == 0)
     #expect(HonestContract.isFallbackUnsafeStateC(result.message))
+}
+
+@Test func testAccessibilityChannelTrackSelectPreservesPrewriteFailureSemantics() async throws {
+    final class TrackRowSequence: @unchecked Sendable {
+        private let lock = NSLock()
+        private let list: AXUIElement
+        private let header: AXUIElement
+        private var reads = 0
+
+        init(list: AXUIElement, header: AXUIElement) {
+            self.list = list
+            self.header = header
+        }
+
+        func children(of element: AXUIElement) -> [AXUIElement]? {
+            guard CFEqual(element, list) else { return nil }
+            return lock.withLock {
+                reads += 1
+                return reads == 1 ? [header] : []
+            }
+        }
+    }
+
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(624)
+    let window = builder.element(625)
+    let trackList = builder.element(626)
+    let header = builder.element(627)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setChildren(window, [trackList])
+    builder.setAttribute(trackList, kAXRoleAttribute as String, kAXListRole as String)
+    builder.setAttribute(trackList, kAXIdentifierAttribute as String, "Track Headers")
+    builder.setChildren(trackList, [header])
+    builder.setAttribute(header, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    let rows = TrackRowSequence(list: trackList, header: header)
+    let logicRuntime = builder.makeLogicRuntime(
+        appElement: app,
+        childrenHandler: { rows.children(of: $0) },
+        setAttributeHandler: nil,
+        performActionHandler: nil
+    )
+    let channel = makeAXBackedAccessibilityChannel(builder: builder, app: app, logicRuntime: logicRuntime)
+
+    let result = await channel.execute(operation: "track.select", params: ["index": "0"])
+    let object = decodeAccessibilityJSON(result.message)
+
+    #expect(!result.isSuccess)
+    #expect(try #require(object["state"] as? String) == "C")
+    #expect(try #require(object["error"] as? String) == "ax_write_failed")
+    #expect(object["write_attempted"] == nil)
+    #expect(object["fallback_unsafe"] == nil)
+    #expect(object["safe_to_retry"] == nil)
+    #expect(object["terminal"] == nil)
+    #expect(object["terminal_scope"] == nil)
+    #expect(builder.setCalls.isEmpty)
+    #expect(builder.actionCalls.isEmpty)
 }
 
 @Test func testAccessibilityChannelControlBarToggleDoesNotTrustNoopAXPress() async {

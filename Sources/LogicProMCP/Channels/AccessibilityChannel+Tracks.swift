@@ -2068,7 +2068,9 @@ extension AccessibilityChannel {
             }
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
-                hint: "Failed to select track \(index) via the AX selection ladder",
+                hint: writeAttempted
+                    ? "The AX selection attempt for track \(index) reported failure after a write; whether selection landed is unknown, so later channel fallback is blocked."
+                    : "Failed to select track \(index) via the AX selection ladder",
                 extras: extras
             ))
         }
