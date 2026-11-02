@@ -31,6 +31,17 @@ import Testing
         var selectedIndices: [Int] = []
     }
 
+    private final class AccessBoundaryState: @unchecked Sendable {
+        private let lock = NSLock()
+        private var cancellation = false
+        private var ownership = true
+
+        var cancellationRequested: Bool { lock.withLock { cancellation } }
+        var ownsGate: Bool { lock.withLock { ownership } }
+        func requestCancellation() { lock.withLock { cancellation = true } }
+        func reclaimGate() { lock.withLock { ownership = false } }
+    }
+
     private final class MenuActionCounter: @unchecked Sendable {
         var actions: [String] = []
         var viewButtonReadsAfterShow = 0
@@ -647,6 +658,159 @@ import Testing
         #expect(attempt.rowSelectionWriteAttempted)
         #expect(!attempt.rowSelectionRestored)
         #expect(counter.writes == 2)
+    }
+
+    @Test func publicPartialObserverStopsBeforeForwardSelectionWhenCancellationWasRequested() {
+        let fixture = Self.fixture(rowCount: 3, hollowRows: [1, 2])
+        let counter = SelectionCounter()
+        let access = AccessBoundaryState()
+        access.requestCancellation()
+        fixture.builder.setAttribute(fixture.eventTab, kAXValueAttribute as String, 1)
+        let runtime = fixture.builder.makeLogicRuntime(
+            appElement: fixture.app,
+            setAttributeHandler: { _, _, _ in
+                counter.writes += 1
+                return true
+            },
+            performActionHandler: { _, _ in true }
+        )
+        let context = OperationTraceContext(
+            mutationGateAcquired: true,
+            ownsGate: { access.ownsGate },
+            cancellationRequested: { access.cancellationRequested }
+        )
+
+        let attempt = OperationTraceContext.$current.withValue(context) {
+            EventListReadbackCollector.observeHarvestedNoteTable(runtime: runtime)
+        }
+
+        #expect(throws: EventListReadbackCollectorError.rowSelectionFailed(index: 1)) {
+            _ = try attempt.result.get()
+        }
+        #expect(counter.writes == 0)
+        #expect(!attempt.rowSelectionWriteAttempted)
+        #expect(attempt.rowSelectionRestored)
+    }
+
+    @Test func publicPartialObserverStopsBeforeForwardSelectionWhenGateWasReclaimed() {
+        let fixture = Self.fixture(rowCount: 3, hollowRows: [1, 2])
+        let counter = SelectionCounter()
+        let access = AccessBoundaryState()
+        access.reclaimGate()
+        fixture.builder.setAttribute(fixture.eventTab, kAXValueAttribute as String, 1)
+        let runtime = fixture.builder.makeLogicRuntime(
+            appElement: fixture.app,
+            setAttributeHandler: { _, _, _ in
+                counter.writes += 1
+                return true
+            },
+            performActionHandler: { _, _ in true }
+        )
+        let context = OperationTraceContext(
+            mutationGateAcquired: true,
+            ownsGate: { access.ownsGate }
+        )
+
+        let attempt = OperationTraceContext.$current.withValue(context) {
+            EventListReadbackCollector.observeHarvestedNoteTable(runtime: runtime)
+        }
+
+        #expect(throws: EventListReadbackCollectorError.rowSelectionFailed(index: 1)) {
+            _ = try attempt.result.get()
+        }
+        #expect(counter.writes == 0)
+        #expect(!attempt.rowSelectionWriteAttempted)
+        #expect(attempt.rowSelectionRestored)
+    }
+
+    @Test func publicPartialObserverSkipsLateRestorationAfterGateReclamation() {
+        let fixture = Self.fixture(rowCount: 3, hollowRows: [1, 2])
+        let builder = fixture.builder
+        let counter = SelectionCounter()
+        let access = AccessBoundaryState()
+        builder.setAttribute(fixture.eventTab, kAXValueAttribute as String, 1)
+        let runtime = builder.makeLogicRuntime(
+            appElement: fixture.app,
+            setAttributeHandler: { element, attribute, value in
+                guard element == fixture.table,
+                      attribute == (kAXSelectedRowsAttribute as String) else {
+                    builder.setAttribute(element, attribute, value)
+                    return true
+                }
+                counter.writes += 1
+                builder.setAttribute(element, attribute, value)
+                if counter.writes == 1 {
+                    for field in fixture.rowFields {
+                        builder.setAttribute(field.position, kAXDescriptionAttribute as String, "1 1 1 1")
+                        builder.setAttribute(field.number, kAXValueAttribute as String, 60)
+                        builder.setAttribute(field.value, kAXValueDescriptionAttribute as String, "100")
+                    }
+                    access.reclaimGate()
+                }
+                return true
+            },
+            performActionHandler: { _, _ in true }
+        )
+        let context = OperationTraceContext(
+            mutationGateAcquired: true,
+            ownsGate: { access.ownsGate }
+        )
+
+        let attempt = OperationTraceContext.$current.withValue(context) {
+            EventListReadbackCollector.observeHarvestedNoteTable(runtime: runtime)
+        }
+
+        #expect(throws: EventListReadbackCollectorError.rowSelectionRestorationFailed(primary: nil)) {
+            _ = try attempt.result.get()
+        }
+        #expect(counter.writes == 1)
+        #expect(attempt.rowSelectionWriteAttempted)
+        #expect(!attempt.rowSelectionRestored)
+    }
+
+    @Test func publicPartialObserverRestoresAfterCancellationWhileClaimIsStillOwned() throws {
+        let fixture = Self.fixture(rowCount: 3, hollowRows: [1, 2])
+        let builder = fixture.builder
+        let counter = SelectionCounter()
+        let access = AccessBoundaryState()
+        builder.setAttribute(fixture.eventTab, kAXValueAttribute as String, 1)
+        let runtime = builder.makeLogicRuntime(
+            appElement: fixture.app,
+            setAttributeHandler: { element, attribute, value in
+                guard element == fixture.table,
+                      attribute == (kAXSelectedRowsAttribute as String) else {
+                    builder.setAttribute(element, attribute, value)
+                    return true
+                }
+                counter.writes += 1
+                builder.setAttribute(element, attribute, value)
+                if counter.writes == 1 {
+                    for field in fixture.rowFields {
+                        builder.setAttribute(field.position, kAXDescriptionAttribute as String, "1 1 1 1")
+                        builder.setAttribute(field.number, kAXValueAttribute as String, 60)
+                        builder.setAttribute(field.value, kAXValueDescriptionAttribute as String, "100")
+                    }
+                    access.requestCancellation()
+                }
+                return true
+            },
+            performActionHandler: { _, _ in true }
+        )
+        let context = OperationTraceContext(
+            mutationGateAcquired: true,
+            ownsGate: { access.ownsGate },
+            cancellationRequested: { access.cancellationRequested }
+        )
+
+        let attempt = OperationTraceContext.$current.withValue(context) {
+            EventListReadbackCollector.observeHarvestedNoteTable(runtime: runtime)
+        }
+
+        _ = try attempt.result.get()
+        #expect(counter.writes == 2)
+        #expect(attempt.rowSelectionWriteAttempted)
+        #expect(attempt.rowSelectionRestored)
+        #expect(access.ownsGate)
     }
 
     @Test func unreadableOriginalRowSelectionRefusesBeforeAnyActuation() throws {

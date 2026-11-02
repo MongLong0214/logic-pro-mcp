@@ -814,6 +814,7 @@ enum EventListReadbackCollector {
         if let currentRows, rowSelectionsMatch(currentRows, originalRows) {
             return true
         }
+        guard rowSelectionRestorationWritePermitted() else { return false }
         telemetry.writeAttempted = true
         guard AXHelpers.setAttribute(
             table,
@@ -834,6 +835,22 @@ enum EventListReadbackCollector {
         _ rhs: [AXUIElement]
     ) -> Bool {
         lhs.count == rhs.count && zip(lhs, rhs).allSatisfy { CFEqual($0, $1) }
+    }
+
+    private static func rowSelectionForwardWritePermitted() -> Bool {
+        guard !Task.isCancelled else { return false }
+        guard let context = OperationTraceContext.current else { return true }
+        guard !context.cancellationRequested(),
+              context.deadline.map({ ContinuousClock.now < $0 }) ?? true
+        else { return false }
+        return !context.mutationGateAcquired || context.ownsGate()
+    }
+
+    /// Cancellation still permits the owned inverse, but a reclaimed claim never does. A late
+    /// restoration write could otherwise disturb the successor that acquired the gate.
+    private static func rowSelectionRestorationWritePermitted() -> Bool {
+        guard let context = OperationTraceContext.current else { return true }
+        return !context.mutationGateAcquired || context.ownsGate()
     }
 
     // MARK: - Header and metadata
@@ -1009,6 +1026,9 @@ enum EventListReadbackCollector {
                     total: rows.count,
                     passes: selections
                 )
+            }
+            guard rowSelectionForwardWritePermitted() else {
+                throw EventListReadbackCollectorError.rowSelectionFailed(index: nextIndex)
             }
             telemetry.writeAttempted = true
             guard AXHelpers.setAttribute(
