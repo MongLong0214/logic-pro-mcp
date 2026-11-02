@@ -231,6 +231,43 @@ class AcceptanceContractTests(unittest.TestCase):
         self.assertEqual({counterexample["observation"]
                           for counterexample in row["restore_counterexample"]}, {"post"})
 
+    def test_each_restore_chain_must_use_its_nearest_fresh_handles(self):
+        import copy
+        import engine
+
+        spec = self.spec()
+        cases = []
+
+        stale_plan = copy.deepcopy(spec)
+        row = next(row for row in stale_plan["rows"]
+                   if row["id"] == "approved-output-and-send-are-independently-final")
+        steps = {step["as"]: step for step in row["restore"]}
+        params = steps["restore_send_plan"]["call"]["params"]
+        params["snapshot_id"] = {"$observation": "restore_output_inspection.snapshot_id"}
+        params["policy"]["project_ref"] = {
+            "$observation": "restore_output_inspection.project.project_ref",
+        }
+        params["policy"]["targets"][0]["track_ref"] = {
+            "$observation": (
+                "restore_output_inspection.associations.rows[track_index=1].track_ref"
+            ),
+        }
+        cases.append(("send plan reuses output inspection", stale_plan))
+
+        stale_apply = copy.deepcopy(spec)
+        row = next(row for row in stale_apply["rows"]
+                   if row["id"] == "approved-output-and-send-are-independently-final")
+        steps = {step["as"]: step for step in row["restore"]}
+        params = steps["restore_send_apply"]["call"]["params"]
+        params["plan_id"] = {"$observation": "restore_output_plan.plan_id"}
+        params["digest"] = {"$observation": "restore_output_plan.digest"}
+        cases.append(("send apply reuses output plan", stale_apply))
+
+        for name, mutant in cases:
+            with self.subTest(name=name):
+                problems = engine.validate_spec(mutant)
+                self.assertTrue(any("nearest prior" in problem for problem in problems), problems)
+
     def run_combined_row(self, row, *, fail_inspection=False):
         class Life:
             def __init__(self):

@@ -501,6 +501,14 @@ OBSERVATION_SESSION_FIELDS = {
     }),
 }
 
+# A restore may contain several independent repair chains. A field's source therefore comes from
+# the nearest earlier producer of that exact tool/command kind, not merely any earlier call in the
+# whole restore section. Operation-side flows retain their existing allowlist and order rules.
+RESTORE_SESSION_PRODUCERS = {
+    ("logic_project", "plan_session_repair"): ("logic_project", "inspect_session"),
+    ("logic_project", "apply_session_repair"): ("logic_project", "plan_session_repair"),
+}
+
 
 def observation_session_field_allowed(tool: str, command: str, path: tuple) -> bool:
     return path in OBSERVATION_SESSION_FIELDS.get((tool, command), ())
@@ -585,6 +593,20 @@ def observation_param_problems(row: dict) -> list:
                     noun = "setup call" if target_ref else "prior call"
                     out.append(f"{where}: source {root!r} is not a {noun}; dynamic request "
                                f"parameters come only from a prior call reply")
+                elif section == "restore" and session_field:
+                    producer_kind = RESTORE_SESSION_PRODUCERS.get(
+                        (call["tool"], call["command"]))
+                    nearest = None if producer_kind is None else next((
+                        candidate for candidate in reversed(sequence[:consumer_at])
+                        if is_call(candidate)
+                        and (candidate["call"]["tool"],
+                             candidate["call"]["command"]) == producer_kind), None)
+                    if producer_kind is not None and root != (nearest or {}).get("as"):
+                        expected = None if nearest is None else nearest["as"]
+                        shown_kind = ".".join(producer_kind)
+                        out.append(f"{where}: source {root!r} is not the nearest prior "
+                                   f"{shown_kind} call {expected!r} for restore call "
+                                   f"{step['as']!r}")
     return out
 
 

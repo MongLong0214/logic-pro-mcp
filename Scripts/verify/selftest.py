@@ -175,6 +175,9 @@ MUTANTS = [
     {"id": "session-bindings-unrestricted", "file": "engine.py",
      "old": '    return path in OBSERVATION_SESSION_FIELDS.get((tool, command), ())',
      "new": '    return True'},
+    {"id": "restore-session-chain-provenance-disabled", "file": "engine.py",
+     "old": '                elif section == "restore" and session_field:',
+     "new": '                elif False and section == "restore" and session_field:'},
     {"id": "mixer-saga-setup-opt-in-dropped", "file": "setups.py",
      "old": '        "server_env": {"LOGIC_MCP_ADR004_MUTATION_SAGA": "1"},',
      "new": '        "server_env": {},'},
@@ -1826,6 +1829,27 @@ def check_971_contract(case: dict, where: dict):
         if not any("not bound before" in problem
                    for problem in engine.validate_spec(stale_restore)):
             return f"the {kind} restore apply can reuse the operation-side plan handle"
+
+    cross_chain = copy.deepcopy(spec)
+    stale_row = next(row for row in cross_chain["rows"] if row["id"] == combined["id"])
+    stale_restore = {step["as"]: step for step in stale_row["restore"]}
+    send_plan = stale_restore["restore_send_plan"]["call"]["params"]
+    send_plan["snapshot_id"] = {"$observation": "restore_output_inspection.snapshot_id"}
+    send_plan["policy"]["project_ref"] = {
+        "$observation": "restore_output_inspection.project.project_ref"}
+    send_plan["policy"]["targets"][0]["track_ref"] = {
+        "$observation": "restore_output_inspection.associations.rows[track_index=1].track_ref"}
+    if not any("nearest prior" in problem for problem in engine.validate_spec(cross_chain)):
+        return "the send restore plan can reuse the output chain's inspection handles"
+
+    cross_chain = copy.deepcopy(spec)
+    stale_row = next(row for row in cross_chain["rows"] if row["id"] == combined["id"])
+    stale_restore = {step["as"]: step for step in stale_row["restore"]}
+    send_apply = stale_restore["restore_send_apply"]["call"]["params"]
+    send_apply["plan_id"] = {"$observation": "restore_output_plan.plan_id"}
+    send_apply["digest"] = {"$observation": "restore_output_plan.digest"}
+    if not any("nearest prior" in problem for problem in engine.validate_spec(cross_chain)):
+        return "the send restore apply can reuse the output chain's plan handles"
 
     def run(found, failures=None, nodes=None, frontier=None):
         return {"observation": {"readable": True, "mixer_found": found,
