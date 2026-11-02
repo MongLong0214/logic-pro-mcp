@@ -49,7 +49,29 @@ struct ControlsViewParameterEnumeratorTests {
     }
 
     @Test func changingPhysicalRowListCannotProduceACompleteManifest() {
-        let fixture = makeControlsFixture(rowsChangeAfterFirstRead: true)
+        let fixture = makeControlsFixture(rowListMutation: .dropLast)
+
+        #expect(ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: fixture.runtime
+        ) == nil)
+        #expect(fixture.rowListReadCounter?.current == 2)
+    }
+
+    @Test func replacingAPhysicalRowDuringEnumerationCannotProduceACompleteManifest() {
+        let fixture = makeControlsFixture(rowListMutation: .replace(index: 7))
+
+        #expect(ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: fixture.runtime
+        ) == nil)
+        #expect(fixture.rowListReadCounter?.current == 2)
+    }
+
+    @Test func reorderingPhysicalRowsDuringEnumerationCannotProduceACompleteManifest() {
+        let fixture = makeControlsFixture(rowListMutation: .swap(6, 7))
 
         #expect(ControlsViewParameterEnumerator.enumerate(
             in: fixture.window,
@@ -622,6 +644,12 @@ private enum DepthBoundaryChildrenFixture {
     case boundaryReadError(AXError)
 }
 
+private enum RowListMutation: Sendable {
+    case dropLast
+    case replace(index: Int)
+    case swap(Int, Int)
+}
+
 private final class LockedDepthBoundaryReadCounter: @unchecked Sendable {
     private let lock = NSLock()
     private var value = 0
@@ -696,7 +724,7 @@ private func makeControlsFixture(
     leafChildrenReadError: AXError? = nil,
     unreadableDirectHeaderRole: Bool = false,
     windowIdentifierReadError: AXError? = nil,
-    rowsChangeAfterFirstRead: Bool = false
+    rowListMutation: RowListMutation? = nil
 ) -> ControlsFixture {
     let builder = FakeAXRuntimeBuilder()
     let window = builder.element(90_000)
@@ -893,7 +921,9 @@ private func makeControlsFixture(
     let headerDecorationID = builder.elementID(headerDecoration)
     let depthBoundaryFailure = depthBoundaryReadFailure
     let observedTableChildren = tableChildren
-    let rowListReadCounter = rowsChangeAfterFirstRead ? LockedRowListReadCounter() : nil
+    let replacementRow = builder.element(92_000)
+    builder.setRole(replacementRow, kAXRowRole as String)
+    let rowListReadCounter = rowListMutation == nil ? nil : LockedRowListReadCounter()
     let runtime: AXHelpers.Runtime
     if !unreadableLabelElementIDs.isEmpty
         || unreadableWindowTitle
@@ -904,16 +934,24 @@ private func makeControlsFixture(
         || leafChildrenReadError != nil
         || unreadableDirectHeaderRole
         || windowIdentifierReadError != nil
-        || rowsChangeAfterFirstRead {
+        || rowListMutation != nil {
         runtime = builder.makeAXRuntime(
             attributeValueResultHandler: { element, attribute in
                 let elementID = builder.elementID(element)
                 if attribute == (kAXRowsAttribute as String), elementID == tableID,
                    let rowListReadCounter {
                     let read = rowListReadCounter.next()
-                    let observedRows = read == 1
-                        ? observedTableChildren
-                        : Array(observedTableChildren.dropLast())
+                    var observedRows = observedTableChildren
+                    if read > 1, let rowListMutation {
+                        switch rowListMutation {
+                        case .dropLast:
+                            observedRows.removeLast()
+                        case .replace(let index):
+                            observedRows[index] = replacementRow
+                        case .swap(let first, let second):
+                            observedRows.swapAt(first, second)
+                        }
+                    }
                     return .success(observedRows as NSArray)
                 }
                 let unreadableLabel = attribute == (kAXValueAttribute as String)
