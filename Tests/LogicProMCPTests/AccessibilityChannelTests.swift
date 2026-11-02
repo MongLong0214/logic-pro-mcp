@@ -4380,7 +4380,12 @@ private final class LockedFlag: @unchecked Sendable {
 
     let selectFailure = await failingChannel.execute(operation: "track.select", params: ["index": "0"])
     #expect(!selectFailure.isSuccess)
-    #expect(selectFailure.message.contains("Failed to select track 0"))
+    #expect(selectFailure.message.contains("\"error\":\"ax_write_failed\""))
+    #expect(selectFailure.message.contains("\"write_attempted\":true"))
+    #expect(selectFailure.message.contains("\"fallback_unsafe\":true"))
+    #expect(selectFailure.message.contains("\"safe_to_retry\":false"))
+    #expect(selectFailure.message.contains("\"terminal\":true"))
+    #expect(selectFailure.message.contains("\"human_intervention_required\":false"))
 
     let soloButton = builder.element(234)
     builder.setChildren(header, [soloButton])
