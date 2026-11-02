@@ -189,6 +189,18 @@ struct Issue955ConfirmedCompressorSagaTests {
         let result = try await run(f, params: params, expired: fault == "expired")
         #expect(result["state"] as? String == "C")
         #expect(await f.channel.snapshot().2.isEmpty)
+        if fault == "missing" || fault == "wrong" {
+            #expect(try #require(result["terminal"] as? Bool))
+            #expect(result["terminal_scope"] as? String == "mcp_request_only")
+            #expect(try #require(result["safe_to_retry"] as? Bool))
+            #expect(!(try #require(result["human_intervention_required"] as? Bool)))
+            #expect(result["human_intervention_requests"] as? Int == 0)
+            #expect(result["human_dependent_transitions"] as? Int == 0)
+            let hint = try #require(result["hint"] as? String)
+            #expect(hint.contains("confirmed_plan_hash"))
+            #expect(hint.contains("saga_preflight"))
+            #expect(!hint.contains("Confirm this"))
+        }
         if fault == "expired" { try await waitForVerifiedIdle() }
     }
 

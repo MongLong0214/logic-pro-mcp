@@ -432,6 +432,15 @@ struct SagaSurfaceTests {
                 #expect(object["state"] as? String == "C")
                 #expect(object["error"] as? String == "invalid_params")
                 #expect(object["journal_scope"] as? String == "session")
+                let terminal = try #require(object["terminal"] as? Bool)
+                #expect(terminal)
+                #expect(object["terminal_scope"] as? String == "mcp_request_only")
+                let humanInterventionRequired = try #require(
+                    object["human_intervention_required"] as? Bool
+                )
+                #expect(!humanInterventionRequired)
+                #expect(object["human_intervention_requests"] as? Int == 0)
+                #expect(object["human_dependent_transitions"] as? Int == 0)
                 #expect(await channel.writeCount() == 0)
             }
         }
@@ -450,6 +459,15 @@ struct SagaSurfaceTests {
             #expect(result.isError!)
             #expect(object["state"] as? String == "C")
             #expect(object["error"] as? String == "invalid_params")
+            let terminal = try #require(object["terminal"] as? Bool)
+            #expect(terminal)
+            #expect(object["terminal_scope"] as? String == "mcp_request_only")
+            let humanInterventionRequired = try #require(
+                object["human_intervention_required"] as? Bool
+            )
+            #expect(!humanInterventionRequired)
+            #expect(object["human_intervention_requests"] as? Int == 0)
+            #expect(object["human_dependent_transitions"] as? Int == 0)
             #expect(await channel.writeCount() == 0)
         }
     }
