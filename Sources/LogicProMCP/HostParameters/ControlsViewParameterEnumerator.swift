@@ -71,6 +71,26 @@ enum ControlsViewParameterEnumerator {
         }
     }
 
+    /// The exact JSON-safe scalar observed from a control's AXValue. This is
+    /// dynamic read evidence only: it is deliberately excluded from the UI
+    /// signature and manifest fingerprint and carries no unit or write claim.
+    enum ObservedRawValue: Equatable, Sendable {
+        case boolean(Bool)
+        case number(Double)
+        case string(String)
+
+        var jsonValue: Any {
+            switch self {
+            case .boolean(let value):
+                return value
+            case .number(let value):
+                return value
+            case .string(let value):
+                return value
+            }
+        }
+    }
+
     struct RowObservation: Equatable, Sendable {
         let rowIndex: Int
         let observedLabel: String?
@@ -78,6 +98,7 @@ enum ControlsViewParameterEnumerator {
         /// on rows refused for their label. This makes the read observation
         /// auditable without pretending an unaddressable row is writable.
         let controlRoles: [String]
+        let observedRawValue: ObservedRawValue?
         let valueDescription: String?
         let valueIsSettable: Bool?
         let classification: RowClassification
@@ -191,6 +212,7 @@ enum ControlsViewParameterEnumerator {
                 rowIndex: rowIndex,
                 observedLabel: label,
                 controlRoles: observedRoleStrings,
+                observedRawValue: controlForObservation?.observedRawValue,
                 valueDescription: controlForObservation?.valueDescription,
                 valueIsSettable: controlForObservation?.valueIsSettable,
                 classification: classification
@@ -546,11 +568,20 @@ enum ControlsViewParameterEnumerator {
             guard let role = GenericParameterControlRole(rawValue: descendant.role) else {
                 return nil
             }
+            let observedRawValue = observedRawValue(
+                on: descendant.element,
+                runtime: runtime
+            )
+            let description = valueDescription(
+                on: descendant.element,
+                runtime: runtime
+            )
             return ControlObservation(
                 element: descendant.element,
                 role: role,
-                valueIsReadable: valueIsReadable(on: descendant.element, runtime: runtime),
-                valueDescription: valueDescription(on: descendant.element, runtime: runtime),
+                valueIsReadable: observedRawValue != nil || description != nil,
+                observedRawValue: observedRawValue,
+                valueDescription: description,
                 valueIsSettable: AXHelpers.isAttributeSettable(
                     descendant.element,
                     kAXValueAttribute as String,
@@ -560,21 +591,35 @@ enum ControlsViewParameterEnumerator {
         }
     }
 
-    private static func valueIsReadable(
+    private static func observedRawValue(
         on control: AXUIElement,
         runtime: AXHelpers.Runtime
-    ) -> Bool {
+    ) -> ObservedRawValue? {
         let valueRead: Swift.Result<AnyObject?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
             control,
             kAXValueAttribute as String,
             runtime: runtime
         )
         switch valueRead {
-        case .success(.some):
-            return true
+        case .success(.some(let raw)):
+            return observedRawValue(raw)
         case .success(.none), .failure:
-            return valueDescription(on: control, runtime: runtime) != nil
+            return nil
         }
+    }
+
+    private static func observedRawValue(_ raw: AnyObject) -> ObservedRawValue? {
+        if let value = raw as? String {
+            return .string(value)
+        }
+        if CFGetTypeID(raw) == CFBooleanGetTypeID(), let value = raw as? Bool {
+            return .boolean(value)
+        }
+        if let value = raw as? NSNumber {
+            let number = value.doubleValue
+            return number.isFinite ? .number(number) : nil
+        }
+        return nil
     }
 
     private static func valueDescription(
@@ -846,6 +891,7 @@ enum ControlsViewParameterEnumerator {
         let element: AXUIElement
         let role: GenericParameterControlRole
         let valueIsReadable: Bool
+        let observedRawValue: ObservedRawValue?
         let valueDescription: String?
         let valueIsSettable: Bool?
     }

@@ -5,6 +5,63 @@ import Testing
 
 @Suite("ADR-018 Controls-view parameter enumerator")
 struct ControlsViewParameterEnumeratorTests {
+    @Test func rowObservationsPreserveExactSupportedAXValueScalars() throws {
+        let stringFixture = makeControlsFixture()
+        let booleanFixture = makeControlsFixture()
+        booleanFixture.builder.setAttribute(
+            booleanFixture.builder.element(90_102),
+            kAXValueAttribute as String,
+            true
+        )
+        let numberFixture = makeControlsFixture()
+        numberFixture.builder.setAttribute(
+            numberFixture.builder.element(90_122),
+            kAXValueAttribute as String,
+            5_000.0
+        )
+
+        let stringResult = try #require(ControlsViewParameterEnumerator.enumerate(
+            in: stringFixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: stringFixture.runtime
+        ))
+        let booleanResult = try #require(ControlsViewParameterEnumerator.enumerate(
+            in: booleanFixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: booleanFixture.runtime
+        ))
+        let numberResult = try #require(ControlsViewParameterEnumerator.enumerate(
+            in: numberFixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: numberFixture.runtime
+        ))
+
+        #expect(stringResult.rowObservations[7].observedRawValue == .string("50.0 %"))
+        #expect(booleanResult.rowObservations[0].observedRawValue == .boolean(true))
+        #expect(numberResult.rowObservations[1].observedRawValue == .number(5_000.0))
+    }
+
+    @Test func unsupportedAXValueShapeCannotClaimReadableScalarEvidence() throws {
+        let fixture = makeControlsFixture()
+        fixture.builder.setAttribute(
+            fixture.builder.element(90_102),
+            kAXValueAttribute as String,
+            ["not", "a", "scalar"]
+        )
+
+        let result = try #require(ControlsViewParameterEnumerator.enumerate(
+            in: fixture.window,
+            buildFingerprint: "Logic-12.x",
+            runtime: fixture.runtime
+        ))
+
+        #expect(result.rowObservations[0].observedRawValue == nil)
+        #expect(result.rowObservations[0].classification == .parameter(
+            controlRole: .checkBox,
+            valueIsReadable: false
+        ))
+    }
+
     @Test func duplicatePhysicalEmptyCellsAcrossRowsCannotMintSeparateObservations() {
         let fixture = makeControlsFixture(
             duplicateCellSourceIndex: 6,

@@ -935,6 +935,13 @@ enum SemanticOracleTable {
             guard let value else { return false }
             return value is NSNull || JSONInspector.isBoolean(value)
         }
+        func nullableObservedScalar(_ value: Any?) -> Bool {
+            guard let value else { return false }
+            if value is NSNull || value is String || JSONInspector.isBoolean(value) {
+                return true
+            }
+            return JSONInspector.number(of: value)?.isFinite == true
+        }
         func parameterName(from label: String) -> String {
             let trimmed = label.trimmingCharacters(in: .whitespacesAndNewlines)
             let withoutColon = trimmed.hasSuffix(":") ? String(trimmed.dropLast()) : trimmed
@@ -1024,6 +1031,8 @@ enum SemanticOracleTable {
                   row.keys.contains("observed_label"), nullableString(row["observed_label"]),
                   let controlRoles = row["control_roles"] as? [String],
                   controlRoles.allSatisfy(allowedRoles.contains),
+                  row.keys.contains("observed_raw_value"),
+                  nullableObservedScalar(row["observed_raw_value"]),
                   row.keys.contains("value_description"), nullableString(row["value_description"]),
                   row.keys.contains("value_is_settable"), nullableBoolean(row["value_is_settable"]),
                   let classification = nonEmptyString(row["classification"])
@@ -1037,6 +1046,17 @@ enum SemanticOracleTable {
                 guard allowedRoles.contains(role), controlRoles == [role],
                       let label = nonEmptyString(row["observed_label"]),
                       parameterRows[position] == nil else { return false }
+                if readable {
+                    guard !(row["observed_raw_value"] is NSNull)
+                        || nonEmptyString(row["value_description"]) != nil else {
+                        return false
+                    }
+                } else {
+                    guard row["observed_raw_value"] is NSNull,
+                          row["value_description"] is NSNull else {
+                        return false
+                    }
+                }
                 parameterRows[position] = (role, readable, label)
                 continue
             }

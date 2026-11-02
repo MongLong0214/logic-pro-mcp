@@ -1170,6 +1170,7 @@ struct SemanticOracleMutationTests {
             "row_index": 0,
             "observed_label": "Mode",
             "control_roles": ["AXRadioButton", "AXRadioButton"],
+            "observed_raw_value": NSNull(),
             "value_description": NSNull(),
             "value_is_settable": NSNull(),
             "classification": "refused_ambiguous_control_AXRadioButton,AXRadioButton",
