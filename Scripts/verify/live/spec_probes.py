@@ -304,10 +304,13 @@ def mixer_visible_of(run: dict) -> dict:
     if not walk.get("readable") or not isinstance(tree, dict) or not isinstance(tree.get("nodes"), list):
         raise Unreadable("mixer_visible: absence requires a complete walk")
     failures = tree.get("children_read_failures")
-    if not isinstance(failures, list):
+    frontier = tree.get("frontier_truncations")
+    if not isinstance(failures, list) or not isinstance(frontier, list):
         raise Unreadable("mixer_visible: absence requires a complete walk")
     if failures:
         raise Unreadable("mixer_visible: absence has a child-read failure")
+    if frontier:
+        raise Unreadable("mixer_visible: absence has an unvisited depth cutoff")
     if any(not isinstance(node, dict) or node.get("read_errors")
            for node in tree["nodes"]):
         raise Unreadable("mixer_visible: absence has a node-read failure")

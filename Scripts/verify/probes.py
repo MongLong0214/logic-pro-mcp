@@ -88,7 +88,8 @@ PROBES = {
         "returns": '{"visible": <bool>, "walk_sha256": <str>}',
         "reads": "the verifier's own routing_slots_ax walk. A found Mixer container is visible. "
                  "Absence is accepted only after a readable complete walk with zero child-read "
-                 "failures; an incomplete walk is UNREADABLE, never visible:false. The reading "
+                 "failures, zero node-read failures, and an explicitly empty depth-cutoff "
+                 "frontier; an incomplete walk is UNREADABLE, never visible:false. The reading "
                  "cites the whole walk by walk_sha256.",
     },
     "routing_send_assign": {

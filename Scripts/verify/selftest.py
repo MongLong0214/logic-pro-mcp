@@ -155,6 +155,12 @@ MUTANTS = [
     {"id": "mixer-hidden-child-failure-ignored", "file": "live/spec_probes.py",
      "old": '    if failures:\n        raise Unreadable("mixer_visible: absence has a child-read failure")',
      "new": '    if False and failures:\n        raise Unreadable("mixer_visible: absence has a child-read failure")'},
+    {"id": "mixer-hidden-cutoff-frontier-ignored", "file": "live/spec_probes.py",
+     "old": '    if frontier:\n        raise Unreadable("mixer_visible: absence has an unvisited depth cutoff")',
+     "new": '    if False and frontier:\n        raise Unreadable("mixer_visible: absence has an unvisited depth cutoff")'},
+    {"id": "mixer-hidden-cutoff-frontier-optional", "file": "live/spec_probes.py",
+     "old": '    frontier = tree.get("frontier_truncations")',
+     "new": '    frontier = tree.get("frontier_truncations", [])'},
     {"id": "mixer-hidden-node-failure-ignored", "file": "live/spec_probes.py",
      "old": '    if any(not isinstance(node, dict) or node.get("read_errors")\n'
             '           for node in tree["nodes"]):',
@@ -1769,17 +1775,27 @@ def check_971_contract(case: dict, where: dict):
                for problem in engine.validate_spec(mutant)):
         return "an observation can steer presentation.mixer_visible"
 
-    def run(found, failures=None, nodes=None):
+    def run(found, failures=None, nodes=None, frontier=None):
         return {"observation": {"readable": True, "mixer_found": found,
                 "raw": {"walk": {"readable": True, "value": {
                     "nodes": list(nodes or []),
                     "children_read_failures": list(failures or []),
+                    "frontier_truncations": list(frontier or []),
                 }}}}}
 
     if spec_probes.mixer_visible_of(run(False)) != {"visible": False}:
         return "a complete hidden-Mixer walk is not false"
+    missing_frontier = run(False)
+    del missing_frontier["observation"]["raw"]["walk"]["value"]["frontier_truncations"]
+    try:
+        spec_probes.mixer_visible_of(missing_frontier)
+    except spec_probes.Unreadable:
+        pass
+    else:
+        return "a hidden-Mixer walk without frontier-exhaustion evidence was accepted as false"
     for name, reading in (
         ("child", run(False, failures=[{"path": [0], "status": -25204}])),
+        ("depth-cutoff", run(False, frontier=[{"path": [0] * 21, "children": 1}])),
         ("node", run(False, nodes=[{"read_errors": ["AXHelp:-25204"]}])),
     ):
         try:

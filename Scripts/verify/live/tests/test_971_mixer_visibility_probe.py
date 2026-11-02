@@ -11,10 +11,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(HERE)))
 
 import runner  # noqa: E402
 import evidence_doc  # noqa: E402
-from live import spec_probes  # noqa: E402
+from live import probes as live_probes, spec_probes  # noqa: E402
 
 
-def routing_run(found, *, walk_readable=True, child_failures=None, nodes=None):
+def routing_run(found, *, walk_readable=True, child_failures=None, nodes=None,
+                frontier_truncations=None):
     return {
         "observation": {
             "readable": True,
@@ -25,6 +26,7 @@ def routing_run(found, *, walk_readable=True, child_failures=None, nodes=None):
                     "value": {
                         "nodes": list(nodes or []),
                         "children_read_failures": list(child_failures or []),
+                        "frontier_truncations": list(frontier_truncations or []),
                     },
                 }
             },
@@ -57,9 +59,23 @@ class MixerVisibilityProbeTests(unittest.TestCase):
         with self.assertRaisesRegex(spec_probes.Unreadable, "complete walk"):
             spec_probes.mixer_visible_of(routing_run(False, walk_readable=False))
 
+    def test_hidden_requires_an_explicitly_exhausted_frontier(self):
+        run = routing_run(False)
+        del run["observation"]["raw"]["walk"]["value"]["frontier_truncations"]
+        with self.assertRaisesRegex(spec_probes.Unreadable, "complete walk"):
+            spec_probes.mixer_visible_of(run)
+
     def test_hidden_is_unreadable_when_a_node_attribute_failed(self):
         run = routing_run(False, nodes=[{"read_errors": ["AXHelp:-25204"]}])
         with self.assertRaisesRegex(spec_probes.Unreadable, "node-read failure"):
+            spec_probes.mixer_visible_of(run)
+
+    def test_below_cutoff_mixer_is_unreadable_instead_of_hidden(self):
+        run = routing_run(False, frontier_truncations=[{
+            "path": [0] + [0] * 20,
+            "children": 1,
+        }])
+        with self.assertRaisesRegex(spec_probes.Unreadable, "depth cutoff"):
             spec_probes.mixer_visible_of(run)
 
     def test_live_probe_keeps_the_complete_raw_walk(self):
@@ -73,6 +89,45 @@ class MixerVisibilityProbeTests(unittest.TestCase):
             spec_probes.live_probes.run = saved
         self.assertEqual(got, {"visible": False, "walk_sha256": "walk-sha"})
         self.assertEqual(len(sidecars.kept), 1)
+
+
+class AXWalkExhaustionTests(unittest.TestCase):
+    def test_cutoff_node_with_a_child_records_frontier_truncation(self):
+        class FakeAX:
+            def __init__(self, _pid):
+                self.app = "app"
+                self.timeout_status = 0
+
+            def elements(self, element, name):
+                if element == "app" and name == "AXWindows":
+                    return {"status": 0, "elements": ["window"]}
+                children = {
+                    "window": ["level-1"],
+                    "level-1": ["cutoff"],
+                    "cutoff": ["mixer-below-cutoff"],
+                }.get(element, [])
+                return {"status": 0, "elements": children}
+
+            def value(self, element, name):
+                value = "window" if name == "AXTitle" else f"{element}-{name}"
+                return {"status": 0, "value": value}
+
+            def close(self):
+                pass
+
+        saved = live_probes.cfbridge.AX
+        live_probes.cfbridge.AX = FakeAX
+        try:
+            walked = live_probes.ax_walk(123, max_depth=2)
+        finally:
+            live_probes.cfbridge.AX = saved
+        self.assertTrue(walked["readable"])
+        self.assertEqual(walked["value"]["frontier_truncations"], [{
+            "path": [0, 0, 0],
+            "children": 1,
+        }])
+        self.assertNotIn("mixer-below-cutoff", [
+            node["AXRole"] for node in walked["value"]["nodes"]])
 
 
 class SessionBindingTests(unittest.TestCase):
