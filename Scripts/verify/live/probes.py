@@ -67,14 +67,16 @@ def ax_walk(pid, max_depth, window_title=None, valued=lambda node: False,
     Each node keeps its path (window index, then child indices), depth and the text attributes
     asked for. A read that failed with a status that is not an answer (-25205/-25212 are answers)
     is kept in the node's `read_errors`; a children read that failed is listed in
-    `children_read_failures`: an unread subtree is unknown, not empty. `valued(node)` selects the
-    nodes whose AXValue is read too (`value`, or `value_error`).
+    `children_read_failures`: an unread subtree is unknown, not empty. At `max_depth`, one final
+    AXChildren read records any non-empty `frontier_truncations`; an empty list proves the bounded
+    walk exhausted its frontier. `valued(node)` selects the nodes whose AXValue is read too
+    (`value`, or `value_error`).
     """
     try:
         ax = cfbridge.AX(pid)
     except Exception as exc:  # noqa: BLE001
         return obs.unreadable(f"AX session: {exc!r}", pid=pid)
-    nodes, failures, windows_seen = [], [], []
+    nodes, failures, frontier, windows_seen = [], [], [], []
     try:
         listed = ax.elements(ax.app, "AXWindows") if ax.app else {"status": None, "elements": None}
         if listed["elements"] is None:
@@ -95,12 +97,14 @@ def ax_walk(pid, max_depth, window_title=None, valued=lambda node: False,
                     node["value"] = None
                     node["value_error"] = read["status"]
             nodes.append(node)
-            if depth >= max_depth:
-                return
             kids = ax.elements(element, "AXChildren")
             if kids["elements"] is None:
                 if kids["status"] not in cfbridge.AX_ANSWERS:
                     failures.append({"path": path, "status": kids["status"]})
+                return
+            if depth >= max_depth:
+                if kids["elements"]:
+                    frontier.append({"path": path, "children": len(kids["elements"])})
                 return
             for index, kid in enumerate(kids["elements"]):
                 walk(kid, depth + 1, path + [index])
@@ -111,7 +115,8 @@ def ax_walk(pid, max_depth, window_title=None, valued=lambda node: False,
             if window_title is not None and title != window_title:
                 continue
             walk(window, 0, [index])
-        return obs.readable({"nodes": nodes, "children_read_failures": failures},
+        return obs.readable({"nodes": nodes, "children_read_failures": failures,
+                            "frontier_truncations": frontier},
                             pid=pid, windows=windows_seen, window_title=window_title,
                             max_depth=max_depth, messaging_timeout_status=ax.timeout_status)
     finally:

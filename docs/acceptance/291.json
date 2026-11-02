@@ -55,6 +55,9 @@
     {"path": "restored.inputs", "op": "eq", "ref": {"obs": "pre.inputs"}},
     {"path": "restored.outputs", "op": "eq", "ref": {"obs": "pre.outputs"}}
    ],
+   "restore_counterexample": [
+    {"observation": "post", "replaces": "restored", "must_fail": [4]}
+   ],
    "independence": ["as_found", "pre", "post"]
   },
   {
@@ -94,6 +97,9 @@
     {"path": "restored.send_counts", "op": "eq", "ref": {"obs": "as_found.send_counts"}},
     {"path": "restored.inputs", "op": "eq", "ref": {"obs": "as_found.inputs"}},
     {"path": "restored.outputs", "op": "eq", "ref": {"obs": "as_found.outputs"}}
+   ],
+   "restore_counterexample": [
+    {"observation": "post", "replaces": "restored", "must_fail": [0, 1, 2]}
    ],
    "independence": ["as_found", "mutate", "pre", "post"]
   }

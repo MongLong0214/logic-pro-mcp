@@ -51,6 +51,9 @@
    "restore_expect": [
     {"path": "restored.armed", "op": "eq", "ref": {"obs": "pre.armed"}}
    ],
+   "restore_counterexample": [
+    {"observation": "post", "replaces": "restored", "must_fail": [0]}
+   ],
    "independence": ["pre", "post"]
   },
   {
@@ -80,6 +83,9 @@
    "restore_expect": [
     {"path": "restored.armed", "op": "eq", "ref": {"obs": "as_found.armed"}}
    ],
+   "restore_counterexample": [
+    {"observation": "post", "replaces": "restored", "must_fail": [0]}
+   ],
    "independence": ["as_found", "pre", "post"]
   },
   {
@@ -106,6 +112,7 @@
    ],
    "restore": [],
    "restore_expect": [],
+   "restore_counterexample": [],
    "independence": ["as_found", "pre", "post"]
   },
   {
@@ -132,6 +139,9 @@
    ],
    "restore_expect": [
     {"path": "restored.armed", "op": "eq", "ref": {"obs": "pre.armed"}}
+   ],
+   "restore_counterexample": [
+    {"observation": "post", "replaces": "restored", "must_fail": [0]}
    ],
    "independence": ["pre", "post"]
   },
@@ -166,6 +176,7 @@
    ],
    "restore": [],
    "restore_expect": [],
+   "restore_counterexample": [],
    "independence": ["control_post", "off_home_row", "pre", "pre_row", "post", "post_row"]
   }
  ]

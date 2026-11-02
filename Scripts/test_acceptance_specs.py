@@ -229,6 +229,18 @@ class Guard(unittest.TestCase):
         spec["rows"][0]["restore"][0]["call"]["params"]["title"] = label.lower()
         self._refused(self._tree({PILOT: spec}), "restore[0].call.params.title", "as a literal")
 
+    def test_exact_mixer_view_protocol_enum_is_not_treated_as_a_ui_label(self):
+        spec = _pilot()
+        spec["rows"][0]["restore"][0]["call"] = {
+            "tool": "logic_navigate", "command": "toggle_view",
+            "params": {"view": "mixer", "visible": True},
+        }
+        code, out = self._run(self._tree({PILOT: spec}))
+        self.assertEqual(code, 0, out[-1500:])
+
+        spec["rows"][0]["restore"][0]["call"]["command"] = "another_command"
+        self._refused(self._tree({PILOT: spec}), "restore[0].call.params.view", "as a literal")
+
     def test_a_label_literal_as_an_expected_value_is_refused(self):
         spec = _pilot()
         label = _a_localised_canonical()

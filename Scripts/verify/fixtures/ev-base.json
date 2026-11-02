@@ -119,6 +119,15 @@
       "value": false
      }
     ],
+    "restore_counterexample": [
+     {
+      "observation": "post",
+      "replaces": "restored",
+      "must_fail": [
+       0
+      ]
+     }
+    ],
     "independence": [
      "pre",
      "post"
@@ -126,7 +135,7 @@
    }
   ]
  },
- "spec_sha256": "6ea172caba7614e1d11cd23de1b9a7e06fd504483c9f6a0c458247599644f7bc",
+ "spec_sha256": "2d7b54114c341460dbd2b1214e1e17269a9572b7bf3765c29112fe6279386d2a",
  "binary": {
   "binary_path": null,
   "binary_sha256": null,
@@ -361,7 +370,10 @@
     "restore": [
      "PASS"
     ],
-    "reasons": []
+    "reasons": [],
+    "restore_counterexample": [
+     "FAIL"
+    ]
    }
   },
   "en": {
@@ -378,7 +390,10 @@
     "restore": [
      "PASS"
     ],
-    "reasons": []
+    "reasons": [],
+    "restore_counterexample": [
+     "FAIL"
+    ]
    }
   }
  },
