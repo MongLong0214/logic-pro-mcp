@@ -882,7 +882,10 @@ actor LogicProServer {
         // Retained snapshot lookup never reads Logic or generates a replacement.
         let freshPopulationRead = tool == "logic_project" && command == "inspect_session"
             && commandParams["snapshot_id"] == nil
+        let selectedRegionEventRead = tool == "logic_midi"
+            && command == "read_selected_region_events"
         let ownedObservationRead = freshPopulationRead
+            || selectedRegionEventRead
             || (tool == "logic_mixer" && (command == "get_input_bus_verified" || command == "get_send_bypass_verified"))
         if ownedObservationRead && Task.isCancelled {
             return toolStateCResult(.cancelled,

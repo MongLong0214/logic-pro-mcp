@@ -4,6 +4,13 @@ import Testing
 @testable import LogicProMCP
 
 @Suite struct Issue302SelectedRegionEventListReaderTests {
+    private actor EntryProbe {
+        private var entered = false
+
+        func markEntered() { entered = true }
+        func hasEntered() -> Bool { entered }
+    }
+
     private static let region = SelectedRegionEventListReader.RegionIdentity(
         name: "Selected MIDI",
         trackIndex: 3,
@@ -278,6 +285,35 @@ import Testing
 
         #expect(observed.scopeComplete)
         #expect(observed.selected == [Self.region])
+    }
+
+    @Test func selectedRegionHarvestCannotEnterWhileAnotherMutationOwnsLogicAccess() async throws {
+        let gate = LogicMutationGate()
+        let predecessor = try #require(gate.tryAcquire(operation: "logic_tracks.rename"))
+        defer { gate.release(predecessor) }
+        let entry = EntryProbe()
+
+        let result = await LogicProServer.runWithDeadline(
+            tool: "logic_midi",
+            command: "read_selected_region_events",
+            mutationGate: gate
+        ) {
+            await entry.markEntered()
+            return toolTextResult("harvest entered")
+        }
+
+        #expect(!(await entry.hasEntered()))
+        let body = try #require(sharedJSONObject(sharedToolText(result)))
+        #expect(body["state"] as? String == "C")
+        #expect(body["error"] as? String == "mutating_operation_in_progress")
+        #expect(!(try #require(body["write_attempted"] as? Bool)))
+        #expect(try #require(body["safe_to_retry"] as? Bool))
+        #expect(gate.stillOwns(predecessor))
+        #expect(gate.currentOperation() == "logic_tracks.rename")
+        #expect(!LogicProServer.isMutatingCommand(
+            tool: "logic_midi",
+            command: "read_selected_region_events"
+        ))
     }
 
     @Test func logicMIDIPublishesTheReachablePartialReadContract() async throws {

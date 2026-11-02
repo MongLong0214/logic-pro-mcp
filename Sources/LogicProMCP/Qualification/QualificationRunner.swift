@@ -1190,18 +1190,15 @@ package struct QualificationRunner: Sendable {
                 }
             }
         }
-        for axis in requiredAxes where axis != attestedAxis {
-            if attestation.cases.contains(where: {
-                $0.id == axis.key
-                    && $0.axis == axis
-                    && $0.status == .passed
-                    && $0.verified
-                    && $0.verificationKind == .independentReadback
-                    && $0.deferral == nil
-                    && $0.readback?.verified == true
-            }) {
-                rejections.append(.foreignLiveAxisInSingleRun(key: axis.key))
-            }
+        for qualificationCase in attestation.cases
+        where qualificationCase.axis != attestedAxis
+            && qualificationCase.id == qualificationCase.axis.key
+            && qualificationCase.status == .passed
+            && qualificationCase.verified
+            && qualificationCase.verificationKind == .independentReadback
+            && qualificationCase.deferral == nil
+            && qualificationCase.readback?.verified == true {
+            rejections.append(.foreignLiveAxisInSingleRun(key: qualificationCase.axis.key))
         }
         if let operationCatalogIssue {
             rejections.append(.evidenceBindingMismatch(detail: operationCatalogIssue))
