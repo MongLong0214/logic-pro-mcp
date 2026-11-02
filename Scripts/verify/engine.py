@@ -489,19 +489,40 @@ def contains_observation_param(value) -> bool:
 # product reply.
 OBSERVATION_TARGET_PARAMS = frozenset({"target_ref"})
 
+# Exact call/parameter leaves that may carry opaque values issued by an earlier call in the same
+# row. Request semantics (including presentation.mixer_visible) remain literal in the spec.
+OBSERVATION_SESSION_FIELDS = {
+    ("logic_project", "plan_session_repair"): frozenset({
+        ("snapshot_id",), ("policy", "project_ref"),
+    }),
+    ("logic_project", "apply_session_repair"): frozenset({
+        ("plan_id",), ("digest",),
+    }),
+}
+
+
+def observation_session_field_allowed(tool: str, command: str, path: tuple) -> bool:
+    return path in OBSERVATION_SESSION_FIELDS.get((tool, command), ())
+
+
+def observation_param_refs(value, path=()):
+    """Yield (leaf path, reference object) for every reserved dynamic value in ``value``."""
+    if isinstance(value, dict):
+        if "$observation" in value:
+            yield path, value
+            return
+        for key, child in value.items():
+            yield from observation_param_refs(child, path + (key,))
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            yield from observation_param_refs(child, path + (index,))
+
 
 def observation_param_problems(row: dict) -> list:
-    """Validate the narrow session-reference seam used by an operation call.
-
-    Only a top-level parameter of the named operation may be an observation reference.  Its source
-    is a call already bound in ``steps`` before the operation.  Thus a transient target reference
-    can flow from a setup inventory reply into the operation without permitting a future, probe,
-    post-operation or restore reading to steer a request.
-    """
+    """Validate the exact opaque-reference seams admitted between prior call replies."""
     steps = {step["as"]: step for step in row["steps"]}
     order = {step["as"]: i for i, step in enumerate(row["steps"])}
     operation = row["operation"]
-    operation_at = order.get(operation)
     out = []
     for section, sequence in (("steps", row["steps"]), ("restore", row["restore"])):
         for step in sequence:
@@ -510,23 +531,43 @@ def observation_param_problems(row: dict) -> list:
                     out.append(f"step {step['as']!r}: reserved $observation may appear only as "
                                f"a top-level parameter of the operation call")
                 continue
-            for param, value in step["call"]["params"].items():
-                if not contains_observation_param(value):
-                    continue
-                where = f"step {step['as']!r} call param {param!r}"
+            call = step["call"]
+            for path, value in observation_param_refs(call["params"]):
+                shown = ".".join(str(part) for part in path)
+                where = f"step {step['as']!r} call param {shown!r}"
                 exact = (isinstance(value, dict) and set(value) == {"$observation"}
                          and isinstance(value.get("$observation"), str))
                 if not exact:
-                    out.append(f"{where}: $observation is a top-level object with exactly one field, "
+                    out.append(f"{where}: $observation is an object with exactly one field, "
                                f"whose value is a path string")
                     continue
-                if section != "steps" or step["as"] != operation:
-                    out.append(f"{where}: only the operation {operation!r} may consume an "
-                               f"$observation parameter")
+                target_ref = path == ("target_ref",)
+                session_call = (call["tool"], call["command"]) in OBSERVATION_SESSION_FIELDS
+                session_field = observation_session_field_allowed(
+                    call["tool"], call["command"], path)
+                if section != "steps":
+                    if target_ref:
+                        out.append(f"{where}: only the operation {operation!r} may consume an "
+                                   f"$observation parameter")
+                    else:
+                        out.append(f"{where}: not an admitted session field for "
+                                   f"{call['tool']}.{call['command']}")
                     continue
-                if param not in OBSERVATION_TARGET_PARAMS:
-                    out.append(f"{where}: {param!r} is not an admitted target parameter; "
-                               f"$observation may set only {sorted(OBSERVATION_TARGET_PARAMS)!r}")
+                if not (target_ref or session_field):
+                    if session_call:
+                        out.append(f"{where}: not an admitted session field for "
+                                   f"{call['tool']}.{call['command']}")
+                    elif path and path[0] == "target_ref":
+                        out.append(f"{where}: $observation must be a top-level object with "
+                                   f"exactly one field, whose value is a path string")
+                    else:
+                        out.append(f"{where}: {path[0]!r} is not an admitted target parameter; "
+                                   f"$observation may set only "
+                                   f"{sorted(OBSERVATION_TARGET_PARAMS)!r}")
+                    continue
+                if target_ref and step["as"] != operation:
+                    out.append(f"{where}: only the operation {operation!r} may consume an "
+                               f"$observation target_ref")
                     continue
                 path = value["$observation"]
                 try:
@@ -537,11 +578,13 @@ def observation_param_problems(row: dict) -> list:
                 if not segments:
                     out.append(f"{where}: {path!r} names a whole reply; it must name a string field")
                     continue
-                if root not in steps or operation_at is None or order[root] >= operation_at:
-                    out.append(f"{where}: source {root!r} is not bound before the operation "
-                               f"{operation!r}")
+                consumer_at = order.get(step["as"])
+                if root not in steps or consumer_at is None or order[root] >= consumer_at:
+                    out.append(f"{where}: source {root!r} is not bound before the call "
+                               f"{step['as']!r}")
                 elif not is_call(steps[root]):
-                    out.append(f"{where}: source {root!r} is not a setup call; dynamic request "
+                    noun = "setup call" if target_ref else "prior call"
+                    out.append(f"{where}: source {root!r} is not a {noun}; dynamic request "
                                f"parameters come only from a prior call reply")
     return out
 

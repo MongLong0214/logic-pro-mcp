@@ -152,6 +152,26 @@ CASES = os.path.join(FIXTURES, "cases.json")
 SELFTEST_HEAD = "d81c7e5b0d4ba2c2531dc3432809bd3e8697c4ea"
 
 MUTANTS = [
+    {"id": "mixer-hidden-child-failure-ignored", "file": "live/spec_probes.py",
+     "old": '    if failures:\n        raise Unreadable("mixer_visible: absence has a child-read failure")',
+     "new": '    if False and failures:\n        raise Unreadable("mixer_visible: absence has a child-read failure")'},
+    {"id": "mixer-hidden-node-failure-ignored", "file": "live/spec_probes.py",
+     "old": '    if any(not isinstance(node, dict) or node.get("read_errors")\n'
+            '           for node in tree["nodes"]):',
+     "new": '    if False and any(not isinstance(node, dict) or node.get("read_errors")\n'
+            '           for node in tree["nodes"]):'},
+    {"id": "mixer-hidden-reported-visible", "file": "live/spec_probes.py",
+     "old": '    return {"visible": False}\n\n\ndef _mixer_body',
+     "new": '    return {"visible": True}\n\n\ndef _mixer_body'},
+    {"id": "session-bindings-all-refused", "file": "engine.py",
+     "old": '    return path in OBSERVATION_SESSION_FIELDS.get((tool, command), ())',
+     "new": '    return False and path in OBSERVATION_SESSION_FIELDS.get((tool, command), ())'},
+    {"id": "session-bindings-unrestricted", "file": "engine.py",
+     "old": '    return path in OBSERVATION_SESSION_FIELDS.get((tool, command), ())',
+     "new": '    return True'},
+    {"id": "mixer-saga-setup-opt-in-dropped", "file": "setups.py",
+     "old": '        "server_env": {"LOGIC_MCP_ADR004_MUTATION_SAGA": "1"},',
+     "new": '        "server_env": {},'},
     {"id": "unreadable-is-pass", "file": "predicates.py",
      "old": "if isinstance(actual, Unreadable):\n        return UNREADABLE, actual.reason",
      "new": "if isinstance(actual, Unreadable):\n        return PASS, actual.reason"},
@@ -1731,6 +1751,48 @@ def check_live_fixtures(case: dict, where: dict):
     return None
 
 
+def check_971_contract(case: dict, where: dict):
+    """The new probe, exact session-binding allowlist and dedicated setup are load-bearing."""
+    import engine
+    import setups
+    from live import spec_probes
+
+    with open(os.path.join(ROOT, "docs", "acceptance", "971.json"), encoding="utf-8") as handle:
+        spec = json.load(handle)
+    problems = engine.validate_spec(spec)
+    if problems:
+        return f"the #971 spec is not admitted: {problems}"
+    mutant = copy.deepcopy(spec)
+    mutant["rows"][0]["steps"][2]["call"]["params"]["policy"]["presentation"][
+        "mixer_visible"] = {"$observation": "inspection.project.project_ref"}
+    if not any("not an admitted session field" in problem
+               for problem in engine.validate_spec(mutant)):
+        return "an observation can steer presentation.mixer_visible"
+
+    def run(found, failures=None, nodes=None):
+        return {"observation": {"readable": True, "mixer_found": found,
+                "raw": {"walk": {"readable": True, "value": {
+                    "nodes": list(nodes or []),
+                    "children_read_failures": list(failures or []),
+                }}}}}
+
+    if spec_probes.mixer_visible_of(run(False)) != {"visible": False}:
+        return "a complete hidden-Mixer walk is not false"
+    for name, reading in (
+        ("child", run(False, failures=[{"path": [0], "status": -25204}])),
+        ("node", run(False, nodes=[{"read_errors": ["AXHelp:-25204"]}])),
+    ):
+        try:
+            spec_probes.mixer_visible_of(reading)
+        except spec_probes.Unreadable:
+            continue
+        return f"a hidden-Mixer walk with a {name}-read failure was accepted as false"
+    declaration = setups.declaration("lpm-locale-campaign-mixer-saga")
+    if declaration["server_env"] != {"LOGIC_MCP_ADR004_MUTATION_SAGA": "1"}:
+        return f"the Mixer Saga setup has env {declaration['server_env']!r}"
+    return None
+
+
 CHECKS = {"records_cite_their_bytes": check_records_cite_their_bytes,
           "pilot_full_record_is_declined": check_pilot_full_record_is_declined,
           "run_cli_has_no_life_seam": check_run_cli_has_no_life_seam,
@@ -1744,6 +1806,7 @@ CHECKS = {"records_cite_their_bytes": check_records_cite_their_bytes,
           "reply": check_reply,
           "gate": check_gate,
           "live_fixtures": check_live_fixtures,
+          "971_contract": check_971_contract,
           "probe": check_probe,
           "probes_implemented": check_probes_implemented}
 

@@ -83,6 +83,14 @@ PROBES = {
                  "topology to equal the independent walk, and is UNREADABLE if that graph "
                  "publishes a Send source edge without an independently witnessed destination.",
     },
+    "mixer_visible": {
+        "args": {},
+        "returns": '{"visible": <bool>, "walk_sha256": <str>}',
+        "reads": "the verifier's own routing_slots_ax walk. A found Mixer container is visible. "
+                 "Absence is accepted only after a readable complete walk with zero child-read "
+                 "failures; an incomplete walk is UNREADABLE, never visible:false. The reading "
+                 "cites the whole walk by walk_sha256.",
+    },
     "routing_send_assign": {
         "args": {"strip": "int"},
         "returns": '{"strip": <int>, "selected": <str>, "record_sha256": <str>}',

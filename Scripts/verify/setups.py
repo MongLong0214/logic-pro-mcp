@@ -54,6 +54,12 @@ SETUPS = {
         "ready": None,
         "gate": ["fingerprint"],
     },
+    "lpm-locale-campaign-mixer-saga": {
+        "live": "locale_campaign_mixer",
+        "server_env": {"LOGIC_MCP_ADR004_MUTATION_SAGA": "1"},
+        "ready": None,
+        "gate": ["fingerprint"],
+    },
     # The self-test's spec fixtures (fixtures/spec-*.json). Only FakeLifecycle drives them.
     "selftest-two-tracks": {
         "live": None,

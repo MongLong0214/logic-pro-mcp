@@ -72,6 +72,12 @@ UNDECIDED = {
 LABEL_SCOPES = ("steps", "restore")
 EXPECT_SCOPES = ("expect", "restore_expect")
 
+# Public protocol enums that happen to equal a localized UI canonical. These exact structured
+# positions are request syntax, not labels sent to or compared with Logic's UI.
+PROTOCOL_CALL_VALUES = {
+    ("logic_navigate", "toggle_view", ("view",)): frozenset({"mixer"}),
+}
+
 
 def spec_dir() -> str:
     return os.environ.get("LPM_ACCEPTANCE_DIR") or os.path.join(REPO, "docs", "acceptance")
@@ -187,19 +193,29 @@ def _path_selector_strings(path: str, at: str):
             yield from _string_values(segment[2], f"{at}.{segment[1]}")
 
 
-def _call_param_strings(params: dict, at: str):
+def _call_param_strings(call: dict, at: str):
     """Strings sent as call params, with `$observation` treated as the path it is.
 
     `check-spec` has already admitted the document, so an observation wrapper here is exact and its
     path parses. Its selector values are what can be localized UI labels; the whole path is syntax,
     just like an expectation path, and must not be compared to the label vocabulary as one string.
     """
-    for name, value in params.items():
-        where = f"{at}.{name}"
+    tool, command = call.get("tool"), call.get("command")
+
+    def walk(value, where, path):
         if isinstance(value, dict) and set(value) == {"$observation"}:
             yield from _path_selector_strings(value["$observation"], f"{where}.$observation")
-        else:
-            yield from _string_values(value, where)
+        elif isinstance(value, str):
+            if value not in PROTOCOL_CALL_VALUES.get((tool, command, path), ()):
+                yield where, value
+        elif isinstance(value, dict):
+            for key, child in value.items():
+                yield from walk(child, f"{where}.{key}", path + (key,))
+        elif isinstance(value, list):
+            for index, child in enumerate(value):
+                yield from walk(child, f"{where}[{index}]", path + (index,))
+
+    yield from walk(call.get("params") or {}, at, ())
 
 
 def scoped_strings(spec: dict):
@@ -209,7 +225,7 @@ def scoped_strings(spec: dict):
         for key in LABEL_SCOPES:
             for i, step in enumerate(row.get(key) or []):
                 if "call" in step:
-                    yield from _call_param_strings(step["call"].get("params") or {},
+                    yield from _call_param_strings(step["call"],
                                                    f"{base}.{key}[{i}].call.params")
                 if "wait" in step:
                     until = step["wait"].get("until") or {}

@@ -204,6 +204,14 @@ parameter values or restore calls. It is also refused on request-semantics param
 `param` and `mode`. This is target transport only: a setup reply remains ineligible as an independent
 expected value or effect proof.
 
+The approved session-repair chain has one additional exact allowlist because each public call
+issues the opaque strings needed by the next call. `logic_project.plan_session_repair` may bind
+only `snapshot_id` and `policy.project_ref` from a prior call; `logic_project.apply_session_repair`
+may bind only `plan_id` and `digest`. Each leaf uses the same exact `$observation` object, resolves
+only a non-empty string from an earlier call reply, and is sent as an ordinary string. All request
+semantics, including `policy.presentation`, remain literal in the acceptance document. No probe,
+future reading, restore reading, arbitrary nested leaf or whole reply may steer these calls.
+
 ### Paths
 
 A path is a small JSONPath subset. Its first segment is a bound name, and the rest walk into that
