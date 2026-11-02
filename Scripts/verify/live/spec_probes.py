@@ -292,6 +292,31 @@ def routing_slots_of(run: dict, rows: dict) -> dict:
             "send_counts": send_counts, "inputs": inputs, "outputs": outputs}
 
 
+def mixer_visible_of(run: dict) -> dict:
+    """Read visibility without treating an incomplete AX search as an absent Mixer."""
+    observation = (run or {}).get("observation") or {}
+    if not observation.get("readable") or not isinstance(observation.get("mixer_found"), bool):
+        raise Unreadable("mixer_visible: the Mixer search did not read")
+    if observation["mixer_found"]:
+        return {"visible": True}
+    walk = ((observation.get("raw") or {}).get("walk") or {})
+    tree = walk.get("value")
+    if not walk.get("readable") or not isinstance(tree, dict) or not isinstance(tree.get("nodes"), list):
+        raise Unreadable("mixer_visible: absence requires a complete walk")
+    failures = tree.get("children_read_failures")
+    frontier = tree.get("frontier_truncations")
+    if not isinstance(failures, list) or not isinstance(frontier, list):
+        raise Unreadable("mixer_visible: absence requires a complete walk")
+    if failures:
+        raise Unreadable("mixer_visible: absence has a child-read failure")
+    if frontier:
+        raise Unreadable("mixer_visible: absence has an unvisited depth cutoff")
+    if any(not isinstance(node, dict) or node.get("read_errors")
+           for node in tree["nodes"]):
+        raise Unreadable("mixer_visible: absence has a node-read failure")
+    return {"visible": False}
+
+
 def _mixer_body(text: str) -> dict:
     try:
         body = E.loads(text)
@@ -438,6 +463,12 @@ def routing_slots(ctx: dict) -> str:
                   "product_edges": product_edges, "product_send_edges": send_edges,
                   "mixer_before_sha256": before_sha, "mixer_sha256": mixer_sha,
                   "walk_sha256": walk_sha})
+
+
+def mixer_visible(ctx: dict) -> str:
+    run = live_probes.run("routing_slots_ax", {"lproj": ctx["lproj"]})
+    data = json.dumps(run, ensure_ascii=False, sort_keys=True, default=repr).encode("utf-8")
+    return _text({**mixer_visible_of(run), "walk_sha256": ctx["life"].sidecar(data)})
 
 
 def routing_send_assign(ctx: dict, strip: int) -> str:

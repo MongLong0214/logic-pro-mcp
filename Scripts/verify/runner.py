@@ -373,56 +373,64 @@ def _probe(ctx: dict, step: dict) -> str:
     return text
 
 
-def _resolved_call_params(ctx: dict, params: dict) -> dict:
-    """Resolve the one dynamic call-parameter form admitted by ``engine``.
-
-    A reference is a top-level parameter value shaped exactly as
-    ``{"$observation": "prior.path"}``.  The referenced observation was already stored by this
-    runner, so parse and walk that stored raw text with the same strict machinery the judge uses.
-    Only strings are substituted: this seam exists for opaque, session-issued target references,
-    not for copying arbitrary reply objects into a later request.
-    """
-    resolved = {}
+def _resolved_call_params(ctx: dict, tool: str, command: str, params: dict) -> dict:
+    """Resolve only exact engine-admitted opaque string leaves from prior call replies."""
     entries = ctx.get("observations") or {}
-    for name, value in params.items():
+
+    def resolve(value, path):
         if not engine.contains_observation_param(value):
-            resolved[name] = value
-            continue
-        if name not in engine.OBSERVATION_TARGET_PARAMS:
+            return value
+        if isinstance(value, dict) and "$observation" not in value:
+            return {key: resolve(child, path + (key,)) for key, child in value.items()}
+        if isinstance(value, list):
+            return [resolve(child, path + (index,)) for index, child in enumerate(value)]
+        admitted = (path == ("target_ref",)
+                    or engine.observation_session_field_allowed(tool, command, path))
+        shown = ".".join(str(part) for part in path)
+        if not admitted:
+            if (tool, command) in engine.OBSERVATION_SESSION_FIELDS:
+                problem = f"not an admitted session field for {tool}.{command}"
+            elif len(path) > 1:
+                problem = "reserved $observation must be a top-level parameter object"
+            else:
+                problem = f"{path[0]!r} is not an admitted target parameter"
+            raise StepUnreadable(f"call param {shown!r}: {problem}")
+        if (not isinstance(value, dict) or set(value) != {"$observation"}
+                or not isinstance(value["$observation"], str)):
             raise StepUnreadable(
-                f"call param {name!r}: {name!r} is not an admitted target parameter")
-        if set(value) != {"$observation"} or not isinstance(value["$observation"], str):
-            raise StepUnreadable(
-                f"call param {name!r}: reserved $observation must be exactly one string field")
-        path = value["$observation"]
+                f"call param {shown!r}: reserved $observation must be exactly one string field")
+        observation_path = value["$observation"]
         try:
-            root, segments = P.parse_path(path)
+            root, segments = P.parse_path(observation_path)
         except ValueError as exc:
-            raise StepUnreadable(f"call param {name!r}: {exc}") from exc
+            raise StepUnreadable(f"call param {shown!r}: {exc}") from exc
         entry = entries.get(root)
         if entry is None:
             raise StepUnreadable(
-                f"call param {name!r}: observation {root!r} is not stored before this call")
+                f"call param {shown!r}: observation {root!r} is not stored before this call")
         observed = engine.observation_value(entry)
         if isinstance(observed, P.Unreadable):
             raise StepUnreadable(
-                f"call param {name!r}: observation {root!r} is unreadable: {observed.reason}")
+                f"call param {shown!r}: observation {root!r} is unreadable: {observed.reason}")
         found = P.walk(observed.value, segments, root)
         if isinstance(found, P.Unreadable):
-            raise StepUnreadable(f"call param {name!r}: {found.reason}")
+            raise StepUnreadable(f"call param {shown!r}: {found.reason}")
         if not isinstance(found.value, str):
             raise StepUnreadable(
-                f"call param {name!r}: {path} is {P.kind_of(found.value)}, not a string")
+                f"call param {shown!r}: {observation_path} is "
+                f"{P.kind_of(found.value)}, not a string")
         if not found.value:
-            raise StepUnreadable(f"call param {name!r}: {path} is an empty string")
-        resolved[name] = found.value
-    return resolved
+            raise StepUnreadable(
+                f"call param {shown!r}: {observation_path} is an empty string")
+        return found.value
+
+    return {name: resolve(value, (name,)) for name, value in params.items()}
 
 
 def _take(ctx: dict, step: dict) -> str:
     if "call" in step:
         call = step["call"]
-        params = _resolved_call_params(ctx, call["params"])
+        params = _resolved_call_params(ctx, call["tool"], call["command"], call["params"])
         return ctx["session"].call(call["tool"], call["command"], params, CALL_TIMEOUT_S)
     if "read" in step:
         return ctx["session"].read(step["read"]["uri"], READ_TIMEOUT_S)

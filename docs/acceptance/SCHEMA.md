@@ -156,6 +156,7 @@ one of the ten.
   {"as": "restored", "probe": {"name": "track_armed", "args": {"index": 0}}}
  ],
  "restore_expect": [{"path": "restored.armed", "op": "eq", "ref": {"obs": "pre.armed"}}],
+ "restore_counterexample": [{"observation": "post", "replaces": "restored", "must_fail": [0]}],
  "independence": ["pre", "post"]
 }
 ```
@@ -170,6 +171,7 @@ one of the ten.
 | `counterexample` | substitutions that must make named expectations FAIL (below) |
 | `restore` | steps that return the fixture to its as-found state (may be empty) |
 | `restore_expect` | expectations that prove it was returned; they read only steps after the last call in `restore`, and are empty when `restore` has no call (below) |
+| `restore_counterexample` | no-op-restore substitutions that must make named restore expectations FAIL; empty only when `restore_expect` is empty (below) |
 | `independence` | the names whose readings do not come from the operation's own reply |
 
 ### Steps
@@ -201,6 +203,14 @@ The reserved key is not admitted on setup calls, post-operation calls, probes, r
 parameter values or restore calls. It is also refused on request-semantics parameters such as
 `param` and `mode`. This is target transport only: a setup reply remains ineligible as an independent
 expected value or effect proof.
+
+The approved session-repair chain has one additional exact allowlist because each public call
+issues the opaque strings needed by the next call. `logic_project.plan_session_repair` may bind
+only `snapshot_id` and `policy.project_ref` from a prior call; `logic_project.apply_session_repair`
+may bind only `plan_id` and `digest`. Each leaf uses the same exact `$observation` object, resolves
+only a non-empty string from an earlier call reply, and is sent as an ordinary string. All request
+semantics, including `policy.presentation`, remain literal in the acceptance document. No probe,
+future reading, restore reading, arbitrary nested leaf or whole reply may steer these calls.
 
 ### Paths
 
@@ -358,8 +368,18 @@ A restore check (`restore_expect`) reads only what a restore produced.
 - A `restore` with no call restored nothing, so its `restore_expect` is empty (`[]`).
 - A `restore` with a call has at least one restore check. A write is credited only when its
   restore is verified (#984).
-- A restore check needs no counterexample. Nothing yet shows one can fail: a restoring call that
-  changes nothing passes these rules.
+- A row with restore checks has at least one `restore_counterexample`. Its `observation` is a
+  non-call reading bound after the operation and before restoration; its `replaces` is the same
+  kind of reading bound after the final restoring call. Each `must_fail` index names a
+  `restore_expect` whose path reads `replaces`.
+- The engine substitutes the post-operation observation for the post-restore reading and judges
+  each named check again. Each must FAIL. If one PASSES, the row FAILS with
+  `restore_counterexample_accepted`: the check would give the restoring call credit if it changed
+  nothing. If one is UNREADABLE, the row is UNREADABLE.
+- A listed restore check may not compare with the counterexample's own observation. The two sides
+  would then become the same reading under substitution and manufacture a failure. Other restore
+  checks may retain complete-state or no-collateral-damage assertions; at least one named check
+  must distinguish the state before restoration from the state after it.
 
 `restore_expect` is judged like `expect`. If one FAILS, the row FAILS with `restore_failed`: the
 fixture was left changed, and the next row's as-found state is not the one it assumes.
@@ -393,7 +413,10 @@ fixture was left changed, and the next row's as-found state is not the one it as
   - An observation the runner could not take is `{step, unreadable: reason}`.
   - An observation whose `step` differs from the spec's step of that name is UNREADABLE.
 - `verdicts.<locale>.<row>`: what the engine computed when the evidence was written. `recheck`
-  recomputes them and compares `verdict`, `expect`, `counterexample` and `restore`.
+  recomputes them and compares `verdict`, `expect`, `counterexample`, `restore` and
+  `restore_counterexample`. Historic evidence embeds the exact older spec bytes it ran against;
+  unattested command-line recheck accepts their absent field and preserves their older verdict
+  shape, but admission of a new or attested spec requires the field on every row.
 
 Every observation entry is shape-checked before anything is judged: an entry that is not an
 object, a `step` that is not an object, or a `raw`/`raw_bytes`/`unreadable` of the wrong type is

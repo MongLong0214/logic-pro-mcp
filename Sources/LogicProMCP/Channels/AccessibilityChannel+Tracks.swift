@@ -2047,11 +2047,31 @@ extension AccessibilityChannel {
         // coordinate fallback — fail closed if every AX step is rejected).
         _ = ProcessUtils.Runtime.production.activateLogicPro()
         try? await Task.sleep(nanoseconds: 150_000_000)
-        guard AXLogicProElements.selectTrackViaAX(at: index, runtime: runtime) else {
+        var writeAttempted = false
+        guard AXLogicProElements.selectTrackViaAX(
+            at: index,
+            runtime: runtime,
+            willWrite: { writeAttempted = true }
+        ) else {
+            var extras: [String: Any] = ["requested": index]
+            if writeAttempted {
+                extras.merge([
+                    "write_attempted": true,
+                    "fallback_unsafe": true,
+                    "safe_to_retry": false,
+                    "terminal": true,
+                    "terminal_scope": "mcp_request_only",
+                    "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                    "human_dependent_transitions": 0,
+                ]) { _, new in new }
+            }
             return .error(HonestContract.encodeStateC(
                 error: .axWriteFailed,
-                hint: "Failed to select track \(index) via the AX selection ladder",
-                extras: ["requested": index]
+                hint: writeAttempted
+                    ? "The AX selection attempt for track \(index) reported failure after a write; whether selection landed is unknown, so later channel fallback is blocked."
+                    : "Failed to select track \(index) via the AX selection ladder",
+                extras: extras
             ))
         }
 
