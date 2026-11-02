@@ -2117,8 +2117,9 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
 @Test func testAccessibilityChannelTrackSelectFailsClosedWhenEveryAXStepRejected() async throws {
     // ADR-001: track.select's Step-5 coordinate click is gone. When the header's
     // parent group is not AXSelectedChildren-writable AND Steps 2-4 (AXSelected /
-    // AXPress) are all rejected, selectTrackViaAX fails and the op returns honest
-    // State C ax_write_failed — never a silent success, never a coordinate click.
+    // AXPress) all report rejection, selectTrackViaAX fails. An AX write can still
+    // take effect before reporting failure, so the refusal must terminate routing
+    // rather than let the MCU channel issue a second selection.
     // The header carries a real frame so a re-introduced Step-5 would actuate it.
     let builder = FakeAXRuntimeBuilder()
     let app = builder.element(620)
@@ -2136,10 +2137,18 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     builder.setAttribute(header, kAXPositionAttribute as String, axPoint(10, 100))
     builder.setAttribute(header, kAXSizeAttribute as String, axSize(180, 40))
 
-    // Every AX setter and action is rejected, including the runtime-threaded first two rungs.
+    // The primary setter lands the selection but reports failure. Every later AX
+    // setter/action also reports rejection.
     let logicRuntime = builder.makeLogicRuntime(
         appElement: app,
-        setAttributeHandler: { _, _, _ in false },
+        setAttributeHandler: { element, attribute, _ in
+            if element == trackList,
+               attribute == (kAXSelectedChildrenAttribute as String) {
+                builder.setAttribute(trackList, attribute, [header])
+                builder.setAttribute(header, kAXSelectedAttribute as String, true)
+            }
+            return false
+        },
         performActionHandler: { _, _ in false }
     )
     let channel = makeAXBackedAccessibilityChannel(builder: builder, app: app, logicRuntime: logicRuntime)
@@ -2150,6 +2159,76 @@ private final class MarkerWindowReadSequence: @unchecked Sendable {
     #expect(!result.isSuccess)
     #expect(try #require(object["state"] as? String) == "C")
     #expect(try #require(object["error"] as? String) == "ax_write_failed")
+    let hint = try #require(object["hint"] as? String)
+    #expect(hint.contains("whether selection landed is unknown"))
+    #expect(hint.contains("later channel fallback is blocked"))
+    #expect(try #require(builder.attributeValue(header, kAXSelectedAttribute as String) as? Bool))
+    #expect(try #require(object["write_attempted"] as? Bool))
+    #expect(try #require(object["fallback_unsafe"] as? Bool))
+    #expect(!(try #require(object["safe_to_retry"] as? Bool)))
+    #expect(try #require(object["terminal"] as? Bool))
+    #expect(try #require(object["terminal_scope"] as? String) == "mcp_request_only")
+    #expect(!(try #require(object["human_intervention_required"] as? Bool)))
+    #expect(try #require(object["human_intervention_requests"] as? Int) == 0)
+    #expect(try #require(object["human_dependent_transitions"] as? Int) == 0)
+    #expect(HonestContract.isFallbackUnsafeStateC(result.message))
+}
+
+@Test func testAccessibilityChannelTrackSelectPreservesPrewriteFailureSemantics() async throws {
+    final class TrackRowSequence: @unchecked Sendable {
+        private let lock = NSLock()
+        private let list: AXUIElement
+        private let header: AXUIElement
+        private var reads = 0
+
+        init(list: AXUIElement, header: AXUIElement) {
+            self.list = list
+            self.header = header
+        }
+
+        func children(of element: AXUIElement) -> [AXUIElement]? {
+            guard CFEqual(element, list) else { return nil }
+            return lock.withLock {
+                reads += 1
+                return reads == 1 ? [header] : []
+            }
+        }
+    }
+
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(624)
+    let window = builder.element(625)
+    let trackList = builder.element(626)
+    let header = builder.element(627)
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, window)
+    builder.setChildren(window, [trackList])
+    builder.setAttribute(trackList, kAXRoleAttribute as String, kAXListRole as String)
+    builder.setAttribute(trackList, kAXIdentifierAttribute as String, "Track Headers")
+    builder.setChildren(trackList, [header])
+    builder.setAttribute(header, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+    let rows = TrackRowSequence(list: trackList, header: header)
+    let logicRuntime = builder.makeLogicRuntime(
+        appElement: app,
+        childrenHandler: { rows.children(of: $0) },
+        setAttributeHandler: nil,
+        performActionHandler: nil
+    )
+    let channel = makeAXBackedAccessibilityChannel(builder: builder, app: app, logicRuntime: logicRuntime)
+
+    let result = await channel.execute(operation: "track.select", params: ["index": "0"])
+    let object = decodeAccessibilityJSON(result.message)
+
+    #expect(!result.isSuccess)
+    #expect(try #require(object["state"] as? String) == "C")
+    #expect(try #require(object["error"] as? String) == "ax_write_failed")
+    #expect(object["write_attempted"] == nil)
+    #expect(object["fallback_unsafe"] == nil)
+    #expect(object["safe_to_retry"] == nil)
+    #expect(object["terminal"] == nil)
+    #expect(object["terminal_scope"] == nil)
+    #expect(builder.setCalls.isEmpty)
+    #expect(builder.actionCalls.isEmpty)
 }
 
 @Test func testAccessibilityChannelControlBarToggleDoesNotTrustNoopAXPress() async {
@@ -4301,7 +4380,12 @@ private final class LockedFlag: @unchecked Sendable {
 
     let selectFailure = await failingChannel.execute(operation: "track.select", params: ["index": "0"])
     #expect(!selectFailure.isSuccess)
-    #expect(selectFailure.message.contains("Failed to select track 0"))
+    #expect(selectFailure.message.contains("\"error\":\"ax_write_failed\""))
+    #expect(selectFailure.message.contains("\"write_attempted\":true"))
+    #expect(selectFailure.message.contains("\"fallback_unsafe\":true"))
+    #expect(selectFailure.message.contains("\"safe_to_retry\":false"))
+    #expect(selectFailure.message.contains("\"terminal\":true"))
+    #expect(selectFailure.message.contains("\"human_intervention_required\":false"))
 
     let soloButton = builder.element(234)
     builder.setChildren(header, [soloButton])
