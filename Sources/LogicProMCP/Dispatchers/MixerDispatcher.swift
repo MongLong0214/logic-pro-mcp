@@ -12,6 +12,24 @@ struct MixerDispatcher: OperationTraceDispatching {
         "set_send", "set_output", "set_input", "toggle_eq", "reset_strip", "bypass_plugin",
     ]
 
+    private static func verifiedOpInProgressResult(_ operation: String) -> CallTool.Result {
+        toolTextResult(.error(HonestContract.encodeStateC(
+            error: .verifiedOpInProgress,
+            hint: "Another verified UI acquisition is in progress; this MCP request terminated before writing.",
+            extras: [
+                "operation": operation,
+                "verified": false,
+                "write_attempted": false,
+                "safe_to_retry": true,
+                "terminal": true,
+                "terminal_scope": "mcp_request_only",
+                "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
+            ]
+        )))
+    }
+
     static let tool = commandTool(
         name: "logic_mixer",
         description: "set_send_mode_verified -> {target_ref: mix_..., project_ref?: prj_..., ordinal: Int >= 0, mode: post_pan|post_fader|pre_fader, expected_current: same}. Requires the complete checked native mode menu and exact occupied control/source under stopped transport. One owned mode leaf preserves destination/raw level/bypass/Independent Pan/population, then independently verifies the new mode; no-op sends no mode leaf. Missing/ambiguous/unreadable evidence refuses, unknown after is State B with no guessed inverse. No physical screen-slot, canonical, Saga or general mode claim. set_send_level_verified -> {target_ref: mix_..., project_ref?: prj_..., ordinal: Int >= 0, level_db: String, expected_current: String}. Only qualified semantic -95/-95.0, -6/-6.0 and -∞ are accepted; no universal range or raw conversion. A changing call uses the exact occupied knob and its owned numeric editor under stopped transport, checked routing/mode/raw/bypass/control/population custody, then independent same-knob readback. Equal desired/current is zero-click; unknown after is State B with no guessed inverse. No Saga or physical screen-slot inference. get_send_bypass_verified -> {target_ref: mix_..., project_ref?: prj_..., ordinal: Int >= 0} independently reads the exact occupied send checkbox, checked route, raw level and checked non-routing titles; it reports the actual checkbox action names/status. set_send_bypass_verified -> same target/ordinal plus bypassed: literal Bool and expected_current: literal Bool. A changing call requires stopped transport and one supported exact-checkbox AXPress with independent strict Boolean after-read and protected control/source/population. Already equal is a verified zero-press no-op. Unknown or changed after-state is State B, with no guessed inverse; no track/index selectors or physical screen-slot inference. set_send_output_verified -> {target_ref: mix_..., project_ref?: prj_..., ordinal: Int >= 0, destination: {kind: physical, ports: [a,b]} | {kind: stereo_output} | {kind: bus, number: 1..256} | {kind: no_send}, expected_current: physical/stereo/bus shape, replace_existing: true} addresses an occupied send at its exact source-census ordinal. Explicit fresh sole-empty creation instead requires expected_current:{kind:no_send}, replace_existing:false and destination:{kind:stereo_output}; ambiguous empty slots refuse. A bus requires an existing receiver and a clear observed loop path before popup acquisition and again at the final press; unreadable dependencies refuse. no_send removes only a completely observed singleton occupied send: State A requires original-header source renewal, one independently observed empty anchor and preserved physical population. No Send is distinct from No Output. Fresh creation requires a retained original-header association, exact current empty control/path, checked No Send before and independent occupied Stereo after; the returned send_ordinal_after is observed, not reused from the empty slot. No public removed-send inverse is accepted. Replacement State A requires fresh checked after evidence and preserved unique slot/level/bypass/raw non-routing checkmarks. Retired source renewal requires its original retained header and a complete singleton correspondence; fresh references are required for explicit occupied-route inverse. Source/focus loss or unknown after-state is unverified; no automatic inverse or ordinal/name adoption after retirement. Other Send levels, Aux creation and format conversion are not supported. " +
@@ -55,8 +73,7 @@ struct MixerDispatcher: OperationTraceDispatching {
                 return toolInvalidParamsResult("An exact physical Mixer target_ref, occupied census ordinal and qualified text levels (-95, -6, -∞, optionally .0) are required")
             }
             guard verifiedGate.tryAcquire() else {
-                return toolTextResult(.error(HonestContract.encodeStateC(error: .verifiedOpInProgress,
-                    extras: ["operation": operation, "write_attempted": false])))
+                return verifiedOpInProgressResult(operation)
             }
             defer { verifiedGate.release() }
             switch await TargetRefResolver.resolveMutationIndex(params, targetRegistry: targetRegistry, cache: cache,
@@ -96,8 +113,7 @@ struct MixerDispatcher: OperationTraceDispatching {
                 channelParams["expected_current"] = expected ? "true" : "false"
             }
             guard verifiedGate.tryAcquire() else {
-                return toolTextResult(.error(HonestContract.encodeStateC(error: .verifiedOpInProgress,
-                    extras: ["operation": operation, "write_attempted": false])))
+                return verifiedOpInProgressResult(operation)
             }
             defer { verifiedGate.release() }
             switch await TargetRefResolver.resolveMutationIndex(params, targetRegistry: targetRegistry,
@@ -130,8 +146,7 @@ struct MixerDispatcher: OperationTraceDispatching {
                 return toolInvalidParamsResult("set_send_mode_verified requires an exact physical Mixer target_ref, source-census ordinal and explicit post_pan/post_fader/pre_fader mode and expected_current")
             }
             guard verifiedGate.tryAcquire() else {
-                return toolTextResult(.error(HonestContract.encodeStateC(error: .verifiedOpInProgress,
-                    hint: "Another verified UI acquisition is in progress.", extras: ["operation": operation, "write_attempted": false])))
+                return verifiedOpInProgressResult(operation)
             }
             defer { verifiedGate.release() }
             switch await TargetRefResolver.resolveMutationIndex(params, targetRegistry: targetRegistry,
@@ -191,9 +206,7 @@ struct MixerDispatcher: OperationTraceDispatching {
                 return toolInvalidParamsResult("set_send_output_verified requires an exact physical Mixer target_ref and source-census ordinal: occupied physical/stereo/existing-bus replacement requires replace_existing:true; fresh sole-empty Stereo creation requires expected_current:no_send and replace_existing:false")
             }
             guard verifiedGate.tryAcquire() else {
-                return toolTextResult(.error(HonestContract.encodeStateC(error: .verifiedOpInProgress,
-                    hint: "Another verified UI acquisition is in progress.",
-                    extras: ["operation": operation, "write_attempted": false])))
+                return verifiedOpInProgressResult(operation)
             }
             defer { verifiedGate.release() }
             switch await TargetRefResolver.resolveMutationIndex(params, targetRegistry: targetRegistry,
@@ -295,9 +308,7 @@ struct MixerDispatcher: OperationTraceDispatching {
                 return toolInvalidParamsResult("set_input_bus_verified requires only a physical Mixer target_ref, Bus 1..256 destination and expected_current, and replace_existing:true")
             }
             guard verifiedGate.tryAcquire() else {
-                return toolTextResult(.error(HonestContract.encodeStateC(error: .verifiedOpInProgress,
-                    hint: "Another verified UI acquisition is in progress.",
-                    extras: ["operation": operation, "write_attempted": false])))
+                return verifiedOpInProgressResult(operation)
             }
             defer { verifiedGate.release() }
             switch await TargetRefResolver.resolveMutationIndex(params, targetRegistry: targetRegistry,
@@ -338,9 +349,7 @@ struct MixerDispatcher: OperationTraceDispatching {
                 return toolInvalidParamsResult("get_send_destination_verified requires a nonnegative integer ordinal from send_slots")
             }
             guard verifiedGate.tryAcquire() else {
-                return toolTextResult(.error(HonestContract.encodeStateC(error: .verifiedOpInProgress,
-                    hint: "Another verified UI acquisition is in progress.",
-                    extras: ["operation": operation, "write_attempted": false])))
+                return verifiedOpInProgressResult(operation)
             }
             defer { verifiedGate.release() }
             switch await TargetRefResolver.resolveMutationIndex(params, targetRegistry: targetRegistry,
