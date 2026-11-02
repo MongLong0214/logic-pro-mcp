@@ -1757,6 +1757,13 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             } else { finalControl = control }
             stage = "final_custody"
             guard await projectIsCurrent(allowPendingCancellation: true), sourceCurrent() else { return nil }
+            if renewal != nil, requiresCombinedOutputSendHandoff,
+               outputAttempted, outputApplied, !outputInverseConsumed {
+                // The Bus prerequisite read renewed this exact source/control
+                // after the owned Output. Keep only the request-local baseline
+                // needed by a later Output inverse; do not renew public refs.
+                combinedSendControl = finalControl
+            }
             accepted = true
             return .init(pair: pair, control: finalControl, renewal: renewal,
                 checkedPeerHeaders: checkedPeerHeaders.isEmpty ? nil : checkedPeerHeaders,

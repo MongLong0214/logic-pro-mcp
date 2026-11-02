@@ -6195,12 +6195,18 @@ struct Issue965HeldSelectionAssociationTests {
 
     @Test("One captured source composes its existing direct Output and occupied Send without widening authority",
           arguments: ["completed", "preflight_drift", "cancel_after_output", "post_output_send_drift",
-            "output_replacement_cancel_after_both", "main_output_drift_after_send"])
+            "output_replacement_cancel_after_both", "main_output_drift_after_send",
+            "send_prewrite_refusal_after_renewal"])
     func canonicalDirectOutputAndOccupiedSendShareOneBoundedSaga(_ outcome: String) async throws {
         try await FeatureFlags.withAdr004MutationSagaForTests(true) {
             try await assertOccupiedSingleSendRenewal(existingBus: true, restoring: true, emptyModeMenu: true,
                 noOpDestination: .bus(1), canonicalSend: "forward", canonicalBus: true,
-                canonicalBusChange: true, combinedOutputSend: outcome)
+                canonicalBusChange: true,
+                canonicalBusReceiverFault: outcome == "send_prewrite_refusal_after_renewal"
+                    ? "physical_source_read_renewal" : nil,
+                combinedOutputSend: outcome,
+                decidingSendFault: outcome == "send_prewrite_refusal_after_renewal"
+                    ? "late_leaf_refusal" : nil)
         }
     }
 
@@ -6749,6 +6755,7 @@ struct Issue965HeldSelectionAssociationTests {
             let sourceInputReadRenewal = canonicalBusReceiverFault == "physical_source_read_renewal" || inverseInputReadRenewal
             f.measureNamedBusPreInput = measureNamedBusPreInput
             if stableDestinationBulkReads { f.useBulkReads = true }
+            if decidingSendFault == "late_leaf_refusal" { f.useBulkReads = true }
             let nameField = b.element(1_971_400)
             let inverseEditor = b.element(1_971_402), renameItem = b.element(1_971_406)
             if canonicalName {
@@ -8455,6 +8462,13 @@ struct Issue965HeldSelectionAssociationTests {
                     }
                     f.routingActionNames = { element in
                         let prior = priorActions?(element)
+                        if decidingSendFault == "late_leaf_refusal",
+                           f.routingInputReadRenewed,
+                           SendRemovalSagaAdapter.requiredBeforeState != nil,
+                           CFEqual(element, b.element(1_971_503)) {
+                            f.routingDecidingSendFaultInjected = true
+                            return .success([])
+                        }
                         if CFEqual(element, b.element(1_971_503)),
                            SendRemovalSagaAdapter.requiredBeforeState != nil,
                            f.routingDestinationPresses == 0 {
@@ -8544,6 +8558,21 @@ struct Issue965HeldSelectionAssociationTests {
                         #expect(summary["record_count"] as? Int == 2)
                         #expect(summary["forward_write_boundary_count"] as? Int == 2)
                         #expect(summary["compensation_write_boundary_count"] as? Int == 0)
+                    case "send_prewrite_refusal_after_renewal":
+                        #expect(f.routingInputReadRenewed,
+                            "Reach the exact source/control renewal before the deciding Send writer")
+                        #expect(f.routingDecidingSendFaultInjected,
+                            "Reach the deciding Send writer and refuse before its leaf")
+                        #expect(b.attributeValue(mode, "AXMenuItemMarkChar") as? String == "✓",
+                            "The refusal must not change the captured Send baseline")
+                        #expect(body["saga_state"] as? String == "fullyCompensated")
+                        #expect(body["final_disposition"] as? String == "stopped_fully_compensated")
+                        #expect(f.routingMainOutputPresses == 2 && f.routingDestinationPresses == 0)
+                        #expect(f.routingBusLeafPresses.isEmpty)
+                        let summary = try #require((body["compensation"] as? [String: Any])?["journal_summary"] as? [String: Any])
+                        #expect(summary["record_count"] as? Int == 2)
+                        #expect(summary["forward_write_boundary_count"] as? Int == 1)
+                        #expect(summary["compensation_write_boundary_count"] as? Int == 1)
                     default:
                         Issue.record("Unknown combined Output/Send outcome")
                     }
