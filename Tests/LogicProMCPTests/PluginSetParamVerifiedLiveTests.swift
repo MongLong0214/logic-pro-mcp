@@ -4211,6 +4211,54 @@ private final class Counter: @unchecked Sendable {
     #expect(remainingWindows.count == 1)
 }
 
+@Test func testIssue1417OwnedEditorCleanupRecognizesExactWindowAbsentDuringRetrySettlement() async throws {
+    let fixture = LiveFixture(
+        pluginWindowPresent: false,
+        openWindowOnSlotPress: true,
+        pluginCloseControlFailsToClose: true
+    )
+    let b = fixture.builder
+    let arrange = b.element(1001)
+    let editor = b.element(1004)
+    let postPressWindowReads = MutableBox(0)
+    b.setAttribute(
+        arrange,
+        kAXDocumentAttribute as String,
+        URL(fileURLWithPath: expectedPath).absoluteString
+    )
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        if fixture.pluginCloseControlPressCount.value > 0,
+           CFEqual(element, fixture.app),
+           attribute == kAXWindowsAttribute as String {
+            postPressWindowReads.value += 1
+            if postPressWindowReads.value == 2 {
+                // The first close press settles during the existing retry wait.
+                // The exact owned window is absent before another mutation.
+                b.setAttribute(fixture.app, kAXWindowsAttribute as String, [arrange])
+            }
+        }
+        return nil
+    })
+
+    let result = await AccessibilityChannel.defaultGetParamVerified(
+        params: parameterReadParams(),
+        runtime: runtime
+    )
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "A")
+    #expect(postPressWindowReads.value >= 2)
+    #expect(try #require(object["editor_close_attempted"] as? Bool))
+    #expect(try #require(object["editor_close_observed"] as? Bool))
+    #expect(object["editor_cleanup_unobserved"] == nil)
+    #expect(object["editor_still_open"] == nil)
+    #expect(object["editor_cleanup_diagnostics"] == nil)
+    #expect(fixture.pluginCloseControlPressCount.value == 1)
+    let remainingWindows = try #require(
+        b.attributeValue(fixture.app, kAXWindowsAttribute as String) as? [AXUIElement]
+    )
+    #expect(!remainingWindows.contains { CFEqual($0, editor) })
+}
+
 @Test(arguments: ["nil", "no_value", "attribute_unsupported", "unreadable"])
 func testIssue1417OwnedEditorCleanupPreservesCloseButtonReadFailure(_ kind: String) async throws {
     let fixture = LiveFixture(pluginWindowPresent: false, openWindowOnSlotPress: true)

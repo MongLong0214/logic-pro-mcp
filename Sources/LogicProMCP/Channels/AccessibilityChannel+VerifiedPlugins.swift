@@ -5735,6 +5735,16 @@ extension AccessibilityChannel {
         }
 
         for attempt in 0..<3 {
+            if attempt > 0 {
+                // The preceding accepted press can settle during the existing
+                // retry wait. Observe exact absence before acquiring another
+                // close control or attempting another mutation.
+                retainWindowMembership()
+                if outcome.windowMembership == "absent" {
+                    outcome.observed = true
+                    return outcome
+                }
+            }
             let closeButtonRead = AXHelpers.getAttributeResult(
                 window, kAXCloseButtonAttribute, runtime: runtime.ax
             ) as Result<AXUIElement?, AXHelpers.AXStatusError>
