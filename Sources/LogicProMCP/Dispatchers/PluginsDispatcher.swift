@@ -551,6 +551,11 @@ struct PluginsDispatcher: OperationTraceDispatching {
                     "what_was_observed": "another verified op is already in progress (serialized server-wide)",
                     "safe_to_retry": true,
                     "write_attempted": false,
+                    "terminal": true,
+                    "terminal_scope": "mcp_request_only",
+                    "human_intervention_required": false,
+                    "human_intervention_requests": 0,
+                    "human_dependent_transitions": 0,
                 ]
             ), isError: true)
         }
