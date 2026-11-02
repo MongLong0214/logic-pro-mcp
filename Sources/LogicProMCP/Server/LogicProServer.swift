@@ -811,6 +811,11 @@ actor LogicProServer {
                 // HonestContract `safe_to_retry` semantics (write_attempted:false).
                 "safe_to_retry": true,
                 "write_attempted": false,
+                "terminal": true,
+                "terminal_scope": "mcp_request_only",
+                "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
             ]
         )
         return toolTextResult(body, isError: true)

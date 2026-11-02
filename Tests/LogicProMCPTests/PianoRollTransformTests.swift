@@ -406,6 +406,31 @@ struct PianoRollTransformTests {
         #expect(plan.warnings.isEmpty)
     }
 
+    @Test func planWarningsReportSetVelocityClamp() throws {
+        let scenarios: [(requested: Int, applied: UInt8)] = [
+            (requested: 0, applied: 1),
+            (requested: 200, applied: 127),
+        ]
+
+        for scenario in scenarios {
+            let plan = try #require(
+                planTransform(
+                    region: region(),
+                    transform: .setVelocity(scenario.requested),
+                    beforeSnapshot: snapshot(notes: [note(pitch: 60, velocity: 40)])
+                )
+            )
+
+            #expect(plan.predictedAfter.map(\.velocity) == [scenario.applied])
+            #expect(plan.warnings == [
+                .setVelocityClamped(
+                    requested: scenario.requested,
+                    applied: scenario.applied
+                ),
+            ])
+        }
+    }
+
     @Test func defaultPolicyRejectsANewSamePitchChannelOverlap() {
         let notes = [
             note(pitch: 60, start: 0, duration: 120),

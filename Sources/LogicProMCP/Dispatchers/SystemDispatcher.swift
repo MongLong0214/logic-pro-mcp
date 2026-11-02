@@ -943,7 +943,15 @@ struct SystemDispatcher: OperationTraceDispatching {
             let availability: [SagaBeforeStateAvailability]
             if sendRemoval != nil || sendMode != nil || sendLevel != nil || inputBus != nil {
                 guard let mutationGate, let claim = mutationGate.tryAcquire(operation: "saga.send_removal_observation") else {
-                    return toolStateCResult(.verifiedOpInProgress, extras: ["write_attempted": false])
+                    return SagaWire.scopedStateC(
+                        .verifiedOpInProgress,
+                        hint: "Another mutation owns the gate; this preflight request terminated before reading its before-state.",
+                        extras: [
+                            "operation": OperationID.systemSagaPreflight.rawValue,
+                            "write_attempted": false,
+                            "safe_to_retry": true,
+                        ]
+                    )
                 }
                 defer { mutationGate.release(claim) }
                 let parent = OperationTraceContext.current
