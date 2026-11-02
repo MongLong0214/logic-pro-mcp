@@ -588,7 +588,14 @@ enum SagaWire {
         hint: String? = nil,
         extras: [String: Any] = [:]
     ) -> CallTool.Result {
-        let scoped = sessionFields.merging(["verified": false]) { _, new in new }
+        let scoped = sessionFields.merging([
+            "verified": false,
+            "terminal": true,
+            "terminal_scope": "mcp_request_only",
+            "human_intervention_required": false,
+            "human_intervention_requests": 0,
+            "human_dependent_transitions": 0,
+        ]) { _, new in new }
             .merging(extras) { _, new in new }
         return toolStateCResult(error, hint: hint, extras: scoped)
     }
