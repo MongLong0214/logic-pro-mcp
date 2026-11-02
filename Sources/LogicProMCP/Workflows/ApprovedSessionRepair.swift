@@ -318,7 +318,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                                        request: SessionPopulationObservation.Request) -> OutputTask? {
         guard FeatureFlags.adr002TargetRef, FeatureFlags.adr004MutationSaga,
               policy.targets.count == 1, policy.outputs.count == 1,
-              policy.roles.isEmpty, policy.sends.isEmpty, policy.receivers.isEmpty, policy.protectedPaths.isEmpty,
+              policy.roles.isEmpty, policy.sends.count <= 1, policy.receivers.isEmpty, policy.protectedPaths.isEmpty,
               policy.trackSort == nil, policy.mixerVisible == nil,
               let target = policy.targets.first, target.mixerRef == nil,
               names.isEmpty || (names.count == 1 && names.first?.target == target.handle),
@@ -345,6 +345,18 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         let checked = fresh.checkedOutputs.filter { $0.source.matches(pair.strip) && $0.sendOrdinal == nil }
         guard strips.count == 1, let stripIndex = strips.first, let mixerRef = source.mixerReference(at: stripIndex),
               checked.count == 1, let before = checked.first?.assignment else { return nil }
+        // The only mixed routing shape admitted here is another already occupied,
+        // independently checked Send on this same source. Both direct endpoints must
+        // remain local, so this grants no Bus-output or Aux lifecycle authority.
+        let combinedOccupiedSend: Bool
+        if let send = policy.sends.first {
+            combinedOccupiedSend = names.isEmpty && policy.inputs.isEmpty
+                && send.target == target.handle && send.observedOrdinal != nil
+                && localAssignmentForBefore(before) != nil
+                && localAssignmentForBefore(desired) != nil
+                && before != desired
+        } else { combinedOccupiedSend = false }
+        guard policy.sends.isEmpty || combinedOccupiedSend else { return nil }
         // Bus routes remain singleton output-only tasks. A positive
         // existing receiver is required; this grants no allocation/lifecycle
         // or shared input/name sink authority.
@@ -383,7 +395,16 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                         let input = strip.inputObservation, input.state != .unreadable,
                         let sends = strip.sendSlots else { return false }
                   if binding.matches(pair.strip) {
-                      guard sends.allSatisfy({ $0.state == .observedEmpty }) else { return false }
+                      if combinedOccupiedSend, let intent = policy.sends.first,
+                         let ordinal = intent.observedOrdinal {
+                          guard sends.count == 2,
+                                sends.filter({ $0.state == .observedEmpty }).count == 1,
+                                let occupied = sends.first(where: { $0.state == .occupiedUnknownDestination }),
+                                occupied.ordinal == ordinal, occupied.levelRaw?.isFinite == true,
+                                occupied.bypassed != nil, occupied.destinationDisplay?.isEmpty == false else { return false }
+                      } else {
+                          guard sends.allSatisfy({ $0.state == .observedEmpty }) else { return false }
+                      }
                   } else {
                       // Peers are preserved observations, not destinations or writer targets.
                       // Unknown endpoint identity is honest; an unread level/display/bypass is
@@ -468,7 +489,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         request: SessionPopulationObservation.Request) -> SendTask? {
         guard FeatureFlags.adr002TargetRef, FeatureFlags.adr004MutationSaga,
               names.count <= 1, policy.targets.count == 1, policy.sends.count == 1,
-              policy.roles.isEmpty, policy.outputs.isEmpty, policy.receivers.isEmpty,
+              policy.roles.isEmpty, policy.outputs.count <= 1, policy.receivers.isEmpty,
               policy.protectedPaths.isEmpty, policy.trackSort == nil, policy.mixerVisible == nil,
               let target = policy.targets.first, target.mixerRef == nil,
               let intent = policy.sends.first, intent.target == target.handle,
@@ -495,6 +516,16 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         let desired = intent.localOutput ?? intent.bus.map(OutputAssignment.bus)
         guard rows.count == 1, let row = rows.first, let mixerRef = source.mixerReference(at: row),
               checked.count == 1, let reading = checked.first else { return nil }
+        if let output = policy.outputs.first {
+            let checkedMain = fresh.checkedOutputs.filter { $0.source.matches(pair.strip) && $0.sendOrdinal == nil }
+            guard names.isEmpty, policy.inputs.isEmpty,
+                  output.subject == .target(target.handle),
+                  let desiredOutput = localAssignment(output.destination),
+                  localAssignmentForBefore(desiredOutput) != nil,
+                  checkedMain.count == 1, let beforeOutput = checkedMain.first?.assignment,
+                  localAssignmentForBefore(beforeOutput) != nil,
+                  beforeOutput != desiredOutput else { return nil }
+        }
         let namedBusReplacement: Bool
         if case .bus(let before) = reading.assignment, case .bus(let after)? = desired {
             namedBusReplacement = names.count == 1 && before != after
@@ -548,13 +579,19 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         before["mode"] = .string("post_fader")
         before["level_raw"] = .int(0)
         before["bypassed"] = .bool(false)
+        let dependencies: [Value]
+        if policy.outputs.isEmpty {
+            dependencies = names.isEmpty ? [] : [.string("name_" + task.handle)]
+        } else {
+            dependencies = [.string("output_" + task.handle)]
+        }
         return .object(["id": .string("send_" + task.handle),
             "kind": .string(task.desired == nil ? "local_send_removal" : "local_send_output"),
             "target_ref": .string(task.reference.rawValue), "mixer_ref": .string(task.mixerRef.rawValue),
             "observed_ordinal": .int(task.ordinal),
             "before": .object(before),
             "after": task.desired.map(assignmentValue) ?? .object(["kind": .string("no_send")]),
-            "dependencies": .array(names.isEmpty ? [] : [.string("name_" + task.handle)]), "blocked_reasons": .array([]),
+            "dependencies": .array(dependencies), "blocked_reasons": .array([]),
             "required_invariants": .array(["captured_track_strip_pair", "original_send_control",
                 "checked_send_readback", "conditional_owned_send_inverse"].map(Value.string))])
     }
@@ -612,7 +649,17 @@ final class ApprovedSessionRepair: @unchecked Sendable {
         guard naming.reasons.isEmpty else { return nil }
         let policy = naming.policy
         let send = capturedSend(policy: policy, names: names, source: source, request: request)
-        if let send, names.isEmpty,
+        let output = capturedOutput(policy: policy, names: names, source: source, request: request)
+        if let output, let send, names.isEmpty,
+           !policy.outputs.isEmpty, !policy.sends.isEmpty,
+           output.reference == send.reference, output.mixerRef == send.mixerRef,
+           output.pair.track.matches(send.pair.track), output.pair.strip.matches(send.pair.strip),
+           output.before != output.desired, send.before != send.desired,
+           case .issued(let project)? = source.projectIssuance {
+            return .init(projectRef: project, document: output.pair.track.document, mixer: nil,
+                names: [], renameCapture: nil, output: output, send: send)
+        }
+        if let send, names.isEmpty, policy.outputs.isEmpty,
            case .issued(let project)? = source.projectIssuance {
             return .init(projectRef: project, document: send.pair.track.document, mixer: nil,
                 names: [], renameCapture: nil, send: send)
@@ -622,8 +669,7 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             return .init(projectRef: project, document: document, mixer: nil, names: [], renameCapture: nil,
                 receivers: receivers)
         }
-        let output = capturedOutput(policy: policy, names: names, source: source, request: request)
-        if let output, names.isEmpty,
+        if let output, names.isEmpty, policy.sends.isEmpty,
            case .issued(let project)? = source.projectIssuance {
             return .init(projectRef: project, document: output.pair.track.document, mixer: nil,
                 names: [], renameCapture: nil, output: output)
@@ -902,6 +948,37 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             return .init(plan: saga, projectRef: issued, document: captured.document, nameGoals: goals,
                 cacheProjectEpoch: source.capture.projectEpoch, inputTask: input,
                 registryProjectEpoch: targetSnapshot.projectEpoch, cache: cache, registry: registry, journal: journal)
+        }
+        if let output = captured.output, let send = captured.send, changed.isEmpty {
+            guard output.reference == send.reference, output.mixerRef == send.mixerRef,
+                  output.pair.track.matches(send.pair.track), output.pair.strip.matches(send.pair.strip),
+                  output.before != output.desired, send.before != send.desired,
+                  let outputStep = capturedOutputStep(policy: policy, names: names,
+                    source: source.capture, request: source.request),
+                  let sendStep = capturedSendStep(policy: policy, names: names,
+                    source: source.capture, request: source.request),
+                  steps == [outputStep, sendStep],
+                  let current = await registry.resolve(output.reference), current.kind == .track,
+                  current.physicalTrack?.matches(output.pair.track) == true,
+                  let mixer = await registry.resolve(output.mixerRef), mixer.kind == .mixerStrip,
+                  mixer.physicalMixerStrip?.matches(output.pair.strip) == true else { return nil }
+            let saga = SagaPlan(steps: [
+                .init(operationID: .mixerSetOutputVerified, targetRef: output.reference,
+                    params: ["destination": .string(output.desired.token)],
+                    expectedInverse: .init(operationID: .mixerSetOutputVerified,
+                        valueParameter: "destination")),
+                .init(operationID: .mixerSetSendOutputVerified, targetRef: send.mixerRef,
+                    params: ["ordinal": .int(send.ordinal),
+                        "destination": send.desired.map(assignmentValue) ?? .object(["kind": .string("no_send")]),
+                        "expected_current": assignmentValue(send.before), "replace_existing": .bool(true),
+                        "project_ref": .string(issued.rawValue)],
+                    expectedInverse: .init(operationID: .mixerSetSendOutputVerified,
+                        valueParameter: "destination"))
+            ], idempotencyKey: key, canonicalPlanID: id, canonicalDigest: digest)
+            return .init(plan: saga, projectRef: issued, document: captured.document,
+                cacheProjectEpoch: source.capture.projectEpoch, outputTask: output, sendTask: send,
+                registryProjectEpoch: targetSnapshot.projectEpoch,
+                cache: cache, registry: registry, journal: journal)
         }
         if let send = captured.send, changed.isEmpty {
             guard let current = await registry.resolve(send.reference), current.kind == .track,
@@ -1510,7 +1587,22 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                 // The actual whole-census renewal authenticates new physical owners;
                 // frozen complete values still decide their preservation.
                 outputPair = pair; outputRenewal = renewal; outputProof = renewal.observation
-                guard let label = capturedSource.output, let sink = OutputAssignment.observed(slotLabel: label),
+                let sink: OutputAssignment
+                if let output = outputTask, output.reference == task.reference,
+                   output.mixerRef == task.mixerRef,
+                   output.pair.track.matches(task.pair.track), output.pair.strip.matches(task.pair.strip),
+                   outputAttempted, outputApplied, !outputInverseConsumed,
+                   checkedOutputEffect?.assignment == output.desired {
+                    // The preceding Saga step independently retained and read this
+                    // exact Output effect. Revalidate that owned value below; never
+                    // mistake the frozen pre-plan caption for current state.
+                    sink = output.desired
+                } else {
+                    guard let label = capturedSource.output,
+                          let captured = OutputAssignment.observed(slotLabel: label) else { return nil }
+                    sink = captured
+                }
+                guard
                       outputFootprintHeld(pair: pair, assignment: sink,
                         taskOverride: .init(reference: task.reference, mixerRef: task.mixerRef, pair: task.pair,
                             before: sink, desired: sink, capture: task.capture, handle: task.handle),
@@ -1569,6 +1661,36 @@ final class ApprovedSessionRepair: @unchecked Sendable {
                 checkedPeerHeaders: checkedPeerHeaders.isEmpty ? nil : checkedPeerHeaders,
                 continuedChange: continuedChange)
         })
+    }
+
+    /// A later Send failure may run before this plan's Output inverse. The Output
+    /// inverse is owned only while the same source's untouched/restored Send is
+    /// still exactly at its captured destination, mode, scalars and native control.
+    private func combinedSendBaselineCurrentBeforeOutputInverse() async -> Bool {
+        guard let task = sendTask, let output = outputTask,
+              task.reference == output.reference, task.mixerRef == output.mixerRef,
+              task.pair.track.matches(output.pair.track), task.pair.strip.matches(output.pair.strip),
+              let pair = outputPair, pair.track.matches(task.pair.track),
+              await projectIsCurrent(allowPendingCancellation: true),
+              let current = AXLogicProElements.assignedSendMenuControl(in: pair.strip.strip,
+                ordinal: task.ordinal, runtime: pair.track.runtime.ax), task.control.matches(current),
+              AXLogicProElements.sendSlotObservations(in: pair.strip.strip,
+                runtime: pair.track.runtime.ax) == task.footprint else { return false }
+        let read = await AXMixerStripBinding.$current.withValue(pair.strip) {
+            await AXMixerStripBinding.$outputAssociation.withValue(pair) {
+                await AccessibilityChannel.getOutputObservation(runtime: pair.track.runtime,
+                    sendOrdinal: task.ordinal, requiringOriginalSendControl: current)
+            }
+        }
+        guard read.result.isSuccess, read.assignment == task.before,
+              read.sendControl?.matches(current) == true,
+              read.sendNonRoutingChecks == ["Post Fader"] || read.sendNonRoutingChecks == ["포스트 페이더"],
+              let final = AXLogicProElements.assignedSendMenuControl(in: pair.strip.strip,
+                ordinal: task.ordinal, runtime: pair.track.runtime.ax), current.matches(final),
+              AXLogicProElements.sendSlotObservations(in: pair.strip.strip,
+                runtime: pair.track.runtime.ax) == task.footprint,
+              await projectIsCurrent(allowPendingCancellation: true) else { return false }
+        return true
     }
 
 
@@ -3009,6 +3131,11 @@ final class ApprovedSessionRepair: @unchecked Sendable {
             return toolStateCResult(.staleTargetReference, extras: ["write_attempted": false])
         }
         if inverse {
+            if sendTask != nil, !(await combinedSendBaselineCurrentBeforeOutputInverse()) {
+                Log.info("Canonical output refused: the combined Send baseline changed before inverse routing",
+                    subsystem: "saga")
+                return toolStateCResult(.staleTargetReference, extras: ["write_attempted": false])
+            }
             let retainedOwnershipIsCurrent: Bool
             if !task.prerequisiteBuses.isEmpty {
                 retainedOwnershipIsCurrent = await recheckOutputBusPrerequisites()
