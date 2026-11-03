@@ -360,12 +360,15 @@ private func waitUntil(
 
     let result = await router.route(operation: "transport.toggle_metronome")
     let body = decodeRouterJSON(result.message)
+    let fallbackUnsafe = try #require(body["fallback_unsafe"] as? Bool)
+    let writeAttempted = try #require(body["write_attempted"] as? Bool)
+    let safeToRetry = try #require(body["safe_to_retry"] as? Bool)
 
     #expect(!result.isSuccess)
     #expect(await accessibility.executedOps.isEmpty)
-    #expect(body["fallback_unsafe"] as? Bool == true)
-    #expect(body["write_attempted"] as? Bool == true)
-    #expect(body["safe_to_retry"] as? Bool == false)
+    #expect(fallbackUnsafe)
+    #expect(writeAttempted)
+    #expect(!safeToRetry)
     #expect(body["phase"] as? String == "press")
 }
 
@@ -382,14 +385,17 @@ private func waitUntil(
 
     let result = await router.route(operation: "transport.toggle_metronome")
     let body = decodeRouterJSON(result.message)
+    let fallbackUnsafe = try #require(body["fallback_unsafe"] as? Bool)
+    let writeAttempted = try #require(body["write_attempted"] as? Bool)
+    let safeToRetry = try #require(body["safe_to_retry"] as? Bool)
 
     #expect(!result.isSuccess)
     #expect(await accessibility.executedOps.isEmpty)
     #expect(await transport.sentBytes.isEmpty)
     #expect(body["error"] as? String == "port_unavailable")
-    #expect(body["fallback_unsafe"] as? Bool == true)
-    #expect(body["write_attempted"] as? Bool == false)
-    #expect(body["safe_to_retry"] as? Bool == true)
+    #expect(fallbackUnsafe)
+    #expect(!writeAttempted)
+    #expect(safeToRetry)
 }
 
 @Test func testStopDuringVerifiedHealthCheckInvalidatesExecutionBeforeAnyWrite() async throws {
@@ -413,15 +419,18 @@ private func waitUntil(
 
     let result = await route.value
     let body = decodeRouterJSON(result.message)
+    let fallbackUnsafe = try #require(body["fallback_unsafe"] as? Bool)
+    let writeAttempted = try #require(body["write_attempted"] as? Bool)
+    let safeToRetry = try #require(body["safe_to_retry"] as? Bool)
     #expect(!result.isSuccess)
     #expect(await accessibility.executedOps.isEmpty)
     #expect(await transport.sentBytes.isEmpty)
-    #expect(body["fallback_unsafe"] as? Bool == true)
-    #expect(body["write_attempted"] as? Bool == false)
-    #expect(body["safe_to_retry"] as? Bool == true)
+    #expect(fallbackUnsafe)
+    #expect(!writeAttempted)
+    #expect(safeToRetry)
 }
 
-@Test func testReadyProviderReplacedByNonProviderCannotUseStaleIDProof() async {
+@Test func testReadyProviderReplacedByNonProviderCannotUseStaleIDProof() async throws {
     let router = ChannelRouter()
     let accessibility = MockChannel(id: .accessibility)
     let probe = BlockingStopProbe()
@@ -445,12 +454,14 @@ private func waitUntil(
 
     let result = await route.value
     let body = decodeRouterJSON(result.message)
+    let fallbackUnsafe = try #require(body["fallback_unsafe"] as? Bool)
+    let writeAttempted = try #require(body["write_attempted"] as? Bool)
     #expect(!result.isSuccess)
     #expect(await provedProvider.executions == 0)
     #expect(await replacement.executedOps.isEmpty)
     #expect(await accessibility.executedOps.isEmpty)
-    #expect(body["fallback_unsafe"] as? Bool == true)
-    #expect(body["write_attempted"] as? Bool == false)
+    #expect(fallbackUnsafe)
+    #expect(!writeAttempted)
 }
 
 @Test func testStopDrainsVerifiedExecutionAlreadyInsideFirstSend() async throws {
@@ -500,12 +511,15 @@ private func waitUntil(
 
     let result = await router.route(operation: "transport.toggle_metronome")
     let body = decodeRouterJSON(result.message)
+    let fallbackUnsafe = try #require(body["fallback_unsafe"] as? Bool)
+    let writeAttempted = try #require(body["write_attempted"] as? Bool)
+    let safeToRetry = try #require(body["safe_to_retry"] as? Bool)
 
     #expect(!result.isSuccess)
     #expect(await accessibility.executedOps.isEmpty)
-    #expect(body["fallback_unsafe"] as? Bool == true)
-    #expect(body["write_attempted"] as? Bool == true)
-    #expect(body["safe_to_retry"] as? Bool == false)
+    #expect(fallbackUnsafe)
+    #expect(writeAttempted)
+    #expect(!safeToRetry)
     #expect(body["phase"] as? String == "release")
     #expect(await transport.sentBytes == [[0xBF, 98, 0x7F]])
 }
