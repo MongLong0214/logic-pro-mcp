@@ -20,7 +20,7 @@ A local Model Context Protocol (MCP) server that lets Claude Code, Claude Deskto
   <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-0.10-blue.svg?style=flat-square" /></a>
   <a href="https://github.com/MongLong0214/logic-pro-mcp/actions/workflows/ci.yml"><img src="https://github.com/MongLong0214/logic-pro-mcp/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square" /></a>
-  <img src="https://img.shields.io/badge/stable-v3.18.0-blue.svg?style=flat-square" />
+  <img src="https://img.shields.io/badge/stable-v3.19.0-blue.svg?style=flat-square" />
 </p>
 
 <p align="center">
@@ -66,7 +66,7 @@ Counts below are read from the current source tree with the command shown; re-ru
 | Control channels | **7** — CoreMIDI, Accessibility, CGEvent, AppleScript, MCU, MIDIKeyCommands, Scripter | `grep -n 'case .* = "' Sources/LogicProMCP/Channels/Channel.swift` |
 | Locales Logic ships | **10** — de-DE en-US es-ES fr-FR it-IT ja-JP ko-KR pt-BR zh-CN zh-TW | `python3 -c "import json; print(json.load(open('docs/locale/ui-labels.json'))['supported_locales'])"` |
 | Supported Logic Pro | **Latest Logic Pro first** — desktop **Logic Pro** (`com.apple.logic10`, `/Applications/Logic Pro.app`). Apple Creator Studio **Logic Pro Creator Studio** (`com.apple.mobilelogic`, `/Applications/Logic Pro Creator Studio.app`) is recognised, not supported. Desktop **Logic Pro** is the only variant the release qualification matrix covers (`shipVariants = [.desktop]`), and the only one this release supports. Without `LOGIC_PRO_BUNDLE_ID` the server can still select Creator Studio: it targets the frontmost Logic; failing that a running one, then an installed one, desktop first in both. So a Creator Studio that is frontmost, or is the only Logic running, becomes the target, with no qualification evidence behind it. Set `LOGIC_PRO_BUNDLE_ID=com.apple.logic10` to keep the server on desktop Logic Pro. Logic Pro 12.3 is the actively-validated target (macOS 15.6+); older versions down to the 12.0.1 floor are best-effort |
-| Release state | **Current stable**: `v3.18.0` — [v3.18.0](https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v3.18.0) |
+| Release state | **Current stable**: `v3.19.0` — [v3.19.0](https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v3.19.0) |
 
 If this project helps you make music with Claude, Cursor, Codex, or any MCP client, star the repo. It helps the project reach more Logic Pro users and maintainers.
 
@@ -110,7 +110,7 @@ Logic Pro MCP uses a different model. It routes each operation to the strongest 
 - **Confirmation levels**: destructive/project and plugin insertion flows require explicit confirmation metadata before execution.
 - **Provenance labels**: read surfaces expose source, freshness, and evidence labels instead of forcing clients to guess.
 - **Installer hardening**: Homebrew pins SHA256; the shell installer refuses to run without explicit hash/team pins unless same-origin provenance is explicitly allowed.
-- **Release honesty**: `v3.18.0` is the current stable line, and README claims stay tied to shipped artifacts, release-tree tests, or explicitly linked live evidence.
+- **Release honesty**: `v3.19.0` is the current stable line, and README claims stay tied to shipped artifacts, release-tree tests, or explicitly linked live evidence.
 
 ## Locales
 
@@ -141,7 +141,7 @@ A `derived` label has not been read from a running Logic in that locale; it is A
 
 The package manifest uses Swift tools 6.0 for compatibility. Current source verification uses Xcode 16.4 / Swift 6.2 in CI.
 
-The current stable line is `v3.18.0` (cut 2026-09-28 UTC). Its per-release detail — everything added, changed, and fixed since `v3.17.0`, along with every stated limit — is in [CHANGELOG.md](CHANGELOG.md); this README does not restate release history.
+The current stable line is `v3.19.0` (cut 2026-11-03 UTC). Its per-release detail — everything added, changed, and fixed since `v3.18.0`, along with every stated limit — is in [CHANGELOG.md](CHANGELOG.md); this README does not restate release history.
 
 ### 1. Install
 
@@ -213,7 +213,7 @@ operations remain `unattended_unavailable` rather than becoming ready from an op
 The installer is **fail-closed**: it refuses to run without explicit `LOGIC_PRO_MCP_SHA256` + `LOGIC_PRO_MCP_TEAM_ID` env pins. It verifies the downloaded `LogicProMCP-macOS-universal.tar.gz` archive, so copy the SHA from that archive entry in the release's `SHA256SUMS.txt`:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.18.0/Scripts/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.19.0/Scripts/install.sh -o install.sh
 # inspect install.sh, then:
 LOGIC_PRO_MCP_SHA256=<paste LogicProMCP-macOS-universal.tar.gz SHA256SUMS entry> \
 LOGIC_PRO_MCP_TEAM_ID=<paste team_id from RELEASE-METADATA.json> \
@@ -224,7 +224,7 @@ If you knowingly accept same-origin provenance (hash + Team ID fetched from the 
 
 ```bash
 LOGIC_PRO_MCP_ALLOW_SAME_ORIGIN=1 \
-bash <(curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.18.0/Scripts/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.19.0/Scripts/install.sh)
 ```
 
 See [SECURITY.md §Installer trust model](SECURITY.md#installer-trust-model) for the trust tiers and threat model.
@@ -378,7 +378,7 @@ Per-release detail lives in [CHANGELOG.md](CHANGELOG.md). Security and installer
 
 ## Registry Metadata
 
-The repository ships `server.json` for the official MCP Registry metadata path. It is pinned to the current stable release (`v3.18.0`) and carries discovery tags for Logic Pro, DAW automation, MIDI, Claude/Cursor MCP clients, and music-production agents. The record is metadata-only because the registry package schema does not yet model Homebrew formulas or GitHub release tarballs as first-class package types. The install authority remains the pinned GitHub Release/Homebrew path above.
+The repository ships `server.json` for the official MCP Registry metadata path. It is pinned to the current stable release (`v3.19.0`) and carries discovery tags for Logic Pro, DAW automation, MIDI, Claude/Cursor MCP clients, and music-production agents. The record is metadata-only because the registry package schema does not yet model Homebrew formulas or GitHub release tarballs as first-class package types. The install authority remains the pinned GitHub Release/Homebrew path above.
 
 ## Known Limitations
 

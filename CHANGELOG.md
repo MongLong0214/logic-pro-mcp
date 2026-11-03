@@ -8,6 +8,14 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+---
+
+## [3.19.0] — 2026-11-03
+
+Caller-facing changes since v3.18.0. Guard scripts, CI, qualification infrastructure, live
+harnesses, roadmap work, and issue bookkeeping are excluded unless they changed a shipped
+contract. Every stated limit remains part of the corresponding change.
+
 ### Added
 - **Compressor `ratio` is available through read-only `logic_plugins get_param_verified` (#299).**
   The Controls row is sampled twice and returns its raw AX value plus Logic's verbatim ratio display
