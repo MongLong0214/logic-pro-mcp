@@ -148,6 +148,7 @@ actor MockKeyCmdTransport: KeyCmdTransportProtocol {
     var sendError: MockKeyCmdTransportError?
     var sendAttempts = 0
     var failOnSendAttempts: Set<Int> = []
+    var forcedReadiness: KeyCmdTransportReadiness?
 
     func prepare() async throws {
         prepared = true
@@ -172,7 +173,14 @@ actor MockKeyCmdTransport: KeyCmdTransportProtocol {
         failOnSendAttempts = attempts
     }
 
+    func setReadiness(_ readiness: KeyCmdTransportReadiness?) {
+        forcedReadiness = readiness
+    }
+
     func readiness() async -> KeyCmdTransportReadiness {
+        if let forcedReadiness {
+            return forcedReadiness
+        }
         if prepared {
             return KeyCmdTransportReadiness(available: true, detail: "Mock KeyCmd transport ready")
         }

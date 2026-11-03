@@ -129,6 +129,83 @@ private actor StopAllCompletionProbe {
     }
 }
 
+private actor BlockingKeyCmdTransport: KeyCmdTransportProtocol {
+    enum BlockPoint {
+        case none
+        case readiness
+        case firstSend
+    }
+
+    private let probe: BlockingStopProbe
+    private var blockPoint: BlockPoint = .none
+    private(set) var sentBytes: [[UInt8]] = []
+
+    init(probe: BlockingStopProbe) {
+        self.probe = probe
+    }
+
+    func prepare() async throws {}
+
+    func setBlockPoint(_ blockPoint: BlockPoint) {
+        self.blockPoint = blockPoint
+    }
+
+    func send(_ bytes: [UInt8]) async throws {
+        if blockPoint == .firstSend, sentBytes.isEmpty {
+            blockPoint = .none
+            probe.blockUntilReleased()
+        }
+        sentBytes.append(bytes)
+    }
+
+    func readiness() async -> KeyCmdTransportReadiness {
+        if blockPoint == .readiness {
+            blockPoint = .none
+            probe.blockUntilReleased()
+        }
+        return KeyCmdTransportReadiness(available: true, detail: "blocking transport ready")
+    }
+}
+
+private actor BlockingOperationReadyChannel: OperationReadinessProviding {
+    nonisolated let id = ChannelID.midiKeyCommands
+    private let probe: BlockingStopProbe
+    private(set) var executions = 0
+
+    init(probe: BlockingStopProbe) {
+        self.probe = probe
+    }
+
+    func start() async throws {}
+    func stop() async {}
+
+    func execute(operation: String, params: [String: String]) async -> ChannelResult {
+        executions += 1
+        return .success("stale readiness provider executed")
+    }
+
+    func healthCheck() async -> ChannelHealth {
+        .healthy(
+            detail: "operation-only readiness",
+            verificationStatus: .unattendedUnavailable
+        )
+    }
+
+    func isReady(operation: String) async -> Bool {
+        probe.blockUntilReleased()
+        return true
+    }
+
+    func executeIfReady(
+        operation: String,
+        params: [String: String],
+        beforeExecution: @escaping @Sendable () async -> Bool
+    ) async -> OperationReadyExecution {
+        guard await beforeExecution() else { return .notReady }
+        return .executed(await execute(operation: operation, params: params))
+    }
+}
+
 private actor StartOrderRecorder {
     private var started: [ChannelID] = []
 
@@ -223,6 +300,232 @@ private func waitUntil(
     let cgOps = await cgEvent.executedOps
     #expect(keyCmdOps.count == 0) // skipped (unavailable)
     #expect(cgOps.count == 1)     // fallback used
+}
+
+@Test func testUnverifiedMetronomeBindingPreservesExistingAccessibilityFirstRoute() async throws {
+    let router = ChannelRouter()
+    let accessibility = MockChannel(id: .accessibility)
+    let transport = MockKeyCmdTransport()
+    let keyCommands = MIDIKeyCommandsChannel(transport: transport)
+    try await keyCommands.start()
+    await router.register(accessibility)
+    await router.register(keyCommands)
+
+    let result = await router.route(operation: "transport.toggle_metronome")
+
+    #expect(result.isSuccess)
+    #expect(await accessibility.executedOps.count == 1)
+    #expect(await transport.sentBytes.isEmpty)
+}
+
+@Test func testVerifiedMetronomeBindingMovesMIDIKeyCommandsAheadOfAccessibility() async throws {
+    let router = ChannelRouter()
+    let accessibility = MockChannel(id: .accessibility)
+    let transport = MockKeyCmdTransport()
+    let keyCommands = MIDIKeyCommandsChannel(transport: transport)
+    try await keyCommands.start()
+    await keyCommands.recordVerifiedBinding(operation: "transport.toggle_metronome")
+    await router.register(accessibility)
+    await router.register(keyCommands)
+
+    let result = await router.route(operation: "transport.toggle_metronome")
+
+    #expect(result.isSuccess)
+    #expect(await accessibility.executedOps.isEmpty)
+    #expect(await transport.sentBytes == [[0xBF, 98, 0x7F], [0xBF, 98, 0x00]])
+}
+
+@Test func testStoppingKeyCommandChannelClearsVerifiedOperationReadiness() async throws {
+    let transport = MockKeyCmdTransport()
+    let keyCommands = MIDIKeyCommandsChannel(transport: transport)
+    try await keyCommands.start()
+    await keyCommands.recordVerifiedBinding(operation: "transport.toggle_metronome")
+    #expect(await keyCommands.isReady(operation: "transport.toggle_metronome"))
+
+    await keyCommands.stop()
+
+    #expect(!(await keyCommands.isReady(operation: "transport.toggle_metronome")))
+}
+
+@Test func testVerifiedMetronomeFirstSendFailureForbidsForegroundFallback() async throws {
+    let router = ChannelRouter()
+    let accessibility = MockChannel(id: .accessibility)
+    let transport = MockKeyCmdTransport()
+    await transport.setFailOnSendAttempts([1])
+    let keyCommands = MIDIKeyCommandsChannel(transport: transport)
+    try await keyCommands.start()
+    await keyCommands.recordVerifiedBinding(operation: "transport.toggle_metronome")
+    await router.register(accessibility)
+    await router.register(keyCommands)
+
+    let result = await router.route(operation: "transport.toggle_metronome")
+    let body = decodeRouterJSON(result.message)
+    let fallbackUnsafe = try #require(body["fallback_unsafe"] as? Bool)
+    let writeAttempted = try #require(body["write_attempted"] as? Bool)
+    let safeToRetry = try #require(body["safe_to_retry"] as? Bool)
+
+    #expect(!result.isSuccess)
+    #expect(await accessibility.executedOps.isEmpty)
+    #expect(fallbackUnsafe)
+    #expect(writeAttempted)
+    #expect(!safeToRetry)
+    #expect(body["phase"] as? String == "press")
+}
+
+@Test func testVerifiedMetronomePortLossForbidsForegroundFallbackBeforeWrite() async throws {
+    let router = ChannelRouter()
+    let accessibility = MockChannel(id: .accessibility)
+    let transport = MockKeyCmdTransport()
+    let keyCommands = MIDIKeyCommandsChannel(transport: transport)
+    try await keyCommands.start()
+    await keyCommands.recordVerifiedBinding(operation: "transport.toggle_metronome")
+    await transport.setReadiness(.init(available: false, detail: "owned port disappeared"))
+    await router.register(accessibility)
+    await router.register(keyCommands)
+
+    let result = await router.route(operation: "transport.toggle_metronome")
+    let body = decodeRouterJSON(result.message)
+    let fallbackUnsafe = try #require(body["fallback_unsafe"] as? Bool)
+    let writeAttempted = try #require(body["write_attempted"] as? Bool)
+    let safeToRetry = try #require(body["safe_to_retry"] as? Bool)
+
+    #expect(!result.isSuccess)
+    #expect(await accessibility.executedOps.isEmpty)
+    #expect(await transport.sentBytes.isEmpty)
+    #expect(body["error"] as? String == "port_unavailable")
+    #expect(fallbackUnsafe)
+    #expect(!writeAttempted)
+    #expect(safeToRetry)
+}
+
+@Test func testStopDuringVerifiedHealthCheckInvalidatesExecutionBeforeAnyWrite() async throws {
+    let router = ChannelRouter()
+    let accessibility = MockChannel(id: .accessibility)
+    let probe = BlockingStopProbe()
+    let transport = BlockingKeyCmdTransport(probe: probe)
+    let keyCommands = MIDIKeyCommandsChannel(transport: transport)
+    try await keyCommands.start()
+    await keyCommands.recordVerifiedBinding(operation: "transport.toggle_metronome")
+    await transport.setBlockPoint(.readiness)
+    await router.register(accessibility)
+    await router.register(keyCommands)
+
+    let route = Task {
+        await router.route(operation: "transport.toggle_metronome")
+    }
+    #expect(probe.waitUntilStopCalled())
+    await keyCommands.stop()
+    probe.unblock()
+
+    let result = await route.value
+    let body = decodeRouterJSON(result.message)
+    let fallbackUnsafe = try #require(body["fallback_unsafe"] as? Bool)
+    let writeAttempted = try #require(body["write_attempted"] as? Bool)
+    let safeToRetry = try #require(body["safe_to_retry"] as? Bool)
+    #expect(!result.isSuccess)
+    #expect(await accessibility.executedOps.isEmpty)
+    #expect(await transport.sentBytes.isEmpty)
+    #expect(fallbackUnsafe)
+    #expect(!writeAttempted)
+    #expect(safeToRetry)
+}
+
+@Test func testReadyProviderReplacedByNonProviderCannotUseStaleIDProof() async throws {
+    let router = ChannelRouter()
+    let accessibility = MockChannel(id: .accessibility)
+    let probe = BlockingStopProbe()
+    let provedProvider = BlockingOperationReadyChannel(probe: probe)
+    let replacement = MockChannel(
+        id: .midiKeyCommands,
+        healthOverride: .healthy(
+            detail: "replacement has no operation proof",
+            verificationStatus: .unattendedUnavailable
+        )
+    )
+    await router.register(accessibility)
+    await router.register(provedProvider)
+
+    let route = Task {
+        await router.route(operation: "transport.toggle_metronome")
+    }
+    #expect(probe.waitUntilStopCalled())
+    await router.register(replacement)
+    probe.unblock()
+
+    let result = await route.value
+    let body = decodeRouterJSON(result.message)
+    let fallbackUnsafe = try #require(body["fallback_unsafe"] as? Bool)
+    let writeAttempted = try #require(body["write_attempted"] as? Bool)
+    #expect(!result.isSuccess)
+    #expect(await provedProvider.executions == 0)
+    #expect(await replacement.executedOps.isEmpty)
+    #expect(await accessibility.executedOps.isEmpty)
+    #expect(fallbackUnsafe)
+    #expect(!writeAttempted)
+}
+
+@Test func testStopDrainsVerifiedExecutionAlreadyInsideFirstSend() async throws {
+    let router = ChannelRouter()
+    let probe = BlockingStopProbe()
+    let stopCompletion = StopAllCompletionProbe()
+    let transport = BlockingKeyCmdTransport(probe: probe)
+    let keyCommands = MIDIKeyCommandsChannel(transport: transport)
+    try await keyCommands.start()
+    await keyCommands.recordVerifiedBinding(operation: "transport.toggle_metronome")
+    await transport.setBlockPoint(.firstSend)
+    await router.register(keyCommands)
+
+    let route = Task {
+        await router.route(operation: "transport.toggle_metronome")
+    }
+    #expect(probe.waitUntilStopCalled())
+    let stop = Task {
+        await keyCommands.stop()
+        await stopCompletion.markCompleted()
+    }
+    #expect(try await waitUntil {
+        !(await keyCommands.isReady(operation: "transport.toggle_metronome"))
+    })
+    #expect(!(await stopCompletion.isCompleted()))
+
+    probe.unblock()
+    let result = await route.value
+    await stop.value
+
+    #expect(result.isSuccess)
+    #expect(await stopCompletion.isCompleted())
+    #expect(await transport.sentBytes == [[0xBF, 98, 0x7F], [0xBF, 98, 0x00]])
+    #expect(!(await keyCommands.isReady(operation: "transport.toggle_metronome")))
+}
+
+@Test func testVerifiedMetronomeReleaseFailureForbidsForegroundFallbackAsPartialSend() async throws {
+    let router = ChannelRouter()
+    let accessibility = MockChannel(id: .accessibility)
+    let transport = MockKeyCmdTransport()
+    await transport.setFailOnSendAttempts([2])
+    let keyCommands = MIDIKeyCommandsChannel(transport: transport)
+    try await keyCommands.start()
+    await keyCommands.recordVerifiedBinding(operation: "transport.toggle_metronome")
+    await router.register(accessibility)
+    await router.register(keyCommands)
+
+    let result = await router.route(operation: "transport.toggle_metronome")
+    let body = decodeRouterJSON(result.message)
+    let fallbackUnsafe = try #require(body["fallback_unsafe"] as? Bool)
+    let writeAttempted = try #require(body["write_attempted"] as? Bool)
+    let safeToRetry = try #require(body["safe_to_retry"] as? Bool)
+
+    #expect(!result.isSuccess)
+    #expect(await accessibility.executedOps.isEmpty)
+    #expect(fallbackUnsafe)
+    #expect(writeAttempted)
+    #expect(!safeToRetry)
+    #expect(body["phase"] as? String == "release")
+    #expect(await transport.sentBytes == [[0xBF, 98, 0x7F]])
+}
+
+private func decodeRouterJSON(_ text: String) -> [String: Any] {
+    (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] ?? [:]
 }
 
 @Test func testRouterTransportFallsBackToAppleScript() async {

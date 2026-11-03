@@ -366,9 +366,26 @@ actor ChannelRouter {
             return Self.emptyChainResult(operation: operation, restriction: Self.debugOnlyChannel)
         }
 
+        var operationReadyChannels: Set<ChannelID> = []
+        for (id, channel) in channels {
+            guard tableChain.contains(id),
+                  let provider = channel as? any OperationReadinessProviding,
+                  await provider.isReady(operation: operation) else { continue }
+            operationReadyChannels.insert(id)
+        }
+
+        // An operation-specific proof may promote that channel without changing
+        // the static table or the channel-wide health contract. Unverified routes
+        // retain the byte-for-byte table order.
+        let prioritizedTableChain = tableChain.filter(operationReadyChannels.contains)
+            + tableChain.filter { !operationReadyChannels.contains($0) }
+
         let chain: [ChannelID]
         switch Self.effectiveChain(
-            tableChain, operation: operation, restriction: Self.debugOnlyChannel, pass: Self.debugPassOperations
+            prioritizedTableChain,
+            operation: operation,
+            restriction: Self.debugOnlyChannel,
+            pass: Self.debugPassOperations
         ) {
         case let .success(kept):
             chain = kept
@@ -415,6 +432,20 @@ actor ChannelRouter {
                 ? ChannelHealth.unavailable("MCU is deferred until an MCU write or consented setup")
                 : await channel.healthCheck()
             guard health.available else {
+                if operationReadyChannels.contains(channelID) {
+                    return .error(HonestContract.encodeStateC(
+                        error: .portUnavailable,
+                        hint: health.detail,
+                        extras: [
+                            "operation": operation,
+                            "terminal": true,
+                            "terminal_scope": "mcp_request_only",
+                            "fallback_unsafe": true,
+                            "safe_to_retry": true,
+                            "write_attempted": false,
+                        ]
+                    ))
+                }
                 // PRD Issue #1 §4.1 step 7: a bypass op (KeyCmd MIDI send)
                 // whose channel reports `available:false` means the virtual
                 // port itself is not published — no other channel can supply
@@ -436,7 +467,7 @@ actor ChannelRouter {
                 lastError = "Channel \(channelID.rawValue): \(health.detail)"
                 continue
             }
-            guard isBypass || health.ready else {
+            guard isBypass || operationReadyChannels.contains(channelID) || health.ready else {
                 Log.debug(
                     "Channel \(channelID.rawValue) is not runtime-ready: \(health.detail), trying next",
                     subsystem: "router"
@@ -452,21 +483,46 @@ actor ChannelRouter {
                     extras: ["operation": operation, "write_attempted": false]
                 ))
             }
-            await OperationTraceContext.record(.channelStarted, attributes: [
-                "channel": channelID.rawValue,
-            ])
-            // #389: an armed write boundary commits HERE — the first channel
-            // that actually executes — and never on a route that resolved no
-            // channel. Reads route without an arm, so this is a no-op for them.
-            await OperationTraceWriteBoundaryArm.commitIfArmed()
-            if channelID == .mcu && !Self.passiveMCUOperations.contains(operation),
-               stopping || !Self.mcuUsePermitted {
-                return .error(HonestContract.encodeStateC(
-                    error: .cancelled, hint: "MCU execution cancelled or ownership expired",
-                    extras: ["operation": operation, "write_attempted": false]
-                ))
+            let result: ChannelResult
+            if operationReadyChannels.contains(channelID) {
+                guard let provider = channel as? any OperationReadinessProviding else {
+                    return .error(Self.operationReadinessInvalidated(operation: operation))
+                }
+                let claimed = await provider.executeIfReady(
+                    operation: operation,
+                    params: params
+                ) { [weak self] in
+                    guard let self,
+                          await self.isCurrentChannel(channel, id: channelID) else { return false }
+                    await OperationTraceContext.record(.channelStarted, attributes: [
+                        "channel": channelID.rawValue,
+                    ])
+                    await OperationTraceWriteBoundaryArm.commitIfArmed()
+                    return true
+                }
+                switch claimed {
+                case .notReady:
+                    return .error(Self.operationReadinessInvalidated(operation: operation))
+                case .executed(let executed):
+                    result = executed
+                }
+            } else {
+                await OperationTraceContext.record(.channelStarted, attributes: [
+                    "channel": channelID.rawValue,
+                ])
+                // #389: an armed write boundary commits HERE — the first channel
+                // that actually executes — and never on a route that resolved no
+                // channel. Reads route without an arm, so this is a no-op for them.
+                await OperationTraceWriteBoundaryArm.commitIfArmed()
+                if channelID == .mcu && !Self.passiveMCUOperations.contains(operation),
+                   stopping || !Self.mcuUsePermitted {
+                    return .error(HonestContract.encodeStateC(
+                        error: .cancelled, hint: "MCU execution cancelled or ownership expired",
+                        extras: ["operation": operation, "write_attempted": false]
+                    ))
+                }
+                result = await channel.execute(operation: operation, params: params)
             }
-            let result = await channel.execute(operation: operation, params: params)
             var completedAttributes = [
                 "channel": channelID.rawValue,
                 "outcome": result.isSuccess ? "success" : "error",
@@ -590,6 +646,29 @@ actor ChannelRouter {
                 "safe_to_retry": false,
             ]
         ))
+    }
+
+    private func isCurrentChannel(_ channel: any Channel, id: ChannelID) -> Bool {
+        guard let current = channels[id] else { return false }
+        return ObjectIdentifier(current) == ObjectIdentifier(channel)
+    }
+
+    private static func operationReadinessInvalidated(operation: String) -> String {
+        HonestContract.encodeStateC(
+            error: .cancelled,
+            hint: "Verified operation readiness was invalidated before execution",
+            extras: [
+                "operation": operation,
+                "terminal": true,
+                "terminal_scope": "mcp_request_only",
+                "fallback_unsafe": true,
+                "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
+                "safe_to_retry": true,
+                "write_attempted": false,
+            ]
+        )
     }
 
     private static func shouldContinueAfterTerminalStateC(

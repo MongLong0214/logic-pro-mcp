@@ -14,11 +14,15 @@ protocol KeyCmdTransportProtocol: Actor {
 
 /// MIDI Key Commands channel: triggers Logic Pro key commands via MIDI CC on Channel 16.
 /// Each operation maps to a specific CC# (§4.11 mapping table).
-actor MIDIKeyCommandsChannel: KeyCmdCCChannel {
+actor MIDIKeyCommandsChannel: KeyCmdCCChannel, OperationReadinessProviding {
     nonisolated let id = ChannelID.midiKeyCommands
 
     let transport: any KeyCmdTransportProtocol
     let approvalStore: any ManualValidationStoring
+    private var verifiedOperations: Set<String> = []
+    private var stopping = false
+    private var verifiedExecutionsInFlight = 0
+    private var stopWaiters: [CheckedContinuation<Void, Never>] = []
 
     init(
         transport: any KeyCmdTransportProtocol,
@@ -106,6 +110,7 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel {
 
     func start() async throws {
         let readiness = try await prepareTransportForStart()
+        stopping = false
         Log.info(
             "MIDIKeyCommands channel started (\(Self.mappingTable.count) commands mapped) — \(readiness.detail)",
             subsystem: "keycmd"
@@ -113,7 +118,80 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel {
     }
 
     func stop() async {
+        stopping = true
+        verifiedOperations.removeAll()
+        if verifiedExecutionsInFlight > 0 {
+            await withCheckedContinuation { continuation in
+                stopWaiters.append(continuation)
+            }
+        }
         Log.info("MIDIKeyCommands channel stopped", subsystem: "keycmd")
+    }
+
+    /// Record only catalog operations that were functionally verified through this
+    /// actor's owned transport during the current process lifetime.
+    func recordVerifiedBinding(operation: String) {
+        guard !stopping,
+              MIDIKeyCommandBindingCatalog.entries.contains(where: { $0.operation == operation }) else {
+            return
+        }
+        verifiedOperations.insert(operation)
+    }
+
+    func isReady(operation: String) -> Bool {
+        !stopping && verifiedOperations.contains(operation)
+    }
+
+    func executeIfReady(
+        operation: String,
+        params: [String: String],
+        beforeExecution: @escaping @Sendable () async -> Bool
+    ) async -> OperationReadyExecution {
+        guard !stopping, verifiedOperations.contains(operation) else {
+            return .notReady
+        }
+        verifiedExecutionsInFlight += 1
+        defer { finishVerifiedExecution() }
+
+        guard await beforeExecution() else {
+            return .notReady
+        }
+        return .executed(await execute(operation: operation, params: params, verified: true))
+    }
+
+    private func finishVerifiedExecution() {
+        precondition(verifiedExecutionsInFlight > 0)
+        verifiedExecutionsInFlight -= 1
+        guard verifiedExecutionsInFlight == 0 else { return }
+        let waiters = stopWaiters
+        stopWaiters.removeAll()
+        for waiter in waiters {
+            waiter.resume()
+        }
+    }
+
+    private static func verifiedMappedSendFailure(
+        _ error: any Error,
+        operation: String,
+        phase: String,
+        writeAttempted: Bool
+    ) -> ChannelResult {
+        .error(HonestContract.encodeStateC(
+            error: .axWriteFailed,
+            hint: "Verified MIDI key-command \(phase) send failed for \(operation): \(error)",
+            extras: [
+                "operation": operation,
+                "phase": phase,
+                "terminal": true,
+                "terminal_scope": "mcp_request_only",
+                "fallback_unsafe": true,
+                "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
+                "safe_to_retry": !writeAttempted,
+                "write_attempted": writeAttempted,
+            ]
+        ))
     }
 
     private static func mappedTerminalFailure(
@@ -139,6 +217,18 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel {
     }
 
     func execute(operation: String, params: [String: String]) async -> ChannelResult {
+        await execute(
+            operation: operation,
+            params: params,
+            verified: !stopping && verifiedOperations.contains(operation)
+        )
+    }
+
+    private func execute(
+        operation: String,
+        params: [String: String],
+        verified: Bool
+    ) async -> ChannelResult {
         // T6 (PRD Issue#1 §4.3 / AC-1.1) — direct MIDI send path for the
         // 7 "midi.*.keycmd" ops. These bypass the CC mapping table and
         // push raw MIDI bytes through the KeyCmd virtual transport. The
@@ -163,9 +253,28 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel {
 
         do {
             try await transport.send(bytes)
+        } catch {
+            if verified {
+                return Self.verifiedMappedSendFailure(
+                    error, operation: operation, phase: "press", writeAttempted: true
+                )
+            }
+            return Self.mappedTerminalFailure(
+                .axWriteFailed,
+                operation: operation,
+                hint: "Failed to send key command for \(operation): \(error)",
+                writeAttempted: true
+            )
+        }
+        do {
             // Send CC value 0 to "release" (some Logic Pro commands need note-off style)
             try await transport.send(releaseBytes)
         } catch {
+            if verified {
+                return Self.verifiedMappedSendFailure(
+                    error, operation: operation, phase: "release", writeAttempted: true
+                )
+            }
             return Self.mappedTerminalFailure(
                 .axWriteFailed,
                 operation: operation,
