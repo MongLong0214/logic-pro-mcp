@@ -1711,10 +1711,11 @@ enum SemanticOracleTable {
     // MARK: - midi
 
     // CoreMIDIChannel `listMIDIPortsJSON` → {"sources":[String],
-    // "destinations":[String]}. The `logic://midi/ports` resource routes the
-    // SAME midi.list_ports operation and serves the channel's message verbatim
-    // (ResourceHandlers+StateReaders), so response and readback are equal by
-    // construction — the strongest available check for a body with no constants.
+    // "destinations":[String]}. The legacy `logic://midi/ports` resource routes
+    // the SAME midi.list_ports operation and serves the channel's message verbatim
+    // (ResourceHandlers+StateReaders), so that source remains protocol-only. Live
+    // qualification instead obtains the same typed shape from a separate, direct
+    // CoreMIDI endpoint census in the qualification process.
     static let midiListPorts = OperationOracle(
         custom: .midiListPorts,
         reason: """
@@ -1726,9 +1727,9 @@ enum SemanticOracleTable {
             verbatim, so agreement proves same-handler echo and transport \
             consistency — it is NOT an independent readback and must not be \
             read as one. It still catches truncation, reordering, and \
-            serialization damage between the two reads. No truly independent \
-            MIDI probe exists today; Phase B may add a CoreMIDI-direct probe to \
-            make this a real cross-check.
+            serialization damage between the two reads. Qualification may award \
+            semantic credit only when this same comparison is bound to the \
+            separately acquired host://coremidi/ports source.
             """,
         independentReadbackDeferral: QualificationDeferral(
             code: .semanticValidatorUnavailable,

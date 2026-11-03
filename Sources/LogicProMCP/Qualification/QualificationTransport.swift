@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import CoreMIDI
 
 struct QualificationDriveRequest: Sendable {
     let executableURL: URL
@@ -767,7 +768,8 @@ struct QualificationOperationResult: Equatable, Sendable {
                 return "independent readback was not admissible: \(reason)"
             }
             if let deferred = QualificationSemanticReadbackValidator.independentReadbackDeferral(
-                for: operationID
+                for: operationID,
+                readbackSource: readbackSource
             ) {
                 return deferral?.detail ?? deferred.detail
             }
@@ -839,7 +841,8 @@ struct QualificationOperationResult: Equatable, Sendable {
             )
         case .notQualified where isError == false && semanticReadbackValidated == false:
             if let deferred = QualificationSemanticReadbackValidator.independentReadbackDeferral(
-                for: operationID
+                for: operationID,
+                readbackSource: readbackSource
             ) {
                 return QualificationDeferral(
                     code: .semanticMismatch,
@@ -877,7 +880,8 @@ struct QualificationOperationResult: Equatable, Sendable {
             )
         case .protocolSmoke:
             if let deferred = QualificationSemanticReadbackValidator.independentReadbackDeferral(
-                for: operationID
+                for: operationID,
+                readbackSource: readbackSource
             ) {
                 return deferred
             }
@@ -919,7 +923,8 @@ struct QualificationOperationResult: Equatable, Sendable {
         return QualificationSemanticReadbackValidator.validate(
             operationID: operationID,
             responseData: responseData,
-            readbackData: readbackData
+            readbackData: readbackData,
+            readbackSource: readbackSource
         )
     }
 
@@ -1077,15 +1082,29 @@ struct QualificationLiveGateSummary: Equatable, Sendable {
 }
 
 enum QualificationSemanticReadbackValidator {
-    static func independentReadbackDeferral(for operationID: String) -> QualificationDeferral? {
+    static let coreMIDIPortReadbackSource = "host://coremidi/ports"
+
+    static func independentReadbackDeferral(
+        for operationID: String,
+        readbackSource: String? = nil
+    ) -> QualificationDeferral? {
         guard let id = OperationID(rawValue: operationID) else { return nil }
+        if id == .midiListPorts, readbackSource == coreMIDIPortReadbackSource {
+            return nil
+        }
         return SemanticOracleTable.byOperationID[id]?.independentReadbackDeferral
+    }
+
+    static func canUseIndependentReadback(for operationID: OperationID) -> Bool {
+        operationID == .midiListPorts
+            || SemanticOracleTable.byOperationID[operationID]?.independentReadbackDeferral == nil
     }
 
     static func validate(
         operationID: String,
         responseData: Data,
-        readbackData: Data
+        readbackData: Data,
+        readbackSource: String? = nil
     ) -> Bool? {
         switch OperationID(rawValue: operationID) {
         case .systemHealth:
@@ -1098,7 +1117,10 @@ enum QualificationSemanticReadbackValidator {
             guard let oracle = SemanticOracleTable.byOperationID[id] else { return nil }
             let verdict = oracle.evaluate(responseData: responseData, readbackData: readbackData)
             switch verdict {
-            case .some(true) where oracle.independentReadbackDeferral != nil:
+            case .some(true) where independentReadbackDeferral(
+                for: operationID,
+                readbackSource: readbackSource
+            ) != nil:
                 return nil
             default:
                 return verdict
@@ -1248,15 +1270,20 @@ struct QualificationTransport: Sendable {
     let handshakeTimeout: TimeInterval
     let requestTimeout: TimeInterval
     let shutdownGrace: TimeInterval
+    let midiPortReadback: @Sendable () throws -> Data
 
     init(
         handshakeTimeout: TimeInterval = 45,
         requestTimeout: TimeInterval = 10,
-        shutdownGrace: TimeInterval = 1
+        shutdownGrace: TimeInterval = 1,
+        midiPortReadback: @escaping @Sendable () throws -> Data = {
+            try QualificationTransport.coreMIDIPortReadback()
+        }
     ) {
         self.handshakeTimeout = handshakeTimeout
         self.requestTimeout = requestTimeout
         self.shutdownGrace = shutdownGrace
+        self.midiPortReadback = midiPortReadback
     }
 
     /// Environment the same-artifact qualification drives the server with.
@@ -1785,12 +1812,19 @@ struct QualificationTransport: Sendable {
                 var readbackData: Data?
                 var readbackFailure: String?
                 do {
-                    readbackData = try resourceReadback(
-                        session,
-                        id: nextID,
-                        uri: readbackSource,
-                        phase: readbackRequestID
-                    )
+                    if spec.id == .midiListPorts {
+                        // The resource endpoint dispatches the same server handler as the tool,
+                        // so equality there is circular. Enumerate CoreMIDI from this separate
+                        // qualification process while the candidate is alive instead.
+                        readbackData = try midiPortReadback()
+                    } else {
+                        readbackData = try resourceReadback(
+                            session,
+                            id: nextID,
+                            uri: readbackSource,
+                            phase: readbackRequestID
+                        )
+                    }
                 } catch {
                     readbackFailure = Self.observedFailureReason(
                         from: error,
@@ -5159,6 +5193,54 @@ struct QualificationTransport: Sendable {
         }
     }
 
+    static func coreMIDIPortReadback() throws -> Data {
+        struct Listing: Encodable {
+            let sources: [String]
+            let destinations: [String]
+        }
+
+        func endpointName(_ endpoint: MIDIEndpointRef, kind: String, index: Int) throws -> String {
+            guard endpoint != 0 else {
+                throw QualificationTransportError.protocolViolation(
+                    "host_coremidi_readback: missing \(kind) endpoint at index \(index)"
+                )
+            }
+            for property in [kMIDIPropertyDisplayName, kMIDIPropertyName] {
+                var value: Unmanaged<CFString>?
+                if MIDIObjectGetStringProperty(endpoint, property, &value) == noErr,
+                   let name = value?.takeRetainedValue() as String? {
+                    return name
+                }
+            }
+            throw QualificationTransportError.protocolViolation(
+                "host_coremidi_readback: unnamed \(kind) endpoint at index \(index)"
+            )
+        }
+
+        func endpointNames(
+            count: Int,
+            kind: String,
+            getter: (Int) -> MIDIEndpointRef
+        ) throws -> [String] {
+            try (0..<count).map { index in
+                try endpointName(getter(index), kind: kind, index: index)
+            }
+        }
+
+        let listing = Listing(
+            sources: try endpointNames(
+                count: MIDIGetNumberOfSources(), kind: "source", getter: MIDIGetSource
+            ),
+            destinations: try endpointNames(
+                count: MIDIGetNumberOfDestinations(), kind: "destination",
+                getter: MIDIGetDestination
+            )
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        return try encoder.encode(listing)
+    }
+
     static func readbackSource(for spec: OperationSpec) -> String {
         // These existing recipes mutate and restore the exact track scalar. Their final
         // independent read must use that same surface, not require a separately visible Mixer.
@@ -5184,6 +5266,9 @@ struct QualificationTransport: Sendable {
                 return "logic://project/info"
             }
         case .logicMidi:
+            if spec.id == .midiListPorts {
+                return QualificationSemanticReadbackValidator.coreMIDIPortReadbackSource
+            }
             return "logic://midi/ports"
         case .logicTracks:
             switch spec.id {

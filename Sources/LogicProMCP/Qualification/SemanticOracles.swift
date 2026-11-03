@@ -606,14 +606,20 @@ struct QualificationSemanticPolicy: Codable, Equatable, Sendable {
         case independentlyCreditable = "independently_creditable"
     }
 
-    func evaluate(operationID: String, responseData: Data, readbackData: Data) -> Bool {
+    func evaluate(
+        operationID: String,
+        responseData: Data,
+        readbackData: Data,
+        readbackSource: String? = nil
+    ) -> Bool {
         switch kind {
         case .bespokeHealth:
             guard operationID == OperationID.systemHealth.rawValue else { return false }
             return QualificationSemanticReadbackValidator.validate(
                 operationID: operationID,
                 responseData: responseData,
-                readbackData: readbackData
+                readbackData: readbackData,
+                readbackSource: readbackSource
             ) == true
         case .declarative:
             guard strength != nil,
@@ -630,7 +636,8 @@ struct QualificationSemanticPolicy: Codable, Equatable, Sendable {
             return QualificationSemanticReadbackValidator.validate(
                 operationID: operationID,
                 responseData: responseData,
-                readbackData: readbackData
+                readbackData: readbackData,
+                readbackSource: readbackSource
             ) == true
         case .none:
             return false

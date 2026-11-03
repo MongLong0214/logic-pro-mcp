@@ -46,6 +46,36 @@ struct Issue373SameHandlerReadbackCreditTests {
         #expect(!verified)
     }
 
+    @Test func separateHostCoreMIDIPortCensusCanEarnSemanticCredit() throws {
+        let result = try Self.result(
+            .midiListPorts,
+            response: Data(Self.ports.utf8),
+            readback: Data(Self.ports.utf8),
+            source: "host://coremidi/ports"
+        )
+
+        #expect(result.status == .passed)
+        #expect(result.verified)
+        #expect(result.verificationKind == .semanticReadback)
+        #expect(result.deferral == nil)
+        #expect(PromotionGate.operationIsLiveCredited(Self.operationCase(result)))
+    }
+
+    @Test func divergentHostCoreMIDIPortCensusCannotEarnSemanticCredit() throws {
+        let result = try Self.result(
+            .midiListPorts,
+            response: Data(Self.ports.utf8),
+            readback: Data(#"{"sources":["different"],"destinations":["fabricated destination"]}"#.utf8),
+            source: "host://coremidi/ports"
+        )
+
+        #expect(result.status == .notQualified)
+        #expect(!result.verified)
+        #expect(result.verificationKind == .typedDeferral)
+        #expect(result.deferral?.code == .semanticMismatch)
+        #expect(!PromotionGate.operationIsLiveCredited(Self.operationCase(result)))
+    }
+
     @Test func forgedSameHandlerMIDIPortSemanticCaseCannotEarnLiveCredit() {
         let operationCase = QualificationCase(
             id: "in-process/midi.list_ports", status: .passed,

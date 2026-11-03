@@ -87,6 +87,11 @@ struct PromotionGate {
               operationCase.readback?.verified == true else { return false }
         switch operationCase.verificationKind {
         case .semanticReadback:
+            if operationCase.operationID == OperationID.midiListPorts.rawValue,
+               operationCase.readback?.source
+                != QualificationSemanticReadbackValidator.coreMIDIPortReadbackSource {
+                return false
+            }
             if let catalogEntry {
                 return catalogEntry.operationID == operationCase.operationID
                     && catalogEntry.semanticPolicy.independentlyCreditable
@@ -98,6 +103,7 @@ struct PromotionGate {
                 return false
             }
             if operationID == .systemHealth { return true }
+            if operationID == .midiListPorts { return true }
             guard let oracle = SemanticOracleTable.byOperationID[operationID] else { return false }
             return oracle.independentReadbackDeferral == nil
         case .verifiedWriteCycle:

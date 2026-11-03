@@ -1164,7 +1164,9 @@ struct QualificationRunnerTests {
             mutability: captured.mutability, requestID: captured.requestID,
             responseData: captured.responseData, isError: captured.isError,
             state: nil, error: nil, hint: nil, writeAttempted: nil,
-            readbackSource: QualificationTransport.readbackSource(for: spec),
+            // This fixture is deliberately the legacy circular resource path. Do not derive it
+            // from the production source mapping, which now selects a separate host census.
+            readbackSource: "logic://midi/ports",
             readbackRequestID: captured.readbackRequestID, readbackData: captured.readbackData,
             verification: spec.verification, deadline: spec.deadline, failureReason: captured.failureReason
         )
@@ -1275,6 +1277,28 @@ struct QualificationRunnerTests {
         #expect(restored.exitCode == 0, "\(restored.stdout)")
     }
 
+    @Test func runnerVerifierAcceptsBoundHostCoreMIDIPortReadback() async throws {
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .midiListPorts })
+        let drive = Self.driveResult(specs: [spec])
+        let ports = try #require(drive.operationResults[spec.id.rawValue])
+        #expect(ports.readbackSource
+            == QualificationSemanticReadbackValidator.coreMIDIPortReadbackSource)
+        #expect(ports.status == .passed)
+
+        let fixture = try Fixture(specs: [spec], drive: { _ in drive })
+        defer { fixture.remove() }
+        try JSONEncoder().encode(Self.axisWaivers()).write(to: fixture.waiversURL)
+        let attestation = try await fixture.qualify(waiversURL: fixture.waiversURL)
+        let operationCase = try #require(
+            attestation.cases.first { $0.id == "in-process/midi.list_ports" }
+        )
+        #expect(operationCase.status == .passed)
+        #expect(operationCase.readback?.source
+            == QualificationSemanticReadbackValidator.coreMIDIPortReadbackSource)
+        let accepted = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+        #expect(accepted.exitCode == 0, "\(accepted.stdout)\(accepted.stderr)")
+    }
+
     @Test func operationQualificationSeparatesSemanticReadSmokeAndTypedDeferrals() async throws {
         let fixture = try Fixture(specs: OperationRegistry.specs)
         defer { fixture.remove() }
@@ -1293,14 +1317,15 @@ struct QualificationRunnerTests {
         #expect(marked == Set<OperationID>([.midiListPorts, .midiReadSelectedRegionEvents, .mixerGetOutputVerified, .mixerGetSendDestinationVerified,
             .mixerGetInputBusVerified, .mixerGetSendBypassVerified, .pluginsPlanParameterChanges,
             .pluginsGetHostParameterManifest, .pluginsGetParamVerified, .pluginsGetChannelEQStateVerified]))
+        let smokeOnly = marked.subtracting([.midiListPorts])
         let readOnlyIDs = Set(OperationRegistry.specs.filter { $0.mutability == .readOnly }.map(\.id.rawValue))
-        let markedIDs = Set(marked.map(\.rawValue))
+        let smokeOnlyIDs = Set(smokeOnly.map(\.rawValue))
         let passed = operationCases.filter { $0.status == .passed }
-        #expect(passed.count == readOnlyCount - marked.count)
-        #expect(Set(passed.map(\.operationID)) == readOnlyIDs.subtracting(markedIDs))
+        #expect(passed.count == readOnlyCount - smokeOnly.count)
+        #expect(Set(passed.map(\.operationID)) == readOnlyIDs.subtracting(smokeOnlyIDs))
         let smoke = operationCases.filter { $0.status == .protocolSmoke }
-        #expect(smoke.count == marked.count)
-        #expect(Set(smoke.map(\.operationID)) == markedIDs)
+        #expect(smoke.count == smokeOnly.count)
+        #expect(Set(smoke.map(\.operationID)) == smokeOnlyIDs)
         for qualificationCase in smoke {
             let declared = try #require(QualificationSemanticReadbackValidator.independentReadbackDeferral(
                 for: qualificationCase.operationID))
@@ -7047,14 +7072,15 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(marked == Set<OperationID>([.midiListPorts, .midiReadSelectedRegionEvents, .mixerGetOutputVerified, .mixerGetSendDestinationVerified,
             .mixerGetInputBusVerified, .mixerGetSendBypassVerified, .pluginsPlanParameterChanges,
             .pluginsGetHostParameterManifest, .pluginsGetParamVerified, .pluginsGetChannelEQStateVerified]))
-        let markedIDs = Set(marked.map(\.rawValue))
+        let smokeOnly = marked.subtracting([.midiListPorts])
+        let smokeOnlyIDs = Set(smokeOnly.map(\.rawValue))
         let readOnlyIDs = Set(OperationRegistry.specs.filter { $0.mutability == .readOnly }.map(\.id.rawValue))
         let passed = operationCases.filter { $0.status == .passed }
-        #expect(passed.count == readOnlyCount - marked.count)
-        #expect(Set(passed.map(\.operationID)) == readOnlyIDs.subtracting(markedIDs))
+        #expect(passed.count == readOnlyCount - smokeOnly.count)
+        #expect(Set(passed.map(\.operationID)) == readOnlyIDs.subtracting(smokeOnlyIDs))
         let smoke = operationCases.filter { $0.status == .protocolSmoke }
-        #expect(smoke.count == marked.count)
-        #expect(Set(smoke.map(\.operationID)) == markedIDs)
+        #expect(smoke.count == smokeOnly.count)
+        #expect(Set(smoke.map(\.operationID)) == smokeOnlyIDs)
         // DERIVED: everything the registry has, minus the read-only specs this fixture qualifies.
         // It was `90`, and the day main added `system.setup_control_surface` it read 91 -- a number
         // that tracks the registry turns every new operation into a failing test that says
@@ -7063,7 +7089,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                     == OperationRegistry.specs.count - readOnlyCount)
         // Other semantic reads + health's bespoke validator pass; the same-handler smoke
         // and aggregate axes contribute no passes here.
-        #expect(attestation.passed == readOnlyCount - marked.count)
+        #expect(attestation.passed == readOnlyCount - smokeOnly.count)
         #expect(attestation.failed == 1)
 
         for qualificationCase in operationCases {
@@ -7074,7 +7100,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             #expect(qualificationCase.id == "in-process/\(spec.id.rawValue)")
             #expect(OperationHandlerRegistry.handler(tool: qualificationCase.tool, command: qualificationCase.command) != nil)
             if spec.mutability == .readOnly {
-                if marked.contains(spec.id) {
+                if smokeOnly.contains(spec.id) {
                     let declared = try #require(QualificationSemanticReadbackValidator.independentReadbackDeferral(
                         for: spec.id.rawValue))
                     #expect(qualificationCase.status == .protocolSmoke)
@@ -8582,11 +8608,13 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                     hint: nil,
                     writeAttempted: responseEnvelope?["write_attempted"] as? Bool
                         ?? (spec.id == .midiListPorts ? nil : false),
-                    readbackSource: spec.tool == .logicTransport
-                        ? "logic://transport/state"
-                        : spec.tool == .logicMixer
-                            ? "logic://mixer"
-                            : "logic://system/health",
+                    readbackSource: spec.id == .midiListPorts
+                        ? QualificationSemanticReadbackValidator.coreMIDIPortReadbackSource
+                        : spec.tool == .logicTransport
+                            ? "logic://transport/state"
+                            : spec.tool == .logicMixer
+                                ? "logic://mixer"
+                                : "logic://system/health",
                     readbackRequestID: "fake-readback-\(spec.id.rawValue)",
                     readbackData: readback,
                     failureReason: spec.id == failedOperationID ? "synthetic operation failure" : nil,

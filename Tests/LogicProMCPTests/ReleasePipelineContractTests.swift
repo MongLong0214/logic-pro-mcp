@@ -28,16 +28,26 @@ import Testing
     #expect(tag.lowerBound < tagPush.lowerBound)
 }
 
-@Test func release_qualification_gate_builds_and_requires_live_logic_before_full_suite() throws {
+@Test func release_qualification_gate_isolates_live_tests_before_unfiltered_full_suite() throws {
     let gate = try scriptContents("Scripts/release-qualify.sh")
 
     let build = try #require(gate.range(of: "\nswift build -c release\n"))
     let logic = try #require(gate.range(of: "if ! pgrep -xq \"Logic Pro\"; then"))
     let permission = try #require(gate.range(of: "if ! .build/release/LogicProMCP --check-permissions; then"))
-    let suite = try #require(gate.range(of: "\nLOGIC_PRO_MCP_RUN_LIVE_QA=1 swift test --no-parallel\n"))
+    let liveNames = [
+        "realReleaseBinaryExecutesEveryOperationWithIndependentReadback",
+        "runnerIgnoresPartialStateFaultEnvOnRealServer",
+        "runnerRejectsPartialStateObservedFromRealServer",
+    ]
+    let liveFilter = try #require(gate.range(
+        of: "LOGIC_PRO_MCP_RUN_LIVE_QA=1 swift test --no-parallel --filter"
+    ))
+    let suite = try #require(gate.range(of: "\nswift test --no-parallel\n"))
     #expect(build.lowerBound < logic.lowerBound)
     #expect(logic.lowerBound < permission.lowerBound)
-    #expect(permission.lowerBound < suite.lowerBound)
+    #expect(permission.lowerBound < liveFilter.lowerBound)
+    #expect(liveFilter.lowerBound < suite.lowerBound)
+    #expect(liveNames.allSatisfy { gate.contains($0) })
 }
 
 @Test func release_workflow_runs_tests_before_packaging() throws {
