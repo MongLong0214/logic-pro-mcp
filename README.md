@@ -378,7 +378,7 @@ Per-release detail lives in [CHANGELOG.md](CHANGELOG.md). Security and installer
 
 ## Registry Metadata
 
-The repository ships `server.json` for the official MCP Registry metadata path. It is pinned to the current stable release (`v3.19.0`) and carries discovery tags for Logic Pro, DAW automation, MIDI, Claude/Cursor MCP clients, and music-production agents. The record is metadata-only because the registry package schema does not yet model Homebrew formulas or GitHub release tarballs as first-class package types. The install authority remains the pinned GitHub Release/Homebrew path above.
+The repository ships `server.json` for the official MCP Registry metadata path. During this source cut, the source candidate is `v3.19.0`, while `server.json` and the Homebrew Formula remain pinned to the published registry release (`v3.18.0`) until hosted v3.19.0 assets and their checksum exist. The record carries discovery tags for Logic Pro, DAW automation, MIDI, Claude/Cursor MCP clients, and music-production agents. It is metadata-only because the registry package schema does not yet model Homebrew formulas or GitHub release tarballs as first-class package types. The install authority remains the pinned GitHub Release/Homebrew path above.
 
 ## Known Limitations
 

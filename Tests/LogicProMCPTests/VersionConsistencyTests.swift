@@ -119,7 +119,6 @@ private func latestChangelogReleaseHeading() throws -> ChangelogReleaseHeading? 
         "The current stable line is `v\(version)`",
         "**Current stable**: `v\(version)`",
         "/v\(version)/Scripts/install.sh",
-        "stable release (`v\(version)`)",
     ]
 
     for reference in requiredCurrentVersionReferences {
@@ -128,6 +127,16 @@ private func latestChangelogReleaseHeading() throws -> ChangelogReleaseHeading? 
             "README.md must keep current-version reference in sync: \(reference)"
         )
     }
+
+    let registryData = Data(try readRepoFile("server.json").utf8)
+    let registry = try #require(
+        try JSONSerialization.jsonObject(with: registryData) as? [String: Any]
+    )
+    let publishedVersion = try #require(registry["version"] as? String)
+    #expect(readme.contains("source candidate is `v\(version)`"))
+    #expect(
+        readme.contains("published registry release (`v\(publishedVersion)`)")
+    )
 }
 
 @Test func testManifestResourceSurfaceMatchesPublishedStableRelease() throws {
