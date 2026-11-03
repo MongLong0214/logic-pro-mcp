@@ -5350,6 +5350,48 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(classifiesClosedPanelAsEnvironmental)
     }
 
+    @Test func liveGateClassifiesOnlyTheExactZeroWriteSelectedRegionScopeRefusalAsAPrecondition() {
+        func result(reason: String) -> QualificationOperationResult {
+            QualificationOperationResult(
+                operationID: OperationID.midiReadSelectedRegionEvents.rawValue,
+                tool: "logic_midi",
+                command: "read_selected_region_events",
+                mutability: .readOnly,
+                requestID: "selected-region-request",
+                responseData: Data(#"{"state":"C","error":"selected_region_event_read_unavailable","reason":"selection_scope_incomplete","write_attempted":false,"row_selection_write_attempted":false,"row_selection_restored":false}"#.utf8),
+                isError: true,
+                state: "C",
+                error: "selected_region_event_read_unavailable",
+                hint: nil,
+                reason: reason,
+                writeAttempted: false,
+                rowSelectionWriteAttempted: false,
+                rowSelectionRestored: false,
+                readbackSource: "logic://midi/selected-region-events",
+                readbackRequestID: "selected-region-readback",
+                readbackData: Data(#"{}"#.utf8),
+                failureReason: nil
+            )
+        }
+
+        let exact = QualificationLiveGateSummary(operationResults: [
+            result(reason: "selection_scope_incomplete"),
+        ])
+        #expect(exact.notExercisableWithoutPreconditions == [
+            .init(
+                operationID: OperationID.midiReadSelectedRegionEvents.rawValue,
+                reason: "requires a complete selected Arrange-region scope"
+            ),
+        ])
+        #expect(exact.failed == 0)
+
+        let changed = QualificationLiveGateSummary(operationResults: [
+            result(reason: "different_scope_failure"),
+        ])
+        #expect(changed.notExercisableWithoutPreconditions.isEmpty)
+        #expect(changed.failed == 1)
+    }
+
     @Test func liveGateRejectsDifferentTracksListLibraryHintAsFailure() {
         let summary = QualificationLiveGateSummary(operationResults: [
             Self.tracksListLibraryRefusal(hint: "A different library-panel refusal.")

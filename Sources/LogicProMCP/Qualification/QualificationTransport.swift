@@ -444,7 +444,10 @@ struct QualificationOperationResult: Equatable, Sendable {
     /// The refusal's actionable half. Captured because the deferral used to guess a cause the
     /// operation had already named -- see `operationUnavailable` below.
     let hint: String?
+    let reason: String?
     let writeAttempted: Bool?
+    let rowSelectionWriteAttempted: Bool?
+    let rowSelectionRestored: Bool?
     let readbackSource: String?
     let readbackRequestID: String?
     let readbackData: Data?
@@ -472,7 +475,10 @@ struct QualificationOperationResult: Equatable, Sendable {
         state: String?,
         error: String?,
         hint: String?,
+        reason: String? = nil,
         writeAttempted: Bool?,
+        rowSelectionWriteAttempted: Bool? = nil,
+        rowSelectionRestored: Bool? = nil,
         readbackSource: String?,
         readbackRequestID: String?,
         readbackData: Data?,
@@ -492,7 +498,10 @@ struct QualificationOperationResult: Equatable, Sendable {
         self.state = state
         self.error = error
         self.hint = hint
+        self.reason = reason
         self.writeAttempted = writeAttempted
+        self.rowSelectionWriteAttempted = rowSelectionWriteAttempted
+        self.rowSelectionRestored = rowSelectionRestored
         self.readbackSource = readbackSource
         self.readbackRequestID = readbackRequestID
         self.readbackData = readbackData
@@ -655,18 +664,28 @@ struct QualificationOperationResult: Equatable, Sendable {
     /// different refusal from one of these operations is a product failure,
     /// not a generic exemption.
     var liveGateUnmetOperationPrecondition: String? {
-        guard isError == true, error == "invalid_params" else { return nil }
+        guard isError == true else { return nil }
         switch OperationID(rawValue: operationID) {
         case .audioAnalyzeSpectrum:
+            guard error == "invalid_params" else { return nil }
             guard hint == "analyze_spectrum requires non-empty string 'path'" else { return nil }
             return "requires non-empty string 'path'"
         case .audioRecommendEQ:
+            guard error == "invalid_params" else { return nil }
             guard hint == "recommend_eq requires non-empty string 'path'" else { return nil }
             return "requires non-empty string 'path'"
         case .systemClearTraces:
+            guard error == "invalid_params" else { return nil }
             guard hint == "clear_traces requires 'confirmed:true' because it destroys in-process diagnostic evidence"
             else { return nil }
             return "requires 'confirmed:true'"
+        case .midiReadSelectedRegionEvents:
+            guard error == "selected_region_event_read_unavailable",
+                  reason == "selection_scope_incomplete",
+                  writeAttempted == false,
+                  rowSelectionWriteAttempted == false,
+                  rowSelectionRestored == false else { return nil }
+            return "requires a complete selected Arrange-region scope"
         default:
             return nil
         }
@@ -1796,7 +1815,10 @@ struct QualificationTransport: Sendable {
                     state: typed?.state,
                     error: typed?.error,
                     hint: typed?.hint,
+                    reason: typed?.reason,
                     writeAttempted: typed?.writeAttempted,
+                    rowSelectionWriteAttempted: typed?.rowSelectionWriteAttempted,
+                    rowSelectionRestored: typed?.rowSelectionRestored,
                     readbackSource: readbackSource,
                     readbackRequestID: readbackRequestID,
                     readbackData: readbackData,
@@ -5577,14 +5599,20 @@ private struct OperationProbeResult: Decodable {
     let state: String?
     let error: String?
     let hint: String?
+    let reason: String?
     let writeAttempted: Bool?
+    let rowSelectionWriteAttempted: Bool?
+    let rowSelectionRestored: Bool?
     let traceID: String?
 
     enum CodingKeys: String, CodingKey {
         case state
         case error
         case hint
+        case reason
         case writeAttempted = "write_attempted"
+        case rowSelectionWriteAttempted = "row_selection_write_attempted"
+        case rowSelectionRestored = "row_selection_restored"
         case traceID = "trace_id"
     }
 }
