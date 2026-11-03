@@ -101,6 +101,15 @@ PROBES = {
                  "The acceptance row restores it through the product's public undo command and "
                  "independently reads the restored Mixer.",
     },
+    "routing_send_assign_stereo": {
+        "args": {"strip": "int"},
+        "returns": '{"strip": <int>, "selected": <str>, "record_sha256": <str>}',
+        "reads": "the registered #971 setup actuator: press the declared fixture strip's sole "
+                 "empty Send and select the exact localized Apple Stereo Output row. The full "
+                 "actuation/settlement record is kept as a sidecar. Independent routing_slots "
+                 "readings establish the setup effect and the public Saga's final and restored "
+                 "routing state.",
+    },
 }
 
 #: The JSON types an argument declaration may name, and the Python types they admit.

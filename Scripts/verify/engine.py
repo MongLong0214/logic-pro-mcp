@@ -494,10 +494,19 @@ OBSERVATION_TARGET_PARAMS = frozenset({"target_ref"})
 OBSERVATION_SESSION_FIELDS = {
     ("logic_project", "plan_session_repair"): frozenset({
         ("snapshot_id",), ("policy", "project_ref"),
+        ("policy", "targets", 0, "track_ref"),
     }),
     ("logic_project", "apply_session_repair"): frozenset({
         ("plan_id",), ("digest",),
     }),
+}
+
+# A restore may contain several independent repair chains. A field's source therefore comes from
+# the nearest earlier producer of that exact tool/command kind, not merely any earlier call in the
+# whole restore section. Operation-side flows retain their existing allowlist and order rules.
+RESTORE_SESSION_PRODUCERS = {
+    ("logic_project", "plan_session_repair"): ("logic_project", "inspect_session"),
+    ("logic_project", "apply_session_repair"): ("logic_project", "plan_session_repair"),
 }
 
 
@@ -520,11 +529,13 @@ def observation_param_refs(value, path=()):
 
 def observation_param_problems(row: dict) -> list:
     """Validate the exact opaque-reference seams admitted between prior call replies."""
-    steps = {step["as"]: step for step in row["steps"]}
-    order = {step["as"]: i for i, step in enumerate(row["steps"])}
     operation = row["operation"]
     out = []
     for section, sequence in (("steps", row["steps"]), ("restore", row["restore"])):
+        # An opaque restore handle is valid only inside its fresh restore chain. Operation-side
+        # replies are historical by then and cannot be replayed as restore authority.
+        steps = {step["as"]: step for step in sequence}
+        order = {step["as"]: i for i, step in enumerate(sequence)}
         for step in sequence:
             if not is_call(step):
                 if contains_observation_param(step):
@@ -545,13 +556,9 @@ def observation_param_problems(row: dict) -> list:
                 session_call = (call["tool"], call["command"]) in OBSERVATION_SESSION_FIELDS
                 session_field = observation_session_field_allowed(
                     call["tool"], call["command"], path)
-                if section != "steps":
-                    if target_ref:
-                        out.append(f"{where}: only the operation {operation!r} may consume an "
-                                   f"$observation parameter")
-                    else:
-                        out.append(f"{where}: not an admitted session field for "
-                                   f"{call['tool']}.{call['command']}")
+                if section != "steps" and target_ref:
+                    out.append(f"{where}: only the operation {operation!r} may consume an "
+                               f"$observation parameter")
                     continue
                 if not (target_ref or session_field):
                     if session_call:
@@ -586,6 +593,20 @@ def observation_param_problems(row: dict) -> list:
                     noun = "setup call" if target_ref else "prior call"
                     out.append(f"{where}: source {root!r} is not a {noun}; dynamic request "
                                f"parameters come only from a prior call reply")
+                elif section == "restore" and session_field:
+                    producer_kind = RESTORE_SESSION_PRODUCERS.get(
+                        (call["tool"], call["command"]))
+                    nearest = None if producer_kind is None else next((
+                        candidate for candidate in reversed(sequence[:consumer_at])
+                        if is_call(candidate)
+                        and (candidate["call"]["tool"],
+                             candidate["call"]["command"]) == producer_kind), None)
+                    if producer_kind is not None and root != (nearest or {}).get("as"):
+                        expected = None if nearest is None else nearest["as"]
+                        shown_kind = ".".join(producer_kind)
+                        out.append(f"{where}: source {root!r} is not the nearest prior "
+                                   f"{shown_kind} call {expected!r} for restore call "
+                                   f"{step['as']!r}")
     return out
 
 

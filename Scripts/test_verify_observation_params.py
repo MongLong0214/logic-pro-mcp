@@ -245,6 +245,89 @@ class ObservationParamAdmissionTests(unittest.TestCase):
                 }
                 self.assertIn("not an admitted target parameter", self.problems(row))
 
+    @staticmethod
+    def session_repair_row():
+        def project_call(name, command, params):
+            return {"as": name, "call": {
+                "tool": "logic_project", "command": command, "params": params,
+            }}
+
+        inspect = project_call("inspection", "inspect_session", {})
+        plan = project_call("plan", "plan_session_repair", {
+            "snapshot_id": {"$observation": "inspection.snapshot_id"},
+            "policy": {
+                "project_ref": {"$observation": "inspection.project.project_ref"},
+                "targets": [{
+                    "handle": "source",
+                    "track_ref": {
+                        "$observation": "inspection.associations.rows[track_index=1].track_ref",
+                    },
+                }],
+            },
+        })
+        apply = project_call("apply", "apply_session_repair", {
+            "plan_id": {"$observation": "plan.plan_id"},
+            "digest": {"$observation": "plan.digest"},
+        })
+        restore_inspect = project_call("restore_inspection", "inspect_session", {})
+        restore_plan = project_call("restore_plan", "plan_session_repair", {
+            "snapshot_id": {"$observation": "restore_inspection.snapshot_id"},
+            "policy": {
+                "project_ref": {
+                    "$observation": "restore_inspection.project.project_ref",
+                },
+                "targets": [{
+                    "handle": "source",
+                    "track_ref": {
+                        "$observation": (
+                            "restore_inspection.associations.rows[track_index=1].track_ref"
+                        ),
+                    },
+                }],
+            },
+        })
+        restore_apply = project_call("restore_apply", "apply_session_repair", {
+            "plan_id": {"$observation": "restore_plan.plan_id"},
+            "digest": {"$observation": "restore_plan.digest"},
+        })
+        return {
+            "steps": [inspect, plan, apply],
+            "operation": "apply",
+            "restore": [restore_inspect, restore_plan, restore_apply],
+        }
+
+    def test_exact_session_repair_target_and_restore_chain_are_admissible(self):
+        self.assertEqual(self.problems(self.session_repair_row()), "")
+
+    def test_session_repair_allowlist_does_not_admit_request_semantics(self):
+        row = self.session_repair_row()
+        row["steps"][1]["call"]["params"]["policy"]["outputs"] = [{
+            "target": {"$observation": "inspection.snapshot_id"},
+        }]
+        self.assertIn("not an admitted session field", self.problems(row))
+
+    def test_restore_target_ref_remains_refused(self):
+        row = self.session_repair_row()
+        row["restore"][2]["call"]["params"]["target_ref"] = {
+            "$observation": "restore_inspection.snapshot_id",
+        }
+        self.assertIn("only the operation", self.problems(row))
+
+    def test_restore_session_fields_cannot_reuse_operation_side_replies(self):
+        cases = (
+            (1, ("snapshot_id",), "inspection.snapshot_id"),
+            (2, ("plan_id",), "plan.plan_id"),
+        )
+        for step_index, keys, source in cases:
+            with self.subTest(source=source):
+                row = self.session_repair_row()
+                params = row["restore"][step_index]["call"]["params"]
+                target = params
+                for key in keys[:-1]:
+                    target = target[key]
+                target[keys[-1]] = {"$observation": source}
+                self.assertIn("not bound before", self.problems(row))
+
 
 if __name__ == "__main__":
     unittest.main()

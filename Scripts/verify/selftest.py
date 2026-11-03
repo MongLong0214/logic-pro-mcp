@@ -175,6 +175,9 @@ MUTANTS = [
     {"id": "session-bindings-unrestricted", "file": "engine.py",
      "old": '    return path in OBSERVATION_SESSION_FIELDS.get((tool, command), ())',
      "new": '    return True'},
+    {"id": "restore-session-chain-provenance-disabled", "file": "engine.py",
+     "old": '                elif section == "restore" and session_field:',
+     "new": '                elif False and section == "restore" and session_field:'},
     {"id": "mixer-saga-setup-opt-in-dropped", "file": "setups.py",
      "old": '        "server_env": {"LOGIC_MCP_ADR004_MUTATION_SAGA": "1"},',
      "new": '        "server_env": {},'},
@@ -1774,6 +1777,79 @@ def check_971_contract(case: dict, where: dict):
     if not any("not an admitted session field" in problem
                for problem in engine.validate_spec(mutant)):
         return "an observation can steer presentation.mixer_visible"
+    combined = [row for row in spec["rows"]
+                if row["id"] == "approved-output-and-send-are-independently-final"]
+    if len(combined) != 1:
+        return "the exact combined Output/Send row is missing"
+    combined = combined[0]
+    if not combined["counterexample"] or not combined["restore_counterexample"]:
+        return "the combined Output/Send row lacks a post or restore counterexample"
+    plan = next(step for step in combined["steps"] if step["as"] == "plan")
+    target = plan["call"]["params"]["policy"]["targets"][0]
+    if target.get("track_ref") != {
+            "$observation": "inspection.associations.rows[track_index=1].track_ref"}:
+        return f"the combined Output/Send target is not bound to the inspected track: {target!r}"
+    restore = {step["as"]: step for step in combined["restore"]}
+    expected_restore = [
+        "restore_output_inspection", "restore_output_plan", "restore_output_apply",
+        "restore_send_inspection", "restore_send_plan", "restore_send_apply", "restored",
+    ]
+    if list(restore) != expected_restore:
+        return f"the combined row does not carry the two exact fresh restore chains: {list(restore)!r}"
+    for kind in ("output", "send"):
+        plan_name = f"restore_{kind}_plan"
+        apply_name = f"restore_{kind}_apply"
+        inspection_name = f"restore_{kind}_inspection"
+        restore_target = restore[plan_name]["call"]["params"]["policy"]["targets"][0]
+        if restore_target.get("track_ref") != {
+                "$observation":
+                f"{inspection_name}.associations.rows[track_index=1].track_ref"}:
+            return (f"the {kind} restore target is not bound to its fresh restored inspection: "
+                    f"{restore_target!r}")
+        if restore[plan_name]["call"]["params"].get("snapshot_id") != {
+                "$observation": f"{inspection_name}.snapshot_id"}:
+            return f"the {kind} restore plan does not use its fresh inspection snapshot"
+        apply_params = restore[apply_name]["call"]["params"]
+        if (apply_params.get("plan_id") != {"$observation": f"{plan_name}.plan_id"}
+                or apply_params.get("digest") != {"$observation": f"{plan_name}.digest"}):
+            return f"the {kind} restore apply does not use its fresh plan"
+
+        stale_restore = copy.deepcopy(spec)
+        stale_row = next(row for row in stale_restore["rows"] if row["id"] == combined["id"])
+        stale_step = next(step for step in stale_row["restore"] if step["as"] == plan_name)
+        stale_step["call"]["params"]["snapshot_id"] = {"$observation": "inspection.snapshot_id"}
+        if not any("not bound before" in problem
+                   for problem in engine.validate_spec(stale_restore)):
+            return f"the {kind} restore plan can reuse the operation-side inspection handle"
+
+        stale_restore = copy.deepcopy(spec)
+        stale_row = next(row for row in stale_restore["rows"] if row["id"] == combined["id"])
+        stale_step = next(step for step in stale_row["restore"] if step["as"] == apply_name)
+        stale_step["call"]["params"]["plan_id"] = {"$observation": "plan.plan_id"}
+        if not any("not bound before" in problem
+                   for problem in engine.validate_spec(stale_restore)):
+            return f"the {kind} restore apply can reuse the operation-side plan handle"
+
+    cross_chain = copy.deepcopy(spec)
+    stale_row = next(row for row in cross_chain["rows"] if row["id"] == combined["id"])
+    stale_restore = {step["as"]: step for step in stale_row["restore"]}
+    send_plan = stale_restore["restore_send_plan"]["call"]["params"]
+    send_plan["snapshot_id"] = {"$observation": "restore_output_inspection.snapshot_id"}
+    send_plan["policy"]["project_ref"] = {
+        "$observation": "restore_output_inspection.project.project_ref"}
+    send_plan["policy"]["targets"][0]["track_ref"] = {
+        "$observation": "restore_output_inspection.associations.rows[track_index=1].track_ref"}
+    if not any("nearest prior" in problem for problem in engine.validate_spec(cross_chain)):
+        return "the send restore plan can reuse the output chain's inspection handles"
+
+    cross_chain = copy.deepcopy(spec)
+    stale_row = next(row for row in cross_chain["rows"] if row["id"] == combined["id"])
+    stale_restore = {step["as"]: step for step in stale_row["restore"]}
+    send_apply = stale_restore["restore_send_apply"]["call"]["params"]
+    send_apply["plan_id"] = {"$observation": "restore_output_plan.plan_id"}
+    send_apply["digest"] = {"$observation": "restore_output_plan.digest"}
+    if not any("nearest prior" in problem for problem in engine.validate_spec(cross_chain)):
+        return "the send restore apply can reuse the output chain's plan handles"
 
     def run(found, failures=None, nodes=None, frontier=None):
         return {"observation": {"readable": True, "mixer_found": found,

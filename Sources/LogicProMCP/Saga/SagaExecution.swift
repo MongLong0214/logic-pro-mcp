@@ -332,6 +332,10 @@ final class SendRemovalSagaAdapter: @unchecked Sendable {
                 token = assignment.token; source = .axSendMenuCheckmark
             } else if let removed = self.removal {
                 guard !self.inverseConsumed, removed.permits(runtime: removed.source.pair.track.runtime) else { return nil }
+                if self.approved?.requiresCombinedOutputSendHandoff == true {
+                    guard await self.approved?.retainCombinedSendRemovalRead(removed) == true else { return nil }
+                    self.pair = removed.source.pair
+                }
                 token = "no_send"; source = .axSendSlotFootprint
             } else {
                 guard !self.attempted, let reference = step.targetRef,
