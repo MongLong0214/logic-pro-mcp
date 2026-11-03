@@ -346,7 +346,7 @@ The public docs tree is intentionally scoped: setup, API, troubleshooting, READM
 
 | Gate | What it checks | Evidence |
 |------|-----------------|----------|
-| CI (every push/PR) | Full deterministic test suite, release build, repo guards | [Actions](https://github.com/MongLong0214/logic-pro-mcp/actions/workflows/ci.yml) badge above reflects the current `main` head |
+| CI (every PR merge candidate) | Full deterministic test suite, release build, repo guards | [Actions](https://github.com/MongLong0214/logic-pro-mcp/actions/workflows/ci.yml) lists the exact merge-candidate validations |
 | Release build | `swift build -c release` | Runs in CI and in the release workflow |
 | Live E2E | Registered operations against a real, running Logic Pro session with independent readback | Per-release evidence and dated observation records under `docs/observations/`, linked from the relevant CHANGELOG entries; not run for every commit |
 | README media | Actual Logic Pro screen-capture derivatives | Published under `docs/media/` |
