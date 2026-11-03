@@ -513,6 +513,36 @@ final class SendRemovalSagaAdapter: @unchecked Sendable {
                 let upstream = AccessibilityChannel.sendRemovalObserver
                 let upstreamChange = AccessibilityChannel.sendChangeObserver
                 let upstreamCreation = AccessibilityChannel.sendCreationObserver
+                let dispatchParams = params
+                let dispatchReadRenewal = readRenewal
+                let dispatchPeerHeaders = checkedPeerHeaders
+                let dispatchRequiredBefore = requiredBefore
+                let dispatchRequiredControl = requiredControl
+                let dispatchHeld = held
+                let dispatch: @Sendable () async -> CallTool.Result = {
+                    await MixerDispatcher.handle(command: "set_send_output_verified", params: dispatchParams,
+                        router: router, cache: cache, targetRegistry: registry)
+                }
+                let withCheckedReads: @Sendable () async -> CallTool.Result = {
+                    await Self.$checkedReadRenewal.withValue(dispatchReadRenewal) {
+                        await Self.$checkedOutputHandoff.withValue(outputHandoff) {
+                            await Self.$checkedReadPeerHeaders.withValue(dispatchPeerHeaders) {
+                                await Self.$requiredBeforeState.withValue(dispatchRequiredBefore) {
+                                    await dispatch()
+                                }
+                            }
+                        }
+                    }
+                }
+                let withSourceCustody: @Sendable () async -> CallTool.Result = {
+                    await Self.$requiredSendControl.withValue(dispatchRequiredControl) {
+                        await Self.$requiredNameCheck.withValue(nameCheck) {
+                            await Self.$checkedSourcePair.withValue(dispatchHeld) {
+                                await withCheckedReads()
+                            }
+                        }
+                    }
+                }
                 response = await AccessibilityChannel.$sendCreationObserver.withValue({ proof in
                     if Self.isCreation(self.forward), proof.source.original.matches(routedHeld.strip),
                        proof.source.originalTrack.matches(routedHeld.track) {
@@ -533,22 +563,7 @@ final class SendRemovalSagaAdapter: @unchecked Sendable {
                                 upstream?(proof)
                             }
                         }) {
-                            await Self.$requiredSendControl.withValue(requiredControl) {
-                                await Self.$requiredNameCheck.withValue(nameCheck) {
-                                    await Self.$checkedSourcePair.withValue(held) {
-                                        await Self.$checkedReadRenewal.withValue(readRenewal) {
-                                            await Self.$checkedOutputHandoff.withValue(outputHandoff) {
-                                                await Self.$checkedReadPeerHeaders.withValue(checkedPeerHeaders) {
-                                                    await Self.$requiredBeforeState.withValue(requiredBefore) {
-                                                        await MixerDispatcher.handle(command: "set_send_output_verified", params: params,
-                                                            router: router, cache: cache, targetRegistry: registry)
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                            await withSourceCustody()
                         }
                     }
                 }
