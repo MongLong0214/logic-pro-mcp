@@ -21,6 +21,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GUARD = os.path.join(REPO, "Scripts", "check-acceptance-specs.py")
 SPECS = os.path.join(REPO, "docs", "acceptance")
 PILOT = "1020.json"
+ISSUE_969 = "969.json"
 QUEUE = "QUEUE.json"
 sys.path.insert(0, os.path.join(REPO, "Scripts"))
 
@@ -29,6 +30,11 @@ import locale_labels  # noqa: E402
 
 def _pilot() -> dict:
     with open(os.path.join(SPECS, PILOT), encoding="utf-8") as handle:
+        return json.load(handle)
+
+
+def _issue_969() -> dict:
+    with open(os.path.join(SPECS, ISSUE_969), encoding="utf-8") as handle:
         return json.load(handle)
 
 
@@ -91,6 +97,59 @@ class Guard(unittest.TestCase):
         code, out = self._run()
         self.assertEqual(code, 0, out[-1500:])
         self.assertIn("admitted offline by check-spec", out)
+
+    def test_969_direct_mixer_setter_is_idempotent_falsifiable_and_restored(self):
+        spec = _issue_969()
+        self.assertEqual(spec["issue"], 969)
+        self.assertEqual(spec["locales"], "all")
+        self.assertEqual(spec["fixture"]["id"], "lpm-locale-campaign-mixer")
+        self.assertEqual(len(spec["rows"]), 1)
+        row = spec["rows"][0]
+        self.assertEqual(row["id"], "direct-mixer-hide-is-idempotent-and-restored")
+        self.assertEqual(row["operation"], "repeat")
+        self.assertEqual([step["as"] for step in row["steps"]],
+                         ["as_found", "first", "pre_repeat", "repeat", "post"])
+        self.assertEqual(row["steps"][0]["probe"], {"name": "mixer_visible", "args": {}})
+        self.assertEqual(row["steps"][1]["call"], {
+            "tool": "logic_navigate", "command": "toggle_view",
+            "params": {"view": "mixer", "visible": False},
+        })
+        self.assertEqual(row["steps"][2]["probe"], {"name": "mixer_visible", "args": {}})
+        self.assertEqual(row["steps"][3]["call"], row["steps"][1]["call"])
+        self.assertEqual(row["steps"][4]["probe"], {"name": "mixer_visible", "args": {}})
+
+        expects = {(item["path"], item["op"]): item for item in row["expect"]}
+        for path, value in [
+                ("first.before_visible", True), ("first.after_visible", False),
+                ("first.write_attempted", True), ("pre_repeat.visible", False),
+                ("repeat.before_visible", False), ("repeat.after_visible", False),
+                ("repeat.write_attempted", False)]:
+            self.assertEqual(expects[(path, "eq")]["value"], value)
+        self.assertTrue(expects[("first.write_attempted", "eq")]["invariant"])
+        self.assertTrue(expects[("pre_repeat.visible", "eq")]["invariant"])
+        self.assertEqual(expects[("post.visible", "unchanged")]["ref"],
+                         {"obs": "pre_repeat.visible"})
+
+        post_indices = [index for index, item in enumerate(row["expect"])
+                        if item["path"] == "post.visible"]
+        self.assertEqual(row["counterexample"], [{
+            "observation": "as_found", "replaces": "post",
+            "must_fail": post_indices,
+        }])
+        self.assertEqual(row["restore"], [
+            {"as": "restore", "call": {
+                "tool": "logic_navigate", "command": "toggle_view",
+                "params": {"view": "mixer", "visible": True},
+            }},
+            {"as": "restored", "probe": {"name": "mixer_visible", "args": {}}},
+        ])
+        self.assertEqual(row["restore_expect"], [{
+            "path": "restored.visible", "op": "eq", "ref": {"obs": "as_found.visible"},
+        }])
+        self.assertEqual(row["restore_counterexample"], [{
+            "observation": "post", "replaces": "restored", "must_fail": [0],
+        }])
+        self.assertEqual(row["independence"], ["as_found", "pre_repeat", "post"])
 
     def test_an_unbroken_copy_passes(self):
         """The control for every case below: the copy itself is not what they refuse."""

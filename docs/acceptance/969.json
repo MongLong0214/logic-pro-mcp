@@ -1,0 +1,70 @@
+{
+ "format": "lpm-acceptance/1",
+ "issue": 969,
+ "surface": "navigation.mixer_visibility",
+ "sources": [
+  {
+   "doc": "issue:969",
+   "sha": null,
+   "quote": "Blind toggles are not retry-safe setters."
+  }
+ ],
+ "fixture": {
+  "id": "lpm-locale-campaign-mixer",
+  "note": "The 19-track locale-campaign project with every track flag clear, its exact declared Mixer topology, and the Mixer shown. The lifecycle verifies the declared fixture before the row."
+ },
+ "locales": "all",
+ "rows": [
+  {
+   "id": "direct-mixer-hide-is-idempotent-and-restored",
+   "criterion": 0,
+   "steps": [
+    {"as": "as_found", "probe": {"name": "mixer_visible", "args": {}}},
+    {"as": "first", "call": {"tool": "logic_navigate", "command": "toggle_view", "params": {"view": "mixer", "visible": false}}},
+    {"as": "pre_repeat", "probe": {"name": "mixer_visible", "args": {}}},
+    {"as": "repeat", "call": {"tool": "logic_navigate", "command": "toggle_view", "params": {"view": "mixer", "visible": false}}},
+    {"as": "post", "probe": {"name": "mixer_visible", "args": {}}}
+   ],
+   "operation": "repeat",
+   "expect": [
+    {"path": "as_found.visible", "op": "eq", "value": true, "invariant": true},
+    {"path": "first.state", "op": "eq", "value": "A", "invariant": true},
+    {"path": "first.verified", "op": "eq", "value": true, "invariant": true},
+    {"path": "first.requested_visible", "op": "eq", "value": false, "invariant": true},
+    {"path": "first.before_visible", "op": "eq", "value": true, "invariant": true},
+    {"path": "first.after_visible", "op": "eq", "value": false, "invariant": true},
+    {"path": "first.write_attempted", "op": "eq", "value": true, "invariant": true},
+    {"path": "first.menu_restored", "op": "eq", "value": true, "invariant": true},
+    {"path": "first.visibility_source", "op": "eq", "value": "ax_bound_mixer", "invariant": true},
+    {"path": "pre_repeat.visible", "op": "eq", "value": false, "invariant": true},
+    {"path": "repeat.state", "op": "eq", "value": "A"},
+    {"path": "repeat.verified", "op": "eq", "value": true},
+    {"path": "repeat.requested_visible", "op": "eq", "value": false},
+    {"path": "repeat.before_visible", "op": "eq", "value": false},
+    {"path": "repeat.after_visible", "op": "eq", "value": false},
+    {"path": "repeat.write_attempted", "op": "eq", "value": false},
+    {"path": "repeat.menu_restored", "op": "eq", "value": true},
+    {"path": "repeat.visibility_source", "op": "eq", "value": "ax_bound_mixer"},
+    {"path": "post.visible", "op": "unchanged", "ref": {"obs": "pre_repeat.visible"}}
+   ],
+   "counterexample": [
+    {"observation": "as_found", "replaces": "post", "must_fail": [18]}
+   ],
+   "restore": [
+    {"as": "restore", "call": {"tool": "logic_navigate", "command": "toggle_view", "params": {"view": "mixer", "visible": true}}},
+    {"as": "restored", "probe": {"name": "mixer_visible", "args": {}}}
+   ],
+   "restore_expect": [
+    {"path": "restored.visible", "op": "eq", "ref": {"obs": "as_found.visible"}}
+   ],
+   "restore_counterexample": [
+    {"observation": "post", "replaces": "restored", "must_fail": [0]}
+   ],
+   "independence": [
+    "as_found",
+    "pre_repeat",
+    "post"
+   ]
+  }
+ ]
+}
