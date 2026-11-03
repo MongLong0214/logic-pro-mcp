@@ -829,22 +829,21 @@ enum SemanticOracleFixtures {
         .tracksListLibrary: SemanticOracleFixture(
             response: """
                 {"categories":["Bass","Drum Kit"],\
-                "presetsByCategory":{"Bass":["Deep Sub"],"Drum Kit":["SoCal"]},\
+                "presetsByCategory":{"Bass":["Deep Sub"]},\
                 "currentCategory":"Bass","currentPreset":"Deep Sub"}
                 """,
             readback: """
-                {"cache_age_sec":12.0,"fetched_at":"1970-01-01T00:00:00Z",\
-                "ax_occluded":false,"data":{"categories":["Bass","Drum Kit"],\
-                "presetsByCategory":{"Bass":["Deep Sub"],"Drum Kit":["SoCal"]},\
-                "source":"ax"}}
+                {"categories":["Bass","Drum Kit"],\
+                "presetsByCategory":{"Bass":["Deep Sub"]},\
+                "currentCategory":"Bass","currentPreset":"Deep Sub"}
                 """,
             customMutants: [
                 .init(.malformed, "not json"),
-                // Advertises a category it cannot enumerate presets for.
+                // The selected category must own the only immediate preset list.
                 .init(
                     .wellFormedButWrong,
                     "{\"categories\":[\"Bass\",\"Ghost\"],\"presetsByCategory\":"
-                        + "{\"Bass\":[\"Deep Sub\"]},\"currentCategory\":\"Bass\"}"
+                        + "{\"Ghost\":[\"Deep Sub\"]},\"currentCategory\":\"Bass\"}"
                 ),
                 // presetsByCategory carries the key, but not a preset LIST.
                 .init(
@@ -852,31 +851,29 @@ enum SemanticOracleFixtures {
                     "{\"categories\":[\"Bass\"],\"presetsByCategory\":"
                         + "{\"Bass\":\"Deep Sub\"},\"currentCategory\":\"Bass\"}"
                 ),
-                // Vacuous: an empty inventory is internally "consistent" and
-                // agrees with an empty readback, but verifies nothing.
+                // Vacuous: an empty inventory agrees with itself but verifies nothing.
                 .init(
                     .wellFormedButWrong,
                     "{\"categories\":[],\"presetsByCategory\":{}}",
-                    readbackOverride: "{\"cache_age_sec\":1.0,\"fetched_at\":null,"
-                        + "\"ax_occluded\":false,\"data\":{\"categories\":[]}}"
+                    readbackOverride: "{\"categories\":[],\"presetsByCategory\":{}}"
                 ),
                 .init(.wellFormedButWrong, "{\"categories\":[\"Bass\",\"Drum Kit\"]}"),
-                // Response is internally consistent but disagrees with the read.
+                // Both shapes are individually valid but disagree.
                 .init(
                     .readbackDivergence,
                     "{\"categories\":[\"Bass\"],\"presetsByCategory\":"
                         + "{\"Bass\":[\"Deep Sub\"]},\"currentCategory\":\"Bass\"}"
                 ),
-                // Degraded readback (cache miss) must fail closed, not soft-pass
-                // on internal consistency alone.
+                // Explicit host unavailability must fail closed.
                 .init(
                     .readbackDivergence,
                     """
                     {"categories":["Bass","Drum Kit"],\
-                    "presetsByCategory":{"Bass":["Deep Sub"],"Drum Kit":["SoCal"]},\
+                    "presetsByCategory":{"Bass":["Deep Sub"]},\
                     "currentCategory":"Bass","currentPreset":"Deep Sub"}
                     """,
-                    readbackOverride: "{\"cached\":false,\"note\":\"Run logic_library scan to populate\"}"
+                    readbackOverride: "{\"available\":false,"
+                        + "\"reason\":\"explicit_library_panel_unavailable\"}"
                 ),
             ]
         ),

@@ -1105,51 +1105,7 @@ struct QualificationRunnerTests {
         }
     }
 
-    private static let knownLiveGateFailures: [KnownLiveGateFailure] = [
-        // `tracks.list_library` has TWO distinct behaviours and needs both handled.
-        //
-        // With Logic's Library panel closed it refuses with an exact hint, and that
-        // refusal is an environmental prerequisite — the same shape as the plug-in
-        // window `scan_plugin_presets` needs — so it is bucketed there rather than
-        // counted as a shortfall.
-        //
-        // When it ANSWERS, it fails its own oracle, and that is a real defect. It was
-        // pinned here until 2026-09-02, removed on the strength of a run where the
-        // panel happened to be closed, and the exact-match assertion put it straight
-        // back the first time a run answered instead of refusing. Measured 2026-09-03
-        // against the release binary:
-        //
-        //     tracks.list_library   -> {"categories": ["Aux","Bass","Drums","Effects",
-        //                                "Guitar","Keys","Mix Bus","Vocal"],
-        //                               "presetsByCategory": {}}
-        //     logic://library/inventory (its independent readback)
-        //                           -> {"cached": false, …} — no inventory at all
-        //
-        // Eight advertised categories, presets enumerated for none of them, and a
-        // readback carrying nothing to compare against. The oracle's own words for
-        // this: an inventory that advertises a category it cannot enumerate presets
-        // for is lying about what it read. So it is pinned again, with the reason it
-        // actually fails with, and it leaves this list when the operation stops
-        // reporting categories it cannot enumerate.
-        //
-        // RUNNING THIS TEST NEEDS LOGIC'S LIBRARY PANEL OPEN. Hit again 2026-09-14: with the panel
-        // closed the operation REFUSES instead of answering, the refusal is bucketed as an
-        // environmental prerequisite, and the test then reports this entry as a failure that
-        // "stopped failing" — which reads exactly like the defect was fixed. It was not; the panel
-        // was shut after a Logic restart. Read the control bar's `라이브러리` checkbox (value 1 =
-        // open) before believing this entry can be removed.
-        .init(
-            operationID: OperationID.tracksListLibrary.rawValue,
-            failureReason: "semantic readback mismatch: response did not match its independent readback",
-            trackingIssue: "#284"
-        ),
-        //
-        // `tracks.resolve_path` was pinned here until 2026-09-02 as well, and left
-        // by being fixed: a warm-cache miss answered `exists:false` with no `reason`
-        // and a warning claiming the path had resolved. Its oracle checks the
-        // response alone: a miss needs a non-empty `reason`; a hit needs a
-        // `matchedPath` and a known `kind`.
-    ]
+    private static let knownLiveGateFailures: [KnownLiveGateFailure] = []
 
     @Test func qualificationExecutesEachOperationAndBindsIndependentReadback() async throws {
         let specs = [
@@ -1333,6 +1289,116 @@ struct QualificationRunnerTests {
         #expect(accepted.exitCode == 0, "\(accepted.stdout)\(accepted.stderr)")
     }
 
+    @Test func runnerVerifierAcceptsBoundHostLibraryPanelReadback() async throws {
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .tracksListLibrary })
+        let drive = Self.driveResult(specs: [spec])
+        let library = try #require(drive.operationResults[spec.id.rawValue])
+        #expect(library.readbackSource
+            == QualificationSemanticReadbackValidator.libraryPanelReadbackSource)
+        #expect(QualificationTransport.readbackSource(for: spec)
+            == QualificationSemanticReadbackValidator.libraryPanelReadbackSource)
+        #expect(library.status == .passed)
+
+        let fixture = try Fixture(specs: [spec], drive: { _ in drive })
+        defer { fixture.remove() }
+        try JSONEncoder().encode(Self.axisWaivers()).write(to: fixture.waiversURL)
+        let attestation = try await fixture.qualify(waiversURL: fixture.waiversURL)
+        let operationCase = try #require(
+            attestation.cases.first { $0.id == "in-process/tracks.list_library" }
+        )
+        #expect(operationCase.status == .passed)
+        #expect(operationCase.readback?.source
+            == QualificationSemanticReadbackValidator.libraryPanelReadbackSource)
+        let accepted = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+        #expect(accepted.exitCode == 0, "\(accepted.stdout)\(accepted.stderr)")
+    }
+
+    private final class LibraryReadbackProbe: @unchecked Sendable {
+        private let lock = NSLock()
+        private var callsStorage = 0
+
+        func record() {
+            lock.lock()
+            callsStorage += 1
+            lock.unlock()
+        }
+
+        var calls: Int {
+            lock.lock()
+            defer { lock.unlock() }
+            return callsStorage
+        }
+    }
+
+    private enum LibraryReadbackFailure: Error {
+        case unavailable
+    }
+
+    @Test func transportUsesInjectedLibraryPanelReadbackInsteadOfCacheResource() throws {
+        let fixture = try SlowHandshakeFixture(libraryReadback: true)
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .tracksListLibrary })
+        let snapshot = Data(#"{"categories":["Bass"],"presetsByCategory":{}}"#.utf8)
+        let probe = LibraryReadbackProbe()
+
+        let drive = try QualificationTransport(
+            handshakeTimeout: 2,
+            requestTimeout: 2,
+            shutdownGrace: 2,
+            libraryPanelReadback: {
+                probe.record()
+                return snapshot
+            }
+        ).drive(.init(
+            executableURL: fixture.executableURL,
+            environment: ["HANDSHAKE_DELAY": "0"],
+            expectedOperationCount: 0,
+            operations: [spec]
+        ))
+
+        let result = try #require(drive.operationResults[spec.id.rawValue])
+        #expect(probe.calls == 1)
+        #expect(result.status == .passed)
+        #expect(result.responseData == snapshot)
+        #expect(result.readbackData == snapshot)
+        #expect(result.readbackSource
+            == QualificationSemanticReadbackValidator.libraryPanelReadbackSource)
+        let requests = try String(
+            contentsOf: fixture.directory.appendingPathComponent("requests"),
+            encoding: .utf8
+        )
+        #expect(!requests.contains("logic://library/inventory"))
+    }
+
+    @Test func transportFailsClosedWhenLibraryPanelReadbackThrows() throws {
+        let fixture = try SlowHandshakeFixture(libraryReadback: true)
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .tracksListLibrary })
+        let probe = LibraryReadbackProbe()
+
+        let drive = try QualificationTransport(
+            handshakeTimeout: 2,
+            requestTimeout: 2,
+            shutdownGrace: 2,
+            libraryPanelReadback: {
+                probe.record()
+                throw LibraryReadbackFailure.unavailable
+            }
+        ).drive(.init(
+            executableURL: fixture.executableURL,
+            environment: ["HANDSHAKE_DELAY": "0"],
+            expectedOperationCount: 0,
+            operations: [spec]
+        ))
+
+        let result = try #require(drive.operationResults[spec.id.rawValue])
+        #expect(probe.calls == 1)
+        #expect(result.status == .failed)
+        #expect(result.readbackData == nil)
+        let failureReason = try #require(result.failureReason)
+        #expect(failureReason.contains("independent readback"))
+    }
+
     @Test func operationQualificationSeparatesSemanticReadSmokeAndTypedDeferrals() async throws {
         let fixture = try Fixture(specs: OperationRegistry.specs)
         defer { fixture.remove() }
@@ -1348,10 +1414,10 @@ struct QualificationRunnerTests {
         let readOnlyCount = OperationRegistry.specs.filter { $0.mutability == .readOnly }.count
         let marked = Set(SemanticOracleTable.all
             .filter { $0.independentReadbackDeferral != nil }.map(\.operationID))
-        #expect(marked == Set<OperationID>([.midiListPorts, .midiReadSelectedRegionEvents, .mixerGetOutputVerified, .mixerGetSendDestinationVerified,
+        #expect(marked == Set<OperationID>([.midiListPorts, .tracksListLibrary, .midiReadSelectedRegionEvents, .mixerGetOutputVerified, .mixerGetSendDestinationVerified,
             .mixerGetInputBusVerified, .mixerGetSendBypassVerified, .pluginsPlanParameterChanges,
             .pluginsGetHostParameterManifest, .pluginsGetParamVerified, .pluginsGetChannelEQStateVerified]))
-        let smokeOnly = marked.subtracting([.midiListPorts])
+        let smokeOnly = marked.subtracting([.midiListPorts, .tracksListLibrary])
         let readOnlyIDs = Set(OperationRegistry.specs.filter { $0.mutability == .readOnly }.map(\.id.rawValue))
         let smokeOnlyIDs = Set(smokeOnly.map(\.rawValue))
         let passed = operationCases.filter { $0.status == .passed }
@@ -7118,10 +7184,10 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         let readOnlyCount = OperationRegistry.specs.filter { $0.mutability == .readOnly }.count
         let marked = Set(SemanticOracleTable.all
             .filter { $0.independentReadbackDeferral != nil }.map(\.operationID))
-        #expect(marked == Set<OperationID>([.midiListPorts, .midiReadSelectedRegionEvents, .mixerGetOutputVerified, .mixerGetSendDestinationVerified,
+        #expect(marked == Set<OperationID>([.midiListPorts, .tracksListLibrary, .midiReadSelectedRegionEvents, .mixerGetOutputVerified, .mixerGetSendDestinationVerified,
             .mixerGetInputBusVerified, .mixerGetSendBypassVerified, .pluginsPlanParameterChanges,
             .pluginsGetHostParameterManifest, .pluginsGetParamVerified, .pluginsGetChannelEQStateVerified]))
-        let smokeOnly = marked.subtracting([.midiListPorts])
+        let smokeOnly = marked.subtracting([.midiListPorts, .tracksListLibrary])
         let smokeOnlyIDs = Set(smokeOnly.map(\.rawValue))
         let readOnlyIDs = Set(OperationRegistry.specs.filter { $0.mutability == .readOnly }.map(\.id.rawValue))
         let passed = operationCases.filter { $0.status == .passed }
@@ -8541,9 +8607,11 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             error: error,
             hint: hint,
             writeAttempted: false,
-            readbackSource: "logic://library/inventory",
+            readbackSource: QualificationSemanticReadbackValidator.libraryPanelReadbackSource,
             readbackRequestID: "missing-library-panel-readback",
-            readbackData: Data(#"{}"#.utf8),
+            readbackData: Data(
+                #"{"available":false,"reason":"explicit_library_panel_unavailable"}"#.utf8
+            ),
             failureReason: nil
         )
     }
@@ -8659,6 +8727,8 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                         ?? (spec.id == .midiListPorts ? nil : false),
                     readbackSource: spec.id == .midiListPorts
                         ? QualificationSemanticReadbackValidator.coreMIDIPortReadbackSource
+                        : spec.id == .tracksListLibrary
+                            ? QualificationSemanticReadbackValidator.libraryPanelReadbackSource
                         : spec.tool == .logicTransport
                             ? "logic://transport/state"
                             : spec.tool == .logicMixer
@@ -8750,6 +8820,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         let executableURL: URL
 
         init(transportRefusal: Bool = false, transportNativePause: Bool = false,
+             libraryReadback: Bool = false,
              initialTransportMotion: String = "stopped", cachedTransport: Bool = false,
              nameRecipe: OperationID? = nil, nameIdentityFault: String = "none",
              countInCycle: String? = nil, autopunchCycle: String? = nil,
@@ -8790,7 +8861,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             IFS= read -r request_line || exit 0
             IFS= read -r request_line || exit 0
             """#
-            if transportRefusal || transportNativePause || nameRecipe != nil || countInCycle != nil
+            if transportRefusal || transportNativePause || libraryReadback || nameRecipe != nil || countInCycle != nil
                 || autopunchCycle != nil || playheadStep != nil || valueCycle != nil {
                 script = try #require(script.components(separatedBy: "# AFTER SEED").first) + #"""
                 cd "$(dirname "$0")" || exit 1
@@ -8943,6 +9014,8 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"logic_pro_running\\":true,\\"logic_pro_version\\":\\"11.2\\",\\"logic_pro_bundle_id\\":\\"com.apple.logic10\\",\\"logic_pro_variant\\":\\"desktop\\",\\"logic_pro_ui_locale\\":\\"en-US\\",\\"process_metadata_resolved\\":true,\\"logic_pro_variants\\":[{\\"variant\\":\\"desktop\\",\\"bundle_id\\":\\"com.apple.logic10\\",\\"installed\\":true,\\"running\\":true},{\\"variant\\":\\"creator_studio\\",\\"bundle_id\\":\\"com.apple.mobilelogic\\",\\"installed\\":false,\\"running\\":false}]}"}]}}\n' "$id" ;;
                       *'__adr001b_no_write_probe'*)
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"invalid_params\\",\\"write_attempted\\":false}"}]}}\n' "$id" ;;
+                      *'"command":"list_library"'*)
+                        printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"categories\\":[\\"Bass\\"],\\"presetsByCategory\\":{}}"}]}}\n' "$id" ;;
                       *'"command":"set_volume"'*|*'"command":"set_pan"'*)
                         value_writes=$((value_writes + 1))
                         if ! printf '%s' "$request" | grep -q '"target_ref":"held-track"'; then
