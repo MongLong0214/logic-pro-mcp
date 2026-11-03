@@ -224,6 +224,14 @@ class WorkflowWiring(unittest.TestCase):
                 self.assertIn("runner.arch", cache_block)
                 self.assertIn("Package.resolved", cache_block)
 
+    def test_release_compile_waits_for_offline_guard_runner_slot(self):
+        compile_job = self.jobs["compile"]
+        self.assertRegex(compile_job, r"(?m)^    needs: offline-guards$")
+        self.assertRegex(compile_job, r"(?m)^    if: \$\{\{ !cancelled\(\) \}\}$")
+        self.assertRegex(compile_job, r"(?m)^    runs-on: macos-15$")
+        self.assertIn("swift build -c release", compile_job)
+        self.assertNotRegex(self.jobs["test"], r"(?m)^    needs:")
+
     def test_the_aggregate_requires_every_gate_and_checks_success(self):
         build = self.jobs["build"]
         needs = re.search(r"^    needs:\s*\[([^\]]*)\]", build, re.M)

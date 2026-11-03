@@ -158,6 +158,12 @@ jobs:
 
   compile:
     name: compile
+    # The full test job is the 80+ minute critical path. Let the 20-minute offline guard release
+    # its hosted macOS runner before requesting this 10-minute release build. This caps one PR at
+    # two macOS runners without changing validation breadth or the test-dominated critical path.
+    needs: offline-guards
+    # An offline-guard defect must not hide release-build defects from the same attempt.
+    if: ${{ !cancelled() }}
     runs-on: macos-15
     timeout-minutes: 60
     steps:
