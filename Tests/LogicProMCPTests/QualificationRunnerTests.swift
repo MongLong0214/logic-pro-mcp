@@ -1395,7 +1395,8 @@ struct QualificationRunnerTests {
         #expect(probe.calls == 1)
         #expect(result.status == .failed)
         #expect(result.readbackData == nil)
-        #expect(result.failureReason?.contains("independent readback") == true)
+        let failureReason = try #require(result.failureReason)
+        #expect(failureReason.contains("independent readback"))
     }
 
     @Test func operationQualificationSeparatesSemanticReadSmokeAndTypedDeferrals() async throws {
