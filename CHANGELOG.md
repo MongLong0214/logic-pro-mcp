@@ -8,7 +8,24 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+---
+
+## [3.19.0] — 2026-11-03
+
+Caller-facing changes since v3.18.0. Guard scripts, CI, qualification infrastructure, live
+harnesses, roadmap work, and issue bookkeeping are excluded unless they changed a shipped
+contract. Every stated limit remains part of the corresponding change.
+
 ### Added
+- **Gain, Sample Delay, and Noise Gate expose their measured parameters through read-only
+  `logic_plugins get_param_verified` (#1396).** Gain returns its level and polarity selections;
+  Sample Delay returns sample-unit delay values; and Noise Gate returns threshold, reduction,
+  attack, hold, release, hysteresis, lookahead, both sidechain cutoffs, and the selected sidechain
+  filter. Numeric results preserve opaque AX values beside Logic's verbatim engineering displays,
+  and the Noise Gate filter is read from the already-selected popup value without opening it.
+  Missing, ambiguous, malformed, unrecognized, or unstable observations fail closed without a
+  default. These parameters remain read-only: no writer capability or enabled-filter state is
+  inferred. Native acceptance was measured on Logic 12.3; no Logic 12.4 run is claimed.
 - **Compressor `ratio` is available through read-only `logic_plugins get_param_verified` (#299).**
   The Controls row is sampled twice and returns its raw AX value plus Logic's verbatim ratio display
   (for example `2.1:1`). The existing non-actuation measurement is preserved: the catalog still has
