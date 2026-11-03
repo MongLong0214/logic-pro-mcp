@@ -188,6 +188,127 @@ private func makeLibraryPanelFixture(
     #expect(inventory?.currentPreset == "Acid Etched Bass")
 }
 
+@Test func qualificationLibraryPanelReaderUsesOwnedListsForTwoColumnSnapshot() throws {
+    let fixture = makeLibraryPanelFixture()
+
+    let snapshot = try #require(QualificationLibraryPanelReader.snapshot(runtime: fixture.runtime))
+
+    #expect(snapshot.categories == ["Bass", "Drums"])
+    #expect(snapshot.presetsByCategory == ["Bass": ["Sub", "Funky"]])
+    #expect(snapshot.currentCategory == "Bass")
+    #expect(snapshot.currentPreset == "Sub")
+}
+
+@Test func qualificationLibraryPanelReaderKeepsDeepSelectedLeafOutsideImmediatePresetList() throws {
+    let fixture = makeLibraryPanelFixture()
+    let leafList = fixture.builder.element(10_110)
+    let acid = fixture.builder.element(10_111)
+    fixture.builder.setChildren(
+        fixture.browser,
+        [fixture.categoryList, fixture.presetList, leafList, fixture.horizontalScrollBar]
+    )
+    fixture.builder.setAttribute(leafList, kAXRoleAttribute as String, kAXListRole as String)
+    fixture.builder.setChildren(leafList, [acid])
+    fixture.builder.setAttribute(acid, kAXRoleAttribute as String, kAXStaticTextRole as String)
+    fixture.builder.setAttribute(acid, kAXValueAttribute as String, "Acid Etched Bass")
+    fixture.builder.setAttribute(acid, kAXPositionAttribute as String, libraryAXPoint(420, 100))
+    fixture.builder.setAttribute(acid, kAXSizeAttribute as String, libraryAXSize(120, 20))
+    fixture.builder.setAttribute(acid, kAXParentAttribute as String, leafList)
+    fixture.builder.setAttribute(leafList, kAXSelectedChildrenAttribute as String, [acid])
+
+    let snapshot = try #require(QualificationLibraryPanelReader.snapshot(runtime: fixture.runtime))
+
+    #expect(snapshot.presetsByCategory == ["Bass": ["Sub", "Funky"]])
+    #expect(snapshot.currentPreset == "Acid Etched Bass")
+}
+
+@Test func qualificationLibraryPanelReaderPreservesObservedOneColumnShape() throws {
+    let fixture = makeLibraryPanelFixture()
+    fixture.builder.setChildren(
+        fixture.browser,
+        [fixture.categoryList, fixture.horizontalScrollBar]
+    )
+
+    let snapshot = try #require(QualificationLibraryPanelReader.snapshot(runtime: fixture.runtime))
+
+    #expect(snapshot.categories == ["Bass", "Drums"])
+    #expect(snapshot.presetsByCategory.isEmpty)
+    #expect(snapshot.currentCategory == nil)
+    #expect(snapshot.currentPreset == nil)
+}
+
+@Test func qualificationLibraryPanelReaderSupportsOutlineColumnsAtBrowserDepthSix() throws {
+    let fixture = makeLibraryPanelFixture()
+    fixture.builder.setAttribute(
+        fixture.categoryList,
+        kAXRoleAttribute as String,
+        kAXOutlineRole as String
+    )
+    fixture.builder.setAttribute(
+        fixture.presetList,
+        kAXRoleAttribute as String,
+        kAXOutlineRole as String
+    )
+    let bass = fixture.builder.element(10_005)
+    let drums = fixture.builder.element(10_006)
+    let wrappers = (0 ..< 4).map { fixture.builder.element(10_120 + $0) }
+    fixture.builder.setChildren(fixture.categoryList, [wrappers[0]])
+    for index in wrappers.indices {
+        fixture.builder.setAttribute(
+            wrappers[index],
+            kAXRoleAttribute as String,
+            kAXGroupRole as String
+        )
+        fixture.builder.setAttribute(
+            wrappers[index],
+            kAXParentAttribute as String,
+            index == 0 ? fixture.categoryList : wrappers[index - 1]
+        )
+        fixture.builder.setChildren(
+            wrappers[index],
+            index == wrappers.count - 1 ? [bass, drums] : [wrappers[index + 1]]
+        )
+    }
+    fixture.builder.setAttribute(
+        bass,
+        kAXParentAttribute as String,
+        wrappers[wrappers.count - 1]
+    )
+    fixture.builder.setAttribute(
+        drums,
+        kAXParentAttribute as String,
+        wrappers[wrappers.count - 1]
+    )
+
+    let product = try #require(LibraryAccessor.enumerate(runtime: fixture.runtime))
+    let snapshot = try #require(QualificationLibraryPanelReader.snapshot(runtime: fixture.runtime))
+
+    #expect(product.categories == ["Bass", "Drums"])
+    #expect(snapshot.categories == product.categories)
+    #expect(snapshot.presetsByCategory == product.presetsByCategory)
+    #expect(snapshot.currentCategory == product.currentCategory)
+    #expect(snapshot.currentPreset == product.currentPreset)
+}
+
+@Test func qualificationLibraryPanelReaderReturnsExplicitUnavailableSentinel() throws {
+    let fixture = makeLibraryPanelFixture()
+    fixture.builder.setAttribute(
+        fixture.browser,
+        kAXDescriptionAttribute as String,
+        "Files"
+    )
+
+    let data = try QualificationLibraryPanelReader.read(runtime: fixture.runtime)
+    let object = try #require(
+        JSONSerialization.jsonObject(with: data) as? [String: Any]
+    )
+
+    let available = try #require(object["available"] as? Bool)
+    #expect(!available)
+    #expect(object["reason"] as? String == "explicit_library_panel_unavailable")
+    #expect(object["categories"] == nil)
+}
+
 @Test func libraryAccessorSegmentVisibleDetectsRowInVisibleBrowser() {
     // #135 — selectPath's segment-timing hardening polls for the next
     // segment's AXStaticText. `segmentIsVisible` is the read-only primitive

@@ -1084,6 +1084,7 @@ struct QualificationLiveGateSummary: Equatable, Sendable {
 
 enum QualificationSemanticReadbackValidator {
     static let coreMIDIPortReadbackSource = "host://coremidi/ports"
+    static let libraryPanelReadbackSource = "host://accessibility/library-panel"
 
     static func independentReadbackDeferral(
         for operationID: String,
@@ -1093,11 +1094,14 @@ enum QualificationSemanticReadbackValidator {
         if id == .midiListPorts, readbackSource == coreMIDIPortReadbackSource {
             return nil
         }
+        if id == .tracksListLibrary, readbackSource == libraryPanelReadbackSource {
+            return nil
+        }
         return SemanticOracleTable.byOperationID[id]?.independentReadbackDeferral
     }
 
     static func canUseIndependentReadback(for operationID: OperationID) -> Bool {
-        operationID == .midiListPorts
+        operationID == .midiListPorts || operationID == .tracksListLibrary
             || SemanticOracleTable.byOperationID[operationID]?.independentReadbackDeferral == nil
     }
 
@@ -1272,6 +1276,7 @@ struct QualificationTransport: Sendable {
     let requestTimeout: TimeInterval
     let shutdownGrace: TimeInterval
     let midiPortReadback: @Sendable () throws -> Data
+    let libraryPanelReadback: @Sendable () throws -> Data
 
     init(
         handshakeTimeout: TimeInterval = 45,
@@ -1279,12 +1284,16 @@ struct QualificationTransport: Sendable {
         shutdownGrace: TimeInterval = 1,
         midiPortReadback: @escaping @Sendable () throws -> Data = {
             try QualificationTransport.coreMIDIPortReadback()
+        },
+        libraryPanelReadback: @escaping @Sendable () throws -> Data = {
+            try QualificationLibraryPanelReader.read()
         }
     ) {
         self.handshakeTimeout = handshakeTimeout
         self.requestTimeout = requestTimeout
         self.shutdownGrace = shutdownGrace
         self.midiPortReadback = midiPortReadback
+        self.libraryPanelReadback = libraryPanelReadback
     }
 
     /// Environment the same-artifact qualification drives the server with.
@@ -1497,31 +1506,9 @@ struct QualificationTransport: Sendable {
                         // trace seed above already establishes and is indifferent to sweep order.
                         // The seed is a REFUSED `saga_execute` — a typed zero-write refusal — so it
                         // records a trace without mutating anything.
-                        // NOT SEEDED, and the reason is worth keeping: `tracks.list_library`'s
-                        // independent readback is `logic://library/inventory`, which on a fresh
-                        // server answers `{"cached":false,"note":"Run logic_library scan to
-                        // populate…"}`. Seeding it with `tracks.scan_library` was tried on
-                        // 2026-09-14 and did nothing. THE REASON RECORDED THEN WAS WRONG, and it
-                        // is corrected here rather than deleted because the wrong one closed this
-                        // operation as unfixable. It said `scan_library` "returns its presets in
-                        // the response without ever writing that file". It DOES write:
-                        // `AccessibilityChannel+Library.swift:270` writes
-                        // `Resources/library-inventory-disk.json` for a disk scan, and
-                        // `parseScanMode` answers `.disk` for an absent mode -- so the default
-                        // scan wrote a file the reader had never been taught to look for. That
-                        // filename split was fixed on 2026-09-19 (#923); the reader now carries
-                        // both names, canonical first.
-                        //
-                        // Seeding is STILL not attempted here, for a reason that survives the
-                        // correction: the seed would have to run a real library scan against the
-                        // operator's Logic, which is minutes of work and touches nothing this
-                        // operation is about. Re-measure before calling it unfixable again.
-                        //
-                        // That is why the operation sits in `knownLiveGateFailures`. It is not a
-                        // disagreement between two readings; it is a missing second reading. The
-                        // dispositions are to give the operation a readback the product actually
-                        // emits, or to waive it with a reason — NOT to seed it, and the seeding
-                        // attempt is removed rather than left looking like it helps.
+                        // `tracks.list_library` is deliberately not seeded with a library scan.
+                        // Its qualification readback comes from the separate read-only host AX
+                        // panel census, not from the product cache or a scan that changes state.
                         // #373 Phase B: operations with a write-and-restore recipe run it here.
                         // A refusal inside the cycle is NOT swallowed into a pass — the record is
                         // simply absent and the operation falls through to the existing zero-write
@@ -1806,6 +1793,10 @@ struct QualificationTransport: Sendable {
                         // so equality there is circular. Enumerate CoreMIDI from this separate
                         // qualification process while the candidate is alive instead.
                         readbackData = try midiPortReadback()
+                    } else if spec.id == .tracksListLibrary {
+                        // The cache resource does not independently establish the visible panel.
+                        // Read the exact Library browser from this qualification process instead.
+                        readbackData = try libraryPanelReadback()
                     } else {
                         readbackData = try resourceReadback(
                             session,
@@ -5279,8 +5270,9 @@ struct QualificationTransport: Sendable {
             return "logic://midi/ports"
         case .logicTracks:
             switch spec.id {
-            case .tracksListLibrary, .tracksScanLibrary, .tracksResolvePath,
-                 .tracksScanPluginPresets:
+            case .tracksListLibrary:
+                return QualificationSemanticReadbackValidator.libraryPanelReadbackSource
+            case .tracksScanLibrary, .tracksResolvePath, .tracksScanPluginPresets:
                 return "logic://library/inventory"
             default:
                 return "logic://tracks"

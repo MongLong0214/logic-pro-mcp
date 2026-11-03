@@ -131,25 +131,137 @@ struct Issue373SameHandlerReadbackCreditTests {
         #expect(!PromotionGate.operationIsLiveCredited(Self.operationCase(result)))
     }
 
-    @Test func existingLibraryInventoryReadKeepsExistingSemanticCredit() throws {
+    @Test func cachedLibraryInventoryEchoIsProtocolSmokeNotSemanticCredit() throws {
         let fixture = try #require(SemanticOracleFixtures.byOperationID[.tracksListLibrary])
         let result = try Self.result(
             .tracksListLibrary, response: fixture.responseData, readback: fixture.readbackData,
             source: "logic://library/inventory"
         )
+        #expect(result.status == .protocolSmoke)
+        #expect(!result.verified)
+        #expect(result.verificationKind == .protocolSmoke)
+        #expect(result.deferral?.code == .semanticValidatorUnavailable)
+        #expect(!PromotionGate.operationIsLiveCredited(Self.operationCase(result)))
+        let verified = try #require(result.readback?.verified as Bool?)
+        #expect(!verified)
+    }
+
+    @Test func separateHostLibraryPanelCensusCanCreditTheObservedOneColumnShape() throws {
+        let inventory = Data(
+            #"{"categories":["Aux","Bass","Drums","Effects","Guitar","Keys","Mix Bus","Vocal"],"presetsByCategory":{}}"#.utf8
+        )
+        let result = try Self.result(
+            .tracksListLibrary,
+            response: inventory,
+            readback: inventory,
+            source: QualificationSemanticReadbackValidator.libraryPanelReadbackSource
+        )
+
         #expect(result.status == .passed)
         #expect(result.verified)
         #expect(result.verificationKind == .semanticReadback)
+        #expect(result.deferral == nil)
         #expect(PromotionGate.operationIsLiveCredited(Self.operationCase(result)))
-        let verified = try #require(result.readback?.verified as Bool?)
-        #expect(verified)
-        let different = try Self.result(
-            .tracksListLibrary, response: fixture.responseData,
-            readback: Data(#"{"data":{"categories":["unrelated"]}}"#.utf8),
-            source: "logic://library/inventory"
+    }
+
+    @Test func oneColumnDuplicateLabelsRemainCreditableWithoutOwnershipClaim() throws {
+        let inventory = Data(
+            #"{"categories":["Bass","Bass"],"presetsByCategory":{}}"#.utf8
         )
-        #expect(different.status == .notQualified)
-        #expect(!different.verified)
+        let result = try Self.result(
+            .tracksListLibrary,
+            response: inventory,
+            readback: inventory,
+            source: QualificationSemanticReadbackValidator.libraryPanelReadbackSource
+        )
+
+        #expect(result.status == .passed)
+        #expect(result.verified)
+        #expect(PromotionGate.operationIsLiveCredited(Self.operationCase(result)))
+    }
+
+    @Test func separateHostLibraryPanelCensusAcceptsDeepSelectionOutsideImmediateList() throws {
+        let inventory = Data(
+            #"{"categories":["Bass","Drums"],"presetsByCategory":{"Bass":["Sub","Funky"]},"currentCategory":"Bass","currentPreset":"Acid Etched Bass"}"#.utf8
+        )
+        let result = try Self.result(
+            .tracksListLibrary,
+            response: inventory,
+            readback: inventory,
+            source: QualificationSemanticReadbackValidator.libraryPanelReadbackSource
+        )
+
+        #expect(result.status == .passed)
+        #expect(result.verified)
+        #expect(PromotionGate.operationIsLiveCredited(Self.operationCase(result)))
+    }
+
+    @Test func ambiguousDuplicateSelectedCategoryCannotEarnSemanticCredit() throws {
+        let inventory = Data(
+            #"{"categories":["Bass","Bass"],"presetsByCategory":{"Bass":["Sub"]},"currentCategory":"Bass","currentPreset":"Sub"}"#.utf8
+        )
+        let result = try Self.result(
+            .tracksListLibrary,
+            response: inventory,
+            readback: inventory,
+            source: QualificationSemanticReadbackValidator.libraryPanelReadbackSource
+        )
+
+        #expect(result.status == .notQualified)
+        #expect(result.deferral?.code == .semanticMismatch)
+        #expect(!result.verified)
+        #expect(!PromotionGate.operationIsLiveCredited(Self.operationCase(result)))
+    }
+
+    @Test func divergentHostLibraryPanelCensusCannotEarnSemanticCredit() throws {
+        let response = Data(
+            #"{"categories":["Bass"],"presetsByCategory":{"Bass":["Sub"]},"currentCategory":"Bass","currentPreset":"Sub"}"#.utf8
+        )
+        let readback = Data(
+            #"{"categories":["Bass"],"presetsByCategory":{"Bass":["Funky"]},"currentCategory":"Bass","currentPreset":"Funky"}"#.utf8
+        )
+        let result = try Self.result(
+            .tracksListLibrary,
+            response: response,
+            readback: readback,
+            source: QualificationSemanticReadbackValidator.libraryPanelReadbackSource
+        )
+
+        #expect(result.status == .notQualified)
+        #expect(result.deferral?.code == .semanticMismatch)
+        #expect(!result.verified)
+        #expect(!PromotionGate.operationIsLiveCredited(Self.operationCase(result)))
+    }
+
+    @Test func nearMatchLibraryPanelSourceCannotEarnSemanticCredit() throws {
+        let fixture = try #require(SemanticOracleFixtures.byOperationID[.tracksListLibrary])
+        let result = try Self.result(
+            .tracksListLibrary,
+            response: fixture.responseData,
+            readback: fixture.readbackData,
+            source: "host://accessibility/library-panel/cache"
+        )
+
+        #expect(result.status == .protocolSmoke)
+        #expect(!result.verified)
+        #expect(!PromotionGate.operationIsLiveCredited(Self.operationCase(result)))
+    }
+
+    @Test func unavailableHostLibraryPanelSentinelCannotEarnSemanticCredit() throws {
+        let fixture = try #require(SemanticOracleFixtures.byOperationID[.tracksListLibrary])
+        let result = try Self.result(
+            .tracksListLibrary,
+            response: fixture.responseData,
+            readback: Data(
+                #"{"available":false,"reason":"explicit_library_panel_unavailable"}"#.utf8
+            ),
+            source: QualificationSemanticReadbackValidator.libraryPanelReadbackSource
+        )
+
+        #expect(result.status == .notQualified)
+        #expect(result.deferral?.code == .semanticMismatch)
+        #expect(!result.verified)
+        #expect(!PromotionGate.operationIsLiveCredited(Self.operationCase(result)))
     }
 
     @Test(arguments: [OperationID.pluginsGetParamVerified, .pluginsGetChannelEQStateVerified])

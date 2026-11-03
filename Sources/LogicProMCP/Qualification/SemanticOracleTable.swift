@@ -1845,48 +1845,58 @@ enum SemanticOracleTable {
 
     // MARK: - tracks
 
-    // LibraryAccessor.Inventory → {categories, presetsByCategory,
-    // currentCategory?, currentPreset?}. The `logic://library/inventory`
-    // resource wraps the cached scan in a T7 envelope under "data".
+    // LibraryAccessor.Inventory and QualificationLibraryPanelReader.Snapshot share
+    // {categories, presetsByCategory, currentCategory?, currentPreset?}. The legacy
+    // cache resource is protocol-only; qualification uses a separate host AX census.
     static let tracksListLibrary = OperationOracle(
         custom: .tracksListLibrary,
         reason: """
             LibraryAccessor.Inventory has no constant-valued field — all four \
             keys are environment-dependent — so no declarative VALUE constraint \
-            exists. The load-bearing check is the internal consistency of the \
-            inventory (every advertised category must actually carry a preset \
-            list) plus agreement with the independent inventory resource read, \
-            neither of which the constraint model can express.
-            """
+            exists. The load-bearing check is exact semantic equality with the \
+            separately acquired visible Library-panel snapshot, including the \
+            selected category and deepest selected preset when those columns exist.
+            """,
+        independentReadbackDeferral: QualificationDeferral(
+            code: .semanticValidatorUnavailable,
+            detail: "tracks.list_library and logic://library/inventory do not provide an "
+                + "independent visible Library-panel readback"
+        )
     ) { responseData, readbackData in
-        guard let response = JSONInspector.parse(responseData) as? [String: Any],
-              let categories = response["categories"] as? [String],
-              let presetsByCategory = response["presetsByCategory"] as? [String: Any] else {
+        func valid(_ snapshot: QualificationLibraryPanelReader.Snapshot) -> Bool {
+            guard !snapshot.categories.isEmpty,
+                  snapshot.categories.allSatisfy({ !$0.isEmpty }),
+                  snapshot.presetsByCategory.keys.allSatisfy({ !$0.isEmpty }),
+                  snapshot.presetsByCategory.values.flatMap({ $0 }).allSatisfy({ !$0.isEmpty })
+            else { return false }
+            guard let currentCategory = snapshot.currentCategory else {
+                return snapshot.presetsByCategory.isEmpty && snapshot.currentPreset == nil
+            }
+            guard !currentCategory.isEmpty,
+                  snapshot.categories.filter({ $0 == currentCategory }).count == 1,
+                  Set(snapshot.presetsByCategory.keys) == Set([currentCategory])
+            else { return false }
+            if let currentPreset = snapshot.currentPreset, currentPreset.isEmpty { return false }
+            // A deep third column may own the selected leaf while the second column
+            // contains its parent folders, so membership in that immediate list is not required.
+            return true
+        }
+
+        let decoder = JSONDecoder()
+        guard let response = try? decoder.decode(
+            QualificationLibraryPanelReader.Snapshot.self,
+            from: responseData
+        ),
+              let readback = try? decoder.decode(
+                  QualificationLibraryPanelReader.Snapshot.self,
+                  from: readbackData
+              ),
+              valid(response),
+              valid(readback)
+        else {
             return false
         }
-        // A zero-category inventory would make the checks below vacuously true
-        // (`[].allSatisfy` is true, and two empty sets always agree). "I read
-        // nothing and it was all consistent" is not a semantic pass.
-        guard !categories.isEmpty else { return false }
-        // An inventory that advertises a category it cannot enumerate presets
-        // for is lying about what it read — and the preset list must actually
-        // be a list of preset names, not merely some value under that key.
-        guard categories.allSatisfy({ presetsByCategory[$0] as? [String] != nil }) else {
-            return false
-        }
-        // Fail closed on the readback. A degraded resource read ({"error":…},
-        // a cache miss {"cached":false,…}, or a non-object body) carries no
-        // inventory to compare against — and an internal-consistency-only pass
-        // would report `readback.verified == true` on evidence that contributed
-        // nothing. Without a usable independent read there is no semantic
-        // verification to claim.
-        guard let readback = JSONInspector.parse(readbackData) as? [String: Any],
-              let data = readback["data"] as? [String: Any],
-              let readbackCategories = data["categories"] as? [String],
-              !readbackCategories.isEmpty else {
-            return false
-        }
-        return Set(categories) == Set(readbackCategories)
+        return response == readback
     }
 
     // AccessibilityChannel+Library `encodeLibraryRoot` →

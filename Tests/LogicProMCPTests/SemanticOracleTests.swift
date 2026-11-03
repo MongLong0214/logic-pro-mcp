@@ -1803,7 +1803,7 @@ struct SemanticOracleMutationTests {
     func validatorRoutesEachOracleOperationToItsOracle(operationID: OperationID) throws {
         let marked = Set(SemanticOracleTable.all
             .filter { $0.independentReadbackDeferral != nil }.map(\.operationID))
-        #expect(marked == Set<OperationID>([.midiListPorts, .midiReadSelectedRegionEvents, .mixerGetOutputVerified, .mixerGetSendDestinationVerified,
+        #expect(marked == Set<OperationID>([.midiListPorts, .tracksListLibrary, .midiReadSelectedRegionEvents, .mixerGetOutputVerified, .mixerGetSendDestinationVerified,
             .mixerGetInputBusVerified, .mixerGetSendBypassVerified, .pluginsPlanParameterChanges,
             .pluginsGetHostParameterManifest, .pluginsGetParamVerified, .pluginsGetChannelEQStateVerified]))
         let fixture = try #require(SemanticOracleFixtures.byOperationID[operationID])

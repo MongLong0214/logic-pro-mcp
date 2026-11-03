@@ -92,6 +92,11 @@ struct PromotionGate {
                 != QualificationSemanticReadbackValidator.coreMIDIPortReadbackSource {
                 return false
             }
+            if operationCase.operationID == OperationID.tracksListLibrary.rawValue,
+               operationCase.readback?.source
+                != QualificationSemanticReadbackValidator.libraryPanelReadbackSource {
+                return false
+            }
             if let catalogEntry {
                 return catalogEntry.operationID == operationCase.operationID
                     && catalogEntry.semanticPolicy.independentlyCreditable
@@ -104,6 +109,7 @@ struct PromotionGate {
             }
             if operationID == .systemHealth { return true }
             if operationID == .midiListPorts { return true }
+            if operationID == .tracksListLibrary { return true }
             guard let oracle = SemanticOracleTable.byOperationID[operationID] else { return false }
             return oracle.independentReadbackDeferral == nil
         case .verifiedWriteCycle:
