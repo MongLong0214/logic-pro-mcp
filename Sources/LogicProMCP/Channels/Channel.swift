@@ -93,8 +93,22 @@ protocol Channel: Actor {
 
 /// A channel whose global health remains conservative but which can prove that one
 /// particular operation is ready for unattended execution in this process.
+enum OperationReadyExecution: Sendable {
+    case notReady
+    case executed(ChannelResult)
+}
+
 protocol OperationReadinessProviding: Channel {
     func isReady(operation: String) async -> Bool
+
+    /// Recheck readiness inside the channel actor and retain an in-flight claim
+    /// through execution. `beforeExecution` binds the claim to the router's
+    /// current channel identity before the write boundary is committed.
+    func executeIfReady(
+        operation: String,
+        params: [String: String],
+        beforeExecution: @escaping @Sendable () async -> Bool
+    ) async -> OperationReadyExecution
 }
 
 /// Shared surface for the two send-only "MIDI CC on channel 16" channels

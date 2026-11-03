@@ -483,21 +483,44 @@ actor ChannelRouter {
                     extras: ["operation": operation, "write_attempted": false]
                 ))
             }
-            await OperationTraceContext.record(.channelStarted, attributes: [
-                "channel": channelID.rawValue,
-            ])
-            // #389: an armed write boundary commits HERE — the first channel
-            // that actually executes — and never on a route that resolved no
-            // channel. Reads route without an arm, so this is a no-op for them.
-            await OperationTraceWriteBoundaryArm.commitIfArmed()
-            if channelID == .mcu && !Self.passiveMCUOperations.contains(operation),
-               stopping || !Self.mcuUsePermitted {
-                return .error(HonestContract.encodeStateC(
-                    error: .cancelled, hint: "MCU execution cancelled or ownership expired",
-                    extras: ["operation": operation, "write_attempted": false]
-                ))
+            let result: ChannelResult
+            if operationReadyChannels.contains(channelID),
+               let provider = channel as? any OperationReadinessProviding {
+                let claimed = await provider.executeIfReady(
+                    operation: operation,
+                    params: params
+                ) { [weak self] in
+                    guard let self,
+                          await self.isCurrentChannel(channel, id: channelID) else { return false }
+                    await OperationTraceContext.record(.channelStarted, attributes: [
+                        "channel": channelID.rawValue,
+                    ])
+                    await OperationTraceWriteBoundaryArm.commitIfArmed()
+                    return true
+                }
+                switch claimed {
+                case .notReady:
+                    return .error(Self.operationReadinessInvalidated(operation: operation))
+                case .executed(let executed):
+                    result = executed
+                }
+            } else {
+                await OperationTraceContext.record(.channelStarted, attributes: [
+                    "channel": channelID.rawValue,
+                ])
+                // #389: an armed write boundary commits HERE — the first channel
+                // that actually executes — and never on a route that resolved no
+                // channel. Reads route without an arm, so this is a no-op for them.
+                await OperationTraceWriteBoundaryArm.commitIfArmed()
+                if channelID == .mcu && !Self.passiveMCUOperations.contains(operation),
+                   stopping || !Self.mcuUsePermitted {
+                    return .error(HonestContract.encodeStateC(
+                        error: .cancelled, hint: "MCU execution cancelled or ownership expired",
+                        extras: ["operation": operation, "write_attempted": false]
+                    ))
+                }
+                result = await channel.execute(operation: operation, params: params)
             }
-            let result = await channel.execute(operation: operation, params: params)
             var completedAttributes = [
                 "channel": channelID.rawValue,
                 "outcome": result.isSuccess ? "success" : "error",
@@ -621,6 +644,29 @@ actor ChannelRouter {
                 "safe_to_retry": false,
             ]
         ))
+    }
+
+    private func isCurrentChannel(_ channel: any Channel, id: ChannelID) -> Bool {
+        guard let current = channels[id] else { return false }
+        return ObjectIdentifier(current) == ObjectIdentifier(channel)
+    }
+
+    private static func operationReadinessInvalidated(operation: String) -> String {
+        HonestContract.encodeStateC(
+            error: .cancelled,
+            hint: "Verified operation readiness was invalidated before execution",
+            extras: [
+                "operation": operation,
+                "terminal": true,
+                "terminal_scope": "mcp_request_only",
+                "fallback_unsafe": true,
+                "human_intervention_required": false,
+                "human_intervention_requests": 0,
+                "human_dependent_transitions": 0,
+                "safe_to_retry": true,
+                "write_attempted": false,
+            ]
+        )
     }
 
     private static func shouldContinueAfterTerminalStateC(

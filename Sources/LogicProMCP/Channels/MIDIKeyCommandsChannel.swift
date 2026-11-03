@@ -20,6 +20,9 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel, OperationReadinessProviding {
     let transport: any KeyCmdTransportProtocol
     let approvalStore: any ManualValidationStoring
     private var verifiedOperations: Set<String> = []
+    private var stopping = false
+    private var verifiedExecutionsInFlight = 0
+    private var stopWaiters: [CheckedContinuation<Void, Never>] = []
 
     init(
         transport: any KeyCmdTransportProtocol,
@@ -107,6 +110,7 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel, OperationReadinessProviding {
 
     func start() async throws {
         let readiness = try await prepareTransportForStart()
+        stopping = false
         Log.info(
             "MIDIKeyCommands channel started (\(Self.mappingTable.count) commands mapped) — \(readiness.detail)",
             subsystem: "keycmd"
@@ -114,21 +118,56 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel, OperationReadinessProviding {
     }
 
     func stop() async {
+        stopping = true
         verifiedOperations.removeAll()
+        if verifiedExecutionsInFlight > 0 {
+            await withCheckedContinuation { continuation in
+                stopWaiters.append(continuation)
+            }
+        }
         Log.info("MIDIKeyCommands channel stopped", subsystem: "keycmd")
     }
 
     /// Record only catalog operations that were functionally verified through this
     /// actor's owned transport during the current process lifetime.
     func recordVerifiedBinding(operation: String) {
-        guard MIDIKeyCommandBindingCatalog.entries.contains(where: { $0.operation == operation }) else {
+        guard !stopping,
+              MIDIKeyCommandBindingCatalog.entries.contains(where: { $0.operation == operation }) else {
             return
         }
         verifiedOperations.insert(operation)
     }
 
     func isReady(operation: String) -> Bool {
-        verifiedOperations.contains(operation)
+        !stopping && verifiedOperations.contains(operation)
+    }
+
+    func executeIfReady(
+        operation: String,
+        params: [String: String],
+        beforeExecution: @escaping @Sendable () async -> Bool
+    ) async -> OperationReadyExecution {
+        guard !stopping, verifiedOperations.contains(operation) else {
+            return .notReady
+        }
+        verifiedExecutionsInFlight += 1
+        defer { finishVerifiedExecution() }
+
+        guard await beforeExecution() else {
+            return .notReady
+        }
+        return .executed(await execute(operation: operation, params: params, verified: true))
+    }
+
+    private func finishVerifiedExecution() {
+        precondition(verifiedExecutionsInFlight > 0)
+        verifiedExecutionsInFlight -= 1
+        guard verifiedExecutionsInFlight == 0 else { return }
+        let waiters = stopWaiters
+        stopWaiters.removeAll()
+        for waiter in waiters {
+            waiter.resume()
+        }
     }
 
     private static func verifiedMappedSendFailure(
@@ -178,6 +217,18 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel, OperationReadinessProviding {
     }
 
     func execute(operation: String, params: [String: String]) async -> ChannelResult {
+        await execute(
+            operation: operation,
+            params: params,
+            verified: !stopping && verifiedOperations.contains(operation)
+        )
+    }
+
+    private func execute(
+        operation: String,
+        params: [String: String],
+        verified: Bool
+    ) async -> ChannelResult {
         // T6 (PRD Issue#1 §4.3 / AC-1.1) — direct MIDI send path for the
         // 7 "midi.*.keycmd" ops. These bypass the CC mapping table and
         // push raw MIDI bytes through the KeyCmd virtual transport. The
@@ -200,13 +251,12 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel, OperationReadinessProviding {
         let bytes: [UInt8] = [0xB0 | Self.midiChannel, cc, 0x7F]
         let releaseBytes: [UInt8] = [0xB0 | Self.midiChannel, cc, 0x00]
 
-        let verified = verifiedOperations.contains(operation)
         do {
             try await transport.send(bytes)
         } catch {
             if verified {
                 return Self.verifiedMappedSendFailure(
-                    error, operation: operation, phase: "press", writeAttempted: false
+                    error, operation: operation, phase: "press", writeAttempted: true
                 )
             }
             return Self.mappedTerminalFailure(
