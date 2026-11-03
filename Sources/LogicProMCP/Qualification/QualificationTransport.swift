@@ -1,5 +1,6 @@
 import Foundation
 import Darwin
+import CoreMIDI
 
 struct QualificationDriveRequest: Sendable {
     let executableURL: URL
@@ -444,7 +445,10 @@ struct QualificationOperationResult: Equatable, Sendable {
     /// The refusal's actionable half. Captured because the deferral used to guess a cause the
     /// operation had already named -- see `operationUnavailable` below.
     let hint: String?
+    let reason: String?
     let writeAttempted: Bool?
+    let rowSelectionWriteAttempted: Bool?
+    let rowSelectionRestored: Bool?
     let readbackSource: String?
     let readbackRequestID: String?
     let readbackData: Data?
@@ -472,7 +476,10 @@ struct QualificationOperationResult: Equatable, Sendable {
         state: String?,
         error: String?,
         hint: String?,
+        reason: String? = nil,
         writeAttempted: Bool?,
+        rowSelectionWriteAttempted: Bool? = nil,
+        rowSelectionRestored: Bool? = nil,
         readbackSource: String?,
         readbackRequestID: String?,
         readbackData: Data?,
@@ -492,7 +499,10 @@ struct QualificationOperationResult: Equatable, Sendable {
         self.state = state
         self.error = error
         self.hint = hint
+        self.reason = reason
         self.writeAttempted = writeAttempted
+        self.rowSelectionWriteAttempted = rowSelectionWriteAttempted
+        self.rowSelectionRestored = rowSelectionRestored
         self.readbackSource = readbackSource
         self.readbackRequestID = readbackRequestID
         self.readbackData = readbackData
@@ -655,18 +665,29 @@ struct QualificationOperationResult: Equatable, Sendable {
     /// different refusal from one of these operations is a product failure,
     /// not a generic exemption.
     var liveGateUnmetOperationPrecondition: String? {
-        guard isError == true, error == "invalid_params" else { return nil }
+        guard isError == true else { return nil }
         switch OperationID(rawValue: operationID) {
         case .audioAnalyzeSpectrum:
+            guard error == "invalid_params" else { return nil }
             guard hint == "analyze_spectrum requires non-empty string 'path'" else { return nil }
             return "requires non-empty string 'path'"
         case .audioRecommendEQ:
+            guard error == "invalid_params" else { return nil }
             guard hint == "recommend_eq requires non-empty string 'path'" else { return nil }
             return "requires non-empty string 'path'"
         case .systemClearTraces:
+            guard error == "invalid_params" else { return nil }
             guard hint == "clear_traces requires 'confirmed:true' because it destroys in-process diagnostic evidence"
             else { return nil }
             return "requires 'confirmed:true'"
+        case .midiReadSelectedRegionEvents:
+            guard state == "C",
+                  error == "selected_region_event_read_unavailable",
+                  reason == "selection_scope_incomplete",
+                  writeAttempted == false,
+                  rowSelectionWriteAttempted == false,
+                  rowSelectionRestored == false else { return nil }
+            return "requires a complete selected Arrange-region scope"
         default:
             return nil
         }
@@ -748,7 +769,8 @@ struct QualificationOperationResult: Equatable, Sendable {
                 return "independent readback was not admissible: \(reason)"
             }
             if let deferred = QualificationSemanticReadbackValidator.independentReadbackDeferral(
-                for: operationID
+                for: operationID,
+                readbackSource: readbackSource
             ) {
                 return deferral?.detail ?? deferred.detail
             }
@@ -820,7 +842,8 @@ struct QualificationOperationResult: Equatable, Sendable {
             )
         case .notQualified where isError == false && semanticReadbackValidated == false:
             if let deferred = QualificationSemanticReadbackValidator.independentReadbackDeferral(
-                for: operationID
+                for: operationID,
+                readbackSource: readbackSource
             ) {
                 return QualificationDeferral(
                     code: .semanticMismatch,
@@ -858,7 +881,8 @@ struct QualificationOperationResult: Equatable, Sendable {
             )
         case .protocolSmoke:
             if let deferred = QualificationSemanticReadbackValidator.independentReadbackDeferral(
-                for: operationID
+                for: operationID,
+                readbackSource: readbackSource
             ) {
                 return deferred
             }
@@ -900,7 +924,8 @@ struct QualificationOperationResult: Equatable, Sendable {
         return QualificationSemanticReadbackValidator.validate(
             operationID: operationID,
             responseData: responseData,
-            readbackData: readbackData
+            readbackData: readbackData,
+            readbackSource: readbackSource
         )
     }
 
@@ -1058,15 +1083,29 @@ struct QualificationLiveGateSummary: Equatable, Sendable {
 }
 
 enum QualificationSemanticReadbackValidator {
-    static func independentReadbackDeferral(for operationID: String) -> QualificationDeferral? {
+    static let coreMIDIPortReadbackSource = "host://coremidi/ports"
+
+    static func independentReadbackDeferral(
+        for operationID: String,
+        readbackSource: String? = nil
+    ) -> QualificationDeferral? {
         guard let id = OperationID(rawValue: operationID) else { return nil }
+        if id == .midiListPorts, readbackSource == coreMIDIPortReadbackSource {
+            return nil
+        }
         return SemanticOracleTable.byOperationID[id]?.independentReadbackDeferral
+    }
+
+    static func canUseIndependentReadback(for operationID: OperationID) -> Bool {
+        operationID == .midiListPorts
+            || SemanticOracleTable.byOperationID[operationID]?.independentReadbackDeferral == nil
     }
 
     static func validate(
         operationID: String,
         responseData: Data,
-        readbackData: Data
+        readbackData: Data,
+        readbackSource: String? = nil
     ) -> Bool? {
         switch OperationID(rawValue: operationID) {
         case .systemHealth:
@@ -1079,7 +1118,10 @@ enum QualificationSemanticReadbackValidator {
             guard let oracle = SemanticOracleTable.byOperationID[id] else { return nil }
             let verdict = oracle.evaluate(responseData: responseData, readbackData: readbackData)
             switch verdict {
-            case .some(true) where oracle.independentReadbackDeferral != nil:
+            case .some(true) where independentReadbackDeferral(
+                for: operationID,
+                readbackSource: readbackSource
+            ) != nil:
                 return nil
             default:
                 return verdict
@@ -1229,15 +1271,20 @@ struct QualificationTransport: Sendable {
     let handshakeTimeout: TimeInterval
     let requestTimeout: TimeInterval
     let shutdownGrace: TimeInterval
+    let midiPortReadback: @Sendable () throws -> Data
 
     init(
         handshakeTimeout: TimeInterval = 45,
         requestTimeout: TimeInterval = 10,
-        shutdownGrace: TimeInterval = 1
+        shutdownGrace: TimeInterval = 1,
+        midiPortReadback: @escaping @Sendable () throws -> Data = {
+            try QualificationTransport.coreMIDIPortReadback()
+        }
     ) {
         self.handshakeTimeout = handshakeTimeout
         self.requestTimeout = requestTimeout
         self.shutdownGrace = shutdownGrace
+        self.midiPortReadback = midiPortReadback
     }
 
     /// Environment the same-artifact qualification drives the server with.
@@ -1370,10 +1417,43 @@ struct QualificationTransport: Sendable {
             // been emitted and has always been empty.
             var mutationRestoreRecords: [QualificationMutationRestoreRecord] = []
             var operationResults: [String: QualificationOperationResult] = [:]
+            var preparedReadParams: [OperationID: [String: Any]] = [:]
+            var readProbePreparationFailures: [OperationID: String] = [:]
+            let requestedIDs = Set(request.operations.map(\.id))
+            let requestedMixerReads = Self.mixerReadProbeOperationIDs.intersection(requestedIDs)
+            let requestedPluginReads = Self.pluginReadProbeOperationIDs.intersection(requestedIDs)
+            if !requestedPluginReads.isEmpty {
+                do {
+                    let params = try Self.preparePluginReadProbeParams(
+                        tracksRead: {
+                            let tracksReadID = nextID
+                            nextID += 1
+                            return try resourceReadback(
+                                session, id: tracksReadID, uri: "logic://tracks",
+                                phase: "plugin_read_probe_tracks")
+                        },
+                        inventoryRead: { track in
+                            let inventoryID = nextID
+                            nextID += 1
+                            return try pluginInventory(
+                                session, id: inventoryID, track: track,
+                                phase: "plugin_read_probe_inventory.\(track)"
+                            )
+                        }
+                    )
+                    preparedReadParams.merge(params) { current, _ in current }
+                } catch {
+                    let failure = Self.observedFailureReason(
+                        from: error, during: "plug-in read-probe preparation")
+                    for operation in requestedPluginReads {
+                        readProbePreparationFailures[operation] = failure
+                    }
+                }
+            }
             for spec in request.operations {
                 var response: (text: String, isError: Bool)?
                 var responseRequestID: String?
-                var responseFailure: String?
+                var responseFailure: String? = readProbePreparationFailures[spec.id]
                 var phaseBRecord: QualificationMutationRestoreRecord?
                 var phaseBRefusal: String?
                 // `tracks.rename` reuses the negative probe's response below and never reaches the
@@ -1672,6 +1752,28 @@ struct QualificationTransport: Sendable {
                             // as the failure it is rather than skipped.
                             seededSessionSnapshotID = try? sessionInspectionSeed(session, startingAt: seedID)
                         }
+                        if requestedMixerReads.contains(spec.id) {
+                            let mixerInspectionID = nextID
+                            // Every request-owned inspection has one exact zero-write retry budget.
+                            nextID += 2
+                            do {
+                                let inspection = try sessionInspectionSeedPayload(
+                                    session, startingAt: mixerInspectionID)
+                                let current = Self.mixerReadProbeParams(from: inspection.responseData)
+                                preparedReadParams.removeValue(forKey: spec.id)
+                                guard let currentParams = current[spec.id] else {
+                                    throw QualificationTransportError.protocolViolation(
+                                        "mixer_read_probe_inspection: no current params for \(spec.id.rawValue)"
+                                    )
+                                }
+                                preparedReadParams[spec.id] = currentParams
+                                responseFailure = nil
+                            } catch {
+                                preparedReadParams.removeValue(forKey: spec.id)
+                                responseFailure = Self.observedFailureReason(
+                                    from: error, during: "fresh mixer read-probe inspection")
+                            }
+                        }
                         let responseID = nextID
                         nextID += 1
                         responseRequestID = String(responseID)
@@ -1684,6 +1786,7 @@ struct QualificationTransport: Sendable {
                             spec: spec,
                             traceID: seededTraceID,
                             sessionSnapshotID: seededSessionSnapshotID,
+                            preparedReadParams: preparedReadParams,
                             timeout: probeTimeout
                         )
                     }
@@ -1698,12 +1801,19 @@ struct QualificationTransport: Sendable {
                 var readbackData: Data?
                 var readbackFailure: String?
                 do {
-                    readbackData = try resourceReadback(
-                        session,
-                        id: nextID,
-                        uri: readbackSource,
-                        phase: readbackRequestID
-                    )
+                    if spec.id == .midiListPorts {
+                        // The resource endpoint dispatches the same server handler as the tool,
+                        // so equality there is circular. Enumerate CoreMIDI from this separate
+                        // qualification process while the candidate is alive instead.
+                        readbackData = try midiPortReadback()
+                    } else {
+                        readbackData = try resourceReadback(
+                            session,
+                            id: nextID,
+                            uri: readbackSource,
+                            phase: readbackRequestID
+                        )
+                    }
                 } catch {
                     readbackFailure = Self.observedFailureReason(
                         from: error,
@@ -1728,7 +1838,10 @@ struct QualificationTransport: Sendable {
                     state: typed?.state,
                     error: typed?.error,
                     hint: typed?.hint,
+                    reason: typed?.reason,
                     writeAttempted: typed?.writeAttempted,
+                    rowSelectionWriteAttempted: typed?.rowSelectionWriteAttempted,
+                    rowSelectionRestored: typed?.rowSelectionRestored,
                     readbackSource: readbackSource,
                     readbackRequestID: readbackRequestID,
                     readbackData: readbackData,
@@ -1953,12 +2066,17 @@ struct QualificationTransport: Sendable {
         )
     }
 
+    static func operationRequestTimeout(for spec: OperationSpec) -> TimeInterval {
+        spec.deadline.seconds + 5
+    }
+
     private func operation(
         _ session: QualificationSubprocessSession,
         id: Int,
         spec: OperationSpec,
         traceID: String,
         sessionSnapshotID: String? = nil,
+        preparedReadParams: [OperationID: [String: Any]] = [:],
         timeout: TimeInterval? = nil
     ) throws -> (text: String, isError: Bool) {
         let result: ToolCallResult = try session.request(
@@ -1969,16 +2087,38 @@ struct QualificationTransport: Sendable {
                 "arguments": [
                     "command": spec.command,
                     "params": Self.probeParams(
-                        for: spec, traceID: traceID, sessionSnapshotID: sessionSnapshotID),
+                        for: spec, traceID: traceID, sessionSnapshotID: sessionSnapshotID,
+                        preparedReadParams: preparedReadParams),
                 ],
             ],
             phase: "operation_probe.\(spec.id.rawValue)",
-            timeout: timeout
+            timeout: timeout ?? Self.operationRequestTimeout(for: spec)
         )
         return (
             try result.text(phase: "operation_probe.\(spec.id.rawValue)"),
             result.isError == true
         )
+    }
+
+    private func pluginInventory(
+        _ session: QualificationSubprocessSession,
+        id: Int,
+        track: Int,
+        phase: String
+    ) throws -> Data {
+        let result: ToolCallResult = try session.request(
+            id: id,
+            method: "tools/call",
+            params: [
+                "name": "logic_plugins",
+                "arguments": [
+                    "command": "get_inventory",
+                    "params": ["track": track],
+                ],
+            ],
+            phase: phase
+        )
+        return Data(try result.text(phase: phase).utf8)
     }
 
     /// #373 Phase B: the two history operations, and which way each one moves the stack.
@@ -4737,14 +4877,239 @@ struct QualificationTransport: Sendable {
     /// record nothing wrote and report exactly what it reported before the seed existed.
     static let sagaProbeIdempotencyKey = "qualification-read-probe"
     static let qualificationAudioProbePath = "/System/Library/Sounds/Ping.aiff"
+    static let mixerReadProbeOperationIDs: Set<OperationID> = [
+        .mixerGetOutputVerified,
+        .mixerGetInputBusVerified,
+        .mixerGetSendDestinationVerified,
+        .mixerGetSendBypassVerified,
+    ]
+    static let pluginReadProbeOperationIDs: Set<OperationID> = [
+        .pluginsGetHostParameterManifest,
+        .pluginsGetParamVerified,
+        .pluginsGetChannelEQStateVerified,
+        .pluginsPlanParameterChanges,
+    ]
+    static let qualificationHostBuildFingerprint = "logic-pro-mcp-qualification-unverified"
+
+    /// Read-only Mixer probes must address the exact physical sources the current server issued.
+    /// Names and Arrange indices cannot substitute for a `mix_` reference: Aux and output strips
+    /// have no safe Arrange ordinal, and duplicate names are ordinary. The resource's typed slot
+    /// observations decide which operation can be attempted; untyped display bytes never grant a
+    /// send or input capability.
+    static func mixerReadProbeParams(from resourceData: Data) -> [OperationID: [String: Any]] {
+        guard let envelope = try? JSONSerialization.jsonObject(with: resourceData) as? [String: Any]
+        else { return [:] }
+        let strips: [[String: Any]]
+        if let resourceRows = envelope["strips"] as? [[String: Any]] {
+            strips = resourceRows
+        } else if let snapshotID = envelope["snapshot_id"] as? String, !snapshotID.isEmpty,
+                  let sources = envelope["sources"] as? [String: Any],
+                  sources["strips"] as? String == "ax_request_read",
+                  let section = envelope["strips"] as? [String: Any],
+                  let freshRows = section["rows"] as? [[String: Any]] {
+            strips = freshRows
+        } else {
+            return [:]
+        }
+        var params: [OperationID: [String: Any]] = [:]
+        for strip in strips {
+            guard let reference = strip["mixer_strip_ref"] as? String,
+                  reference.hasPrefix("mix_"), reference.count > 4 else { continue }
+
+            if params[.mixerGetOutputVerified] == nil,
+               let observation = strip["output_observation"] as? [String: Any],
+               observation["state"] as? String == "observed_destination",
+               let destination = observation["destination"] as? String,
+               OutputAssignment.observed(slotLabel: destination) != nil {
+                params[.mixerGetOutputVerified] = ["target_ref": reference]
+            }
+            if params[.mixerGetInputBusVerified] == nil,
+               let observation = strip["input_observation"] as? [String: Any],
+               observation["state"] as? String == "observed_source",
+               let source = observation["source"] as? String,
+               InputAssignment.classifiedMenuTitle(source)?.busOutputAssignment != nil {
+                params[.mixerGetInputBusVerified] = ["target_ref": reference]
+            }
+            guard let slots = strip["send_slots"] as? [[String: Any]] else { continue }
+            for slot in slots {
+                guard let ordinal = slot["ordinal"] as? Int, ordinal >= 0,
+                      let state = slot["state"] as? String,
+                      state == "occupied_unknown_destination"
+                        || state == "occupied_known_destination" else { continue }
+                if params[.mixerGetSendDestinationVerified] == nil {
+                    params[.mixerGetSendDestinationVerified] = [
+                        "target_ref": reference, "ordinal": ordinal,
+                    ]
+                }
+                if params[.mixerGetSendBypassVerified] == nil,
+                   slot["bypassed"] is Bool {
+                    params[.mixerGetSendBypassVerified] = [
+                        "target_ref": reference, "ordinal": ordinal,
+                    ]
+                }
+            }
+        }
+        return params
+    }
+
+    /// Build live plug-in read probes only from complete inventory responses that issued current
+    /// `ins_` references. The catalog narrows those physical insert observations to readers the
+    /// shipped dispatcher can actually execute; an occupied name alone grants no parameter
+    /// capability. Plan probes use the planner's stricter raw-unit predicate and never authorize
+    /// application.
+    static func pluginReadProbeParams(from inventoryResponses: [Data]) -> [OperationID: [String: Any]] {
+        struct Candidate {
+            let reference: String
+            let pluginID: String
+            let entry: StockPluginCatalogEntry
+            let order: Int
+        }
+
+        var candidates: [Candidate] = []
+        for data in inventoryResponses {
+            guard let envelope = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                  envelope["state"] as? String == "A",
+                  envelope["complete"] as? Bool == true,
+                  let plugins = envelope["plugins"] as? [[String: Any]] else { continue }
+            for plugin in plugins {
+                guard plugin["read_status"] as? String == "ok",
+                      plugin["occupied"] as? Bool == true,
+                      let reference = plugin["plugin_insert_ref"] as? String,
+                      reference.hasPrefix("ins_"), reference.count > 4,
+                      let pluginID = plugin["plugin_id"] as? String,
+                      let entry = VerifiedPluginCatalog.productionEntryLookup(pluginID) else { continue }
+                candidates.append(Candidate(
+                    reference: reference,
+                    pluginID: pluginID,
+                    entry: entry,
+                    order: candidates.count
+                ))
+            }
+        }
+
+        var params: [OperationID: [String: Any]] = [:]
+        if let candidate = candidates.first {
+            params[.pluginsGetHostParameterManifest] = [
+                "target_ref": candidate.reference,
+                "expected_build_fingerprint": Self.qualificationHostBuildFingerprint,
+            ]
+        }
+
+        // Gain's scalar is the least invasive measured reader in the qualification fixture. Keep
+        // deterministic inventory order for every other catalog-backed plug-in.
+        let scalarCandidates = candidates.sorted { lhs, rhs in
+            let lhsPriority = lhs.pluginID == "logic.stock.effect.gain" ? 0 : 1
+            let rhsPriority = rhs.pluginID == "logic.stock.effect.gain" ? 0 : 1
+            return lhsPriority == rhsPriority ? lhs.order < rhs.order : lhsPriority < rhsPriority
+        }
+        if let selected = scalarCandidates.lazy.compactMap({ candidate -> (Candidate, StockPluginParameterMetadata)? in
+            guard let parameter = candidate.entry.parameters.first(where: Self.pluginParameterIsReadable)
+            else { return nil }
+            return (candidate, parameter)
+        }).first {
+            params[.pluginsGetParamVerified] = [
+                "target_ref": selected.0.reference,
+                "param": selected.1.id,
+            ]
+        }
+
+        if let channelEQ = candidates.first(where: {
+            $0.pluginID == "logic.stock.effect.channel_eq"
+        }) {
+            params[.pluginsGetChannelEQStateVerified] = ["target_ref": channelEQ.reference]
+        }
+
+        if let selected = candidates.lazy.compactMap({ candidate
+            -> (Candidate, StockPluginParameterMetadata, Any)? in
+            guard let parameter = candidate.entry.parameters.first(where: Self.pluginParameterIsPlanReadable),
+                  let value = Self.qualificationPlanValue(for: parameter) else { return nil }
+            return (candidate, parameter, value)
+        }).first, let unit = selected.1.unit {
+            params[.pluginsPlanParameterChanges] = [
+                "target_ref": selected.0.reference,
+                "changes": [[
+                    "param": selected.1.id,
+                    "value": selected.2,
+                    "unit": unit,
+                ] as [String: Any]],
+            ]
+        }
+        return params
+    }
+
+    /// Prepare plug-in probes from their own two authorities only. Session inspection is a Mixer
+    /// source and must not suppress a valid plug-in inventory when that unrelated read refuses.
+    static func preparePluginReadProbeParams(
+        tracksRead: () throws -> Data,
+        inventoryRead: (Int) throws -> Data
+    ) throws -> [OperationID: [String: Any]] {
+        let tracksData = try tracksRead()
+        let inventories = try pluginInventoryTrackIndices(from: tracksData).map(inventoryRead)
+        return pluginReadProbeParams(from: inventories)
+    }
+
+    /// Inventory accepts Arrange track ids, not Mixer strip ordinals. Only a current native track
+    /// read grants that scan range; project-file placeholders and duplicate ids cannot safely
+    /// address the live surface.
+    static func pluginInventoryTrackIndices(from tracksData: Data) -> [Int] {
+        guard let envelope = try? JSONSerialization.jsonObject(with: tracksData) as? [String: Any],
+              envelope["source"] as? String == "ax_live",
+              envelope["readable"] as? Bool == true,
+              let tracks = envelope["data"] as? [[String: Any]] else { return [] }
+        let ids = tracks.compactMap { track -> Int? in
+            guard let id = track["id"] as? Int, id >= 0,
+                  let reference = track["track_ref"] as? String,
+                  reference.hasPrefix("trk_"), reference.count > 4 else { return nil }
+            return id
+        }
+        let counts = Dictionary(grouping: ids, by: { $0 }).mapValues(\.count)
+        return ids.filter { counts[$0] == 1 }.sorted()
+    }
+
+    private static func pluginParameterIsReadable(_ parameter: StockPluginParameterMetadata) -> Bool {
+        if parameter.readbackMethod == "ax_slider_axvalue" {
+            return parameter.axDescription != nil
+        }
+        if parameter.readbackMethod == "ax_controls_view_checkbox_value" {
+            return parameter.controlsViewControlRole == "AXCheckBox"
+                && parameter.controlsViewRowLabel != nil
+        }
+        return ControlsViewParameterReader.kind(for: parameter) != nil
+    }
+
+    private static func pluginParameterIsPlanReadable(_ parameter: StockPluginParameterMetadata) -> Bool {
+        let directSlider = parameter.readbackMethod == "ax_slider_axvalue"
+            && parameter.axDescription != nil
+        let controlsViewSlider = parameter.readbackMethod == "ax_controls_view_slider_display"
+            && parameter.controlsViewControlRole == "AXSlider"
+            && parameter.controlsViewRowLabel != nil
+        let checkbox = parameter.readbackMethod == "ax_controls_view_checkbox_value"
+            && parameter.controlsViewControlRole == "AXCheckBox"
+            && parameter.controlsViewRowLabel != nil
+        return (directSlider || controlsViewSlider || checkbox)
+            && parameter.unit != nil
+            && (parameter.readbackUnit ?? parameter.unit) == parameter.unit
+    }
+
+    private static func qualificationPlanValue(for parameter: StockPluginParameterMetadata) -> Any? {
+        if parameter.unit == "boolean" { return false }
+        guard let range = parameter.valueRange,
+              range.min.isFinite, range.max.isFinite, range.min <= range.max else { return nil }
+        let value = range.defaultValue ?? (range.min + (range.max - range.min) / 2)
+        return value.isFinite && value >= range.min && value <= range.max ? value : nil
+    }
 
     static func probeParams(
         for spec: OperationSpec,
         traceID: String,
-        sessionSnapshotID: String? = nil
+        sessionSnapshotID: String? = nil,
+        preparedReadParams: [OperationID: [String: Any]] = [:]
     ) -> [String: Any] {
         if spec.mutability == .mutating {
             return ["__adr001b_no_write_probe": true]
+        }
+        if let prepared = preparedReadParams[spec.id] {
+            return prepared
         }
         switch spec.id {
         case .systemListRecentTraces:
@@ -4835,6 +5200,54 @@ struct QualificationTransport: Sendable {
         }
     }
 
+    static func coreMIDIPortReadback() throws -> Data {
+        struct Listing: Encodable {
+            let sources: [String]
+            let destinations: [String]
+        }
+
+        func endpointName(_ endpoint: MIDIEndpointRef, kind: String, index: Int) throws -> String {
+            guard endpoint != 0 else {
+                throw QualificationTransportError.protocolViolation(
+                    "host_coremidi_readback: missing \(kind) endpoint at index \(index)"
+                )
+            }
+            for property in [kMIDIPropertyDisplayName, kMIDIPropertyName] {
+                var value: Unmanaged<CFString>?
+                if MIDIObjectGetStringProperty(endpoint, property, &value) == noErr,
+                   let name = value?.takeRetainedValue() as String? {
+                    return name
+                }
+            }
+            throw QualificationTransportError.protocolViolation(
+                "host_coremidi_readback: unnamed \(kind) endpoint at index \(index)"
+            )
+        }
+
+        func endpointNames(
+            count: Int,
+            kind: String,
+            getter: (Int) -> MIDIEndpointRef
+        ) throws -> [String] {
+            try (0..<count).map { index in
+                try endpointName(getter(index), kind: kind, index: index)
+            }
+        }
+
+        let listing = Listing(
+            sources: try endpointNames(
+                count: MIDIGetNumberOfSources(), kind: "source", getter: MIDIGetSource
+            ),
+            destinations: try endpointNames(
+                count: MIDIGetNumberOfDestinations(), kind: "destination",
+                getter: MIDIGetDestination
+            )
+        )
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
+        return try encoder.encode(listing)
+    }
+
     static func readbackSource(for spec: OperationSpec) -> String {
         // These existing recipes mutate and restore the exact track scalar. Their final
         // independent read must use that same surface, not require a separately visible Mixer.
@@ -4860,6 +5273,9 @@ struct QualificationTransport: Sendable {
                 return "logic://project/info"
             }
         case .logicMidi:
+            if spec.id == .midiListPorts {
+                return QualificationSemanticReadbackValidator.coreMIDIPortReadbackSource
+            }
             return "logic://midi/ports"
         case .logicTracks:
             switch spec.id {
@@ -5000,10 +5416,17 @@ struct QualificationTransport: Sendable {
         _ session: QualificationSubprocessSession,
         startingAt id: Int
     ) throws -> String {
+        try sessionInspectionSeedPayload(session, startingAt: id).snapshotID
+    }
+
+    private func sessionInspectionSeedPayload(
+        _ session: QualificationSubprocessSession,
+        startingAt id: Int
+    ) throws -> SessionInspectionSeedPayload {
         guard let inspect = OperationRegistry.specs.first(where: { $0.id == .projectInspectSession }) else {
             throw QualificationTransportError.protocolViolation("session_inspection_seed: no inspect_session operation")
         }
-        return try Self.sessionInspectionSeed(startingAt: id) { requestID, phase in
+        return try Self.sessionInspectionSeedPayload(startingAt: id) { requestID, phase in
             let result: ToolCallResult = try session.request(
                 id: requestID,
                 method: "tools/call",
@@ -5014,7 +5437,8 @@ struct QualificationTransport: Sendable {
                         "params": [:] as [String: Any],
                     ],
                 ],
-                phase: phase
+                phase: phase,
+                timeout: Self.operationRequestTimeout(for: inspect)
             )
             return (result.isError, try result.text(phase: phase))
         }
@@ -5027,6 +5451,13 @@ struct QualificationTransport: Sendable {
         startingAt id: Int,
         request: (Int, String) throws -> (isError: Bool?, text: String)
     ) throws -> String {
+        try sessionInspectionSeedPayload(startingAt: id, request: request).snapshotID
+    }
+
+    private static func sessionInspectionSeedPayload(
+        startingAt id: Int,
+        request: (Int, String) throws -> (isError: Bool?, text: String)
+    ) throws -> SessionInspectionSeedPayload {
         for attempt in 0..<2 {
             let phase = attempt == 0 ? "session_inspection_seed" : "session_inspection_seed_retry"
             let result = try request(id + attempt, phase)
@@ -5040,7 +5471,10 @@ struct QualificationTransport: Sendable {
             guard !seed.snapshotID.isEmpty else {
                 throw QualificationTransportError.protocolViolation("\(phase): empty snapshot_id")
             }
-            return seed.snapshotID
+            return SessionInspectionSeedPayload(
+                snapshotID: seed.snapshotID,
+                responseData: Data(result.text.utf8)
+            )
         }
         throw QualificationTransportError.protocolViolation("session_inspection_seed: no successful fresh read")
     }
@@ -5083,6 +5517,11 @@ struct QualificationTransport: Sendable {
     private struct SessionInspectionSeed: Decodable {
         let snapshotID: String
         enum CodingKeys: String, CodingKey { case snapshotID = "snapshot_id" }
+    }
+
+    private struct SessionInspectionSeedPayload: Sendable {
+        let snapshotID: String
+        let responseData: Data
     }
 
     private static func decodeInner<Value: Decodable>(
@@ -5252,14 +5691,20 @@ private struct OperationProbeResult: Decodable {
     let state: String?
     let error: String?
     let hint: String?
+    let reason: String?
     let writeAttempted: Bool?
+    let rowSelectionWriteAttempted: Bool?
+    let rowSelectionRestored: Bool?
     let traceID: String?
 
     enum CodingKeys: String, CodingKey {
         case state
         case error
         case hint
+        case reason
         case writeAttempted = "write_attempted"
+        case rowSelectionWriteAttempted = "row_selection_write_attempted"
+        case rowSelectionRestored = "row_selection_restored"
         case traceID = "trace_id"
     }
 }

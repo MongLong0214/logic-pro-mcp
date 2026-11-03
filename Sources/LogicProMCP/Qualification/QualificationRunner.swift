@@ -2450,7 +2450,8 @@ package struct QualificationRunner: Sendable {
                 kind: oracle.strength == .custom ? .localCustom : .declarative,
                 strength: oracle.strength,
                 constraints: oracle.constraints,
-                independentlyCreditable: oracle.independentReadbackDeferral == nil
+                independentlyCreditable:
+                    QualificationSemanticReadbackValidator.canUseIndependentReadback(for: spec.id)
             )
         } else {
             disposition = .noSemanticOracle
@@ -2641,7 +2642,9 @@ package struct QualificationRunner: Sendable {
                   let oracle = SemanticOracleTable.byOperationID[operationID],
                   oracle.strength == .custom else { return false }
             return policy.independentlyCreditable
-                == (oracle.independentReadbackDeferral == nil)
+                == QualificationSemanticReadbackValidator.canUseIndependentReadback(
+                    for: operationID
+                )
         case .none:
             return entry.oracleDisposition == .noSemanticOracle
                 && policy.strength == nil
@@ -2804,7 +2807,8 @@ package struct QualificationRunner: Sendable {
                       catalogEntry.semanticPolicy.evaluate(
                           operationID: evidence.operationID,
                           responseData: responseData,
-                          readbackData: readbackData
+                          readbackData: readbackData,
+                          readbackSource: readbackArtifact?.source
                       ) else {
                     return "semantic readback binding"
                 }

@@ -668,6 +668,223 @@ struct QualificationRunnerTests {
         #expect(QualificationTransport.readbackSource(for: spec) == "logic://mixer")
     }
 
+    @Test func mixerReadProbeParamsUseFreshTypedReferencesAndOccupiedCensusOrdinals() throws {
+        let envelope: [String: Any] = [
+            "strips": [
+                [
+                    "mixer_strip_ref": "mix_output",
+                    "output_observation": [
+                        "state": "observed_destination", "destination": "출력 3-4",
+                    ],
+                ],
+                [
+                    "mixer_strip_ref": "mix_physical_input",
+                    "input_observation": ["state": "observed_source", "source": "입력 1"],
+                ],
+                [
+                    "mixer_strip_ref": "mix_bus_input",
+                    "input_observation": ["state": "observed_source", "source": "버스 2"],
+                ],
+                [
+                    "mixer_strip_ref": "mix_send",
+                    "send_slots": [
+                        ["ordinal": 0, "state": "observed_empty"],
+                        [
+                            "ordinal": 3,
+                            "state": "occupied_unknown_destination",
+                            "bypassed": false,
+                        ],
+                    ],
+                ],
+                [
+                    "output_observation": [
+                        "state": "observed_destination", "destination": "Stereo Out",
+                    ],
+                    "send_slots": [[
+                        "ordinal": 9, "state": "occupied_unknown_destination", "bypassed": true,
+                    ]],
+                ],
+            ],
+        ]
+        let params = QualificationTransport.mixerReadProbeParams(
+            from: try JSONSerialization.data(withJSONObject: envelope)
+        )
+
+        #expect(params[.mixerGetOutputVerified]?["target_ref"] as? String == "mix_output")
+        #expect(params[.mixerGetInputBusVerified]?["target_ref"] as? String == "mix_bus_input")
+        #expect(params[.mixerGetSendDestinationVerified]?["target_ref"] as? String == "mix_send")
+        #expect(params[.mixerGetSendDestinationVerified]?["ordinal"] as? Int == 3)
+        #expect(params[.mixerGetSendBypassVerified]?["target_ref"] as? String == "mix_send")
+        #expect(params[.mixerGetSendBypassVerified]?["ordinal"] as? Int == 3)
+    }
+
+    @Test func preparedMixerReadProbeParamsReplaceTheEmptyCatalogFallback() throws {
+        let spec = try #require(OperationRegistry.specs.first {
+            $0.id == .mixerGetSendDestinationVerified
+        })
+        let prepared: [OperationID: [String: Any]] = [
+            .mixerGetSendDestinationVerified: ["target_ref": "mix_live", "ordinal": 4],
+        ]
+        let params = QualificationTransport.probeParams(
+            for: spec, traceID: "trace", preparedReadParams: prepared
+        )
+
+        #expect(params["target_ref"] as? String == "mix_live")
+        #expect(params["ordinal"] as? Int == 4)
+    }
+
+    @Test func mixerReadProbeParamsAcceptRequestOwnedFreshInspectionRows() throws {
+        let inspection: [String: Any] = [
+            "snapshot_id": "snap_fresh",
+            "sources": ["strips": "ax_request_read"],
+            "strips": [
+                "coverage": "partial",
+                "rows": [[
+                    "mixer_strip_ref": "mix_fresh_output",
+                    "output_observation": [
+                        "state": "observed_destination", "destination": "출력 3-4",
+                    ],
+                ]],
+            ],
+        ]
+
+        let params = QualificationTransport.mixerReadProbeParams(
+            from: try JSONSerialization.data(withJSONObject: inspection)
+        )
+
+        #expect(params[.mixerGetOutputVerified]?["target_ref"] as? String
+            == "mix_fresh_output")
+    }
+
+    @Test func pluginReadProbeParamsUseOnlyFreshOccupiedRefsAndSupportedCatalogReaders() throws {
+        let inventory: [String: Any] = [
+            "state": "A",
+            "complete": true,
+            "plugins": [
+                [
+                    "insert": 0, "read_status": "ok", "occupied": true,
+                    "plugin_id": "logic.stock.effect.sample_delay",
+                    "plugin_insert_ref": "stale_sample_delay",
+                ],
+                [
+                    "insert": 1, "read_status": "empty", "occupied": false,
+                    "plugin_id": NSNull(), "plugin_insert_ref": "ins_empty",
+                ],
+                [
+                    "insert": 2, "read_status": "ok", "occupied": true,
+                    "plugin_id": "logic.stock.effect.gain", "plugin_insert_ref": "ins_gain",
+                ],
+                [
+                    "insert": 3, "read_status": "ok", "occupied": true,
+                    "plugin_id": "logic.stock.effect.compressor",
+                    "plugin_insert_ref": "ins_compressor",
+                ],
+                [
+                    "insert": 4, "read_status": "ok", "occupied": true,
+                    "plugin_id": "logic.stock.effect.channel_eq",
+                    "plugin_insert_ref": "ins_channel_eq",
+                ],
+            ],
+        ]
+        let params = QualificationTransport.pluginReadProbeParams(from: [
+            try JSONSerialization.data(withJSONObject: inventory),
+            try JSONSerialization.data(withJSONObject: [
+                "state": "B", "complete": false,
+                "plugins": [[
+                    "read_status": "ok", "occupied": true,
+                    "plugin_id": "logic.stock.effect.gain", "plugin_insert_ref": "ins_state_b",
+                ]],
+            ]),
+        ])
+
+        #expect(params[.pluginsGetHostParameterManifest]?["target_ref"] as? String == "ins_gain")
+        #expect(params[.pluginsGetHostParameterManifest]?["expected_build_fingerprint"] as? String
+            == "logic-pro-mcp-qualification-unverified")
+        #expect(params[.pluginsGetParamVerified]?["target_ref"] as? String == "ins_gain")
+        #expect(params[.pluginsGetParamVerified]?["param"] as? String == "gain")
+        #expect(params[.pluginsGetChannelEQStateVerified]?["target_ref"] as? String
+            == "ins_channel_eq")
+        #expect(params[.pluginsPlanParameterChanges]?["target_ref"] as? String
+            == "ins_compressor")
+        let changes = try #require(
+            params[.pluginsPlanParameterChanges]?["changes"] as? [[String: Any]]
+        )
+        #expect(changes.count == 1)
+        #expect(changes[0]["param"] as? String == "threshold")
+        #expect(changes[0]["unit"] as? String == "normalized")
+        #expect(changes[0]["value"] is Double)
+    }
+
+    @Test func pluginReadProbePreparationUsesTracksAndInventoryWithoutSessionInspection() throws {
+        let tracks = try JSONSerialization.data(withJSONObject: [
+            "source": "ax_live",
+            "readable": true,
+            "data": [
+                ["id": 7, "track_ref": "trk_later"],
+                ["id": 3, "track_ref": "trk_first"],
+            ],
+        ])
+        var inventoryReads: [Int] = []
+        let params = try QualificationTransport.preparePluginReadProbeParams(
+            tracksRead: { tracks },
+            inventoryRead: { track in
+                inventoryReads.append(track)
+                let pluginID = track == 3
+                    ? "logic.stock.effect.sample_delay"
+                    : "logic.stock.effect.compressor"
+                return try JSONSerialization.data(withJSONObject: [
+                    "state": "A",
+                    "complete": true,
+                    "plugins": [[
+                        "read_status": "ok",
+                        "occupied": true,
+                        "plugin_id": pluginID,
+                        "plugin_insert_ref": "ins_\(track)",
+                    ]],
+                ])
+            }
+        )
+
+        #expect(inventoryReads == [3, 7])
+        #expect(params[.pluginsGetHostParameterManifest]?["target_ref"] as? String == "ins_3")
+    }
+
+    @Test func pluginInventoryTrackIndicesRequireUniqueLiveReferencedArrangeRows() throws {
+        let live: [String: Any] = [
+            "source": "ax_live", "readable": true,
+            "data": [
+                ["id": 2, "track_ref": "trk_two"],
+                ["id": 0, "track_ref": "trk_zero"],
+                ["id": 2, "track_ref": "trk_duplicate"],
+                ["id": -1, "track_ref": "trk_negative"],
+                ["id": 4, "track_ref": "not_current"],
+            ],
+        ]
+        let placeholder: [String: Any] = [
+            "source": "project_file", "readable": false,
+            "data": [["id": 0], ["id": 1]],
+        ]
+
+        #expect(QualificationTransport.pluginInventoryTrackIndices(
+            from: try JSONSerialization.data(withJSONObject: live)
+        ) == [0])
+        #expect(QualificationTransport.pluginInventoryTrackIndices(
+            from: try JSONSerialization.data(withJSONObject: placeholder)
+        ).isEmpty)
+    }
+
+    @Test func operationRequestsUseTheirRegistryDeadlineInsteadOfTheTransportDefault() throws {
+        let inspect = try #require(OperationRegistry.specs.first {
+            $0.id == .projectInspectSession
+        })
+        let health = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
+        let saga = try #require(OperationRegistry.specs.first { $0.id == .systemSagaExecute })
+
+        #expect(QualificationTransport.operationRequestTimeout(for: inspect) == 95)
+        #expect(QualificationTransport.operationRequestTimeout(for: health) == 30)
+        #expect(QualificationTransport.operationRequestTimeout(for: saga) == 905)
+    }
+
     @Test(arguments: [OperationID.mixerSetPan, .mixerSetVolume],
           ["live", "cache", "stale", "missing_age", "unreadable", "occluded"])
     func scalarTrackReadbackStillRequiresActualFreshEvidence(operation: OperationID, shape: String) throws {
@@ -981,7 +1198,9 @@ struct QualificationRunnerTests {
             mutability: captured.mutability, requestID: captured.requestID,
             responseData: captured.responseData, isError: captured.isError,
             state: nil, error: nil, hint: nil, writeAttempted: nil,
-            readbackSource: QualificationTransport.readbackSource(for: spec),
+            // This fixture is deliberately the legacy circular resource path. Do not derive it
+            // from the production source mapping, which now selects a separate host census.
+            readbackSource: "logic://midi/ports",
             readbackRequestID: captured.readbackRequestID, readbackData: captured.readbackData,
             verification: spec.verification, deadline: spec.deadline, failureReason: captured.failureReason
         )
@@ -1092,6 +1311,28 @@ struct QualificationRunnerTests {
         #expect(restored.exitCode == 0, "\(restored.stdout)")
     }
 
+    @Test func runnerVerifierAcceptsBoundHostCoreMIDIPortReadback() async throws {
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .midiListPorts })
+        let drive = Self.driveResult(specs: [spec])
+        let ports = try #require(drive.operationResults[spec.id.rawValue])
+        #expect(ports.readbackSource
+            == QualificationSemanticReadbackValidator.coreMIDIPortReadbackSource)
+        #expect(ports.status == .passed)
+
+        let fixture = try Fixture(specs: [spec], drive: { _ in drive })
+        defer { fixture.remove() }
+        try JSONEncoder().encode(Self.axisWaivers()).write(to: fixture.waiversURL)
+        let attestation = try await fixture.qualify(waiversURL: fixture.waiversURL)
+        let operationCase = try #require(
+            attestation.cases.first { $0.id == "in-process/midi.list_ports" }
+        )
+        #expect(operationCase.status == .passed)
+        #expect(operationCase.readback?.source
+            == QualificationSemanticReadbackValidator.coreMIDIPortReadbackSource)
+        let accepted = await fixture.verify(expectedSHA256: fixture.binarySHA256)
+        #expect(accepted.exitCode == 0, "\(accepted.stdout)\(accepted.stderr)")
+    }
+
     @Test func operationQualificationSeparatesSemanticReadSmokeAndTypedDeferrals() async throws {
         let fixture = try Fixture(specs: OperationRegistry.specs)
         defer { fixture.remove() }
@@ -1110,14 +1351,15 @@ struct QualificationRunnerTests {
         #expect(marked == Set<OperationID>([.midiListPorts, .midiReadSelectedRegionEvents, .mixerGetOutputVerified, .mixerGetSendDestinationVerified,
             .mixerGetInputBusVerified, .mixerGetSendBypassVerified, .pluginsPlanParameterChanges,
             .pluginsGetHostParameterManifest, .pluginsGetParamVerified, .pluginsGetChannelEQStateVerified]))
+        let smokeOnly = marked.subtracting([.midiListPorts])
         let readOnlyIDs = Set(OperationRegistry.specs.filter { $0.mutability == .readOnly }.map(\.id.rawValue))
-        let markedIDs = Set(marked.map(\.rawValue))
+        let smokeOnlyIDs = Set(smokeOnly.map(\.rawValue))
         let passed = operationCases.filter { $0.status == .passed }
-        #expect(passed.count == readOnlyCount - marked.count)
-        #expect(Set(passed.map(\.operationID)) == readOnlyIDs.subtracting(markedIDs))
+        #expect(passed.count == readOnlyCount - smokeOnly.count)
+        #expect(Set(passed.map(\.operationID)) == readOnlyIDs.subtracting(smokeOnlyIDs))
         let smoke = operationCases.filter { $0.status == .protocolSmoke }
-        #expect(smoke.count == marked.count)
-        #expect(Set(smoke.map(\.operationID)) == markedIDs)
+        #expect(smoke.count == smokeOnly.count)
+        #expect(Set(smoke.map(\.operationID)) == smokeOnlyIDs)
         for qualificationCase in smoke {
             let declared = try #require(QualificationSemanticReadbackValidator.independentReadbackDeferral(
                 for: qualificationCase.operationID))
@@ -5167,6 +5409,63 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(classifiesClosedPanelAsEnvironmental)
     }
 
+    @Test func liveGateClassifiesOnlyTheExactZeroWriteSelectedRegionScopeRefusalAsAPrecondition() {
+        func result(
+            state: String = "C",
+            error: String = "selected_region_event_read_unavailable",
+            reason: String = "selection_scope_incomplete",
+            writeAttempted: Bool = false,
+            rowSelectionWriteAttempted: Bool = false,
+            rowSelectionRestored: Bool = false
+        ) -> QualificationOperationResult {
+            QualificationOperationResult(
+                operationID: OperationID.midiReadSelectedRegionEvents.rawValue,
+                tool: "logic_midi",
+                command: "read_selected_region_events",
+                mutability: .readOnly,
+                requestID: "selected-region-request",
+                responseData: Data(#"{"state":"C","error":"selected_region_event_read_unavailable","reason":"selection_scope_incomplete","write_attempted":false,"row_selection_write_attempted":false,"row_selection_restored":false}"#.utf8),
+                isError: true,
+                state: state,
+                error: error,
+                hint: nil,
+                reason: reason,
+                writeAttempted: writeAttempted,
+                rowSelectionWriteAttempted: rowSelectionWriteAttempted,
+                rowSelectionRestored: rowSelectionRestored,
+                readbackSource: "logic://midi/selected-region-events",
+                readbackRequestID: "selected-region-readback",
+                readbackData: Data(#"{}"#.utf8),
+                failureReason: nil
+            )
+        }
+
+        let exact = QualificationLiveGateSummary(operationResults: [
+            result(),
+        ])
+        #expect(exact.notExercisableWithoutPreconditions == [
+            .init(
+                operationID: OperationID.midiReadSelectedRegionEvents.rawValue,
+                reason: "requires a complete selected Arrange-region scope"
+            ),
+        ])
+        #expect(exact.failed == 0)
+
+        let changed = [
+            result(state: "B"),
+            result(error: "different_error"),
+            result(reason: "different_scope_failure"),
+            result(writeAttempted: true),
+            result(rowSelectionWriteAttempted: true),
+            result(rowSelectionRestored: true),
+        ]
+        for candidate in changed {
+            let summary = QualificationLiveGateSummary(operationResults: [candidate])
+            #expect(summary.notExercisableWithoutPreconditions.isEmpty)
+            #expect(summary.failed == 1)
+        }
+    }
+
     @Test func liveGateRejectsDifferentTracksListLibraryHintAsFailure() {
         let summary = QualificationLiveGateSummary(operationResults: [
             Self.tracksListLibraryRefusal(hint: "A different library-panel refusal.")
@@ -5360,7 +5659,10 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         ))
 
         #expect(result.handshakeOK)
-        #expect(result.catalog?.operationCount == 119)   // #884 system.setup_control_surface, #862 mixer.bank, #965 project.inspect_session
+        // Exact current catalog, measured by the release binary. The +18 operations since the
+        // previous 119 baseline are nine read-only and nine mutating contracts; their native
+        // dispositions remain independently asserted below rather than being hidden by this count.
+        #expect(result.catalog?.operationCount == 137)
         #expect(result.catalogCountMatch)
         #expect(result.traceOK)
 
@@ -5370,8 +5672,8 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         let liveGate = QualificationLiveGateSummary(operationResults: operationResults)
 
         #expect(operationResults.count == OperationRegistry.specs.count)
-        #expect(mutating.count == 93)
-        #expect(readOnly.count == 26)   // Includes #958 audio.compare_spectra and #966 project.plan_session_repair
+        #expect(mutating.count == 102)
+        #expect(readOnly.count == 35)
         #expect(operationResults.allSatisfy { $0.status != .failed })
         #expect(liveGate.accounted == operationResults.count)
         // The exactness is right and stays. What was wrong is that it reported a
@@ -6819,14 +7121,15 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(marked == Set<OperationID>([.midiListPorts, .midiReadSelectedRegionEvents, .mixerGetOutputVerified, .mixerGetSendDestinationVerified,
             .mixerGetInputBusVerified, .mixerGetSendBypassVerified, .pluginsPlanParameterChanges,
             .pluginsGetHostParameterManifest, .pluginsGetParamVerified, .pluginsGetChannelEQStateVerified]))
-        let markedIDs = Set(marked.map(\.rawValue))
+        let smokeOnly = marked.subtracting([.midiListPorts])
+        let smokeOnlyIDs = Set(smokeOnly.map(\.rawValue))
         let readOnlyIDs = Set(OperationRegistry.specs.filter { $0.mutability == .readOnly }.map(\.id.rawValue))
         let passed = operationCases.filter { $0.status == .passed }
-        #expect(passed.count == readOnlyCount - marked.count)
-        #expect(Set(passed.map(\.operationID)) == readOnlyIDs.subtracting(markedIDs))
+        #expect(passed.count == readOnlyCount - smokeOnly.count)
+        #expect(Set(passed.map(\.operationID)) == readOnlyIDs.subtracting(smokeOnlyIDs))
         let smoke = operationCases.filter { $0.status == .protocolSmoke }
-        #expect(smoke.count == marked.count)
-        #expect(Set(smoke.map(\.operationID)) == markedIDs)
+        #expect(smoke.count == smokeOnly.count)
+        #expect(Set(smoke.map(\.operationID)) == smokeOnlyIDs)
         // DERIVED: everything the registry has, minus the read-only specs this fixture qualifies.
         // It was `90`, and the day main added `system.setup_control_surface` it read 91 -- a number
         // that tracks the registry turns every new operation into a failing test that says
@@ -6835,7 +7138,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                     == OperationRegistry.specs.count - readOnlyCount)
         // Other semantic reads + health's bespoke validator pass; the same-handler smoke
         // and aggregate axes contribute no passes here.
-        #expect(attestation.passed == readOnlyCount - marked.count)
+        #expect(attestation.passed == readOnlyCount - smokeOnly.count)
         #expect(attestation.failed == 1)
 
         for qualificationCase in operationCases {
@@ -6846,7 +7149,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             #expect(qualificationCase.id == "in-process/\(spec.id.rawValue)")
             #expect(OperationHandlerRegistry.handler(tool: qualificationCase.tool, command: qualificationCase.command) != nil)
             if spec.mutability == .readOnly {
-                if marked.contains(spec.id) {
+                if smokeOnly.contains(spec.id) {
                     let declared = try #require(QualificationSemanticReadbackValidator.independentReadbackDeferral(
                         for: spec.id.rawValue))
                     #expect(qualificationCase.status == .protocolSmoke)
@@ -8354,11 +8657,13 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                     hint: nil,
                     writeAttempted: responseEnvelope?["write_attempted"] as? Bool
                         ?? (spec.id == .midiListPorts ? nil : false),
-                    readbackSource: spec.tool == .logicTransport
-                        ? "logic://transport/state"
-                        : spec.tool == .logicMixer
-                            ? "logic://mixer"
-                            : "logic://system/health",
+                    readbackSource: spec.id == .midiListPorts
+                        ? QualificationSemanticReadbackValidator.coreMIDIPortReadbackSource
+                        : spec.tool == .logicTransport
+                            ? "logic://transport/state"
+                            : spec.tool == .logicMixer
+                                ? "logic://mixer"
+                                : "logic://system/health",
                     readbackRequestID: "fake-readback-\(spec.id.rawValue)",
                     readbackData: readback,
                     failureReason: spec.id == failedOperationID ? "synthetic operation failure" : nil,
