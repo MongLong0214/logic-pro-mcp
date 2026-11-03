@@ -681,7 +681,8 @@ struct QualificationOperationResult: Equatable, Sendable {
             else { return nil }
             return "requires 'confirmed:true'"
         case .midiReadSelectedRegionEvents:
-            guard error == "selected_region_event_read_unavailable",
+            guard state == "C",
+                  error == "selected_region_event_read_unavailable",
                   reason == "selection_scope_incomplete",
                   writeAttempted == false,
                   rowSelectionWriteAttempted == false,
@@ -1421,42 +1422,30 @@ struct QualificationTransport: Sendable {
             let requestedIDs = Set(request.operations.map(\.id))
             let requestedMixerReads = Self.mixerReadProbeOperationIDs.intersection(requestedIDs)
             let requestedPluginReads = Self.pluginReadProbeOperationIDs.intersection(requestedIDs)
-            let requestedPreparedReads = requestedMixerReads.union(requestedPluginReads)
-            if !requestedPreparedReads.isEmpty {
-                let seedID = nextID
-                // `sessionInspectionSeed` performs at most one fresh-read retry. Reserve both ids
-                // before any resource read so a refused first attempt cannot collide with it.
-                nextID += 2
+            if !requestedPluginReads.isEmpty {
                 do {
-                    let inspection = try sessionInspectionSeedPayload(session, startingAt: seedID)
-                    if !requestedMixerReads.isEmpty {
-                        preparedReadParams.merge(Self.mixerReadProbeParams(from: inspection.responseData)) {
-                            current, _ in current
-                        }
-                    }
-                    if !requestedPluginReads.isEmpty {
-                        let tracksReadID = nextID
-                        nextID += 1
-                        let tracksData = try resourceReadback(
-                            session, id: tracksReadID, uri: "logic://tracks",
-                            phase: "plugin_read_probe_tracks")
-                        var inventories: [Data] = []
-                        for track in Self.pluginInventoryTrackIndices(from: tracksData) {
+                    let params = try Self.preparePluginReadProbeParams(
+                        tracksRead: {
+                            let tracksReadID = nextID
+                            nextID += 1
+                            return try resourceReadback(
+                                session, id: tracksReadID, uri: "logic://tracks",
+                                phase: "plugin_read_probe_tracks")
+                        },
+                        inventoryRead: { track in
                             let inventoryID = nextID
                             nextID += 1
-                            inventories.append(try pluginInventory(
+                            return try pluginInventory(
                                 session, id: inventoryID, track: track,
                                 phase: "plugin_read_probe_inventory.\(track)"
-                            ))
+                            )
                         }
-                        preparedReadParams.merge(Self.pluginReadProbeParams(from: inventories)) {
-                            current, _ in current
-                        }
-                    }
+                    )
+                    preparedReadParams.merge(params) { current, _ in current }
                 } catch {
                     let failure = Self.observedFailureReason(
-                        from: error, during: "dynamic read-probe preparation")
-                    for operation in requestedPreparedReads {
+                        from: error, during: "plug-in read-probe preparation")
+                    for operation in requestedPluginReads {
                         readProbePreparationFailures[operation] = failure
                     }
                 }
@@ -4973,6 +4962,7 @@ struct QualificationTransport: Sendable {
             let reference: String
             let pluginID: String
             let entry: StockPluginCatalogEntry
+            let order: Int
         }
 
         var candidates: [Candidate] = []
@@ -4988,7 +4978,12 @@ struct QualificationTransport: Sendable {
                       reference.hasPrefix("ins_"), reference.count > 4,
                       let pluginID = plugin["plugin_id"] as? String,
                       let entry = VerifiedPluginCatalog.productionEntryLookup(pluginID) else { continue }
-                candidates.append(Candidate(reference: reference, pluginID: pluginID, entry: entry))
+                candidates.append(Candidate(
+                    reference: reference,
+                    pluginID: pluginID,
+                    entry: entry,
+                    order: candidates.count
+                ))
             }
         }
 
@@ -5002,9 +4997,10 @@ struct QualificationTransport: Sendable {
 
         // Gain's scalar is the least invasive measured reader in the qualification fixture. Keep
         // deterministic inventory order for every other catalog-backed plug-in.
-        let scalarCandidates = candidates.sorted {
-            ($0.pluginID == "logic.stock.effect.gain" ? 0 : 1)
-                < ($1.pluginID == "logic.stock.effect.gain" ? 0 : 1)
+        let scalarCandidates = candidates.sorted { lhs, rhs in
+            let lhsPriority = lhs.pluginID == "logic.stock.effect.gain" ? 0 : 1
+            let rhsPriority = rhs.pluginID == "logic.stock.effect.gain" ? 0 : 1
+            return lhsPriority == rhsPriority ? lhs.order < rhs.order : lhsPriority < rhsPriority
         }
         if let selected = scalarCandidates.lazy.compactMap({ candidate -> (Candidate, StockPluginParameterMetadata)? in
             guard let parameter = candidate.entry.parameters.first(where: Self.pluginParameterIsReadable)
@@ -5039,6 +5035,17 @@ struct QualificationTransport: Sendable {
             ]
         }
         return params
+    }
+
+    /// Prepare plug-in probes from their own two authorities only. Session inspection is a Mixer
+    /// source and must not suppress a valid plug-in inventory when that unrelated read refuses.
+    static func preparePluginReadProbeParams(
+        tracksRead: () throws -> Data,
+        inventoryRead: (Int) throws -> Data
+    ) throws -> [OperationID: [String: Any]] {
+        let tracksData = try tracksRead()
+        let inventories = try pluginInventoryTrackIndices(from: tracksData).map(inventoryRead)
+        return pluginReadProbeParams(from: inventories)
     }
 
     /// Inventory accepts Arrange track ids, not Mixer strip ordinals. Only a current native track

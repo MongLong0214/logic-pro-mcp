@@ -815,6 +815,40 @@ struct QualificationRunnerTests {
         #expect(changes[0]["value"] is Double)
     }
 
+    @Test func pluginReadProbePreparationUsesTracksAndInventoryWithoutSessionInspection() throws {
+        let tracks = try JSONSerialization.data(withJSONObject: [
+            "source": "ax_live",
+            "readable": true,
+            "data": [
+                ["id": 7, "track_ref": "trk_later"],
+                ["id": 3, "track_ref": "trk_first"],
+            ],
+        ])
+        var inventoryReads: [Int] = []
+        let params = try QualificationTransport.preparePluginReadProbeParams(
+            tracksRead: { tracks },
+            inventoryRead: { track in
+                inventoryReads.append(track)
+                let pluginID = track == 3
+                    ? "logic.stock.effect.sample_delay"
+                    : "logic.stock.effect.compressor"
+                return try JSONSerialization.data(withJSONObject: [
+                    "state": "A",
+                    "complete": true,
+                    "plugins": [[
+                        "read_status": "ok",
+                        "occupied": true,
+                        "plugin_id": pluginID,
+                        "plugin_insert_ref": "ins_\(track)",
+                    ]],
+                ])
+            }
+        )
+
+        #expect(inventoryReads == [3, 7])
+        #expect(params[.pluginsGetHostParameterManifest]?["target_ref"] as? String == "ins_3")
+    }
+
     @Test func pluginInventoryTrackIndicesRequireUniqueLiveReferencedArrangeRows() throws {
         let live: [String: Any] = [
             "source": "ax_live", "readable": true,
@@ -5376,7 +5410,14 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
     }
 
     @Test func liveGateClassifiesOnlyTheExactZeroWriteSelectedRegionScopeRefusalAsAPrecondition() {
-        func result(reason: String) -> QualificationOperationResult {
+        func result(
+            state: String = "C",
+            error: String = "selected_region_event_read_unavailable",
+            reason: String = "selection_scope_incomplete",
+            writeAttempted: Bool = false,
+            rowSelectionWriteAttempted: Bool = false,
+            rowSelectionRestored: Bool = false
+        ) -> QualificationOperationResult {
             QualificationOperationResult(
                 operationID: OperationID.midiReadSelectedRegionEvents.rawValue,
                 tool: "logic_midi",
@@ -5385,13 +5426,13 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                 requestID: "selected-region-request",
                 responseData: Data(#"{"state":"C","error":"selected_region_event_read_unavailable","reason":"selection_scope_incomplete","write_attempted":false,"row_selection_write_attempted":false,"row_selection_restored":false}"#.utf8),
                 isError: true,
-                state: "C",
-                error: "selected_region_event_read_unavailable",
+                state: state,
+                error: error,
                 hint: nil,
                 reason: reason,
-                writeAttempted: false,
-                rowSelectionWriteAttempted: false,
-                rowSelectionRestored: false,
+                writeAttempted: writeAttempted,
+                rowSelectionWriteAttempted: rowSelectionWriteAttempted,
+                rowSelectionRestored: rowSelectionRestored,
                 readbackSource: "logic://midi/selected-region-events",
                 readbackRequestID: "selected-region-readback",
                 readbackData: Data(#"{}"#.utf8),
@@ -5400,7 +5441,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         }
 
         let exact = QualificationLiveGateSummary(operationResults: [
-            result(reason: "selection_scope_incomplete"),
+            result(),
         ])
         #expect(exact.notExercisableWithoutPreconditions == [
             .init(
@@ -5410,11 +5451,19 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         ])
         #expect(exact.failed == 0)
 
-        let changed = QualificationLiveGateSummary(operationResults: [
+        let changed = [
+            result(state: "B"),
+            result(error: "different_error"),
             result(reason: "different_scope_failure"),
-        ])
-        #expect(changed.notExercisableWithoutPreconditions.isEmpty)
-        #expect(changed.failed == 1)
+            result(writeAttempted: true),
+            result(rowSelectionWriteAttempted: true),
+            result(rowSelectionRestored: true),
+        ]
+        for candidate in changed {
+            let summary = QualificationLiveGateSummary(operationResults: [candidate])
+            #expect(summary.notExercisableWithoutPreconditions.isEmpty)
+            #expect(summary.failed == 1)
+        }
     }
 
     @Test func liveGateRejectsDifferentTracksListLibraryHintAsFailure() {

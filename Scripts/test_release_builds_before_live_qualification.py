@@ -19,6 +19,7 @@ WORKFLOW = os.path.join(REPO, ".github", "workflows", "release.yml")
 CALLERS = ("release.sh", "release-stable.sh")
 
 BUILD = ["build", "-c", "release"]
+LIST = ["test", "list"]
 SUITE = ["test", "--no-parallel"]
 LIVE_TESTS = (
     "realReleaseBinaryExecutesEveryOperationWithIndependentReadback",
@@ -30,6 +31,13 @@ PGREP = ["-xq", "Logic Pro"]
 CHECK = ["--check-permissions"]
 
 SWIFT_STUB = ('#!/bin/bash\nfor a in "$@"; do printf "%s\\037" "$a"; done >> "$STUB_LOG/swift"\necho >> "$STUB_LOG/swift"\n'
+              'if [ "$1" = test ] && [ "$2" = list ]; then\n'
+              '  printf "%s\\n" \\\n'
+              '    "LogicProMCPTests.QualificationRunnerTests/realReleaseBinaryExecutesEveryOperationWithIndependentReadback()" \\\n'
+              '    "LogicProMCPTests.QualificationRunnerTests/runnerIgnoresPartialStateFaultEnvOnRealServer()" \\\n'
+              '    "LogicProMCPTests.QualificationRunnerTests/runnerRejectsPartialStateObservedFromRealServer()"\n'
+              '  exit 0\n'
+              'fi\n'
               'if [ "$1" = test ]; then\n'
               '  case " $* " in\n'
               '    *" --filter "*) [ "${LOGIC_PRO_MCP_RUN_LIVE_QA:-}" = 1 ] || exit 97 ;;\n'
@@ -84,7 +92,7 @@ def gate_problems(gate_text):
     code, swift, pgrep, binary = run_gate(gate_text, logic_running=True)
     if code != 0:
         problems.append(f"with Logic running the gate exited {code}")
-    if swift != [BUILD, *LIVE_SUITES, SUITE]:
+    if swift != [BUILD, LIST, *LIVE_SUITES, SUITE]:
         problems.append(f"with Logic running swift received {swift}")
     if pgrep != [PGREP]:
         problems.append(f"with Logic running pgrep received {pgrep}")
@@ -305,6 +313,18 @@ class TheGateBehaves(unittest.TestCase):
         broken = text.replace('    "runnerIgnoresPartialStateFaultEnvOnRealServer"\n', "", 1)
         self.assertNotEqual(broken, text)
         self.assertTrue(any(p.startswith("with Logic running swift received") for p in gate_problems(broken)))
+
+    def test_a_gate_with_a_missing_live_test_name_is_refused_before_live_execution(self):
+        text = _read(GATE)
+        broken = text.replace(
+            '    "runnerIgnoresPartialStateFaultEnvOnRealServer"\n',
+            '    "definitelyMissingLiveQualificationTest"\n',
+            1,
+        )
+        self.assertNotEqual(broken, text)
+        code, swift, _, _ = run_gate(broken, logic_running=True)
+        self.assertNotEqual(code, 0)
+        self.assertEqual(swift, [BUILD, LIST])
 
     def test_a_gate_that_leaks_live_mode_into_the_full_suite_is_refused(self):
         text = _read(GATE)

@@ -32,6 +32,20 @@ live_tests=(
     "runnerIgnoresPartialStateFaultEnvOnRealServer"
     "runnerRejectsPartialStateObservedFromRealServer"
 )
+test_inventory="$(swift test list)"
+for live_test in "${live_tests[@]}"; do
+    match_count="$(
+        printf '%s\n' "$test_inventory" | awk -v suffix="/${live_test}()" '
+            length($0) >= length(suffix) &&
+                substr($0, length($0) - length(suffix) + 1) == suffix { matches += 1 }
+            END { print matches + 0 }
+        '
+    )"
+    if [[ "$match_count" -ne 1 ]]; then
+        echo "Error: live qualification filter '$live_test' matched $match_count tests; expected exactly one." >&2
+        exit 1
+    fi
+done
 for live_test in "${live_tests[@]}"; do
     LOGIC_PRO_MCP_RUN_LIVE_QA=1 swift test --no-parallel --filter "$live_test"
 done

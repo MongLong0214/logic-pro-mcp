@@ -39,13 +39,15 @@ import Testing
         "runnerIgnoresPartialStateFaultEnvOnRealServer",
         "runnerRejectsPartialStateObservedFromRealServer",
     ]
+    let inventory = try #require(gate.range(of: "test_inventory=\"$(swift test list)\""))
     let liveFilter = try #require(gate.range(
         of: "LOGIC_PRO_MCP_RUN_LIVE_QA=1 swift test --no-parallel --filter"
     ))
     let suite = try #require(gate.range(of: "\nswift test --no-parallel\n"))
     #expect(build.lowerBound < logic.lowerBound)
     #expect(logic.lowerBound < permission.lowerBound)
-    #expect(permission.lowerBound < liveFilter.lowerBound)
+    #expect(permission.lowerBound < inventory.lowerBound)
+    #expect(inventory.lowerBound < liveFilter.lowerBound)
     #expect(liveFilter.lowerBound < suite.lowerBound)
     #expect(liveNames.allSatisfy { gate.contains($0) })
 }
