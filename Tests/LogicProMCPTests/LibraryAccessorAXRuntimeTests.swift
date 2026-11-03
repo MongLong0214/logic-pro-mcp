@@ -199,6 +199,36 @@ private func makeLibraryPanelFixture(
     #expect(snapshot.currentPreset == "Sub")
 }
 
+@Test func qualificationLibraryPanelReaderRefusesAmbiguousExactBrowserOwnership() throws {
+    let fixture = makeLibraryPanelFixture()
+    let competingBrowser = fixture.builder.element(10_100)
+    fixture.builder.setAttribute(
+        competingBrowser,
+        kAXRoleAttribute as String,
+        kAXBrowserRole as String
+    )
+    fixture.builder.setAttribute(
+        competingBrowser,
+        kAXDescriptionAttribute as String,
+        "Library"
+    )
+    fixture.builder.setAttribute(
+        competingBrowser,
+        kAXParentAttribute as String,
+        fixture.window
+    )
+    fixture.builder.setChildren(competingBrowser, [])
+    fixture.builder.setChildren(fixture.window, [fixture.browser, competingBrowser])
+
+    #expect(QualificationLibraryPanelReader.snapshot(runtime: fixture.runtime) == nil)
+    let object = try #require(JSONSerialization.jsonObject(
+        with: QualificationLibraryPanelReader.read(runtime: fixture.runtime)
+    ) as? [String: Any])
+    let available = try #require(object["available"] as? Bool)
+    #expect(!available)
+    #expect(object["reason"] as? String == "explicit_library_panel_unavailable")
+}
+
 @Test func qualificationLibraryPanelReaderKeepsDeepSelectedLeafOutsideImmediatePresetList() throws {
     let fixture = makeLibraryPanelFixture()
     let leafList = fixture.builder.element(10_110)
