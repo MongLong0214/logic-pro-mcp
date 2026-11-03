@@ -167,6 +167,45 @@ private actor BlockingKeyCmdTransport: KeyCmdTransportProtocol {
     }
 }
 
+private actor BlockingOperationReadyChannel: OperationReadinessProviding {
+    nonisolated let id = ChannelID.midiKeyCommands
+    private let probe: BlockingStopProbe
+    private(set) var executions = 0
+
+    init(probe: BlockingStopProbe) {
+        self.probe = probe
+    }
+
+    func start() async throws {}
+    func stop() async {}
+
+    func execute(operation: String, params: [String: String]) async -> ChannelResult {
+        executions += 1
+        return .success("stale readiness provider executed")
+    }
+
+    func healthCheck() async -> ChannelHealth {
+        .healthy(
+            detail: "operation-only readiness",
+            verificationStatus: .unattendedUnavailable
+        )
+    }
+
+    func isReady(operation: String) async -> Bool {
+        probe.blockUntilReleased()
+        return true
+    }
+
+    func executeIfReady(
+        operation: String,
+        params: [String: String],
+        beforeExecution: @escaping @Sendable () async -> Bool
+    ) async -> OperationReadyExecution {
+        guard await beforeExecution() else { return .notReady }
+        return .executed(await execute(operation: operation, params: params))
+    }
+}
+
 private actor StartOrderRecorder {
     private var started: [ChannelID] = []
 
@@ -382,6 +421,38 @@ private func waitUntil(
     #expect(body["safe_to_retry"] as? Bool == true)
 }
 
+@Test func testReadyProviderReplacedByNonProviderCannotUseStaleIDProof() async {
+    let router = ChannelRouter()
+    let accessibility = MockChannel(id: .accessibility)
+    let probe = BlockingStopProbe()
+    let provedProvider = BlockingOperationReadyChannel(probe: probe)
+    let replacement = MockChannel(
+        id: .midiKeyCommands,
+        healthOverride: .healthy(
+            detail: "replacement has no operation proof",
+            verificationStatus: .unattendedUnavailable
+        )
+    )
+    await router.register(accessibility)
+    await router.register(provedProvider)
+
+    let route = Task {
+        await router.route(operation: "transport.toggle_metronome")
+    }
+    #expect(probe.waitUntilStopCalled())
+    await router.register(replacement)
+    probe.unblock()
+
+    let result = await route.value
+    let body = decodeRouterJSON(result.message)
+    #expect(!result.isSuccess)
+    #expect(await provedProvider.executions == 0)
+    #expect(await replacement.executedOps.isEmpty)
+    #expect(await accessibility.executedOps.isEmpty)
+    #expect(body["fallback_unsafe"] as? Bool == true)
+    #expect(body["write_attempted"] as? Bool == false)
+}
+
 @Test func testStopDrainsVerifiedExecutionAlreadyInsideFirstSend() async throws {
     let router = ChannelRouter()
     let probe = BlockingStopProbe()
@@ -401,7 +472,9 @@ private func waitUntil(
         await keyCommands.stop()
         await stopCompletion.markCompleted()
     }
-    try await Task.sleep(nanoseconds: 20_000_000)
+    #expect(try await waitUntil {
+        !(await keyCommands.isReady(operation: "transport.toggle_metronome"))
+    })
     #expect(!(await stopCompletion.isCompleted()))
 
     probe.unblock()

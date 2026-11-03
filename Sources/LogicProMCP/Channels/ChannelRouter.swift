@@ -484,8 +484,10 @@ actor ChannelRouter {
                 ))
             }
             let result: ChannelResult
-            if operationReadyChannels.contains(channelID),
-               let provider = channel as? any OperationReadinessProviding {
+            if operationReadyChannels.contains(channelID) {
+                guard let provider = channel as? any OperationReadinessProviding else {
+                    return .error(Self.operationReadinessInvalidated(operation: operation))
+                }
                 let claimed = await provider.executeIfReady(
                     operation: operation,
                     params: params
