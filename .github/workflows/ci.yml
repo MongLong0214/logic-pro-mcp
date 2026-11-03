@@ -1,8 +1,9 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
+  # The default-branch ruleset is strict, permits merge commits only, and has no bypass actor.
+  # Therefore the admitted main tree is the exact tree already exercised by this PR merge-candidate
+  # workflow; replaying all three macOS jobs on the resulting merge only competes with the next PR.
   pull_request:
     branches: [main]
     # `edited` stays excluded: PR metadata must not replace code CI's required check suite.
