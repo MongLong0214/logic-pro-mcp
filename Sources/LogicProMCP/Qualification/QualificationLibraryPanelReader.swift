@@ -43,23 +43,22 @@ enum QualificationLibraryPanelReader {
         runtime: AXLogicProElements.Runtime = .production
     ) -> Snapshot? {
         guard let window = AXLogicProElements.mainWindow(runtime: runtime) else { return nil }
-        let browser = AXHelpers.findAllDescendants(
+        let browser = AXLocalePolicy.censusDescendant(
             of: window,
             role: kAXBrowserRole,
+            matching: AXLocalePolicy.libraryPanelLabel,
+            mode: .exactStrict,
             maxDepth: 10,
             runtime: runtime.ax
-        ).first { candidate in
-            let description = AXHelpers.getDescription(candidate, runtime: runtime.ax) ?? ""
-            return AXLocalePolicy.libraryPanelLabel.matches(description, mode: .exactStrict)
-        }
+        ).element
         guard let browser else { return nil }
 
-        let texts = AXHelpers.findAllDescendants(
+        let texts = AXHelpers.censusDescendant(
             of: browser,
             role: kAXStaticTextRole,
             maxDepth: 6,
             runtime: runtime.ax
-        )
+        ).matches
         let positioned = texts.enumerated().compactMap { index, text in
             positionedText(text, traversalIndex: index, runtime: runtime.ax)
         }
