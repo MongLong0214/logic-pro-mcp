@@ -248,6 +248,17 @@ class WorkflowWiring(unittest.TestCase):
         listed = {item.strip() for item in trigger.group(1).split(",") if item.strip()}
         self.assertEqual(listed, {"opened", "synchronize", "reopened"})
 
+    def test_full_code_ci_runs_once_on_the_exact_pull_request_candidate(self):
+        """A protected merge must not replay the same macOS gates on the admitted main tree.
+
+        The live default-branch ruleset was re-read before this boundary changed: strict required
+        checks are enabled, only merge commits are allowed, and no actor can bypass it. The full
+        suite therefore stays on the pull-request merge candidate, where it still gates admission.
+        """
+        trigger = self.executable.split("permissions:", 1)[0]
+        self.assertRegex(trigger, r"(?m)^  pull_request:$")
+        self.assertNotRegex(trigger, r"(?m)^  push:$")
+
     def test_the_concurrency_group_no_longer_carries_a_metadata_domain(self):
         group = re.search(r"^concurrency:\n(?:.*\n)*?\s*group:(.*(?:\n\s{4,}.*)*)",
                           self.executable, re.M)
