@@ -225,6 +225,100 @@ private func waitUntil(
     #expect(cgOps.count == 1)     // fallback used
 }
 
+@Test func testUnverifiedMetronomeBindingPreservesExistingAccessibilityFirstRoute() async throws {
+    let router = ChannelRouter()
+    let accessibility = MockChannel(id: .accessibility)
+    let transport = MockKeyCmdTransport()
+    let keyCommands = MIDIKeyCommandsChannel(transport: transport)
+    try await keyCommands.start()
+    await router.register(accessibility)
+    await router.register(keyCommands)
+
+    let result = await router.route(operation: "transport.toggle_metronome")
+
+    #expect(result.isSuccess)
+    #expect(await accessibility.executedOps.count == 1)
+    #expect(await transport.sentBytes.isEmpty)
+}
+
+@Test func testVerifiedMetronomeBindingMovesMIDIKeyCommandsAheadOfAccessibility() async throws {
+    let router = ChannelRouter()
+    let accessibility = MockChannel(id: .accessibility)
+    let transport = MockKeyCmdTransport()
+    let keyCommands = MIDIKeyCommandsChannel(transport: transport)
+    try await keyCommands.start()
+    await keyCommands.recordVerifiedBinding(operation: "transport.toggle_metronome")
+    await router.register(accessibility)
+    await router.register(keyCommands)
+
+    let result = await router.route(operation: "transport.toggle_metronome")
+
+    #expect(result.isSuccess)
+    #expect(await accessibility.executedOps.isEmpty)
+    #expect(await transport.sentBytes == [[0xBF, 98, 0x7F], [0xBF, 98, 0x00]])
+}
+
+@Test func testStoppingKeyCommandChannelClearsVerifiedOperationReadiness() async throws {
+    let transport = MockKeyCmdTransport()
+    let keyCommands = MIDIKeyCommandsChannel(transport: transport)
+    try await keyCommands.start()
+    await keyCommands.recordVerifiedBinding(operation: "transport.toggle_metronome")
+    #expect(await keyCommands.isReady(operation: "transport.toggle_metronome"))
+
+    await keyCommands.stop()
+
+    #expect(!(await keyCommands.isReady(operation: "transport.toggle_metronome")))
+}
+
+@Test func testVerifiedMetronomeFirstSendFailureForbidsForegroundFallback() async throws {
+    let router = ChannelRouter()
+    let accessibility = MockChannel(id: .accessibility)
+    let transport = MockKeyCmdTransport()
+    await transport.setFailOnSendAttempts([1])
+    let keyCommands = MIDIKeyCommandsChannel(transport: transport)
+    try await keyCommands.start()
+    await keyCommands.recordVerifiedBinding(operation: "transport.toggle_metronome")
+    await router.register(accessibility)
+    await router.register(keyCommands)
+
+    let result = await router.route(operation: "transport.toggle_metronome")
+    let body = decodeRouterJSON(result.message)
+
+    #expect(!result.isSuccess)
+    #expect(await accessibility.executedOps.isEmpty)
+    #expect(body["fallback_unsafe"] as? Bool == true)
+    #expect(body["write_attempted"] as? Bool == false)
+    #expect(body["safe_to_retry"] as? Bool == true)
+    #expect(body["phase"] as? String == "press")
+}
+
+@Test func testVerifiedMetronomeReleaseFailureForbidsForegroundFallbackAsPartialSend() async throws {
+    let router = ChannelRouter()
+    let accessibility = MockChannel(id: .accessibility)
+    let transport = MockKeyCmdTransport()
+    await transport.setFailOnSendAttempts([2])
+    let keyCommands = MIDIKeyCommandsChannel(transport: transport)
+    try await keyCommands.start()
+    await keyCommands.recordVerifiedBinding(operation: "transport.toggle_metronome")
+    await router.register(accessibility)
+    await router.register(keyCommands)
+
+    let result = await router.route(operation: "transport.toggle_metronome")
+    let body = decodeRouterJSON(result.message)
+
+    #expect(!result.isSuccess)
+    #expect(await accessibility.executedOps.isEmpty)
+    #expect(body["fallback_unsafe"] as? Bool == true)
+    #expect(body["write_attempted"] as? Bool == true)
+    #expect(body["safe_to_retry"] as? Bool == false)
+    #expect(body["phase"] as? String == "release")
+    #expect(await transport.sentBytes == [[0xBF, 98, 0x7F]])
+}
+
+private func decodeRouterJSON(_ text: String) -> [String: Any] {
+    (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [String: Any] ?? [:]
+}
+
 @Test func testRouterTransportFallsBackToAppleScript() async {
     let router = ChannelRouter()
     let mcu = MockChannel(id: .mcu, available: false)

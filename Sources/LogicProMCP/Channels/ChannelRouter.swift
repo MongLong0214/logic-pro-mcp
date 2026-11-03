@@ -366,9 +366,26 @@ actor ChannelRouter {
             return Self.emptyChainResult(operation: operation, restriction: Self.debugOnlyChannel)
         }
 
+        var operationReadyChannels: Set<ChannelID> = []
+        for (id, channel) in channels {
+            guard tableChain.contains(id),
+                  let provider = channel as? any OperationReadinessProviding,
+                  await provider.isReady(operation: operation) else { continue }
+            operationReadyChannels.insert(id)
+        }
+
+        // An operation-specific proof may promote that channel without changing
+        // the static table or the channel-wide health contract. Unverified routes
+        // retain the byte-for-byte table order.
+        let prioritizedTableChain = tableChain.filter(operationReadyChannels.contains)
+            + tableChain.filter { !operationReadyChannels.contains($0) }
+
         let chain: [ChannelID]
         switch Self.effectiveChain(
-            tableChain, operation: operation, restriction: Self.debugOnlyChannel, pass: Self.debugPassOperations
+            prioritizedTableChain,
+            operation: operation,
+            restriction: Self.debugOnlyChannel,
+            pass: Self.debugPassOperations
         ) {
         case let .success(kept):
             chain = kept
@@ -415,6 +432,20 @@ actor ChannelRouter {
                 ? ChannelHealth.unavailable("MCU is deferred until an MCU write or consented setup")
                 : await channel.healthCheck()
             guard health.available else {
+                if operationReadyChannels.contains(channelID) {
+                    return .error(HonestContract.encodeStateC(
+                        error: .portUnavailable,
+                        hint: health.detail,
+                        extras: [
+                            "operation": operation,
+                            "terminal": true,
+                            "terminal_scope": "mcp_request_only",
+                            "fallback_unsafe": true,
+                            "safe_to_retry": true,
+                            "write_attempted": false,
+                        ]
+                    ))
+                }
                 // PRD Issue #1 §4.1 step 7: a bypass op (KeyCmd MIDI send)
                 // whose channel reports `available:false` means the virtual
                 // port itself is not published — no other channel can supply
@@ -436,7 +467,7 @@ actor ChannelRouter {
                 lastError = "Channel \(channelID.rawValue): \(health.detail)"
                 continue
             }
-            guard isBypass || health.ready else {
+            guard isBypass || operationReadyChannels.contains(channelID) || health.ready else {
                 Log.debug(
                     "Channel \(channelID.rawValue) is not runtime-ready: \(health.detail), trying next",
                     subsystem: "router"

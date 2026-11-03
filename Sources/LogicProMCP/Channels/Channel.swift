@@ -91,6 +91,12 @@ protocol Channel: Actor {
     func healthCheck() async -> ChannelHealth
 }
 
+/// A channel whose global health remains conservative but which can prove that one
+/// particular operation is ready for unattended execution in this process.
+protocol OperationReadinessProviding: Channel {
+    func isReady(operation: String) async -> Bool
+}
+
 /// Shared surface for the two send-only "MIDI CC on channel 16" channels
 /// (`ScripterChannel` + `MIDIKeyCommandsChannel`). Both push bytes through a
 /// `KeyCmdTransportProtocol`. Their mapped Logic operations have neither
