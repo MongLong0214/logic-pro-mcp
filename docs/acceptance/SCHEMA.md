@@ -199,18 +199,21 @@ parameter:
 The source root must be a `call` bound before the named operation. The runner parses the source's
 stored raw JSON with the same duplicate-key and path rules as the judge, requires the selected value
 to be a non-empty string, and refuses before sending the operation when the observation or path is unreadable.
-The reserved key is not admitted on setup calls, post-operation calls, probes, reads, waits, nested
-parameter values or restore calls. It is also refused on request-semantics parameters such as
+The reserved key is not admitted on ordinary setup calls, post-operation calls, probes, reads,
+waits or arbitrary nested parameter values. It is also refused on request-semantics parameters such as
 `param` and `mode`. This is target transport only: a setup reply remains ineligible as an independent
 expected value or effect proof.
 
 The approved session-repair chain has one additional exact allowlist because each public call
 issues the opaque strings needed by the next call. `logic_project.plan_session_repair` may bind
-only `snapshot_id` and `policy.project_ref` from a prior call; `logic_project.apply_session_repair`
-may bind only `plan_id` and `digest`. Each leaf uses the same exact `$observation` object, resolves
-only a non-empty string from an earlier call reply, and is sent as an ordinary string. All request
-semantics, including `policy.presentation`, remain literal in the acceptance document. No probe,
-future reading, restore reading, arbitrary nested leaf or whole reply may steer these calls.
+only `snapshot_id`, `policy.project_ref`, and the one declared target's
+`policy.targets[0].track_ref` from a prior call; `logic_project.apply_session_repair` may bind only
+`plan_id` and `digest`. Those exact leaves may also bind a fresh inspect-plan-apply chain inside
+`restore`, where every source must still be an earlier call in the same row. Each leaf uses the
+same exact `$observation` object, resolves only a non-empty string from an earlier call reply, and
+is sent as an ordinary string. All request semantics, including `policy.presentation`, output and
+Send intent, remain literal in the acceptance document. No probe, future reading, arbitrary nested
+leaf, whole reply or generic restore `target_ref` may steer these calls.
 
 ### Paths
 

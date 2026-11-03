@@ -49,6 +49,7 @@ def libs():
     vp, ul, lg = ctypes.c_void_p, ctypes.c_ulong, ctypes.c_long
     sig = [
         (cf.CFGetTypeID, ul, (vp,)), (cf.CFRelease, None, (vp,)), (cf.CFRetain, vp, (vp,)),
+        (cf.CFEqual, ctypes.c_bool, (vp, vp)),
         (cf.CFStringGetTypeID, ul, ()), (cf.CFNumberGetTypeID, ul, ()),
         (cf.CFBooleanGetTypeID, ul, ()), (cf.CFArrayGetTypeID, ul, ()),
         (cf.CFDictionaryGetTypeID, ul, ()), (cf.CFNullGetTypeID, ul, ()),
@@ -221,6 +222,10 @@ class AX:
             return self.ax.AXUIElementPerformAction(element, key)
         finally:
             self.cf.CFRelease(key)
+
+    def same(self, left, right):
+        """Whether two live CF/AX references name the same accessibility element."""
+        return bool(self.cf.CFEqual(left, right))
 
     def element_at(self, path):
         """{"status", "element"} for a probe path (window index, then child indices)."""
