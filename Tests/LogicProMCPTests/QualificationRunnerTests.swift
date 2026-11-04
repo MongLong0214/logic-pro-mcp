@@ -4745,26 +4745,40 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
     /// candidate accepted by the actual verifier, never rebuild/sign another binary.
     /// A test-owned optional path permits the separately built pinned Release product.
     /// All publication/build/signing leaves are inert shell stubs; this is not host qualification.
-    @Test(.timeLimit(.minutes(2)), arguments: ["valid", "edited_bundle", "substituted_binary", "original_changed_after_freeze"])
+    @Test(.timeLimit(.minutes(2)), arguments: ["valid", "edited_bundle", "substituted_binary",
+        "original_changed_after_freeze", "missing_matrix_root", "symlink_matrix_root",
+        "fifo_matrix_root", "missing_matrix_child"])
     func releaseConsumerUsesTheActuallyTrustedFinalCandidate(_ mutation: String) async throws {
         let verifier = Self.releaseConsumerVerifierURL
         try #require(FileManager.default.isExecutableFile(atPath: verifier.path))
         let verifierSHA = SupportBundleBuilder.sha256(try Data(contentsOf: verifier))
-        let fixture = try await signedTrustedFixture()
+        let fixture = try await signedTrustedMatrixFixture()
         defer { fixture.remove() }
-        let accepted = try Self.runTrustedVerifierExecutable(fixture, verifierURL: verifier)
+        let accepted = try Self.runTrustedMatrixVerifierExecutable(fixture, verifierURL: verifier)
         try #require(accepted.exitCode == 0, "\(accepted.stdout)\(accepted.stderr)")
-        let verifiedManifestSHA = SupportBundleBuilder.sha256(try Data(contentsOf: fixture.manifestURL))
+        let verifiedMatrixSHA = SupportBundleBuilder.sha256(try Data(contentsOf: fixture.matrixURL))
         if mutation == "edited_bundle" {
-            try Self.mutateJSONObject(at: fixture.attestationURL) { object in
+            try Self.mutateJSONObject(at: fixture.enMatrixAttestationURL) { object in
                 let passed = try #require(object["passed"] as? Int)
                 object["passed"] = passed + 1
             }
         } else if mutation == "substituted_binary" {
             try Data("different-final-candidate".utf8).write(to: fixture.executableURL)
+        } else if mutation == "missing_matrix_root" {
+            try FileManager.default.removeItem(at: fixture.matrixURL)
+        } else if mutation == "symlink_matrix_root" {
+            let target = fixture.directory.appendingPathComponent("untrusted-matrix-root.json")
+            try FileManager.default.copyItem(at: fixture.matrixURL, to: target)
+            try FileManager.default.removeItem(at: fixture.matrixURL)
+            try FileManager.default.createSymbolicLink(at: fixture.matrixURL, withDestinationURL: target)
+        } else if mutation == "fifo_matrix_root" {
+            try FileManager.default.removeItem(at: fixture.matrixURL)
+            try #require(mkfifo(fixture.matrixURL.path, 0o600) == 0)
+        } else if mutation == "missing_matrix_child" {
+            try FileManager.default.removeItem(at: fixture.directory.appendingPathComponent("en"))
         }
-        if mutation == "edited_bundle" || mutation == "substituted_binary" {
-            let rejected = try Self.runTrustedVerifierExecutable(fixture, verifierURL: verifier)
+        if mutation != "valid" && mutation != "original_changed_after_freeze" {
+            let rejected = try Self.runTrustedMatrixVerifierExecutable(fixture, verifierURL: verifier)
             #expect(rejected.exitCode != 0, "\(rejected.stdout)\(rejected.stderr)")
         }
         let process = Process()
@@ -4774,10 +4788,10 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         sys.path.insert(0, 'Scripts')
         from test_release_workflow import ReleaseFinalArtifactConsumerTests
         result, calls = ReleaseFinalArtifactConsumerTests().run_consumer(
-            'supplied', candidate=sys.argv[1], bundle_path=sys.argv[2],
+            'supplied', candidate=sys.argv[1], matrix_path=sys.argv[2],
             verifier=sys.argv[3], trusted_key=sys.argv[4], commit=sys.argv[5],
             mutate_original_bundle=sys.argv[6] == 'original_changed_after_freeze')
-        print(json.dumps({'exit': result.returncode, 'calls': calls,
+        print(json.dumps({'exit': result.returncode, 'timed_out': result.timed_out, 'calls': calls,
                           'stdout': result.stdout, 'stderr': result.stderr}))
         """, fixture.executableURL.path, fixture.directory.path,
             verifier.path,
@@ -4793,7 +4807,9 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         try #require(process.terminationStatus == 0, "\(String(decoding: diagnostics, as: UTF8.self))")
         let result = try #require(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
         let code = try #require(result["exit"] as? Int)
+        let timedOut = try #require(result["timed_out"] as? Bool)
         let calls = try #require(result["calls"] as? [String])
+        #expect(!timedOut, "the matrix refusal must not depend on killing a blocked verifier: \(result)")
         #expect(calls.contains("verifier-build \(verifierSHA)"), "\(result)")
         let publications = calls.filter { $0.hasPrefix("git tag ") || $0.hasPrefix("git push ")
             || $0.hasPrefix("gh release create ") }
@@ -4803,11 +4819,11 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             #expect(!calls.contains { $0.hasPrefix("gh release create ") }, "\(result)")
             let tag = try #require(calls.first { $0.hasPrefix("git tag ") })
             #expect(tag.contains("Final-candidate-SHA256: \(fixture.binarySHA256)"), "\(result)")
-            #expect(tag.contains("Qualification-manifest-SHA256: \(verifiedManifestSHA)"), "\(result)")
+            #expect(tag.contains("Qualification-matrix-SHA256: \(verifiedMatrixSHA)"), "\(result)")
             if mutation == "original_changed_after_freeze" {
-                #expect(calls.contains("original-bundle-changed"))
-                let changed = SupportBundleBuilder.sha256(try Data(contentsOf: fixture.manifestURL))
-                #expect(changed != verifiedManifestSHA)
+                #expect(calls.contains("original-matrix-changed"))
+                let changed = SupportBundleBuilder.sha256(try Data(contentsOf: fixture.matrixURL))
+                #expect(changed != verifiedMatrixSHA)
             }
             #expect(calls.filter { $0 == "trusted-verifier" }.count >= 3, "\(result)")
             #expect(!calls.contains { $0.hasPrefix("swift build") || $0.hasPrefix("codesign --force") }, "\(result)")
@@ -4824,15 +4840,15 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         let verifier = Self.releaseConsumerVerifierURL
         try #require(FileManager.default.isExecutableFile(atPath: verifier.path))
         let verifierSHA = SupportBundleBuilder.sha256(try Data(contentsOf: verifier))
-        let fixture = try await signedTrustedFixture()
+        let fixture = try await signedTrustedMatrixFixture()
         defer { fixture.remove() }
-        let accepted = try Self.runTrustedVerifierExecutable(fixture, verifierURL: verifier)
+        let accepted = try Self.runTrustedMatrixVerifierExecutable(fixture, verifierURL: verifier)
         try #require(accepted.exitCode == 0, "\(accepted.stdout)\(accepted.stderr)")
         if scenario.hasSuffix("edited_bundle") {
-            try Self.mutateJSONObject(at: fixture.attestationURL) { object in
+            try Self.mutateJSONObject(at: fixture.enMatrixAttestationURL) { object in
                 object["passed"] = try #require(object["passed"] as? Int) + 1
             }
-            let rejected = try Self.runTrustedVerifierExecutable(fixture, verifierURL: verifier)
+            let rejected = try Self.runTrustedMatrixVerifierExecutable(fixture, verifierURL: verifier)
             try #require(rejected.exitCode != 0, "\(rejected.stdout)")
         }
         let process = Process()
@@ -4842,7 +4858,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         sys.path.insert(0, 'Scripts')
         from test_release_workflow import ReleaseFinalArtifactConsumerTests
         result, calls = ReleaseFinalArtifactConsumerTests().run_consumer(
-            'supplied', candidate=sys.argv[1], bundle_path=sys.argv[2],
+            'supplied', candidate=sys.argv[1], matrix_path=sys.argv[2],
             verifier=sys.argv[3], trusted_key=sys.argv[4], commit=sys.argv[5],
             entrypoint='stable' if sys.argv[6].startswith('stable') else 'hosted',
             signing_key=sys.argv[7],
@@ -4904,13 +4920,25 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
     /// Drive the YAML's public distribution path with a real signed bundle and
     /// envelope. Network/publication leaves use controlled copies, never a release.
     @Test(.timeLimit(.minutes(2)), arguments: ["valid", "missing", "payload", "fifo",
-        "other_manifest", "metadata", "retrieved_missing", "retrieved_payload", "omitted_publish", "omitted_upload"])
+        "other_matrix", "stale_matrix_pin", "metadata", "retrieved_missing", "retrieved_payload",
+        "omitted_publish", "omitted_upload"])
     func releasePublicationPreservesAndRetrievesSignedPublicEvidence(_ scenario: String) async throws {
         let sentinel = FileManager.default.temporaryDirectory.appendingPathComponent(
             "public-release-candidate-executed-\(UUID().uuidString)")
-        let fixture = try await signedTrustedFixture(candidateExecutionSentinelURL: sentinel)
+        let fixture = try await signedTrustedMatrixFixture(candidateExecutionSentinelURL: sentinel)
+        let other = scenario == "other_matrix" ? try await signedTrustedMatrixFixture(
+            candidateExecutionSentinelURL: sentinel
+        ) : nil
+        if let other {
+            #expect(
+                SupportBundleBuilder.sha256(try Data(contentsOf: other.matrixURL))
+                    != SupportBundleBuilder.sha256(try Data(contentsOf: fixture.matrixURL)),
+                "the cross-matrix splice control needs two independently valid roots"
+            )
+        }
         defer {
             fixture.remove()
+            other?.remove()
             try? FileManager.default.removeItem(at: sentinel)
         }
         let verifier = Self.releaseConsumerVerifierURL
@@ -4921,15 +4949,16 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         sys.path.insert(0, 'Scripts')
         from test_release_workflow import ReleaseFinalArtifactConsumerTests
         result, calls = ReleaseFinalArtifactConsumerTests().run_consumer(
-            'supplied', candidate=sys.argv[1], bundle_path=sys.argv[2], verifier=sys.argv[3],
+            'supplied', candidate=sys.argv[1], matrix_path=sys.argv[2], verifier=sys.argv[3],
             trusted_key=sys.argv[4], commit=sys.argv[5], signing_key=sys.argv[6],
             entrypoint='public', public_fault=None if sys.argv[7] == 'valid' else sys.argv[7],
-            reverify_timeout=5 if sys.argv[7] == 'fifo' else 30)
+            reverify_timeout=5 if sys.argv[7] == 'fifo' else 30,
+            other_matrix_path=None if sys.argv[8] == '' else sys.argv[8])
         print(json.dumps({'exit': result.returncode, 'timed_out': result.timed_out,
                           'calls': calls, 'stdout': result.stdout, 'stderr': result.stderr}))
         """, fixture.executableURL.path, fixture.directory.path, verifier.path,
             fixture.trustedPublicKeyData.base64EncodedString(), fixture.commitSHA,
-            fixture.signingKeyData.base64EncodedString(), scenario]
+            fixture.signingKeyData.base64EncodedString(), scenario, other?.directory.path ?? ""]
         let output = Pipe()
         let diagnostics = Pipe()
         process.standardOutput = output
@@ -4944,12 +4973,12 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         let code = try #require(result["exit"] as? Int)
         let timedOut = try #require(result["timed_out"] as? Bool)
         #expect(!timedOut, "\(result)")
-        #expect(calls.contains { $0 == "owner-preparation trusted-command verify-public" },
+        #expect(calls.contains { $0 == "owner-preparation trusted-command verify-public-matrix" },
                 "the starting public copy must actually authenticate: \(result)")
         if scenario == "valid" || scenario.hasPrefix("retrieved_") || scenario == "omitted_publish" {
             #expect(calls.contains("public-envelope-preserved"), "\(result)")
             #expect(calls.contains("public-archives-preserved"), "\(result)")
-            #expect(calls.filter { $0 == "trusted-command verify-public" }.count >= 2,
+            #expect(calls.filter { $0 == "trusted-command verify-public-matrix" }.count >= 2,
                     "both build and publication must authenticate public evidence: \(result)")
             #expect(calls.contains("hosted-release-action"), "\(result)")
         }
@@ -4984,9 +5013,9 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
     func finalConsumerRejectsNonregularPublicInputsBeforeReading(_ scenario: String) async throws {
         let verifier = Self.releaseConsumerVerifierURL
         try #require(FileManager.default.isExecutableFile(atPath: verifier.path))
-        let fixture = try await signedTrustedFixture()
+        let fixture = try await signedTrustedMatrixFixture()
         defer { fixture.remove() }
-        let accepted = try Self.runTrustedVerifierExecutable(fixture, verifierURL: verifier)
+        let accepted = try Self.runTrustedMatrixVerifierExecutable(fixture, verifierURL: verifier)
         try #require(accepted.exitCode == 0, "\(accepted.stdout)\(accepted.stderr)")
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
@@ -5000,7 +5029,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                   'sums': 'SHA256SUMS.txt', 'manifest': 'release-artifacts.sha256',
                   'metadata': 'RELEASE-METADATA.json'}.get(shape)
         result, calls = ReleaseFinalArtifactConsumerTests().run_consumer(
-            'supplied', candidate=sys.argv[1], bundle_path=sys.argv[2], verifier=sys.argv[3],
+            'supplied', candidate=sys.argv[1], matrix_path=sys.argv[2], verifier=sys.argv[3],
             trusted_key=sys.argv[4], commit=sys.argv[5], entrypoint=entry,
             signing_key=sys.argv[7],
             # Keep the tight liveness bound for every planted FIFO. Other
@@ -5352,6 +5381,38 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             "verify",
             "--candidate", (candidateURL ?? fixture.executableURL).path,
             "--bundle", (bundleURL ?? fixture.directory).path,
+            "--release-version", "1.2.3",
+            "--expected-commit", fixture.commitSHA,
+        ]
+        var environment = ProcessInfo.processInfo.environment
+        environment["LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY"] =
+            fixture.trustedPublicKeyData.base64EncodedString()
+        process.environment = environment
+        let stdout = Pipe()
+        let stderr = Pipe()
+        process.standardOutput = stdout
+        process.standardError = stderr
+        try process.run()
+        let out = stdout.fileHandleForReading.readDataToEndOfFile()
+        let err = stderr.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        return QualificationCommandResult(
+            exitCode: Int(process.terminationStatus),
+            stdout: String(decoding: out, as: UTF8.self),
+            stderr: String(decoding: err, as: UTF8.self)
+        )
+    }
+
+    private static func runTrustedMatrixVerifierExecutable(
+        _ fixture: SignedMatrixFixture,
+        verifierURL: URL? = nil
+    ) throws -> QualificationCommandResult {
+        let process = Process()
+        process.executableURL = verifierURL ?? trustedVerifierExecutableURL
+        process.arguments = [
+            "verify-matrix",
+            "--candidate", fixture.executableURL.path,
+            "--matrix-index", fixture.inputURL.path,
             "--release-version", "1.2.3",
             "--expected-commit", fixture.commitSHA,
         ]
@@ -9029,6 +9090,58 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         return fixture
     }
 
+    private func signedTrustedMatrixFixture(
+        candidateExecutionSentinelURL: URL? = nil
+    ) async throws -> SignedMatrixFixture {
+        let en = try trustedFixture(
+            candidateExecutionSentinelURL: candidateExecutionSentinelURL,
+            observedLocale: .enUS,
+            includeAxisWaivers: false
+        )
+        let ko: Fixture
+        do {
+            ko = try trustedFixture(
+                candidateExecutionSentinelURL: candidateExecutionSentinelURL,
+                observedLocale: .koKR,
+                includeAxisWaivers: false
+            )
+        } catch {
+            en.remove()
+            throw error
+        }
+        let matrix = FileManager.default.temporaryDirectory
+            .appendingPathComponent("signed-release-matrix-\(UUID().uuidString)", isDirectory: true)
+        do {
+            let enResult = await en.runQualification(waiversURL: en.waiversURL, locale: .enUS)
+            try #require(enResult.exitCode == 0, "\(enResult.stdout)\(enResult.stderr)")
+            let koResult = await ko.runQualification(waiversURL: ko.waiversURL, locale: .koKR)
+            try #require(koResult.exitCode == 0, "\(koResult.stdout)\(koResult.stderr)")
+            try FileManager.default.createDirectory(at: matrix, withIntermediateDirectories: false)
+            try FileManager.default.copyItem(at: en.directory, to: matrix.appendingPathComponent("en"))
+            try FileManager.default.copyItem(at: ko.directory, to: matrix.appendingPathComponent("ko"))
+            let input = QualificationMatrixInput(
+                schema: QualificationMatrixInput.currentSchema,
+                runs: [.init(path: "en"), .init(path: "ko")]
+            )
+            let inputURL = matrix.appendingPathComponent("qualification-matrix-input.json")
+            try QualificationPublicEvidence.encode(input).write(to: inputURL)
+            let signing = QualificationRunner.signTrustedMatrix(
+                candidateURL: en.executableURL,
+                matrixURL: matrix,
+                releaseVersion: "1.2.3",
+                expectedCommitSHA: en.commitSHA,
+                signingPrivateKeyData: en.signingKeyData
+            )
+            try #require(signing.exitCode == 0, "\(signing.stdout)\(signing.stderr)")
+            return SignedMatrixFixture(en: en, ko: ko, directory: matrix)
+        } catch {
+            en.remove()
+            ko.remove()
+            try? FileManager.default.removeItem(at: matrix)
+            throw error
+        }
+    }
+
     private static func axisWaivers(
         observedAxis: QualificationAxis = .defaultAxis
     ) -> [QualificationWaiver] {
@@ -9996,6 +10109,35 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         }
 
         func remove() {
+            try? FileManager.default.removeItem(at: directory)
+        }
+    }
+
+    private final class SignedMatrixFixture: @unchecked Sendable {
+        let en: Fixture
+        let ko: Fixture
+        let directory: URL
+
+        init(en: Fixture, ko: Fixture, directory: URL) {
+            self.en = en
+            self.ko = ko
+            self.directory = directory
+        }
+
+        var executableURL: URL { en.executableURL }
+        var commitSHA: String { en.commitSHA }
+        var signingKeyData: Data { en.signingKeyData }
+        var trustedPublicKeyData: Data { en.trustedPublicKeyData }
+        var binarySHA256: String { en.binarySHA256 }
+        var inputURL: URL { directory.appendingPathComponent("qualification-matrix-input.json") }
+        var matrixURL: URL { directory.appendingPathComponent("release-qualification-matrix.json") }
+        var enMatrixAttestationURL: URL {
+            directory.appendingPathComponent("en/release-qualification-attestation.json")
+        }
+
+        func remove() {
+            en.remove()
+            ko.remove()
             try? FileManager.default.removeItem(at: directory)
         }
     }

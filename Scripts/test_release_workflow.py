@@ -237,11 +237,12 @@ class ReleaseFinalArtifactConsumerTests(unittest.TestCase):
     Valid trust is exercised separately with the actual trusted-verifier.
     """
 
-    def run_consumer(self, bundle_kind, *, candidate=None, bundle_path=None,
+    def run_consumer(self, bundle_kind, *, candidate=None, matrix_path=None,
                      verifier=None, trusted_key=None, commit=None,
                      mutate_original_bundle=False, entrypoint="local",
                      archive_mutation=None, public_input_shape=None, checksum_mutation=None,
-                     reverify_timeout=30, signing_key=None, public_fault=None):
+                     reverify_timeout=30, signing_key=None, public_fault=None,
+                     other_matrix_path=None):
         with tempfile.TemporaryDirectory(prefix="release-final-consumer-") as directory:
             root = Path(directory)
             repo = root / "repo"
@@ -269,7 +270,7 @@ class ReleaseFinalArtifactConsumerTests(unittest.TestCase):
   "branch --show-current") echo main ;;
   "rev-parse HEAD"|"rev-parse origin/main") echo {sha} ;;
   "rev-parse refs/tags/"*) exit 1 ;;
-  "for-each-ref"*) printf 'Final-candidate-SHA256: %s\\nQualification-manifest-SHA256: %s\\n' "$OWNER_BINARY_SHA" "$OWNER_MANIFEST_SHA" ;;
+  "for-each-ref"*) printf 'Final-candidate-SHA256: %s\\nQualification-matrix-SHA256: %s\\n' "$OWNER_BINARY_SHA" "$OWNER_MATRIX_SHA" ;;
 esac
 ''',
                 "gh": '''case "$*" in
@@ -301,33 +302,33 @@ fi
                 path.write_text('#!/bin/bash\nprintf "%s\\n" "' + name
                                 + ' $*" >> "$CONSUMER_CALLS"\n' + body + "exit 0\n")
                 path.chmod(0o755)
-            bundle = root / "owner-bundle"
+            matrix = root / "owner-matrix"
             if bundle_kind == "invalid":
-                bundle.mkdir()
-                (bundle / "release-qualification-attestation.json").write_text("not JSON\n")
-            if bundle_path is not None:
-                bundle = Path(bundle_path)
+                matrix.mkdir()
+                (matrix / "release-qualification-matrix.json").write_text("not JSON\n")
+            if matrix_path is not None:
+                matrix = Path(matrix_path)
             if verifier is not None:
                 tool = repo / "trusted-verifier-src/.build/release/trusted-verifier"
                 tool.parent.mkdir(parents=True)
-                # The actual verifier stays outside the candidate bundle; this wrapper only
+                # The actual verifier stays outside the qualification matrix; this wrapper only
                 # records invocation, then forwards to that real debug product.
                 import shlex
                 mutation = ('if [ ! -f "$CONSUMER_MUTATED" ]; then\n'
-                            '  printf "\\n" >> "$CONSUMER_ORIGINAL_BUNDLE/evidence-manifest.json"\n'
+                            '  printf "\\n" >> "$CONSUMER_ORIGINAL_MATRIX/release-qualification-matrix.json"\n'
                             '  touch "$CONSUMER_MUTATED"\n'
-                            '  echo original-bundle-changed >> "$CONSUMER_CALLS"\nfi\n'
+                            '  echo original-matrix-changed >> "$CONSUMER_CALLS"\nfi\n'
                             if mutate_original_bundle else '')
                 tool.write_text('#!/bin/bash\necho trusted-verifier >> "$CONSUMER_CALLS"\n'
                                 + 'echo "trusted-command $1" >> "$CONSUMER_CALLS"\n'
-                                + 'case "$1" in sign|export-public) ;; *)\n'
+                                + 'case "$1" in sign-matrix|export-public-matrix) ;; *)\n'
                                 + '  if [ -n "${LOGIC_PRO_MCP_QUALIFICATION_SIGNING_KEY:-}" ]; then\n'
                                 + '    echo signing-key-in-consumer >> "$CONSUMER_CALLS"\n'
                                 + '  fi ;; esac\n'
                                 + 'printf "verifier-build " >> "$CONSUMER_CALLS"\n'
                                 + 'shasum -a 256 ' + shlex.quote(str(verifier))
                                 + ' | awk \'{print $1}\' >> "$CONSUMER_CALLS"\n'
-                                + 'if [ "$1" != verify-public ]; then\n'
+                                + 'if [ "$1" = verify-matrix ]; then\n'
                                 + 'printf "trusted-candidate %s " "$3" >> "$CONSUMER_CALLS"\n'
                                 + 'shasum -a 256 "$3" | awk \'{print $1}\' >> "$CONSUMER_CALLS"\n'
                                 + 'fi\n' + mutation + 'exec '
@@ -336,16 +337,16 @@ fi
             environment = {
                 "PATH": str(root / "bin") + ":/usr/bin:/bin",
                 "CONSUMER_CALLS": str(calls),
-                "LOGIC_PRO_MCP_QUALIFICATION_BUNDLE": str(bundle),
+                "LOGIC_PRO_MCP_QUALIFICATION_BUNDLE": str(matrix),
                 "DRY_RUN": "0",
-                "CONSUMER_ORIGINAL_BUNDLE": str(bundle),
+                "CONSUMER_ORIGINAL_MATRIX": str(matrix),
                 "CONSUMER_MUTATED": str(root / "original-mutated"),
             }
             if trusted_key is not None:
                 environment["LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY"] = trusted_key
             arguments = ["bash", str(scripts / "release.sh"), "v1.2.3"]
             if candidate is not None:
-                arguments.extend((str(candidate), str(bundle), str(tool)))
+                arguments.extend((str(candidate), str(matrix), str(tool)))
             def run(arguments, timeout=30, env=None):
                 return run_bounded(arguments, cwd=repo, env=environment if env is None else env, timeout=timeout)
 
@@ -360,40 +361,24 @@ fi
                 # exact archive/envelope bytes, without receiving the signing key.
                 owner_public = root / "owner-public"
                 prepared = run(["bash", str(scripts / "release-consume-final.sh"),
-                                "stage", "1.2.3", sha, str(candidate), str(bundle),
+                                "stage", "1.2.3", sha, str(candidate), str(matrix),
                                 str(tool), str(owner_public)])
                 if prepared.returncode != 0:
                     return prepared, calls.read_text().splitlines()
-                projection_bundle = bundle
-                if public_fault == "other_manifest":
-                    projection_bundle = root / "other-accepted-bundle"
-                    shutil.copytree(bundle, projection_bundle)
-                    manifest = projection_bundle / "evidence-manifest.json"
-                    manifest.write_bytes(manifest.read_bytes() + b"\n")
-                    attestation = projection_bundle / "release-qualification-attestation.json"
-                    value = json.loads(attestation.read_text())
-                    digest = hashlib.sha256(manifest.read_bytes()).hexdigest()
-                    value["evidenceManifestSHA256"] = digest
-                    value["provenance"]["evidenceManifestSHA256"] = digest
-                    value.pop("provenanceSignature", None)
-                    attestation.write_text(json.dumps(value))
-                    signed = run([str(tool), "sign", "--candidate", str(candidate),
-                                  "--bundle", str(projection_bundle), "--release-version", "1.2.3",
-                                  "--expected-commit", sha], env={**environment,
-                                  "LOGIC_PRO_MCP_QUALIFICATION_SIGNING_KEY": signing_key})
-                    if signed.returncode != 0:
-                        return signed, calls.read_text().splitlines()
-                exported = run([str(tool), "export-public", "--candidate", str(candidate),
-                                "--bundle", str(projection_bundle), "--public-directory", str(owner_public),
+                projection_matrix = matrix
+                if public_fault == "other_matrix":
+                    if other_matrix_path is None:
+                        raise ValueError("other_matrix needs an independently signed matrix")
+                    projection_matrix = Path(other_matrix_path)
+                exported = run([str(tool), "export-public-matrix", "--candidate", str(candidate),
+                                "--matrix-index", str(projection_matrix / "qualification-matrix-input.json"),
+                                "--public-directory", str(owner_public),
                                 "--release-version", "1.2.3", "--expected-commit", sha],
                                env={**environment, "LOGIC_PRO_MCP_QUALIFICATION_SIGNING_KEY": signing_key})
                 if exported.returncode != 0:
                     return exported, calls.read_text().splitlines()
-                axis = json.loads((projection_bundle / "release-qualification-attestation.json").read_text())["provenance"]["axis"]
-                accepted_public = run([str(tool), "verify-public", "--public-directory", str(owner_public),
-                                       "--release-version", "1.2.3", "--expected-commit", sha,
-                                       "--expected-axis", "/".join(axis[k] for k in
-                                                                  ("variant", "locale", "profile", "cache", "fixture"))])
+                accepted_public = run([str(tool), "verify-public-matrix", "--public-directory", str(owner_public),
+                                       "--release-version", "1.2.3", "--expected-commit", sha])
                 if accepted_public.returncode != 0:
                     return accepted_public, calls.read_text().splitlines()
                 original_public = (owner_public / "qualification-public.json").read_bytes()
@@ -408,11 +393,11 @@ fi
                     for name in public_files:
                         archive.write(owner_public / name, name)
                 shutil.copy2(candidate, repo / "LogicProMCP")
-                bundle_zip = root / "private-owner-bundle.zip"
+                bundle_zip = root / "private-owner-matrix.zip"
                 with zipfile.ZipFile(bundle_zip, "w") as archive:
-                    for path in bundle.rglob("*"):
+                    for path in matrix.rglob("*"):
                         if path.is_file():
-                            archive.write(path, path.relative_to(bundle))
+                            archive.write(path, path.relative_to(matrix))
                 curl = root / "bin/curl"
                 curl.write_text('''#!/bin/bash
 printf 'fetch %s\n' "$*" >> "$CONSUMER_CALLS"
@@ -443,8 +428,10 @@ cp "$input" "$output"
                     "TEST_OWNER_CANDIDATE": str(candidate), "TEST_OWNER_BUNDLE": str(bundle_zip),
                     "TEST_OWNER_PUBLIC": str(public_zip),
                     "OWNER_BINARY_SHA": hashlib.sha256(Path(candidate).read_bytes()).hexdigest(),
-                    "OWNER_MANIFEST_SHA": hashlib.sha256((bundle / "evidence-manifest.json").read_bytes()).hexdigest(),
+                    "OWNER_MATRIX_SHA": hashlib.sha256((matrix / "release-qualification-matrix.json").read_bytes()).hexdigest(),
                 })
+                if public_fault == "stale_matrix_pin":
+                    environment["OWNER_MATRIX_SHA"] = "0" * 64
                 workflow = yaml.safe_load(WORKFLOW.read_text())
                 if public_fault == "omitted_publish":
                     action = next(step for step in workflow["jobs"]["publish"]["steps"]
@@ -572,7 +559,7 @@ cp "$input" "$output"
                     reverify = next(step for step in workflow["jobs"]["validate-install" if entrypoint == "install" else "publish"]["steps"]
                                     if step.get("name") == "Reverify downloaded release artifact")
                     arguments = (["bash", str(scripts / "release-consume-final.sh"), "verify", "1.2.3",
-                                  sha, str(candidate), str(bundle), str(tool), str(repo)]
+                                  sha, str(candidate), str(matrix), str(tool), str(repo)]
                                  if entrypoint == "direct" else
                                  ["bash", "-e", "-o", "pipefail", "-c", reverify["run"]])
                     result = run(arguments, timeout=reverify_timeout)
@@ -616,6 +603,8 @@ cp "$input" "$output"
 
 
 class ReleaseWorkflowReliabilityTests(unittest.TestCase):
+    TRUSTED_MATRIX_VERIFIER_COMMIT = "3b139ed6a812e0b1fcbe0e0175bb256d4f2cbdac"
+
     @classmethod
     def setUpClass(cls):
         cls.workflow = yaml.safe_load(WORKFLOW.read_text())
@@ -669,6 +658,29 @@ class ReleaseWorkflowReliabilityTests(unittest.TestCase):
                 step["with"]["name"],
                 "${{ needs.build-release.outputs.verified_artifact_name }}",
             )
+
+    def test_pinned_trusted_verifier_supports_complete_matrix_commands(self):
+        pin = self.TRUSTED_MATRIX_VERIFIER_COMMIT
+        for job_name in ("build-release", "publish"):
+            steps = self.workflow["jobs"][job_name]["steps"]
+            checkout = next(
+                step for step in steps
+                if step.get("name") == "Checkout authenticated trusted verifier"
+            )
+            self.assertEqual(checkout["with"]["ref"], pin)
+            build = next(
+                step for step in steps
+                if step.get("name") == "Resolve and build trusted verifier without changing pins"
+            )
+            self.assertIn(f'test "$(git rev-parse HEAD)" = {pin}', build["run"])
+
+        source = subprocess.run(
+            ["git", "show", f"{pin}:Sources/LogicProMCP/Qualification/QualificationRunner.swift"],
+            cwd=WORKFLOW.parents[2], capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(source.returncode, 0, source.stderr)
+        self.assertIn('command == "verify-matrix"', source.stdout)
+        self.assertIn('command == "verify-public-matrix"', source.stdout)
 
     def test_install_diagnostic_artifact_always_runs_without_masking_install_failure(self):
         steps = self.workflow["jobs"]["validate-install"]["steps"]

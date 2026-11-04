@@ -1153,9 +1153,10 @@ struct LPMCPPRD001ProductionReadinessREDTests {
         )
 
         let wrongPin = workflow.replacingOccurrences(
-            of: "fa7d4430b4e42e15902ab82ca2b7e67380ca56ff",
+            of: "3b139ed6a812e0b1fcbe0e0175bb256d4f2cbdac",
             with: String(repeating: "0", count: 40)
         )
+        #expect(wrongPin != workflow)
         let wrongPinReport = evaluate(wrongPin, consumer)
         #expect(wrongPinReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
         #expect(wrongPinReport.openDebts.contains(.independentProvenanceNotEnforced))

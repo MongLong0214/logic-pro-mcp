@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
 # Consume owner-staged final bytes. The verifier and anchor are supplied by the
-# trusted operator/workflow, outside the candidate/bundle; neither is read from it.
+# trusted operator/workflow, outside the candidate/matrix; neither is read from it.
 # No candidate execution, rebuilding or signing occurs here. Private evidence and
 # verifier reports never become release assets.
 set -euo pipefail
 umask 077
 
 if [ "$#" != 7 ]; then
-  echo "Usage: $0 stage|verify|verify-public VERSION COMMIT CANDIDATE BUNDLE TRUSTED_VERIFIER PUBLIC_DIRECTORY" >&2
+  echo "Usage: $0 stage|verify|verify-public VERSION COMMIT CANDIDATE MATRIX TRUSTED_VERIFIER PUBLIC_DIRECTORY" >&2
   exit 1
 fi
-mode="$1"; version="$2"; commit="$3"; candidate="$4"; bundle="$5"; verifier="$6"; public="$7"
+mode="$1"; version="$2"; commit="$3"; candidate="$4"; matrix="$5"; verifier="$6"; public="$7"
 repo_root="$(cd "$(dirname "$0")/.." && pwd -P)"
 [[ "$mode" = stage || "$mode" = verify || "$mode" = verify-public ]] || exit 1
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]] || exit 1
@@ -19,8 +19,8 @@ if [ ! -f "$candidate" ] || [ -L "$candidate" ]; then
   echo "Final candidate must be a regular non-link file" >&2
   exit 1
 fi
-if [ ! -d "$bundle" ] || [ -L "$bundle" ]; then
-  echo "Evidence bundle must be a non-link directory" >&2
+if [ ! -d "$matrix" ] || [ -L "$matrix" ]; then
+  echo "Qualification matrix must be a non-link directory" >&2
   exit 1
 fi
 if [ ! -f "$verifier" ] || [ ! -x "$verifier" ] || [ -L "$verifier" ]; then
@@ -28,18 +28,19 @@ if [ ! -f "$verifier" ] || [ ! -x "$verifier" ] || [ -L "$verifier" ]; then
   exit 1
 fi
 test -n "${LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY:-}"
-bundle="$(cd "$bundle" && pwd -P)"
+matrix="$(cd "$matrix" && pwd -P)"
 verifier="$(cd "$(dirname "$verifier")" && pwd -P)/$(basename "$verifier")"
-case "$verifier" in "$bundle"/*) echo "Verifier must be outside the evidence bundle" >&2; exit 1;; esac
+case "$verifier" in "$matrix"/*) echo "Verifier must be outside the qualification matrix" >&2; exit 1;; esac
 
 private="$(mktemp -d)"
 trap 'rm -rf "$private"' EXIT
 cp "$candidate" "$private/LogicProMCP"
-mkdir "$private/bundle"
-cp -R "$bundle/." "$private/bundle/"
+mkdir "$private/matrix"
+cp -R "$matrix/." "$private/matrix/"
 verify_candidate() {
   # Keep the verifier's detailed report private, including on rejection.
-  if ! "$verifier" verify --candidate "$1" --bundle "$private/bundle" \
+  if ! "$verifier" verify-matrix --candidate "$1" \
+      --matrix-index "$private/matrix/qualification-matrix-input.json" \
       --release-version "$version" --expected-commit "$commit" \
       > "$private/verification.json" 2> "$private/verification.stderr"; then
     echo "Final-artifact trusted verification rejected" >&2
@@ -47,11 +48,11 @@ verify_candidate() {
   fi
 }
 verify_candidate "$private/LogicProMCP"
-if [ -n "${EXPECTED_BINARY_SHA256:-}" ] || [ -n "${EXPECTED_MANIFEST_SHA256:-}" ]; then
+if [ -n "${EXPECTED_BINARY_SHA256:-}" ] || [ -n "${EXPECTED_MATRIX_SHA256:-}" ]; then
   [[ "${EXPECTED_BINARY_SHA256:-}" =~ ^[a-f0-9]{64}$ ]]
-  [[ "${EXPECTED_MANIFEST_SHA256:-}" =~ ^[a-f0-9]{64}$ ]]
+  [[ "${EXPECTED_MATRIX_SHA256:-}" =~ ^[a-f0-9]{64}$ ]]
   test "$(shasum -a 256 "$private/LogicProMCP" | awk '{print $1}')" = "$EXPECTED_BINARY_SHA256"
-  test "$(shasum -a 256 "$private/bundle/evidence-manifest.json" | awk '{print $1}')" = "$EXPECTED_MANIFEST_SHA256"
+  test "$(shasum -a 256 "$private/matrix/release-qualification-matrix.json" | awk '{print $1}')" = "$EXPECTED_MATRIX_SHA256"
 fi
 
 if [ "$mode" = stage ]; then
@@ -140,35 +141,41 @@ done
 LC_ALL=C sort "$public/SHA256SUMS.txt" > "$private/supplied-checksums"
 cmp "$private/expected-checksums" "$private/supplied-checksums"
 if [ "$mode" = verify-public ]; then
-  # The expected axis comes from the already trusted private snapshot, never
-  # from the downloaded public envelope. Detailed diagnostics remain private.
-  if ! python3 - "$private/bundle/release-qualification-attestation.json" \
-      > "$private/public-axis" 2> "$private/public-context.stderr" <<'PY'
-import json, pathlib, sys
-axis = json.loads(pathlib.Path(sys.argv[1]).read_bytes())['provenance']['axis']
-print('/'.join(axis[key] for key in ('variant', 'locale', 'profile', 'cache', 'fixture')))
-PY
-  then
-    echo "Final-artifact public context rejected" >&2
-    exit 1
-  fi
-  axis=$(cat "$private/public-axis")
-  if ! "$verifier" verify-public --public-directory "$public" \
-      --release-version "$version" --expected-commit "$commit" --expected-axis "$axis" \
+  if ! "$verifier" verify-public-matrix --public-directory "$public" \
+      --release-version "$version" --expected-commit "$commit" \
       > "$private/public-verification.json" 2> "$private/public-verification.stderr"; then
     echo "Final-artifact public evidence rejected" >&2
     exit 1
   fi
-  # Tie the authenticated projection to THIS accepted bundle and independently
-  # derive distribution metadata from the same candidate. Adjacent checksums
-  # cannot authorize another bundle, version, signer or architecture claim.
-  if ! python3 - "$private/public-verification.json" "$private/bundle/evidence-manifest.json" \
+  # Tie the complete authenticated public projection to THIS frozen private
+  # matrix root and independently derive distribution metadata from the same
+  # candidate. A valid projection from another matrix must never splice in.
+  if ! python3 - "$private/public-verification.json" "$private/matrix/release-qualification-matrix.json" \
       "$public/RELEASE-METADATA.json" "$public/LogicProMCP" "$version" \
       > "$private/public-binding.stdout" 2> "$private/public-binding.stderr" <<'PY'
 import hashlib, json, pathlib, re, subprocess, sys
 payload = json.loads(pathlib.Path(sys.argv[1]).read_bytes())
-if payload['privateManifestSHA256'] != hashlib.sha256(pathlib.Path(sys.argv[2]).read_bytes()).hexdigest():
-    raise ValueError('Different accepted private bundle')
+private_bytes = pathlib.Path(sys.argv[2]).read_bytes()
+private = json.loads(private_bytes)
+if payload['privateMatrixSHA256'] != hashlib.sha256(private_bytes).hexdigest():
+    raise ValueError('Different accepted private matrix')
+for key in ('commitSHA', 'releaseVersion', 'binarySHA256', 'logicVersion',
+            'operationCatalogSHA256'):
+    if payload[key] != private[key]:
+        raise ValueError('Public matrix identity differs from private matrix')
+axis_keys = ('variant', 'locale', 'profile', 'cache', 'fixture')
+def run_identity(run):
+    return tuple(run['axis'][key] for key in axis_keys), run['childAttestationSHA256']
+if sorted(map(run_identity, payload['runs'])) != sorted(map(run_identity, private['runs'])):
+    raise ValueError('Public matrix children differ from private matrix')
+def contains_private_path(value):
+    if isinstance(value, dict):
+        return 'path' in value or any(contains_private_path(item) for item in value.values())
+    if isinstance(value, list):
+        return any(contains_private_path(item) for item in value)
+    return False
+if contains_private_path(payload):
+    raise ValueError('Public matrix disclosed a private path')
 with open(sys.argv[3], 'rb') as source:
     raw = source.read(4097)
 if len(raw) > 4096:
@@ -191,7 +198,7 @@ fi
 if [ "$mode" = stage ]; then
   (cd "$public" && shasum -a 256 LogicProMCP LogicProMCP-macOS-universal.tar.gz \
     LogicProMCP-macOS-arm64.tar.gz RELEASE-METADATA.json SHA256SUMS.txt > release-artifacts.sha256)
-  shasum -a 256 "$private/bundle/evidence-manifest.json" | awk '{print $1}' \
-    > "$public/qualification-manifest.sha256"
+  shasum -a 256 "$private/matrix/release-qualification-matrix.json" | awk '{print $1}' \
+    > "$public/qualification-matrix.sha256"
 fi
 echo "Final signed candidate and both archive members verified"
