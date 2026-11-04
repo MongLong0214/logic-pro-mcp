@@ -2623,16 +2623,20 @@ struct QualificationRunnerTests {
     }
 
     /// AFTER-only producer controls. Archived roots and fake drive metadata, never live capture.
-    private static func atlasProducerVersionPairs(_ version: String) throws -> [AtlasQualification.Pair] {
+    private static func atlasProducerVersionPairs(
+        _ version: String,
+        locale: QualificationLocale = .enUS
+    ) throws -> [AtlasQualification.Pair] {
         let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
             .deletingLastPathComponent().appendingPathComponent("Fixtures/AX")
-        return try ["logic-12.x-desktop-en-track-headers.json",
-                    "logic-12.x-desktop-en-control-bar.json"].map { name in
+        let language = locale == .koKR ? "ko" : "en"
+        return try ["logic-12.x-desktop-\(language)-track-headers.json",
+                    "logic-12.x-desktop-\(language)-control-bar.json"].map { name in
             let baseline = try JSONDecoder().decode(AXSnapshot.Document.self,
                 from: Data(contentsOf: directory.appendingPathComponent(name)))
             #expect(baseline.logicVersion == "12.x")
             return AtlasQualification.Pair(scope: baseline.scope, baseline: baseline,
-                current: AXSnapshot.Document(logicVersion: version, locale: "en-US",
+                current: AXSnapshot.Document(logicVersion: version, locale: locale.rawValue,
                     scope: baseline.scope, capturedFrom: "ax", root: baseline.root))
         }
     }
@@ -3265,6 +3269,396 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             "LOGIC_PRO_MCP_QUALIFICATION_SIGNING_KEY": fixture.signingKeyData.base64EncodedString(),
             "LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY": (key ?? fixture.trustedPublicKeyData).base64EncodedString(),
         ])
+    }
+
+    private func publicMatrixPayload(
+        axes: [QualificationAxis] = QualificationAxis.requiredAxes(
+            profile: .core,
+            cache: .cold,
+            fixture: .empty
+        )
+    ) -> QualificationPublicMatrixEvidence.Payload {
+        let digest = String(repeating: "a", count: 64)
+        let artifacts = QualificationPublicEvidence.artifactNames.map {
+            QualificationPublicEvidence.Artifact(name: $0, sha256: digest)
+        }
+        let runs = axes.enumerated().map { index, axis in
+            let token = String(format: "%064x", index + 1)
+            let child = QualificationPublicEvidence.Payload(
+                schema: QualificationPublicEvidence.schema,
+                commitSHA: String(repeating: "b", count: 40),
+                releaseVersion: "1.2.3",
+                binarySHA256: digest,
+                logicVersion: "12.4",
+                axis: axis,
+                runIDHash: token,
+                startedAt: 1_000,
+                completedAt: 1_001,
+                privateManifestSHA256: token,
+                artifacts: artifacts,
+                cases: [.init(
+                    caseIDHash: token,
+                    operationID: "system.health",
+                    status: .passed,
+                    verificationKind: .independentReadback,
+                    liveCredited: true
+                )],
+                waivers: [],
+                evidence: [.init(
+                    pathHash: token,
+                    sha256: digest,
+                    caseIDHash: token,
+                    kind: "semantic_readback"
+                )],
+                total: 1,
+                passed: 1,
+                failed: 0,
+                waived: 0,
+                disclosure: "No private paths."
+            )
+            return QualificationPublicMatrixEvidence.Run(
+                axis: axis,
+                childAttestationSHA256: token,
+                payload: child
+            )
+        }
+        return QualificationPublicMatrixEvidence.Payload(
+            schema: QualificationPublicMatrixEvidence.schema,
+            commitSHA: String(repeating: "b", count: 40),
+            releaseVersion: "1.2.3",
+            binarySHA256: digest,
+            logicVersion: "12.4",
+            operationCatalogSHA256: digest,
+            privateMatrixSHA256: digest,
+            artifacts: artifacts,
+            runs: runs,
+            disclosure: "Authenticated two-axis projection; private paths remain private."
+        )
+    }
+
+    @Test func publicMatrixEvidenceBindsBothRequiredAxesAndExactPrivateSnapshots() throws {
+        let key = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 19, count: 32))
+        let payload = publicMatrixPayload()
+
+        let signed = try QualificationPublicMatrixEvidence.sign(payload, key: key)
+        let verified = try QualificationPublicMatrixEvidence.verify(
+            signed,
+            trustedKey: key.publicKey.rawRepresentation
+        )
+
+        #expect(verified == payload)
+        let actualAxes = verified.runs.map(\.axis)
+        let sortedAxes = actualAxes.sorted { $0.key < $1.key }
+        let requiredAxes = QualificationAxis.requiredAxes(
+            profile: .core,
+            cache: .cold,
+            fixture: .empty
+        )
+        #expect(actualAxes == sortedAxes)
+        #expect(Set(actualAxes) == Set(requiredAxes))
+    }
+
+    @Test func publicMatrixEvidenceRejectsMissingAxisAndSignedPayloadSubstitution() throws {
+        let key = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 23, count: 32))
+        let complete = publicMatrixPayload()
+        #expect(throws: QualificationPublicMatrixEvidence.Rejection.self) {
+            _ = try QualificationPublicMatrixEvidence.sign(
+                publicMatrixPayload(axes: [QualificationAxis.defaultAxis]),
+                key: key
+            )
+        }
+
+        var envelope = try #require(
+            JSONSerialization.jsonObject(with: QualificationPublicMatrixEvidence.sign(complete, key: key))
+                as? [String: Any]
+        )
+        let encoded = try #require(envelope["payload"] as? String)
+        let encodedPayload = try #require(Data(base64Encoded: encoded))
+        var projected = try #require(
+            JSONSerialization.jsonObject(with: encodedPayload)
+                as? [String: Any]
+        )
+        projected["privateMatrixSHA256"] = String(repeating: "f", count: 64)
+        envelope["payload"] = try JSONSerialization.data(
+            withJSONObject: projected,
+            options: [.sortedKeys]
+        ).base64EncodedString()
+        let substituted = try JSONSerialization.data(withJSONObject: envelope)
+
+        #expect(throws: QualificationPublicMatrixEvidence.Rejection.self) {
+            _ = try QualificationPublicMatrixEvidence.verify(
+                substituted,
+                trustedKey: key.publicKey.rawRepresentation
+            )
+        }
+    }
+
+    private func preparedPublicMatrix() async throws -> (
+        en: Fixture,
+        ko: Fixture,
+        matrix: URL,
+        publicDirectory: URL
+    ) {
+        let specs = [try #require(OperationRegistry.specs.first { $0.id == .systemHealth })]
+        let executableData = Data("public-matrix-candidate".utf8)
+        let commitSHA = String(repeating: "d", count: 40)
+        let en = try Fixture(
+            specs: specs,
+            executableData: executableData,
+            commitSHA: commitSHA,
+            drive: { _ in Self.driveResult(specs: specs, observedLocale: "en-US") }
+        )
+        let ko = try Fixture(
+            specs: specs,
+            executableData: executableData,
+            commitSHA: commitSHA,
+            drive: { _ in Self.driveResult(specs: specs, observedLocale: "ko-KR") }
+        )
+        let matrix = FileManager.default.temporaryDirectory
+            .appendingPathComponent("public-matrix-private-\(UUID())", isDirectory: true)
+        do {
+            try #require((await en.runQualification(mutateOpenProject: false)).exitCode == 0)
+            let koResult = await ko.runner.run(arguments: [
+                "LogicProMCP", "--qualify",
+                "--out", ko.attestationURL.path,
+                "--release-version", "1.2.3",
+                "--locale", "ko",
+            ])
+            try #require(koResult.exitCode == 0, "\(koResult.stdout)\(koResult.stderr)")
+            try FileManager.default.createDirectory(at: matrix, withIntermediateDirectories: false)
+            try FileManager.default.copyItem(at: en.directory, to: matrix.appendingPathComponent("en"))
+            try FileManager.default.copyItem(at: ko.directory, to: matrix.appendingPathComponent("ko"))
+            let input = QualificationMatrixInput(
+                schema: QualificationMatrixInput.currentSchema,
+                runs: [.init(path: "en"), .init(path: "ko")]
+            )
+            try QualificationPublicEvidence.encode(input).write(
+                to: matrix.appendingPathComponent("qualification-matrix-input.json")
+            )
+            let signing = QualificationRunner.signTrustedMatrix(
+                candidateURL: en.executableURL,
+                matrixURL: matrix,
+                releaseVersion: "1.2.3",
+                expectedCommitSHA: commitSHA,
+                signingPrivateKeyData: en.signingKeyData,
+                requiredArtifacts: [],
+                requiredOperationIDs: en.requiredOperationIDs
+            )
+            try #require(signing.exitCode == 0, "\(signing.stdout)\(signing.stderr)")
+            return (en, ko, matrix, try publicEvidenceDirectory(en))
+        } catch {
+            en.remove()
+            ko.remove()
+            try? FileManager.default.removeItem(at: matrix)
+            throw error
+        }
+    }
+
+    @Test func publicMatrixExportValidatesAndProjectsTheCompletePrivateMatrix() async throws {
+        let fixture = try await preparedPublicMatrix()
+        defer {
+            fixture.en.remove()
+            fixture.ko.remove()
+            try? FileManager.default.removeItem(at: fixture.matrix)
+            try? FileManager.default.removeItem(at: fixture.publicDirectory)
+        }
+        let key = try Curve25519.Signing.PrivateKey(
+            rawRepresentation: fixture.en.signingKeyData
+        )
+        let exported = try QualificationRunner.exportPublicMatrixEvidence(
+            candidate: fixture.en.executableURL,
+            matrix: fixture.matrix,
+            directory: fixture.publicDirectory,
+            version: "1.2.3",
+            commit: fixture.en.commitSHA,
+            key: key,
+            requiredArtifacts: [],
+            requiredOperationIDs: fixture.en.requiredOperationIDs
+        )
+        try #require(exported.exitCode == 0, "\(exported.stdout)\(exported.stderr)")
+
+        let verified = QualificationRunner.runTrusted(arguments: [
+            "trusted-verifier", "verify-public-matrix",
+            "--public-directory", fixture.publicDirectory.path,
+            "--release-version", "1.2.3",
+            "--expected-commit", fixture.en.commitSHA,
+        ], environment: [
+            "LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY": fixture.en.trustedPublicKeyData
+                .base64EncodedString(),
+        ])
+        #expect(verified.exitCode == 0, "\(verified.stdout)\(verified.stderr)")
+        let evidenceData = try Data(contentsOf: fixture.publicDirectory.appendingPathComponent(
+            QualificationPublicEvidence.filename
+        ))
+        let payload = try QualificationPublicMatrixEvidence.verify(
+            evidenceData,
+            trustedKey: fixture.en.trustedPublicKeyData
+        )
+        let privateMatrix = try Data(contentsOf: fixture.matrix.appendingPathComponent(
+            "release-qualification-matrix.json"
+        ))
+        #expect(payload.privateMatrixSHA256 == SupportBundleBuilder.sha256(privateMatrix))
+        #expect(Set(payload.runs.map(\.axis)) == Set(QualificationAxis.requiredAxes(
+            profile: .core,
+            cache: .cold,
+            fixture: .empty
+        )))
+        let encodedPayload = String(
+            decoding: try QualificationPublicEvidence.encode(payload),
+            as: UTF8.self
+        )
+        #expect(!encodedPayload.contains(fixture.matrix.path))
+        #expect(!encodedPayload.contains("\"path\":\"en\""))
+        #expect(!encodedPayload.contains("\"path\":\"ko\""))
+
+        try Data("replacement".utf8).write(
+            to: fixture.publicDirectory.appendingPathComponent("LogicProMCP")
+        )
+        let substituted = QualificationRunner.runTrusted(arguments: [
+            "trusted-verifier", "verify-public-matrix",
+            "--public-directory", fixture.publicDirectory.path,
+            "--release-version", "1.2.3",
+            "--expected-commit", fixture.en.commitSHA,
+        ], environment: [
+            "LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY": fixture.en.trustedPublicKeyData
+                .base64EncodedString(),
+        ])
+        #expect(substituted.exitCode != 0)
+    }
+
+    @Test func publicMatrixExportRefusesDestinationInsidePrivateMatrix() async throws {
+        let fixture = try await preparedPublicMatrix()
+        defer {
+            fixture.en.remove()
+            fixture.ko.remove()
+            try? FileManager.default.removeItem(at: fixture.matrix)
+            try? FileManager.default.removeItem(at: fixture.publicDirectory)
+        }
+        let nested = fixture.matrix.appendingPathComponent("public", isDirectory: true)
+        try FileManager.default.moveItem(at: fixture.publicDirectory, to: nested)
+        let result = try QualificationRunner.exportPublicMatrixEvidence(
+            candidate: fixture.en.executableURL,
+            matrix: fixture.matrix,
+            directory: nested,
+            version: "1.2.3",
+            commit: fixture.en.commitSHA,
+            key: Curve25519.Signing.PrivateKey(rawRepresentation: fixture.en.signingKeyData),
+            requiredArtifacts: [],
+            requiredOperationIDs: fixture.en.requiredOperationIDs
+        )
+        #expect(result.exitCode != 0)
+        #expect(!FileManager.default.fileExists(atPath: nested.appendingPathComponent(
+            QualificationPublicEvidence.filename
+        ).path))
+    }
+
+    @Test func publicMatrixProjectsTheSameChildManifestSnapshotsItValidated() async throws {
+        let fixture = try await preparedPublicMatrix()
+        defer {
+            fixture.en.remove()
+            fixture.ko.remove()
+            try? FileManager.default.removeItem(at: fixture.matrix)
+            try? FileManager.default.removeItem(at: fixture.publicDirectory)
+        }
+        let manifest = fixture.matrix.appendingPathComponent("en/evidence-manifest.json")
+        let originalManifest = try Data(contentsOf: manifest)
+        let originalDigest = SupportBundleBuilder.sha256(originalManifest)
+        let replacement = Data("unvalidated replacement".utf8)
+        let result = try QualificationRunner.exportPublicMatrixEvidence(
+            candidate: fixture.en.executableURL,
+            matrix: fixture.matrix,
+            directory: fixture.publicDirectory,
+            version: "1.2.3",
+            commit: fixture.en.commitSHA,
+            key: Curve25519.Signing.PrivateKey(rawRepresentation: fixture.en.signingKeyData),
+            requiredArtifacts: [],
+            requiredOperationIDs: fixture.en.requiredOperationIDs,
+            beforeProjection: {
+                try? replacement.write(to: manifest, options: .atomic)
+            }
+        )
+        try #require(result.exitCode == 0, "\(result.stdout)\(result.stderr)")
+        let publicData = try Data(contentsOf: fixture.publicDirectory.appendingPathComponent(
+            QualificationPublicEvidence.filename
+        ))
+        let payload = try QualificationPublicMatrixEvidence.verify(
+            publicData,
+            trustedKey: fixture.en.trustedPublicKeyData
+        )
+        let en = try #require(payload.runs.first { $0.axis.locale == .enUS })
+        #expect(en.payload.privateManifestSHA256 == originalDigest)
+        #expect(SupportBundleBuilder.sha256(try Data(contentsOf: manifest))
+            == SupportBundleBuilder.sha256(replacement))
+    }
+
+    @Test func publicMatrixCLIExportsAndVerifiesFullyQualifiedRequiredArtifacts() async throws {
+        let sentinel = FileManager.default.temporaryDirectory
+            .appendingPathComponent("public-matrix-candidate-executed-\(UUID())")
+        let en = try trustedFixture(
+            candidateExecutionSentinelURL: sentinel,
+            includeAxisWaivers: false
+        )
+        let ko = try trustedFixture(
+            candidateExecutionSentinelURL: sentinel,
+            observedLocale: .koKR,
+            includeAxisWaivers: false
+        )
+        let matrix = FileManager.default.temporaryDirectory
+            .appendingPathComponent("public-matrix-cli-\(UUID())", isDirectory: true)
+        defer {
+            en.remove()
+            ko.remove()
+            try? FileManager.default.removeItem(at: matrix)
+            try? FileManager.default.removeItem(at: sentinel)
+        }
+        let enResult = await en.runQualification(
+            waiversURL: en.waiversURL,
+            locale: .enUS
+        )
+        let koResult = await ko.runQualification(
+            waiversURL: ko.waiversURL,
+            locale: .koKR
+        )
+        try #require(enResult.exitCode == 0, "\(enResult.stdout)\(enResult.stderr)")
+        try #require(koResult.exitCode == 0, "\(koResult.stdout)\(koResult.stderr)")
+        try FileManager.default.createDirectory(at: matrix, withIntermediateDirectories: false)
+        try FileManager.default.copyItem(at: en.directory, to: matrix.appendingPathComponent("en"))
+        try FileManager.default.copyItem(at: ko.directory, to: matrix.appendingPathComponent("ko"))
+        try QualificationPublicEvidence.encode(QualificationMatrixInput(
+            schema: QualificationMatrixInput.currentSchema,
+            runs: [.init(path: "en"), .init(path: "ko")]
+        )).write(to: matrix.appendingPathComponent("qualification-matrix-input.json"))
+        let signing = QualificationRunner.signTrustedMatrix(
+            candidateURL: en.executableURL,
+            matrixURL: matrix,
+            releaseVersion: "1.2.3",
+            expectedCommitSHA: en.commitSHA,
+            signingPrivateKeyData: en.signingKeyData
+        )
+        try #require(signing.exitCode == 0, "\(signing.stdout)\(signing.stderr)")
+        let directory = try publicEvidenceDirectory(en)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let environment = [
+            "LOGIC_PRO_MCP_QUALIFICATION_SIGNING_KEY": en.signingKeyData.base64EncodedString(),
+            "LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY": en.trustedPublicKeyData.base64EncodedString(),
+        ]
+        let exported = QualificationRunner.runTrusted(arguments: [
+            "trusted-verifier", "export-public-matrix",
+            "--candidate", en.executableURL.path,
+            "--matrix-index", matrix.appendingPathComponent("qualification-matrix-input.json").path,
+            "--public-directory", directory.path,
+            "--release-version", "1.2.3",
+            "--expected-commit", en.commitSHA,
+        ], environment: environment)
+        try #require(exported.exitCode == 0, "\(exported.stdout)\(exported.stderr)")
+        let verified = QualificationRunner.runTrusted(arguments: [
+            "trusted-verifier", "verify-public-matrix",
+            "--public-directory", directory.path,
+            "--release-version", "1.2.3",
+            "--expected-commit", en.commitSHA,
+        ], environment: environment)
+        #expect(verified.exitCode == 0, "\(verified.stdout)\(verified.stderr)")
+        #expect(!FileManager.default.fileExists(atPath: sentinel.path))
     }
 
     @Test func publicEvidenceAcceptsBoundArtifactsWithoutDisclosingPrivatePaths() async throws {
@@ -8493,11 +8887,21 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
     private func trustedFixture(
         specs: [OperationSpec] = OperationRegistry.specs,
         candidateExecutionSentinelURL: URL? = nil,
-        includeRequiredAtlas: Bool = true
+        includeRequiredAtlas: Bool = true,
+        observedLocale: QualificationLocale = .enUS,
+        includeAxisWaivers: Bool = true
     ) throws -> Fixture {
         let driveResult = Self.driveResult(
             specs: specs,
+            observedLocale: observedLocale.rawValue,
             mutationRestoreRecords: [Self.recipeShapedRecord()]
+        )
+        let observedAxis = QualificationAxis(
+            variant: .desktop,
+            locale: observedLocale,
+            profile: .core,
+            cache: .cold,
+            fixture: .empty
         )
         let executableData: Data
         if let candidateExecutionSentinelURL {
@@ -8523,14 +8927,20 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                     affectedCapability: "operation:\(spec.id.rawValue)"
                 )
         }
-        try JSONEncoder().encode(operationWaivers + Self.axisWaivers())
+        let waivers = operationWaivers + (includeAxisWaivers
+            ? Self.axisWaivers(observedAxis: observedAxis)
+            : [])
+        try JSONEncoder().encode(waivers)
             .write(to: fixture.waiversURL)
         if includeRequiredAtlas {
             // Controlled archived roots, not a native capture. Current version comes from
             // the same injected drive that establishes this fixture's independent host.
-            let pairs = try Self.atlasProducerVersionPairs(driveResult.logicProVersion)
+            let pairs = try Self.atlasProducerVersionPairs(
+                driveResult.logicProVersion,
+                locale: observedLocale
+            )
             let atlas = try #require(AtlasQualification.evidenceCaseFor(armed: true,
-                pairs: pairs, axis: .defaultAxis, binarySHA256: fixture.binarySHA256,
+                pairs: pairs, axis: observedAxis, binarySHA256: fixture.binarySHA256,
                 traceID: "trusted-required-atlas-fixture"))
             #expect(atlas.qualificationCase.status == .passed)
             #expect(atlas.qualificationCase.verified)
@@ -9724,12 +10134,14 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         ///   silent default of every fixture.
         func runQualification(
             waiversURL: URL? = nil,
-            mutateOpenProject: Bool = true
+            mutateOpenProject: Bool = true,
+            locale: QualificationLocale = .enUS
         ) async -> QualificationCommandResult {
             var arguments = [
                 "LogicProMCP", "--qualify",
                 "--out", attestationURL.path,
                 "--release-version", "1.2.3",
+                "--locale", locale == .koKR ? "ko" : "en",
             ]
             if mutateOpenProject {
                 arguments.append("--mutate-open-project")
