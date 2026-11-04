@@ -529,6 +529,93 @@ struct QualificationRunnerTests {
         #expect(cause.contains("inverse and cleanup withheld"))
     }
 
+    private final class CleanupSleepProbe: @unchecked Sendable {
+        private let lock = NSLock()
+        private var delaysStorage: [TimeInterval] = []
+
+        func record(_ delay: TimeInterval) {
+            lock.lock()
+            delaysStorage.append(delay)
+            lock.unlock()
+        }
+
+        var delays: [TimeInterval] {
+            lock.lock()
+            defer { lock.unlock() }
+            return delaysStorage
+        }
+    }
+
+    @Test(
+        "name cleanup waits for exact abandoned-holder grace and restores the same track",
+        arguments: [OperationID.tracksRename, .editUndo, .editRedo]
+    )
+    func nameCleanupWaitsForExactAbandonedHolderGrace(operation: OperationID) throws {
+        let fixture = try SlowHandshakeFixture(
+            nameRecipe: operation,
+            nameCleanupContention: "reclaimable")
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
+        let probe = CleanupSleepProbe()
+        let marker = fixture.directory.appendingPathComponent("gate-reclaimed")
+
+        let result = try QualificationTransport(
+            handshakeTimeout: 2,
+            requestTimeout: 2,
+            shutdownGrace: 2,
+            cleanupSleep: { delay in
+                probe.record(delay)
+                try? Data().write(to: marker)
+            }
+        ).drive(.init(
+            executableURL: fixture.executableURL,
+            environment: ["HANDSHAKE_DELAY": "0"],
+            expectedOperationCount: 0,
+            operations: [spec]))
+
+        if operation == .editUndo {
+            #expect(result.operationResults[operation.rawValue]?.status == .passed)
+        } else {
+            #expect(result.operationResults[operation.rawValue]?.status == .notQualified)
+        }
+        #expect(probe.delays == [0.25])
+        let residual = try String(
+            contentsOf: fixture.directory.appendingPathComponent("track-name"),
+            encoding: .utf8
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        #expect(residual == "Before")
+        #expect(!FileManager.default.fileExists(
+            atPath: fixture.directory.appendingPathComponent("unsafe-writes").path))
+    }
+
+    @Test("name cleanup does not wait for contention without exact reclaim proof")
+    func nameCleanupDoesNotWaitWithoutExactReclaimProof() throws {
+        let fixture = try SlowHandshakeFixture(
+            nameRecipe: .tracksRename,
+            nameCleanupContention: "unproven")
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .tracksRename })
+        let probe = CleanupSleepProbe()
+
+        _ = try QualificationTransport(
+            handshakeTimeout: 2,
+            requestTimeout: 2,
+            shutdownGrace: 2,
+            cleanupSleep: { probe.record($0) }
+        ).drive(.init(
+            executableURL: fixture.executableURL,
+            environment: ["HANDSHAKE_DELAY": "0"],
+            expectedOperationCount: 0,
+            operations: [spec]))
+
+        #expect(probe.delays.isEmpty)
+        let residual = try String(
+            contentsOf: fixture.directory.appendingPathComponent("track-name"),
+            encoding: .utf8
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        #expect(residual == "qualification_phase_b_probe")
+    }
+
     @Test(arguments: [OperationID.mixerSetPan, .mixerSetVolume])
     func mixerScalarRecipesUseTheirExactTrackReadback(operation: OperationID) throws {
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
@@ -8985,6 +9072,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
              libraryReadback: Bool = false,
              initialTransportMotion: String = "stopped", cachedTransport: Bool = false,
              nameRecipe: OperationID? = nil, nameIdentityFault: String = "none",
+             nameCleanupContention: String = "none",
              countInCycle: String? = nil, autopunchCycle: String? = nil,
              playheadStep: OperationID? = nil, playheadFault: String = "none", playheadAtBoundary: Bool = false,
              playheadOrigin: String? = nil, valueCycle: OperationID? = nil,
@@ -9037,6 +9125,8 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                 position=1
                 name_recipe=none
                 name_fault=none
+                name_cleanup_contention=none
+                rename_attempts=0
                 count_in_cycle=none
                 count_in=false
                 count_in_reads=0
@@ -9058,6 +9148,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                 printf '%s\n' "$scalar_value" > scalar-value
                 printf '%s\n' "$step_position" > step-position
                 track_name='Before'
+                printf '%s\n' "$track_name" > track-name
                 track_ref=held-track
                 peer_name='Other'
                 peer_ref=peer-track
@@ -9332,6 +9423,29 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                         printf '%s\n' "$count_in" > count_in
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true}"}]}}\n' "$id" ;;
                       *'"command":"rename"'*|*'"command":"undo"'*|*'"command":"redo"'*)
+                        if [ "$name_cleanup_contention" != none ] && [ "$name_recipe" = edit.redo ] && [ "$rename_attempts" = 1 ]; then
+                            case "$request" in
+                              *'"command":"undo"'*)
+                                printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"operation_timeout\\",\\"write_attempted\\":true}"}]}}\n' "$id"
+                                continue ;;
+                            esac
+                        fi
+                        case "$request" in
+                          *'"command":"rename"'*)
+                            rename_attempts=$((rename_attempts + 1))
+                            if [ "$name_cleanup_contention" != none ] && [ "$rename_attempts" = 2 ]; then
+                                printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"operation_timeout\\",\\"write_attempted\\":true}"}]}}\n' "$id"
+                                continue
+                            fi
+                            if [ "$name_cleanup_contention" != none ] && [ "$rename_attempts" -ge 3 ] && [ ! -f gate-reclaimed ]; then
+                                if [ "$name_cleanup_contention" = reclaimable ]; then
+                                    printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"mutating_operation_in_progress\\",\\"safe_to_retry\\":true,\\"write_attempted\\":false,\\"mutation_gate\\":\\"reclaimable_after_grace\\",\\"gate_reclaim_after_sec\\":0.25}"}]}}\n' "$id"
+                                else
+                                    printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"mutating_operation_in_progress\\",\\"safe_to_retry\\":true,\\"write_attempted\\":false}"}]}}\n' "$id"
+                                fi
+                                continue
+                            fi ;;
+                        esac
                         if [ "$fault_consumed" = true ]; then
                             case "$request" in
                               *'"command":"rename"'*'"target_ref":"held-track"'*)
@@ -9346,6 +9460,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                           *'"command":"rename"'*)
                             if printf '%s' "$request" | grep -q 'qualification_phase_b_probe'; then track_name=qualification_phase_b_probe
                             else track_name=Before; fi
+                            printf '%s\n' "$track_name" > track-name
                             [ "$name_recipe" = tracks.rename ] && [ "$name_fault" != none ] && [ "$fault_consumed" = false ] && fault_pending=true ;;
                           *'"command":"undo"'*) track_name=Before
                             [ "$name_recipe" = edit.undo ] && [ "$name_fault" != none ] && [ "$fault_consumed" = false ] && fault_pending=true ;;
@@ -9400,6 +9515,9 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                 if let nameRecipe {
                     script = script.replacingOccurrences(of: "name_recipe=none", with: "name_recipe=\(nameRecipe.rawValue)")
                         .replacingOccurrences(of: "name_fault=none", with: "name_fault=\(nameIdentityFault)")
+                        .replacingOccurrences(
+                            of: "name_cleanup_contention=none",
+                            with: "name_cleanup_contention=\(nameCleanupContention)")
                 }
                 if let valueCycle {
                     script = script.replacingOccurrences(

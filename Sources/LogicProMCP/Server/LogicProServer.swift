@@ -144,6 +144,11 @@ final class LogicMutationGate: @unchecked Sendable {
         let operation: String
     }
 
+    struct ContentionSnapshot: Equatable, Sendable {
+        let operation: String
+        let timedOutReclaimAfter: TimeInterval?
+    }
+
     private let lock = NSLock()
     private var activeOperation: String?
     private var acquiredAt: Date?
@@ -280,6 +285,25 @@ final class LogicMutationGate: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         return activeOperation
+    }
+
+    /// A single locked view of the holder that refused a successor. The reclaim delay is present
+    /// only after the deadline has explicitly abandoned that holder; a healthy long-running
+    /// operation must never be advertised as a short-grace retry opportunity.
+    func contentionSnapshot(now: Date = Date()) -> ContentionSnapshot? {
+        lock.lock()
+        defer { lock.unlock() }
+        guard let operation = activeOperation else { return nil }
+        guard let timedOutAt,
+              timedOutReclaimGrace.isFinite, timedOutReclaimGrace >= 0 else {
+            return ContentionSnapshot(operation: operation, timedOutReclaimAfter: nil)
+        }
+        let elapsed = now.timeIntervalSince(timedOutAt)
+        guard elapsed.isFinite else {
+            return ContentionSnapshot(operation: operation, timedOutReclaimAfter: nil)
+        }
+        let remaining = min(timedOutReclaimGrace, max(0, timedOutReclaimGrace - elapsed))
+        return ContentionSnapshot(operation: operation, timedOutReclaimAfter: remaining)
     }
 
     /// Whether `claim` STILL owns the gate: its epoch matches and a holder is
@@ -796,27 +820,34 @@ actor LogicProServer {
     static func mutationInProgressResult(
         tool: String,
         command: String,
-        activeOperation: String?
+        activeOperation: String?,
+        gateReclaimAfterSeconds: Double? = nil
     ) -> CallTool.Result {
         let operation = operationName(tool: tool, command: command)
+        var extras: [String: Any] = [
+            "operation": operation,
+            "active_operation": activeOperation as Any? ?? NSNull(),
+            // No write was attempted (the gate refused before dispatch), so
+            // the caller can safely retry once the in-flight op releases the
+            // gate — matching the sibling `verified_op_in_progress` and the
+            // HonestContract `safe_to_retry` semantics (write_attempted:false).
+            "safe_to_retry": true,
+            "write_attempted": false,
+            "terminal": true,
+            "terminal_scope": "mcp_request_only",
+            "human_intervention_required": false,
+            "human_intervention_requests": 0,
+            "human_dependent_transitions": 0,
+        ]
+        if let gateReclaimAfterSeconds,
+           gateReclaimAfterSeconds.isFinite, gateReclaimAfterSeconds >= 0 {
+            extras["mutation_gate"] = "reclaimable_after_grace"
+            extras["gate_reclaim_after_sec"] = gateReclaimAfterSeconds
+        }
         let body = HonestContract.encodeStateC(
             error: .mutatingOperationInProgress,
             hint: "\(operation) refused because a previous mutating Logic operation has not finished yet.",
-            extras: [
-                "operation": operation,
-                "active_operation": activeOperation as Any? ?? NSNull(),
-                // No write was attempted (the gate refused before dispatch), so
-                // the caller can safely retry once the in-flight op releases the
-                // gate — matching the sibling `verified_op_in_progress` and the
-                // HonestContract `safe_to_retry` semantics (write_attempted:false).
-                "safe_to_retry": true,
-                "write_attempted": false,
-                "terminal": true,
-                "terminal_scope": "mcp_request_only",
-                "human_intervention_required": false,
-                "human_intervention_requests": 0,
-                "human_dependent_transitions": 0,
-            ]
+            extras: extras
         )
         return toolTextResult(body, isError: true)
     }
@@ -893,10 +924,12 @@ actor LogicProServer {
         }
         if (isMutatingCommand(tool: tool, command: command) || ownedObservationRead), let mutationGate {
             guard let claim = mutationGate.tryAcquire(operation: operation) else {
+                let contention = mutationGate.contentionSnapshot()
                 return mutationInProgressResult(
                     tool: tool,
                     command: command,
-                    activeOperation: mutationGate.currentOperation()
+                    activeOperation: contention?.operation,
+                    gateReclaimAfterSeconds: contention?.timedOutReclaimAfter
                 )
             }
             heldMutationGate = mutationGate

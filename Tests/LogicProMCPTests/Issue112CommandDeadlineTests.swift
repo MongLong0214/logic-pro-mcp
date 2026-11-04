@@ -186,6 +186,10 @@ struct Issue112CommandDeadlineTests {
         #expect(refusal["human_intervention_requests"] as? Int == 0)
         #expect(refusal["human_dependent_transitions"] as? Int == 0)
         #expect(!(try #require(refusal["write_attempted"] as? Bool)))
+        #expect(refusal["mutation_gate"] as? String == "reclaimable_after_grace")
+        let reclaimAfter = try #require(refusal["gate_reclaim_after_sec"] as? Double)
+        #expect(reclaimAfter >= 0)
+        #expect(reclaimAfter <= 3_600)
 
         blocker.unblock()
         await runner.value
@@ -337,6 +341,28 @@ struct Issue112CommandDeadlineTests {
         #expect(gate.tryAcquire(operation: "logic_tracks.mute", now: t0.addingTimeInterval(16)) == nil)
         // Only the full stale TTL reclaims a healthy long-running holder.
         #expect(gate.tryAcquire(operation: "logic_tracks.mute", now: t0.addingTimeInterval(361)) != nil)
+    }
+
+    @Test("healthy holder contention does not advertise timeout reclaim grace")
+    func healthyHolderContentionOmitsTimeoutReclaimGrace() async throws {
+        let gate = LogicMutationGate(staleHolderTTL: 360, timedOutReclaimGrace: 15)
+        let first = try #require(gate.tryAcquire(operation: "logic_project.bounce"))
+
+        let refused = await LogicProServer.runWithDeadline(
+            tool: "logic_tracks",
+            command: "rename",
+            deadlineOverride: 1,
+            mutationGate: gate
+        ) {
+            toolTextResult("{\"unexpected\":true}")
+        }
+
+        let envelope = try #require(json(refused))
+        #expect(envelope["error"] as? String == "mutating_operation_in_progress")
+        #expect(envelope["active_operation"] as? String == "logic_project.bounce")
+        #expect(envelope["mutation_gate"] == nil)
+        #expect(envelope["gate_reclaim_after_sec"] == nil)
+        gate.release(first)
     }
 
     @Test("a timed-out mutating deadline result advertises bounded gate reclaim")
