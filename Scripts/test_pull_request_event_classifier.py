@@ -32,8 +32,8 @@ CI = os.path.join(REPO, ".github", "workflows", "ci.yml")
 
 REQUIRED_CONTEXTS = ("build", "compile", "test")
 AGGREGATE_JOBS = (
-    "guards", "offline-guards", "compile", "test-build", "test-shards", "test-coverage",
-    "test", "formula",
+    "guards", "offline-guards", "compile-platform", "compile", "test-build", "test-shards",
+    "test-coverage", "test", "formula",
 )
 SETUP_PYTHON_SHA = "a26af69be951a213d495a4c3e4e4022e16d87065"
 UPLOAD_ARTIFACT_SHA = "ea165f8d65b6e75b540449e92b4886f43607fa02"
@@ -220,7 +220,7 @@ class WorkflowWiring(unittest.TestCase):
         self.assertIn("run-helper-suites.py", guards)
 
     def test_swift_cache_excludes_build_products(self):
-        for job in ("compile", "test-build", "test-shards"):
+        for job in ("compile-platform", "test-build", "test-shards"):
             with self.subTest(job=job):
                 block = self.jobs[job]
                 cache = re.search(r"(?ms)      - name: Cache SwiftPM downloads\n.*?(?=      - name:|\Z)", block)
@@ -232,14 +232,21 @@ class WorkflowWiring(unittest.TestCase):
                 self.assertIn("Package.resolved", cache_block)
 
     def test_release_compile_and_verified_shards_cap_hosted_macos_at_two(self):
-        compile_job = self.jobs["compile"]
-        self.assertRegex(compile_job, r"(?m)^    needs: offline-guards$")
+        platform = self.jobs["compile-platform"]
+        self.assertRegex(platform, r"(?m)^    needs: offline-guards$")
         self.assertRegex(
-            compile_job,
+            platform,
             r"(?m)^    if: \$\{\{ !cancelled\(\) && needs\.offline-guards\.result != 'cancelled' \}\}$",
         )
-        self.assertRegex(compile_job, r"(?m)^    runs-on: macos-15$")
-        self.assertIn("swift build -c release", compile_job)
+        self.assertRegex(platform, r"(?m)^    runs-on: macos-15$")
+        self.assertIn("swift build -c release", platform)
+
+        compile_job = self.jobs["compile"]
+        self.assertRegex(compile_job, r"(?m)^    runs-on: ubuntu-latest$")
+        self.assertRegex(compile_job, r"(?m)^    needs: \[offline-guards, compile-platform\]$")
+        self.assertRegex(compile_job, r"(?m)^    if: always\(\)$")
+        for producer in ("OFFLINE_GUARDS", "COMPILE_PLATFORM"):
+            self.assertIn(f'[ "${producer}" = "success" ]', compile_job)
 
         builder = self.jobs["test-build"]
         self.assertNotRegex(builder, r"(?m)^    needs:")
@@ -248,9 +255,11 @@ class WorkflowWiring(unittest.TestCase):
         self.assertIn(f"actions/upload-artifact@{UPLOAD_ARTIFACT_SHA}", builder)
 
         shards = self.jobs["test-shards"]
-        self.assertRegex(shards, r"(?m)^    needs: \[test-build, compile\]$")
+        self.assertRegex(shards, r"(?m)^    needs: \[test-build, compile-platform\]$")
         self.assertIn("needs.test-build.result == 'success'", shards)
-        self.assertNotIn("needs.compile.result == 'success'", shards)
+        self.assertIn("needs.compile-platform.result != 'cancelled'", shards)
+        self.assertIn("needs.compile-platform.result != 'skipped'", shards)
+        self.assertNotIn("needs.compile-platform.result == 'success'", shards)
         self.assertIn("fail-fast: false", shards)
         self.assertIn("max-parallel: 2", shards)
         self.assertIn(f"actions/download-artifact@{DOWNLOAD_ARTIFACT_SHA}", shards)
@@ -280,7 +289,7 @@ class WorkflowWiring(unittest.TestCase):
         for producer in ("TEST_BUILD", "TEST_SHARDS", "TEST_COVERAGE"):
             self.assertIn(f'[ "${producer}" = "success" ]', test)
 
-        for name in ("compile", "test-build", "test-shards", "test-coverage"):
+        for name in ("compile-platform", "test-build", "test-shards", "test-coverage"):
             with self.subTest(xcode_job=name):
                 self.assertIn("sudo xcode-select -s /Applications/Xcode_16.4.app", self.jobs[name])
 

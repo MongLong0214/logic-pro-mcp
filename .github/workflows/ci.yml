@@ -162,8 +162,8 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
-  compile:
-    name: compile
+  compile-platform:
+    name: compile-platform
     # The full test job is the 80+ minute critical path. Let the 20-minute offline guard release
     # its hosted macOS runner before requesting this 10-minute release build. This caps one PR at
     # two macOS runners without changing validation breadth or the test-dominated critical path.
@@ -216,6 +216,24 @@ jobs:
 
       - name: Verify Package.resolved is unchanged
         run: git diff --exit-code Package.resolved
+
+  compile:
+    name: compile
+    runs-on: ubuntu-latest
+    needs: [offline-guards, compile-platform]
+    # `compile` is a required context. Keep it unconditional so a cancelled/skipped macOS
+    # producer cannot satisfy branch protection without release-build evidence.
+    if: always()
+    timeout-minutes: 5
+    steps:
+      - name: Offline guards and the platform build must have passed
+        env:
+          OFFLINE_GUARDS: ${{ needs.offline-guards.result }}
+          COMPILE_PLATFORM: ${{ needs.compile-platform.result }}
+        run: |
+          echo "offline-guards=$OFFLINE_GUARDS compile-platform=$COMPILE_PLATFORM"
+          [ "$OFFLINE_GUARDS" = "success" ] || { echo "::error::offline-guards did not succeed"; exit 1; }
+          [ "$COMPILE_PLATFORM" = "success" ] || { echo "::error::compile-platform did not succeed"; exit 1; }
 
   test-build:
     name: test-build
@@ -291,8 +309,10 @@ jobs:
 
   test-shards:
     name: test-shards (${{ matrix.shard }})
-    needs: [test-build, compile]
-    if: ${{ !cancelled() && needs.test-build.result == 'success' }}
+    needs: [test-build, compile-platform]
+    # Preserve independent test evidence after an ordinary release-build failure, but do not ask
+    # for two more macOS runners when that producer was cancelled or skipped for hosted capacity.
+    if: ${{ !cancelled() && needs.test-build.result == 'success' && needs.compile-platform.result != 'cancelled' && needs.compile-platform.result != 'skipped' }}
     runs-on: macos-15
     timeout-minutes: 65
     strategy:
@@ -513,7 +533,7 @@ jobs:
   build:
     name: build
     runs-on: ubuntu-latest
-    needs: [guards, offline-guards, compile, test-build, test-shards, test-coverage, test, formula]
+    needs: [guards, offline-guards, compile-platform, compile, test-build, test-shards, test-coverage, test, formula]
     # The aggregate is also required, so cancellation must reach its explicit result checks rather
     # than turn the job into a successful skip.
     if: always()
@@ -523,6 +543,7 @@ jobs:
         env:
           GUARDS: ${{ needs.guards.result }}
           OFFLINE_GUARDS: ${{ needs.offline-guards.result }}
+          COMPILE_PLATFORM: ${{ needs.compile-platform.result }}
           COMPILE: ${{ needs.compile.result }}
           TEST_BUILD: ${{ needs.test-build.result }}
           TEST_SHARDS: ${{ needs.test-shards.result }}
@@ -530,9 +551,10 @@ jobs:
           TEST: ${{ needs.test.result }}
           FORMULA: ${{ needs.formula.result }}
         run: |
-          echo "guards=$GUARDS offline-guards=$OFFLINE_GUARDS compile=$COMPILE test-build=$TEST_BUILD test-shards=$TEST_SHARDS test-coverage=$TEST_COVERAGE test=$TEST formula=$FORMULA"
+          echo "guards=$GUARDS offline-guards=$OFFLINE_GUARDS compile-platform=$COMPILE_PLATFORM compile=$COMPILE test-build=$TEST_BUILD test-shards=$TEST_SHARDS test-coverage=$TEST_COVERAGE test=$TEST formula=$FORMULA"
           [ "$GUARDS" = "success" ] || { echo "::error::guards did not succeed"; exit 1; }
           [ "$OFFLINE_GUARDS" = "success" ] || { echo "::error::offline-guards did not succeed"; exit 1; }
+          [ "$COMPILE_PLATFORM" = "success" ] || { echo "::error::compile-platform did not succeed"; exit 1; }
           [ "$COMPILE" = "success" ] || { echo "::error::compile did not succeed"; exit 1; }
           [ "$TEST_BUILD" = "success" ] || { echo "::error::test-build did not succeed"; exit 1; }
           [ "$TEST_SHARDS" = "success" ] || { echo "::error::test-shards did not succeed"; exit 1; }
