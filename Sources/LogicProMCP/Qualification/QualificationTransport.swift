@@ -1434,12 +1434,12 @@ struct QualificationTransport: Sendable {
             let readPreparation = Self.prepareRequestedReadProbeParams(
                 requestedMixerReads: requestedMixerReads,
                 requestedPluginReads: requestedPluginReads,
-                refresh: {
+                refresh: { timeout in
                     let refreshID = nextID
                     nextID += 1
                     return try invoke(
                         session, id: refreshID, tool: "logic_system", command: "refresh_cache",
-                        params: [:], phase: "read_probe_refresh")
+                        params: [:], phase: "read_probe_refresh", timeout: timeout)
                 },
                 pluginPreparation: {
                     try Self.preparePluginReadProbeParams(
@@ -2062,6 +2062,16 @@ struct QualificationTransport: Sendable {
 
     static func operationRequestTimeout(for spec: OperationSpec) -> TimeInterval {
         spec.deadline.seconds + 5
+    }
+
+    static func readProbeRefreshTimeout() throws -> TimeInterval {
+        guard let spec = OperationRegistry.spec(
+            tool: "logic_system", command: "refresh_cache"),
+              spec.id == .systemRefreshCache else {
+            throw QualificationTransportError.protocolViolation(
+                "read_probe_refresh: operation spec unavailable")
+        }
+        return operationRequestTimeout(for: spec)
     }
 
     private func operation(
@@ -5048,14 +5058,14 @@ struct QualificationTransport: Sendable {
     static func prepareRequestedReadProbeParams(
         requestedMixerReads: Set<OperationID>,
         requestedPluginReads: Set<OperationID>,
-        refresh: () throws -> (text: String, isError: Bool),
+        refresh: (TimeInterval) throws -> (text: String, isError: Bool),
         pluginPreparation: () throws -> [OperationID: [String: Any]]
     ) -> (params: [OperationID: [String: Any]], failures: [OperationID: String]) {
         let requestedReads = requestedMixerReads.union(requestedPluginReads)
         guard !requestedReads.isEmpty else { return ([:], [:]) }
 
         do {
-            let result = try refresh()
+            let result = try refresh(try readProbeRefreshTimeout())
             guard !result.isError else {
                 throw QualificationTransportError.protocolViolation(
                     "read_probe_refresh: tool returned isError")

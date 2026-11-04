@@ -856,11 +856,13 @@ struct QualificationRunnerTests {
             "data": [["id": 3, "track_ref": "trk_first"]],
         ])
         var events: [String] = []
+        var observedRefreshTimeout: TimeInterval?
 
         let preparation = QualificationTransport.prepareRequestedReadProbeParams(
             requestedMixerReads: [.mixerGetOutputVerified],
             requestedPluginReads: [.pluginsGetHostParameterManifest],
-            refresh: {
+            refresh: { timeout in
+                observedRefreshTimeout = timeout
                 events.append("refresh")
                 return ("{\"refreshed\":true}", false)
             },
@@ -888,6 +890,11 @@ struct QualificationRunnerTests {
         )
 
         #expect(events == ["refresh", "tracks", "inventory.3"])
+        let refreshSpec = try #require(OperationRegistry.spec(
+            tool: "logic_system", command: "refresh_cache"))
+        #expect(observedRefreshTimeout
+            == QualificationTransport.operationRequestTimeout(for: refreshSpec))
+        #expect(try #require(observedRefreshTimeout) > 10)
         #expect(preparation.failures.isEmpty)
         #expect(preparation.params[.pluginsGetHostParameterManifest]?["target_ref"] as? String
             == "ins_3")
@@ -900,7 +907,7 @@ struct QualificationRunnerTests {
         let preparation = QualificationTransport.prepareRequestedReadProbeParams(
             requestedMixerReads: [.mixerGetInputBusVerified],
             requestedPluginReads: [],
-            refresh: {
+            refresh: { _ in
                 refreshCount += 1
                 return ("{\"refreshed\":false}", false)
             },
@@ -923,7 +930,7 @@ struct QualificationRunnerTests {
         let preparation = QualificationTransport.prepareRequestedReadProbeParams(
             requestedMixerReads: [],
             requestedPluginReads: [],
-            refresh: {
+            refresh: { _ in
                 refreshCount += 1
                 return ("{}", false)
             },
@@ -948,7 +955,7 @@ struct QualificationRunnerTests {
         let preparation = QualificationTransport.prepareRequestedReadProbeParams(
             requestedMixerReads: [.mixerGetSendDestinationVerified],
             requestedPluginReads: requestedPluginReads,
-            refresh: { ("{\"refreshed\":true}", false) },
+            refresh: { _ in ("{\"refreshed\":true}", false) },
             pluginPreparation: {
                 throw QualificationTransportError.malformedFrame("inventory")
             }
@@ -979,7 +986,7 @@ struct QualificationRunnerTests {
         let preparation = QualificationTransport.prepareRequestedReadProbeParams(
             requestedMixerReads: requestedMixerReads,
             requestedPluginReads: requestedPluginReads,
-            refresh: {
+            refresh: { _ in
                 if throwsRefresh {
                     throw QualificationTransportError.closedPipe(phase: "refresh")
                 }
