@@ -2,13 +2,13 @@
 # Owner-staged ADHOC release consumption. Qualification must already bind these
 # final signed bytes. This script freezes/verifies/packages them, then tags only;
 # release.yml is the sole publisher, after its same-byte and install checks.
-# The trusted verifier/anchor are operator inputs outside the candidate bundle.
+# The trusted verifier/anchor are operator inputs outside the qualification matrix.
 set -euo pipefail
 VERSION="${1:-}"
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
 DRY_RUN="${DRY_RUN:-0}"
 if [ "$#" != 4 ] || ! [[ "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[A-Za-z0-9.-]+)?$ ]]; then
-  echo "Usage: $0 vMAJOR.MINOR.PATCH[-prerelease] FINAL_CANDIDATE PRIVATE_BUNDLE TRUSTED_VERIFIER" >&2
+  echo "Usage: $0 vMAJOR.MINOR.PATCH[-prerelease] FINAL_CANDIDATE PRIVATE_MATRIX TRUSTED_VERIFIER" >&2
   exit 1
 fi
 cd "$REPO_ROOT"
@@ -35,12 +35,12 @@ trap 'rm -rf "$STAGE_DIR"' EXIT
 bash Scripts/release-consume-final.sh stage "${VERSION#v}" "$QUALIFIED" \
   "$2" "$3" "$4" "$STAGE_DIR/public"
 BINARY_SHA=$(shasum -a 256 "$STAGE_DIR/public/LogicProMCP" | awk '{print $1}')
-MANIFEST_SHA=$(cat "$STAGE_DIR/public/qualification-manifest.sha256")
+MATRIX_SHA=$(cat "$STAGE_DIR/public/qualification-matrix.sha256")
 if [ "$DRY_RUN" = 1 ]; then
   echo "DRY_RUN: verified staged bytes; no tag, push or release publication."
   exit 0
 fi
 git tag "$VERSION" -m "Release $VERSION" -m "Live-qualified: $QUALIFIED" \
-  -m "Final-candidate-SHA256: $BINARY_SHA" -m "Qualification-manifest-SHA256: $MANIFEST_SHA"
+  -m "Final-candidate-SHA256: $BINARY_SHA" -m "Qualification-matrix-SHA256: $MATRIX_SHA"
 git push origin "$VERSION"
 echo "Tag submitted. Hosted same-byte verification and install validation must pass before publication."

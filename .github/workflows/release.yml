@@ -133,9 +133,9 @@ jobs:
           bash Scripts/release-fetch-qualified-inputs.sh public "$private"
           tag_body=$(git for-each-ref --format='%(contents)' "refs/tags/$GITHUB_REF_NAME")
           test "$(printf '%s\n' "$tag_body" | grep -c '^Final-candidate-SHA256: ')" = 1
-          test "$(printf '%s\n' "$tag_body" | grep -c '^Qualification-manifest-SHA256: ')" = 1
+          test "$(printf '%s\n' "$tag_body" | grep -c '^Qualification-matrix-SHA256: ')" = 1
           export EXPECTED_BINARY_SHA256=$(printf '%s\n' "$tag_body" | sed -n 's/^Final-candidate-SHA256: //p')
-          export EXPECTED_MANIFEST_SHA256=$(printf '%s\n' "$tag_body" | sed -n 's/^Qualification-manifest-SHA256: //p')
+          export EXPECTED_MATRIX_SHA256=$(printf '%s\n' "$tag_body" | sed -n 's/^Qualification-matrix-SHA256: //p')
           export LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY="$TRUSTED_QUALIFICATION_PUBLIC_KEY"
           bash Scripts/release-consume-final.sh verify-public "${GITHUB_REF_NAME#v}" "$GITHUB_SHA" \
             "$private/LogicProMCP" "$private/bundle" \
@@ -251,9 +251,9 @@ jobs:
           git fetch --quiet --no-tags --depth=1 origin "+refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
           tag_body=$(git for-each-ref --format='%(contents)' "refs/tags/$GITHUB_REF_NAME")
           test "$(printf '%s\n' "$tag_body" | grep -c '^Final-candidate-SHA256: ')" = 1
-          test "$(printf '%s\n' "$tag_body" | grep -c '^Qualification-manifest-SHA256: ')" = 1
+          test "$(printf '%s\n' "$tag_body" | grep -c '^Qualification-matrix-SHA256: ')" = 1
           export EXPECTED_BINARY_SHA256=$(printf '%s\n' "$tag_body" | sed -n 's/^Final-candidate-SHA256: //p')
-          export EXPECTED_MANIFEST_SHA256=$(printf '%s\n' "$tag_body" | sed -n 's/^Qualification-manifest-SHA256: //p')
+          export EXPECTED_MATRIX_SHA256=$(printf '%s\n' "$tag_body" | sed -n 's/^Qualification-matrix-SHA256: //p')
           export LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY="$TRUSTED_QUALIFICATION_PUBLIC_KEY"
           bash Scripts/release-consume-final.sh verify-public "${GITHUB_REF_NAME#v}" "$GITHUB_SHA" \
             "$PWD/LogicProMCP" "$private/bundle" \

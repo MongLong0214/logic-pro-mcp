@@ -114,6 +114,10 @@ import Testing
     #expect(!workflow.contains("Codesign binary (ADHOC)"))
     #expect(!workflow.contains("codesign --force"))
     #expect(workflow.contains("bash Scripts/release-consume-final.sh verify-public"))
+    #expect(workflow.contains("Qualification-matrix-SHA256: "))
+    #expect(workflow.contains("EXPECTED_MATRIX_SHA256"))
+    #expect(!workflow.contains("Qualification-manifest-SHA256: "))
+    #expect(!workflow.contains("EXPECTED_MANIFEST_SHA256"))
     #expect(workflow.contains("bash Scripts/release-verify-formula-install-paths.sh"))
     #expect(workflow.contains("validate-install"))
     #expect(workflow.contains("macos-15"))
@@ -304,16 +308,23 @@ import Testing
 
 @Test func testLocalReleaseScriptSupportsStableAdhocAndFailsClosedOnRemoteCheck() throws {
     let script = try scriptContents("Scripts/release.sh")
+    let consumer = try scriptContents("Scripts/release-consume-final.sh")
 
     #expect(script.contains("Owner-staged ADHOC release consumption"))
-    #expect(script.contains("FINAL_CANDIDATE PRIVATE_BUNDLE TRUSTED_VERIFIER"))
+    #expect(script.contains("FINAL_CANDIDATE PRIVATE_MATRIX TRUSTED_VERIFIER"))
     #expect(!script.contains("refuses stable tags"))
     #expect(!script.contains("There is intentionally no override"))
     #expect(!script.contains("LOGIC_PRO_MCP_ALLOW_ADHOC_STABLE"))
     #expect(script.contains("set -euo pipefail"))
     #expect(script.contains("REMOTE_TAGS=$(git ls-remote --tags origin \"$VERSION\")"))
     #expect(script.contains("Final-candidate-SHA256: $BINARY_SHA"))
-    #expect(script.contains("Qualification-manifest-SHA256: $MANIFEST_SHA"))
+    #expect(script.contains("Qualification-matrix-SHA256: $MATRIX_SHA"))
+    #expect(!script.contains("Qualification-manifest-SHA256: "))
+    #expect(consumer.contains("verify-matrix --candidate"))
+    #expect(consumer.contains("verify-public-matrix --public-directory"))
+    #expect(consumer.contains("release-qualification-matrix.json"))
+    #expect(consumer.contains("EXPECTED_MATRIX_SHA256"))
+    #expect(!consumer.contains("EXPECTED_MANIFEST_SHA256"))
     #expect(!script.contains("gh release create"))
 }
 

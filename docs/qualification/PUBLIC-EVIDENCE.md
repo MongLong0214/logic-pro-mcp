@@ -1,14 +1,14 @@
 # Public qualification evidence
 
-`trusted-verifier export-public` derives `qualification-public.json` from an
-accepted signed private bundle and the final executable plus both existing
+`trusted-verifier export-public-matrix` derives `qualification-public.json` from an
+accepted signed private qualification matrix and the final executable plus both existing
 release archives. It reuses the operator's existing qualification signing key.
-The private bundle and public directory must be separate, without either
+The private matrix and public directory must be separate, without either
 containing the other. An existing public evidence file is never overwritten.
 
-The public file authenticates source/version/axis, the executable and archive
+The public file authenticates source/version/all required axes, the executable and archive
 digests, archive executable membership, case dispositions, waiver metadata and
-the private evidence inventory's digests. Raw requests/readbacks, filesystem
+every signed child attestation digest plus the exact private matrix root. Raw requests/readbacks, filesystem
 paths, case/run identifiers and waiver impact text remain private. Their hashes
 retain the binding. Waived cases do not become positively qualified operations.
 
@@ -17,16 +17,17 @@ then exports and verifies the public representation:
 
 ```sh
 bash Scripts/release-consume-final.sh stage "$VERSION" "$COMMIT" \
-  "$CANDIDATE" "$PRIVATE_BUNDLE" "$TRUSTED_VERIFIER" "$PUBLIC_DIRECTORY"
-"$TRUSTED_VERIFIER" export-public --candidate "$CANDIDATE" \
-  --bundle "$PRIVATE_BUNDLE" --public-directory "$PUBLIC_DIRECTORY" \
+  "$CANDIDATE" "$PRIVATE_MATRIX" "$TRUSTED_VERIFIER" "$PUBLIC_DIRECTORY"
+"$TRUSTED_VERIFIER" export-public-matrix --candidate "$CANDIDATE" \
+  --matrix-index "$PRIVATE_MATRIX/qualification-matrix-input.json" \
+  --public-directory "$PUBLIC_DIRECTORY" \
   --release-version "$VERSION" --expected-commit "$COMMIT"
 bash Scripts/release-consume-final.sh verify-public "$VERSION" "$COMMIT" \
-  "$CANDIDATE" "$PRIVATE_BUNDLE" "$TRUSTED_VERIFIER" "$PUBLIC_DIRECTORY"
+  "$CANDIDATE" "$PRIVATE_MATRIX" "$TRUSTED_VERIFIER" "$PUBLIC_DIRECTORY"
 ```
 
 Export requires `LOGIC_PRO_MCP_QUALIFICATION_SIGNING_KEY`, as the existing trusted
-signing command does. Signing material is not supplied by the candidate/bundle
+signing command does. Signing material is not supplied by the candidate/matrix
 and is not forwarded to the isolated archive parser. Export itself does not
 upload files or activate a release. The normal release source-member/install
 checks remain necessary; export's archive check establishes the executable
@@ -47,7 +48,7 @@ through `QUALIFICATION_PUBLIC_ASSETS_URL` and
 `QUALIFICATION_PUBLIC_ASSETS_SHA256`, alongside the existing candidate/private
 evidence inputs and separately trusted public key. Hosted jobs receive no signing
 key. They consume these exact archives without repackaging, verify the public
-signature against the accepted private manifest and axis, and derive metadata
+signature against the accepted private matrix root and every required axis, and derive metadata
 from the accepted executable. Missing, changed or mismatched evidence stops
 publication. Install validation still runs before publication.
 
@@ -62,9 +63,8 @@ archives, then runs an independently trusted verifier build:
 
 ```sh
 LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY="$AUTHENTICATED_PUBLIC_KEY" \
-  "$TRUSTED_VERIFIER" verify-public --public-directory "$DOWNLOADED_FILES" \
-  --release-version "$VERSION" --expected-commit "$COMMIT" \
-  --expected-axis desktop/en-US/core/cold/empty
+  "$TRUSTED_VERIFIER" verify-public-matrix --public-directory "$DOWNLOADED_FILES" \
+  --release-version "$VERSION" --expected-commit "$COMMIT"
 ```
 
 The key comes from an independently authenticated channel, not those downloaded
