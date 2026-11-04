@@ -261,7 +261,7 @@ class WorkflowWiring(unittest.TestCase):
 
         test = self.jobs["test"]
         self.assertRegex(test, r"(?m)^    needs: \[test-build, test-shards\]$")
-        self.assertRegex(test, r"(?m)^    if: always\(\) && !cancelled\(\)$")
+        self.assertRegex(test, r"(?m)^    if: always\(\)$")
         self.assertIn("ci-test-shard-manifest.py verify-union", test)
         self.assertIn("xcrun llvm-profdata merge -sparse", test)
         self.assertIn("bash Scripts/ci-coverage-gate.sh", test)
@@ -281,8 +281,11 @@ class WorkflowWiring(unittest.TestCase):
             with self.subTest(job=job):
                 self.assertRegex(build, rf'\[ "\${job.upper().replace("-", "_")}" = "success" \]')
 
-    def test_the_aggregate_still_refuses_to_decide_a_cancelled_run(self):
-        self.assertRegex(self.jobs["build"], r"(?m)^    if:.*!cancelled\(\)")
+    def test_required_aggregators_turn_cancelled_dependencies_into_failed_contexts(self):
+        for job in ("test", "build"):
+            with self.subTest(job=job):
+                self.assertRegex(self.jobs[job], r"(?m)^    if: always\(\)$")
+                self.assertNotIn("!cancelled()", self.jobs[job])
 
     def test_the_body_check_is_no_longer_in_the_code_workflow(self):
         self.assertNotIn("--text", self.executable)
