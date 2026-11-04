@@ -32,7 +32,8 @@ CI = os.path.join(REPO, ".github", "workflows", "ci.yml")
 
 REQUIRED_CONTEXTS = ("build", "compile", "test")
 AGGREGATE_JOBS = (
-    "guards", "offline-guards", "compile", "test-build", "test-shards", "test", "formula",
+    "guards", "offline-guards", "compile", "test-build", "test-shards", "test-coverage",
+    "test", "formula",
 )
 SETUP_PYTHON_SHA = "a26af69be951a213d495a4c3e4e4022e16d87065"
 UPLOAD_ARTIFACT_SHA = "ea165f8d65b6e75b540449e92b4886f43607fa02"
@@ -233,7 +234,10 @@ class WorkflowWiring(unittest.TestCase):
     def test_release_compile_and_verified_shards_cap_hosted_macos_at_two(self):
         compile_job = self.jobs["compile"]
         self.assertRegex(compile_job, r"(?m)^    needs: offline-guards$")
-        self.assertRegex(compile_job, r"(?m)^    if: \$\{\{ !cancelled\(\) \}\}$")
+        self.assertRegex(
+            compile_job,
+            r"(?m)^    if: \$\{\{ !cancelled\(\) && needs\.offline-guards\.result != 'cancelled' \}\}$",
+        )
         self.assertRegex(compile_job, r"(?m)^    runs-on: macos-15$")
         self.assertIn("swift build -c release", compile_job)
 
@@ -259,14 +263,24 @@ class WorkflowWiring(unittest.TestCase):
         self.assertIn("--xunit-output \"$XUNIT_DIR/results.xml\"", shards)
         self.assertIn("ci-test-shard-manifest.py verify-xunit", shards)
 
-        test = self.jobs["test"]
-        self.assertRegex(test, r"(?m)^    needs: \[test-build, test-shards\]$")
-        self.assertRegex(test, r"(?m)^    if: always\(\)$")
-        self.assertIn("ci-test-shard-manifest.py verify-union", test)
-        self.assertIn("xcrun llvm-profdata merge -sparse", test)
-        self.assertIn("bash Scripts/ci-coverage-gate.sh", test)
+        coverage = self.jobs["test-coverage"]
+        self.assertRegex(coverage, r"(?m)^    needs: \[test-build, test-shards\]$")
+        self.assertRegex(
+            coverage,
+            r"(?m)^    if: \$\{\{ !cancelled\(\) && needs\.test-build\.result == 'success' && needs\.test-shards\.result == 'success' \}\}$",
+        )
+        self.assertIn("ci-test-shard-manifest.py verify-union", coverage)
+        self.assertIn("xcrun llvm-profdata merge -sparse", coverage)
+        self.assertIn("bash Scripts/ci-coverage-gate.sh", coverage)
 
-        for name in ("compile", "test-build", "test-shards", "test"):
+        test = self.jobs["test"]
+        self.assertRegex(test, r"(?m)^    runs-on: ubuntu-latest$")
+        self.assertRegex(test, r"(?m)^    needs: \[test-build, test-shards, test-coverage\]$")
+        self.assertRegex(test, r"(?m)^    if: always\(\)$")
+        for producer in ("TEST_BUILD", "TEST_SHARDS", "TEST_COVERAGE"):
+            self.assertIn(f'[ "${producer}" = "success" ]', test)
+
+        for name in ("compile", "test-build", "test-shards", "test-coverage"):
             with self.subTest(xcode_job=name):
                 self.assertIn("sudo xcode-select -s /Applications/Xcode_16.4.app", self.jobs[name])
 
