@@ -171,7 +171,9 @@ jobs:
     # An offline-guard defect must not hide release-build defects from the same attempt.
     # A hosted-capacity cancellation has no code result and requesting another macOS runner only
     # repeats the same 15-minute acquisition failure. Ordinary guard failures still run compile.
-    if: ${{ !cancelled() && needs.offline-guards.result != 'cancelled' }}
+    # Positive allowlisting is deliberate: while GitHub's capacity manager still reports an
+    # upstream job as queued, an empty result would pass a negative `!= cancelled` test.
+    if: ${{ !cancelled() && (needs.offline-guards.result == 'success' || needs.offline-guards.result == 'failure') }}
     runs-on: macos-15
     timeout-minutes: 60
     steps:
@@ -312,7 +314,7 @@ jobs:
     needs: [test-build, compile-platform]
     # Preserve independent test evidence after an ordinary release-build failure, but do not ask
     # for two more macOS runners when that producer was cancelled or skipped for hosted capacity.
-    if: ${{ !cancelled() && needs.test-build.result == 'success' && needs.compile-platform.result != 'cancelled' && needs.compile-platform.result != 'skipped' }}
+    if: ${{ !cancelled() && needs.test-build.result == 'success' && (needs.compile-platform.result == 'success' || needs.compile-platform.result == 'failure') }}
     runs-on: macos-15
     timeout-minutes: 65
     strategy:

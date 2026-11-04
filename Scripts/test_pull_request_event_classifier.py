@@ -236,8 +236,9 @@ class WorkflowWiring(unittest.TestCase):
         self.assertRegex(platform, r"(?m)^    needs: offline-guards$")
         self.assertRegex(
             platform,
-            r"(?m)^    if: \$\{\{ !cancelled\(\) && needs\.offline-guards\.result != 'cancelled' \}\}$",
+            r"(?m)^    if: \$\{\{ !cancelled\(\) && \(needs\.offline-guards\.result == 'success' \|\| needs\.offline-guards\.result == 'failure'\) \}\}$",
         )
+        self.assertNotIn("needs.offline-guards.result !=", platform)
         self.assertRegex(platform, r"(?m)^    runs-on: macos-15$")
         self.assertIn("swift build -c release", platform)
 
@@ -257,9 +258,9 @@ class WorkflowWiring(unittest.TestCase):
         shards = self.jobs["test-shards"]
         self.assertRegex(shards, r"(?m)^    needs: \[test-build, compile-platform\]$")
         self.assertIn("needs.test-build.result == 'success'", shards)
-        self.assertIn("needs.compile-platform.result != 'cancelled'", shards)
-        self.assertIn("needs.compile-platform.result != 'skipped'", shards)
-        self.assertNotIn("needs.compile-platform.result == 'success'", shards)
+        self.assertIn("needs.compile-platform.result == 'success'", shards)
+        self.assertIn("needs.compile-platform.result == 'failure'", shards)
+        self.assertNotIn("needs.compile-platform.result !=", shards)
         self.assertIn("fail-fast: false", shards)
         self.assertIn("max-parallel: 2", shards)
         self.assertIn(f"actions/download-artifact@{DOWNLOAD_ARTIFACT_SHA}", shards)
