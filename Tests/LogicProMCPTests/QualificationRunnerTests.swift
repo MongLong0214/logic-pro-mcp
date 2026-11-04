@@ -3497,7 +3497,33 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         let privateMatrix = try Data(contentsOf: fixture.matrix.appendingPathComponent(
             "release-qualification-matrix.json"
         ))
+        let privateRoot = try JSONDecoder().decode(
+            ReleaseQualificationMatrixAttestation.self,
+            from: privateMatrix
+        )
         #expect(payload.privateMatrixSHA256 == SupportBundleBuilder.sha256(privateMatrix))
+        #expect(payload.operationCatalogSHA256 == privateRoot.operationCatalogSHA256)
+        for projectedRun in payload.runs {
+            let privateRun = try #require(privateRoot.runs.first {
+                $0.axis == projectedRun.axis
+            })
+            let childDirectory = fixture.matrix.appendingPathComponent(privateRun.path)
+            let childAttestationData = try Data(contentsOf: childDirectory.appendingPathComponent(
+                "release-qualification-attestation.json"
+            ))
+            let childAttestation = try JSONDecoder().decode(
+                ReleaseQualificationAttestation.self,
+                from: childAttestationData
+            )
+            let childCatalogData = try Data(contentsOf: childDirectory.appendingPathComponent(
+                "operation-catalog.json"
+            ))
+            #expect(projectedRun.childAttestationSHA256 == privateRun.childAttestationSHA256)
+            #expect(projectedRun.childAttestationSHA256
+                == SupportBundleBuilder.sha256(childAttestationData))
+            #expect(childAttestation.operationCatalogSHA256 == privateRoot.operationCatalogSHA256)
+            #expect(payload.operationCatalogSHA256 == SupportBundleBuilder.sha256(childCatalogData))
+        }
         #expect(Set(payload.runs.map(\.axis)) == Set(QualificationAxis.requiredAxes(
             profile: .core,
             cache: .cold,
