@@ -219,7 +219,10 @@ jobs:
         id: test-suite
         # The release-build outcome is carried to the required `compile` context below. It must not
         # hide an independent test failure from the same already-allocated runner.
-        if: ${{ always() && !cancelled() }}
+        # Positive outcomes prove checkout, dependencies, cache, and Xcode selection all ran. A
+        # skipped release step means one of those prerequisites failed, so do not test with an
+        # unqualified fallback environment.
+        if: ${{ !cancelled() && (steps.release-compile.outcome == 'success' || steps.release-compile.outcome == 'failure') }}
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}

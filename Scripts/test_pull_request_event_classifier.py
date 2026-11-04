@@ -238,7 +238,12 @@ class WorkflowWiring(unittest.TestCase):
         self.assertIn("swift build -c release", platform)
         self.assertIn("git diff --exit-code Package.resolved", platform)
         self.assertIn("id: test-suite", platform)
-        self.assertIn("if: ${{ always() && !cancelled() }}", platform)
+        self.assertIn(
+            "if: ${{ !cancelled() && (steps.release-compile.outcome == 'success' || "
+            "steps.release-compile.outcome == 'failure') }}",
+            platform,
+        )
+        self.assertNotIn("if: ${{ always() && !cancelled() }}", platform)
         self.assertIn("swift test --enable-code-coverage -Xswiftc -suppress-warnings --no-parallel", platform)
         self.assertNotIn("--filter", platform)
         self.assertNotIn("--skip ", platform)
