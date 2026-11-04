@@ -31,8 +31,12 @@ _spec.loader.exec_module(classifier)
 CI = os.path.join(REPO, ".github", "workflows", "ci.yml")
 
 REQUIRED_CONTEXTS = ("build", "compile", "test")
-AGGREGATE_JOBS = ("guards", "offline-guards", "compile", "test", "formula")
+AGGREGATE_JOBS = (
+    "guards", "offline-guards", "compile", "test-build", "test-shards", "test", "formula",
+)
 SETUP_PYTHON_SHA = "a26af69be951a213d495a4c3e4e4022e16d87065"
+UPLOAD_ARTIFACT_SHA = "ea165f8d65b6e75b540449e92b4886f43607fa02"
+DOWNLOAD_ARTIFACT_SHA = "d3f86a106a0bac45b974a628896c90dbdf5c8093"
 
 
 def executable_lines(text: str):
@@ -193,7 +197,9 @@ class WorkflowWiring(unittest.TestCase):
         for job in (*AGGREGATE_JOBS, "build"):
             with self.subTest(job=job):
                 self.assertIn(job, self.jobs)
-                self.assertRegex(self.jobs[job], rf"(?m)^    name: {job}$")
+                expected_name = (r"test-shards \(\$\{\{ matrix\.shard \}\}\)"
+                                 if job == "test-shards" else re.escape(job))
+                self.assertRegex(self.jobs[job], rf"(?m)^    name: {expected_name}$")
 
     def test_independent_offline_guards_use_pinned_python_and_stream_logs(self):
         guards = self.jobs["offline-guards"]
@@ -213,7 +219,7 @@ class WorkflowWiring(unittest.TestCase):
         self.assertIn("run-helper-suites.py", guards)
 
     def test_swift_cache_excludes_build_products(self):
-        for job in ("compile", "test"):
+        for job in ("compile", "test-build", "test-shards"):
             with self.subTest(job=job):
                 block = self.jobs[job]
                 cache = re.search(r"(?ms)      - name: Cache SwiftPM downloads\n.*?(?=      - name:|\Z)", block)
@@ -224,13 +230,45 @@ class WorkflowWiring(unittest.TestCase):
                 self.assertIn("runner.arch", cache_block)
                 self.assertIn("Package.resolved", cache_block)
 
-    def test_release_compile_waits_for_offline_guard_runner_slot(self):
+    def test_release_compile_and_verified_shards_cap_hosted_macos_at_two(self):
         compile_job = self.jobs["compile"]
         self.assertRegex(compile_job, r"(?m)^    needs: offline-guards$")
         self.assertRegex(compile_job, r"(?m)^    if: \$\{\{ !cancelled\(\) \}\}$")
         self.assertRegex(compile_job, r"(?m)^    runs-on: macos-15$")
         self.assertIn("swift build -c release", compile_job)
-        self.assertNotRegex(self.jobs["test"], r"(?m)^    needs:")
+
+        builder = self.jobs["test-build"]
+        self.assertNotRegex(builder, r"(?m)^    needs:")
+        self.assertIn("swift build --build-tests --enable-code-coverage", builder)
+        self.assertIn("ci-test-shard-manifest.py partition", builder)
+        self.assertIn(f"actions/upload-artifact@{UPLOAD_ARTIFACT_SHA}", builder)
+
+        shards = self.jobs["test-shards"]
+        self.assertRegex(shards, r"(?m)^    needs: \[test-build, compile\]$")
+        self.assertIn("needs.test-build.result == 'success'", shards)
+        self.assertNotIn("needs.compile.result == 'success'", shards)
+        self.assertIn("fail-fast: false", shards)
+        self.assertIn("max-parallel: 2", shards)
+        self.assertIn(f"actions/download-artifact@{DOWNLOAD_ARTIFACT_SHA}", shards)
+        self.assertIn(f"actions/upload-artifact@{UPLOAD_ARTIFACT_SHA}", shards)
+        self.assertIn(f"actions/setup-python@{SETUP_PYTHON_SHA}", shards)
+        self.assertIn('python3 -m venv "$RUNNER_TEMP/logic-pro-ci-venv"', shards)
+        self.assertIn("-r Scripts/requirements-ci.txt", shards)
+        self.assertIn("GH_TOKEN: ${{ github.token }}", shards)
+        self.assertIn("--skip-build --enable-code-coverage --no-parallel", shards)
+        self.assertIn("--xunit-output \"$XUNIT_DIR/results.xml\"", shards)
+        self.assertIn("ci-test-shard-manifest.py verify-xunit", shards)
+
+        test = self.jobs["test"]
+        self.assertRegex(test, r"(?m)^    needs: \[test-build, test-shards\]$")
+        self.assertRegex(test, r"(?m)^    if: always\(\) && !cancelled\(\)$")
+        self.assertIn("ci-test-shard-manifest.py verify-union", test)
+        self.assertIn("xcrun llvm-profdata merge -sparse", test)
+        self.assertIn("bash Scripts/ci-coverage-gate.sh", test)
+
+        for name in ("compile", "test-build", "test-shards", "test"):
+            with self.subTest(xcode_job=name):
+                self.assertIn("sudo xcode-select -s /Applications/Xcode_16.4.app", self.jobs[name])
 
     def test_the_aggregate_requires_every_gate_and_checks_success(self):
         build = self.jobs["build"]
