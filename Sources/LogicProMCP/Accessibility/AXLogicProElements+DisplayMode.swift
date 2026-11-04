@@ -555,6 +555,57 @@ enum ControlBarDisplayMode {
     private static func cancel(_ menu: AXUIElement, under popup: AXUIElement, runtime: AXHelpers.Runtime) -> Bool {
         guard actionAvailable(kAXCancelAction as String, on: menu, runtime: runtime),
               AXHelpers.performAction(menu, kAXCancelAction as String, runtime: runtime) else { return false }
-        return waitForMenuClosure(under: popup, runtime: runtime)
+        if waitForMenuClosure(under: popup, runtime: runtime) { return true }
+        guard let checkedItem = checkedCloseItem(in: menu, under: popup, runtime: runtime),
+              actionAvailable(kAXPressAction as String, on: checkedItem, runtime: runtime),
+              AXHelpers.performAction(checkedItem, kAXPressAction as String, runtime: runtime),
+              waitForMenuClosure(under: popup, runtime: runtime) else { return false }
+        Log.info("display_mode_menu_close_method=checked_item_reselection", subsystem: "ax")
+        return true
+    }
+
+    /// Logic 12.4 can acknowledge AXCancel without closing this popup menu. Only after that
+    /// verified non-closure may the already-selected item be reselected as the bounded inverse.
+    /// A fresh, complete census keeps this from becoming an arbitrary or repeated menu press.
+    private static func checkedCloseItem(
+        in menu: AXUIElement, under popup: AXUIElement, runtime: AXHelpers.Runtime
+    ) -> AXUIElement? {
+        guard let menus = observedMenus(under: popup, runtime: runtime), menus.count == 1,
+              CFEqual(menus[0], menu) else { return nil }
+        let census: AXHelpers.Census
+        switch AXHelpers.censusDescendantResult(
+            of: menu, role: kAXMenuItemRole as String, maxDepth: 2, runtime: runtime,
+            requiresCompleteTraversal: true
+        ) {
+        case .success(let observed): census = observed
+        case .failure: return nil
+        }
+        var checked: [AXUIElement] = []
+        for item in census.matches {
+            let enabledRead: Result<AnyObject?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+                item, kAXEnabledAttribute as String, runtime: runtime)
+            guard case .success(let rawEnabled) = enabledRead, let enabled = rawEnabled as? Bool else {
+                return nil
+            }
+            let markRead: Result<AnyObject?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+                item, "AXMenuItemMarkChar", runtime: runtime)
+            let isChecked: Bool
+            switch markRead {
+            case .success(nil):
+                isChecked = false
+            case .success(let raw?):
+                guard let mark = raw as? String else { return nil }
+                isChecked = !mark.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            case .failure(let error) where error.isDefinitiveAbsence:
+                isChecked = false
+            case .failure:
+                return nil
+            }
+            if isChecked {
+                guard enabled else { return nil }
+                checked.append(item)
+            }
+        }
+        return checked.count == 1 ? checked[0] : nil
     }
 }
