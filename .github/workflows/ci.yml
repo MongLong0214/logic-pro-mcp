@@ -3,7 +3,7 @@ name: CI
 on:
   # The default-branch ruleset is strict, permits merge commits only, and has no bypass actor.
   # Therefore the admitted main tree is the exact tree already exercised by this PR merge-candidate
-  # workflow; replaying all three macOS jobs on the resulting merge only competes with the next PR.
+  # workflow; replaying both macOS validation jobs on main only competes with the next PR.
   pull_request:
     branches: [main]
     # `edited` stays excluded: PR metadata must not replace code CI's required check suite.
@@ -27,12 +27,6 @@ concurrency:
 defaults:
   run:
     shell: bash
-
-env:
-  # SwiftPM applies this regex to an implementation-qualified name while `swift test list`
-  # includes the module prefix. Keep the exact suite segment bounded by `.` and `/`, but do not
-  # anchor either side: an anchored module-qualified pattern selects zero tests on Swift 6.2.
-  TEST_SHARD_SELECTOR: '\.(QualificationRunnerTests|Issue965FreshPopulationAcquisitionTests|Issue538TrackCreationObservationTests|Issue968ExactTrackNameAdapterTests|QualificationFaultInjectionTests|MIDIReadbackCallSiteLintTests|Issue538ModalWitnessTests)/'
 
 jobs:
   # WAS `roadmap`, and carried four things: two that compare GitHub issue state against
@@ -78,11 +72,8 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: bash Scripts/ci-verify-formula-sha.sh
 
-
-  # Platform-independent shell integrity checks. The discovered Python runner runs in the macOS
-  # `test` job: #896 adds `test_logic_key_event.py`, whose Swift subprocess imports AppKit. Keeping
-  # that runner out of this Ubuntu job preserves the measured platform-independent shell boundary.
-
+  # Platform-independent shell integrity checks. The discovered Python runner stays in a macOS
+  # job because #896 adds `test_logic_key_event.py`, whose Swift subprocess imports AppKit.
   guards:
     name: guards
     runs-on: ubuntu-latest
@@ -121,8 +112,8 @@ jobs:
 
   offline-guards:
     name: offline-guards
-    # This job builds no product artifact. Use the standard Intel image so the scarce arm64 pool
-    # remains available for the release build and the exact test runtime below.
+    # This job builds no product artifact. Keep the scarce arm64 allocation available for the
+    # complete product validation below; AppKit-dependent helpers still run on macOS.
     runs-on: macos-15-intel
     timeout-minutes: 30
     steps:
@@ -164,174 +155,23 @@ jobs:
           retention-days: 7
           if-no-files-found: warn
 
-  compile-platform:
-    name: compile-platform
-    # The hosted pool abandoned a second macos-15 request after 15 queued minutes while test-build
-    # held the available runner. Keep the longer test runtime build first, then request the release
-    # build after it releases the runner; offline guards still run in parallel on macos-15-intel.
-    # This preserves both platform validations without asking current capacity for two ARM runners.
-    needs: [offline-guards, test-build]
-    # An offline-guard or test-runtime-build defect must not hide release-build defects from the
-    # same attempt. A hosted-capacity cancellation has no code result, so do not repeat its request;
-    # ordinary producer failures release the runner and still permit the independent compile.
-    # Positive allowlisting is deliberate: while GitHub's capacity manager still reports an
-    # upstream job as queued, an empty result would pass a negative `!= cancelled` test.
-    if: ${{ !cancelled() && (needs.offline-guards.result == 'success' || needs.offline-guards.result == 'failure') && (needs.test-build.result == 'success' || needs.test-build.result == 'failure') }}
+  platform-validation:
+    name: platform-validation
+    # The hosted pool abandoned every second macos-15 request after 15 queued minutes. Request one
+    # arm64 runner immediately and keep the release build, full serial suite, and coverage gate on
+    # that runner. The 150-minute bound combines the former 60m compile and 120m test budgets while
+    # retaining one checkout, dependency setup, cache restore, and toolchain selection.
     runs-on: macos-15
-    timeout-minutes: 60
+    timeout-minutes: 150
+    outputs:
+      release-compile: ${{ steps.release-compile.outcome }}
+      test-suite: ${{ steps.test-suite.outcome }}
+      coverage-gate: ${{ steps.coverage-gate.outcome }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          # Guards in this repository compare the branch against its merge base — the observation
-          # ratchets are the load-bearing one: with a shallow clone the base is absent, so the
-          # check degrades to comparing the branch against its own file and a commit that adds a
-          # gap AND raises its own ceiling passes. The ratchet guard now fails outright when the
-          # base is unreadable under CI, and this is what makes that satisfiable.
-          fetch-depth: 0
-
-      - name: Cache SwiftPM downloads
-        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
-        with:
-          path: ~/Library/Caches/org.swift.swiftpm
-          key: spm-${{ runner.os }}-${{ runner.arch }}-xcode164-release-${{ hashFiles('Package.resolved', 'Package.swift') }}
-          restore-keys: |
-            spm-${{ runner.os }}-${{ runner.arch }}-xcode164-release-
-
-      - name: Select Xcode and say which toolchain this is
-        # The pin is Xcode 16.4, required by swift-sdk 0.11.0+ which adopts the short-form
-        # `withThrowingTaskGroup { ... }` syntax that the previous 16.2 pin cannot compile.
-        #
-        # The comment here used to assert "Xcode 16.4 ships Swift 6.2". Apple's own version table
-        # says 6.1, so one of the two was wrong and neither was measured -- and a wrong version in
-        # a comment is what the next person reads when deciding whether to move the pin. The step
-        # prints the toolchain instead of describing it, so the log answers the question and the
-        # comment does not have to.
-        #
-        # This is a correction to a DESCRIPTION. It changes no version and moves no pin.
-        run: |
-          sudo xcode-select -s /Applications/Xcode_16.4.app
-          xcodebuild -version
-          swift --version
-          xcrun --find swift
-          uname -m
-          sw_vers
-
-      - name: Build
-        run: swift build -c release
-
-      - name: Verify Package.resolved is unchanged
-        run: git diff --exit-code Package.resolved
-
-  compile:
-    name: compile
-    runs-on: ubuntu-latest
-    needs: [offline-guards, compile-platform]
-    # `compile` is a required context. Keep it unconditional so a cancelled/skipped macOS
-    # producer cannot satisfy branch protection without release-build evidence.
-    if: always()
-    timeout-minutes: 5
-    steps:
-      - name: Offline guards and the platform build must have passed
-        env:
-          OFFLINE_GUARDS: ${{ needs.offline-guards.result }}
-          COMPILE_PLATFORM: ${{ needs.compile-platform.result }}
-        run: |
-          echo "offline-guards=$OFFLINE_GUARDS compile-platform=$COMPILE_PLATFORM"
-          [ "$OFFLINE_GUARDS" = "success" ] || { echo "::error::offline-guards did not succeed"; exit 1; }
-          [ "$COMPILE_PLATFORM" = "success" ] || { echo "::error::compile-platform did not succeed"; exit 1; }
-
-  test-build:
-    name: test-build
-    runs-on: macos-15
-    timeout-minutes: 75
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          fetch-depth: 0
-
-      - name: Cache SwiftPM downloads
-        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
-        with:
-          path: ~/Library/Caches/org.swift.swiftpm
-          key: spm-${{ runner.os }}-${{ runner.arch }}-xcode164-debug-${{ hashFiles('Package.resolved', 'Package.swift') }}
-          restore-keys: |
-            spm-${{ runner.os }}-${{ runner.arch }}-xcode164-debug-
-
-      - name: Select Xcode and say which toolchain this is
-        run: |
-          sudo xcode-select -s /Applications/Xcode_16.4.app
-          xcodebuild -version
-          swift --version
-          xcrun --find swift
-          uname -m
-          sw_vers
-
-      - name: Build one coverage runtime and exact shard manifests
-        run: |
-          set -euo pipefail
-          ARTIFACT="$RUNNER_TEMP/test-runtime"
-          mkdir -p "$ARTIFACT"
-          swift build --build-tests --enable-code-coverage -Xswiftc -suppress-warnings
-          swift test list --skip-build > "$ARTIFACT/inventory-raw.txt"
-          LC_ALL=C sort "$ARTIFACT/inventory-raw.txt" > "$ARTIFACT/inventory.txt"
-          rm "$ARTIFACT/inventory-raw.txt"
-          python3 Scripts/ci-test-shard-manifest.py partition \
-            --inventory "$ARTIFACT/inventory.txt" \
-            --selector "$TEST_SHARD_SELECTOR" \
-            --selected "$ARTIFACT/selected.txt" \
-            --complement "$ARTIFACT/complement.txt"
-
-          TRIPLE_DEBUG=$(readlink .build/debug)
-          TEST_BUNDLE=".build/$TRIPLE_DEBUG/LogicProMCPPackageTests.xctest"
-          TEST_BINARY="$TEST_BUNDLE/Contents/MacOS/LogicProMCPPackageTests"
-          for executable in "$TEST_BINARY" ".build/$TRIPLE_DEBUG/LogicProMCP" \
-              ".build/$TRIPLE_DEBUG/trusted-verifier"; do
-            test -x "$executable"
-          done
-          {
-            find "$TEST_BUNDLE" -type f -print
-            printf '%s\n' ".build/$TRIPLE_DEBUG/LogicProMCP" \
-              ".build/$TRIPLE_DEBUG/trusted-verifier"
-          } | LC_ALL=C sort | while IFS= read -r path; do
-            shasum -a 256 "$path"
-          done > "$ARTIFACT/runtime-files.sha256"
-          tar -czf "$ARTIFACT/logicpromcp-test-runtime.tar.gz" \
-            .build/debug "$TEST_BUNDLE" \
-            ".build/$TRIPLE_DEBUG/LogicProMCP" \
-            ".build/$TRIPLE_DEBUG/trusted-verifier"
-          git rev-parse HEAD > "$ARTIFACT/candidate-sha.txt"
-          (cd "$ARTIFACT" && shasum -a 256 candidate-sha.txt inventory.txt selected.txt \
-            complement.txt runtime-files.sha256 logicpromcp-test-runtime.tar.gz \
-            > artifact.sha256)
-
-      - name: Publish the hash-bound test runtime
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: test-runtime-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/test-runtime
-          retention-days: 1
-          if-no-files-found: error
-
-  test-shards:
-    name: test-shards (${{ matrix.shard }})
-    needs: [test-build, compile-platform]
-    # Preserve independent test evidence after an ordinary release-build failure, but do not ask
-    # for two more macOS runners when that producer was cancelled or skipped for hosted capacity.
-    if: ${{ !cancelled() && needs.test-build.result == 'success' && (needs.compile-platform.result == 'success' || needs.compile-platform.result == 'failure') }}
-    runs-on: macos-15
-    timeout-minutes: 65
-    strategy:
-      fail-fast: false
-      max-parallel: 2
-      matrix:
-        include:
-          - shard: selected
-            mode: filter
-          - shard: complement
-            mode: skip
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
+          # Observation ratchets compare the branch against its merge base and fail closed if that
+          # history is unavailable.
           fetch-depth: 0
 
       - name: Set up Python 3.11
@@ -351,10 +191,11 @@ jobs:
       - name: Cache SwiftPM downloads
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
         with:
+          # Cache downloads only. Reusing `.build` would let stale binaries or profiles qualify.
           path: ~/Library/Caches/org.swift.swiftpm
-          key: spm-${{ runner.os }}-${{ runner.arch }}-xcode164-debug-${{ hashFiles('Package.resolved', 'Package.swift') }}
+          key: spm-${{ runner.os }}-${{ runner.arch }}-xcode164-validation-${{ hashFiles('Package.resolved', 'Package.swift') }}
           restore-keys: |
-            spm-${{ runner.os }}-${{ runner.arch }}-xcode164-debug-
+            spm-${{ runner.os }}-${{ runner.arch }}-xcode164-validation-
 
       - name: Select Xcode and say which toolchain this is
         run: |
@@ -365,182 +206,108 @@ jobs:
           uname -m
           sw_vers
 
-      - name: Download the exact test runtime
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: test-runtime-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/test-runtime
+      - name: Release build
+        id: release-compile
+        # Preserve independent full-suite evidence when only the release configuration fails.
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          swift build -c release
+          git diff --exit-code Package.resolved
 
-      - name: Verify and run this exact shard
+      - name: Run the full serial suite and collect coverage
+        id: test-suite
+        # The release-build outcome is carried to the required `compile` context below. It must not
+        # hide an independent test failure from the same already-allocated runner.
+        if: ${{ always() && !cancelled() }}
+        continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
-          SHARD: ${{ matrix.shard }}
-          SHARD_MODE: ${{ matrix.mode }}
         run: |
           set -euo pipefail
           source "$RUNNER_TEMP/logic-pro-ci-venv/bin/activate"
-          RUNTIME="$RUNNER_TEMP/test-runtime"
-          OUT="$RUNNER_TEMP/test-shard-$SHARD"
-          XUNIT_DIR="$OUT/xunit"
-          PROFRAW_DIR="$RUNNER_TEMP/logicpromcp-profraw-$SHARD"
-          COVERAGE_LOG="$OUT/test.log"
-          mkdir -p "$OUT" "$XUNIT_DIR" "$PROFRAW_DIR"
-          test "$(cat "$RUNTIME/candidate-sha.txt")" = "$GITHUB_SHA"
-          (cd "$RUNTIME" && shasum -a 256 -c artifact.sha256)
-          tar -xzf "$RUNTIME/logicpromcp-test-runtime.tar.gz" -C "$GITHUB_WORKSPACE"
-          shasum -a 256 -c "$RUNTIME/runtime-files.sha256"
-          TRIPLE_DEBUG=$(readlink .build/debug)
-          test -x ".build/$TRIPLE_DEBUG/LogicProMCPPackageTests.xctest/Contents/MacOS/LogicProMCPPackageTests"
-          test -x ".build/$TRIPLE_DEBUG/LogicProMCP"
-          test -x ".build/$TRIPLE_DEBUG/trusted-verifier"
-          swift test list --skip-build > "$RUNNER_TEMP/inventory-$SHARD-raw.txt"
-          LC_ALL=C sort "$RUNNER_TEMP/inventory-$SHARD-raw.txt" > "$RUNNER_TEMP/inventory-$SHARD.txt"
-          cmp "$RUNTIME/inventory.txt" "$RUNNER_TEMP/inventory-$SHARD.txt"
-
+          PROFRAW_DIR="$RUNNER_TEMP/logicpromcp-profraw"
+          COVERAGE_LOG="$RUNNER_TEMP/logicpromcp-coverage.log"
+          mkdir -p "$PROFRAW_DIR"
           export LLVM_PROFILE_FILE="$PROFRAW_DIR/%m-%p.profraw"
-          if [ "$SHARD_MODE" = "filter" ]; then
-            swift test --skip-build --enable-code-coverage --no-parallel \
-              --xunit-output "$XUNIT_DIR/results.xml" --filter "$TEST_SHARD_SELECTOR" \
-              2>&1 | tee "$COVERAGE_LOG"
-          else
-            swift test --skip-build --enable-code-coverage --no-parallel \
-              --xunit-output "$XUNIT_DIR/results.xml" --skip "$TEST_SHARD_SELECTOR" \
-              2>&1 | tee "$COVERAGE_LOG"
-          fi
-          python3 Scripts/ci-test-shard-manifest.py verify-xunit \
-            --expected "$RUNTIME/$SHARD.txt" \
-            --xunit-directory "$XUNIT_DIR" \
-            --actual "$OUT/actual-$SHARD.txt"
-          find .build -type f -path '*/debug/codecov/default.profdata' \
-            > "$RUNNER_TEMP/profiles-$SHARD.txt"
-          test "$(grep -c . "$RUNNER_TEMP/profiles-$SHARD.txt")" = "1"
-          cp "$(cat "$RUNNER_TEMP/profiles-$SHARD.txt")" "$OUT/$SHARD.profdata"
-          # SwiftPM versions may suffix the requested xUnit basename. The verifier already proved
-          # this empty, shard-private directory contains exactly one XML file; hashing the glob
-          # preserves its actual basename in the evidence instead of guessing a toolchain name.
-          (cd "$OUT" && shasum -a 256 "actual-$SHARD.txt" "$SHARD.profdata" \
-            test.log xunit/*.xml > shard-files.sha256)
 
-      - name: Publish this shard's verified evidence
-        if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
-        with:
-          name: test-shard-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/test-shard-${{ matrix.shard }}
-          retention-days: 1
-          if-no-files-found: warn
-
-  test-coverage:
-    name: test-coverage
-    needs: [test-build, test-shards]
-    # Do not request a third macOS runner after either producer was cancelled for hosted capacity.
-    # The required Ubuntu `test` aggregate below turns every skip/cancel/failure into a red context.
-    if: ${{ !cancelled() && needs.test-build.result == 'success' && needs.test-shards.result == 'success' }}
-    runs-on: macos-15
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-        with:
-          fetch-depth: 0
-
-      - name: Select Xcode and say which toolchain this is
-        run: |
-          sudo xcode-select -s /Applications/Xcode_16.4.app
-          xcodebuild -version
-          swift --version
-          xcrun --find swift
-          uname -m
-          sw_vers
-
-      - name: Download the exact test runtime
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: test-runtime-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/test-runtime
-
-      - name: Download both verified shard results
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          pattern: test-shard-*-${{ github.run_id }}-${{ github.run_attempt }}
-          path: ${{ runner.temp }}/test-shards
-
-      - name: Verify the union and merge only its profiles
-        run: |
-          set -euo pipefail
-          RUNTIME="$RUNNER_TEMP/test-runtime"
-          SHARDS="$RUNNER_TEMP/test-shards"
-          test "$(cat "$RUNTIME/candidate-sha.txt")" = "$GITHUB_SHA"
-          (cd "$RUNTIME" && shasum -a 256 -c artifact.sha256)
-          tar -xzf "$RUNTIME/logicpromcp-test-runtime.tar.gz" -C "$GITHUB_WORKSPACE"
-          shasum -a 256 -c "$RUNTIME/runtime-files.sha256"
-          find "$SHARDS" -type f -name actual-selected.txt > "$RUNNER_TEMP/selected-paths.txt"
-          find "$SHARDS" -type f -name actual-complement.txt > "$RUNNER_TEMP/complement-paths.txt"
-          test "$(grep -c . "$RUNNER_TEMP/selected-paths.txt")" = "1"
-          test "$(grep -c . "$RUNNER_TEMP/complement-paths.txt")" = "1"
-          SELECTED_DIR=$(dirname "$(cat "$RUNNER_TEMP/selected-paths.txt")")
-          COMPLEMENT_DIR=$(dirname "$(cat "$RUNNER_TEMP/complement-paths.txt")")
-          (cd "$SELECTED_DIR" && shasum -a 256 -c shard-files.sha256)
-          (cd "$COMPLEMENT_DIR" && shasum -a 256 -c shard-files.sha256)
-          python3 Scripts/ci-test-shard-manifest.py verify-union \
-            --inventory "$RUNTIME/inventory.txt" \
-            --selected "$SELECTED_DIR/actual-selected.txt" \
-            --complement "$COMPLEMENT_DIR/actual-complement.txt"
-
-          TRIPLE_DEBUG=$(readlink .build/debug)
+          # Coverage must come from this run. SwiftPM downloads are cached, but `.build` is not;
+          # clearing any generated coverage directory also protects reused workspaces.
           find .build -type d -name codecov -prune -exec rm -rf {} + 2>/dev/null || true
-          PROFILE_DIR="$RUNNER_TEMP/shard-profiles"
-          mkdir -p "$PROFILE_DIR" ".build/$TRIPLE_DEBUG/codecov"
-          cp "$SELECTED_DIR/selected.profdata" "$PROFILE_DIR/selected.profdata"
-          cp "$COMPLEMENT_DIR/complement.profdata" "$PROFILE_DIR/complement.profdata"
-          xcrun llvm-profdata merge -sparse "$PROFILE_DIR/selected.profdata" \
-            "$PROFILE_DIR/complement.profdata" \
-            -o ".build/$TRIPLE_DEBUG/codecov/default.profdata"
+
+          swift test --enable-code-coverage -Xswiftc -suppress-warnings --no-parallel 2>&1 | tee "$COVERAGE_LOG"
+          # Runtime profile warnings are surfaced, but the readable report and hard threshold below
+          # decide whether the evidence is valid.
+          PROFILE_WARNING_COUNT=$(grep -c "LLVM Profile Error" "$COVERAGE_LOG" || true)
+          if [ "$PROFILE_WARNING_COUNT" != "0" ]; then
+            echo "::warning::LLVM profile runtime reported $PROFILE_WARNING_COUNT warning(s); continuing to profdata/report validation."
+            echo "::warning::LLVM_PROFILE_FILE=$LLVM_PROFILE_FILE"
+          fi
+          echo "LLVM profile warnings: ${PROFILE_WARNING_COUNT:-0}." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Coverage gate
+        id: coverage-gate
+        if: ${{ !cancelled() && steps.test-suite.outcome == 'success' }}
+        continue-on-error: true
         run: bash Scripts/ci-coverage-gate.sh
 
-      - name: Keep the combined coverage evidence whatever happened
+      - name: Keep the test and coverage reports whatever happened
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: coverage-${{ github.run_id }}-${{ github.run_attempt }}
           path: |
             coverage-report.txt
-            ${{ runner.temp }}/test-shards
+            ${{ runner.temp }}/logicpromcp-coverage.log
           retention-days: 7
           if-no-files-found: warn
+
+  # These Ubuntu jobs publish the existing required context names. They fail closed on both the
+  # producer result (setup/infrastructure) and the relevant validation step outcome.
+  compile:
+    name: compile
+    runs-on: ubuntu-latest
+    needs: [offline-guards, platform-validation]
+    if: always()
+    timeout-minutes: 5
+    steps:
+      - name: Offline guards and the release build must have passed
+        env:
+          OFFLINE_GUARDS: ${{ needs.offline-guards.result }}
+          PLATFORM_VALIDATION: ${{ needs.platform-validation.result }}
+          RELEASE_COMPILE: ${{ needs.platform-validation.outputs.release-compile }}
+        run: |
+          echo "offline-guards=$OFFLINE_GUARDS platform-validation=$PLATFORM_VALIDATION release-compile=$RELEASE_COMPILE"
+          [ "$OFFLINE_GUARDS" = "success" ] || { echo "::error::offline-guards did not succeed"; exit 1; }
+          [ "$PLATFORM_VALIDATION" = "success" ] || { echo "::error::platform-validation did not succeed"; exit 1; }
+          [ "$RELEASE_COMPILE" = "success" ] || { echo "::error::release compile did not succeed"; exit 1; }
 
   test:
     name: test
     runs-on: ubuntu-latest
-    needs: [test-build, test-shards, test-coverage]
-    # This required context must run after cancellation: GitHub treats a conditional skip as
-    # successful, so the result checks — not the job condition — carry the fail-closed decision.
+    needs: platform-validation
     if: always()
     timeout-minutes: 5
     steps:
-      - name: Every test producer must have passed
+      - name: The full serial suite and coverage gate must have passed
         env:
-          TEST_BUILD: ${{ needs.test-build.result }}
-          TEST_SHARDS: ${{ needs.test-shards.result }}
-          TEST_COVERAGE: ${{ needs.test-coverage.result }}
+          PLATFORM_VALIDATION: ${{ needs.platform-validation.result }}
+          TEST_SUITE: ${{ needs.platform-validation.outputs.test-suite }}
+          COVERAGE_GATE: ${{ needs.platform-validation.outputs.coverage-gate }}
         run: |
-          echo "test-build=$TEST_BUILD test-shards=$TEST_SHARDS test-coverage=$TEST_COVERAGE"
-          [ "$TEST_BUILD" = "success" ] || { echo "::error::test-build did not succeed"; exit 1; }
-          [ "$TEST_SHARDS" = "success" ] || { echo "::error::test-shards did not succeed"; exit 1; }
-          [ "$TEST_COVERAGE" = "success" ] || { echo "::error::test-coverage did not succeed"; exit 1; }
+          echo "platform-validation=$PLATFORM_VALIDATION test-suite=$TEST_SUITE coverage-gate=$COVERAGE_GATE"
+          [ "$PLATFORM_VALIDATION" = "success" ] || { echo "::error::platform-validation did not succeed"; exit 1; }
+          [ "$TEST_SUITE" = "success" ] || { echo "::error::full serial test suite did not succeed"; exit 1; }
+          [ "$COVERAGE_GATE" = "success" ] || { echo "::error::coverage gate did not succeed"; exit 1; }
 
-      # The branch ruleset requires `build`, `compile` and `test` as contexts -- re-read 2026-09-18
-  # via `gh api repos/MongLong0214/logic-pro-mcp/rulesets/19060230`: strict is on, the bypass list
-  # is empty, and those three are the whole list. So `needs` is what makes every OTHER job able to
-  # block a merge, which is what `check-every-ci-job-is-required.py` enforces.
-
+  # The branch ruleset requires `build`, `compile` and `test`. Every other job is connected through
+  # `needs`, which `check-every-ci-job-is-required.py` audits.
   build:
     name: build
     runs-on: ubuntu-latest
-    needs: [guards, offline-guards, compile-platform, compile, test-build, test-shards, test-coverage, test, formula]
-    # The aggregate is also required, so cancellation must reach its explicit result checks rather
-    # than turn the job into a successful skip.
+    needs: [guards, offline-guards, platform-validation, compile, test, formula]
+    # A skipped required context is not evidence. Run the explicit result checks after every
+    # dependency outcome, including cancellations.
     if: always()
     timeout-minutes: 5
     steps:
@@ -548,21 +315,15 @@ jobs:
         env:
           GUARDS: ${{ needs.guards.result }}
           OFFLINE_GUARDS: ${{ needs.offline-guards.result }}
-          COMPILE_PLATFORM: ${{ needs.compile-platform.result }}
+          PLATFORM_VALIDATION: ${{ needs.platform-validation.result }}
           COMPILE: ${{ needs.compile.result }}
-          TEST_BUILD: ${{ needs.test-build.result }}
-          TEST_SHARDS: ${{ needs.test-shards.result }}
-          TEST_COVERAGE: ${{ needs.test-coverage.result }}
           TEST: ${{ needs.test.result }}
           FORMULA: ${{ needs.formula.result }}
         run: |
-          echo "guards=$GUARDS offline-guards=$OFFLINE_GUARDS compile-platform=$COMPILE_PLATFORM compile=$COMPILE test-build=$TEST_BUILD test-shards=$TEST_SHARDS test-coverage=$TEST_COVERAGE test=$TEST formula=$FORMULA"
+          echo "guards=$GUARDS offline-guards=$OFFLINE_GUARDS platform-validation=$PLATFORM_VALIDATION compile=$COMPILE test=$TEST formula=$FORMULA"
           [ "$GUARDS" = "success" ] || { echo "::error::guards did not succeed"; exit 1; }
           [ "$OFFLINE_GUARDS" = "success" ] || { echo "::error::offline-guards did not succeed"; exit 1; }
-          [ "$COMPILE_PLATFORM" = "success" ] || { echo "::error::compile-platform did not succeed"; exit 1; }
+          [ "$PLATFORM_VALIDATION" = "success" ] || { echo "::error::platform-validation did not succeed"; exit 1; }
           [ "$COMPILE" = "success" ] || { echo "::error::compile did not succeed"; exit 1; }
-          [ "$TEST_BUILD" = "success" ] || { echo "::error::test-build did not succeed"; exit 1; }
-          [ "$TEST_SHARDS" = "success" ] || { echo "::error::test-shards did not succeed"; exit 1; }
-          [ "$TEST_COVERAGE" = "success" ] || { echo "::error::test-coverage did not succeed"; exit 1; }
           [ "$TEST" = "success" ] || { echo "::error::test did not succeed"; exit 1; }
           [ "$FORMULA" = "success" ] || { echo "::error::formula did not succeed"; exit 1; }

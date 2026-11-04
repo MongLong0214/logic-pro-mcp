@@ -200,27 +200,18 @@ import Testing
     let workflow = try scriptContents(".github/workflows/ci.yml")
     let gate = try scriptContents("Scripts/ci-coverage-gate.sh")
 
-    // Build the coverage runtime once, preserve its executable closure, and run complementary
-    // serial shards from those exact bytes. Each shard proves its xUnit set before profiles merge.
+    // Running the tests and collecting the profile stays in the workflow: it is the one part a
+    // fixture cannot stand in for.
     #expect(workflow.contains("set -euo pipefail"))
-    #expect(workflow.contains("swift build --build-tests --enable-code-coverage"))
-    #expect(workflow.contains("TEST_SHARD_SELECTOR: '\\.(QualificationRunnerTests|"))
-    #expect(!workflow.contains("TEST_SHARD_SELECTOR: '^LogicProMCPTests\\."))
-    #expect(workflow.contains("--filter \"$TEST_SHARD_SELECTOR\""))
-    #expect(workflow.contains("--skip \"$TEST_SHARD_SELECTOR\""))
-    #expect(workflow.contains("logicpromcp-test-runtime.tar.gz"))
-    #expect(workflow.contains("--skip-build --enable-code-coverage --no-parallel"))
-    #expect(workflow.contains("--xunit-output \"$XUNIT_DIR/results.xml\""))
-    #expect(workflow.contains("ci-test-shard-manifest.py verify-xunit"))
-    #expect(workflow.contains("ci-test-shard-manifest.py verify-union"))
-    #expect(workflow.contains("PROFRAW_DIR=\"$RUNNER_TEMP/logicpromcp-profraw-$SHARD\""))
+    #expect(workflow.contains("PROFRAW_DIR=\"$RUNNER_TEMP/logicpromcp-profraw\""))
     #expect(workflow.contains("export LLVM_PROFILE_FILE=\"$PROFRAW_DIR/%m-%p.profraw\""))
-    #expect(workflow.contains("xcrun llvm-profdata merge -sparse"))
+    #expect(workflow.contains("COVERAGE_LOG=\"$RUNNER_TEMP/logicpromcp-coverage.log\""))
+    #expect(workflow.contains("PROFILE_WARNING_COUNT=$(grep -c \"LLVM Profile Error\" \"$COVERAGE_LOG\" || true)"))
+    #expect(workflow.contains("continuing to profdata/report validation"))
+    #expect(workflow.contains("LLVM profile warnings: ${PROFILE_WARNING_COUNT:-0}."))
 
-    // Input profiles stay outside `.build`; only the merged profile is installed at the exact
-    // runtime closure consumed by the unchanged gate.
+    // A cached `default.profdata` is the previous run's answer to a question nobody asked again.
     #expect(workflow.contains("find .build -type d -name codecov"))
-    #expect(workflow.contains("$RUNNER_TEMP/shard-profiles"))
 
     // The workflow must actually CALL the gate. A gate nothing invokes is the defect one level up.
     #expect(workflow.contains("bash Scripts/ci-coverage-gate.sh"))

@@ -31,13 +31,9 @@ _spec.loader.exec_module(classifier)
 CI = os.path.join(REPO, ".github", "workflows", "ci.yml")
 
 REQUIRED_CONTEXTS = ("build", "compile", "test")
-AGGREGATE_JOBS = (
-    "guards", "offline-guards", "compile-platform", "compile", "test-build", "test-shards",
-    "test-coverage", "test", "formula",
-)
+AGGREGATE_JOBS = ("guards", "offline-guards", "platform-validation", "compile", "test", "formula")
 SETUP_PYTHON_SHA = "a26af69be951a213d495a4c3e4e4022e16d87065"
 UPLOAD_ARTIFACT_SHA = "ea165f8d65b6e75b540449e92b4886f43607fa02"
-DOWNLOAD_ARTIFACT_SHA = "d3f86a106a0bac45b974a628896c90dbdf5c8093"
 
 
 def executable_lines(text: str):
@@ -198,16 +194,13 @@ class WorkflowWiring(unittest.TestCase):
         for job in (*AGGREGATE_JOBS, "build"):
             with self.subTest(job=job):
                 self.assertIn(job, self.jobs)
-                expected_name = (r"test-shards \(\$\{\{ matrix\.shard \}\}\)"
-                                 if job == "test-shards" else re.escape(job))
-                self.assertRegex(self.jobs[job], rf"(?m)^    name: {expected_name}$")
+                self.assertRegex(self.jobs[job], rf"(?m)^    name: {job}$")
 
     def test_independent_offline_guards_use_pinned_python_and_stream_logs(self):
         guards = self.jobs["offline-guards"]
         self.assertRegex(guards, r"(?m)^    runs-on: macos-15-intel$")
-        for product_job in ("compile-platform", "test-build", "test-shards", "test-coverage"):
-            with self.subTest(product_job=product_job):
-                self.assertRegex(self.jobs[product_job], r"(?m)^    runs-on: macos-15$")
+        self.assertRegex(self.jobs["platform-validation"], r"(?m)^    runs-on: macos-15$")
+        self.assertEqual(self.text.count("    runs-on: macos-15\n"), 1)
         self.assertIn(f"actions/setup-python@{SETUP_PYTHON_SHA}", guards)
         self.assertIn("python-version: '3.11'", guards)
         self.assertIn("cache-dependency-path: Scripts/requirements-ci.txt", guards)
@@ -223,7 +216,7 @@ class WorkflowWiring(unittest.TestCase):
         self.assertIn("run-helper-suites.py", guards)
 
     def test_swift_cache_excludes_build_products(self):
-        for job in ("compile-platform", "test-build", "test-shards"):
+        for job in ("platform-validation",):
             with self.subTest(job=job):
                 block = self.jobs[job]
                 cache = re.search(r"(?ms)      - name: Cache SwiftPM downloads\n.*?(?=      - name:|\Z)", block)
@@ -234,69 +227,42 @@ class WorkflowWiring(unittest.TestCase):
                 self.assertIn("runner.arch", cache_block)
                 self.assertIn("Package.resolved", cache_block)
 
-    def test_release_compile_and_verified_shards_cap_hosted_macos_at_two(self):
-        platform = self.jobs["compile-platform"]
-        self.assertRegex(platform, r"(?m)^    needs: \[offline-guards, test-build\]$")
-        self.assertRegex(
-            platform,
-            r"(?m)^    if: \$\{\{ !cancelled\(\) && \(needs\.offline-guards\.result == 'success' \|\| needs\.offline-guards\.result == 'failure'\) && \(needs\.test-build\.result == 'success' \|\| needs\.test-build\.result == 'failure'\) \}\}$",
-        )
-        self.assertNotIn("needs.offline-guards.result !=", platform)
-        self.assertNotIn("needs.test-build.result !=", platform)
-        self.assertRegex(platform, r"(?m)^    runs-on: macos-15$")
+    def test_one_arm_allocation_preserves_release_build_full_tests_and_coverage(self):
+        platform = self.jobs["platform-validation"]
+        self.assertNotRegex(platform, r"(?m)^    needs:")
+        self.assertRegex(platform, r"(?m)^    timeout-minutes: 150$")
+        self.assertIn("release-compile: ${{ steps.release-compile.outcome }}", platform)
+        self.assertIn("test-suite: ${{ steps.test-suite.outcome }}", platform)
+        self.assertIn("coverage-gate: ${{ steps.coverage-gate.outcome }}", platform)
+        self.assertIn("id: release-compile", platform)
         self.assertIn("swift build -c release", platform)
+        self.assertIn("git diff --exit-code Package.resolved", platform)
+        self.assertIn("id: test-suite", platform)
+        self.assertIn("if: ${{ always() && !cancelled() }}", platform)
+        self.assertIn("swift test --enable-code-coverage -Xswiftc -suppress-warnings --no-parallel", platform)
+        self.assertNotIn("--filter", platform)
+        self.assertNotIn("--skip ", platform)
+        self.assertIn("id: coverage-gate", platform)
+        self.assertIn("if: ${{ !cancelled() && steps.test-suite.outcome == 'success' }}", platform)
+        self.assertIn("bash Scripts/ci-coverage-gate.sh", platform)
+        self.assertEqual(platform.count("continue-on-error: true"), 3)
+        self.assertIn(f"actions/setup-python@{SETUP_PYTHON_SHA}", platform)
+        self.assertIn(f"actions/upload-artifact@{UPLOAD_ARTIFACT_SHA}", platform)
+        self.assertIn("sudo xcode-select -s /Applications/Xcode_16.4.app", platform)
 
         compile_job = self.jobs["compile"]
         self.assertRegex(compile_job, r"(?m)^    runs-on: ubuntu-latest$")
-        self.assertRegex(compile_job, r"(?m)^    needs: \[offline-guards, compile-platform\]$")
+        self.assertRegex(compile_job, r"(?m)^    needs: \[offline-guards, platform-validation\]$")
         self.assertRegex(compile_job, r"(?m)^    if: always\(\)$")
-        for producer in ("OFFLINE_GUARDS", "COMPILE_PLATFORM"):
+        for producer in ("OFFLINE_GUARDS", "PLATFORM_VALIDATION", "RELEASE_COMPILE"):
             self.assertIn(f'[ "${producer}" = "success" ]', compile_job)
-
-        builder = self.jobs["test-build"]
-        self.assertNotRegex(builder, r"(?m)^    needs:")
-        self.assertIn("swift build --build-tests --enable-code-coverage", builder)
-        self.assertIn("ci-test-shard-manifest.py partition", builder)
-        self.assertIn(f"actions/upload-artifact@{UPLOAD_ARTIFACT_SHA}", builder)
-
-        shards = self.jobs["test-shards"]
-        self.assertRegex(shards, r"(?m)^    needs: \[test-build, compile-platform\]$")
-        self.assertIn("needs.test-build.result == 'success'", shards)
-        self.assertIn("needs.compile-platform.result == 'success'", shards)
-        self.assertIn("needs.compile-platform.result == 'failure'", shards)
-        self.assertNotIn("needs.compile-platform.result !=", shards)
-        self.assertIn("fail-fast: false", shards)
-        self.assertIn("max-parallel: 2", shards)
-        self.assertIn(f"actions/download-artifact@{DOWNLOAD_ARTIFACT_SHA}", shards)
-        self.assertIn(f"actions/upload-artifact@{UPLOAD_ARTIFACT_SHA}", shards)
-        self.assertIn(f"actions/setup-python@{SETUP_PYTHON_SHA}", shards)
-        self.assertIn('python3 -m venv "$RUNNER_TEMP/logic-pro-ci-venv"', shards)
-        self.assertIn("-r Scripts/requirements-ci.txt", shards)
-        self.assertIn("GH_TOKEN: ${{ github.token }}", shards)
-        self.assertIn("--skip-build --enable-code-coverage --no-parallel", shards)
-        self.assertIn("--xunit-output \"$XUNIT_DIR/results.xml\"", shards)
-        self.assertIn("ci-test-shard-manifest.py verify-xunit", shards)
-
-        coverage = self.jobs["test-coverage"]
-        self.assertRegex(coverage, r"(?m)^    needs: \[test-build, test-shards\]$")
-        self.assertRegex(
-            coverage,
-            r"(?m)^    if: \$\{\{ !cancelled\(\) && needs\.test-build\.result == 'success' && needs\.test-shards\.result == 'success' \}\}$",
-        )
-        self.assertIn("ci-test-shard-manifest.py verify-union", coverage)
-        self.assertIn("xcrun llvm-profdata merge -sparse", coverage)
-        self.assertIn("bash Scripts/ci-coverage-gate.sh", coverage)
 
         test = self.jobs["test"]
         self.assertRegex(test, r"(?m)^    runs-on: ubuntu-latest$")
-        self.assertRegex(test, r"(?m)^    needs: \[test-build, test-shards, test-coverage\]$")
+        self.assertRegex(test, r"(?m)^    needs: platform-validation$")
         self.assertRegex(test, r"(?m)^    if: always\(\)$")
-        for producer in ("TEST_BUILD", "TEST_SHARDS", "TEST_COVERAGE"):
+        for producer in ("PLATFORM_VALIDATION", "TEST_SUITE", "COVERAGE_GATE"):
             self.assertIn(f'[ "${producer}" = "success" ]', test)
-
-        for name in ("compile-platform", "test-build", "test-shards", "test-coverage"):
-            with self.subTest(xcode_job=name):
-                self.assertIn("sudo xcode-select -s /Applications/Xcode_16.4.app", self.jobs[name])
 
     def test_the_aggregate_requires_every_gate_and_checks_success(self):
         build = self.jobs["build"]
@@ -310,7 +276,7 @@ class WorkflowWiring(unittest.TestCase):
                 self.assertRegex(build, rf'\[ "\${job.upper().replace("-", "_")}" = "success" \]')
 
     def test_required_aggregators_turn_cancelled_dependencies_into_failed_contexts(self):
-        for job in ("test", "build"):
+        for job in ("compile", "test", "build"):
             with self.subTest(job=job):
                 self.assertRegex(self.jobs[job], r"(?m)^    if: always\(\)$")
                 self.assertNotIn("!cancelled()", self.jobs[job])
