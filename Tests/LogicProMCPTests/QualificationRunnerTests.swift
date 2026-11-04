@@ -590,7 +590,13 @@ struct QualificationRunnerTests {
 
     @Test(
         "name cleanup does not wait for contention without exact reclaim proof",
-        arguments: ["unproven", "boolean_delay"]
+        arguments: [
+            "unproven",
+            "boolean_delay",
+            "missing_success",
+            "successful_error",
+            "numeric_boole",
+        ]
     )
     func nameCleanupDoesNotWaitWithoutExactReclaimProof(shape: String) throws {
         let fixture = try SlowHandshakeFixture(
@@ -9442,9 +9448,15 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                             fi
                             if [ "$name_cleanup_contention" != none ] && [ "$rename_attempts" -ge 3 ] && [ ! -f gate-reclaimed ]; then
                                 if [ "$name_cleanup_contention" = reclaimable ]; then
-                                    printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"mutating_operation_in_progress\\",\\"safe_to_retry\\":true,\\"write_attempted\\":false,\\"mutation_gate\\":\\"reclaimable_after_grace\\",\\"gate_reclaim_after_sec\\":0.25}"}]}}\n' "$id"
+                                    printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"success\\":false,\\"error\\":\\"mutating_operation_in_progress\\",\\"safe_to_retry\\":true,\\"write_attempted\\":false,\\"mutation_gate\\":\\"reclaimable_after_grace\\",\\"gate_reclaim_after_sec\\":0.25}"}]}}\n' "$id"
                                 elif [ "$name_cleanup_contention" = boolean_delay ]; then
-                                    printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"mutating_operation_in_progress\\",\\"safe_to_retry\\":true,\\"write_attempted\\":false,\\"mutation_gate\\":\\"reclaimable_after_grace\\",\\"gate_reclaim_after_sec\\":true}"}]}}\n' "$id"
+                                    printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"success\\":false,\\"error\\":\\"mutating_operation_in_progress\\",\\"safe_to_retry\\":true,\\"write_attempted\\":false,\\"mutation_gate\\":\\"reclaimable_after_grace\\",\\"gate_reclaim_after_sec\\":true}"}]}}\n' "$id"
+                                elif [ "$name_cleanup_contention" = successful_error ]; then
+                                    printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"success\\":true,\\"error\\":\\"mutating_operation_in_progress\\",\\"safe_to_retry\\":true,\\"write_attempted\\":false,\\"mutation_gate\\":\\"reclaimable_after_grace\\",\\"gate_reclaim_after_sec\\":0.25}"}]}}\n' "$id"
+                                elif [ "$name_cleanup_contention" = numeric_boole ]; then
+                                    printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"success\\":false,\\"error\\":\\"mutating_operation_in_progress\\",\\"safe_to_retry\\":1,\\"write_attempted\\":0,\\"mutation_gate\\":\\"reclaimable_after_grace\\",\\"gate_reclaim_after_sec\\":0.25}"}]}}\n' "$id"
+                                elif [ "$name_cleanup_contention" = missing_success ]; then
+                                    printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"mutating_operation_in_progress\\",\\"safe_to_retry\\":true,\\"write_attempted\\":false,\\"mutation_gate\\":\\"reclaimable_after_grace\\",\\"gate_reclaim_after_sec\\":0.25}"}]}}\n' "$id"
                                 else
                                     printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"mutating_operation_in_progress\\",\\"safe_to_retry\\":true,\\"write_attempted\\":false}"}]}}\n' "$id"
                                 fi

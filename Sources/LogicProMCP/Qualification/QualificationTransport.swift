@@ -2217,9 +2217,10 @@ struct QualificationTransport: Sendable {
               let data = reply.text.data(using: .utf8),
               let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
               object["state"] as? String == "C",
+              exactJSONBoolean(object["success"], equals: false),
               object["error"] as? String == "mutating_operation_in_progress",
-              object["safe_to_retry"] as? Bool == true,
-              object["write_attempted"] as? Bool == false,
+              exactJSONBoolean(object["safe_to_retry"], equals: true),
+              exactJSONBoolean(object["write_attempted"], equals: false),
               object["mutation_gate"] as? String == "reclaimable_after_grace",
               let delayNumber = object["gate_reclaim_after_sec"] as? NSNumber,
               CFGetTypeID(delayNumber) != CFBooleanGetTypeID() else { return nil }
@@ -2228,6 +2229,12 @@ struct QualificationTransport: Sendable {
               delay.isFinite, delay >= 0,
               delay <= LogicProServer.mutationGateReclaimGraceSeconds else { return nil }
         return delay
+    }
+
+    private static func exactJSONBoolean(_ value: Any?, equals expected: Bool) -> Bool {
+        guard let number = value as? NSNumber,
+              CFGetTypeID(number) == CFBooleanGetTypeID() else { return false }
+        return number.boolValue == expected
     }
 
     /// One tool call with CALLER-SUPPLIED params.

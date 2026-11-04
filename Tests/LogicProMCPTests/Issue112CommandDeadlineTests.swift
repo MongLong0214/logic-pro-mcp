@@ -297,9 +297,6 @@ struct Issue112CommandDeadlineTests {
         #expect(first != nil)
         // The command deadline abandons logic_transport.play at its 25s deadline.
         gate.markTimedOut(first!, now: t0.addingTimeInterval(25))
-        let contention = gate.contentionSnapshot(now: t0.addingTimeInterval(30))
-        #expect(contention?.operation == "logic_transport.play")
-        #expect(contention?.timedOutReclaimAfter == 10)
         // Within the grace after the timeout, the gate is still genuinely held —
         // a successor mutation is refused (the abandoned work may still be unwinding).
         #expect(gate.tryAcquire(operation: "logic_transport.stop", now: t0.addingTimeInterval(25 + 14)) == nil)
@@ -313,6 +310,34 @@ struct Issue112CommandDeadlineTests {
         #expect(gate.currentOperation() == "logic_transport.stop")
         gate.release(second!)
         #expect(gate.currentOperation() == nil)
+    }
+
+    @Test("a refused acquire returns the refusing holder snapshot atomically")
+    func refusedAcquireBindsItsContentionSnapshot() throws {
+        let gate = LogicMutationGate(staleHolderTTL: 360, timedOutReclaimGrace: 15)
+        let t0 = Date()
+        let first = try #require(gate.tryAcquire(operation: "logic_transport.play", now: t0))
+        gate.markTimedOut(first, now: t0.addingTimeInterval(25))
+
+        let refusal = gate.acquire(
+            operation: "logic_transport.stop",
+            now: t0.addingTimeInterval(30)
+        )
+        let snapshot: LogicMutationGate.ContentionSnapshot
+        switch refusal {
+        case .acquired:
+            Issue.record("successor acquired before the timeout reclaim grace elapsed")
+            return
+        case .contended(let value):
+            snapshot = value
+        }
+
+        // Later holder changes cannot change which holder actually refused this request.
+        gate.release(first)
+        let successor = try #require(gate.tryAcquire(operation: "logic_tracks.mute"))
+        #expect(snapshot.operation == "logic_transport.play")
+        #expect(snapshot.timedOutReclaimAfter == 10)
+        gate.release(successor)
     }
 
     @Test("markTimedOut is epoch-guarded against an already-reclaimed successor")

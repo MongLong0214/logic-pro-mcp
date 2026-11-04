@@ -149,6 +149,11 @@ final class LogicMutationGate: @unchecked Sendable {
         let timedOutReclaimAfter: TimeInterval?
     }
 
+    enum Acquisition: Equatable, Sendable {
+        case acquired(Claim)
+        case contended(ContentionSnapshot)
+    }
+
     private let lock = NSLock()
     private var activeOperation: String?
     private var acquiredAt: Date?
@@ -215,11 +220,14 @@ final class LogicMutationGate: @unchecked Sendable {
         return now.timeIntervalSince(since) >= staleHolderTTL
     }
 
-    func tryAcquire(
+    /// Acquire the gate or return the exact holder that refused the request.
+    /// Both outcomes are decided under the same lock so a release or successor
+    /// cannot replace the holder between refusal and its retry metadata.
+    func acquire(
         operation: String,
         now: Date = Date(),
         reclaimPolicy: ReclaimPolicy = .automatic
-    ) -> Claim? {
+    ) -> Acquisition {
         lock.lock()
         defer { lock.unlock() }
         if let active = activeOperation, let since = acquiredAt {
@@ -235,14 +243,14 @@ final class LogicMutationGate: @unchecked Sendable {
                     subsystem: "server"
                 )
             } else if activeReclaimPolicy == .releaseOnly {
-                return nil
+                return .contended(contentionSnapshotLocked(operation: active, now: now))
             } else if now.timeIntervalSince(since) >= staleHolderTTL {
                 Log.warn(
                     "Reclaiming stale mutation gate from \(active) held \(Int(now.timeIntervalSince(since)))s (TTL \(Int(staleHolderTTL))s) — prior op may still be wedged",
                     subsystem: "server"
                 )
             } else {
-                return nil
+                return .contended(contentionSnapshotLocked(operation: active, now: now))
             }
         }
         epoch &+= 1
@@ -250,7 +258,20 @@ final class LogicMutationGate: @unchecked Sendable {
         acquiredAt = now
         timedOutAt = nil
         activeReclaimPolicy = reclaimPolicy
-        return Claim(epoch: epoch, operation: operation)
+        return .acquired(Claim(epoch: epoch, operation: operation))
+    }
+
+    func tryAcquire(
+        operation: String,
+        now: Date = Date(),
+        reclaimPolicy: ReclaimPolicy = .automatic
+    ) -> Claim? {
+        guard case .acquired(let claim) = acquire(
+            operation: operation,
+            now: now,
+            reclaimPolicy: reclaimPolicy
+        ) else { return nil }
+        return claim
     }
 
     /// Mark the current holder (if `claim` still owns the gate) as abandoned by
@@ -287,13 +308,12 @@ final class LogicMutationGate: @unchecked Sendable {
         return activeOperation
     }
 
-    /// A single locked view of the holder that refused a successor. The reclaim delay is present
-    /// only after the deadline has explicitly abandoned that holder; a healthy long-running
-    /// operation must never be advertised as a short-grace retry opportunity.
-    func contentionSnapshot(now: Date = Date()) -> ContentionSnapshot? {
-        lock.lock()
-        defer { lock.unlock() }
-        guard let operation = activeOperation else { return nil }
+    /// Caller must hold `lock`. The reclaim delay is present only after the
+    /// deadline has explicitly abandoned this exact holder.
+    private func contentionSnapshotLocked(
+        operation: String,
+        now: Date
+    ) -> ContentionSnapshot {
         guard let timedOutAt,
               timedOutReclaimGrace.isFinite, timedOutReclaimGrace >= 0 else {
             return ContentionSnapshot(operation: operation, timedOutReclaimAfter: nil)
@@ -923,17 +943,18 @@ actor LogicProServer {
                 extras: ["write_attempted": false, "navigation_performed": false])
         }
         if (isMutatingCommand(tool: tool, command: command) || ownedObservationRead), let mutationGate {
-            guard let claim = mutationGate.tryAcquire(operation: operation) else {
-                let contention = mutationGate.contentionSnapshot()
+            switch mutationGate.acquire(operation: operation) {
+            case .contended(let contention):
                 return mutationInProgressResult(
                     tool: tool,
                     command: command,
-                    activeOperation: contention?.operation,
-                    gateReclaimAfterSeconds: contention?.timedOutReclaimAfter
+                    activeOperation: contention.operation,
+                    gateReclaimAfterSeconds: contention.timedOutReclaimAfter
                 )
+            case .acquired(let claim):
+                heldMutationGate = mutationGate
+                heldClaim = claim
             }
-            heldMutationGate = mutationGate
-            heldClaim = claim
         } else {
             heldMutationGate = nil
             heldClaim = nil
