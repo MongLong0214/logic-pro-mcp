@@ -448,11 +448,12 @@ enum ProcessUtils {
             let command = String(parts[1])
             let pathComponents = command.split(separator: "/")
             let parents = pathComponents.dropLast()
+            let executableName = pathComponents.last.map(String.init) ?? ""
             let hasBundleParent = parents.contains { $0.hasSuffix(".app") || $0.hasSuffix(".appex") }
             // Match the executable itself, not a bundle ancestor or quoted argv.
             // Unbundled exact-name paths retain the existing stdio fallback.
             let isMainExecutablePath = command.hasPrefix("/")
-                && LogicProTarget.isLogicProcessName((command as NSString).lastPathComponent)
+                && LogicProTarget.isLogicProcessName(executableName)
                 && !parents.contains(where: { $0.last?.isWhitespace == true })
                 && (!hasBundleParent || mainExecutableSuffixes.contains(where: { command.hasSuffix($0) }))
             if LogicProTarget.isLogicProcessName(command) || isMainExecutablePath {
