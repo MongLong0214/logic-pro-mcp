@@ -447,7 +447,8 @@ def cmd_batch(args) -> int:
 
 def cmd_self_test(args) -> int:
     import selftest
-    return selftest.main(cases_only=args.cases_only, first_failure=args.first_failure)
+    return selftest.main(cases_only=args.cases_only, first_failure=args.first_failure,
+                         first_check=args.first_check)
 
 
 def parser() -> argparse.ArgumentParser:
@@ -482,6 +483,7 @@ def parser() -> argparse.ArgumentParser:
     p = sub.add_parser("self-test", help="fixtures and engine mutants, offline")
     p.add_argument("--cases-only", action="store_true", help=argparse.SUPPRESS)
     p.add_argument("--first-failure", action="store_true", help=argparse.SUPPRESS)
+    p.add_argument("--first-check", help=argparse.SUPPRESS)
     p.set_defaults(func=cmd_self_test)
     return top
 

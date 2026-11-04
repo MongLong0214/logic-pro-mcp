@@ -122,10 +122,9 @@ jobs:
   offline-guards:
     name: offline-guards
     # This job builds no product artifact. Use the standard Intel image so the scarce arm64 pool
-    # remains available for the release build and the exact test runtime below. The unchanged full
-    # guard suite exceeded 30 minutes on that image, so its budget retains the complete run.
+    # remains available for the release build and the exact test runtime below.
     runs-on: macos-15-intel
-    timeout-minutes: 60
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:

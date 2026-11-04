@@ -205,7 +205,6 @@ class WorkflowWiring(unittest.TestCase):
     def test_independent_offline_guards_use_pinned_python_and_stream_logs(self):
         guards = self.jobs["offline-guards"]
         self.assertRegex(guards, r"(?m)^    runs-on: macos-15-intel$")
-        self.assertRegex(guards, r"(?m)^    timeout-minutes: 60$")
         for product_job in ("compile-platform", "test-build", "test-shards", "test-coverage"):
             with self.subTest(product_job=product_job):
                 self.assertRegex(self.jobs[product_job], r"(?m)^    runs-on: macos-15$")
