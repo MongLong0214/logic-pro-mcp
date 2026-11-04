@@ -640,6 +640,188 @@ MUTANTS = [
      "new": '"""The verdict on one evidence document (control: a docstring edit, no behaviour).'},
 ]
 
+# A mutant needs only one load-bearing check to prove that the fixtures reject it. Run that check
+# first, then fall through to every remaining case if the hint has gone stale. `run_mutant` also
+# refuses a stale hint, so this table cannot silently trade self-test quality for speed.
+FIRST_CHECK_BY_MUTANT = {
+    "any-check-pins": "changed-pinned-by-not_null-refused",
+    "armed-false-when-unread": "track-armed-count-short-unreadable",
+    "armed-set-empty-when-unread": "armed-set-count-short-unreadable",
+    "attest-reads-document": "attestation-built-only-in-process",
+    "attestation-binary-unchecked": "attested-binary-differs",
+    "attestation-built-from-the-file": "attestation-shaped-dict-in-evidence",
+    "attestation-check-scoped-to-verify": "attestation-check-sees-the-whole-repository",
+    "attestation-digest-unchecked": "attested-then-one-byte-changed",
+    "attestation-head-unchecked": "attested-head-differs",
+    "attestation-locale-unchecked": "attested-reading-is-korean-stored-says-english",
+    "attestation-reached-by-getattr": "attestation-shaped-dict-in-evidence",
+    "attestation-rest-unchecked": "attested-rest-changed-after-the-run",
+    "attestation-restamped-after-a-change": "attestation-built-only-in-process",
+    "attestation-type-unchecked": "attestation-lookalike",
+    "baseline-before-a-call-allowed": "baseline-before-setup",
+    "baseline-home-unchecked": "run-baseline-off-home-is-not-home",
+    "baseline-read-once-over-the-passing-message": "run-baseline-waits-out-the-passing-message",
+    "baseline-showing-the-passing-message-unchecked": "run-baseline-still-showing-the-message-is-named",
+    "binding-ignored": "committed-ev-base-is-unbound",
+    "body-reserialized": "reply-text-exact",
+    "call-after-operation-allowed": "call-after-operation",
+    "call-counts-as-independent": "independent-is-call",
+    "canon-does-not-pin": "changed-pinned-by-canon-ok",
+    "canon-quote-unchecked": "canon-quote-wrong",
+    "changed-alone-allowed": "changed-alone-refused",
+    "closed-stdout-changes-the-exit": "closed-stdout-keeps-the-exit",
+    "count_eq-one-element-passes": "op-count_eq-fails",
+    "counterexample-after-operation-allowed": "counterexample-after-operation",
+    "counterexamples-skipped": "ev-pass",
+    "criterion-from-any-document": "acceptance-doc-as-source",
+    "digest-before-verdicts": "run-fake-clean-records",
+    "dirt-kind-only": "run-rival-named-unreadable",
+    "duplicate-keys-kept-silently": "duplicate-key-in-a-spec",
+    "effect-before-operation-allowed": "effect-before-operation",
+    "effect-ref-after-operation-allowed": "effect-ref-after-operation",
+    "effect-ref-to-a-call-allowed": "effect-ref-is-a-setup-reply",
+    "entry-shape-unchecked": "entry-is-a-list",
+    "evidence-not-content-addressed": "record-twice-same-basename",
+    "first-restore-call-only": "restore-check-reads-a-second-call-reply",
+    "gate-ignores-flags": "run-gate-miss-resets-then-runs",
+    "gate-ignores-upper-row": "run-gate-bank-off-home-resets",
+    "gate-reads-once-over-the-passing-message": "run-gate-waits-out-the-passing-message",
+    "gate-skipped": "run-gate-miss-resets-then-runs",
+    "host-provenance-grants-measured": "recheck-of-a-file-is-never-clean",
+    "in-does-not-pin": "changed-pinned-by-in-ok",
+    "incomplete-outranks-failed": "ev-fail",
+    "independence-rule-off": "no-independence",
+    "index-off-by-one": "track-armed-reads-sample",
+    "initial-reset-unchecked": "run-initial-reset-unconfirmed-stops-the-locale",
+    "invariant-after-operation-allowed": "invariant-after-operation",
+    "invariant-credited-as-proof": "invariant-in-must-fail",
+    "large-finite-refused": "large-finite-in-raw-is-read",
+    "lcd-cell-matched-on-its-first-letter": "run-baseline-off-home-is-not-home",
+    "legacy-restore-counterexample-attested": "legacy-spec-cannot-be-attested",
+    "life-guard-off": "life-keyword-outside-selftest-named",
+    "lifecycle-ignored": "run-modal-before-step-unreadable",
+    "live-fixture-unchecked": "run-cli-has-no-life-seam",
+    "live-reset-confirmed-unjudged": "live-reset-is-judged",
+    "live-reset-fingerprint-unread": "live-reset-is-judged",
+    "locale-mismatch-ignored": "duplicated-locale",
+    "locale-setting-unchecked": "setting-names-another-language",
+    "locale-title-unchecked": "title-not-shown",
+    "locale-unverified-ignored": "no-locale-reading",
+    "missing-locale-ignored": "missing-locale",
+    "mixer-hidden-child-failure-ignored": "971-mixer-visibility-contract",
+    "mixer-hidden-cutoff-frontier-ignored": "971-mixer-visibility-contract",
+    "mixer-hidden-cutoff-frontier-optional": "971-mixer-visibility-contract",
+    "mixer-hidden-node-failure-ignored": "971-mixer-visibility-contract",
+    "mixer-hidden-reported-visible": "971-mixer-visibility-contract",
+    "mixer-saga-setup-opt-in-dropped": "971-mixer-visibility-contract",
+    "nan-accepted": "nan-in-evidence-refused",
+    "nan-written": "nan-not-written",
+    "ne-pins": "changed-pinned-by-ne-refused",
+    "null-difference-passes": "op-changed-null-is-unreadable",
+    "null-rule-top-level-only": "changed-nested-null-unreadable",
+    "op-changed-always-passes": "ops-pass",
+    "op-changed-never-passes": "ops-pass",
+    "op-count_eq-always-passes": "ops-pass",
+    "op-count_eq-never-passes": "ops-pass",
+    "op-count_ge-always-passes": "ops-pass",
+    "op-count_ge-never-passes": "ops-pass",
+    "op-eq-always-passes": "ev-pass",
+    "op-eq-never-passes": "ev-pass",
+    "op-in-always-passes": "ops-pass",
+    "op-in-never-passes": "ops-pass",
+    "op-is_null-always-passes": "ops-pass",
+    "op-is_null-never-passes": "ops-pass",
+    "op-matches_canon-always-passes": "canon-pass",
+    "op-matches_canon-never-passes": "canon-pass",
+    "op-ne-always-passes": "ops-pass",
+    "op-ne-never-passes": "restore-counterexample-accepted",
+    "op-not_in-always-passes": "ops-pass",
+    "op-not_in-never-passes": "ops-pass",
+    "op-not_null-always-passes": "ops-pass",
+    "op-not_null-never-passes": "ops-pass",
+    "op-subset-always-passes": "ops-pass",
+    "op-subset-never-passes": "ops-pass",
+    "op-superset-always-passes": "ops-pass",
+    "op-superset-never-passes": "ops-pass",
+    "op-unchanged-always-passes": "ops-pass",
+    "op-unchanged-never-passes": "ops-pass",
+    "operator-shipped-without-coverage": "coverage",
+    "overflow-accepted": "overflow-in-evidence-refused",
+    "passing-message-keeps-its-accents": "run-gate-waits-out-the-passing-message",
+    "passing-message-outlasting-the-wait-passes": "run-gate-passing-message-outlasts-the-wait",
+    "passing-wait-reads-once": "run-gate-waits-out-the-passing-message",
+    "passing-wait-unbounded": "run-gate-passing-message-outlasts-the-wait",
+    "pin-op-unchecked": "changed-pinned-by-ne-refused",
+    "product-source-allowed": "product-source",
+    "provenance-file-unchecked": "forged-binding-file-missing",
+    "provenance-hash-unchecked": "forged-binding-hash-mismatch",
+    "provenance-head-unchecked": "head-not-a-commit",
+    "provenance-not-measured": "forged-binding-file-missing",
+    "quote-always-holds": "quote-not-in-source",
+    "reading-not-normalized": "run-tuple-in-reading",
+    "recheck-exits-clean": "recheck-of-a-file-is-never-clean",
+    "record-drops-the-fields-no-check-reads": "run-full-record-declined-on-a-field-no-check-reads",
+    "record-keeps-only-the-steps-its-checks-read": "run-record-keeps-every-step-reading",
+    "record-refusal-names-no-producer": "record-of-a-file-is-refused",
+    "record-without-attestation": "run-fake-clean-records",
+    "record-written-past-the-canon-guard": "run-full-record-declined-on-a-field-no-check-reads",
+    "reset-record-inline": "live-records-go-to-sidecars",
+    "reset-record-not-read": "run-initial-reset-unconfirmed-stops-the-locale",
+    "rest-dropped-from-evidence": "run-fake-clean-records",
+    "rest-record-inline": "live-records-go-to-sidecars",
+    "rest-unconfirmed-passes": "run-rest-not-confirmed-exits-3",
+    "restore-baseline-before-operation-refused": "restore-legitimate-baseline",
+    "restore-call-reply-counts": "restore-reads-the-restoring-reply",
+    "restore-call-without-a-check-allowed": "restore-call-without-a-check",
+    "restore-check-reads-any-reply-allowed": "restore-check-compares-with-a-setup-reply",
+    "restore-counterexample-accepted": "restore-counterexample-accepted",
+    "restore-counterexample-before-operation-allowed": "restore-counterexample-must-read-after-operation",
+    "restore-counterexample-before-restore-counts": "restore-counterexample-must-replace-post-restore-reading",
+    "restore-counterexample-of-another-kind-allowed": "restore-counterexample-must-be-the-same-reading",
+    "restore-counterexamples-skipped": "restore-without-a-counterexample-is-refused",
+    "restore-reads-after-operation-allowed": "restore-reads-after-operation",
+    "restore-reads-before-operation-allowed": "restore-expect-before-operation",
+    "restore-rule-reverted": "restore-expect-before-operation",
+    "restore-session-chain-provenance-disabled": "971-mixer-visibility-contract",
+    "restore-skipped": "ev-pass",
+    "restore-skipped-after-failure": "run-timeout-then-restore-runs",
+    "restore-step-before-the-call-counts": "restore-probe-before-the-call",
+    "restore-without-a-call-allowed": "pilot-upper-row-claim-in-restore-expect",
+    "retry-reset-unchecked": "run-retry-reset-unconfirmed-stops-the-locale",
+    "row-probe-ignores-the-baseline-message": "run-row-probe-waits-out-the-passing-message",
+    "row-probe-reads-once-over-the-passing-message": "run-row-probe-waits-out-the-passing-message",
+    "runner-private-guard-off": "life-keyword-outside-selftest-named",
+    "self-comparison-allowed": "effect-compared-with-itself",
+    "server-env-dropped": "run-start-carries-declared-env",
+    "session-bindings-all-refused": "971-mixer-visibility-contract",
+    "session-bindings-unrestricted": "971-mixer-visibility-contract",
+    "settle-samples-inline": "live-records-go-to-sidecars",
+    "spec-digest-ignored": "spec-tampered",
+    "step-identity-ignored": "wrong-step",
+    "step-name-reuse-allowed": "restore-name-reused-from-steps",
+    "store-default-on-unreadable": "run-probe-unreadable-stays-unreadable",
+    "stored-verdicts-not-compared": "verdict-mismatch",
+    "structured-preferred": "reply-text-exact",
+    "subset-reason-ignored": "subset-without-reason",
+    "switch-failure-already-there": "run-switch-refused-not-already-there",
+    "switch-per-entry": "batch-one-switch-per-locale",
+    "timeout-as-empty-object": "reply-timeout-unreadable",
+    "truncation-ignored": "truncated",
+    "unchanged-null-passes": "unchanged-null-null-unreadable",
+    "unknown-fixture-admitted": "run-unknown-fixture-refused",
+    "unlisted-effect-allowed": "effect-not-in-must-fail",
+    "unreadable-is-pass": "ev-unreadable",
+    "wait-ignores-bound": "run-wait-gives-up-at-bound",
+    "wait-reads-once": "run-wait-polls-until",
+    "witness-before-a-call-allowed": "witness-before-setup",
+    "witness-compared-with-itself-allowed": "witness-is-the-baseline",
+    "witness-of-another-kind-allowed": "witness-of-another-kind",
+}
+
+for _mutant in MUTANTS:
+    if not _mutant.get("control"):
+        _mutant["first_check"] = FIRST_CHECK_BY_MUTANT[_mutant["id"]]
+
 
 def operator_mutants() -> list:
     """Two per operator of predicates.OPS, generated from the table itself: always-passes and
@@ -649,10 +831,14 @@ def operator_mutants() -> list:
     out = []
     for op, (needs, _) in P.OPS.items():
         anchor = f'"{op}": ({needs}, lambda a, b: '
-        out.append({"id": f"op-{op}-always-passes", "file": "predicates.py", "op": op,
-                    "old": anchor, "new": anchor + "True or "})
-        out.append({"id": f"op-{op}-never-passes", "file": "predicates.py", "op": op,
-                    "old": anchor, "new": anchor + "False and "})
+        always = f"op-{op}-always-passes"
+        never = f"op-{op}-never-passes"
+        out.append({"id": always, "file": "predicates.py", "op": op,
+                    "old": anchor, "new": anchor + "True or ",
+                    "first_check": FIRST_CHECK_BY_MUTANT.get(always)})
+        out.append({"id": never, "file": "predicates.py", "op": op,
+                    "old": anchor, "new": anchor + "False and ",
+                    "first_check": FIRST_CHECK_BY_MUTANT.get(never)})
     return out
 
 
@@ -1940,9 +2126,19 @@ def load_cases() -> list:
     return cases
 
 
-def run_cases(cases: list, first_failure: bool = False) -> tuple:
+def _cases_with_first(cases: list, first_case: str) -> list:
+    """The same cases with one named load-bearing check first; none are removed."""
+    selected = [case for case in cases if case["name"] == first_case]
+    if len(selected) != 1:
+        raise RuntimeError(f"first case {first_case!r} occurs {len(selected)} time(s), not once")
+    return selected + [case for case in cases if case["name"] != first_case]
+
+
+def run_cases(cases: list, first_failure: bool = False, first_case: str | None = None) -> tuple:
     """(names passed, [(name, why)] failed). With first_failure, stop after the first failed case:
     a caller that only wants to know whether the copy is killed does not need the rest named."""
+    if first_case:
+        cases = _cases_with_first(cases, first_case)
     passed, failed = [], []
     saved = os.environ.get("LPM_VERIFY_ISSUE_BODIES")
     os.environ["LPM_VERIFY_ISSUE_BODIES"] = os.path.join(FIXTURES, "issues")
@@ -2001,9 +2197,11 @@ def run_mutant(mutant: dict) -> dict:
             return {"id": mutant["id"], "state": "BROKEN", "by": [], "why": str(exc)}
         env = dict(os.environ, LPM_VERIFY_REPO=os.environ.get("LPM_VERIFY_REPO") or ROOT,
                    PYTHONDONTWRITEBYTECODE="1")
-        proc = subprocess.run([sys.executable, os.path.join(target, "verify.py"), "self-test",
-                               "--cases-only", "--first-failure"], env=env, capture_output=True,
-                              text=True, timeout=600)
+        argv = [sys.executable, os.path.join(target, "verify.py"), "self-test",
+                "--cases-only", "--first-failure"]
+        if not mutant.get("control"):
+            argv += ["--first-check", mutant["first_check"]]
+        proc = subprocess.run(argv, env=env, capture_output=True, text=True, timeout=600)
     by = list(dict.fromkeys(line.split()[1].rstrip(":") for line in proc.stdout.splitlines()
                             if line.startswith("FAIL ")))
     if proc.returncode == 0:
@@ -2013,17 +2211,29 @@ def run_mutant(mutant: dict) -> dict:
     else:
         state = "BROKEN"
     tail = (proc.stdout + proc.stderr).strip().splitlines()[-2:]
-    return {"id": mutant["id"], "state": state, "by": by, "why": "" if by or not tail else " | ".join(tail)}
+    why = "" if by or not tail else " | ".join(tail)
+    expected = mutant.get("first_check")
+    if state == "killed" and expected not in by:
+        state = "BROKEN"
+        why = f"its first check {expected!r} no longer kills it; update the load-bearing hint"
+    return {"id": mutant["id"], "state": state, "by": by, "why": why}
 
 
 # ---------------------------------------------------------------------------------------------
 # entry
 # ---------------------------------------------------------------------------------------------
 
-def main(cases_only: bool = False, first_failure: bool = False) -> int:
+def main(cases_only: bool = False, first_failure: bool = False,
+         first_check: str | None = None) -> int:
     cases = load_cases()
-    passed, failed = run_cases(cases, first_failure=first_failure)
-    failed += [("coverage", why) for why in coverage_problems(cases)]
+    if first_check == "coverage":
+        passed = []
+        failed = [("coverage", why) for why in coverage_problems(cases)]
+        if not failed:
+            passed, failed = run_cases(cases, first_failure=first_failure)
+    else:
+        passed, failed = run_cases(cases, first_failure=first_failure, first_case=first_check)
+        failed += [("coverage", why) for why in coverage_problems(cases)]
     for name, why in failed:
         print(f"FAIL {name}: {why}")
     if cases_only:

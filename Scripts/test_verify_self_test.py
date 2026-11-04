@@ -8,6 +8,7 @@ drive fails. It needs no network and no running Logic.
 
     python3 Scripts/test_verify_self_test.py
 """
+import importlib.util
 import os
 import re
 import subprocess
@@ -20,7 +21,34 @@ SUMMARY = re.compile(r"^self-test: (\d+) case\(s\) passed; (\d+) of (\d+) mutant
                      r"0 survived; control survived \(exit 0\)$", re.M)
 
 
+def _load_selftest():
+    verify_dir = os.path.dirname(VERIFY)
+    spec = importlib.util.spec_from_file_location("verify_selftest", os.path.join(verify_dir, "selftest.py"))
+    module = importlib.util.module_from_spec(spec)
+    sys.path.insert(0, verify_dir)
+    try:
+        spec.loader.exec_module(module)
+    finally:
+        sys.path.pop(0)
+    return module
+
+
 class VerifierSelfTest(unittest.TestCase):
+    def test_every_mutant_prioritizes_an_existing_load_bearing_check(self):
+        selftest = _load_selftest()
+        cases = selftest.load_cases()
+        names = {case["name"] for case in cases}
+        mutants = selftest.MUTANTS + selftest.operator_mutants()
+        real = [mutant for mutant in mutants if not mutant.get("control")]
+
+        self.assertEqual([], [mutant["id"] for mutant in real if not mutant.get("first_check")])
+        self.assertEqual([], [mutant["id"] for mutant in real
+                              if mutant["first_check"] not in names | {"coverage"}])
+        ordered = selftest._cases_with_first(cases, real[-1]["first_check"])
+        self.assertEqual(ordered[0]["name"], real[-1]["first_check"])
+        self.assertEqual({case["name"] for case in ordered}, names)
+        self.assertEqual(len(ordered), len(cases))
+
     def test_every_case_passes_and_every_mutant_is_killed(self):
         proc = subprocess.run([sys.executable, VERIFY, "self-test"], capture_output=True, text=True,
                               timeout=600)
