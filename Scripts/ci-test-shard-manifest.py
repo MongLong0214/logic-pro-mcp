@@ -70,22 +70,17 @@ def verify_union(inventory_path: Path, selected_path: Path, complement_path: Pat
         raise ManifestError(f"shard union differs from inventory; missing={missing} extra={extra}")
 
 
-def verify_xunit(
-    expected_path: Path, xunit_directory: Path, xunit_name: str, actual_path: Path
-) -> None:
+def verify_xunit(expected_path: Path, xunit_directory: Path, actual_path: Path) -> None:
     expected = set(_read(expected_path, label="expected shard manifest", require_sorted=True))
-    if Path(xunit_name).name != xunit_name or not xunit_name.endswith(".xml"):
-        raise ManifestError(f"xUnit name must be one local XML filename: {xunit_name!r}")
     try:
         xml_files = sorted(path for path in xunit_directory.iterdir()
                            if path.is_file() and path.suffix == ".xml")
     except OSError as error:
         raise ManifestError(f"cannot inspect xUnit directory {xunit_directory}: {error}") from error
-    wanted = xunit_directory / xunit_name
-    if xml_files != [wanted]:
+    if len(xml_files) != 1:
         raise ManifestError(
-            f"expected exactly one xUnit output named {xunit_name}; found "
-            f"{[path.name for path in xml_files]}")
+            f"expected exactly one xUnit XML output; found {[path.name for path in xml_files]}")
+    wanted = xml_files[0]
     try:
         root = ET.parse(wanted).getroot()
     except (OSError, ET.ParseError) as error:
@@ -123,7 +118,6 @@ def _parser() -> argparse.ArgumentParser:
     xunit = subparsers.add_parser("verify-xunit")
     xunit.add_argument("--expected", type=Path, required=True)
     xunit.add_argument("--xunit-directory", type=Path, required=True)
-    xunit.add_argument("--xunit-name", required=True)
     xunit.add_argument("--actual", type=Path, required=True)
 
     union = subparsers.add_parser("verify-union")
@@ -139,7 +133,7 @@ def main() -> int:
         if args.command == "partition":
             partition_manifest(args.inventory, args.selector, args.selected, args.complement)
         elif args.command == "verify-xunit":
-            verify_xunit(args.expected, args.xunit_directory, args.xunit_name, args.actual)
+            verify_xunit(args.expected, args.xunit_directory, args.actual)
         else:
             verify_union(args.inventory, args.selected, args.complement)
     except ManifestError as error:

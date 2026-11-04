@@ -204,6 +204,10 @@ import Testing
     // serial shards from those exact bytes. Each shard proves its xUnit set before profiles merge.
     #expect(workflow.contains("set -euo pipefail"))
     #expect(workflow.contains("swift build --build-tests --enable-code-coverage"))
+    #expect(workflow.contains("TEST_SHARD_SELECTOR: '\\.(QualificationRunnerTests|"))
+    #expect(!workflow.contains("TEST_SHARD_SELECTOR: '^LogicProMCPTests\\."))
+    #expect(workflow.contains("--filter \"$TEST_SHARD_SELECTOR\""))
+    #expect(workflow.contains("--skip \"$TEST_SHARD_SELECTOR\""))
     #expect(workflow.contains("logicpromcp-test-runtime.tar.gz"))
     #expect(workflow.contains("--skip-build --enable-code-coverage --no-parallel"))
     #expect(workflow.contains("--xunit-output \"$XUNIT_DIR/results.xml\""))

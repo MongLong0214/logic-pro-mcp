@@ -85,10 +85,10 @@ class XUnitTests(ManifestFixture):
             '<testcase classname="LogicProMCPTests.Suite" '
             'name="parameterized(arguments:)" />'
             '<testcase classname="LogicProMCPTests.Suite" name="skipped()">'
-            '<skipped /></testcase>')
+            '<skipped /></testcase>', name="results-swift-testing.xml")
         actual = self.root / "actual.txt"
 
-        manifest.verify_xunit(expected, self.root / "xunit", "results.xml", actual)
+        manifest.verify_xunit(expected, self.root / "xunit", actual)
 
         self.assertEqual(actual.read_text(encoding="utf-8"), expected.read_text(encoding="utf-8"))
 
@@ -98,8 +98,7 @@ class XUnitTests(ManifestFixture):
             '<testcase classname="LogicProMCPTests.Suite" name="a()" />'
             '<testcase classname="LogicProMCPTests.Suite" name="a()" />')
         with self.assertRaisesRegex(manifest.ManifestError, "duplicate"):
-            manifest.verify_xunit(
-                expected, self.root / "xunit", "results.xml", self.root / "actual.txt")
+            manifest.verify_xunit(expected, self.root / "xunit", self.root / "actual.txt")
 
     def test_missing_extra_failure_and_error_are_refused(self):
         expected = self.write("expected.txt", "LogicProMCPTests.Suite/a()\n")
@@ -114,21 +113,19 @@ class XUnitTests(ManifestFixture):
                 (xunit_dir / "results.xml").write_text(
                     f"<testsuites><testsuite>{child}</testsuite></testsuites>", encoding="utf-8")
                 with self.assertRaises(manifest.ManifestError):
-                    manifest.verify_xunit(
-                        expected, xunit_dir, "results.xml", self.root / f"actual-{suffix}.txt")
+                    manifest.verify_xunit(expected, xunit_dir, self.root / f"actual-{suffix}.txt")
 
     def test_missing_or_ambiguous_xunit_output_is_refused(self):
         expected = self.write("expected.txt", "LogicProMCPTests.Suite/a()\n")
         empty = self.root / "empty"
         empty.mkdir()
         with self.assertRaisesRegex(manifest.ManifestError, "exactly one"):
-            manifest.verify_xunit(expected, empty, "results.xml", self.root / "actual.txt")
+            manifest.verify_xunit(expected, empty, self.root / "actual.txt")
 
         self.xunit('<testcase classname="LogicProMCPTests.Suite" name="a()" />')
         self.write("xunit/results-swift-testing.xml", "<testsuites />")
         with self.assertRaisesRegex(manifest.ManifestError, "exactly one"):
-            manifest.verify_xunit(
-                expected, self.root / "xunit", "results.xml", self.root / "actual-2.txt")
+            manifest.verify_xunit(expected, self.root / "xunit", self.root / "actual-2.txt")
 
 
 if __name__ == "__main__":

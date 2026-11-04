@@ -29,7 +29,10 @@ defaults:
     shell: bash
 
 env:
-  TEST_SHARD_SELECTOR: '^LogicProMCPTests\.(QualificationRunnerTests|Issue965FreshPopulationAcquisitionTests|Issue538TrackCreationObservationTests|Issue968ExactTrackNameAdapterTests|QualificationFaultInjectionTests|MIDIReadbackCallSiteLintTests|Issue538ModalWitnessTests)/'
+  # SwiftPM applies this regex to an implementation-qualified name while `swift test list`
+  # includes the module prefix. Keep the exact suite segment bounded by `.` and `/`, but do not
+  # anchor either side: an anchored module-qualified pattern selects zero tests on Swift 6.2.
+  TEST_SHARD_SELECTOR: '\.(QualificationRunnerTests|Issue965FreshPopulationAcquisitionTests|Issue538TrackCreationObservationTests|Issue968ExactTrackNameAdapterTests|QualificationFaultInjectionTests|MIDIReadbackCallSiteLintTests|Issue538ModalWitnessTests)/'
 
 jobs:
   # WAS `roadmap`, and carried four things: two that compare GitHub issue state against
@@ -379,14 +382,17 @@ jobs:
           fi
           python3 Scripts/ci-test-shard-manifest.py verify-xunit \
             --expected "$RUNTIME/$SHARD.txt" \
-            --xunit-directory "$XUNIT_DIR" --xunit-name results.xml \
+            --xunit-directory "$XUNIT_DIR" \
             --actual "$OUT/actual-$SHARD.txt"
           find .build -type f -path '*/debug/codecov/default.profdata' \
             > "$RUNNER_TEMP/profiles-$SHARD.txt"
           test "$(grep -c . "$RUNNER_TEMP/profiles-$SHARD.txt")" = "1"
           cp "$(cat "$RUNNER_TEMP/profiles-$SHARD.txt")" "$OUT/$SHARD.profdata"
+          # SwiftPM versions may suffix the requested xUnit basename. The verifier already proved
+          # this empty, shard-private directory contains exactly one XML file; hashing the glob
+          # preserves its actual basename in the evidence instead of guessing a toolchain name.
           (cd "$OUT" && shasum -a 256 "actual-$SHARD.txt" "$SHARD.profdata" \
-            test.log xunit/results.xml > shard-files.sha256)
+            test.log xunit/*.xml > shard-files.sha256)
 
       - name: Publish this shard's verified evidence
         if: always()
