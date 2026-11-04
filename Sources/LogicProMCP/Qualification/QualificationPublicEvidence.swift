@@ -13,14 +13,14 @@ enum QualificationPublicEvidence {
         let name: String
         let sha256: String
     }
-    struct Case: Codable {
+    struct Case: Codable, Equatable {
         let caseIDHash: String
         let operationID: String?
         let status: QualificationStatus
         let verificationKind: QualificationVerificationKind
         let liveCredited: Bool
     }
-    struct Waiver: Codable {
+    struct Waiver: Codable, Equatable {
         let caseIDHash: String
         let reasonCode: String
         let owningIssue: String
@@ -29,13 +29,13 @@ enum QualificationPublicEvidence {
         let affectsDefaultProfile: Bool
         let expiryVersion: String
     }
-    struct Evidence: Codable {
+    struct Evidence: Codable, Equatable {
         let pathHash: String
         let sha256: String
         let caseIDHash: String
         let kind: String
     }
-    struct Payload: Codable {
+    struct Payload: Codable, Equatable {
         let schema: String
         let commitSHA: String
         let releaseVersion: String

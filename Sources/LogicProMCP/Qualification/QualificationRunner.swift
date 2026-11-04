@@ -89,6 +89,12 @@ package struct QualificationRunner: Sendable {
         }
     }
 
+    private struct PublicMatrixChildSnapshot {
+        let child: MatrixChildSnapshot
+        let manifestData: Data
+        let operationCatalogData: Data
+    }
+
     private struct VerificationOutput: Codable {
         struct Rejection: Codable {
             let reason: String
@@ -1073,16 +1079,20 @@ package struct QualificationRunner: Sendable {
         requiredOperationIDs expectedOperationIDs: Set<String>?,
         beforeEvidenceRead: @Sendable (URL) -> Void,
         signatureRequirement: SignatureRequirement,
+        manifestSnapshot: Data? = nil,
         operationCatalogSnapshot: Data? = nil,
         matrixChildAxis: QualificationAxis? = nil
     ) throws -> [PromotionRejectionReason] {
         let manifestArtifact = Self.manifestFilename
         let requiredArtifacts = requestedArtifacts.union([manifestArtifact])
-        let manifest = (try? Self.readNoFollow(
+        let manifestData = manifestSnapshot ?? (try? Self.readNoFollow(
             relativePath: manifestArtifact,
             directory: directory,
             beforeRead: beforeEvidenceRead
-        )).flatMap { try? JSONDecoder().decode(EvidenceManifest.self, from: $0) }
+        ))
+        let manifest = manifestData.flatMap {
+            try? JSONDecoder().decode(EvidenceManifest.self, from: $0)
+        }
         let operationCatalogData = operationCatalogSnapshot ?? (try? Self.readNoFollow(
             relativePath: Self.operationCatalogFilename,
             directory: directory,
@@ -1332,7 +1342,8 @@ package struct QualificationRunner: Sendable {
     ) -> QualificationCommandResult {
         do {
             if let command = arguments.dropFirst().first,
-               command == "export-public" || command == "verify-public" {
+               command == "export-public" || command == "verify-public"
+                || command == "export-public-matrix" || command == "verify-public-matrix" {
                 return try runPublicCommand(command, arguments: Array(arguments.dropFirst(2)), environment: environment)
             }
             if let command = arguments.dropFirst().first,
@@ -1443,29 +1454,79 @@ package struct QualificationRunner: Sendable {
     private static func runPublicCommand(_ command: String, arguments: [String],
                                          environment: [String: String]) throws -> QualificationCommandResult {
         do {
-            let allowed: Set<String> = command == "export-public"
-                ? ["--candidate", "--bundle", "--public-directory", "--release-version", "--expected-commit"]
-                : ["--public-directory", "--release-version", "--expected-commit", "--expected-axis"]
+            let isExport = command == "export-public" || command == "export-public-matrix"
+            let isMatrix = command == "export-public-matrix" || command == "verify-public-matrix"
+            let allowed: Set<String>
+            if isExport {
+                allowed = isMatrix
+                    ? ["--candidate", "--matrix-index", "--public-directory", "--release-version", "--expected-commit"]
+                    : ["--candidate", "--bundle", "--public-directory", "--release-version", "--expected-commit"]
+            } else {
+                allowed = isMatrix
+                    ? ["--public-directory", "--release-version", "--expected-commit"]
+                    : ["--public-directory", "--release-version", "--expected-commit", "--expected-axis"]
+            }
             let values = try optionValues(arguments, allowed: allowed)
             guard let path = values["--public-directory"], let version = values["--release-version"],
                   SemanticVersion(version) != nil, let commit = values["--expected-commit"], isCommitSHA(commit) else {
                 return try typedFailure("publicEvidenceArguments")
             }
             let directory = URL(fileURLWithPath: path).standardizedFileURL
-            if command == "export-public" {
-                guard let candidate = values["--candidate"], let bundle = values["--bundle"],
+            if isExport {
+                guard let candidate = values["--candidate"],
                       let keyData = environment[signingKeyEnvironmentKey].flatMap({ Data(base64Encoded: $0) }),
                       let key = try? Curve25519.Signing.PrivateKey(rawRepresentation: keyData) else {
                     return try typedFailure("signingKeyUnavailable")
                 }
+                if isMatrix {
+                    guard let matrixIndex = values["--matrix-index"] else {
+                        return try typedFailure("publicEvidenceArguments")
+                    }
+                    let index = URL(fileURLWithPath: matrixIndex).standardizedFileURL
+                    guard index.lastPathComponent == matrixInputFilename else {
+                        return try typedFailure("publicEvidenceArguments")
+                    }
+                    return try exportPublicMatrixEvidence(
+                        candidate: URL(fileURLWithPath: candidate),
+                        matrix: index.deletingLastPathComponent(),
+                        directory: directory,
+                        version: version,
+                        commit: commit,
+                        key: key
+                    )
+                }
+                guard let bundle = values["--bundle"] else {
+                    return try typedFailure("publicEvidenceArguments")
+                }
                 return try exportPublicEvidence(candidate: URL(fileURLWithPath: candidate),
                     bundle: URL(fileURLWithPath: bundle), directory: directory, version: version, commit: commit, key: key)
             }
-            guard let expectedAxis = values["--expected-axis"],
-                  let key = environment[trustedPublicKeyEnvironmentKey].flatMap({ Data(base64Encoded: $0) }) else {
+            guard let key = environment[trustedPublicKeyEnvironmentKey].flatMap({ Data(base64Encoded: $0) }) else {
                 return try typedFailure("trustedPublicKeyUnavailable")
             }
             let data = try readNoFollow(relativePath: QualificationPublicEvidence.filename, directory: directory, beforeRead: { _ in })
+            if isMatrix {
+                let payload = try QualificationPublicMatrixEvidence.verify(data, trustedKey: key)
+                guard payload.commitSHA == commit, payload.releaseVersion == version else {
+                    return try typedFailure("publicEvidenceContextMismatch")
+                }
+                let artifacts = try publicArtifacts(
+                    directory,
+                    binarySHA256: payload.binarySHA256,
+                    inspectArchives: false
+                )
+                guard artifacts == payload.artifacts else {
+                    return try typedFailure("publicArtifactMismatch")
+                }
+                return QualificationCommandResult(
+                    exitCode: 0,
+                    stdout: String(decoding: try QualificationPublicEvidence.encode(payload), as: UTF8.self) + "\n",
+                    stderr: ""
+                )
+            }
+            guard let expectedAxis = values["--expected-axis"] else {
+                return try typedFailure("publicEvidenceArguments")
+            }
             let payload = try QualificationPublicEvidence.verify(data, trustedKey: key)
             guard payload.commitSHA == commit, payload.releaseVersion == version, payload.axis.key == expectedAxis else {
                 return try typedFailure("publicEvidenceContextMismatch")
@@ -1507,15 +1568,44 @@ package struct QualificationRunner: Sendable {
             releaseVersion: version, expectedCommitSHA: commit, requiredArtifacts: trustedRequiredArtifacts,
             requiredOperationIDs: nil, beforeEvidenceRead: beforeEvidenceRead,
             signatureRequirement: .required(trustedPublicKeyData: key.publicKey.rawRepresentation),
+            manifestSnapshot: manifestData,
             operationCatalogSnapshot: operationCatalogData)
         guard rejections.isEmpty else { return try typedFailure("privateQualificationRejected") }
+        let artifacts = try publicArtifacts(directory, binarySHA256: attestation.binarySHA256, inspectArchives: true)
+        let payload = try makePublicPayload(
+            attestation: attestation,
+            manifestData: manifestData,
+            operationCatalogData: operationCatalogData,
+            artifacts: artifacts,
+            version: version
+        )
+        let data = try QualificationPublicEvidence.sign(payload, key: key)
+        guard try publicArtifacts(directory, binarySHA256: attestation.binarySHA256, inspectArchives: false) == artifacts else {
+            return try typedFailure("publicArtifactsChanged")
+        }
+        try writeNewPublicEvidence(data, directory: directory)
+        return QualificationCommandResult(exitCode: 0, stdout: "Exported qualification-public.json\n", stderr: "")
+    }
+
+    private static func makePublicPayload(
+        attestation: ReleaseQualificationAttestation,
+        manifestData: Data,
+        operationCatalogData: Data,
+        artifacts: [QualificationPublicEvidence.Artifact],
+        version: String
+    ) throws -> QualificationPublicEvidence.Payload {
+        guard SupportBundleBuilder.sha256(manifestData) == attestation.evidenceManifestSHA256,
+              SupportBundleBuilder.sha256(operationCatalogData) == attestation.operationCatalogSHA256 else {
+            throw QualificationPublicEvidence.Rejection.invalid
+        }
         let manifest = try JSONDecoder().decode(EvidenceManifest.self, from: manifestData)
         let operationCatalog = try JSONDecoder().decode(
             QualificationOperationCatalog.self,
             from: operationCatalogData
         )
-        guard let provenance = attestation.provenance else { return try typedFailure("provenanceMissing") }
-        let artifacts = try publicArtifacts(directory, binarySHA256: attestation.binarySHA256, inspectArchives: true)
+        guard let provenance = attestation.provenance else {
+            throw QualificationPublicEvidence.Rejection.invalid
+        }
         let registered = Set(operationCatalog.operations.map(\.operationID))
         let catalogEntries = Dictionary(uniqueKeysWithValues: operationCatalog.operations.map {
             ($0.operationID, $0)
@@ -1541,7 +1631,7 @@ package struct QualificationRunner: Sendable {
                 caseIDHash: hash(item.caseID), kind: item.kind.rawValue)
         }.sorted { $0.pathHash < $1.pathHash }
         let counts = QualificationSummaryCounts(cases: attestation.cases)
-        let payload = QualificationPublicEvidence.Payload(schema: QualificationPublicEvidence.schema,
+        return QualificationPublicEvidence.Payload(schema: QualificationPublicEvidence.schema,
             commitSHA: attestation.commitSHA, releaseVersion: version, binarySHA256: attestation.binarySHA256,
             logicVersion: attestation.logicVersion, axis: provenance.axis, runIDHash: hash(provenance.runID),
             startedAt: attestation.startedAt.timeIntervalSince1970, completedAt: attestation.completedAt.timeIntervalSince1970,
@@ -1549,12 +1639,167 @@ package struct QualificationRunner: Sendable {
             waivers: waivers, evidence: evidence, total: counts.total, passed: counts.passed,
             failed: counts.failed, waived: counts.waived,
             disclosure: "Authenticated projection; raw evidence, paths, case/run identifiers and waiver impact text remain private. Raw semantics are not replayed by public verification.")
-        let data = try QualificationPublicEvidence.sign(payload, key: key)
-        guard try publicArtifacts(directory, binarySHA256: attestation.binarySHA256, inspectArchives: false) == artifacts else {
+    }
+
+    /// Validate and project the exact root and child snapshots loaded here.
+    /// The private paths are used only for bounded reads and never enter the
+    /// public payload.
+    package static func exportPublicMatrixEvidence(
+        candidate: URL,
+        matrix: URL,
+        directory: URL,
+        version: String,
+        commit: String,
+        key: Curve25519.Signing.PrivateKey,
+        requiredArtifacts: Set<String> = trustedRequiredArtifacts,
+        requiredOperationIDs: Set<String>? = nil,
+        beforeProjection: @Sendable () -> Void = {}
+    ) throws -> QualificationCommandResult {
+        guard publicDirectoryIsDisjoint(directory, from: matrix) else {
+            return try typedFailure("publicPrivateDirectoryOverlap")
+        }
+        let envelopeData = try readNoFollow(
+            relativePath: matrixAttestationFilename,
+            directory: matrix,
+            beforeRead: { _ in }
+        )
+        let envelope = try JSONDecoder().decode(
+            ReleaseQualificationMatrixAttestation.self,
+            from: envelopeData
+        )
+        var rejections = try matrixEnvelopeRejections(
+            envelope,
+            candidateURL: candidate,
+            releaseVersion: version,
+            expectedCommitSHA: commit,
+            trustedPublicKeyData: key.publicKey.rawRepresentation
+        )
+        guard rejections.isEmpty else { return try verificationResult(rejections) }
+
+        let expectedRunCount = QualificationAxis.requiredAxes(
+            profile: envelope.profile,
+            cache: envelope.cache,
+            fixture: envelope.fixture
+        ).count
+        guard envelope.runs.count == expectedRunCount else {
+            rejections.append(.evidenceBindingMismatch(
+                detail: "matrix run count expected \(expectedRunCount), got \(envelope.runs.count)"
+            ))
+            return try verificationResult(rejections)
+        }
+
+        let paths = try validatedMatrixPaths(envelope.runs.map(\.path))
+        var snapshots: [PublicMatrixChildSnapshot] = []
+        for (run, path) in zip(envelope.runs, paths) {
+            let (childDirectory, attestationData) = try readMatrixChildAttestation(
+                path: path,
+                matrixURL: matrix
+            )
+            guard SupportBundleBuilder.sha256(attestationData) == run.childAttestationSHA256 else {
+                rejections.append(.matrixChildDigestMismatch(path: path))
+                continue
+            }
+            let child = MatrixChildSnapshot(
+                path: path,
+                directory: childDirectory,
+                attestationData: attestationData,
+                attestation: try JSONDecoder().decode(
+                    ReleaseQualificationAttestation.self,
+                    from: attestationData
+                )
+            )
+            if child.axis != run.axis {
+                rejections.append(.evidenceBindingMismatch(
+                    detail: "matrix run axis does not match child: \(path)"
+                ))
+            }
+            let manifestData = try readNoFollow(
+                relativePath: manifestFilename,
+                directory: childDirectory,
+                beforeRead: { _ in }
+            )
+            let operationCatalogData = try readNoFollow(
+                relativePath: operationCatalogFilename,
+                directory: childDirectory,
+                beforeRead: { _ in }
+            )
+            snapshots.append(PublicMatrixChildSnapshot(
+                child: child,
+                manifestData: manifestData,
+                operationCatalogData: operationCatalogData
+            ))
+        }
+        for snapshot in snapshots {
+            rejections.append(contentsOf: try evaluateBundle(
+                attestation: snapshot.child.attestation,
+                directory: snapshot.child.directory,
+                candidateURL: candidate,
+                releaseVersion: version,
+                expectedCommitSHA: commit,
+                requiredArtifacts: requiredArtifacts,
+                requiredOperationIDs: requiredOperationIDs,
+                beforeEvidenceRead: { _ in },
+                signatureRequirement: .skipped,
+                manifestSnapshot: snapshot.manifestData,
+                operationCatalogSnapshot: snapshot.operationCatalogData,
+                matrixChildAxis: snapshot.child.axis
+            ))
+        }
+        rejections.append(contentsOf: matrixCommonIdentityRejections(
+            snapshots.map(\.child),
+            releaseVersion: version,
+            expectedCommitSHA: commit,
+            envelope: envelope
+        ))
+        guard rejections.isEmpty else { return try verificationResult(rejections) }
+
+        beforeProjection()
+        let artifacts = try publicArtifacts(
+            directory,
+            binarySHA256: envelope.binarySHA256,
+            inspectArchives: true
+        )
+        let projectedRuns = try snapshots.map { snapshot in
+            QualificationPublicMatrixEvidence.Run(
+                axis: snapshot.child.axis,
+                childAttestationSHA256: SupportBundleBuilder.sha256(
+                    snapshot.child.attestationData
+                ),
+                payload: try makePublicPayload(
+                    attestation: snapshot.child.attestation,
+                    manifestData: snapshot.manifestData,
+                    operationCatalogData: snapshot.operationCatalogData,
+                    artifacts: artifacts,
+                    version: version
+                )
+            )
+        }.sorted { $0.axis.key < $1.axis.key }
+        let payload = QualificationPublicMatrixEvidence.Payload(
+            schema: QualificationPublicMatrixEvidence.schema,
+            commitSHA: envelope.commitSHA,
+            releaseVersion: envelope.releaseVersion,
+            binarySHA256: envelope.binarySHA256,
+            logicVersion: envelope.logicVersion,
+            operationCatalogSHA256: envelope.operationCatalogSHA256,
+            privateMatrixSHA256: SupportBundleBuilder.sha256(envelopeData),
+            artifacts: artifacts,
+            runs: projectedRuns,
+            disclosure: "Authenticated matrix projection; private paths, raw evidence, case/run identifiers and waiver impact text remain private. Raw semantics are not replayed by public verification."
+        )
+        let data = try QualificationPublicMatrixEvidence.sign(payload, key: key)
+        guard try publicArtifacts(
+            directory,
+            binarySHA256: envelope.binarySHA256,
+            inspectArchives: false
+        ) == artifacts else {
             return try typedFailure("publicArtifactsChanged")
         }
         try writeNewPublicEvidence(data, directory: directory)
-        return QualificationCommandResult(exitCode: 0, stdout: "Exported qualification-public.json\n", stderr: "")
+        return QualificationCommandResult(
+            exitCode: 0,
+            stdout: "Exported qualification-public.json matrix\n",
+            stderr: ""
+        )
     }
 
     /// Compare actual directory identities, including /var aliases and volume
