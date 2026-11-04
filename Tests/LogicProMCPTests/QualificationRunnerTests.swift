@@ -582,6 +582,7 @@ struct QualificationRunnerTests {
     func historyStageTimeoutAfterWriteRestoresOriginalName(operation: OperationID) throws {
         let fixture = try SlowHandshakeFixture(
             nameRecipe: operation,
+            nameCleanupDelay: 0.15,
             nameStageFailure: "timeout_after_write")
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
@@ -590,7 +591,7 @@ struct QualificationRunnerTests {
 
         let result = try QualificationTransport(
             handshakeTimeout: 2,
-            requestTimeout: 2,
+            requestTimeout: 0.05,
             shutdownGrace: 2,
             cleanupSleep: { delay in
                 probe.record(delay)
@@ -607,6 +608,12 @@ struct QualificationRunnerTests {
         #expect(observed.mutationRestore == nil)
         #expect(observed.mutationRestoreRefusal?.contains("rename refused") == true)
         #expect(probe.delays == [0.25])
+        #expect(result.wireFrames.contains {
+            $0.direction == .response && $0.operationID == "phase_b.cleanup"
+        }, "cleanup must complete within the operation deadline, not merely write after a generic timeout")
+        #expect(FileManager.default.fileExists(
+            atPath: fixture.directory.appendingPathComponent("cleanup-readback").path),
+            "cleanup must return before the transport performs its exact-reference readback")
         let residual = try String(
             contentsOf: fixture.directory.appendingPathComponent("track-name"),
             encoding: .utf8
@@ -9586,6 +9593,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
              initialTransportMotion: String = "stopped", cachedTransport: Bool = false,
              nameRecipe: OperationID? = nil, nameIdentityFault: String = "none",
              nameCleanupContention: String = "none", nameStageDelay: TimeInterval = 0,
+             nameCleanupDelay: TimeInterval = 0,
              nameStageFailure: String = "none",
              countInCycle: String? = nil, autopunchCycle: String? = nil,
              playheadStep: OperationID? = nil, playheadFault: String = "none", playheadAtBoundary: Bool = false,
@@ -9641,6 +9649,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                 name_fault=none
                 name_cleanup_contention=none
                 name_stage_delay=0
+                name_cleanup_delay=0
                 name_stage_failure=none
                 rename_attempts=0
                 count_in_cycle=none
@@ -9689,6 +9698,9 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                         esac
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://project/info","text":"{\\"source\\":\\"ax_live\\",\\"cache_age_sec\\":0,\\"identity_source\\":\\"current_document_project_file\\",\\"identity_fetched_at\\":\\"%s\\",\\"data\\":{\\"project_ref\\":\\"%s\\",\\"filePath\\":\\"/tmp/qualification-step.logicx\\"}}"}]}}\n' "$id" "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" "$step_project_ref" ;;
                       *'"uri":"logic://tracks"'*)
+                        if [ "$name_cleanup_delay" != 0 ] && [ "$rename_attempts" -ge 3 ]; then
+                            touch cleanup-readback
+                        fi
                         if [ "$value_cycle" != none ]; then
                             value_reads=$((value_reads + 1))
                             if [ "$value_reads" = 2 ]; then
@@ -9962,6 +9974,9 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                                 printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"success\\":false,\\"error\\":\\"mutating_operation_in_progress\\",\\"safe_to_retry\\":true,\\"write_attempted\\":false,\\"mutation_gate\\":\\"reclaimable_after_grace\\",\\"gate_reclaim_after_sec\\":0.25}"}]}}\n' "$id"
                                 continue
                             fi
+                            if [ "$rename_attempts" -ge 3 ] && [ "$name_cleanup_delay" != 0 ]; then
+                                sleep "$name_cleanup_delay"
+                            fi
                             if [ "$name_cleanup_contention" != none ] && [ "$rename_attempts" = 2 ]; then
                                 printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"operation_timeout\\",\\"write_attempted\\":true}"}]}}\n' "$id"
                                 continue
@@ -10058,6 +10073,9 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                         .replacingOccurrences(
                             of: "name_stage_delay=0",
                             with: "name_stage_delay=\(nameStageDelay)")
+                        .replacingOccurrences(
+                            of: "name_cleanup_delay=0",
+                            with: "name_cleanup_delay=\(nameCleanupDelay)")
                         .replacingOccurrences(
                             of: "name_stage_failure=none",
                             with: "name_stage_failure=\(nameStageFailure)")

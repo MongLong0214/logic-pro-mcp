@@ -3688,7 +3688,8 @@ struct QualificationTransport: Sendable {
                     guard let cleanup = try? invoke(
                         session, id: cleanupID, tool: "logic_tracks", command: "rename",
                         params: ["target_ref": original.trackRef, "name": original.value],
-                        phase: "phase_b.cleanup") else { break }
+                        phase: "phase_b.cleanup",
+                        timeout: spec.deadline.seconds + 5) else { break }
                     cleanupID += 1
                     if let delay = Self.cleanupGateReclaimDelay(cleanup) {
                         cleanupSleep(delay)
