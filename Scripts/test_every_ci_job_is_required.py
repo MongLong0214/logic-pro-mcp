@@ -771,9 +771,9 @@ class TheMigrationsOwnMutations(unittest.TestCase):
     def test_a_code_job_dropped_from_the_aggregate_fails(self):
         """The aggregate must wait for every code-validation job."""
         self._edit("ci.yml",
-                   "needs: [guards, offline-guards, compile, test, formula]",
-                   "needs: [guards, offline-guards, compile, formula]")
-        self._refuses("`test` is in no required gate")
+                   "needs: [guards, offline-guards, platform-validation, compile, test, formula]",
+                   "needs: [guards, offline-guards, compile, test, formula]")
+        self._refuses("`platform-validation` is in no required gate")
 
     # ---- the declaration itself -----------------------------------------------------------------
     def test_demoting_the_second_gate_fails(self):
