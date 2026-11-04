@@ -849,6 +849,168 @@ struct QualificationRunnerTests {
         #expect(params[.pluginsGetHostParameterManifest]?["target_ref"] as? String == "ins_3")
     }
 
+    @Test func requestedReadProbePreparationRefreshesBeforePluginAuthorities() throws {
+        let tracks = try JSONSerialization.data(withJSONObject: [
+            "source": "ax_live",
+            "readable": true,
+            "data": [["id": 3, "track_ref": "trk_first"]],
+        ])
+        var events: [String] = []
+        var observedRefreshTimeout: TimeInterval?
+
+        let preparation = QualificationTransport.prepareRequestedReadProbeParams(
+            requestedMixerReads: [.mixerGetOutputVerified],
+            requestedPluginReads: [.pluginsGetHostParameterManifest],
+            refresh: { timeout in
+                observedRefreshTimeout = timeout
+                events.append("refresh")
+                return ("{\"refreshed\":true}", false)
+            },
+            pluginPreparation: {
+                try QualificationTransport.preparePluginReadProbeParams(
+                    tracksRead: {
+                        events.append("tracks")
+                        return tracks
+                    },
+                    inventoryRead: { track in
+                        events.append("inventory.\(track)")
+                        return try JSONSerialization.data(withJSONObject: [
+                            "state": "A",
+                            "complete": true,
+                            "plugins": [[
+                                "read_status": "ok",
+                                "occupied": true,
+                                "plugin_id": "logic.stock.effect.gain",
+                                "plugin_insert_ref": "ins_\(track)",
+                            ]],
+                        ])
+                    }
+                )
+            }
+        )
+
+        #expect(events == ["refresh", "tracks", "inventory.3"])
+        let refreshSpec = try #require(OperationRegistry.spec(
+            tool: "logic_system", command: "refresh_cache"))
+        #expect(observedRefreshTimeout
+            == QualificationTransport.operationRequestTimeout(for: refreshSpec))
+        #expect(try #require(observedRefreshTimeout) > 10)
+        #expect(preparation.failures.isEmpty)
+        #expect(preparation.params[.pluginsGetHostParameterManifest]?["target_ref"] as? String
+            == "ins_3")
+    }
+
+    @Test func mixerOnlyReadProbePreparationRefreshesWithoutPluginPreparation() {
+        var refreshCount = 0
+        var pluginPreparationCount = 0
+
+        let preparation = QualificationTransport.prepareRequestedReadProbeParams(
+            requestedMixerReads: [.mixerGetInputBusVerified],
+            requestedPluginReads: [],
+            refresh: { _ in
+                refreshCount += 1
+                return ("{\"refreshed\":false}", false)
+            },
+            pluginPreparation: {
+                pluginPreparationCount += 1
+                return [:]
+            }
+        )
+
+        #expect(refreshCount == 1)
+        #expect(pluginPreparationCount == 0)
+        #expect(preparation.params.isEmpty)
+        #expect(preparation.failures.isEmpty)
+    }
+
+    @Test func emptyReadProbePreparationDoesNotRefreshOrPreparePlugins() {
+        var refreshCount = 0
+        var pluginPreparationCount = 0
+
+        let preparation = QualificationTransport.prepareRequestedReadProbeParams(
+            requestedMixerReads: [],
+            requestedPluginReads: [],
+            refresh: { _ in
+                refreshCount += 1
+                return ("{}", false)
+            },
+            pluginPreparation: {
+                pluginPreparationCount += 1
+                return [:]
+            }
+        )
+
+        #expect(refreshCount == 0)
+        #expect(pluginPreparationCount == 0)
+        #expect(preparation.params.isEmpty)
+        #expect(preparation.failures.isEmpty)
+    }
+
+    @Test func pluginPreparationFailureDoesNotInvalidateRefreshedMixerReads() {
+        let requestedPluginReads: Set<OperationID> = [
+            .pluginsGetHostParameterManifest,
+            .pluginsGetParamVerified,
+        ]
+
+        let preparation = QualificationTransport.prepareRequestedReadProbeParams(
+            requestedMixerReads: [.mixerGetSendDestinationVerified],
+            requestedPluginReads: requestedPluginReads,
+            refresh: { _ in ("{\"refreshed\":true}", false) },
+            pluginPreparation: {
+                throw QualificationTransportError.malformedFrame("inventory")
+            }
+        )
+
+        #expect(preparation.params.isEmpty)
+        #expect(Set(preparation.failures.keys) == requestedPluginReads)
+        #expect(preparation.failures.values.allSatisfy {
+            $0.contains("plug-in read-probe preparation failed")
+                && $0.contains("qualification_transport_malformed_frame:inventory")
+        })
+    }
+
+    @Test(arguments: [false, true])
+    func failedReadProbeRefreshFailsEveryRequestedReadAndSkipsPluginPreparation(
+        throwsRefresh: Bool
+    ) {
+        let requestedMixerReads: Set<OperationID> = [
+            .mixerGetOutputVerified,
+            .mixerGetSendBypassVerified,
+        ]
+        let requestedPluginReads: Set<OperationID> = [
+            .pluginsGetParamVerified,
+            .pluginsPlanParameterChanges,
+        ]
+        var pluginPreparationCount = 0
+
+        let preparation = QualificationTransport.prepareRequestedReadProbeParams(
+            requestedMixerReads: requestedMixerReads,
+            requestedPluginReads: requestedPluginReads,
+            refresh: { _ in
+                if throwsRefresh {
+                    throw QualificationTransportError.closedPipe(phase: "refresh")
+                }
+                return ("{\"error\":\"refused\"}", true)
+            },
+            pluginPreparation: {
+                pluginPreparationCount += 1
+                return [:]
+            }
+        )
+
+        #expect(pluginPreparationCount == 0)
+        #expect(Set(preparation.failures.keys) == requestedMixerReads.union(requestedPluginReads))
+        let reasons = Set(preparation.failures.values)
+        #expect(reasons.count == 1)
+        let reason = reasons.first ?? ""
+        #expect(reason.contains("read-probe cache refresh failed"))
+        if throwsRefresh {
+            #expect(reason.contains("qualification_transport_closed_pipe:refresh"))
+        } else {
+            #expect(reason.contains("read_probe_refresh: tool returned isError"))
+        }
+    }
+
     @Test func pluginInventoryTrackIndicesRequireUniqueLiveReferencedArrangeRows() throws {
         let live: [String: Any] = [
             "source": "ax_live", "readable": true,
