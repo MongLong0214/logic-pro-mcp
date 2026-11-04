@@ -606,7 +606,8 @@ struct QualificationRunnerTests {
         let observed = try #require(result.operationResults[operation.rawValue])
         #expect(observed.status == .notQualified)
         #expect(observed.mutationRestore == nil)
-        #expect(observed.mutationRestoreRefusal?.contains("rename refused") == true)
+        let refusal = try #require(observed.mutationRestoreRefusal)
+        #expect(refusal.contains("rename refused"))
         #expect(probe.delays == [0.25])
         #expect(result.wireFrames.contains {
             $0.direction == .response && $0.operationID == "phase_b.cleanup"
