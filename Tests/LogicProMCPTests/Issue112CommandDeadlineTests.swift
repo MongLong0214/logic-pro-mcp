@@ -297,6 +297,9 @@ struct Issue112CommandDeadlineTests {
         #expect(first != nil)
         // The command deadline abandons logic_transport.play at its 25s deadline.
         gate.markTimedOut(first!, now: t0.addingTimeInterval(25))
+        let contention = gate.contentionSnapshot(now: t0.addingTimeInterval(30))
+        #expect(contention?.operation == "logic_transport.play")
+        #expect(contention?.timedOutReclaimAfter == 10)
         // Within the grace after the timeout, the gate is still genuinely held —
         // a successor mutation is refused (the abandoned work may still be unwinding).
         #expect(gate.tryAcquire(operation: "logic_transport.stop", now: t0.addingTimeInterval(25 + 14)) == nil)

@@ -588,11 +588,14 @@ struct QualificationRunnerTests {
             atPath: fixture.directory.appendingPathComponent("unsafe-writes").path))
     }
 
-    @Test("name cleanup does not wait for contention without exact reclaim proof")
-    func nameCleanupDoesNotWaitWithoutExactReclaimProof() throws {
+    @Test(
+        "name cleanup does not wait for contention without exact reclaim proof",
+        arguments: ["unproven", "boolean_delay"]
+    )
+    func nameCleanupDoesNotWaitWithoutExactReclaimProof(shape: String) throws {
         let fixture = try SlowHandshakeFixture(
             nameRecipe: .tracksRename,
-            nameCleanupContention: "unproven")
+            nameCleanupContention: shape)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == .tracksRename })
         let probe = CleanupSleepProbe()
@@ -9440,6 +9443,8 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                             if [ "$name_cleanup_contention" != none ] && [ "$rename_attempts" -ge 3 ] && [ ! -f gate-reclaimed ]; then
                                 if [ "$name_cleanup_contention" = reclaimable ]; then
                                     printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"mutating_operation_in_progress\\",\\"safe_to_retry\\":true,\\"write_attempted\\":false,\\"mutation_gate\\":\\"reclaimable_after_grace\\",\\"gate_reclaim_after_sec\\":0.25}"}]}}\n' "$id"
+                                elif [ "$name_cleanup_contention" = boolean_delay ]; then
+                                    printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"mutating_operation_in_progress\\",\\"safe_to_retry\\":true,\\"write_attempted\\":false,\\"mutation_gate\\":\\"reclaimable_after_grace\\",\\"gate_reclaim_after_sec\\":true}"}]}}\n' "$id"
                                 else
                                     printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"mutating_operation_in_progress\\",\\"safe_to_retry\\":true,\\"write_attempted\\":false}"}]}}\n' "$id"
                                 fi

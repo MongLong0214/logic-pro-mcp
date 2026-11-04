@@ -2221,7 +2221,10 @@ struct QualificationTransport: Sendable {
               object["safe_to_retry"] as? Bool == true,
               object["write_attempted"] as? Bool == false,
               object["mutation_gate"] as? String == "reclaimable_after_grace",
-              let delay = object["gate_reclaim_after_sec"] as? Double,
+              let delayNumber = object["gate_reclaim_after_sec"] as? NSNumber,
+              CFGetTypeID(delayNumber) != CFBooleanGetTypeID() else { return nil }
+        let delay = delayNumber.doubleValue
+        guard
               delay.isFinite, delay >= 0,
               delay <= LogicProServer.mutationGateReclaimGraceSeconds else { return nil }
         return delay
