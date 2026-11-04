@@ -332,6 +332,8 @@ import Testing
     let script = try scriptContents("Scripts/release-stable.sh")
 
     #expect(script.contains("release.sh"))
+    #expect(script.contains("FINAL_CANDIDATE PRIVATE_MATRIX TRUSTED_VERIFIER"))
+    #expect(!script.contains("PRIVATE_BUNDLE"))
     #expect(!script.contains("gh secret list --repo \"$REPO\" --app actions"))
     #expect(!script.contains("Stable tag '$VERSION' was NOT created."))
     #expect(!script.contains("MACOS_CERT_BASE64"))

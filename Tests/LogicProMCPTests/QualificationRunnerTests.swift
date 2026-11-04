@@ -4791,7 +4791,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             'supplied', candidate=sys.argv[1], matrix_path=sys.argv[2],
             verifier=sys.argv[3], trusted_key=sys.argv[4], commit=sys.argv[5],
             mutate_original_bundle=sys.argv[6] == 'original_changed_after_freeze')
-        print(json.dumps({'exit': result.returncode, 'calls': calls,
+        print(json.dumps({'exit': result.returncode, 'timed_out': result.timed_out, 'calls': calls,
                           'stdout': result.stdout, 'stderr': result.stderr}))
         """, fixture.executableURL.path, fixture.directory.path,
             verifier.path,
@@ -4807,7 +4807,9 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         try #require(process.terminationStatus == 0, "\(String(decoding: diagnostics, as: UTF8.self))")
         let result = try #require(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
         let code = try #require(result["exit"] as? Int)
+        let timedOut = try #require(result["timed_out"] as? Bool)
         let calls = try #require(result["calls"] as? [String])
+        #expect(!timedOut, "the matrix refusal must not depend on killing a blocked verifier: \(result)")
         #expect(calls.contains("verifier-build \(verifierSHA)"), "\(result)")
         let publications = calls.filter { $0.hasPrefix("git tag ") || $0.hasPrefix("git push ")
             || $0.hasPrefix("gh release create ") }

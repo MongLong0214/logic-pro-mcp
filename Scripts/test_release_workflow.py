@@ -603,6 +603,8 @@ cp "$input" "$output"
 
 
 class ReleaseWorkflowReliabilityTests(unittest.TestCase):
+    TRUSTED_MATRIX_VERIFIER_COMMIT = "3b139ed6a812e0b1fcbe0e0175bb256d4f2cbdac"
+
     @classmethod
     def setUpClass(cls):
         cls.workflow = yaml.safe_load(WORKFLOW.read_text())
@@ -656,6 +658,29 @@ class ReleaseWorkflowReliabilityTests(unittest.TestCase):
                 step["with"]["name"],
                 "${{ needs.build-release.outputs.verified_artifact_name }}",
             )
+
+    def test_pinned_trusted_verifier_supports_complete_matrix_commands(self):
+        pin = self.TRUSTED_MATRIX_VERIFIER_COMMIT
+        for job_name in ("build-release", "publish"):
+            steps = self.workflow["jobs"][job_name]["steps"]
+            checkout = next(
+                step for step in steps
+                if step.get("name") == "Checkout authenticated trusted verifier"
+            )
+            self.assertEqual(checkout["with"]["ref"], pin)
+            build = next(
+                step for step in steps
+                if step.get("name") == "Resolve and build trusted verifier without changing pins"
+            )
+            self.assertIn(f'test "$(git rev-parse HEAD)" = {pin}', build["run"])
+
+        source = subprocess.run(
+            ["git", "show", f"{pin}:Sources/LogicProMCP/Qualification/QualificationRunner.swift"],
+            cwd=WORKFLOW.parents[2], capture_output=True, text=True, check=False,
+        )
+        self.assertEqual(source.returncode, 0, source.stderr)
+        self.assertIn('command == "verify-matrix"', source.stdout)
+        self.assertIn('command == "verify-public-matrix"', source.stdout)
 
     def test_install_diagnostic_artifact_always_runs_without_masking_install_failure(self):
         steps = self.workflow["jobs"]["validate-install"]["steps"]
