@@ -1431,9 +1431,18 @@ struct QualificationTransport: Sendable {
             let requestedIDs = Set(request.operations.map(\.id))
             let requestedMixerReads = Self.mixerReadProbeOperationIDs.intersection(requestedIDs)
             let requestedPluginReads = Self.pluginReadProbeOperationIDs.intersection(requestedIDs)
-            if !requestedPluginReads.isEmpty {
-                do {
-                    let params = try Self.preparePluginReadProbeParams(
+            let readPreparation = Self.prepareRequestedReadProbeParams(
+                requestedMixerReads: requestedMixerReads,
+                requestedPluginReads: requestedPluginReads,
+                refresh: {
+                    let refreshID = nextID
+                    nextID += 1
+                    return try invoke(
+                        session, id: refreshID, tool: "logic_system", command: "refresh_cache",
+                        params: [:], phase: "read_probe_refresh")
+                },
+                pluginPreparation: {
+                    try Self.preparePluginReadProbeParams(
                         tracksRead: {
                             let tracksReadID = nextID
                             nextID += 1
@@ -1450,15 +1459,10 @@ struct QualificationTransport: Sendable {
                             )
                         }
                     )
-                    preparedReadParams.merge(params) { current, _ in current }
-                } catch {
-                    let failure = Self.observedFailureReason(
-                        from: error, during: "plug-in read-probe preparation")
-                    for operation in requestedPluginReads {
-                        readProbePreparationFailures[operation] = failure
-                    }
                 }
-            }
+            )
+            preparedReadParams.merge(readPreparation.params) { current, _ in current }
+            readProbePreparationFailures.merge(readPreparation.failures) { current, _ in current }
             for spec in request.operations {
                 var response: (text: String, isError: Bool)?
                 var responseRequestID: String?
@@ -1739,7 +1743,7 @@ struct QualificationTransport: Sendable {
                             // as the failure it is rather than skipped.
                             seededSessionSnapshotID = try? sessionInspectionSeed(session, startingAt: seedID)
                         }
-                        if requestedMixerReads.contains(spec.id) {
+                        if responseFailure == nil, requestedMixerReads.contains(spec.id) {
                             let mixerInspectionID = nextID
                             // Every request-owned inspection has one exact zero-write retry budget.
                             nextID += 2
@@ -1754,7 +1758,6 @@ struct QualificationTransport: Sendable {
                                     )
                                 }
                                 preparedReadParams[spec.id] = currentParams
-                                responseFailure = nil
                             } catch {
                                 preparedReadParams.removeValue(forKey: spec.id)
                                 responseFailure = Self.observedFailureReason(
@@ -1778,7 +1781,7 @@ struct QualificationTransport: Sendable {
                         )
                     }
                 } catch {
-                    responseFailure = Self.observedFailureReason(
+                    responseFailure = responseFailure ?? Self.observedFailureReason(
                         from: error,
                         during: "operation request"
                     )
@@ -5037,6 +5040,46 @@ struct QualificationTransport: Sendable {
         let tracksData = try tracksRead()
         let inventories = try pluginInventoryTrackIndices(from: tracksData).map(inventoryRead)
         return pluginReadProbeParams(from: inventories)
+    }
+
+    /// Warm the candidate's read cache once before any requested Mixer or plug-in probe. A failed
+    /// refresh is shared evidence for every dependent read and must not be replaced by a later
+    /// operation refusal. Plug-in discovery remains owned by tracks plus plug-in inventories.
+    static func prepareRequestedReadProbeParams(
+        requestedMixerReads: Set<OperationID>,
+        requestedPluginReads: Set<OperationID>,
+        refresh: () throws -> (text: String, isError: Bool),
+        pluginPreparation: () throws -> [OperationID: [String: Any]]
+    ) -> (params: [OperationID: [String: Any]], failures: [OperationID: String]) {
+        let requestedReads = requestedMixerReads.union(requestedPluginReads)
+        guard !requestedReads.isEmpty else { return ([:], [:]) }
+
+        do {
+            let result = try refresh()
+            guard !result.isError else {
+                throw QualificationTransportError.protocolViolation(
+                    "read_probe_refresh: tool returned isError")
+            }
+        } catch {
+            let failure = observedFailureReason(
+                from: error, during: "read-probe cache refresh")
+            return (
+                [:],
+                Dictionary(uniqueKeysWithValues: requestedReads.map { ($0, failure) })
+            )
+        }
+
+        guard !requestedPluginReads.isEmpty else { return ([:], [:]) }
+        do {
+            return (try pluginPreparation(), [:])
+        } catch {
+            let failure = observedFailureReason(
+                from: error, during: "plug-in read-probe preparation")
+            return (
+                [:],
+                Dictionary(uniqueKeysWithValues: requestedPluginReads.map { ($0, failure) })
+            )
+        }
     }
 
     /// Inventory accepts Arrange track ids, not Mixer strip ordinals. Only a current native track
