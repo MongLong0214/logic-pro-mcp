@@ -1277,6 +1277,7 @@ struct QualificationTransport: Sendable {
     let shutdownGrace: TimeInterval
     let midiPortReadback: @Sendable () throws -> Data
     let libraryPanelReadback: @Sendable () throws -> Data
+    let cleanupSleep: @Sendable (TimeInterval) -> Void
 
     init(
         handshakeTimeout: TimeInterval = 45,
@@ -1287,6 +1288,9 @@ struct QualificationTransport: Sendable {
         },
         libraryPanelReadback: @escaping @Sendable () throws -> Data = {
             try QualificationLibraryPanelReader.read()
+        },
+        cleanupSleep: @escaping @Sendable (TimeInterval) -> Void = {
+            Thread.sleep(forTimeInterval: $0)
         }
     ) {
         self.handshakeTimeout = handshakeTimeout
@@ -1294,6 +1298,7 @@ struct QualificationTransport: Sendable {
         self.shutdownGrace = shutdownGrace
         self.midiPortReadback = midiPortReadback
         self.libraryPanelReadback = libraryPanelReadback
+        self.cleanupSleep = cleanupSleep
     }
 
     /// Environment the same-artifact qualification drives the server with.
@@ -2200,6 +2205,36 @@ struct QualificationTransport: Sendable {
         if let state = object["state"] as? String { return state == "C" }
         if let success = object["success"] as? Bool { return !success }
         return true
+    }
+
+    /// Return a bounded wait only for the server's exact zero-write contention envelope after a
+    /// deadline-abandoned holder. Healthy holders, unsafe replies, malformed values, and generic
+    /// retry hints remain fail-closed and consume no qualification wait.
+    private static func cleanupGateReclaimDelay(
+        _ reply: (text: String, isError: Bool)
+    ) -> TimeInterval? {
+        guard reply.isError,
+              let data = reply.text.data(using: .utf8),
+              let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              object["state"] as? String == "C",
+              exactJSONBoolean(object["success"], equals: false),
+              object["error"] as? String == "mutating_operation_in_progress",
+              exactJSONBoolean(object["safe_to_retry"], equals: true),
+              exactJSONBoolean(object["write_attempted"], equals: false),
+              object["mutation_gate"] as? String == "reclaimable_after_grace",
+              let delayNumber = object["gate_reclaim_after_sec"] as? NSNumber,
+              CFGetTypeID(delayNumber) != CFBooleanGetTypeID() else { return nil }
+        let delay = delayNumber.doubleValue
+        guard
+              delay.isFinite, delay >= 0,
+              delay <= LogicProServer.mutationGateReclaimGraceSeconds else { return nil }
+        return delay
+    }
+
+    private static func exactJSONBoolean(_ value: Any?, equals expected: Bool) -> Bool {
+        guard let number = value as? NSNumber,
+              CFGetTypeID(number) == CFBooleanGetTypeID() else { return false }
+        return number.boolValue == expected
     }
 
     /// One tool call with CALLER-SUPPLIED params.
@@ -3497,11 +3532,15 @@ struct QualificationTransport: Sendable {
                         phase: "phase_b.cleanup_preflight"),
                         current.trackRef == pre.trackRef, current.value == probeValue else { break }
                     cleanupID += 2
-                    _ = try? invoke(
+                    guard let cleanup = try? invoke(
                         session, id: cleanupID, tool: spec.tool.rawValue, command: spec.command,
                         params: ["target_ref": pre.trackRef, readbackField: pre.value], phase: "phase_b.cleanup",
-            timeout: spec.deadline.seconds + 5)
+                        timeout: spec.deadline.seconds + 5) else { break }
                     cleanupID += 1
+                    if let delay = Self.cleanupGateReclaimDelay(cleanup) {
+                        cleanupSleep(delay)
+                        continue
+                    }
                     guard let seen = try? observedTrackString(
                         session, id: cleanupID, trackIndex: 0, field: readbackField,
                         phase: "phase_b.cleanup_readback") else { break }
@@ -3653,11 +3692,14 @@ struct QualificationTransport: Sendable {
                     guard seen.trackRef == original.trackRef else { break }
                     if seen.value == original.value { break }
                     guard seen.value == probeName else { break }
-                    _ = try? invoke(
+                    guard let cleanup = try? invoke(
                         session, id: cleanupID, tool: "logic_tracks", command: "rename",
                         params: ["target_ref": original.trackRef, "name": original.value],
-                        phase: "phase_b.cleanup")
+                        phase: "phase_b.cleanup") else { break }
                     cleanupID += 1
+                    if let delay = Self.cleanupGateReclaimDelay(cleanup) {
+                        cleanupSleep(delay)
+                    }
                 }
             }
         }
