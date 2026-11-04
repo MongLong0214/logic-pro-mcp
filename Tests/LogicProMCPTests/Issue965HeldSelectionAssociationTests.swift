@@ -824,6 +824,7 @@ struct Issue965HeldSelectionAssociationTests {
         var routingBypassMenuCancels = 0
         var routingBypassFinalValueReads = 0
         var routingBypassFinalCapabilityRead = false
+        var routingBypassControlRenewalArmed = false
         var routingBypassPendingValue: Bool?
         var routingActionNames: (@Sendable (AXUIElement) -> Result<[String], AXHelpers.AXStatusError>?)?
         var routingLevelMouse: AXMouseHelper.Runtime?
@@ -5191,6 +5192,14 @@ struct Issue965HeldSelectionAssociationTests {
         try await assertOccupiedSingleSendRenewal(emptyModeMenu: true, bypassMode: "roundtrip")
     }
 
+    @Test func registeredSendBypassAcceptsOnlyItsCheckedRouteControlRenewal() async throws {
+        try await assertOccupiedSingleSendRenewal(emptyModeMenu: true, bypassMode: "renewed_control_read")
+    }
+
+    @Test func registeredSendBypassRejectsPeerDriftDuringCheckedRouteControlRenewal() async throws {
+        try await assertOccupiedSingleSendRenewal(emptyModeMenu: true, bypassMode: "renewed_control_peer_level")
+    }
+
     @Test func registeredSendLevelUsesItsOwnedSemanticEditor() async throws {
         try await assertOccupiedSingleSendRenewal(emptyModeMenu: true, levelMode: "roundtrip")
     }
@@ -7012,6 +7021,8 @@ struct Issue965HeldSelectionAssociationTests {
                 f.useBulkReads = true
                 b.setActionNames(b.element(1_965_2622), [kAXPressAction as String])
                 b.setAttribute(b.element(1_965_2622), kAXEnabledAttribute as String, false)
+                b.setActionNames(b.element(1_965_2642), [kAXPressAction as String])
+                b.setAttribute(b.element(1_965_2642), kAXEnabledAttribute as String, false)
             }
             let originalList = b.element(1_965_2623), renewedList = b.element(1_965_2643)
             let originalChildren = b.makeAXRuntime().children(f.strips[1])
@@ -8831,6 +8842,16 @@ struct Issue965HeldSelectionAssociationTests {
                 #expect(f.routingDestinationPresses == 0 && f.routingReplacement == nil)
             }
             f.routingRead = { element, attribute in
+                if ["renewed_control_read", "renewed_control_peer_level"].contains(bypassMode ?? ""),
+                   f.routingBypassControlRenewalArmed,
+                   CFEqual(element, b.element(1_965_721)), attribute == kAXValueAttribute as String {
+                    f.routingBypassControlRenewalArmed = false
+                    f.routingLateScopeInjected = true
+                    b.setChildren(f.strips[1], originalChildren + renewedSend)
+                    if bypassMode == "renewed_control_peer_level" {
+                        b.setAttribute(renewedSend[2], kAXValueAttribute as String, 1)
+                    }
+                }
                 if let boundary = modePeerBoundary, f.routingModePresses == 0,
                    CFEqual(element, extraSend[0]), attribute == kAXHelpAttribute as String {
                     boundary.peerReads += 1
@@ -9263,6 +9284,33 @@ struct Issue965HeldSelectionAssociationTests {
                 if levelMode?.hasPrefix("return_window") == true {
                     #expect(f.routingLevelReturnTransitions == 2 && f.routingLevelWaits == 0)
                 }
+                return
+            }
+            if ["renewed_control_read", "renewed_control_peer_level"].contains(bypassMode ?? "") {
+                f.routingBypassControlRenewalArmed = true
+                f.routingBypassMenuOpens = 0; f.routingBypassMenuCancels = 0
+                let result = await LogicProServer.runWithDeadline(tool: "logic_mixer",
+                    command: "get_send_bypass_verified", commandParams: ["ordinal": .int(1)], mutationGate: gate) {
+                    await AXMixerStripBinding.$current.withValue(originalPair.strip) {
+                        await AXMixerStripBinding.$outputAssociation.withValue(originalPair) {
+                            toolTextResult(await AccessibilityChannel.sendBypassVerified(
+                                params: ["ordinal": "1"], writing: false, runtime: f.logic()))
+                        }
+                    }
+                }
+                let body = try #require(sharedJSONObject(sharedToolText(result)))
+                if bypassMode == "renewed_control_peer_level" {
+                    #expect(body["state"] as? String == "C",
+                        "Peer drift during renewed checked-route bypass read: \(sharedToolText(result))")
+                } else {
+                    #expect(body["state"] as? String == "A", "Actual renewed checked-route bypass read: \(sharedToolText(result))")
+                    let bypassed = try #require(body["bypassed"] as? Bool)
+                    #expect(!bypassed)
+                }
+                #expect(f.routingLateScopeInjected && !f.routingBypassControlRenewalArmed)
+                #expect(f.routingBypassMenuOpens == 1 && f.routingBypassMenuCancels == 1)
+                #expect(f.routingBypassPresses == 0 && f.routingDestinationPresses == 0)
+                #expect(!gate.isHeldByEntitledHolder())
                 return
             }
             if bypassMode != nil {

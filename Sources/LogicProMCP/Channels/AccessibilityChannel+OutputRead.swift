@@ -156,13 +156,14 @@ extension AccessibilityChannel {
         guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
               let physical = AXMixerStripBinding.current, let app = AXLogicProElements.appRoot(runtime: runtime),
               let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: runtime.ax),
-              let control = AXLogicProElements.assignedSendMenuControl(in: physical.strip, ordinal: ordinal, runtime: runtime.ax),
               let slots = AXLogicProElements.sendSlotObservations(in: physical.strip, runtime: runtime.ax),
               let slot = slots.first(where: { $0.ordinal == ordinal }), let value = slot.bypassed,
               slot.levelRaw?.isFinite == true,
               let population = AXLogicProElements.mixerChannelStripsIfCompletelyRead(in: physical.mixer, runtime: runtime.ax)?.strips else { return nil }
         let reading = await getOutputObservation(runtime: runtime, sendOrdinal: ordinal)
-        guard let assignment = reading.assignment, let checks = reading.sendNonRoutingChecks, !checks.isEmpty else { return nil }
+        guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+              let assignment = reading.assignment, let checks = reading.sendNonRoutingChecks, !checks.isEmpty,
+              let control = reading.sendControl else { return nil }
         let held = SendBypassSnapshot(physical: physical, control: control, slots: slots, population: population,
             focus: focus, value: value, assignment: assignment, checks: checks)
         return sendBypassCustody(held, runtime: runtime) ? held : nil
