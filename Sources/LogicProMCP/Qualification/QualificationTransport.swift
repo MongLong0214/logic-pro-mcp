@@ -3664,21 +3664,14 @@ struct QualificationTransport: Sendable {
                     + "— an earlier run left it, and this cycle cannot tell its own edit from that "
                     + "one")
         }
-        let staged = try invoke(
-            session, id: step(), tool: "logic_tracks", command: "rename",
-            params: ["target_ref": original.trackRef, "name": probeName], phase: "phase_b.stage")
-        guard !Self.mutationSaysItFailed(staged.text) else {
-            throw QualificationTransportError.protocolViolation(
-                "phase_b.stage: rename refused, so there is no edit for \(spec.id.rawValue) to "
-                    + "move over: " + staged.text.prefix(220))
-        }
-        // THE TRACK IS NOW RENAMED and every exit has to put the original back. The cleanup
-        // WRITES the name rather than pressing undo again: undo is the operation under test, and a
-        // cleanup that depends on it cannot be trusted to run when the thing it depends on is what
-        // just failed.
-        // `let`, not `var`: for these two shapes the staged edit is ALWAYS owed a cleanup — the
-        // restore puts the probe name back rather than the original — so there is no exit that
-        // clears it, and saying so in the type is more honest than a flag that never moves.
+        // Arm the exact-reference cleanup BEFORE staging. The server can apply the rename and then
+        // return an operation-timeout response, or the client can reach its own deadline before the
+        // response arrives. In either case the first throwing exit is already past the write even
+        // though this function has not received a successful reply yet.
+        //
+        // The cleanup preflight distinguishes a refused zero-write request from that late write:
+        // the original value needs no action, while only this cycle's probe value may be restored.
+        // It never guesses through a changed reference or a third-party value.
         let nameNeedsRestoring = true
         var nameCustodyLost = false
         defer {
@@ -3695,13 +3688,23 @@ struct QualificationTransport: Sendable {
                     guard let cleanup = try? invoke(
                         session, id: cleanupID, tool: "logic_tracks", command: "rename",
                         params: ["target_ref": original.trackRef, "name": original.value],
-                        phase: "phase_b.cleanup") else { break }
+                        phase: "phase_b.cleanup",
+                        timeout: spec.deadline.seconds + 5) else { break }
                     cleanupID += 1
                     if let delay = Self.cleanupGateReclaimDelay(cleanup) {
                         cleanupSleep(delay)
                     }
                 }
             }
+        }
+        let staged = try invoke(
+            session, id: step(), tool: "logic_tracks", command: "rename",
+            params: ["target_ref": original.trackRef, "name": probeName], phase: "phase_b.stage",
+            timeout: spec.deadline.seconds + 5)
+        guard !Self.mutationSaysItFailed(staged.text) else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.stage: rename refused, so there is no edit for \(spec.id.rawValue) to "
+                    + "move over: " + staged.text.prefix(220))
         }
         nameCustodyLost = true
         let renamed = try observedTrackString(
