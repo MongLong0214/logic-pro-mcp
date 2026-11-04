@@ -166,16 +166,17 @@ jobs:
 
   compile-platform:
     name: compile-platform
-    # The full test job is the 80+ minute critical path. Let the 20-minute offline guard release
-    # its hosted macOS runner before requesting this 10-minute release build. This caps one PR at
-    # two macOS runners without changing validation breadth or the test-dominated critical path.
-    needs: offline-guards
-    # An offline-guard defect must not hide release-build defects from the same attempt.
-    # A hosted-capacity cancellation has no code result and requesting another macOS runner only
-    # repeats the same 15-minute acquisition failure. Ordinary guard failures still run compile.
+    # The hosted pool abandoned a second macos-15 request after 15 queued minutes while test-build
+    # held the available runner. Keep the longer test runtime build first, then request the release
+    # build after it releases the runner; offline guards still run in parallel on macos-15-intel.
+    # This preserves both platform validations without asking current capacity for two ARM runners.
+    needs: [offline-guards, test-build]
+    # An offline-guard or test-runtime-build defect must not hide release-build defects from the
+    # same attempt. A hosted-capacity cancellation has no code result, so do not repeat its request;
+    # ordinary producer failures release the runner and still permit the independent compile.
     # Positive allowlisting is deliberate: while GitHub's capacity manager still reports an
     # upstream job as queued, an empty result would pass a negative `!= cancelled` test.
-    if: ${{ !cancelled() && (needs.offline-guards.result == 'success' || needs.offline-guards.result == 'failure') }}
+    if: ${{ !cancelled() && (needs.offline-guards.result == 'success' || needs.offline-guards.result == 'failure') && (needs.test-build.result == 'success' || needs.test-build.result == 'failure') }}
     runs-on: macos-15
     timeout-minutes: 60
     steps:

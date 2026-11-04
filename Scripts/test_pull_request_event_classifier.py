@@ -236,12 +236,13 @@ class WorkflowWiring(unittest.TestCase):
 
     def test_release_compile_and_verified_shards_cap_hosted_macos_at_two(self):
         platform = self.jobs["compile-platform"]
-        self.assertRegex(platform, r"(?m)^    needs: offline-guards$")
+        self.assertRegex(platform, r"(?m)^    needs: \[offline-guards, test-build\]$")
         self.assertRegex(
             platform,
-            r"(?m)^    if: \$\{\{ !cancelled\(\) && \(needs\.offline-guards\.result == 'success' \|\| needs\.offline-guards\.result == 'failure'\) \}\}$",
+            r"(?m)^    if: \$\{\{ !cancelled\(\) && \(needs\.offline-guards\.result == 'success' \|\| needs\.offline-guards\.result == 'failure'\) && \(needs\.test-build\.result == 'success' \|\| needs\.test-build\.result == 'failure'\) \}\}$",
         )
         self.assertNotIn("needs.offline-guards.result !=", platform)
+        self.assertNotIn("needs.test-build.result !=", platform)
         self.assertRegex(platform, r"(?m)^    runs-on: macos-15$")
         self.assertIn("swift build -c release", platform)
 
