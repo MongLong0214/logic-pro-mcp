@@ -678,6 +678,9 @@ struct Issue965HeldSelectionAssociationTests {
         var transientEditorRead = false
         var transientForeignRead = false
         var delayedOwnFocusRead = false
+        var delayedOwnFocusDuration: Duration?
+        var delayedOwnFocusUntil: ContinuousClock.Instant?
+        var transientViewportValueFailures = 0
         var metadataReads = 0
         var focusReadsBeforeWrite = [0, 0]
         var scopeLossPhase: Int?
@@ -1262,6 +1265,11 @@ struct Issue965HeldSelectionAssociationTests {
                         delayedOwnFocusRead = true
                         return .some(strips[1])
                     }
+                    if let until = delayedOwnFocusUntil, ContinuousClock.now < until,
+                       selections.count == 1, CFEqual(element, app),
+                       attribute == kAXFocusedUIElementAttribute as String {
+                        return .some(strips[1])
+                    }
                     if fault == "transient_foreign_focus", selections.count == 1,
                        CFEqual(element, app), attribute == kAXFocusedUIElementAttribute as String, !transientForeignRead {
                         transientForeignRead = true
@@ -1357,6 +1365,9 @@ struct Issue965HeldSelectionAssociationTests {
                         Issue.record("only exact held rail selection is authorized"); return false
                     }
                     selections.append(index)
+                    if selections.count == 1, let delay = delayedOwnFocusDuration {
+                        delayedOwnFocusUntil = ContinuousClock.now.advanced(by: delay)
+                    }
                     let previousFocus = builder.attributeValue(app, kAXFocusedUIElementAttribute as String)
                     routingSelection?(index)
                     if fault == "no_op" { return true }
@@ -12622,6 +12633,83 @@ struct Issue965HeldSelectionAssociationTests {
         let focus: AXUIElement = try #require(AXHelpers.getAttribute(f.app, kAXFocusedUIElementAttribute as String,
             runtime: f.builder.makeAXRuntime()))
         #expect(CFEqual(focus, f.strips[1]))
+    }
+
+    @Test func ownedMixerFocusMayLandAfterMoreThanFourSettlementAttempts() async throws {
+        let f = try Fixture()
+        f.delayedOwnFocusDuration = .milliseconds(350)
+        let started = ContinuousClock.now
+        let body = try await inspect(f)
+        #expect(f.delayedOwnFocusUntil != nil)
+        #expect(started.duration(to: .now) >= .milliseconds(350),
+            "Exercise an owned focus landing beyond the former four-attempt settlement window")
+        #expect(f.selections == [1, 0])
+        #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "restored")
+        let rows = try #require((body["associations"] as? [String: Any])?["rows"] as? [[String: Any]])
+        #expect(rows.count == 2)
+    }
+
+    @Test func anOwnedFocusThatNeverSettlesRemainsBoundedAndPublishesNoPair() async throws {
+        let f = try Fixture()
+        f.delayedOwnFocusDuration = .seconds(30)
+        let started = ContinuousClock.now
+        let body = try await inspect(f)
+        #expect(started.duration(to: .now) < .seconds(3),
+            "An exact held focus may settle late, but it never grants an unbounded wait")
+        #expect(f.selections == [1, 0], "Restore without visiting an unrequested peer")
+        let rows = (body["associations"] as? [String: Any])?["rows"] as? [[String: Any]] ?? []
+        #expect(rows.isEmpty, "An unchanged challenge focus remains cleanup evidence only")
+        #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "restored")
+    }
+
+    @Test func transientOwnedViewportUnreadAfterSelectionSettlesBeforeAdvancing() async throws {
+        let f = try Fixture(withViewport: true, fourTracks: true)
+        f.transientViewportValueFailures = 1
+        f.routingReadResult = { element, attribute in
+            if f.selections.last == 2, CFEqual(element, f.scroll),
+               attribute == kAXValueAttribute as String, f.transientViewportValueFailures > 0 {
+                f.transientViewportValueFailures -= 1
+                return .failure(.init(raw: AXError.cannotComplete.rawValue))
+            }
+            return nil
+        }
+        let body = try await inspect(f)
+        #expect(f.transientViewportValueFailures == 0)
+        #expect(f.selections == [1, 2, 3, 0])
+        #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "restored")
+        let rows = try #require((body["associations"] as? [String: Any])?["rows"] as? [[String: Any]])
+        #expect(rows.count == 4)
+    }
+
+    @Test func libraryViewportRebuildDoesNotRevokeHeldTracksViewport() async throws {
+        let f = try Fixture(withViewport: true)
+        let library = f.builder.element(1_965_750)
+        let originalLibraryScroll = f.builder.element(1_965_751)
+        let replacementLibraryScroll = f.builder.element(1_965_752)
+        f.builder.setRole(library, kAXBrowserRole as String)
+        f.builder.setAttribute(library, kAXDescriptionAttribute as String,
+            AXLocalePolicy.libraryPanelLabel.canonical)
+        for scroll in [originalLibraryScroll, replacementLibraryScroll] {
+            f.builder.setRole(scroll, kAXScrollBarRole as String)
+            f.builder.setAttribute(scroll, kAXValueAttribute as String, NSNumber(value: 0))
+            f.builder.setAttributeSettable(scroll, kAXValueAttribute as String, true)
+            f.builder.setChildren(scroll, [])
+        }
+        f.builder.setChildren(library, [originalLibraryScroll])
+        f.builder.setChildren(f.window,
+            f.builder.makeAXRuntime().children(f.window) + [library])
+        f.routingSelection = { index in
+            if index == 1 { f.builder.setChildren(library, [replacementLibraryScroll]) }
+        }
+
+        let body = try await inspect(f)
+
+        #expect(f.selections == [1, 0])
+        #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "restored")
+        let rows = try #require((body["associations"] as? [String: Any])?["rows"] as? [[String: Any]])
+        #expect(rows.count == 2,
+            "An exact Library redraw is outside the retained Tracks/Mixer viewport custody")
+        #expect(f.scrollWrites.isEmpty, "Library redraw must not authorize a viewport inverse")
     }
 
     @Test func explicitNavigationPublishesPhysicalPairsWithoutNameOrOrdinalJoin() async throws {

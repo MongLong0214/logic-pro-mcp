@@ -6,6 +6,11 @@ extension AccessibilityChannel {
     /// A held passive focus plus this Mixer's actual selected-child relationship
     /// can also start an explicitly owned, exposed-header observation.
     final class HeldSelectionAssociation: @unchecked Sendable {
+        private static let selectionSettlementDelays: [Duration] = [
+            .milliseconds(30), .milliseconds(30), .milliseconds(30),
+            .milliseconds(120), .milliseconds(240), .milliseconds(480),
+        ]
+
         struct Pair: @unchecked Sendable {
             let track: AXTrackBinding.Binding
             let strip: AXMixerStripBinding.Binding
@@ -276,19 +281,37 @@ extension AccessibilityChannel {
         private static func viewport(_ window: AXUIElement, ax: AXHelpers.Runtime,
                                      held: [ViewportControl]? = nil) -> [ViewportControl]? {
             var sliders: [AXUIElement] = []
+            var browsers: [AXUIElement] = []
             guard case .success(let census) = AXHelpers.censusDescendantResult(of: window, role: kAXScrollBarRole as String,
                 maxDepth: 32, runtime: ax, requiresCompleteTraversal: true, batchingRoleAndChildren: true,
                 permittingRead: { (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil },
                 observingRole: { element, role in
                     if role == kAXSliderRole as String { sliders.append(element) }
+                    if role == kAXBrowserRole as String { browsers.append(element) }
                 }) else { return nil }
-            var controls: [(AXUIElement, String?)] = census.matches.map { ($0, nil) }
+            let libraryBrowsers = browsers.filter {
+                AXLocalePolicy.libraryPanelLabel.matches(
+                    AXHelpers.getDescription($0, runtime: ax) ?? "", mode: .exactStrict)
+            }
+            func isInsideLibrary(_ control: AXUIElement) -> Bool {
+                guard !libraryBrowsers.isEmpty,
+                      let path = Self.path(control, to: window, ax: ax) else { return false }
+                return libraryBrowsers.contains { browser in
+                    path.contains { CFEqual($0, browser) }
+                }
+            }
+            // Track selection can rebuild the Library browser and all of its
+            // scrollbars without moving either the Tracks or Mixer viewport.
+            // Keep the exact held non-Library controls strict; a replacement of
+            // one of those controls still revokes custody below.
+            var controls: [(AXUIElement, String?)] = census.matches
+                .filter { !isInsideLibrary($0) }.map { ($0, nil) }
             let zoomLabels = AXLocalePolicy.horizontalZoomSlider.labels + AXLocalePolicy.verticalZoomSlider.labels
             // Discover own zoom controls before navigation. Inspector selection
             // may redraw unrelated sliders; their descriptions cannot revoke
             // custody of an original, reciprocally held viewport control.
             let zooms = held.map { $0.filter { $0.zoomDescription != nil }.map { ($0.element, $0.zoomDescription) } }
-                ?? sliders.map { ($0, nil as String?) }
+                ?? sliders.filter { !isInsideLibrary($0) }.map { ($0, nil as String?) }
             for (slider, heldDescription) in zooms {
                 guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return nil }
                 if heldDescription != nil {
@@ -337,13 +360,21 @@ extension AccessibilityChannel {
             }
         }
 
-        private func currentViewport() -> [ViewportControl]? {
+        private func observedCurrentViewport() -> [ViewportControl]? {
             guard let current = Self.viewport(window, ax: logic.ax, held: viewport),
                   Self.sameViewport(current, viewport, includingValues: false),
                   let paths = Self.viewportPaths(current, window: window, ax: logic.ax),
                   paths.count == viewportPaths.count,
                   zip(paths, viewportPaths).allSatisfy({ Self.same($0, $1) }) else {
-                lost = true; return nil
+                return nil
+            }
+            return current
+        }
+
+        private func currentViewport() -> [ViewportControl]? {
+            guard let current = observedCurrentViewport() else {
+                lost = true
+                return nil
             }
             return current
         }
@@ -1929,7 +1960,7 @@ extension AccessibilityChannel {
             let precedingFocus = expectedFocus
             let precedingSelectedChild = expectedSelectedChild
             let accepted = AXHelpers.setAttribute(rail, kAXSelectedChildrenAttribute as String, [headers[index]] as CFArray, runtime: logic.ax)
-            for attempt in 0..<4 {
+            for attempt in 0...Self.selectionSettlementDelays.count {
                 guard owned() else { return false }
                 let selectionChanged = Self.exclusiveIndex(headers, ax: logic.ax) == index
                 if selectionChanged, !effects.changed.contains("track_selection") {
@@ -1951,17 +1982,31 @@ extension AccessibilityChannel {
                     // Only original held strips are admitted by the guard above.
                     let awaitingOwnFocus: Bool
                     if let selectedChild, let precedingSelectedChild, let originalSelectedChild {
-                        awaitingOwnFocus = index == originalIndex
+                        let selectedChildIsPending = index == originalIndex
                             ? !CFEqual(selectedChild, originalSelectedChild) : CFEqual(selectedChild, precedingSelectedChild)
+                        let focusIsPending = index == originalIndex
+                            ? !CFEqual(focus, originalFocus) : CFEqual(focus, precedingFocus)
+                        // Logic can publish the reciprocal selected child before
+                        // its focused strip lands. Both are independent custody
+                        // witnesses; neither one alone may advance the next
+                        // selection or strand the eventual inverse.
+                        awaitingOwnFocus = selectedChildIsPending || focusIsPending
                     } else {
                         awaitingOwnFocus = index == originalIndex
                             ? !CFEqual(focus, originalFocus) : CFEqual(focus, precedingFocus)
                     }
-                    if awaitingOwnFocus && attempt < 3 {
-                        do { try await Task.sleep(for: .milliseconds(30)) } catch { return false }
+                    if awaitingOwnFocus && attempt < Self.selectionSettlementDelays.count {
+                        do { try await Task.sleep(for: Self.selectionSettlementDelays[attempt]) } catch { return false }
                         continue
                     }
-                    guard let afterViewport = currentViewport() else { return false }
+                    guard let afterViewport = observedCurrentViewport() else {
+                        if attempt < Self.selectionSettlementDelays.count {
+                            do { try await Task.sleep(for: Self.selectionSettlementDelays[attempt]) } catch { return false }
+                            continue
+                        }
+                        lost = true
+                        return false
+                    }
                     // The viewport read may coincide with our selected child's
                     // delayed focus landing. Admit only that exact transition,
                     // not another held strip or an unrelated editor. Unchanged
@@ -2003,8 +2048,8 @@ extension AccessibilityChannel {
                     guard retainMixerViewportAfterOwnedAction() else { return false }
                     return permitsRead() && !stop() && accepted
                 }
-                if attempt < 3 {
-                    do { try await Task.sleep(for: .milliseconds(30)) } catch { return false }
+                if attempt < Self.selectionSettlementDelays.count {
+                    do { try await Task.sleep(for: Self.selectionSettlementDelays[attempt]) } catch { return false }
                 }
             }
             return false
