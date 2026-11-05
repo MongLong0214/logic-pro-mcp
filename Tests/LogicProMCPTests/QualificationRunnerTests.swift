@@ -290,15 +290,11 @@ struct QualificationRunnerTests {
 
     @Test func registeredSupportBundleRecipeVerifiesAndRemovesItsOwnedDirectory() throws {
         let rootKey = "LOGIC_MCP_SUPPORT_BUNDLE_ROOT_OVERRIDE"
-        let previousRoot = getenv(rootKey).map { String(cString: $0) }
-        let root = FileManager.default.temporaryDirectory
+        let root = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Caches/LogicProMCPTests", isDirectory: true)
             .appendingPathComponent("qualification-support-bundle-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        setenv(rootKey, root.path, 1)
-        SecureFD._testBaseOverride = root
         defer {
-            SecureFD._testBaseOverride = nil
-            if let previousRoot { setenv(rootKey, previousRoot, 1) } else { unsetenv(rootKey) }
             try? FileManager.default.removeItem(at: root)
         }
 
@@ -308,7 +304,8 @@ struct QualificationRunnerTests {
             $0.id == .systemExportSupportBundle
         })
         let result = try QualificationTransport(
-            handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2
+            handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2,
+            supportBundleRoot: { root }
         ).drive(.init(
             executableURL: fixture.executableURL,
             environment: ["HANDSHAKE_DELAY": "0", rootKey: root.path],
@@ -332,15 +329,11 @@ struct QualificationRunnerTests {
 
     @Test func malformedSupportBundleReplyIsRefusedAndItsOwnedDirectoryIsStillRemoved() throws {
         let rootKey = "LOGIC_MCP_SUPPORT_BUNDLE_ROOT_OVERRIDE"
-        let previousRoot = getenv(rootKey).map { String(cString: $0) }
-        let root = FileManager.default.temporaryDirectory
+        let root = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Caches/LogicProMCPTests", isDirectory: true)
             .appendingPathComponent("qualification-support-bundle-\(UUID().uuidString)", isDirectory: true)
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
-        setenv(rootKey, root.path, 1)
-        SecureFD._testBaseOverride = root
         defer {
-            SecureFD._testBaseOverride = nil
-            if let previousRoot { setenv(rootKey, previousRoot, 1) } else { unsetenv(rootKey) }
             try? FileManager.default.removeItem(at: root)
         }
 
@@ -351,7 +344,8 @@ struct QualificationRunnerTests {
             $0.id == .systemExportSupportBundle
         })
         let result = try QualificationTransport(
-            handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2
+            handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2,
+            supportBundleRoot: { root }
         ).drive(.init(
             executableURL: fixture.executableURL,
             environment: ["HANDSHAKE_DELAY": "0", rootKey: root.path],
@@ -365,6 +359,77 @@ struct QualificationRunnerTests {
         #expect(refusal.contains("no file manifest"))
         #expect(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty,
                 "a malformed reply must not strand its verifier-owned bundle")
+    }
+
+    @Test func lostSupportBundleReplyIsRefusedAndItsOwnedDirectoryIsStillRemoved() throws {
+        let rootKey = "LOGIC_MCP_SUPPORT_BUNDLE_ROOT_OVERRIDE"
+        let root = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Caches/LogicProMCPTests", isDirectory: true)
+            .appendingPathComponent("qualification-support-bundle-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        let fixture = try SlowHandshakeFixture(
+            supportBundleCycle: true, supportBundleFault: "lost_reply")
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first {
+            $0.id == .systemExportSupportBundle
+        })
+        let result = try QualificationTransport(
+            handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2,
+            supportBundleRoot: { root }
+        ).drive(.init(
+            executableURL: fixture.executableURL,
+            environment: ["HANDSHAKE_DELAY": "0", rootKey: root.path],
+            expectedOperationCount: 0,
+            operations: [spec]
+        ))
+        let observed = try #require(result.operationResults[spec.id.rawValue])
+        #expect(observed.status != .passed)
+        #expect(observed.mutationRestore == nil)
+        let refusal = try #require(observed.mutationRestoreRefusal)
+        #expect(refusal.contains("owned support-bundle cleanup removed_and_absence_verified"))
+        #expect(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty,
+                "a lost reply must not strand the verifier-owned bundle")
+    }
+
+    @Test func supportBundleCleanupFailureIsReportedWithResidualState() throws {
+        let rootKey = "LOGIC_MCP_SUPPORT_BUNDLE_ROOT_OVERRIDE"
+        let root = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Caches/LogicProMCPTests", isDirectory: true)
+            .appendingPathComponent("qualification-support-bundle-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        let fixture = try SlowHandshakeFixture(
+            supportBundleCycle: true, supportBundleFault: "missing_manifest")
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first {
+            $0.id == .systemExportSupportBundle
+        })
+        let result = try QualificationTransport(
+            handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2,
+            supportBundleRoot: { root },
+            supportBundleRemover: { _, _ in
+                throw QualificationTransportError.protocolViolation("injected cleanup failure")
+            }
+        ).drive(.init(
+            executableURL: fixture.executableURL,
+            environment: ["HANDSHAKE_DELAY": "0", rootKey: root.path],
+            expectedOperationCount: 0,
+            operations: [spec]
+        ))
+        let observed = try #require(result.operationResults[spec.id.rawValue])
+        #expect(observed.status != .passed)
+        let refusal = try #require(observed.mutationRestoreRefusal)
+        #expect(refusal.contains("owned support-bundle cleanup failed"))
+        #expect(refusal.contains("residual=present_or_unverified"))
+        #expect(try !FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty,
+                "the injected cleanup failure must leave a residual for the refusal to report")
     }
 
     @Test(arguments: [#"{"state":"A","verified":false}"#,
@@ -10419,6 +10484,10 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                             entry="{\"name\":\"$name\",\"sha256\":\"$digest\"}"
                             if [ -n "$files_json" ]; then files_json="$files_json,$entry"; else files_json=$entry; fi
                         done
+                        if [ "$support_bundle_fault" = lost_reply ]; then
+                            printf '{"jsonrpc":"2.0","id":%s}\n' "$id"
+                            continue
+                        fi
                         if [ "$support_bundle_fault" = missing_manifest ]; then
                             inner="{\"state\":\"A\",\"bundle_path\":\"$bundle\"}"
                         else

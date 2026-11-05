@@ -1354,6 +1354,8 @@ struct QualificationTransport: Sendable {
     let midiPortReadback: @Sendable () throws -> Data
     let libraryPanelReadback: @Sendable () throws -> Data
     let cleanupSleep: @Sendable (TimeInterval) -> Void
+    let supportBundleRoot: @Sendable () -> URL
+    let supportBundleRemover: @Sendable (URL, SecureFD.Identity) throws -> String
 
     init(
         handshakeTimeout: TimeInterval = 45,
@@ -1367,6 +1369,12 @@ struct QualificationTransport: Sendable {
         },
         cleanupSleep: @escaping @Sendable (TimeInterval) -> Void = {
             Thread.sleep(forTimeInterval: $0)
+        },
+        supportBundleRoot: @escaping @Sendable () -> URL = {
+            SystemDispatcher.supportBundleRoot
+        },
+        supportBundleRemover: @escaping @Sendable (URL, SecureFD.Identity) throws -> String = {
+            try QualificationTransport.removeOwnedSupportBundle(at: $0, expectedIdentity: $1)
         }
     ) {
         self.handshakeTimeout = handshakeTimeout
@@ -1375,6 +1383,8 @@ struct QualificationTransport: Sendable {
         self.midiPortReadback = midiPortReadback
         self.libraryPanelReadback = libraryPanelReadback
         self.cleanupSleep = cleanupSleep
+        self.supportBundleRoot = supportBundleRoot
+        self.supportBundleRemover = supportBundleRemover
     }
 
     /// Environment the same-artifact qualification drives the server with.
@@ -4073,76 +4083,108 @@ struct QualificationTransport: Sendable {
         spec: OperationSpec
     ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
         let leaf = "qualification-\(UUID().uuidString.lowercased())"
-        let target = SystemDispatcher.supportBundleRoot
+        let target = supportBundleRoot()
             .appendingPathComponent(leaf, isDirectory: true)
             .standardizedFileURL
         let pre = try Self.ownedSupportBundleAbsenceObservation(at: target)
-        let mutation = try invoke(
-            session, id: id, tool: spec.tool.rawValue, command: spec.command,
-            params: ["dir": leaf], phase: "phase_b.mutation",
-            timeout: spec.deadline.seconds + 5)
-        // From this point on, any directory at the UUID target can only have appeared during the
-        // operation we just invoked. Acquire its identity before trusting the response manifest,
-        // so malformed or incomplete success replies cannot strand verifier-owned diagnostics.
-        var cleanupIdentity = try? Self.ownedSupportBundleIdentity(at: target)
-        defer {
-            if let cleanupIdentity {
-                _ = try? Self.removeOwnedSupportBundle(
-                    at: target, expectedIdentity: cleanupIdentity)
-            }
-        }
-        guard !mutation.isError,
-              let responseData = mutation.text.data(using: .utf8),
-              let response = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any],
-              response["state"] as? String == "A",
-              response["bundle_path"] as? String == target.path else {
-            throw QualificationTransportError.protocolViolation(
-                "phase_b.mutation: system.export_support_bundle did not publish the owned path")
-        }
-
-        guard let rows = response["files"] as? [[String: Any]], !rows.isEmpty else {
-            throw QualificationTransportError.protocolViolation(
-                "phase_b.readback: support-bundle response has no file manifest")
-        }
-        var expected: [OwnedSupportBundleFile] = []
-        var names = Set<String>()
-        for row in rows {
-            guard let name = row["name"] as? String,
-                  (try? SecureFD.validateComponent(name)) != nil,
-                  names.insert(name).inserted,
-                  let digest = row["sha256"] as? String,
-                  digest.count == 64,
-                  digest.utf8.allSatisfy({
-                      (48...57).contains($0) || (97...102).contains($0)
-                  }) else {
+        // Arm cleanup before the request. A timeout or malformed/lost response says nothing about
+        // whether the operation created its UUID directory, and every target at this path is ours
+        // because the exact leaf was observed absent immediately above.
+        var cleanupIdentity: SecureFD.Identity?
+        do {
+            let mutation = try invoke(
+                session, id: id, tool: spec.tool.rawValue, command: spec.command,
+                params: ["dir": leaf], phase: "phase_b.mutation",
+                timeout: spec.deadline.seconds + 5)
+            // Acquire identity before trusting the response manifest, so malformed or incomplete
+            // success replies cannot strand verifier-owned diagnostics.
+            cleanupIdentity = try? Self.ownedSupportBundleIdentity(at: target)
+            guard !mutation.isError,
+                  let responseData = mutation.text.data(using: .utf8),
+                  let response = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any],
+                  response["state"] as? String == "A",
+                  response["bundle_path"] as? String == target.path else {
                 throw QualificationTransportError.protocolViolation(
-                    "phase_b.readback: malformed support-bundle manifest")
+                    "phase_b.mutation: system.export_support_bundle did not publish the owned path")
             }
-            expected.append(.init(name: name, sha256: digest))
-        }
-        guard names == Set(SupportBundleBuilder.fileNames) else {
-            throw QualificationTransportError.protocolViolation(
-                "phase_b.readback: support-bundle manifest is not the exact product file set")
-        }
 
-        let after = try Self.verifiedOwnedSupportBundleReadback(
-            at: target, expected: expected, expectedIdentity: cleanupIdentity)
-        cleanupIdentity = after.identity
-        let restore = try Self.removeOwnedSupportBundle(
-            at: target, expectedIdentity: after.identity)
-        cleanupIdentity = nil
-        let restored = try Self.ownedSupportBundleAbsenceObservation(at: target)
-        return (
-            QualificationMutationRestoreRecord(
-                operationID: spec.id.rawValue,
-                preState: pre,
-                mutation: mutation.text,
-                readback: after.raw,
-                restore: restore,
-                restoreReadback: restored
-            ),
-            id + 1
-        )
+            guard let rows = response["files"] as? [[String: Any]], !rows.isEmpty else {
+                throw QualificationTransportError.protocolViolation(
+                    "phase_b.readback: support-bundle response has no file manifest")
+            }
+            var expected: [OwnedSupportBundleFile] = []
+            var names = Set<String>()
+            for row in rows {
+                guard let name = row["name"] as? String,
+                      (try? SecureFD.validateComponent(name)) != nil,
+                      names.insert(name).inserted,
+                      let digest = row["sha256"] as? String,
+                      digest.count == 64,
+                      digest.utf8.allSatisfy({
+                          (48...57).contains($0) || (97...102).contains($0)
+                      }) else {
+                    throw QualificationTransportError.protocolViolation(
+                        "phase_b.readback: malformed support-bundle manifest")
+                }
+                expected.append(.init(name: name, sha256: digest))
+            }
+            guard names == Set(SupportBundleBuilder.fileNames) else {
+                throw QualificationTransportError.protocolViolation(
+                    "phase_b.readback: support-bundle manifest is not the exact product file set")
+            }
+
+            let after = try Self.verifiedOwnedSupportBundleReadback(
+                at: target, expected: expected, expectedIdentity: cleanupIdentity)
+            cleanupIdentity = after.identity
+            let restore = try supportBundleRemover(target, after.identity)
+            cleanupIdentity = nil
+            let restored = try Self.ownedSupportBundleAbsenceObservation(at: target)
+            return (
+                QualificationMutationRestoreRecord(
+                    operationID: spec.id.rawValue,
+                    preState: pre,
+                    mutation: mutation.text,
+                    readback: after.raw,
+                    restore: restore,
+                    restoreReadback: restored
+                ),
+                id + 1
+            )
+        } catch {
+            let cleanup = cleanupOwnedSupportBundleAfterFailure(
+                at: target, expectedIdentity: cleanupIdentity)
+            throw QualificationTransportError.protocolViolation(
+                "\(error) | owned support-bundle cleanup \(cleanup)")
+        }
+    }
+
+    private func cleanupOwnedSupportBundleAfterFailure(
+        at target: URL,
+        expectedIdentity: SecureFD.Identity?
+    ) -> String {
+        let identity: SecureFD.Identity
+        if let expectedIdentity {
+            identity = expectedIdentity
+        } else {
+            do {
+                identity = try Self.ownedSupportBundleIdentity(at: target)
+            } catch {
+                if (try? Self.ownedSupportBundleAbsenceObservation(at: target)) != nil {
+                    return "absent_verified"
+                }
+                return "failed: identity_unavailable(\(error)); residual=present_or_unverified"
+            }
+        }
+        do {
+            _ = try supportBundleRemover(target, identity)
+            _ = try Self.ownedSupportBundleAbsenceObservation(at: target)
+            return "removed_and_absence_verified"
+        } catch {
+            let residual = (try? Self.ownedSupportBundleAbsenceObservation(at: target)) != nil
+                ? "absent"
+                : "present_or_unverified"
+            return "failed: \(error); residual=\(residual)"
+        }
     }
 
     private static func ownedSupportBundleEnvelope(
