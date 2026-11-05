@@ -372,7 +372,7 @@ struct QualificationRunnerTests {
         }
 
         let fixture = try SlowHandshakeFixture(
-            supportBundleCycle: true, supportBundleFault: "lost_reply")
+            supportBundleCycle: true, supportBundleFault: "lost_reply_nonzero")
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first {
             $0.id == .systemExportSupportBundle
@@ -429,6 +429,54 @@ struct QualificationRunnerTests {
         }
         #expect(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty,
                 "a timed-out late publication must be quiesced before cleanup is credited")
+    }
+
+    @Test func failedSupportBundleQuiescenceWithholdsCleanupAndReportsResidual() throws {
+        let rootKey = "LOGIC_MCP_SUPPORT_BUNDLE_ROOT_OVERRIDE"
+        let root = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Caches/LogicProMCPTests", isDirectory: true)
+            .appendingPathComponent("qualification-support-bundle-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        let fixture = try SlowHandshakeFixture(
+            supportBundleCycle: true, supportBundleFault: "late_timeout")
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first {
+            $0.id == .systemExportSupportBundle
+        })
+        do {
+            _ = try QualificationTransport(
+                handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2,
+                supportBundleRoot: { root },
+                supportBundleQuiescer: { _ in
+                    let deadline = Date().addingTimeInterval(2)
+                    while Date() < deadline,
+                          (try? FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty) != false {
+                        Thread.sleep(forTimeInterval: 0.01)
+                    }
+                    throw QualificationTransportError.shutdownTimeout
+                },
+                supportBundleRemover: { _, _ in
+                    Issue.record("cleanup must be withheld while the candidate may still publish")
+                    return "unexpected cleanup"
+                }
+            ).drive(.init(
+                executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0", rootKey: root.path],
+                expectedOperationCount: 0,
+                operations: [spec]
+            ))
+            Issue.record("failed quiescence must abort the candidate drive")
+        } catch {
+            #expect(String(describing: error).contains("support_bundle_outcome_uncertain"))
+            #expect(String(describing: error).contains("cleanup_withheld(candidate_not_quiesced)"))
+            #expect(String(describing: error).contains("residual=present_or_unverified"))
+        }
+        #expect(try !FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty,
+                "unsafe cleanup must leave a diagnosed residual instead of racing a live writer")
     }
 
     @Test func supportBundleCleanupFailureIsReportedWithResidualState() throws {
@@ -10532,6 +10580,10 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                         if [ "$support_bundle_fault" = lost_reply ]; then
                             printf '{"jsonrpc":"2.0","id":%s}\n' "$id"
                             continue
+                        fi
+                        if [ "$support_bundle_fault" = lost_reply_nonzero ]; then
+                            printf '{"jsonrpc":"2.0","id":%s}\n' "$id"
+                            exit 47
                         fi
                         if [ "$support_bundle_fault" = missing_manifest ]; then
                             inner="{\"state\":\"A\",\"bundle_path\":\"$bundle\"}"

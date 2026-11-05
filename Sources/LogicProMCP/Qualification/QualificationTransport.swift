@@ -1368,6 +1368,9 @@ struct QualificationTransport: Sendable {
     let libraryPanelReadback: @Sendable () throws -> Data
     let cleanupSleep: @Sendable (TimeInterval) -> Void
     let supportBundleRoot: @Sendable () -> URL
+    let supportBundleQuiescer: @Sendable (
+        QualificationSubprocessSession
+    ) throws -> QualificationSubprocessSession.ShutdownOutcome
     let supportBundleRemover: @Sendable (URL, SecureFD.Identity) throws -> String
 
     init(
@@ -1386,6 +1389,11 @@ struct QualificationTransport: Sendable {
         supportBundleRoot: @escaping @Sendable () -> URL = {
             SystemDispatcher.supportBundleRoot
         },
+        supportBundleQuiescer: @escaping @Sendable (
+            QualificationSubprocessSession
+        ) throws -> QualificationSubprocessSession.ShutdownOutcome = {
+            try $0.shutdown()
+        },
         supportBundleRemover: @escaping @Sendable (URL, SecureFD.Identity) throws -> String = {
             try QualificationTransport.removeOwnedSupportBundle(at: $0, expectedIdentity: $1)
         }
@@ -1397,6 +1405,7 @@ struct QualificationTransport: Sendable {
         self.libraryPanelReadback = libraryPanelReadback
         self.cleanupSleep = cleanupSleep
         self.supportBundleRoot = supportBundleRoot
+        self.supportBundleQuiescer = supportBundleQuiescer
         self.supportBundleRemover = supportBundleRemover
     }
 
@@ -2045,6 +2054,11 @@ struct QualificationTransport: Sendable {
                 mutationRestoreRecords: mutationRestoreRecords,
                 failureReason: nil
             )
+        } catch let error as QualificationTransportError where error.requiresDriveAbort {
+            // The support-bundle path has already decided whether cleanup was safe. Preserve its
+            // quiescence/residual diagnosis even when the stopped candidate exited nonzero.
+            _ = try? session.shutdown()
+            throw error
         } catch {
             let outcome: QualificationSubprocessSession.ShutdownOutcome
             do {
@@ -4204,18 +4218,17 @@ struct QualificationTransport: Sendable {
         cause: String
     ) -> QualificationTransportError {
         do {
-            let outcome = try session.shutdown()
+            let outcome = try supportBundleQuiescer(session)
             let cleanup = cleanupOwnedSupportBundleAfterFailure(
                 at: target, expectedIdentity: expectedIdentity)
             return .supportBundleOutcomeQuiesced(
                 "\(cause) | candidate_process_quiesced(status=\(outcome.status),forced=\(outcome.forced))"
                     + " | owned support-bundle cleanup \(cleanup)")
         } catch {
-            let cleanup = cleanupOwnedSupportBundleAfterFailure(
-                at: target, expectedIdentity: expectedIdentity)
             return .supportBundleOutcomeUncertain(
                 "\(cause) | candidate_process_quiescence_failed(\(error))"
-                    + " | owned support-bundle cleanup \(cleanup)")
+                    + " | owned support-bundle cleanup cleanup_withheld(candidate_not_quiesced)"
+                    + "; residual=present_or_unverified")
         }
     }
 
