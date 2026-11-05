@@ -81,9 +81,51 @@ class FinalConsumerInputTypeTests(unittest.TestCase):
             self.assertNotEqual(result.returncode, 0)  # The spy always rejects; no trust credit.
             self.assertTrue(invoked)
 
+    def test_checksum_row_targeting_fifo_is_rejected_before_costly_verification(self):
+        with tempfile.TemporaryDirectory(prefix="final-checksum-input-") as directory:
+            root = Path(directory)
+            candidate = root / "candidate"
+            candidate.write_bytes(b"opaque candidate")
+            matrix = root / "matrix"
+            matrix.mkdir()
+            public = root / "public"
+            public.mkdir()
+            for name in ("LogicProMCP", "LogicProMCP-macOS-universal.tar.gz",
+                         "LogicProMCP-macOS-arm64.tar.gz"):
+                (public / name).write_bytes(b"public artifact")
+            outside = root / "outside-release-file"
+            os.mkfifo(outside)
+            (public / "SHA256SUMS.txt").write_text("0" * 64 + "  ../outside-release-file\n")
+
+            invoked = root / "verifier-invoked"
+            verifier = root / "verifier"
+            verifier.write_text('#!/bin/bash\ntouch "$VERIFIER_INVOKED"\nsleep 30\nexit 78\n')
+            verifier.chmod(0o755)
+            result = run_bounded(
+                ["bash", str(WORKFLOW.parents[2] / "Scripts/release-consume-final.sh"),
+                 "verify", "1.2.3", "a" * 40, str(candidate), str(matrix), str(verifier),
+                 str(public)], timeout=2, env={
+                    "PATH": "/usr/bin:/bin", "VERIFIER_INVOKED": str(invoked),
+                    "LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY": "test-only-anchor",
+                })
+
+            self.assertFalse(result.timed_out, "Malformed public checksum input reached the verifier")
+            self.assertNotEqual(result.returncode, 0)
+            self.assertIn("Final-artifact checksum input rejected", result.stderr)
+            self.assertFalse(invoked.exists())
+
     def invoke(self, root, candidate):
         bundle = root / "bundle"
         bundle.mkdir()
+        public = root / "public"
+        public.mkdir()
+        rows = []
+        for name in ("LogicProMCP", "LogicProMCP-macOS-universal.tar.gz",
+                     "LogicProMCP-macOS-arm64.tar.gz"):
+            data = ("public " + name).encode()
+            (public / name).write_bytes(data)
+            rows.append(hashlib.sha256(data).hexdigest() + "  " + name + "\n")
+        (public / "SHA256SUMS.txt").write_text("".join(rows))
         invoked = root / "verifier-invoked"
         verifier = root / "verifier"
         verifier.write_text('#!/bin/bash\ntouch "$VERIFIER_INVOKED"\nexit 78\n')
@@ -91,7 +133,7 @@ class FinalConsumerInputTypeTests(unittest.TestCase):
         result = run_bounded(
             ["bash", str(WORKFLOW.parents[2] / "Scripts/release-consume-final.sh"),
              "verify", "1.2.3", "a" * 40, str(candidate), str(bundle), str(verifier),
-             str(root / "public")], timeout=2, env={
+             str(public)], timeout=2, env={
                 "PATH": "/usr/bin:/bin", "VERIFIER_INVOKED": str(invoked),
                 "LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY": "test-only-nonempty-anchor",
             })

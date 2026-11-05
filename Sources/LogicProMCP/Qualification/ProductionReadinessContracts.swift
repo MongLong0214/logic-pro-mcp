@@ -57,7 +57,7 @@ enum ProductionReadinessContractEvaluator {
     static let currentInstallReverifyScriptSHA256 = "0f27f1d94c03f46fd42c5653cdc1bd28e146760c045ed15ba55571836e3eaebb"
     static let currentInstallerScriptSHA256 = "05baeb501f55328a94988d0517cc20aa24f040705ba9b507be24356c4c51198c"
     static let currentInstallerEnvironmentSHA256 = "667e46a28039d26a227d9f0a9368c95e3202c75663404c059a6a4c809f1f8bc2"
-    static let currentReleaseConsumerSHA256 = "e15b0e901632098ae528b82df3df4c36e9fcc6503cdeec641f33fff91d9c3afe"
+    static let currentReleaseConsumerSHA256 = "fc7426efb6ba100faa0391a2fc285d1776fe8a8336e79643154827b1bdedae97"
     static let uploadArtifactCommitSHA = "65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08"
     static let downloadArtifactCommitSHA = "d3f86a106a0bac45b974a628896c90dbdf5c8093"
 
