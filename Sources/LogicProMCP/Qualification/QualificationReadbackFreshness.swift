@@ -72,6 +72,11 @@ enum QualificationReadbackFreshness {
     /// The sole resource provenance that means this answer came from the AX surface.
     static let liveSourceToken = "ax_live"
 
+    /// A verifier-process observation of the exact support-bundle directory it owns. This is not
+    /// an AX surface, so it has a distinct URI and provenance token rather than pretending that a
+    /// host filesystem read was `ax_live`.
+    static let ownedSupportBundleReadbackSource = "host://filesystem/owned-support-bundle"
+
     /// WHERE a resource publishes its provenance and WHICH token there means "read live off the AX
     /// surface". These are not interchangeable across resources, and the gate used to assume they
     /// were.
@@ -110,6 +115,8 @@ enum QualificationReadbackFreshness {
     static let provenanceDialects: [(prefix: String, dialect: ProvenanceDialect)] = [
         ("logic://mixer", ProvenanceDialect(key: "data_source", liveToken: "ax_poll",
                                             rowsKey: "strips")),
+        (ownedSupportBundleReadbackSource,
+         ProvenanceDialect(key: "source", liveToken: "host_filesystem")),
     ]
 
     static func dialect(for uri: String?) -> ProvenanceDialect {
