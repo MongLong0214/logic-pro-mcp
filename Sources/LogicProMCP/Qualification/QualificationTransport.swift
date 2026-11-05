@@ -1794,8 +1794,8 @@ struct QualificationTransport: Sendable {
                         during: "operation request"
                     )
                 }
-                let readbackRequestID = "operation-readback-\(nextID)"
                 let readbackSource = Self.readbackSource(for: spec)
+                var readbackRequestID: String?
                 var readbackData: Data?
                 var readbackFailure: String?
                 do {
@@ -1803,17 +1803,40 @@ struct QualificationTransport: Sendable {
                         // The resource endpoint dispatches the same server handler as the tool,
                         // so equality there is circular. Enumerate CoreMIDI from this separate
                         // qualification process while the candidate is alive instead.
+                        readbackRequestID = "operation-readback-\(nextID)"
+                        nextID += 1
                         readbackData = try midiPortReadback()
                     } else if spec.id == .tracksListLibrary {
                         // The cache resource does not independently establish the visible panel.
                         // Read the exact Library browser from this qualification process instead.
+                        readbackRequestID = "operation-readback-\(nextID)"
+                        nextID += 1
                         readbackData = try libraryPanelReadback()
                     } else {
-                        readbackData = try resourceReadback(
-                            session,
-                            id: nextID,
-                            uri: readbackSource,
-                            phase: readbackRequestID
+                        readbackData = try Self.independentResourceReadback(
+                            source: readbackSource,
+                            nextRequestID: &nextID,
+                            refresh: { refreshID, timeout in
+                                return try invoke(
+                                    session,
+                                    id: refreshID,
+                                    tool: "logic_system",
+                                    command: "refresh_cache",
+                                    params: [:],
+                                    phase: "independent_readback_refresh.\(spec.id.rawValue)",
+                                    timeout: timeout
+                                )
+                            },
+                            read: { readID in
+                                let phase = "operation-readback-\(readID)"
+                                readbackRequestID = phase
+                                return try resourceReadback(
+                                    session,
+                                    id: readID,
+                                    uri: readbackSource,
+                                    phase: phase
+                                )
+                            }
                         )
                     }
                 } catch {
@@ -1822,7 +1845,6 @@ struct QualificationTransport: Sendable {
                         during: "independent readback"
                     )
                 }
-                nextID += 1
                 let typed = response.flatMap {
                     try? Self.decodeInner(
                         $0.text,
@@ -5224,6 +5246,31 @@ struct QualificationTransport: Sendable {
                 Dictionary(uniqueKeysWithValues: requestedPluginReads.map { ($0, failure) })
             )
         }
+    }
+
+    /// Mixer read operations can spend longer navigating than the resource freshness window.
+    /// Refresh immediately before their independent resource read, while leaving every freshness
+    /// and semantic validator unchanged. A refused refresh cannot be followed by a read whose old
+    /// cache bytes would be mistaken for evidence from this operation.
+    static func independentResourceReadback(
+        source: String,
+        nextRequestID: inout Int,
+        refresh: (Int, TimeInterval) throws -> (text: String, isError: Bool),
+        read: (Int) throws -> Data
+    ) throws -> Data {
+        if source == "logic://mixer" {
+            let timeout = try readProbeRefreshTimeout()
+            let refreshID = nextRequestID
+            nextRequestID += 1
+            let result = try refresh(refreshID, timeout)
+            guard !result.isError else {
+                throw QualificationTransportError.protocolViolation(
+                    "independent_readback_refresh: tool returned isError")
+            }
+        }
+        let readID = nextRequestID
+        nextRequestID += 1
+        return try read(readID)
     }
 
     /// Inventory accepts Arrange track ids, not Mixer strip ordinals. Only a current native track
