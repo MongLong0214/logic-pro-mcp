@@ -1329,6 +1329,8 @@ enum QualificationTransportError: Error, Equatable, CustomStringConvertible, Sen
     case closedPipe(phase: String)
     case launchFailed(String)
     case protocolViolation(String)
+    case supportBundleOutcomeQuiesced(String)
+    case supportBundleOutcomeUncertain(String)
     case shutdownTimeout
     case unimplemented
 
@@ -1341,8 +1343,19 @@ enum QualificationTransportError: Error, Equatable, CustomStringConvertible, Sen
         case .closedPipe(let phase): "qualification_transport_closed_pipe:\(phase)"
         case .launchFailed(let detail): "qualification_transport_launch_failed:\(detail)"
         case .protocolViolation(let detail): "qualification_transport_protocol_violation:\(detail)"
+        case .supportBundleOutcomeQuiesced(let detail):
+            "qualification_support_bundle_outcome_quiesced:\(detail)"
+        case .supportBundleOutcomeUncertain(let detail):
+            "qualification_support_bundle_outcome_uncertain:\(detail)"
         case .shutdownTimeout: "qualification_transport_shutdown_timeout"
         case .unimplemented: "qualification_transport_unimplemented"
+        }
+    }
+
+    var requiresDriveAbort: Bool {
+        switch self {
+        case .supportBundleOutcomeQuiesced, .supportBundleOutcomeUncertain: true
+        default: false
         }
     }
 }
@@ -1647,6 +1660,9 @@ struct QualificationTransport: Sendable {
                                 mutationRestoreRecords.append(cycle.record)
                                 phaseBRecord = cycle.record
                                 nextID = cycle.nextID
+                            } catch let error as QualificationTransportError
+                                where error.requiresDriveAbort {
+                                throw error
                             } catch {
                                 phaseBRefusal = Self.observedFailureReason(
                                     from: error, during: "phase_b recipe")
@@ -1889,6 +1905,9 @@ struct QualificationTransport: Sendable {
                             timeout: probeTimeout
                         )
                     }
+                } catch let error as QualificationTransportError
+                    where error.requiresDriveAbort {
+                    throw error
                 } catch {
                     responseFailure = responseFailure ?? Self.observedFailureReason(
                         from: error,
@@ -4092,16 +4111,30 @@ struct QualificationTransport: Sendable {
         // because the exact leaf was observed absent immediately above.
         var cleanupIdentity: SecureFD.Identity?
         do {
-            let mutation = try invoke(
-                session, id: id, tool: spec.tool.rawValue, command: spec.command,
-                params: ["dir": leaf], phase: "phase_b.mutation",
-                timeout: spec.deadline.seconds + 5)
+            let mutation: (text: String, isError: Bool)
+            do {
+                mutation = try invoke(
+                    session, id: id, tool: spec.tool.rawValue, command: spec.command,
+                    params: ["dir": leaf], phase: "phase_b.mutation",
+                    timeout: spec.deadline.seconds + 5)
+            } catch {
+                throw supportBundleFailureAfterQuiescing(
+                    session, at: target, expectedIdentity: cleanupIdentity,
+                    cause: String(describing: error))
+            }
             // Acquire identity before trusting the response manifest, so malformed or incomplete
             // success replies cannot strand verifier-owned diagnostics.
             cleanupIdentity = try? Self.ownedSupportBundleIdentity(at: target)
+            let response = mutation.text.data(using: .utf8).flatMap {
+                try? JSONSerialization.jsonObject(with: $0) as? [String: Any]
+            }
+            if mutation.isError, response?["error"] as? String == "operation_timeout" {
+                throw supportBundleFailureAfterQuiescing(
+                    session, at: target, expectedIdentity: cleanupIdentity,
+                    cause: "phase_b.mutation: operation_timeout")
+            }
             guard !mutation.isError,
-                  let responseData = mutation.text.data(using: .utf8),
-                  let response = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any],
+                  let response,
                   response["state"] as? String == "A",
                   response["bundle_path"] as? String == target.path else {
                 throw QualificationTransportError.protocolViolation(
@@ -4150,11 +4183,39 @@ struct QualificationTransport: Sendable {
                 ),
                 id + 1
             )
+        } catch let error as QualificationTransportError where error.requiresDriveAbort {
+            throw error
         } catch {
             let cleanup = cleanupOwnedSupportBundleAfterFailure(
                 at: target, expectedIdentity: cleanupIdentity)
             throw QualificationTransportError.protocolViolation(
                 "\(error) | owned support-bundle cleanup \(cleanup)")
+        }
+    }
+
+    /// A timeout or missing transport reply does not mean the server-side write stopped. End the
+    /// exact candidate process first, then reacquire and remove only the UUID leaf this verifier
+    /// observed absent before dispatch. No bounded absence poll can prove that an orphaned task
+    /// will not publish after the poll ends.
+    private func supportBundleFailureAfterQuiescing(
+        _ session: QualificationSubprocessSession,
+        at target: URL,
+        expectedIdentity: SecureFD.Identity?,
+        cause: String
+    ) -> QualificationTransportError {
+        do {
+            let outcome = try session.shutdown()
+            let cleanup = cleanupOwnedSupportBundleAfterFailure(
+                at: target, expectedIdentity: expectedIdentity)
+            return .supportBundleOutcomeQuiesced(
+                "\(cause) | candidate_process_quiesced(status=\(outcome.status),forced=\(outcome.forced))"
+                    + " | owned support-bundle cleanup \(cleanup)")
+        } catch {
+            let cleanup = cleanupOwnedSupportBundleAfterFailure(
+                at: target, expectedIdentity: expectedIdentity)
+            return .supportBundleOutcomeUncertain(
+                "\(cause) | candidate_process_quiescence_failed(\(error))"
+                    + " | owned support-bundle cleanup \(cleanup)")
         }
     }
 

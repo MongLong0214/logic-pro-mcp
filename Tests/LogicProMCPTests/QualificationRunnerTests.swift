@@ -377,22 +377,58 @@ struct QualificationRunnerTests {
         let spec = try #require(OperationRegistry.specs.first {
             $0.id == .systemExportSupportBundle
         })
-        let result = try QualificationTransport(
-            handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2,
-            supportBundleRoot: { root }
-        ).drive(.init(
-            executableURL: fixture.executableURL,
-            environment: ["HANDSHAKE_DELAY": "0", rootKey: root.path],
-            expectedOperationCount: 0,
-            operations: [spec]
-        ))
-        let observed = try #require(result.operationResults[spec.id.rawValue])
-        #expect(observed.status != .passed)
-        #expect(observed.mutationRestore == nil)
-        let refusal = try #require(observed.mutationRestoreRefusal)
-        #expect(refusal.contains("owned support-bundle cleanup removed_and_absence_verified"))
+        do {
+            _ = try QualificationTransport(
+                handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2,
+                supportBundleRoot: { root }
+            ).drive(.init(
+                executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0", rootKey: root.path],
+                expectedOperationCount: 0,
+                operations: [spec]
+            ))
+            Issue.record("a lost support-bundle reply must abort the candidate drive")
+        } catch {
+            #expect(String(describing: error).contains("support_bundle_outcome_quiesced"))
+            #expect(String(describing: error).contains("removed_and_absence_verified"))
+        }
         #expect(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty,
                 "a lost reply must not strand the verifier-owned bundle")
+    }
+
+    @Test func timedOutSupportBundleThatPublishesLateIsQuiescedAndRemoved() throws {
+        let rootKey = "LOGIC_MCP_SUPPORT_BUNDLE_ROOT_OVERRIDE"
+        let root = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Caches/LogicProMCPTests", isDirectory: true)
+            .appendingPathComponent("qualification-support-bundle-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer {
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        let fixture = try SlowHandshakeFixture(
+            supportBundleCycle: true, supportBundleFault: "late_timeout")
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first {
+            $0.id == .systemExportSupportBundle
+        })
+        do {
+            _ = try QualificationTransport(
+                handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2,
+                supportBundleRoot: { root }
+            ).drive(.init(
+                executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0", rootKey: root.path],
+                expectedOperationCount: 0,
+                operations: [spec]
+            ))
+            Issue.record("a timed-out support-bundle write must abort the candidate drive")
+        } catch {
+            #expect(String(describing: error).contains("support_bundle_outcome_quiesced"))
+            #expect(String(describing: error).contains("removed_and_absence_verified"))
+        }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty,
+                "a timed-out late publication must be quiesced before cleanup is credited")
     }
 
     @Test func supportBundleCleanupFailureIsReportedWithResidualState() throws {
@@ -10476,6 +10512,12 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                         leaf=$(printf '%s' "$request" | /usr/bin/sed -n 's/.*"dir":"\([^"]*\)".*/\1/p')
                         case "$leaf" in qualification-[0-9a-f-]*) ;; *) exit 41 ;; esac
                         bundle="$support_root/$leaf"
+                        if [ "$support_bundle_fault" = late_timeout ]; then
+                            inner='{"state":"C","error":"operation_timeout","write_attempted":true}'
+                            escaped=$(printf '%s' "$inner" | /usr/bin/sed 's/\\/\\\\/g; s/"/\\"/g')
+                            printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"%s"}]}}\n' "$id" "$escaped"
+                            /bin/sleep 0.2
+                        fi
                         /bin/mkdir "$bundle" || exit 42
                         files_json=
                         for name in doctor.json manifest.json metadata.json redaction_report.json traces.json SHA256SUMS; do
@@ -10484,6 +10526,9 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                             entry="{\"name\":\"$name\",\"sha256\":\"$digest\"}"
                             if [ -n "$files_json" ]; then files_json="$files_json,$entry"; else files_json=$entry; fi
                         done
+                        if [ "$support_bundle_fault" = late_timeout ]; then
+                            continue
+                        fi
                         if [ "$support_bundle_fault" = lost_reply ]; then
                             printf '{"jsonrpc":"2.0","id":%s}\n' "$id"
                             continue
