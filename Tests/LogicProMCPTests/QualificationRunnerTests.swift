@@ -842,7 +842,24 @@ struct QualificationRunnerTests {
 
     @Test func mixerReadProbeParamsUseFreshTypedReferencesAndOccupiedCensusOrdinals() throws {
         let envelope: [String: Any] = [
+            "schema": "logic_pro_mcp_session_population.v1",
+            "read_only": true,
+            "snapshot_id": "snap_typed_rows",
+            "scope": "whole_project",
+            "requested_domains": ["tracks", "hierarchy", "strips", "associations"],
+            "sources": ["tracks": "ax_request_read", "strips": "ax_request_read"],
+            "tracks": [
+                "coverage": "partial",
+                "rows": [
+                    ["track_ref": "trk_output"],
+                    ["track_ref": "trk_physical_input"],
+                    ["track_ref": "trk_bus_input"],
+                    ["track_ref": "trk_send"],
+                ],
+            ],
             "strips": [
+                "coverage": "partial",
+                "rows": [
                 [
                     "mixer_strip_ref": "mix_output",
                     "output_observation": [
@@ -876,6 +893,26 @@ struct QualificationRunnerTests {
                         "ordinal": 9, "state": "occupied_unknown_destination", "bypassed": true,
                     ]],
                 ],
+                ],
+            ],
+            "associations": [
+                "coverage": "partial",
+                "rows": [
+                    ["track_ref": "trk_output", "mixer_strip_ref": "mix_output",
+                     "source": "held_exclusive_selection_focus"],
+                    ["track_ref": "trk_physical_input", "mixer_strip_ref": "mix_physical_input",
+                     "source": "held_exclusive_selection_focus"],
+                    ["track_ref": "trk_bus_input", "mixer_strip_ref": "mix_bus_input",
+                     "source": "held_exclusive_selection_selected_child"],
+                    ["track_ref": "trk_send", "mixer_strip_ref": "mix_send",
+                     "source": "held_exclusive_selection_focus"],
+                ],
+            ],
+            "ui_effects": [
+                "navigation_performed": true,
+                "restoration": "restored",
+                "attempted": ["track_selection"],
+                "changed": ["track_selection"],
             ],
         ]
         let params = QualificationTransport.mixerReadProbeParams(
@@ -888,6 +925,23 @@ struct QualificationRunnerTests {
         #expect(params[.mixerGetSendDestinationVerified]?["ordinal"] as? Int == 3)
         #expect(params[.mixerGetSendBypassVerified]?["target_ref"] as? String == "mix_send")
         #expect(params[.mixerGetSendBypassVerified]?["ordinal"] as? Int == 3)
+    }
+
+    @Test func sessionInspectionSeedPurposesKeepPlannerPassiveAndMixerNavigationBound() throws {
+        let planner = QualificationTransport.sessionInspectionSeedRequestParams(for: .planner)
+        let mixer = QualificationTransport.sessionInspectionSeedRequestParams(for: .mixerRead)
+
+        #expect(planner.isEmpty)
+        #expect(mixer["scope"] as? String == "whole_project")
+        #expect(mixer["domains"] as? [String]
+            == ["tracks", "hierarchy", "strips", "associations"])
+        #expect(try #require(mixer["allow_ui_navigation"] as? Bool))
+        #expect(QualificationTransport.mixerReadProbeOperationIDs == [
+            .mixerGetOutputVerified,
+            .mixerGetInputBusVerified,
+            .mixerGetSendDestinationVerified,
+            .mixerGetSendBypassVerified,
+        ])
     }
 
     @Test func preparedMixerReadProbeParamsReplaceTheEmptyCatalogFallback() throws {
@@ -907,8 +961,16 @@ struct QualificationRunnerTests {
 
     @Test func mixerReadProbeParamsAcceptRequestOwnedFreshInspectionRows() throws {
         let inspection: [String: Any] = [
+            "schema": "logic_pro_mcp_session_population.v1",
+            "read_only": true,
             "snapshot_id": "snap_fresh",
-            "sources": ["strips": "ax_request_read"],
+            "scope": "whole_project",
+            "requested_domains": ["tracks", "hierarchy", "strips", "associations"],
+            "sources": ["tracks": "ax_request_read", "strips": "ax_request_read"],
+            "tracks": [
+                "coverage": "partial",
+                "rows": [["track_ref": "trk_fresh_output"]],
+            ],
             "strips": [
                 "coverage": "partial",
                 "rows": [[
@@ -918,6 +980,20 @@ struct QualificationRunnerTests {
                     ],
                 ]],
             ],
+            "associations": [
+                "coverage": "partial",
+                "rows": [[
+                    "track_ref": "trk_fresh_output",
+                    "mixer_strip_ref": "mix_fresh_output",
+                    "source": "held_exclusive_selection_selected_child",
+                ]],
+            ],
+            "ui_effects": [
+                "navigation_performed": true,
+                "restoration": "restored",
+                "attempted": ["track_selection"],
+                "changed": ["track_selection"],
+            ],
         ]
 
         let params = QualificationTransport.mixerReadProbeParams(
@@ -926,6 +1002,122 @@ struct QualificationRunnerTests {
 
         #expect(params[.mixerGetOutputVerified]?["target_ref"] as? String
             == "mix_fresh_output")
+    }
+
+    @Test func mixerReadProbeParamsRejectUnsafeOrUnboundInspectionRows() throws {
+        func inspection(
+            stripCoverage: String = "partial",
+            associationCoverage: String = "partial",
+            trackRefs: [String] = ["trk_fresh_output"],
+            stripRefs: [String] = ["mix_fresh_output"],
+            associationTrackRef: String = "trk_fresh_output",
+            associationRef: String = "mix_fresh_output",
+            associationRows: [[String: Any]]? = nil,
+            navigationPerformed: Bool = true,
+            restoration: String = "restored",
+            attempted: [String] = ["track_selection"],
+            changed: [String] = ["track_selection"],
+            reason: Any = NSNull()
+        ) -> [String: Any] {
+            [
+                "schema": "logic_pro_mcp_session_population.v1",
+                "read_only": true,
+                "snapshot_id": "snap_fresh",
+                "scope": "whole_project",
+                "requested_domains": ["tracks", "hierarchy", "strips", "associations"],
+                "sources": ["tracks": "ax_request_read", "strips": "ax_request_read"],
+                "tracks": [
+                    "coverage": "partial",
+                    "rows": trackRefs.map { ["track_ref": $0] },
+                ],
+                "strips": [
+                    "coverage": stripCoverage,
+                    "rows": stripRefs.map { reference in [
+                        "mixer_strip_ref": reference,
+                        "output_observation": [
+                            "state": "observed_destination", "destination": "출력 3-4",
+                        ],
+                    ] },
+                ],
+                "associations": [
+                    "coverage": associationCoverage,
+                    "rows": associationRows ?? [[
+                        "track_ref": associationTrackRef,
+                        "mixer_strip_ref": associationRef,
+                        "source": "held_exclusive_selection_focus",
+                    ]],
+                ],
+                "ui_effects": [
+                    "navigation_performed": navigationPerformed,
+                    "restoration": restoration,
+                    "attempted": attempted,
+                    "changed": changed,
+                    "reason": reason,
+                ],
+            ]
+        }
+        let unsafe: [[String: Any]] = [
+            inspection(stripCoverage: "unstable"),
+            inspection(associationCoverage: "unavailable"),
+            inspection(associationRef: "mix_other"),
+            inspection(associationTrackRef: "trk_ghost"),
+            inspection(trackRefs: ["trk_fresh_output", "trk_fresh_output"]),
+            inspection(
+                trackRefs: ["trk_first", "trk_second"],
+                associationRows: [
+                    [
+                        "track_ref": "trk_first", "mixer_strip_ref": "mix_fresh_output",
+                        "source": "held_exclusive_selection_focus",
+                    ],
+                    [
+                        "track_ref": "trk_second", "mixer_strip_ref": "mix_fresh_output",
+                        "source": "held_exclusive_selection_focus",
+                    ],
+                ]
+            ),
+            inspection(
+                stripRefs: ["mix_first", "mix_second"],
+                associationRows: [
+                    [
+                        "track_ref": "trk_fresh_output", "mixer_strip_ref": "mix_first",
+                        "source": "held_exclusive_selection_focus",
+                    ],
+                    [
+                        "track_ref": "trk_fresh_output", "mixer_strip_ref": "mix_second",
+                        "source": "held_exclusive_selection_focus",
+                    ],
+                ]
+            ),
+            inspection(restoration: "not_restored"),
+            inspection(changed: ["mixer_visibility"]),
+            inspection(reason: "association_population_moved"),
+            inspection(
+                navigationPerformed: false,
+                restoration: "not_applicable",
+                attempted: ["track_selection"],
+                changed: []
+            ),
+        ]
+
+        for envelope in unsafe {
+            let params = QualificationTransport.mixerReadProbeParams(
+                from: try JSONSerialization.data(withJSONObject: envelope)
+            )
+            #expect(params.isEmpty)
+        }
+
+        let legacyBypass: [String: Any] = [
+            "snapshot_id": "snap_legacy",
+            "strips": [[
+                "mixer_strip_ref": "mix_fresh_output",
+                "output_observation": [
+                    "state": "observed_destination", "destination": "출력 3-4",
+                ],
+            ]],
+        ]
+        #expect(QualificationTransport.mixerReadProbeParams(
+            from: try JSONSerialization.data(withJSONObject: legacyBypass)
+        ).isEmpty)
     }
 
     @Test func pluginReadProbeParamsUseOnlyFreshOccupiedRefsAndSupportedCatalogReaders() throws {

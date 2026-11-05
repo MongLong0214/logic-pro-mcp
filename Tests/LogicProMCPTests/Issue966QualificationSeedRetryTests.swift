@@ -8,7 +8,9 @@ struct Issue966QualificationSeedRetryTests {
 
     @Test func oneRejectedReadCanSeedFromANewReadWithoutLosingTheRefusal() throws {
         var calls: [(Int, String)] = []
-        let id = try QualificationTransport.sessionInspectionSeed(startingAt: 41) { requestID, phase in
+        let id = try QualificationTransport.sessionInspectionSeed(
+            startingAt: 41, purpose: .planner
+        ) { requestID, phase in
             calls.append((requestID, phase))
             return calls.count == 1 ? (true, refusal) : (false, #"{"snapshot_id":"snap_fresh"}"#)
         }
@@ -19,7 +21,9 @@ struct Issue966QualificationSeedRetryTests {
 
     @Test func aSuccessfulFirstReadDoesNotRetry() throws {
         var count = 0
-        let id = try QualificationTransport.sessionInspectionSeed(startingAt: 41) { _, _ in
+        let id = try QualificationTransport.sessionInspectionSeed(
+            startingAt: 41, purpose: .planner
+        ) { _, _ in
             count += 1
             return (false, #"{"snapshot_id":"snap_first"}"#)
         }
@@ -30,7 +34,9 @@ struct Issue966QualificationSeedRetryTests {
     @Test func aSecondRejectedReadRemainsAFailure() {
         var count = 0
         #expect(throws: (any Error).self) {
-            _ = try QualificationTransport.sessionInspectionSeed(startingAt: 41) { _, _ in
+            _ = try QualificationTransport.sessionInspectionSeed(
+                startingAt: 41, purpose: .planner
+            ) { _, _ in
                 count += 1
                 return (true, refusal)
             }
@@ -61,7 +67,9 @@ struct Issue966QualificationSeedRetryTests {
         var count = 0
         let body = refusal.replacingOccurrences(of: replacement.0, with: replacement.1)
         #expect(throws: (any Error).self) {
-            _ = try QualificationTransport.sessionInspectionSeed(startingAt: 41) { _, _ in
+            _ = try QualificationTransport.sessionInspectionSeed(
+                startingAt: 41, purpose: .planner
+            ) { _, _ in
                 count += 1
                 return (true, body)
             }
@@ -73,7 +81,9 @@ struct Issue966QualificationSeedRetryTests {
     func malformedSuccessIsNotRetried(_ text: String) {
         var count = 0
         #expect(throws: (any Error).self) {
-            _ = try QualificationTransport.sessionInspectionSeed(startingAt: 41) { _, _ in
+            _ = try QualificationTransport.sessionInspectionSeed(
+                startingAt: 41, purpose: .planner
+            ) { _, _ in
                 count += 1
                 return (false, text)
             }
@@ -84,11 +94,28 @@ struct Issue966QualificationSeedRetryTests {
     @Test func requestTimeoutIsNotRetried() {
         var count = 0
         #expect(throws: QualificationTransportError.requestTimeout(phase: "session_inspection_seed")) {
-            _ = try QualificationTransport.sessionInspectionSeed(startingAt: 41) { _, phase in
+            _ = try QualificationTransport.sessionInspectionSeed(
+                startingAt: 41, purpose: .planner
+            ) { _, phase in
                 count += 1
                 throw QualificationTransportError.requestTimeout(phase: phase)
             }
         }
         #expect(count == 1)
+    }
+
+    @Test func navigationEnabledMixerInspectionNeverRetriesARefusal() {
+        var calls: [(Int, String)] = []
+        #expect(throws: (any Error).self) {
+            _ = try QualificationTransport.sessionInspectionSeed(
+                startingAt: 41,
+                purpose: .mixerRead
+            ) { requestID, phase in
+                calls.append((requestID, phase))
+                return (true, refusal)
+            }
+        }
+        #expect(calls.map(\.0) == [41])
+        #expect(calls.map(\.1) == ["session_inspection_seed"])
     }
 }

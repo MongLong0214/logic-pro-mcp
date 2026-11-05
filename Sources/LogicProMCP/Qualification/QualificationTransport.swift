@@ -1746,15 +1746,18 @@ struct QualificationTransport: Sendable {
                             nextID += 2
                             // A failed seed sends no handle, so the planner's refusal is recorded
                             // as the failure it is rather than skipped.
-                            seededSessionSnapshotID = try? sessionInspectionSeed(session, startingAt: seedID)
+                            seededSessionSnapshotID = try? sessionInspectionSeed(
+                                session, startingAt: seedID, purpose: .planner)
                         }
                         if responseFailure == nil, requestedMixerReads.contains(spec.id) {
                             let mixerInspectionID = nextID
-                            // Every request-owned inspection has one exact zero-write retry budget.
-                            nextID += 2
+                            // This seed can navigate to establish physical track/strip association
+                            // custody, so it is deliberately one-shot. A second request after any
+                            // false refusal could repeat UI effects that the refusal failed to report.
+                            nextID += 1
                             do {
                                 let inspection = try sessionInspectionSeedPayload(
-                                    session, startingAt: mixerInspectionID)
+                                    session, startingAt: mixerInspectionID, purpose: .mixerRead)
                                 let current = Self.mixerReadProbeParams(from: inspection.responseData)
                                 preparedReadParams.removeValue(forKey: spec.id)
                                 guard let currentParams = current[spec.id] else {
@@ -4932,6 +4935,33 @@ struct QualificationTransport: Sendable {
         .mixerGetSendDestinationVerified,
         .mixerGetSendBypassVerified,
     ]
+    enum SessionInspectionSeedPurpose: Sendable {
+        case planner
+        case mixerRead
+
+        var maximumAttempts: Int {
+            switch self {
+            case .planner: 2
+            case .mixerRead: 1
+            }
+        }
+    }
+    static let mixerInspectionSeedDomains = ["tracks", "hierarchy", "strips", "associations"]
+
+    static func sessionInspectionSeedRequestParams(
+        for purpose: SessionInspectionSeedPurpose
+    ) -> [String: Any] {
+        switch purpose {
+        case .planner:
+            return [:]
+        case .mixerRead:
+            return [
+                "scope": "whole_project",
+                "domains": mixerInspectionSeedDomains,
+                "allow_ui_navigation": true,
+            ]
+        }
+    }
     static let pluginReadProbeOperationIDs: Set<OperationID> = [
         .pluginsGetHostParameterManifest,
         .pluginsGetParamVerified,
@@ -4949,21 +4979,80 @@ struct QualificationTransport: Sendable {
         guard let envelope = try? JSONSerialization.jsonObject(with: resourceData) as? [String: Any]
         else { return [:] }
         let strips: [[String: Any]]
-        if let resourceRows = envelope["strips"] as? [[String: Any]] {
-            strips = resourceRows
-        } else if let snapshotID = envelope["snapshot_id"] as? String, !snapshotID.isEmpty,
+        let requestOwnedAssociationRefs: Set<String>
+        if let snapshotID = envelope["snapshot_id"] as? String, !snapshotID.isEmpty,
+                  envelope["schema"] as? String == "logic_pro_mcp_session_population.v1",
+                  let readOnly = envelope["read_only"], JSONInspector.isBoolean(readOnly),
+                  readOnly as? Bool == true,
+                  envelope["scope"] as? String == "whole_project",
+                  envelope["requested_domains"] as? [String] == mixerInspectionSeedDomains,
                   let sources = envelope["sources"] as? [String: Any],
+                  sources["tracks"] as? String == "ax_request_read",
                   sources["strips"] as? String == "ax_request_read",
+                  let tracks = envelope["tracks"] as? [String: Any],
+                  let trackCoverage = tracks["coverage"] as? String,
+                  ["complete", "partial"].contains(trackCoverage),
+                  let trackRows = tracks["rows"] as? [[String: Any]],
                   let section = envelope["strips"] as? [String: Any],
-                  let freshRows = section["rows"] as? [[String: Any]] {
+                  let stripCoverage = section["coverage"] as? String,
+                  ["complete", "partial"].contains(stripCoverage),
+                  let freshRows = section["rows"] as? [[String: Any]],
+                  let associations = envelope["associations"] as? [String: Any],
+                  let associationCoverage = associations["coverage"] as? String,
+                  ["complete", "partial"].contains(associationCoverage),
+                  let associationRows = associations["rows"] as? [[String: Any]],
+                  let effects = envelope["ui_effects"] as? [String: Any],
+                  let navigationPerformed = effects["navigation_performed"],
+                  JSONInspector.isBoolean(navigationPerformed),
+                  let navigated = navigationPerformed as? Bool,
+                  let restoration = effects["restoration"] as? String,
+                  let attempted = effects["attempted"] as? [String],
+                  let changed = effects["changed"] as? [String],
+                  effects["reason"] == nil || effects["reason"] is NSNull,
+                  !attempted.contains("mixer_visibility"),
+                  !changed.contains("mixer_visibility"),
+                  navigated
+                    ? restoration == "restored"
+                    : restoration == "not_applicable" && attempted.isEmpty && changed.isEmpty {
+            let trackRefs = trackRows.compactMap { row -> String? in
+                guard let reference = row["track_ref"] as? String,
+                      reference.hasPrefix("trk_"), reference.count > 4 else { return nil }
+                return reference
+            }
+            guard trackRefs.count == trackRows.count else { return [:] }
+            let associationRefs = associationRows.compactMap { row -> (String, String)? in
+                guard let trackRef = row["track_ref"] as? String,
+                      trackRef.hasPrefix("trk_"), trackRef.count > 4,
+                      let mixerRef = row["mixer_strip_ref"] as? String,
+                      mixerRef.hasPrefix("mix_"), mixerRef.count > 4,
+                      ["held_exclusive_selection_focus",
+                       "held_exclusive_selection_selected_child"].contains(
+                        row["source"] as? String ?? "") else { return nil }
+                return (trackRef, mixerRef)
+            }
+            guard associationRefs.count == associationRows.count else { return [:] }
+            let uniquelyAssociated = Set(associationRefs.compactMap { pair in
+                associationRefs.filter { $0.1 == pair.1 }.count == 1
+                    && associationRefs.filter { $0.0 == pair.0 }.count == 1 ? pair.1 : nil
+            })
+            let uniquelyObservedTrackRefs = Set(trackRefs.filter { reference in
+                trackRefs.filter { $0 == reference }.count == 1
+            })
+            let censusBoundAssociationRefs = Set(associationRefs.compactMap { pair in
+                uniquelyObservedTrackRefs.contains(pair.0)
+                    && uniquelyAssociated.contains(pair.1) ? pair.1 : nil
+            })
+            guard !censusBoundAssociationRefs.isEmpty else { return [:] }
             strips = freshRows
+            requestOwnedAssociationRefs = censusBoundAssociationRefs
         } else {
             return [:]
         }
         var params: [OperationID: [String: Any]] = [:]
         for strip in strips {
             guard let reference = strip["mixer_strip_ref"] as? String,
-                  reference.hasPrefix("mix_"), reference.count > 4 else { continue }
+                  reference.hasPrefix("mix_"), reference.count > 4,
+                  requestOwnedAssociationRefs.contains(reference) else { continue }
 
             if params[.mixerGetOutputVerified] == nil,
                let observation = strip["output_observation"] as? [String: Any],
@@ -5504,19 +5593,22 @@ struct QualificationTransport: Sendable {
     /// to answer, and its refusal for an unsaved project is classified where refusals are.
     private func sessionInspectionSeed(
         _ session: QualificationSubprocessSession,
-        startingAt id: Int
+        startingAt id: Int,
+        purpose: SessionInspectionSeedPurpose
     ) throws -> String {
-        try sessionInspectionSeedPayload(session, startingAt: id).snapshotID
+        try sessionInspectionSeedPayload(session, startingAt: id, purpose: purpose).snapshotID
     }
 
     private func sessionInspectionSeedPayload(
         _ session: QualificationSubprocessSession,
-        startingAt id: Int
+        startingAt id: Int,
+        purpose: SessionInspectionSeedPurpose
     ) throws -> SessionInspectionSeedPayload {
         guard let inspect = OperationRegistry.specs.first(where: { $0.id == .projectInspectSession }) else {
             throw QualificationTransportError.protocolViolation("session_inspection_seed: no inspect_session operation")
         }
-        return try Self.sessionInspectionSeedPayload(startingAt: id) { requestID, phase in
+        let requestParams = Self.sessionInspectionSeedRequestParams(for: purpose)
+        return try Self.sessionInspectionSeedPayload(startingAt: id, purpose: purpose) { requestID, phase in
             let result: ToolCallResult = try session.request(
                 id: requestID,
                 method: "tools/call",
@@ -5524,7 +5616,7 @@ struct QualificationTransport: Sendable {
                     "name": inspect.tool.rawValue,
                     "arguments": [
                         "command": inspect.command,
-                        "params": [:] as [String: Any],
+                        "params": requestParams,
                     ],
                 ],
                 phase: phase,
@@ -5539,16 +5631,18 @@ struct QualificationTransport: Sendable {
     /// old rows, refresh the boundary around them, navigate, or retry a write/timeout.
     static func sessionInspectionSeed(
         startingAt id: Int,
+        purpose: SessionInspectionSeedPurpose,
         request: (Int, String) throws -> (isError: Bool?, text: String)
     ) throws -> String {
-        try sessionInspectionSeedPayload(startingAt: id, request: request).snapshotID
+        try sessionInspectionSeedPayload(startingAt: id, purpose: purpose, request: request).snapshotID
     }
 
     private static func sessionInspectionSeedPayload(
         startingAt id: Int,
+        purpose: SessionInspectionSeedPurpose,
         request: (Int, String) throws -> (isError: Bool?, text: String)
     ) throws -> SessionInspectionSeedPayload {
-        for attempt in 0..<2 {
+        for attempt in 0..<purpose.maximumAttempts {
             let phase = attempt == 0 ? "session_inspection_seed" : "session_inspection_seed_retry"
             let result = try request(id + attempt, phase)
             if result.isError == true {

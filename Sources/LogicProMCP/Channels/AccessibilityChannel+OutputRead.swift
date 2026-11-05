@@ -73,7 +73,8 @@ extension AccessibilityChannel {
         runtime: AXLogicProElements.Runtime = .production,
         timing: OutputAssignmentTiming = .live
     ) async -> ChannelResult {
-        (await getCheckedRoutingDestination(params: [:], sendOrdinal: nil, inputBusOnly: true, runtime: runtime, timing: timing)).result
+        (await getCheckedRoutingDestination(params: [:], sendOrdinal: nil, inputBusOnly: true,
+            runtime: runtime, timing: timing, observingPeerHeaders: [])).result
     }
     /// A checked assigned-send choice, not a routing-graph completeness claim.
     static func getAssignedSendVerified(
