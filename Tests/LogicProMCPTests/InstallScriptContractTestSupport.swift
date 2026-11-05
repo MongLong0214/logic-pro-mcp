@@ -32,6 +32,23 @@ struct InstallerFixture {
     let pathEnv: String
 }
 
+private final class ProcessOutputCapture: @unchecked Sendable {
+    private let lock = NSLock()
+    private var data = Data()
+
+    func store(_ value: Data) {
+        lock.lock()
+        data = value
+        lock.unlock()
+    }
+
+    func snapshot() -> Data {
+        lock.lock()
+        defer { lock.unlock() }
+        return data
+    }
+}
+
 @discardableResult
 func runProcess(
     executable: String,
@@ -57,14 +74,38 @@ func runProcess(
     process.standardOutput = stdoutPipe
     process.standardError = stderrPipe
     try process.run()
+
+    let stdoutCapture = ProcessOutputCapture()
+    let stderrCapture = ProcessOutputCapture()
+    let drainGroup = DispatchGroup()
+
+    func drain(_ pipe: Pipe, into capture: ProcessOutputCapture) {
+        drainGroup.enter()
+        DispatchQueue.global(qos: .userInitiated).async {
+            var data = Data()
+            do {
+                while let chunk = try pipe.fileHandleForReading.read(upToCount: 64 * 1024),
+                      !chunk.isEmpty {
+                    data.append(chunk)
+                }
+            } catch {
+                // Preserve whatever the child wrote before the pipe became unreadable.
+            }
+            capture.store(data)
+            drainGroup.leave()
+        }
+    }
+    drain(stdoutPipe, into: stdoutCapture)
+    drain(stderrPipe, into: stderrCapture)
     process.waitUntilExit()
+    drainGroup.wait()
 
     let stdout = String(
-        data: stdoutPipe.fileHandleForReading.readDataToEndOfFile(),
+        data: stdoutCapture.snapshot(),
         encoding: .utf8
     ) ?? ""
     let stderr = String(
-        data: stderrPipe.fileHandleForReading.readDataToEndOfFile(),
+        data: stderrCapture.snapshot(),
         encoding: .utf8
     ) ?? ""
     return ScriptRunResult(exitCode: process.terminationStatus, stdout: stdout, stderr: stderr)

@@ -1,6 +1,20 @@
 import Foundation
 import Testing
 
+@Test(.timeLimit(.minutes(1)), arguments: ["stdout", "stderr"])
+func testRunProcessDrainsLargeOutputWhileChildIsRunning(channel: String) throws {
+    let redirection = channel == "stderr" ? " >&2" : ""
+    let result = try runProcess(
+        executable: "/bin/bash",
+        arguments: ["-c", "yes 0123456789 | head -n 20000\(redirection)"],
+        currentDirectoryURL: installScriptContractRepositoryRootURL()
+    )
+
+    #expect(result.exitCode == 0)
+    let output = channel == "stderr" ? result.stderr : result.stdout
+    #expect(output.utf8.count == 220_000, "the helper must preserve the child's complete output")
+}
+
 @Test func testInstallScriptTerminatesWhenPermissionCheckFails() throws {
     let fixture = try makeInstallerFixture(permissionExitCode: 1)
 
