@@ -324,14 +324,25 @@ enum ControlBarDisplayMode {
         }
         guard CFEqual(popup, lease.popup) else { return "display_mode_popup_changed" }
         if let currentOwner {
-            guard let current = currentOwner() else { return "display_mode_window_changed" }
-            guard CFEqual(current.0, window), CFEqual(current.0, lease.window) else {
-                return "display_mode_window_changed"
-            }
-            guard let currentPopup = current.1,
-                  CFEqual(currentPopup, popup), CFEqual(currentPopup, lease.popup) else {
-                return "display_mode_popup_changed"
-            }
+            // AX can transiently return a replacement proxy for this same popup while its owned
+            // menu settles. Keep the exact CFEqual lease: retry only the read, never broaden the
+            // locator or act through the replacement. A changed window refuses immediately and a
+            // popup that does not settle back to the leased control still refuses at the deadline.
+            let deadline = Date().addingTimeInterval(modeConfirmationTimeout)
+            repeat {
+                guard let current = currentOwner() else { return "display_mode_window_changed" }
+                guard CFEqual(current.0, window), CFEqual(current.0, lease.window) else {
+                    return "display_mode_window_changed"
+                }
+                if let currentPopup = current.1,
+                   CFEqual(currentPopup, popup), CFEqual(currentPopup, lease.popup) {
+                    return nil
+                }
+                let remaining = deadline.timeIntervalSinceNow
+                guard remaining > 0 else { break }
+                Thread.sleep(forTimeInterval: min(modeConfirmationPollInterval, remaining))
+            } while Date() < deadline
+            return "display_mode_popup_changed"
         }
         return nil
     }

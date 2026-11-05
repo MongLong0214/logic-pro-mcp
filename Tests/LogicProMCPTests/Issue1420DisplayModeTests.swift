@@ -530,6 +530,54 @@ func testDisplayModeCancelFallbackRequiresTheCheckedPressToCloseTheMenu(_ fault:
     #expect(!fixture.builder.makeAXRuntime().children(fixture.popup).isEmpty)
 }
 
+// A live Logic 12.3 first call returned a one-read replacement proxy for the otherwise unchanged
+// display-mode popup. The next fresh-server call and an independent AXShowMenu probe both retained
+// the leased identity. Treat only that settling read as transient; permanent replacement still
+// owns no write authority.
+@Test func testDisplayModeSwitchRetriesOneTransientPopupOwnershipMismatch() {
+    let fixture = DisplayModeFixture()
+    let runtime = fixture.runtime()
+    let foreign = fixture.builder.element(142_091)
+    var ownerReads = 0
+    let result = ControlBarDisplayMode.selectBeats(
+        in: fixture.popup, window: fixture.window, runtime: runtime,
+        currentOwner: {
+            ownerReads += 1
+            return (fixture.window, ownerReads == 1 ? foreign : fixture.popup)
+        })
+
+    guard case .switched = result else {
+        Issue.record("A one-read popup identity mismatch should settle back to the leased popup")
+        return
+    }
+    #expect(ownerReads >= 2)
+    #expect(fixture.value == "Beats")
+}
+
+@Test func testDisplayModeSwitchStillRefusesAPermanentPopupOwnershipMismatch() {
+    let fixture = DisplayModeFixture()
+    let runtime = fixture.runtime()
+    let foreign = fixture.builder.element(142_092)
+    var ownerReads = 0
+    let result = ControlBarDisplayMode.selectBeats(
+        in: fixture.popup, window: fixture.window, runtime: runtime,
+        currentOwner: {
+            ownerReads += 1
+            return (fixture.window, foreign)
+        })
+
+    guard case .unsettled(let lease?, let reason) = result else {
+        Issue.record("A permanent popup replacement must retain the unconsumed inverse")
+        return
+    }
+    #expect(lease.original == "Beats & Project")
+    #expect(reason == "display_mode_popup_changed")
+    #expect(ownerReads >= 3)
+    #expect(fixture.value == "Beats & Project")
+    #expect(fixture.actions.calls.map(\.action)
+        == [kAXShowMenuAction as String, kAXCancelAction as String])
+}
+
 // The popup supplied at restore entry can be detached or replaced while its owned menu action is
 // settling. A successful leaf press or Cancel is not enough: the same popup must still belong to
 // the main window's control bar at the final readback.
