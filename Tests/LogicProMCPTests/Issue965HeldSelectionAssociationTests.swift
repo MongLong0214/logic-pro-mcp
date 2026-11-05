@@ -10193,6 +10193,7 @@ struct Issue965HeldSelectionAssociationTests {
     private func runInputBusRenewal(number: Int, condition: String, graph: Bool, keep: Bool,
                                     readOutputAfterRenewal: Bool, inputGoal: Int?) async throws {
         let hasUnrequestedPeer = condition.hasPrefix("cold_rail_input_unrequested_peer")
+            || condition == "public_input_unrequested_peer"
         let f = try Fixture(fourTracks: hasUnrequestedPeer), registry = TargetRegistry()
         let coldRailInput = condition.hasPrefix("cold_rail_input_")
         let captureNow = ContinuousClock.now
@@ -10398,7 +10399,8 @@ struct Issue965HeldSelectionAssociationTests {
         }
         let firstChallengeRetiresPeer = condition == "cold_rail_input_peer_retired"
             || condition == "cold_rail_input_unrequested_peer_changed"
-        if firstChallengeRetiresPeer || condition == "cold_rail_input_unrequested_peer" {
+        if firstChallengeRetiresPeer || condition == "cold_rail_input_unrequested_peer"
+            || condition == "public_input_unrequested_peer" {
             f.routingSelection = { index in
                 guard f.inputMenuCancels == 1, !f.routingLateScopeInjected else { return }
                 if !firstChallengeRetiresPeer, index != 2 { return }
@@ -10867,6 +10869,7 @@ struct Issue965HeldSelectionAssociationTests {
             runtime: f.builder.makeAXRuntime()))
         #expect(!current.strips.contains { CFEqual($0, f.strips[1]) }, "The original source is genuinely absent, not renamed in place")
         let succeeded = condition == "paired" || condition == "unselected_pair" || condition == "selected_child"
+            || condition == "public_input_unrequested_peer"
         #expect(body["state"] as? String == (succeeded ? "A" : "C"), "Input renewal response: \(sharedToolText(result))")
         let attempted = try #require(body["write_attempted"] as? Bool)
         #expect(!attempted)
@@ -12406,7 +12409,7 @@ struct Issue965HeldSelectionAssociationTests {
         #expect(effects["reason"] as? String == "association_restoration_unverified")
     }
 
-    @Test(arguments: [1, 256], ["paired", "selected_child"])
+    @Test(arguments: [1, 256], ["paired", "selected_child", "public_input_unrequested_peer"])
     func inputBusRenewsRetiredSourceThroughOriginalCapturedHeader(number: Int, condition: String) async throws {
         try await assertInputBusRenewal(number: number, condition: condition)
     }
