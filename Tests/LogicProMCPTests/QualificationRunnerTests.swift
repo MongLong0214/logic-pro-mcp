@@ -4651,7 +4651,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         expected.formUnion(QualificationTransport.markerStagedRestoreMode.keys)
         expected.formUnion([
             .tracksRename, .tracksSelect, .tracksDelete, .transportSetTempo,
-            .navigateGotoMarker, .navigateCreateMarker,
+            .navigateGotoMarker, .navigateCreateMarker, .systemExportSupportBundle,
         ])
         let catalogued = Set(OperationRegistry.specs.compactMap { spec in
             QualificationTransport.mutationRestorePolicy(for: spec.id) == nil ? nil : spec.id
