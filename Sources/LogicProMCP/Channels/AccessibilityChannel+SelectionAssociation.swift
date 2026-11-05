@@ -279,16 +279,24 @@ extension AccessibilityChannel {
         }
 
         private static func viewport(_ window: AXUIElement, ax: AXHelpers.Runtime,
-                                     held: [ViewportControl]? = nil) -> [ViewportControl]? {
+                                     held: [ViewportControl]? = nil,
+                                     onContradiction: () -> Void = {}) -> [ViewportControl]? {
             var sliders: [AXUIElement] = []
             var browsers: [AXUIElement] = []
-            guard case .success(let census) = AXHelpers.censusDescendantResult(of: window, role: kAXScrollBarRole as String,
+            let census: AXHelpers.Census
+            switch AXHelpers.censusDescendantResult(of: window, role: kAXScrollBarRole as String,
                 maxDepth: 32, runtime: ax, requiresCompleteTraversal: true, batchingRoleAndChildren: true,
                 permittingRead: { (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil },
                 observingRole: { element, role in
                     if role == kAXSliderRole as String { sliders.append(element) }
                     if role == kAXBrowserRole as String { browsers.append(element) }
-                }) else { return nil }
+                }) {
+            case .success(let observed): census = observed
+            case .failure(let error) where error.isTransientDuringRebuild: return nil
+            case .failure:
+                onContradiction()
+                return nil
+            }
             let libraryBrowsers = browsers.filter {
                 AXLocalePolicy.libraryPanelLabel.matches(
                     AXHelpers.getDescription($0, runtime: ax) ?? "", mode: .exactStrict)
@@ -313,32 +321,61 @@ extension AccessibilityChannel {
             let zooms = held.map { $0.filter { $0.zoomDescription != nil }.map { ($0.element, $0.zoomDescription) } }
                 ?? sliders.filter { !isInsideLibrary($0) }.map { ($0, nil as String?) }
             for (slider, heldDescription) in zooms {
-                guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return nil }
+                guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else {
+                    onContradiction()
+                    return nil
+                }
                 if heldDescription != nil {
                     // A role contradiction sampled by this fresh census is
                     // irreversible; a later role read cannot erase it.
                     guard sliders.filter({ CFEqual($0, slider) }).count == 1,
-                          AXHelpers.getRole(slider, runtime: ax) == kAXSliderRole as String else { return nil }
+                          AXHelpers.getRole(slider, runtime: ax) == kAXSliderRole as String else {
+                        onContradiction()
+                        return nil
+                    }
                 }
                 switch AXHelpers.getAttributeResult(slider, kAXDescriptionAttribute as String,
                     runtime: ax) as Result<AnyObject?, AXHelpers.AXStatusError> {
                 case .success(.some(let rawDescription)):
                     guard CFGetTypeID(rawDescription) == CFStringGetTypeID(),
-                          let description = rawDescription as? String else { return nil }
+                          let description = rawDescription as? String else {
+                        onContradiction()
+                        return nil
+                    }
                     if let heldDescription {
-                        guard description.utf8.elementsEqual(heldDescription.utf8) else { return nil }
+                        guard description.utf8.elementsEqual(heldDescription.utf8) else {
+                            onContradiction()
+                            return nil
+                        }
                         controls.append((slider, heldDescription))
                     } else if zoomLabels.contains(description) { controls.append((slider, description)) }
-                case .success(.none): if heldDescription != nil { return nil }
-                case .failure(let error) where error.isDefinitiveAbsence: if heldDescription != nil { return nil }
-                default: return nil
+                case .success(.none):
+                    if heldDescription != nil {
+                        onContradiction()
+                        return nil
+                    }
+                case .failure(let error) where error.isDefinitiveAbsence:
+                    if heldDescription != nil {
+                        onContradiction()
+                        return nil
+                    }
+                case .failure(let error) where error.isTransientDuringRebuild: return nil
+                default:
+                    onContradiction()
+                    return nil
                 }
             }
             var result: [ViewportControl] = []
             for (control, description) in controls {
-                guard case .success(.some(let value)) = AXHelpers.getAttributeResult(control, kAXValueAttribute as String,
-                    runtime: ax) as Result<NSNumber?, AXHelpers.AXStatusError>, value.doubleValue.isFinite else { return nil }
-                result.append((control, value.doubleValue, description))
+                switch AXHelpers.getAttributeResult(control, kAXValueAttribute as String,
+                    runtime: ax) as Result<NSNumber?, AXHelpers.AXStatusError> {
+                case .success(.some(let value)) where value.doubleValue.isFinite:
+                    result.append((control, value.doubleValue, description))
+                case .failure(let error) where error.isTransientDuringRebuild: return nil
+                default:
+                    onContradiction()
+                    return nil
+                }
             }
             return result
         }
@@ -361,11 +398,13 @@ extension AccessibilityChannel {
         }
 
         private func observedCurrentViewport() -> [ViewportControl]? {
-            guard let current = Self.viewport(window, ax: logic.ax, held: viewport),
-                  Self.sameViewport(current, viewport, includingValues: false),
+            guard let current = Self.viewport(window, ax: logic.ax, held: viewport,
+                    onContradiction: { lost = true }) else { return nil }
+            guard Self.sameViewport(current, viewport, includingValues: false),
                   let paths = Self.viewportPaths(current, window: window, ax: logic.ax),
                   paths.count == viewportPaths.count,
                   zip(paths, viewportPaths).allSatisfy({ Self.same($0, $1) }) else {
+                lost = true
                 return nil
             }
             return current

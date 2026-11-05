@@ -661,6 +661,7 @@ struct Issue965HeldSelectionAssociationTests {
         var inverseValueReadCount = 0
         var viewportFaultAtRead: Int?
         var viewportFaultInjected = false
+        var transientViewportReplacementRestored = false
         var referenceCurrent = true
         var useBulkReads = false
         var batchReadCalls = 0
@@ -14828,6 +14829,42 @@ struct Issue965HeldSelectionAssociationTests {
         #expect(f.selections == [1, 0])
         #expect(f.scrollWrites.isEmpty, "do not overwrite a newer view or act through lost control/document/focus custody")
         #expect(body["associations"] == nil)
+        #expect(body["state"] as? String == "C")
+        #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "not_restored")
+    }
+
+    @Test func aSampledNonLibraryViewportReplacementCannotBeRenewedAway() async throws {
+        let f = try Fixture(withViewport: true)
+        let replacement = f.builder.element(1_965_741)
+        f.builder.setRole(replacement, kAXScrollBarRole as String)
+        f.builder.setAttribute(replacement, kAXValueAttribute as String, NSNumber(value: 0.1))
+        f.builder.setChildren(replacement, [])
+        f.fault = "selection_scroll"
+        f.routingChildrenRead = { element in
+            if f.selections.count == 2, CFEqual(element, f.window), !f.viewportFaultInjected {
+                f.viewportFaultInjected = true
+                f.builder.setChildren(f.window,
+                    [f.rail, f.mixer, f.builder.element(1_965_720), replacement])
+            }
+        }
+        f.routingReadResult = { element, attribute in
+            if CFEqual(element, replacement), attribute == kAXValueAttribute as String {
+                f.builder.setChildren(f.window,
+                    [f.rail, f.mixer, f.builder.element(1_965_720), f.scroll])
+                f.transientViewportReplacementRestored = true
+                return .success(NSNumber(value: 0.1))
+            }
+            return nil
+        }
+
+        let body = try await inspect(f)
+
+        #expect(f.viewportFaultInjected && f.transientViewportReplacementRestored,
+            "Sample the replacement, then put the original control back before a retry")
+        #expect(f.selections == [1, 0])
+        #expect(f.scrollWrites.isEmpty)
+        #expect(body["associations"] == nil,
+            "A positive non-Library identity contradiction is permanent for this observation")
         #expect(body["state"] as? String == "C")
         #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "not_restored")
     }
