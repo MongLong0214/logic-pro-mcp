@@ -1009,8 +1009,10 @@ struct QualificationRunnerTests {
             stripCoverage: String = "partial",
             associationCoverage: String = "partial",
             trackRefs: [String] = ["trk_fresh_output"],
+            stripRefs: [String] = ["mix_fresh_output"],
             associationTrackRef: String = "trk_fresh_output",
             associationRef: String = "mix_fresh_output",
+            associationRows: [[String: Any]]? = nil,
             navigationPerformed: Bool = true,
             restoration: String = "restored",
             attempted: [String] = ["track_selection"],
@@ -1030,16 +1032,16 @@ struct QualificationRunnerTests {
                 ],
                 "strips": [
                     "coverage": stripCoverage,
-                    "rows": [[
-                        "mixer_strip_ref": "mix_fresh_output",
+                    "rows": stripRefs.map { reference in [
+                        "mixer_strip_ref": reference,
                         "output_observation": [
                             "state": "observed_destination", "destination": "출력 3-4",
                         ],
-                    ]],
+                    ] },
                 ],
                 "associations": [
                     "coverage": associationCoverage,
-                    "rows": [[
+                    "rows": associationRows ?? [[
                         "track_ref": associationTrackRef,
                         "mixer_strip_ref": associationRef,
                         "source": "held_exclusive_selection_focus",
@@ -1060,6 +1062,32 @@ struct QualificationRunnerTests {
             inspection(associationRef: "mix_other"),
             inspection(associationTrackRef: "trk_ghost"),
             inspection(trackRefs: ["trk_fresh_output", "trk_fresh_output"]),
+            inspection(
+                trackRefs: ["trk_first", "trk_second"],
+                associationRows: [
+                    [
+                        "track_ref": "trk_first", "mixer_strip_ref": "mix_fresh_output",
+                        "source": "held_exclusive_selection_focus",
+                    ],
+                    [
+                        "track_ref": "trk_second", "mixer_strip_ref": "mix_fresh_output",
+                        "source": "held_exclusive_selection_focus",
+                    ],
+                ]
+            ),
+            inspection(
+                stripRefs: ["mix_first", "mix_second"],
+                associationRows: [
+                    [
+                        "track_ref": "trk_fresh_output", "mixer_strip_ref": "mix_first",
+                        "source": "held_exclusive_selection_focus",
+                    ],
+                    [
+                        "track_ref": "trk_fresh_output", "mixer_strip_ref": "mix_second",
+                        "source": "held_exclusive_selection_focus",
+                    ],
+                ]
+            ),
             inspection(restoration: "not_restored"),
             inspection(changed: ["mixer_visibility"]),
             inspection(reason: "association_population_moved"),
