@@ -94,6 +94,7 @@ private struct DisplayModeFixture {
         projectChangeOnPressTitle: String? = nil,
         mainWindowChangeOnPressTitle: String? = nil,
         mainWindowChangeOnCancel: Bool = false,
+        replacementMenuOnCancel: AXUIElement? = nil,
         unreadablePopupLabel: AXUIElement? = nil
     ) -> AXHelpers.Runtime {
         let builder = builder, app = app, window = window, foreignWindow = foreignWindow
@@ -128,7 +129,11 @@ private struct DisplayModeFixture {
                 }
                 if action == kAXCancelAction as String, CFEqual(element, menu) {
                     if failingCancel { return false }
-                    if !cancelKeepsMenuOpen { builder.setChildren(popup, []) }
+                    if let replacementMenuOnCancel {
+                        builder.setChildren(popup, [replacementMenuOnCancel])
+                    } else if !cancelKeepsMenuOpen {
+                        builder.setChildren(popup, [])
+                    }
                     if mainWindowChangeOnCancel {
                         builder.setAttribute(app, kAXMainWindowAttribute as String, foreignWindow)
                     }
@@ -403,18 +408,174 @@ func testDisplayModeRestoreActsOnlyWhileTheLeaseHolds(_ mode: String) throws {
         == .refused("display_mode_project_changed"))
 }
 
-@Test(arguments: ["cancel_failed", "menu_stayed_open"])
-func testDisplayModeNoOpRestoreRequiresVerifiedMenuClosure(_ fault: String) throws {
+@Test func testDisplayModeNoOpRestoreRefusesWhenCancelFails() throws {
+    let fixture = DisplayModeFixture()
+    let lease = try fixture.lease(fixture.runtime())
+    fixture.builder.setAttribute(fixture.popup, kAXValueAttribute as String, "Beats & Project")
+    fixture.selectMenuItem("Beats & Project")
+    let runtime = fixture.runtime(failingCancel: true)
+    #expect(ControlBarDisplayMode.restore(lease, window: fixture.window, popup: fixture.popup, runtime: runtime)
+        == .refused("display_mode_menu_not_closed"))
+}
+
+@Test func testDisplayModeNoOpRestoreReselectsTheCheckedItemWhenCancelLeavesTheMenuOpen() throws {
+    let fixture = DisplayModeFixture()
+    let lease = try fixture.lease(fixture.runtime())
+    fixture.builder.setAttribute(fixture.popup, kAXValueAttribute as String, "Beats & Project")
+    fixture.selectMenuItem("Beats & Project")
+    let runtime = fixture.runtime(cancelKeepsMenuOpen: true)
+
+    #expect(ControlBarDisplayMode.restore(
+        lease, window: fixture.window, popup: fixture.popup, runtime: runtime
+    ) == .restored)
+    #expect(fixture.value == "Beats & Project")
+    #expect(fixture.actions.calls.suffix(3).map(\.action) == [
+        kAXShowMenuAction as String, kAXCancelAction as String, kAXPressAction as String,
+    ])
+    #expect(fixture.actions.calls.last?.id == fixture.id("Beats & Project"))
+    #expect(fixture.builder.makeAXRuntime().children(fixture.popup).isEmpty)
+}
+
+@Test(arguments: ["zero", "multiple"])
+func testDisplayModeCancelFallbackRefusesAnAmbiguousCheckedItemSet(_ shape: String) throws {
+    let fixture = DisplayModeFixture()
+    let lease = try fixture.lease(fixture.runtime())
+    fixture.builder.setAttribute(fixture.popup, kAXValueAttribute as String, "Beats & Project")
+    fixture.selectMenuItem("Beats & Project")
+    if shape == "zero" {
+        fixture.builder.removeAttribute(fixture.items["Beats & Project"]!, "AXMenuItemMarkChar")
+    } else {
+        fixture.builder.setAttribute(fixture.items["Beats"]!, "AXMenuItemMarkChar", "✓")
+    }
+    let before = fixture.actions.calls.filter { $0.action == kAXPressAction as String }.count
+
+    #expect(ControlBarDisplayMode.restore(
+        lease, window: fixture.window, popup: fixture.popup,
+        runtime: fixture.runtime(cancelKeepsMenuOpen: true)
+    ) == .refused("display_mode_menu_not_closed"))
+    #expect(fixture.actions.calls.filter { $0.action == kAXPressAction as String }.count == before)
+    #expect(!fixture.builder.makeAXRuntime().children(fixture.popup).isEmpty)
+}
+
+@Test func testDisplayModeCancelFallbackRefusesADisabledCheckedItem() throws {
+    let fixture = DisplayModeFixture()
+    let lease = try fixture.lease(fixture.runtime())
+    fixture.builder.setAttribute(fixture.popup, kAXValueAttribute as String, "Beats & Project")
+    fixture.selectMenuItem("Beats & Project")
+    fixture.builder.setAttribute(
+        fixture.items["Beats & Project"]!, kAXEnabledAttribute as String, false)
+    let before = fixture.actions.calls.filter { $0.action == kAXPressAction as String }.count
+
+    #expect(ControlBarDisplayMode.restore(
+        lease, window: fixture.window, popup: fixture.popup,
+        runtime: fixture.runtime(cancelKeepsMenuOpen: true)
+    ) == .refused("display_mode_menu_not_closed"))
+    #expect(fixture.actions.calls.filter { $0.action == kAXPressAction as String }.count == before)
+}
+
+@Test(arguments: ["enabled", "mark"])
+func testDisplayModeCancelFallbackRefusesAnUnreadableCheckedItemCensus(_ attribute: String) throws {
+    let fixture = DisplayModeFixture()
+    let lease = try fixture.lease(fixture.runtime())
+    fixture.builder.setAttribute(fixture.popup, kAXValueAttribute as String, "Beats & Project")
+    fixture.selectMenuItem("Beats & Project")
+    let selected = fixture.items["Beats & Project"]!
+    if attribute == "enabled" {
+        fixture.builder.setAttribute(selected, kAXEnabledAttribute as String, "not-a-boolean")
+    } else {
+        fixture.builder.setAttribute(selected, "AXMenuItemMarkChar", 1)
+    }
+    let before = fixture.actions.calls.filter { $0.action == kAXPressAction as String }.count
+
+    #expect(ControlBarDisplayMode.restore(
+        lease, window: fixture.window, popup: fixture.popup,
+        runtime: fixture.runtime(cancelKeepsMenuOpen: true)
+    ) == .refused("display_mode_menu_not_closed"))
+    #expect(fixture.actions.calls.filter { $0.action == kAXPressAction as String }.count == before)
+}
+
+@Test func testDisplayModeCancelFallbackDoesNotAdoptAReplacementMenu() throws {
+    let fixture = DisplayModeFixture()
+    let lease = try fixture.lease(fixture.runtime())
+    fixture.builder.setAttribute(fixture.popup, kAXValueAttribute as String, "Beats & Project")
+    fixture.selectMenuItem("Beats & Project")
+    let replacement = fixture.builder.element(142_099)
+    fixture.builder.setRole(replacement, kAXMenuRole as String)
+    fixture.builder.setChildren(replacement, Array(fixture.items.values))
+    let before = fixture.actions.calls.filter { $0.action == kAXPressAction as String }.count
+
+    #expect(ControlBarDisplayMode.restore(
+        lease, window: fixture.window, popup: fixture.popup,
+        runtime: fixture.runtime(replacementMenuOnCancel: replacement)
+    ) == .refused("display_mode_menu_not_closed"))
+    #expect(fixture.actions.calls.filter { $0.action == kAXPressAction as String }.count == before)
+}
+
+@Test(arguments: ["press_failed", "menu_stayed_open"])
+func testDisplayModeCancelFallbackRequiresTheCheckedPressToCloseTheMenu(_ fault: String) throws {
     let fixture = DisplayModeFixture()
     let lease = try fixture.lease(fixture.runtime())
     fixture.builder.setAttribute(fixture.popup, kAXValueAttribute as String, "Beats & Project")
     fixture.selectMenuItem("Beats & Project")
     let runtime = fixture.runtime(
-        failingCancel: fault == "cancel_failed",
-        cancelKeepsMenuOpen: fault == "menu_stayed_open"
-    )
-    #expect(ControlBarDisplayMode.restore(lease, window: fixture.window, popup: fixture.popup, runtime: runtime)
-        == .refused("display_mode_menu_not_closed"))
+        failingPressTitle: fault == "press_failed" ? "Beats & Project" : nil,
+        cancelKeepsMenuOpen: true,
+        pressKeepsMenuOpenTitle: fault == "menu_stayed_open" ? "Beats & Project" : nil)
+
+    #expect(ControlBarDisplayMode.restore(
+        lease, window: fixture.window, popup: fixture.popup, runtime: runtime
+    ) == .refused("display_mode_menu_not_closed"))
+    #expect(fixture.actions.calls.last?.id == fixture.id("Beats & Project"))
+    #expect(fixture.actions.calls.last?.action == kAXPressAction as String)
+    #expect(!fixture.builder.makeAXRuntime().children(fixture.popup).isEmpty)
+}
+
+// A live Logic 12.3 first call returned a one-read replacement proxy for the otherwise unchanged
+// display-mode popup. The next fresh-server call and an independent AXShowMenu probe both retained
+// the leased identity. Treat only that settling read as transient; permanent replacement still
+// owns no write authority.
+@Test func testDisplayModeSwitchRetriesOneTransientPopupOwnershipMismatch() {
+    let fixture = DisplayModeFixture()
+    let runtime = fixture.runtime()
+    let foreign = fixture.builder.element(142_091)
+    var ownerReads = 0
+    let result = ControlBarDisplayMode.selectBeats(
+        in: fixture.popup, window: fixture.window, runtime: runtime,
+        currentOwner: {
+            ownerReads += 1
+            return (fixture.window, ownerReads == 1 ? foreign : fixture.popup)
+        })
+
+    guard case .switched = result else {
+        Issue.record("A one-read popup identity mismatch should settle back to the leased popup")
+        return
+    }
+    #expect(ownerReads >= 2)
+    #expect(fixture.value == "Beats")
+}
+
+@Test func testDisplayModeSwitchStillRefusesAPermanentPopupOwnershipMismatch() {
+    let fixture = DisplayModeFixture()
+    let runtime = fixture.runtime()
+    let foreign = fixture.builder.element(142_092)
+    var ownerReads = 0
+    let result = ControlBarDisplayMode.selectBeats(
+        in: fixture.popup, window: fixture.window, runtime: runtime,
+        currentOwner: {
+            ownerReads += 1
+            return (fixture.window, foreign)
+        })
+
+    guard case .unsettled(let lease?, let reason) = result else {
+        Issue.record("A permanent popup replacement must retain the unconsumed inverse")
+        return
+    }
+    #expect(lease.original == "Beats & Project")
+    #expect(reason == "display_mode_popup_changed")
+    #expect(ownerReads >= 3)
+    #expect(fixture.value == "Beats & Project")
+    #expect(fixture.actions.calls.map(\.action)
+        == [kAXShowMenuAction as String, kAXCancelAction as String])
 }
 
 // The popup supplied at restore entry can be detached or replaced while its owned menu action is
@@ -601,18 +762,31 @@ func testDisplayModeSwitchRetainsLeaseWhenChangedModeMenuDoesNotClose(_ fault: S
     #expect(fixture.builder.makeAXRuntime().children(fixture.popup).isEmpty)
 }
 
-@Test(arguments: ["cancel_failed", "menu_stayed_open"])
-func testDisplayModeSwitchTreatsAnUnclosedFalseShowEffectAsUnsettled(_ fault: String) {
+@Test func testDisplayModeSwitchTreatsAFailedCancelOfAFalseShowEffectAsUnsettled() {
     let fixture = DisplayModeFixture()
     let runtime = fixture.runtime(
-        failingCancel: fault == "cancel_failed",
-        cancelKeepsMenuOpen: fault == "menu_stayed_open",
+        failingCancel: true,
         falseShowMenuAfterOpening: true)
 
     #expect(fixture.select(runtime) == .unsettled(nil, "display_mode_menu_not_closed"))
     #expect(fixture.actions.calls.map(\.action)
         == [kAXShowMenuAction as String, kAXCancelAction as String])
     #expect(!fixture.builder.makeAXRuntime().children(fixture.popup).isEmpty)
+}
+
+@Test func testDisplayModeSwitchClosesAFalseShowEffectByReselectingItsCheckedItem() {
+    let fixture = DisplayModeFixture()
+    let runtime = fixture.runtime(
+        cancelKeepsMenuOpen: true,
+        falseShowMenuAfterOpening: true)
+
+    #expect(fixture.select(runtime) == .unavailable("display_mode_beats_item_not_pressed"))
+    #expect(fixture.actions.calls.map(\.action) == [
+        kAXShowMenuAction as String, kAXCancelAction as String, kAXPressAction as String,
+    ])
+    #expect(fixture.actions.calls.last?.id == fixture.id("Beats & Project"))
+    #expect(fixture.value == "Beats & Project")
+    #expect(fixture.builder.makeAXRuntime().children(fixture.popup).isEmpty)
 }
 
 @Test func testDisplayModeRestoreCancelsAnInverseMenuThatDoesNotSelfClose() throws {
