@@ -2396,7 +2396,10 @@ extension AccessibilityChannel {
                      observingPeerHeaders: [AXTrackBinding.Binding]? = nil,
                      observingPeerStrips: [AXMixerStripBinding.Binding]? = nil,
                      populationReadDuration: Duration = .zero,
-                     collectionNow: @Sendable () -> ContinuousClock.Instant = { .now }) async -> [Pair] {
+                     collectionNow: @Sendable () -> ContinuousClock.Instant = { .now },
+                     settlingSelectedChallenge: @Sendable () async -> Void = {
+                         try? await Task.sleep(for: .milliseconds(30))
+                     }) async -> [Pair] {
             var preferredIndex: Int?
             if let prioritizingHeader {
                 guard allHeldHeaders, CFEqual(prioritizingHeader.window, window),
@@ -2562,7 +2565,21 @@ extension AccessibilityChannel {
                         }
                         if !CFEqual(associationStrip, originalAssociationStrip) { observed.append((challenge, associationStrip)) }
                     }
-                    if requestedPeersWereObserved() { break }
+                    if requestedPeersWereObserved() {
+                        if observingPeerHeaders?.isEmpty == true, observingPeerStrips == nil {
+                            // A public scalar read requests no optional peers. Logic can
+                            // acknowledge the first held selection before its reciprocal
+                            // Mixer focus/selected-child relationship has settled. Keep
+                            // the existing claim, visit no other header, and require one
+                            // delayed exact passive proof before the original inverse.
+                            await settlingSelectedChallenge()
+                            guard !stop(), await referenceIsCurrent(), permitsRead() else {
+                                selectionsVerified = false
+                                break
+                            }
+                        }
+                        break
+                    }
                     continue
                 }
                 if expectedIndex == originalIndex {

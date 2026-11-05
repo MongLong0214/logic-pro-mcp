@@ -12955,6 +12955,33 @@ struct Issue965HeldSelectionAssociationTests {
         }
     }
 
+    @Test("An explicit empty peer request settles its selected challenge before the original inverse")
+    func emptyPeerRequestSettlesBeforeOriginalInverse() async throws {
+        let f = try Fixture(withViewport: true, fourTracks: true)
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "mixer.get_input_bus_verified"))
+        defer { gate.release(claim) }
+        let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: { gate.stillOwns(claim) })
+        try await OperationTraceContext.$current.withValue(context) {
+            let association = try #require(AccessibilityChannel.HeldSelectionAssociation(window: f.window,
+                logic: f.logic(), expectedProject: nil, requiresProjectReference: false))
+            f.routingSelection = { index in
+                if index == 0, f.selections.count > 1, !f.routingLateScopeInjected {
+                    f.fault = "no_op"
+                }
+            }
+            let pairs = await association.observe(referenceIsCurrent: { true }, stoppingWhen: { false },
+                allHeldHeaders: true, observingPeerHeaders: [], settlingSelectedChallenge: {
+                    #expect(f.selections == [1], "Settle only the exact first challenge before its inverse")
+                    f.routingLateScopeInjected = true
+                })
+            #expect(f.routingLateScopeInjected)
+            #expect(f.selections == [1, 0], "Do not visit either unrequested peer")
+            #expect(pairs.count == 2)
+            #expect(association.effects.restoration == "restored")
+        }
+    }
+
     @Test("Original-header renewal actually challenges its retained native source before optional peers")
     func sourceRenewalPrioritizesItsActualNativeHeader() async throws {
         let f = try Fixture(withViewport: true, fourTracks: true)
