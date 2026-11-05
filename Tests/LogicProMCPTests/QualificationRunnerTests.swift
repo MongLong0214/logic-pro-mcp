@@ -1375,6 +1375,87 @@ struct QualificationRunnerTests {
         }
     }
 
+    @Test func independentMixerReadbackRefreshesImmediatelyBeforeReading() throws {
+        var events: [String] = []
+        var nextRequestID = 41
+        var observedRefreshTimeout: TimeInterval?
+        let expected = Data(#"{"data_source":"ax_live"}"#.utf8)
+
+        let actual = try QualificationTransport.independentResourceReadback(
+            source: "logic://mixer",
+            nextRequestID: &nextRequestID,
+            refresh: { requestID, timeout in
+                observedRefreshTimeout = timeout
+                events.append("refresh.\(requestID)")
+                return (#"{"refreshed":true}"#, false)
+            },
+            read: { requestID in
+                events.append("read.\(requestID)")
+                return expected
+            }
+        )
+
+        #expect(actual == expected)
+        #expect(events == ["refresh.41", "read.42"])
+        #expect(nextRequestID == 43)
+        let refreshSpec = try #require(OperationRegistry.spec(
+            tool: "logic_system", command: "refresh_cache"))
+        #expect(observedRefreshTimeout
+            == QualificationTransport.operationRequestTimeout(for: refreshSpec))
+        #expect(try #require(observedRefreshTimeout) > 10)
+    }
+
+    @Test func independentNonMixerReadbackDoesNotRefresh() throws {
+        var events: [String] = []
+        var nextRequestID = 41
+
+        _ = try QualificationTransport.independentResourceReadback(
+            source: "logic://tracks",
+            nextRequestID: &nextRequestID,
+            refresh: { requestID, _ in
+                events.append("refresh.\(requestID)")
+                return (#"{"refreshed":true}"#, false)
+            },
+            read: { requestID in
+                events.append("read.\(requestID)")
+                return Data()
+            }
+        )
+
+        #expect(events == ["read.41"])
+        #expect(nextRequestID == 42)
+    }
+
+    @Test(arguments: [false, true])
+    func failedIndependentMixerRefreshPreventsRead(throwsRefresh: Bool) {
+        var readCount = 0
+        var nextRequestID = 41
+        var refreshRequestID: Int?
+
+        #expect(throws: QualificationTransportError.self) {
+            _ = try QualificationTransport.independentResourceReadback(
+                source: "logic://mixer",
+                nextRequestID: &nextRequestID,
+                refresh: { requestID, _ in
+                    refreshRequestID = requestID
+                    if throwsRefresh {
+                        throw QualificationTransportError.closedPipe(
+                            phase: "independent_readback_refresh")
+                    }
+                    return (#"{"error":"refused"}"#, true)
+                },
+                read: { _ in
+                    readCount += 1
+                    return Data()
+                }
+            )
+        }
+
+        #expect(readCount == 0)
+        #expect(refreshRequestID == 41)
+        #expect(nextRequestID == 42)
+    }
+
     @Test func pluginInventoryTrackIndicesRequireUniqueLiveReferencedArrangeRows() throws {
         let live: [String: Any] = [
             "source": "ax_live", "readable": true,
