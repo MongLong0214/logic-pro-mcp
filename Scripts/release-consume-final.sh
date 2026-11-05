@@ -34,6 +34,74 @@ case "$verifier" in "$matrix"/*) echo "Verifier must be outside the qualificatio
 
 private="$(mktemp -d)"
 trap 'rm -rf "$private"' EXIT
+
+snapshot_public_inputs() {
+  # Refuse nonregular outer inputs and freeze the checksum rows before any
+  # expensive verifier invocation. The checksum file is opened nonblocking so
+  # a replacement FIFO cannot park the release consumer before fstat rejects it.
+  for artifact in LogicProMCP LogicProMCP-macOS-universal.tar.gz LogicProMCP-macOS-arm64.tar.gz SHA256SUMS.txt; do
+    if [ ! -f "$public/$artifact" ] || [ -L "$public/$artifact" ]; then
+      echo "Final-artifact input must be a regular non-link file" >&2
+      exit 1
+    fi
+  done
+  if [ "$mode" = verify-public ]; then
+    for artifact in RELEASE-METADATA.json qualification-public.json; do
+      if [ ! -f "$public/$artifact" ] || [ -L "$public/$artifact" ]; then
+        echo "Final-artifact input must be a regular non-link file" >&2
+        exit 1
+      fi
+    done
+  fi
+  if ! python3 - "$public/SHA256SUMS.txt" > "$private/supplied-checksums" \
+      2> "$private/checksum-validation.stderr" <<'PY'
+import os, re, stat, sys
+
+path = sys.argv[1]
+fd = os.open(path, os.O_RDONLY | os.O_NONBLOCK | os.O_NOFOLLOW)
+try:
+    if not stat.S_ISREG(os.fstat(fd).st_mode):
+        raise ValueError('Checksum input is not a regular file')
+    raw = bytearray()
+    while len(raw) <= 4096:
+        chunk = os.read(fd, 4097 - len(raw))
+        if not chunk:
+            break
+        raw.extend(chunk)
+finally:
+    os.close(fd)
+if len(raw) > 4096:
+    raise ValueError('Checksum input is oversized')
+try:
+    lines = bytes(raw).decode('ascii').splitlines()
+except UnicodeDecodeError as error:
+    raise ValueError('Checksum input is not ASCII') from error
+expected = {
+    'LogicProMCP',
+    'LogicProMCP-macOS-universal.tar.gz',
+    'LogicProMCP-macOS-arm64.tar.gz',
+}
+rows = {}
+for line in lines:
+    match = re.fullmatch(r'([0-9a-f]{64})  ([A-Za-z0-9.-]+)', line)
+    if match is None or match.group(2) not in expected or match.group(2) in rows:
+        raise ValueError('Checksum input has an invalid row')
+    rows[match.group(2)] = match.group(1)
+if set(rows) != expected:
+    raise ValueError('Checksum input has a missing row')
+for line in sorted(f'{digest}  {name}' for name, digest in rows.items()):
+    print(line)
+PY
+  then
+    echo "Final-artifact checksum input rejected" >&2
+    exit 1
+  fi
+}
+
+if [ "$mode" != stage ]; then
+  snapshot_public_inputs
+fi
+
 cp "$candidate" "$private/LogicProMCP"
 mkdir "$private/matrix"
 cp -R "$matrix/." "$private/matrix/"
@@ -66,24 +134,9 @@ if [ "$mode" = stage ]; then
   (cd "$public" && LOGIC_PRO_MCP_RELEASE_VERSION="v$version" RELEASE_MODE=adhoc \
     bash "$repo_root/Scripts/release-package.sh")
   (cd "$public" && bash "$repo_root/Scripts/release-verify-formula-install-paths.sh")
+  snapshot_public_inputs
 fi
 
-# Reject outer file types before cmp, archive opening or checksum reads. Member
-# validation and trusted verification cannot protect an earlier blocking read.
-for artifact in LogicProMCP LogicProMCP-macOS-universal.tar.gz LogicProMCP-macOS-arm64.tar.gz SHA256SUMS.txt; do
-  if [ ! -f "$public/$artifact" ] || [ -L "$public/$artifact" ]; then
-    echo "Final-artifact input must be a regular non-link file" >&2
-    exit 1
-  fi
-done
-if [ "$mode" = verify-public ]; then
-  for artifact in RELEASE-METADATA.json qualification-public.json; do
-    if [ ! -f "$public/$artifact" ] || [ -L "$public/$artifact" ]; then
-      echo "Final-artifact input must be a regular non-link file" >&2
-      exit 1
-    fi
-  done
-fi
 cmp "$private/LogicProMCP" "$public/LogicProMCP"
 codesign --verify --strict --verbose=2 "$public/LogicProMCP"
 verify_candidate "$public/LogicProMCP"
@@ -138,7 +191,6 @@ done
 # source of paths to open. Sorting retains support for reordered checksum rows.
 (cd "$public" && shasum -a 256 LogicProMCP-macOS-universal.tar.gz \
   LogicProMCP-macOS-arm64.tar.gz LogicProMCP | LC_ALL=C sort) > "$private/expected-checksums"
-LC_ALL=C sort "$public/SHA256SUMS.txt" > "$private/supplied-checksums"
 cmp "$private/expected-checksums" "$private/supplied-checksums"
 if [ "$mode" = verify-public ]; then
   if ! "$verifier" verify-public-matrix --public-directory "$public" \
