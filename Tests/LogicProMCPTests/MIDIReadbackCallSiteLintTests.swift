@@ -90,6 +90,34 @@ import Testing
         )
     }
 
+    /// One-way prefilter for the structural scan below. False positives (for
+    /// example a spelling in a comment) are harmless because SwiftSyntax still
+    /// decides what is a real reference. Every form the structural scan can
+    /// count contains at least one of these source spellings, including the
+    /// contextual `.init(contentBinding:)` CompleteProof mint.
+    private static func sourceNeedsSyntaxScan(_ source: String) -> Bool {
+        [
+            "assessReadback",
+            "observeNoteTable",
+            "observeHarvestedNoteTable",
+            "CompleteProof",
+            "contentBinding",
+        ].contains { source.contains($0) }
+    }
+
+    @Test func syntaxPrefilterIncludesEveryStructuralSpelling() {
+        for spelling in [
+            "assessReadback",
+            "observeNoteTable",
+            "observeHarvestedNoteTable",
+            "CompleteProof",
+            "contentBinding",
+        ] {
+            #expect(Self.sourceNeedsSyntaxScan("let candidate = \(spelling)"))
+        }
+        #expect(!Self.sourceNeedsSyntaxScan("let unrelated = MIDIReadbackState.partial"))
+    }
+
     private static func probeCallSiteOffenders(
         fileName: String,
         strictProbeReferences: Int,
@@ -219,6 +247,7 @@ import Testing
                 "source directory not found at \(sources.path)")
 
         var scanned = 0
+        var parsed = 0
         var sawAssessmentFile = false
         var offenders: [String] = []
         var proofMintInAssessment = 0
@@ -237,6 +266,8 @@ import Testing
                 offenders.append("\(url.lastPathComponent): unreadable (\(error))")
                 continue
             }
+            guard Self.sourceNeedsSyntaxScan(text) else { continue }
+            parsed += 1
             let isAssessment = url.standardizedFileURL.path == assessmentPath
             let scan = Self.scan(text)
             let census = Self.fileCensus(
@@ -262,6 +293,8 @@ import Testing
 
         #expect(sawAssessmentFile, "expected the assessment file at \(assessmentPath)")
         #expect(scanned > 50, "expected to scan the LogicProMCP source tree; scanned \(scanned) files")
+        #expect(parsed > 0 && parsed < scanned,
+                "expected the one-way prefilter to narrow syntax parsing; parsed \(parsed) of \(scanned) files")
         #expect(offenders.isEmpty, "dark-core call-site lint offenders: \(offenders)")
         #expect(assessmentReferencesInProvider == 1,
                 "\(Self.providerFile) must be the sole adapter call site for assessReadback")

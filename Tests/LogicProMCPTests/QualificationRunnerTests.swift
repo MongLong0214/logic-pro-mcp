@@ -5090,6 +5090,38 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(rejections.first?["actual"] as? String == "case evidence binding", "\(result.stdout)")
     }
 
+    @Test func cachedConsumerMatrixCopiesRemainVerifierAcceptedAndIndependent() async throws {
+        let verifier = Self.releaseConsumerVerifierURL
+        try #require(FileManager.default.isExecutableFile(atPath: verifier.path))
+        let first = try await cachedConsumerSignedTrustedMatrixFixture()
+        let second = try await cachedConsumerSignedTrustedMatrixFixture()
+        defer {
+            first.remove()
+            second.remove()
+        }
+
+        #expect(first.directory != second.directory)
+        #expect(first.executableURL != second.executableURL)
+        #expect(first.binarySHA256 == second.binarySHA256)
+        let secondAttestation = try Data(contentsOf: second.enMatrixAttestationURL)
+        for fixture in [first, second] {
+            let accepted = try Self.runTrustedMatrixVerifierExecutable(
+                fixture,
+                verifierURL: verifier
+            )
+            try #require(accepted.exitCode == 0, "\(accepted.stdout)\(accepted.stderr)")
+        }
+
+        try Self.mutateJSONObject(at: first.enMatrixAttestationURL) { object in
+            object["passed"] = try #require(object["passed"] as? Int) + 1
+        }
+        let rejected = try Self.runTrustedMatrixVerifierExecutable(first, verifierURL: verifier)
+        #expect(rejected.exitCode != 0, "\(rejected.stdout)\(rejected.stderr)")
+        #expect(try Data(contentsOf: second.enMatrixAttestationURL) == secondAttestation)
+        let stillAccepted = try Self.runTrustedMatrixVerifierExecutable(second, verifierURL: verifier)
+        #expect(stillAccepted.exitCode == 0, "\(stillAccepted.stdout)\(stillAccepted.stderr)")
+    }
+
     /// Controlled #373 Q5 composition: the real release entrypoint must consume the final
     /// candidate accepted by the actual verifier, never rebuild/sign another binary.
     /// A test-owned optional path permits the separately built pinned Release product.
@@ -5101,7 +5133,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         let verifier = Self.releaseConsumerVerifierURL
         try #require(FileManager.default.isExecutableFile(atPath: verifier.path))
         let verifierSHA = SupportBundleBuilder.sha256(try Data(contentsOf: verifier))
-        let fixture = try await signedTrustedMatrixFixture()
+        let fixture = try await cachedConsumerSignedTrustedMatrixFixture()
         defer { fixture.remove() }
         let accepted = try Self.runTrustedMatrixVerifierExecutable(fixture, verifierURL: verifier)
         try #require(accepted.exitCode == 0, "\(accepted.stdout)\(accepted.stderr)")
@@ -5189,7 +5221,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         let verifier = Self.releaseConsumerVerifierURL
         try #require(FileManager.default.isExecutableFile(atPath: verifier.path))
         let verifierSHA = SupportBundleBuilder.sha256(try Data(contentsOf: verifier))
-        let fixture = try await signedTrustedMatrixFixture()
+        let fixture = try await cachedConsumerSignedTrustedMatrixFixture()
         defer { fixture.remove() }
         let accepted = try Self.runTrustedMatrixVerifierExecutable(fixture, verifierURL: verifier)
         try #require(accepted.exitCode == 0, "\(accepted.stdout)\(accepted.stderr)")
@@ -5362,7 +5394,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
     func finalConsumerRejectsNonregularPublicInputsBeforeReading(_ scenario: String) async throws {
         let verifier = Self.releaseConsumerVerifierURL
         try #require(FileManager.default.isExecutableFile(atPath: verifier.path))
-        let fixture = try await signedTrustedMatrixFixture()
+        let fixture = try await cachedConsumerSignedTrustedMatrixFixture()
         defer { fixture.remove() }
         let accepted = try Self.runTrustedMatrixVerifierExecutable(fixture, verifierURL: verifier)
         try #require(accepted.exitCode == 0, "\(accepted.stdout)\(accepted.stderr)")
@@ -5718,6 +5750,8 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         return trustedVerifierExecutableURL
     }
 
+    private static let consumerMatrixSnapshotCache = ConsumerMatrixSnapshotCache()
+
     private static func runTrustedVerifierExecutable(
         _ fixture: Fixture,
         candidateURL: URL? = nil,
@@ -5753,7 +5787,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
     }
 
     private static func runTrustedMatrixVerifierExecutable(
-        _ fixture: SignedMatrixFixture,
+        _ fixture: any TrustedMatrixFixtureView,
         verifierURL: URL? = nil
     ) throws -> QualificationCommandResult {
         let process = Process()
@@ -9491,6 +9525,21 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         }
     }
 
+    private func cachedConsumerSignedTrustedMatrixFixture() async throws
+        -> ConsumerSignedMatrixFixture
+    {
+        let snapshot: ConsumerMatrixSnapshot
+        if let cached = await Self.consumerMatrixSnapshotCache.current() {
+            snapshot = cached
+        } else {
+            let source = try await signedTrustedMatrixFixture()
+            defer { source.remove() }
+            let captured = try ConsumerMatrixSnapshot(source)
+            snapshot = await Self.consumerMatrixSnapshotCache.installIfAbsent(captured)
+        }
+        return try ConsumerSignedMatrixFixture(snapshot)
+    }
+
     private static func axisWaivers(
         observedAxis: QualificationAxis = .defaultAxis
     ) -> [QualificationWaiver] {
@@ -10495,7 +10544,140 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         }
     }
 
-    private final class SignedMatrixFixture: @unchecked Sendable {
+    private protocol TrustedMatrixFixtureView: Sendable {
+        var executableURL: URL { get }
+        var commitSHA: String { get }
+        var trustedPublicKeyData: Data { get }
+        var inputURL: URL { get }
+    }
+
+    private struct ConsumerMatrixSnapshot: Sendable {
+        struct File: Sendable {
+            let data: Data
+            let permissions: Int
+
+            init(_ url: URL) throws {
+                data = try Data(contentsOf: url)
+                let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
+                permissions = (attributes[.posixPermissions] as? NSNumber)?.intValue ?? 0o600
+            }
+
+            func write(to url: URL) throws {
+                try data.write(to: url, options: .atomic)
+                try FileManager.default.setAttributes(
+                    [.posixPermissions: permissions],
+                    ofItemAtPath: url.path
+                )
+            }
+        }
+
+        let candidate: File
+        let matrixFiles: [String: File]
+        let commitSHA: String
+        let signingKeyData: Data
+        let trustedPublicKeyData: Data
+        let binarySHA256: String
+
+        init(_ fixture: SignedMatrixFixture) throws {
+            candidate = try File(fixture.executableURL)
+            commitSHA = fixture.commitSHA
+            signingKeyData = fixture.signingKeyData
+            trustedPublicKeyData = fixture.trustedPublicKeyData
+            binarySHA256 = fixture.binarySHA256
+
+            let root = fixture.directory.standardizedFileURL
+            let prefix = root.path + "/"
+            let keys: Set<URLResourceKey> = [
+                .isDirectoryKey,
+                .isRegularFileKey,
+                .isSymbolicLinkKey,
+            ]
+            let enumerator = try #require(FileManager.default.enumerator(
+                at: root,
+                includingPropertiesForKeys: Array(keys)
+            ))
+            var files: [String: File] = [:]
+            for case let url as URL in enumerator {
+                let values = try url.resourceValues(forKeys: keys)
+                let isSymbolicLink = values.isSymbolicLink ?? false
+                try #require(!isSymbolicLink, "signed matrix contains a symlink: \(url.path)")
+                if values.isDirectory == true { continue }
+                let isRegularFile = values.isRegularFile ?? false
+                try #require(isRegularFile, "signed matrix contains a nonregular file: \(url.path)")
+                let path = url.standardizedFileURL.path
+                try #require(path.hasPrefix(prefix), "signed matrix entry escaped its root: \(path)")
+                let relativePath = String(path.dropFirst(prefix.count))
+                try #require(!relativePath.isEmpty && files[relativePath] == nil)
+                files[relativePath] = try File(url)
+            }
+            try #require(!files.isEmpty, "signed matrix snapshot is empty")
+            matrixFiles = files
+        }
+    }
+
+    private actor ConsumerMatrixSnapshotCache {
+        private var snapshot: ConsumerMatrixSnapshot?
+
+        func current() -> ConsumerMatrixSnapshot? {
+            snapshot
+        }
+
+        func installIfAbsent(_ candidate: ConsumerMatrixSnapshot) -> ConsumerMatrixSnapshot {
+            if let snapshot { return snapshot }
+            snapshot = candidate
+            return candidate
+        }
+    }
+
+    private final class ConsumerSignedMatrixFixture: TrustedMatrixFixtureView, @unchecked Sendable {
+        let root: URL
+        let directory: URL
+        let executableURL: URL
+        let commitSHA: String
+        let signingKeyData: Data
+        let trustedPublicKeyData: Data
+        let binarySHA256: String
+
+        var inputURL: URL { directory.appendingPathComponent("qualification-matrix-input.json") }
+        var matrixURL: URL { directory.appendingPathComponent("release-qualification-matrix.json") }
+        var enMatrixAttestationURL: URL {
+            directory.appendingPathComponent("en/release-qualification-attestation.json")
+        }
+
+        init(_ snapshot: ConsumerMatrixSnapshot) throws {
+            root = FileManager.default.temporaryDirectory
+                .appendingPathComponent("consumer-release-matrix-\(UUID().uuidString)", isDirectory: true)
+            directory = root.appendingPathComponent("matrix", isDirectory: true)
+            executableURL = root.appendingPathComponent("LogicProMCP")
+            commitSHA = snapshot.commitSHA
+            signingKeyData = snapshot.signingKeyData
+            trustedPublicKeyData = snapshot.trustedPublicKeyData
+            binarySHA256 = snapshot.binarySHA256
+
+            do {
+                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+                try snapshot.candidate.write(to: executableURL)
+                for relativePath in snapshot.matrixFiles.keys.sorted() {
+                    let target = directory.appendingPathComponent(relativePath)
+                    try FileManager.default.createDirectory(
+                        at: target.deletingLastPathComponent(),
+                        withIntermediateDirectories: true
+                    )
+                    let file = try #require(snapshot.matrixFiles[relativePath])
+                    try file.write(to: target)
+                }
+            } catch {
+                try? FileManager.default.removeItem(at: root)
+                throw error
+            }
+        }
+
+        func remove() {
+            try? FileManager.default.removeItem(at: root)
+        }
+    }
+
+    private final class SignedMatrixFixture: TrustedMatrixFixtureView, @unchecked Sendable {
         let en: Fixture
         let ko: Fixture
         let directory: URL
