@@ -43,6 +43,66 @@ struct QualificationReadbackFreshnessTests {
         )
     }
 
+    private static func ownedSupportBundleReadback(
+        source: String = "host_filesystem",
+        cacheAge: Double? = 0
+    ) throws -> Data {
+        var body: [String: Any] = [
+            "source": source,
+            "readable": true,
+            "ax_occluded": false,
+            "verified_empty": false,
+            "data": [
+                "path": "/tmp/qualification-owned-support-bundle",
+                "exists": true,
+                "manifest_verified": true,
+                "files": [["name": "manifest.json"]],
+            ],
+        ]
+        if let cacheAge { body["cache_age_sec"] = cacheAge }
+        return try JSONSerialization.data(withJSONObject: body, options: [.sortedKeys])
+    }
+
+    @Test("the owned support-bundle host read has its own strict freshness dialect")
+    func ownedSupportBundleHostReadbackIsAdmissible() throws {
+        #expect(
+            QualificationReadbackFreshness.verdict(
+                for: try Self.ownedSupportBundleReadback(),
+                uri: QualificationReadbackFreshness.ownedSupportBundleReadbackSource,
+                verification: .readbackRequired,
+                deadline: .short
+            ) == .admissible
+        )
+        #expect(
+            QualificationReadbackFreshness.verdict(
+                for: try Self.ownedSupportBundleReadback(source: "ax_live"),
+                uri: QualificationReadbackFreshness.ownedSupportBundleReadbackSource,
+                verification: .readbackRequired,
+                deadline: .short
+            ) == .notLive(source: "ax_live")
+        )
+        #expect(
+            QualificationReadbackFreshness.verdict(
+                for: try Self.ownedSupportBundleReadback(cacheAge: nil),
+                uri: QualificationReadbackFreshness.ownedSupportBundleReadbackSource,
+                verification: .readbackRequired,
+                deadline: .short
+            ) == .cacheAgeUnknown
+        )
+    }
+
+    @Test("the host filesystem token cannot satisfy a Logic resource dialect")
+    func ownedSupportBundleDialectDoesNotWidenLogicResources() throws {
+        #expect(
+            QualificationReadbackFreshness.verdict(
+                for: try Self.ownedSupportBundleReadback(),
+                uri: "logic://tracks",
+                verification: .readbackRequired,
+                deadline: .short
+            ) == .notLive(source: "host_filesystem")
+        )
+    }
+
     @Test("a live Mixer poll is admissible when the reader names the mixer resource")
     func mixerProvenanceIsReadUnderItsOwnKey() throws {
         #expect(

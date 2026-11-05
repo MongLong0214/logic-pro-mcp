@@ -196,6 +196,177 @@ struct QualificationRunnerTests {
         #expect(String(decoding: try encoder.encode(record), as: UTF8.self) == raw)
     }
 
+    @Test func supportBundleRecordRequiresVerifiedArtifactCreationAndRemoval() throws {
+        func observation(exists: Bool, verified: Bool = false) throws -> String {
+            let files = verified ? SupportBundleBuilder.fileNames.map {
+                ["name": $0, "sha256": String(repeating: "a", count: 64)]
+            } : []
+            let object: [String: Any] = [
+                "source": "host_filesystem",
+                "readable": true,
+                "data": [
+                    "path": "/tmp/qualification-owned-support-bundle",
+                    "exists": exists,
+                    "manifest_verified": verified,
+                    "files": files,
+                ] as [String: Any],
+            ]
+            return String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self)
+        }
+        let owned = "/tmp/qualification-owned-support-bundle"
+        let files = SupportBundleBuilder.fileNames.map {
+            ["name": $0, "sha256": String(repeating: "a", count: 64)]
+        }
+        let mutation = String(decoding: try JSONSerialization.data(withJSONObject: [
+            "state": "A", "bundle_path": owned, "files": files,
+        ]), as: UTF8.self)
+        let record = QualificationMutationRestoreRecord(
+            operationID: OperationID.systemExportSupportBundle.rawValue,
+            preState: try observation(exists: false),
+            mutation: mutation,
+            readback: try observation(exists: true, verified: true),
+            restore: #"{"state":"A","verified":true,"write_attempted":true,"operation":"host_filesystem.remove_owned_support_bundle","path":"/tmp/qualification-owned-support-bundle"}"#,
+            restoreReadback: try observation(exists: false)
+        )
+        #expect(record.verifiedCycleShape)
+    }
+
+    @Test(arguments: ["wrong_path", "unverified_manifest", "partial_manifest", "still_exists",
+                      "mutation_manifest", "restore_receipt"])
+    func supportBundleRecordRejectsIncompleteArtifactOrRestore(shape: String) throws {
+        func observation(
+            path: String,
+            exists: Bool,
+            verified: Bool = false,
+            completeManifest: Bool = true
+        ) throws -> String {
+            let names = completeManifest ? SupportBundleBuilder.fileNames : ["manifest.json"]
+            let files = verified ? names.map {
+                ["name": $0, "sha256": String(repeating: "a", count: 64)]
+            } : []
+            let object: [String: Any] = [
+                "source": "host_filesystem",
+                "readable": true,
+                "data": [
+                    "path": path,
+                    "exists": exists,
+                    "manifest_verified": verified,
+                    "files": files,
+                ] as [String: Any],
+            ]
+            return String(decoding: try JSONSerialization.data(withJSONObject: object), as: UTF8.self)
+        }
+        let owned = "/tmp/qualification-owned-support-bundle"
+        let mutationNames = shape == "mutation_manifest"
+            ? Array(SupportBundleBuilder.fileNames.dropLast())
+            : SupportBundleBuilder.fileNames
+        let mutationFiles = mutationNames.map {
+            ["name": $0, "sha256": String(repeating: "a", count: 64)]
+        }
+        let mutation = String(decoding: try JSONSerialization.data(withJSONObject: [
+            "state": "A", "bundle_path": owned, "files": mutationFiles,
+        ]), as: UTF8.self)
+        let restoreOperation = shape == "restore_receipt"
+            ? "host_filesystem.remove_foreign_bundle"
+            : "host_filesystem.remove_owned_support_bundle"
+        let restore = String(decoding: try JSONSerialization.data(withJSONObject: [
+            "state": "A", "verified": true, "write_attempted": true,
+            "operation": restoreOperation, "path": owned,
+        ]), as: UTF8.self)
+        let record = QualificationMutationRestoreRecord(
+            operationID: OperationID.systemExportSupportBundle.rawValue,
+            preState: try observation(path: owned, exists: false),
+            mutation: mutation,
+            readback: try observation(
+                path: shape == "wrong_path" ? owned + "-foreign" : owned,
+                exists: true,
+                verified: shape != "unverified_manifest",
+                completeManifest: shape != "partial_manifest"),
+            restore: restore,
+            restoreReadback: try observation(path: owned, exists: shape == "still_exists")
+        )
+        #expect(!record.verifiedCycleShape)
+    }
+
+    @Test func registeredSupportBundleRecipeVerifiesAndRemovesItsOwnedDirectory() throws {
+        let rootKey = "LOGIC_MCP_SUPPORT_BUNDLE_ROOT_OVERRIDE"
+        let previousRoot = getenv(rootKey).map { String(cString: $0) }
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("qualification-support-bundle-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        setenv(rootKey, root.path, 1)
+        SecureFD._testBaseOverride = root
+        defer {
+            SecureFD._testBaseOverride = nil
+            if let previousRoot { setenv(rootKey, previousRoot, 1) } else { unsetenv(rootKey) }
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        let fixture = try SlowHandshakeFixture(supportBundleCycle: true)
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first {
+            $0.id == .systemExportSupportBundle
+        })
+        let result = try QualificationTransport(
+            handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2
+        ).drive(.init(
+            executableURL: fixture.executableURL,
+            environment: ["HANDSHAKE_DELAY": "0", rootKey: root.path],
+            expectedOperationCount: 0,
+            operations: [spec]
+        ))
+        let observed = try #require(result.operationResults[spec.id.rawValue])
+        #expect(observed.status == .passed, "\(observed)")
+        #expect(observed.readbackSource
+            == QualificationReadbackFreshness.ownedSupportBundleReadbackSource)
+        let record = try #require(result.mutationRestoreRecords.first)
+        #expect(record.operationID == spec.id.rawValue)
+        #expect(record.verifiedCycleShape)
+        let children = try FileManager.default.contentsOfDirectory(atPath: root.path)
+        #expect(children.isEmpty, "the recipe must remove its UUID bundle, not leave diagnostics behind")
+        let effects = result.wireFrames.filter {
+            $0.direction == .request && $0.operationID == "phase_b.mutation"
+        }
+        #expect(effects.count == 1)
+    }
+
+    @Test func malformedSupportBundleReplyIsRefusedAndItsOwnedDirectoryIsStillRemoved() throws {
+        let rootKey = "LOGIC_MCP_SUPPORT_BUNDLE_ROOT_OVERRIDE"
+        let previousRoot = getenv(rootKey).map { String(cString: $0) }
+        let root = FileManager.default.temporaryDirectory
+            .appendingPathComponent("qualification-support-bundle-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        setenv(rootKey, root.path, 1)
+        SecureFD._testBaseOverride = root
+        defer {
+            SecureFD._testBaseOverride = nil
+            if let previousRoot { setenv(rootKey, previousRoot, 1) } else { unsetenv(rootKey) }
+            try? FileManager.default.removeItem(at: root)
+        }
+
+        let fixture = try SlowHandshakeFixture(
+            supportBundleCycle: true, supportBundleFault: "missing_manifest")
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first {
+            $0.id == .systemExportSupportBundle
+        })
+        let result = try QualificationTransport(
+            handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2
+        ).drive(.init(
+            executableURL: fixture.executableURL,
+            environment: ["HANDSHAKE_DELAY": "0", rootKey: root.path],
+            expectedOperationCount: 0,
+            operations: [spec]
+        ))
+        let observed = try #require(result.operationResults[spec.id.rawValue])
+        #expect(observed.status != .passed)
+        #expect(observed.mutationRestore == nil)
+        let refusal = try #require(observed.mutationRestoreRefusal)
+        #expect(refusal.contains("no file manifest"))
+        #expect(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty,
+                "a malformed reply must not strand its verifier-owned bundle")
+    }
+
     @Test(arguments: [#"{"state":"A","verified":false}"#,
                       #"{"state":"A","verified":true,"write_attempted":false}"#,
                       #"{"state":"A","verified":true,"unchanged":true}"#])
@@ -10034,7 +10205,8 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
              countInCycle: String? = nil, autopunchCycle: String? = nil,
              playheadStep: OperationID? = nil, playheadFault: String = "none", playheadAtBoundary: Bool = false,
              playheadOrigin: String? = nil, valueCycle: OperationID? = nil,
-             valueFault: String = "none") throws {
+             valueFault: String = "none", supportBundleCycle: Bool = false,
+             supportBundleFault: String = "none") throws {
             directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("qualification-slow-handshake-\(UUID().uuidString)", isDirectory: true)
             executableURL = directory.appendingPathComponent("server.sh")
@@ -10070,7 +10242,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             IFS= read -r request_line || exit 0
             """#
             if transportRefusal || transportNativePause || libraryReadback || nameRecipe != nil || countInCycle != nil
-                || autopunchCycle != nil || playheadStep != nil || valueCycle != nil {
+                || autopunchCycle != nil || playheadStep != nil || valueCycle != nil || supportBundleCycle {
                 script = try #require(script.components(separatedBy: "# AFTER SEED").first) + #"""
                 cd "$(dirname "$0")" || exit 1
                 initial_playing=false
@@ -10105,6 +10277,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                 value_fault=none
                 value_reads=0
                 value_writes=0
+                support_bundle_fault=none
                 scalar_value=0.4
                 printf '%s\n' "$scalar_value" > scalar-value
                 printf '%s\n' "$step_position" > step-position
@@ -10227,10 +10400,32 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"{\\"source\\":\\"%s\\",\\"unverified\\":%s,\\"cache_age_sec\\":0,\\"observed_tempo\\":120,\\"data\\":{\\"state\\":{\\"isPlaying\\":%s,\\"isRecording\\":false,\\"isCycleEnabled\\":false,\\"observedCycleEnabled\\":false,\\"tempo\\":120,\\"position\\":\\"%s.1\\",\\"positionReadback\\":{\\"value\\":\\"%s.1\\",\\"observedComponents\\":[\\"bar\\",\\"beat\\"]}}}}"}]}}\n' "$id" "$resource_source" "$resource_unverified" "$playing" "$position" "$position" ;;
                       *'"uri":"logic://system/operations"'*)
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://system/operations","text":"{\\"schema_version\\":1,\\"generated_at\\":\\"1970-01-01T00:00:00Z\\",\\"operation_count\\":0,\\"operations\\":[]}"}]}}\n' "$id" ;;
+                      *'"uri":"logic://system/health"'*)
+                        printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://system/health","text":"{\\"logic_pro_running\\":true,\\"logic_pro_version\\":\\"11.2\\",\\"logic_pro_bundle_id\\":\\"com.apple.logic10\\",\\"logic_pro_variant\\":\\"desktop\\",\\"logic_pro_ui_locale\\":\\"en-US\\",\\"process_metadata_resolved\\":true}"}]}}\n' "$id" ;;
                       *'"command":"health"'*)
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"logic_pro_running\\":true,\\"logic_pro_version\\":\\"11.2\\",\\"logic_pro_bundle_id\\":\\"com.apple.logic10\\",\\"logic_pro_variant\\":\\"desktop\\",\\"logic_pro_ui_locale\\":\\"en-US\\",\\"process_metadata_resolved\\":true,\\"logic_pro_variants\\":[{\\"variant\\":\\"desktop\\",\\"bundle_id\\":\\"com.apple.logic10\\",\\"installed\\":true,\\"running\\":true},{\\"variant\\":\\"creator_studio\\",\\"bundle_id\\":\\"com.apple.mobilelogic\\",\\"installed\\":false,\\"running\\":false}]}"}]}}\n' "$id" ;;
                       *'__adr001b_no_write_probe'*)
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"invalid_params\\",\\"write_attempted\\":false}"}]}}\n' "$id" ;;
+                      *'"command":"export_support_bundle"'*)
+                        support_root=${LOGIC_MCP_SUPPORT_BUNDLE_ROOT_OVERRIDE:?}
+                        leaf=$(printf '%s' "$request" | /usr/bin/sed -n 's/.*"dir":"\([^"]*\)".*/\1/p')
+                        case "$leaf" in qualification-[0-9a-f-]*) ;; *) exit 41 ;; esac
+                        bundle="$support_root/$leaf"
+                        /bin/mkdir "$bundle" || exit 42
+                        files_json=
+                        for name in doctor.json manifest.json metadata.json redaction_report.json traces.json SHA256SUMS; do
+                            printf 'fixture-%s\n' "$name" > "$bundle/$name" || exit 43
+                            digest=$(/usr/bin/shasum -a 256 "$bundle/$name" | /usr/bin/awk '{print $1}')
+                            entry="{\"name\":\"$name\",\"sha256\":\"$digest\"}"
+                            if [ -n "$files_json" ]; then files_json="$files_json,$entry"; else files_json=$entry; fi
+                        done
+                        if [ "$support_bundle_fault" = missing_manifest ]; then
+                            inner="{\"state\":\"A\",\"bundle_path\":\"$bundle\"}"
+                        else
+                            inner="{\"state\":\"A\",\"bundle_path\":\"$bundle\",\"files\":[$files_json]}"
+                        fi
+                        escaped=$(printf '%s' "$inner" | /usr/bin/sed 's/\\/\\\\/g; s/"/\\"/g')
+                        printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"%s"}]}}\n' "$id" "$escaped" ;;
                       *'"command":"list_library"'*)
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"categories\\":[\\"Bass\\"],\\"presetsByCategory\\":{}}"}]}}\n' "$id" ;;
                       *'"command":"set_volume"'*|*'"command":"set_pan"'*)
@@ -10520,6 +10715,11 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                     script = script.replacingOccurrences(
                         of: "value_cycle=none", with: "value_cycle=\(valueCycle.rawValue)")
                         .replacingOccurrences(of: "value_fault=none", with: "value_fault=\(valueFault)")
+                }
+                if supportBundleFault != "none" {
+                    script = script.replacingOccurrences(
+                        of: "support_bundle_fault=none",
+                        with: "support_bundle_fault=\(supportBundleFault)")
                 }
                 if cachedTransport {
                     script = script.replacingOccurrences(of: "resource_source=ax_live", with: "resource_source=cache")
