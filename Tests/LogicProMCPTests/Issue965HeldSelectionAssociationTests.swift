@@ -13071,6 +13071,40 @@ struct Issue965HeldSelectionAssociationTests {
         }
     }
 
+    @Test("A retained passive rail focus does not consume the selected-child settlement reserve")
+    func passiveRailFocusUsesTheReciprocalSelectedChildWithoutWaitingForFocusMovement() async throws {
+        let f = try Fixture(withViewport: true, fourTracks: true)
+        f.selectionKeepsPassiveRailFocus = true
+        f.builder.setAttributeSettable(f.rail, kAXValueAttribute as String, false)
+        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.rail)
+        f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[1]])
+        f.routingReadResult = { element, attribute in
+            if CFEqual(element, f.rail), [kAXValueAttribute, kAXSelectedTextAttribute,
+                kAXNumberOfCharactersAttribute, kAXInsertionPointLineNumberAttribute]
+                .map({ $0 as String }).contains(attribute) {
+                return .failure(.init(raw: AXError.noValue.rawValue))
+            }
+            return nil
+        }
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: { gate.stillOwns(claim) })
+        try await OperationTraceContext.$current.withValue(context) {
+            let association = try #require(AccessibilityChannel.HeldSelectionAssociation(window: f.window,
+                logic: f.logic(), expectedProject: nil, requiresProjectReference: false,
+                allowsSelectedChildRailEntry: true))
+            let referenceDeadline = ContinuousClock.now.advanced(by: .milliseconds(700))
+            let pairs = await association.observe(referenceIsCurrent: {
+                ContinuousClock.now < referenceDeadline
+            }, stoppingWhen: { false }, allHeldHeaders: true)
+            #expect(f.selections == [1, 2, 3, 0])
+            #expect(pairs.count == 4,
+                "The exact reciprocal selected child is the association witness; unchanged owned rail focus is already settled")
+            #expect(association.effects.restoration == "restored")
+        }
+    }
+
     @Test("Original-header renewal actually challenges its retained native source before optional peers")
     func sourceRenewalPrioritizesItsActualNativeHeader() async throws {
         let f = try Fixture(withViewport: true, fourTracks: true)

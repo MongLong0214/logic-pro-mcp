@@ -2023,12 +2023,22 @@ extension AccessibilityChannel {
                     if let selectedChild, let precedingSelectedChild, let originalSelectedChild {
                         let selectedChildIsPending = index == originalIndex
                             ? !CFEqual(selectedChild, originalSelectedChild) : CFEqual(selectedChild, precedingSelectedChild)
-                        let focusIsPending = index == originalIndex
-                            ? !CFEqual(focus, originalFocus) : CFEqual(focus, precedingFocus)
+                        let focusIsPending: Bool
+                        if let originalRailFocus, CFEqual(focus, originalRailFocus) {
+                            // A passive Track rail keeps focus while its exact
+                            // reciprocal Mixer selected child advances. The
+                            // owned() fence above has already revalidated this
+                            // exact rail, selection, census, and viewport.
+                            focusIsPending = false
+                        } else {
+                            focusIsPending = index == originalIndex
+                                ? !CFEqual(focus, originalFocus) : CFEqual(focus, precedingFocus)
+                        }
                         // Logic can publish the reciprocal selected child before
                         // its focused strip lands. Both are independent custody
-                        // witnesses; neither one alone may advance the next
-                        // selection or strand the eventual inverse.
+                        // witnesses. A retained passive rail is the one bounded
+                        // exception: its reciprocal selected child is the moving
+                        // witness while the exact owned rail remains focused.
                         awaitingOwnFocus = selectedChildIsPending || focusIsPending
                     } else {
                         awaitingOwnFocus = index == originalIndex
