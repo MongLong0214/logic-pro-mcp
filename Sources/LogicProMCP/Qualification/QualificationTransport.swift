@@ -6012,7 +6012,7 @@ struct QualificationTransport: Sendable {
         case .logicMixer, .logicPlugins:
             return "logic://mixer"
         case .logicNavigate:
-            return "logic://markers"
+            return spec.id == .navigateGotoBar ? "logic://transport/state" : "logic://markers"
         case .logicEdit:
             return "logic://tracks"
         case .logicProject:

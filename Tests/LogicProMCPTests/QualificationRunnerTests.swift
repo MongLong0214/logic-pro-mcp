@@ -1029,6 +1029,16 @@ struct QualificationRunnerTests {
             "the scalar recipe captures and restores this exact track, not a separately hidden Mixer")
     }
 
+    @Test func gotoBarUsesTransportReadbackWithoutChangingMarkerNavigation() throws {
+        let gotoBar = try #require(OperationRegistry.specs.first { $0.id == .navigateGotoBar })
+        let gotoMarker = try #require(OperationRegistry.specs.first { $0.id == .navigateGotoMarker })
+
+        #expect(QualificationTransport.readbackSource(for: gotoBar) == "logic://transport/state",
+            "goto_bar restores and verifies the playhead through the transport-state resource")
+        #expect(QualificationTransport.readbackSource(for: gotoMarker) == "logic://markers",
+            "marker navigation must keep its marker-specific semantic readback")
+    }
+
     @Test(arguments: [OperationID.mixerSetPan, .mixerSetVolume])
     func mixerScalarCyclesAddressAndRestoreTheHeldTrack(operation: OperationID) throws {
         let fixture = try SlowHandshakeFixture(valueCycle: operation)
