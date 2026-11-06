@@ -893,6 +893,7 @@ struct Issue965HeldSelectionAssociationTests {
         var thirdSharesOriginalStrip = false
         var thirdRetainsPreviousFocus = false
         var selectionKeepsPassiveRailFocus = false
+        var selectionKeepsPassiveWindowFocus = false
         var selectedChildrenReads = 0
         var selectedChildrenReadsAtWrite = 0
         var associationStopReads = 0
@@ -1387,6 +1388,12 @@ struct Issue965HeldSelectionAssociationTests {
                         builder.setAttribute(mixer, kAXSelectedChildrenAttribute as String, [selectedStrip])
                         if let previousFocus, CFEqual(previousFocus as AnyObject, rail) {
                             builder.setAttribute(app, kAXFocusedUIElementAttribute as String, rail)
+                        }
+                    }
+                    if selectionKeepsPassiveWindowFocus {
+                        builder.setAttribute(mixer, kAXSelectedChildrenAttribute as String, [selectedStrip])
+                        if let previousFocus, CFEqual(previousFocus as AnyObject, window) {
+                            builder.setAttribute(app, kAXFocusedUIElementAttribute as String, window)
                         }
                     }
                     if index == 2, thirdRetainsPreviousFocus, let previousFocus {
@@ -13101,6 +13108,30 @@ struct Issue965HeldSelectionAssociationTests {
             #expect(f.selections == [1, 2, 3, 0])
             #expect(pairs.count == 4,
                 "The exact reciprocal selected child is the association witness; unchanged owned rail focus is already settled")
+            #expect(association.effects.restoration == "restored")
+        }
+    }
+
+    @Test("A retained passive window focus uses the reciprocal selected child")
+    func passiveWindowFocusUsesTheReciprocalSelectedChildWithoutWaitingForFocusMovement() async throws {
+        let f = try Fixture(withViewport: true, fourTracks: true)
+        f.selectionKeepsPassiveWindowFocus = true
+        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.window)
+        f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[1]])
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: { gate.stillOwns(claim) })
+        try await OperationTraceContext.$current.withValue(context) {
+            let association = try #require(AccessibilityChannel.HeldSelectionAssociation(window: f.window,
+                logic: f.logic(), expectedProject: nil, requiresProjectReference: false,
+                allowsSelectedChildRailEntry: true))
+            let referenceDeadline = ContinuousClock.now.advanced(by: .milliseconds(700))
+            let pairs = await association.observe(referenceIsCurrent: {
+                ContinuousClock.now < referenceDeadline
+            }, stoppingWhen: { false }, allHeldHeaders: true)
+            #expect(f.selections == [1, 2, 3, 0])
+            #expect(pairs.count == 4)
             #expect(association.effects.restoration == "restored")
         }
     }
