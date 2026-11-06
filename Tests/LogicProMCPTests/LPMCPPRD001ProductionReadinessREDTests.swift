@@ -1324,6 +1324,48 @@ struct LPMCPPRD001ProductionReadinessREDTests {
         #expect(contributorKeyReport.openDebts.contains(.releaseWorkflowMissingIndependentQualification))
         #expect(contributorKeyReport.openDebts.contains(.independentProvenanceNotEnforced))
 
+        let qualifiedInputTokenLine =
+            "          QUALIFICATION_INPUTS_GITHUB_TOKEN: ${{ github.token }}\n"
+        let missingQualifiedInputToken = workflow.replacingOccurrences(
+            of: qualifiedInputTokenLine,
+            with: ""
+        )
+        let missingQualifiedInputTokenReport = evaluate(missingQualifiedInputToken, consumer)
+        #expect(
+            missingQualifiedInputTokenReport.openDebts.contains(
+                .releaseWorkflowMissingIndependentQualification
+            )
+        )
+
+        let contributorControlledInputToken = workflow.replacingOccurrences(
+            of: qualifiedInputTokenLine,
+            with: "          QUALIFICATION_INPUTS_GITHUB_TOKEN: ${{ secrets.QUALIFICATION_INPUTS_GITHUB_TOKEN }}\n"
+        )
+        let contributorControlledInputTokenReport = evaluate(
+            contributorControlledInputToken,
+            consumer
+        )
+        #expect(
+            contributorControlledInputTokenReport.openDebts.contains(
+                .releaseWorkflowMissingIndependentQualification
+            )
+        )
+
+        let extraPackageCredential = workflow.replacingOccurrences(
+            of: qualifiedInputTokenLine,
+            with: qualifiedInputTokenLine + "          GH_TOKEN: ${{ github.token }}\n",
+            options: [],
+            range: workflow.range(of: "      - name: Package").map {
+                $0.lowerBound..<workflow.endIndex
+            }
+        )
+        let extraPackageCredentialReport = evaluate(extraPackageCredential, consumer)
+        #expect(
+            extraPackageCredentialReport.openDebts.contains(
+                .releaseWorkflowMissingIndependentQualification
+            )
+        )
+
         let noOpInstallGate = workflow
             .replacingOccurrences(
                 of: "bash Scripts/install.sh | tee install.log",

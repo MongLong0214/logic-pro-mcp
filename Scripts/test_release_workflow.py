@@ -272,6 +272,131 @@ cp "$FETCH_SOURCE" "$output"
                 self.assertNotIn(sentinel, result.stdout + result.stderr)
 
 
+class QualifiedInputAuthenticationTests(unittest.TestCase):
+    REPOSITORY = "MongLong0214/logic-pro-mcp"
+    TOKEN = "ghs_test_run_token"
+    ASSET_URL = (
+        "https://api.github.com/repos/MongLong0214/logic-pro-mcp/releases/assets/595476489"
+    )
+
+    def invoke(self, url, *, repository=REPOSITORY, token=TOKEN):
+        with tempfile.TemporaryDirectory(prefix="qualified-input-auth-") as directory:
+            root = Path(directory)
+            destination = root / "private"
+            destination.mkdir()
+            source = root / "bundle.zip"
+            with zipfile.ZipFile(source, "w", compression=zipfile.ZIP_STORED) as archive:
+                archive.writestr("attestation.json", b"controlled")
+            arguments = root / "curl.arguments"
+            configuration = root / "curl.configuration"
+            invoked = root / "curl.invoked"
+            executable = root / "curl"
+            executable.write_text('''#!/bin/bash
+set -euo pipefail
+touch "$FETCH_INVOKED"
+: > "$FETCH_CONFIG"
+if [ "${1:-}" = -q ]; then shift; fi
+if [ "${1:-}" = --config ] && [ "${2:-}" = - ]; then
+  cat > "$FETCH_CONFIG"
+  shift 2
+fi
+printf '%s\n' "$@" > "$FETCH_ARGUMENTS"
+output=""
+while [ "$#" -gt 0 ]; do
+  case "$1" in --output) output="$2"; shift 2;; *) shift;; esac
+done
+test -n "$output"
+cp "$FETCH_SOURCE" "$output"
+''')
+            executable.chmod(0o755)
+            environment = {
+                "PATH": str(root) + ":/usr/bin:/bin",
+                "FETCH_SOURCE": str(source),
+                "FETCH_ARGUMENTS": str(arguments),
+                "FETCH_CONFIG": str(configuration),
+                "FETCH_INVOKED": str(invoked),
+                "GITHUB_REPOSITORY": repository,
+                "QUALIFICATION_INPUTS_GITHUB_TOKEN": token,
+                "QUALIFICATION_EVIDENCE_URL": url,
+                "QUALIFICATION_EVIDENCE_SHA256": hashlib.sha256(source.read_bytes()).hexdigest(),
+            }
+            result = subprocess.run(
+                ["bash", str(WORKFLOW.parents[2] / "Scripts/release-fetch-qualified-inputs.sh"),
+                 "verify", str(destination)],
+                env=environment, capture_output=True, text=True, timeout=10, check=False,
+            )
+            return {
+                "result": result,
+                "arguments": arguments.read_text() if arguments.exists() else "",
+                "configuration": configuration.read_text() if configuration.exists() else "",
+                "invoked": invoked.exists(),
+                "payload": (destination / "bundle" / "attestation.json").read_bytes()
+                    if (destination / "bundle" / "attestation.json").exists() else None,
+            }
+
+    def test_exact_current_repository_asset_uses_native_oauth_and_https_redirect(self):
+        observed = self.invoke(self.ASSET_URL)
+        result = observed["result"]
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(observed["invoked"])
+        self.assertEqual(observed["payload"], b"controlled")
+        self.assertEqual(
+            observed["configuration"],
+            'oauth2-bearer = "ghs_test_run_token"\n',
+        )
+        arguments = observed["arguments"].splitlines()
+        self.assertIn("--location", arguments)
+        self.assertIn("--proto-redir", arguments)
+        self.assertIn("=https", arguments)
+        self.assertIn("Accept: application/octet-stream", arguments)
+        self.assertNotIn("--location-trusted", arguments)
+        self.assertNotIn(self.TOKEN, observed["arguments"])
+        self.assertNotIn(self.TOKEN, result.stdout + result.stderr)
+
+    def test_presigned_https_input_receives_no_credentials_or_redirect_permission(self):
+        observed = self.invoke(
+            "https://objects.githubusercontent.com/owner/private-asset?signature=controlled"
+        )
+        result = observed["result"]
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue(observed["invoked"])
+        self.assertEqual(observed["configuration"], "")
+        arguments = observed["arguments"].splitlines()
+        self.assertNotIn("--location", arguments)
+        self.assertNotIn("--proto-redir", arguments)
+        self.assertNotIn("Accept: application/octet-stream", arguments)
+        self.assertNotIn(self.TOKEN, observed["arguments"] + result.stdout + result.stderr)
+
+    def test_untrusted_github_api_shapes_refuse_before_curl_without_leaking_token(self):
+        cases = (
+            ("wrong_repository",
+             "https://api.github.com/repos/Other/repository/releases/assets/595476489",
+             self.REPOSITORY, self.TOKEN),
+            ("nonnumeric_asset",
+             "https://api.github.com/repos/MongLong0214/logic-pro-mcp/releases/assets/not-a-number",
+             self.REPOSITORY, self.TOKEN),
+            ("trailing_path", self.ASSET_URL + "/extra", self.REPOSITORY, self.TOKEN),
+            ("query", self.ASSET_URL + "?download=1", self.REPOSITORY, self.TOKEN),
+            ("different_api_path",
+             "https://api.github.com/repos/MongLong0214/logic-pro-mcp/releases/123",
+             self.REPOSITORY, self.TOKEN),
+            ("invalid_repository_environment", self.ASSET_URL,
+             "MongLong0214/logic-pro-mcp/extra", self.TOKEN),
+            ("missing_token", self.ASSET_URL, self.REPOSITORY, ""),
+            ("unsafe_token", self.ASSET_URL, self.REPOSITORY, 'bad"\nheader = "injected"'),
+        )
+        for name, url, repository, token in cases:
+            with self.subTest(name=name):
+                observed = self.invoke(url, repository=repository, token=token)
+                result = observed["result"]
+                self.assertNotEqual(result.returncode, 0)
+                self.assertFalse(observed["invoked"])
+                self.assertEqual(observed["arguments"], "")
+                self.assertEqual(observed["configuration"], "")
+                if token:
+                    self.assertNotIn(token, result.stdout + result.stderr)
+
+
 class ReleaseFinalArtifactConsumerTests(unittest.TestCase):
     """Drive the real release entrypoint without Git/network/build/signing effects.
 
@@ -700,6 +825,32 @@ class ReleaseWorkflowReliabilityTests(unittest.TestCase):
                 step["with"]["name"],
                 "${{ needs.build-release.outputs.verified_artifact_name }}",
             )
+
+    def test_private_asset_fetches_receive_only_the_run_scoped_repository_token(self):
+        consumers = (
+            self.step("Package"),
+            next(
+                step for step in self.workflow["jobs"]["publish"]["steps"]
+                if step.get("name") == "Reverify downloaded release artifact"
+            ),
+        )
+        for consumer in consumers:
+            self.assertEqual(
+                consumer["env"]["QUALIFICATION_INPUTS_GITHUB_TOKEN"],
+                "${{ github.token }}",
+            )
+        self.assertEqual(
+            WORKFLOW.read_text().count(
+                "QUALIFICATION_INPUTS_GITHUB_TOKEN: ${{ github.token }}"
+            ),
+            len(consumers),
+        )
+        self.assertEqual(self.workflow["jobs"]["build-release"]["permissions"], {
+            "contents": "read",
+        })
+        self.assertEqual(self.workflow["jobs"]["publish"]["permissions"], {
+            "contents": "write",
+        })
 
     def test_pinned_trusted_verifier_supports_complete_matrix_commands(self):
         pin = self.TRUSTED_MATRIX_VERIFIER_COMMIT
