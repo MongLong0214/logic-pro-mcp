@@ -1884,14 +1884,20 @@ struct QualificationTransport: Sendable {
                             do {
                                 let inspection = try sessionInspectionSeedPayload(
                                     session, startingAt: mixerInspectionID, purpose: .mixerRead)
-                                let current = Self.mixerReadProbeParams(from: inspection.responseData)
-                                preparedReadParams.removeValue(forKey: spec.id)
-                                guard let currentParams = current[spec.id] else {
+                                let current = Self.preparedMixerReadProbeParams(
+                                    from: inspection.responseData,
+                                    requested: requestedMixerReads,
+                                    previouslyPrepared: preparedReadParams
+                                )
+                                for requestedID in requestedMixerReads {
+                                    preparedReadParams.removeValue(forKey: requestedID)
+                                }
+                                preparedReadParams.merge(current) { _, fresh in fresh }
+                                guard preparedReadParams[spec.id] != nil else {
                                     throw QualificationTransportError.protocolViolation(
                                         "mixer_read_probe_inspection: no current params for \(spec.id.rawValue)"
                                     )
                                 }
-                                preparedReadParams[spec.id] = currentParams
                             } catch {
                                 preparedReadParams.removeValue(forKey: spec.id)
                                 responseFailure = Self.observedFailureReason(
@@ -5639,6 +5645,56 @@ struct QualificationTransport: Sendable {
             }
         }
         return params
+    }
+
+    /// Keep only exact `mix_` parameters that this qualification process already received from a
+    /// valid request-owned inspection. Logic can report one measured transient after a preceding
+    /// read probe fails to restore selection: every population domain is `live_population_moved`
+    /// and the owned selection roundtrip is explicitly `association_restoration_unverified`.
+    /// Repeating that inspection would repeat UI effects, while dropping the already-issued
+    /// session-stable reference makes the runner send empty params. Retain the earlier reference
+    /// only for that exact transcript shape; the product resolver and operation custody checks
+    /// still revalidate it. Any malformed, unrelated, or stably changed inspection clears it.
+    static func preparedMixerReadProbeParams(
+        from resourceData: Data,
+        requested: Set<OperationID>,
+        previouslyPrepared: [OperationID: [String: Any]]
+    ) -> [OperationID: [String: Any]] {
+        let fresh = mixerReadProbeParams(from: resourceData)
+        if !fresh.isEmpty {
+            return fresh.filter { requested.contains($0.key) }
+        }
+
+        guard mixerInspectionAllowsSameSessionTargetRetention(resourceData) else { return [:] }
+        return previouslyPrepared.filter { requested.contains($0.key) }
+    }
+
+    private static func mixerInspectionAllowsSameSessionTargetRetention(_ resourceData: Data) -> Bool {
+        guard let envelope = try? JSONSerialization.jsonObject(with: resourceData) as? [String: Any],
+              envelope["schema"] as? String == "logic_pro_mcp_session_population.v1",
+              let readOnly = envelope["read_only"], JSONInspector.isBoolean(readOnly),
+              readOnly as? Bool == true,
+              let snapshotID = envelope["snapshot_id"] as? String, !snapshotID.isEmpty,
+              envelope["scope"] as? String == "whole_project",
+              envelope["requested_domains"] as? [String] == mixerInspectionSeedDomains,
+              let sources = envelope["sources"] as? [String: Any],
+              sources["tracks"] as? String == "ax_request_read",
+              sources["strips"] as? String == "ax_request_read",
+              let effects = envelope["ui_effects"] as? [String: Any],
+              let navigationPerformed = effects["navigation_performed"],
+              JSONInspector.isBoolean(navigationPerformed),
+              navigationPerformed as? Bool == true,
+              effects["restoration"] as? String == "not_restored",
+              effects["reason"] as? String == "association_restoration_unverified",
+              effects["attempted"] as? [String] == ["track_selection"],
+              effects["changed"] as? [String] == ["track_selection"] else { return false }
+
+        for domain in mixerInspectionSeedDomains {
+            guard let section = envelope[domain] as? [String: Any],
+                  section["coverage"] as? String == "unstable",
+                  section["reasons"] as? [String] == ["live_population_moved"] else { return false }
+        }
+        return true
     }
 
     /// Build live plug-in read probes only from complete inventory responses that issued current

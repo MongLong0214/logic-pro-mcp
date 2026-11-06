@@ -1000,6 +1000,21 @@ extension AccessibilityChannel {
 
         private func passiveAssociationFocusMatches(_ focus: AXUIElement) -> Bool {
             if strips.contains(where: { CFEqual($0, focus) }) { return passiveStripMatches(focus) }
+            if CFEqual(focus, window) {
+                // Logic can leave keyboard focus on the exact project window
+                // while the Track rail owns selection and the reciprocal Mixer
+                // selected child carries the relationship. Identity alone is
+                // not enough: keep the native window role and original rail
+                // path here; selectedChildCustodyMatches() immediately renews
+                // main/focused-window, title/document, PID, census and lease.
+                guard AXHelpers.getRole(focus, runtime: logic.ax) == kAXWindowRole as String,
+                      let currentPath = Self.path(rail, to: window, ax: logic.ax),
+                      Self.same(railPath, currentPath),
+                      currentPath.contains(where: { CFEqual($0, focus) }) else {
+                    lost = true; return false
+                }
+                return true
+            }
             if let originalHeaderFocus, CFEqual(focus, originalHeaderFocus.focus) {
                 // This witness only corroborates the retained numeric name's
                 // nonediting physical custody. Full rail/selection/relationship
@@ -2023,12 +2038,22 @@ extension AccessibilityChannel {
                     if let selectedChild, let precedingSelectedChild, let originalSelectedChild {
                         let selectedChildIsPending = index == originalIndex
                             ? !CFEqual(selectedChild, originalSelectedChild) : CFEqual(selectedChild, precedingSelectedChild)
-                        let focusIsPending = index == originalIndex
-                            ? !CFEqual(focus, originalFocus) : CFEqual(focus, precedingFocus)
+                        let focusIsPending: Bool
+                        if let originalRailFocus, CFEqual(focus, originalRailFocus) {
+                            // A passive Track rail keeps focus while its exact
+                            // reciprocal Mixer selected child advances. The
+                            // owned() fence above has already revalidated this
+                            // exact rail, selection, census, and viewport.
+                            focusIsPending = false
+                        } else {
+                            focusIsPending = index == originalIndex
+                                ? !CFEqual(focus, originalFocus) : CFEqual(focus, precedingFocus)
+                        }
                         // Logic can publish the reciprocal selected child before
                         // its focused strip lands. Both are independent custody
-                        // witnesses; neither one alone may advance the next
-                        // selection or strand the eventual inverse.
+                        // witnesses. A retained passive rail is the one bounded
+                        // exception: its reciprocal selected child is the moving
+                        // witness while the exact owned rail remains focused.
                         awaitingOwnFocus = selectedChildIsPending || focusIsPending
                     } else {
                         awaitingOwnFocus = index == originalIndex
