@@ -478,6 +478,7 @@ enum ProductionReadinessContractEvaluator {
                 == currentVerifierBuildScriptSHA256 else { return false }
 
         let packageEnvironment = [
+            "QUALIFICATION_INPUTS_GITHUB_TOKEN": "${{github.token}}",
             "QUALIFICATION_CANDIDATE_URL": "${{secrets.qualification_candidate_url}}",
             "QUALIFICATION_CANDIDATE_SHA256": "${{secrets.qualification_candidate_sha256}}",
             "QUALIFICATION_EVIDENCE_URL": "${{secrets.qualification_evidence_url}}",
@@ -487,6 +488,7 @@ enum ProductionReadinessContractEvaluator {
             "QUALIFICATION_PUBLIC_ASSETS_SHA256": "${{secrets.qualification_public_assets_sha256}}",
         ]
         let reverifyEnvironment = [
+            "QUALIFICATION_INPUTS_GITHUB_TOKEN": "${{github.token}}",
             "QUALIFICATION_EVIDENCE_URL": "${{secrets.qualification_evidence_url}}",
             "QUALIFICATION_EVIDENCE_SHA256": "${{secrets.qualification_evidence_sha256}}",
             "TRUSTED_QUALIFICATION_PUBLIC_KEY": "${{secrets.trusted_qualification_public_key}}",
