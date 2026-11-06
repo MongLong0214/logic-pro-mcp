@@ -838,13 +838,15 @@ struct QualificationRunnerTests {
         arguments: [OperationID.editUndo, .editRedo]
     )
     func historyStageRenameUsesOperationDeadline(operation: OperationID) throws {
-        let fixture = try SlowHandshakeFixture(nameRecipe: operation, nameStageDelay: 0.15)
+        // Keep the injected delay above the generic request budget, but leave enough budget for
+        // fixture startup and precondition reads under coverage instrumentation.
+        let fixture = try SlowHandshakeFixture(nameRecipe: operation, nameStageDelay: 1.25)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
 
         let result = try QualificationTransport(
             handshakeTimeout: 2,
-            requestTimeout: 0.05,
+            requestTimeout: 1,
             shutdownGrace: 2
         ).drive(.init(
             executableURL: fixture.executableURL,
@@ -902,7 +904,7 @@ struct QualificationRunnerTests {
     func historyStageTimeoutAfterWriteRestoresOriginalName(operation: OperationID) throws {
         let fixture = try SlowHandshakeFixture(
             nameRecipe: operation,
-            nameCleanupDelay: 0.15,
+            nameCleanupDelay: 1.25,
             nameStageFailure: "timeout_after_write")
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
@@ -911,7 +913,7 @@ struct QualificationRunnerTests {
 
         let result = try QualificationTransport(
             handshakeTimeout: 2,
-            requestTimeout: 0.05,
+            requestTimeout: 1,
             shutdownGrace: 2,
             cleanupSleep: { delay in
                 probe.record(delay)
