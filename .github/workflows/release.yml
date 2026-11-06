@@ -118,6 +118,7 @@ jobs:
 
       - name: Package
         env:
+          QUALIFICATION_INPUTS_GITHUB_TOKEN: ${{ github.token }}
           QUALIFICATION_CANDIDATE_URL: ${{ secrets.QUALIFICATION_CANDIDATE_URL }}
           QUALIFICATION_CANDIDATE_SHA256: ${{ secrets.QUALIFICATION_CANDIDATE_SHA256 }}
           QUALIFICATION_EVIDENCE_URL: ${{ secrets.QUALIFICATION_EVIDENCE_URL }}
@@ -227,6 +228,7 @@ jobs:
       # used to run beside it.
       - name: Reverify downloaded release artifact
         env:
+          QUALIFICATION_INPUTS_GITHUB_TOKEN: ${{ github.token }}
           QUALIFICATION_EVIDENCE_URL: ${{ secrets.QUALIFICATION_EVIDENCE_URL }}
           QUALIFICATION_EVIDENCE_SHA256: ${{ secrets.QUALIFICATION_EVIDENCE_SHA256 }}
           TRUSTED_QUALIFICATION_PUBLIC_KEY: ${{ secrets.TRUSTED_QUALIFICATION_PUBLIC_KEY }}

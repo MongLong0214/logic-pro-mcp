@@ -10,6 +10,47 @@ mode="${1:-}"; destination="${2:-}"
 exec 3>&2
 trap 'echo "Qualified private input fetch rejected" >&3' ERR
 exec > "$destination/fetch.stdout" 2> "$destination/fetch.stderr"
+
+download_input() {
+  local url="$1"
+  local output="$2"
+  local repository=""
+  local api_prefix=""
+  local asset_id=""
+  local token=""
+  local -a common=(
+    --proto '=https'
+    --tlsv1.2
+    --fail
+    --silent
+    --show-error
+    --max-time 120
+  )
+
+  if [[ "$url" == https://api.github.com/* ]]; then
+    repository="${GITHUB_REPOSITORY:-}"
+    token="${QUALIFICATION_INPUTS_GITHUB_TOKEN:-}"
+    [[ "$repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]] || return 1
+    [[ "$token" =~ ^[A-Za-z0-9_.-]+$ ]] || return 1
+    api_prefix="https://api.github.com/repos/${repository}/releases/assets/"
+    [[ "$url" == "$api_prefix"* ]] || return 1
+    asset_id="${url#"$api_prefix"}"
+    [[ "$asset_id" =~ ^[1-9][0-9]*$ ]] || return 1
+
+    # Native OAuth is kept off argv and, unlike a custom Authorization header,
+    # curl does not forward these credentials to the different host named by
+    # GitHub's asset redirect. Redirects remain HTTPS-only and bounded.
+    printf 'oauth2-bearer = "%s"\n' "$token" | curl -q --config - \
+      "${common[@]}" --location --proto-redir '=https' --max-redirs 3 \
+      --header 'Accept: application/octet-stream' "$url" --output "$output"
+    return
+  fi
+
+  # Existing owner/pre-signed HTTPS inputs remain supported, but never receive
+  # repository credentials or redirect authority.
+  curl -q "${common[@]}" "$url" --output "$output"
+}
+
 if [ "$mode" = public ]; then
   input_url="${QUALIFICATION_PUBLIC_ASSETS_URL:-}"
   input_sha="${QUALIFICATION_PUBLIC_ASSETS_SHA256:-}"
@@ -23,8 +64,7 @@ else
 fi
 test -n "$input_url"
 [[ "$input_sha" =~ ^[a-f0-9]{64}$ ]]
-curl --proto '=https' --tlsv1.2 --fail --silent --show-error --max-time 120 \
-  "$input_url" --output "$archive"
+download_input "$input_url" "$archive"
 printf '%s  %s\n' "$input_sha" "$archive" | shasum -a 256 --check
 python3 - "$archive" "$extracted" <<'PY'
 import bisect, pathlib, shutil, stat, sys, unicodedata, zipfile
@@ -75,8 +115,7 @@ PY
 if [ "$mode" = stage ]; then
   test -n "${QUALIFICATION_CANDIDATE_URL:-}"
   [[ "${QUALIFICATION_CANDIDATE_SHA256:-}" =~ ^[a-f0-9]{64}$ ]]
-  curl --proto '=https' --tlsv1.2 --fail --silent --show-error --max-time 120 \
-    "$QUALIFICATION_CANDIDATE_URL" --output "$destination/LogicProMCP"
+  download_input "$QUALIFICATION_CANDIDATE_URL" "$destination/LogicProMCP"
   printf '%s  %s\n' "$QUALIFICATION_CANDIDATE_SHA256" "$destination/LogicProMCP" | shasum -a 256 --check
   chmod 0755 "$destination/LogicProMCP"
 fi
