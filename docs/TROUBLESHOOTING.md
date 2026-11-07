@@ -142,6 +142,10 @@ On Logic 12.2, marker reads require the marker list surface to be available. An 
 
 Refresh `logic://tracks` first. Current builds promote trusted live track-cache counts into project info when saved metadata is incomplete.
 
+### `logic://project/info.sampleRate` does not match the saved project
+
+Save the project, then read `logic://project/info` again. Current builds prefer a positive `SampleRate` from the validated current project's saved `MetaData.plist`; a fresh live transport value is used only when that saved field is missing or invalid. If neither source is available, the response retains the `44100` struct default. The resource does not write the file-derived value into shared cache state or combine it with metadata from a different project path.
+
 ## MCU and Mixer
 
 ### Mixer writes return `channels_exhausted`
