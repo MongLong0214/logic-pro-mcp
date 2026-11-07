@@ -11,6 +11,7 @@ import Testing
 private func makeProjectBundle(
     name: String,
     tempo: Double? = 80,
+    sampleRate: Int? = 48_000,
     numerator: Int? = 4,
     denominator: Int? = 4,
     trackCount: Int? = 31,
@@ -29,10 +30,10 @@ private func makeProjectBundle(
 
     var dict: [String: Any] = [
         "Version": 3,
-        "SampleRate": 48000,
         "LastSavedFrom": lastSavedFrom,
     ]
     if let tempo { dict["BeatsPerMinute"] = tempo }
+    if let sampleRate { dict["SampleRate"] = sampleRate }
     if let numerator { dict["SongSignatureNumerator"] = numerator }
     if let denominator { dict["SongSignatureDenominator"] = denominator }
     if !omitTrackCount, let trackCount { dict["NumberOfTracks"] = trackCount }
@@ -76,10 +77,20 @@ func parseMetaData_validBinaryPlist_returnsAllFields() async throws {
     let metadata = await LogicProjectFileReader.read(runtime: runtimeForFixture(bundle: bundle))
     #expect(metadata != nil)
     #expect(metadata?.tempo == 80)
+    #expect(metadata?.sampleRate == 48_000)
     #expect(metadata?.signatureNumerator == 4)
     #expect(metadata?.signatureDenominator == 4)
     #expect(metadata?.trackCount == 31)
     #expect(metadata?.timeSignatureString == "4/4")
+}
+
+@Test
+func parseMetaData_nonPositiveSampleRate_returnsNilField() async throws {
+    let bundle = try makeProjectBundle(name: "ZeroSampleRate", sampleRate: 0)
+    defer { cleanupBundle(bundle) }
+    let metadata = await LogicProjectFileReader.read(runtime: runtimeForFixture(bundle: bundle))
+    #expect(metadata != nil)
+    #expect(metadata?.sampleRate == nil)
 }
 
 @Test
