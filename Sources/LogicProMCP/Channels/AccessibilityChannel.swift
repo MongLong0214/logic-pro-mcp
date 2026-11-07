@@ -330,6 +330,45 @@ actor AccessibilityChannel: Channel {
         return (result.states, result.yielded, true)
     }
 
+    /// Hide View deliberately retires the expanded population's track bindings
+    /// before its inverse. A fresh held-selection challenge on the restored rail
+    /// may renew only rows carrying the exact same AX header; newly hidden rows
+    /// remain unbound. Names and ordinals never participate in the transfer.
+    static func reconciledHiddenViewAssociations(
+        expandedTracks: [TrackState],
+        restoredTracks: [TrackState],
+        restoredStrips: [ChannelStripState],
+        renewedPairs: [HeldSelectionAssociation.Pair]
+    ) -> (tracks: [TrackState], strips: [ChannelStripState], pairs: [HeldSelectionAssociation.Pair])? {
+        guard !renewedPairs.isEmpty,
+              restoredTracks.allSatisfy({ $0.physicalBinding != nil }),
+              restoredStrips.allSatisfy({ $0.physicalBinding != nil }) else { return nil }
+        let restoredBindings = restoredTracks.compactMap(\.physicalBinding)
+        var tracks = expandedTracks
+        for index in tracks.indices {
+            guard let expanded = tracks[index].physicalBinding else { return nil }
+            let matches = restoredBindings.filter {
+                CFEqual($0.window, expanded.window) && CFEqual($0.header, expanded.header)
+                    && $0.document.utf8.elementsEqual(expanded.document.utf8)
+            }
+            if matches.count == 1 {
+                tracks[index].physicalBinding = matches[0]
+            } else if expanded.exposure != nil {
+                // This row existed only while the owned exposure was active.
+                tracks[index].physicalBinding = nil
+            } else { return nil }
+        }
+        guard restoredBindings.allSatisfy({ restored in
+            tracks.filter({ $0.physicalBinding?.matches(restored) == true }).count == 1
+        }) else { return nil }
+        let pairs = renewedPairs.filter { pair in
+            tracks.filter({ $0.physicalBinding?.matches(pair.track) == true }).count == 1
+                && restoredStrips.filter({ $0.physicalBinding?.matches(pair.strip) == true }).count == 1
+        }
+        guard pairs.count == renewedPairs.count else { return nil }
+        return (tracks, restoredStrips, pairs)
+    }
+
     /// Request-owned, read-only population collection. The bound window and physical rows,
     /// not cache counts or equal display names, bracket each attempt.
     func readFreshSessionPopulation(
@@ -350,6 +389,8 @@ actor AccessibilityChannel: Channel {
         var reusesAssociationPresentation = false
         var routingPresentationRenewal: OriginalHeaderSourceRenewal?
         var association: HeldSelectionAssociation?
+        var hiddenViewAssociationCaptureAttempted = false
+        var hiddenViewAssociationPairs: [HeldSelectionAssociation.Pair] = []
         var routingEffects = SessionPopulationObservation.UIEffects()
         var exposedMixerEndEffects = SessionPopulationObservation.UIEffects()
         var associationFocusPreparation: Bool?
@@ -408,14 +449,60 @@ actor AccessibilityChannel: Channel {
                navigation.map({ CFEqual(candidate.window, $0.window)
                    && candidate.title.utf8.elementsEqual($0.title.utf8)
                    && candidate.document.utf8.elementsEqual($0.document.utf8) }) ?? true {
+                var expansionCandidate = candidate
+                var permitsExpansion = true
                 // A possible stack exposure still needs its original pre-action
                 // view baseline. Only the held-association-only path reuses rows.
                 if association != nil, originalPresentation == nil {
                     originalPresentation = try readPresentationBaseline(stoppingWhen: stopBeforeAXRead ?? stop)
                 }
                 stackNavigation = candidate
-                readFocusScope?.retain(candidate)
-                await candidate.expand(stoppingWhen: stop)
+                if candidate.hasPendingHiddenTrackViewExposure,
+                   request.scope == .wholeProject,
+                   Set(request.domains) == Set([.tracks, .hierarchy, .strips, .associations]),
+                   let association, association.permitsRead(), await navigationReferenceIsCurrent(), !stop() {
+                    // Hide View changes the physical header census, so the
+                    // association cannot be discovered after exposure. Observe
+                    // only the exact currently visible header/strip pairs now;
+                    // publication remains deferred until Hide View, selection,
+                    // focus, and the original rail have all been restored.
+                    hiddenViewAssociationCaptureAttempted = true
+                    hiddenViewAssociationPairs = await association.observe(
+                        referenceIsCurrent: navigationReferenceIsCurrent,
+                        stoppingWhen: stop, allHeldHeaders: true,
+                        populationReadDuration: .zero)
+                    // The selection challenge can renew Logic's focused AX
+                    // object even after its exact inverse. Do not carry the
+                    // pre-challenge Hide View authority across that boundary.
+                    // Reacquire every focus, rail, menu and project witness, or
+                    // refuse exposure without falling back to the stale owner.
+                    permitsExpansion = false
+                    if association.effects.reason == nil,
+                       association.effects.navigationPerformed,
+                       association.effects.restoration == "restored",
+                       !hiddenViewAssociationPairs.isEmpty,
+                       association.permitsRead(), await navigationReferenceIsCurrent(), !stop(),
+                       let renewed = OwnedTrackStackObservationNavigation(
+                            window: candidate.window, logic: runtime.logicRuntime, mouse: mouse,
+                            expectedProject: navigationProject,
+                            requiresProjectReference: request.projectRef != nil,
+                            referenceIsCurrent: navigationReferenceIsCurrent),
+                       renewed.hasPendingHiddenTrackViewExposure,
+                       CFEqual(renewed.window, candidate.window),
+                       renewed.title.utf8.elementsEqual(candidate.title.utf8),
+                       renewed.document.utf8.elementsEqual(candidate.document.utf8),
+                       navigation.map({ CFEqual(renewed.window, $0.window)
+                           && renewed.title.utf8.elementsEqual($0.title.utf8)
+                           && renewed.document.utf8.elementsEqual($0.document.utf8) }) ?? true {
+                        expansionCandidate = renewed
+                        stackNavigation = renewed
+                        permitsExpansion = true
+                    }
+                }
+                if permitsExpansion {
+                    readFocusScope?.retain(expansionCandidate)
+                    await expansionCandidate.expand(stoppingWhen: stop)
+                }
             }
         }
         func mergedEffects(_ stack: SessionPopulationObservation.UIEffects, _ mixer: SessionPopulationObservation.UIEffects) -> SessionPopulationObservation.UIEffects {
@@ -454,6 +541,17 @@ actor AccessibilityChannel: Channel {
                 preparingBookend: canPrepare ? prepare : nil,
                 stoppingBeforeAXRead: stopBeforeAXRead ?? stop, stoppingWhen: stop
             )
+            if hiddenViewAssociationCaptureAttempted, let association {
+                population.uiEffects = mergedEffects(population.uiEffects, association.effects)
+                if association.effects.reason != nil
+                    || !association.effects.navigationPerformed
+                    || association.effects.restoration != "restored"
+                    || hiddenViewAssociationPairs.isEmpty {
+                    population.stable = false
+                    population.uiEffects.reason = population.uiEffects.reason
+                        ?? association.effects.reason ?? "association_capture_unavailable"
+                }
+            }
             if let finishBookend {
                 if let association, let navigation,
                    population.hiddenTracksShown == true,
@@ -1062,6 +1160,7 @@ actor AccessibilityChannel: Channel {
                 population.uiEffects.reason = "navigation_baseline_unavailable"
             }
             population.uiEffects = mergedEffects(stackEffects, population.uiEffects)
+            var restoredAssociationPopulation: SessionPopulationObservation.FreshPopulation?
             if stackEffects.navigationPerformed {
                 population.hasCapturedTrackExposure = true
                 // An ended capture is not a current cache reading. Independently acquire
@@ -1073,8 +1172,70 @@ actor AccessibilityChannel: Channel {
                    currentPath.utf8.elementsEqual(observedPath.utf8),
                    stackNavigation?.matchesRestoredTracks(current.tracks) == true {
                     population.restoredTracks = current.tracks
+                    restoredAssociationPopulation = current
                 }
                 if population.restoredTracks == nil || stackEffects.restoration != "restored" { population.stable = false }
+            }
+            if hiddenViewAssociationCaptureAttempted {
+                if population.stable, stackEffects.restoration == "restored",
+                   let restored = restoredAssociationPopulation,
+                   let expandedTracks = population.tracks,
+                   let restoredTracks = restored.tracks,
+                   let restoredStrips = restored.strips,
+                   let association,
+                   hiddenViewAssociationPairs.count == association.headers.count,
+                   let renewed = HeldSelectionAssociation(
+                        window: association.window, logic: runtime.logicRuntime,
+                        expectedProject: navigationProject,
+                        requiresProjectReference: request.projectRef != nil,
+                        allowsSelectedChildRailEntry: true),
+                   restoredTracks.count == renewed.headers.count,
+                   zip(restoredTracks, renewed.headers).allSatisfy({ row, header in
+                        row.physicalBinding.map {
+                            CFEqual($0.window, renewed.window) && CFEqual($0.header, header)
+                                && $0.document.utf8.elementsEqual(renewed.document.utf8)
+                        } == true
+                   }),
+                   restoredStrips.count == renewed.strips.count,
+                   zip(restoredStrips, renewed.strips).allSatisfy({ row, strip in
+                        row.physicalBinding.map {
+                            CFEqual($0.window, renewed.window) && CFEqual($0.mixer, renewed.mixer)
+                                && CFEqual($0.strip, strip)
+                                && $0.document.utf8.elementsEqual(renewed.document.utf8)
+                        } == true
+                   }), renewed.permitsRead(), await navigationReferenceIsCurrent(), !stop() {
+                    readFocusScope?.retainAssociation(renewed)
+                    let renewedPairs = await renewed.observe(
+                        referenceIsCurrent: navigationReferenceIsCurrent,
+                        stoppingWhen: stop, allHeldHeaders: true,
+                        populationReadDuration: .zero)
+                    population.uiEffects = mergedEffects(population.uiEffects, renewed.effects)
+                    let reconciled = Self.reconciledHiddenViewAssociations(
+                        expandedTracks: expandedTracks,
+                        restoredTracks: restoredTracks, restoredStrips: restoredStrips,
+                        renewedPairs: renewedPairs)
+                    let renewedPermits = renewed.permitsRead()
+                    let referenceCurrent = await navigationReferenceIsCurrent()
+                    let stopped = stop()
+                    if renewed.effects.reason == nil,
+                       renewed.effects.navigationPerformed,
+                       renewed.effects.restoration == "restored",
+                       !renewedPairs.isEmpty,
+                       let reconciled, renewedPermits, referenceCurrent, !stopped {
+                        population.tracks = reconciled.tracks
+                        population.strips = reconciled.strips
+                        population.selectionAssociations = reconciled.pairs
+                        population.associationReadbackBoundary = await associationReadbackBoundary()
+                    } else {
+                        population.stable = false
+                        population.uiEffects.reason = population.uiEffects.reason
+                            ?? "association_population_moved"
+                    }
+                } else {
+                    population.stable = false
+                    population.uiEffects.reason = population.uiEffects.reason
+                        ?? "association_population_moved"
+                }
             }
             if population.stable, stackEffects.restoration == "restored" {
                 population.disclosureExposures = disclosureExposures

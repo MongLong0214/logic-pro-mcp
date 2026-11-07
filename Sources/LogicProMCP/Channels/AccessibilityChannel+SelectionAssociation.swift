@@ -418,6 +418,28 @@ extension AccessibilityChannel {
             return current
         }
 
+        /// Logic can briefly return AXCannotComplete for the viewport census
+        /// while an owned track-selection rebuild is settling. Retry only that
+        /// status: observedCurrentViewport marks every positive identity, path,
+        /// role or value contradiction as lost before returning nil.
+        private func selectionEntryViewport(
+            referenceIsCurrent: @Sendable () async -> Bool,
+            stoppingWhen stop: @Sendable () -> Bool
+        ) async -> [ViewportControl]? {
+            if let current = observedCurrentViewport() { return current }
+            guard !lost else { return nil }
+            for delay in Self.selectionSettlementDelays {
+                guard !stop(),
+                      (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return nil }
+                do { try await Task.sleep(for: delay) } catch { return nil }
+                guard !stop(), await referenceIsCurrent(),
+                      (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return nil }
+                if let current = observedCurrentViewport() { return current }
+                guard !lost else { return nil }
+            }
+            return nil
+        }
+
         private func currentWindowScopeMatches() -> Bool {
             guard logic.ax.attributeValuesResult != nil else {
                 guard AXHelpers.getTitle(window, runtime: logic.ax)?.utf8.elementsEqual(title.utf8) == true,
@@ -1987,7 +2009,9 @@ extension AccessibilityChannel {
             guard !lost, !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
                   AXHelpers.isAttributeSettable(rail, kAXSelectedChildrenAttribute as String,
                 runtime: logic.ax) == true,
-                  let beforeViewport = currentViewport(), Self.sameViewport(beforeViewport, expectedViewport),
+                  let beforeViewport = await selectionEntryViewport(
+                    referenceIsCurrent: referenceIsCurrent, stoppingWhen: stop),
+                  Self.sameViewport(beforeViewport, expectedViewport),
                   permitsRead(), !stop(),
                   (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
                   owned(), selectedChildCustodyMatches(),

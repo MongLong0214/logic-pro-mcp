@@ -662,6 +662,9 @@ struct Issue965HeldSelectionAssociationTests {
         var viewportFaultAtRead: Int?
         var viewportFaultInjected = false
         var transientViewportReplacementRestored = false
+        var transientViewportEntryObserved = false
+        var transientViewportEntryArmed = false
+        var transientViewportEntryInjected = false
         var referenceCurrent = true
         var useBulkReads = false
         var batchReadCalls = 0
@@ -1189,6 +1192,16 @@ struct Issue965HeldSelectionAssociationTests {
                         footprintReads[key] = sample
                     }
                     routingRead?(element, attribute)
+                    if fault == "transient_viewport_entry", selections.count == 1,
+                       !transientViewportEntryInjected {
+                        if CFEqual(element, scroll), attribute == kAXValueAttribute as String {
+                            transientViewportEntryObserved = true
+                        }
+                        if transientViewportEntryObserved, CFEqual(element, app),
+                           attribute == kAXFocusedUIElementAttribute as String {
+                            transientViewportEntryArmed = true
+                        }
+                    }
                     if measureNamedBusPreInput, let count = routingNamedSendBeforeInputCount,
                        routingCanonicalInputBuses.count == count,
                        CFEqual(element, builder.element(1_965_710)), attribute == kAXValueAttribute as String {
@@ -1280,6 +1293,13 @@ struct Issue965HeldSelectionAssociationTests {
                     return nil
                 }, attributeValueResultHandler: { [self] element, attribute in
                     if let result = routingReadResult?(element, attribute) { return result }
+                    if fault == "transient_viewport_entry", transientViewportEntryArmed,
+                       !transientViewportEntryInjected, CFEqual(element, scroll),
+                       attribute == kAXValueAttribute as String {
+                        transientViewportEntryInjected = true
+                        transientViewportEntryArmed = false
+                        return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                    }
                     if fault == "selected_child_unreadable", CFEqual(element, mixer),
                        attribute == kAXSelectedChildrenAttribute as String {
                         return .failure(.init(raw: AXError.cannotComplete.rawValue))
@@ -12859,6 +12879,87 @@ struct Issue965HeldSelectionAssociationTests {
             #expect(await cache.retainedMixerAssociation(reference: ref, source: source,
                 snapshot: await registry.currentSnapshot) == nil,
                 "Publishing observed aliases must not grant a scalar writer unique source-header custody")
+        }
+    }
+
+    @Test("A transient viewport rebuild between owned selections is retried and restored")
+    func transientViewportRebuildBetweenOwnedSelectionsIsRetried() async throws {
+        let f = try Fixture(withViewport: true, fourTracks: true)
+        f.fault = "transient_viewport_entry"
+
+        let body = try await inspect(f)
+        let rows = try #require((body["associations"] as? [String: Any])?["rows"] as? [[String: Any]])
+
+        #expect(f.transientViewportEntryObserved && f.transientViewportEntryInjected)
+        #expect(rows.count == 4)
+        #expect(f.selections == [1, 2, 3, 0])
+        #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "restored")
+    }
+
+    @Test("Hidden-view restoration renews only exact surviving header associations")
+    func hiddenViewRestorationRenewsOnlyExactSurvivingHeaderAssociations() throws {
+        let f = try Fixture(withViewport: true, fourTracks: true)
+        let runtime = f.logic()
+        let hidden = f.builder.element(1_965_799)
+        let disclosure = f.builder.element(1_965_798)
+        let expandedHeaders = f.headers + [hidden]
+        let exposure = AXTrackBinding.Exposure(
+            header: f.headers[0], disclosure: disclosure, runtime: runtime,
+            originalHeaders: f.headers, hiddenViewWindow: f.window)
+
+        func track(_ index: Int, header: AXUIElement,
+                   exposure: AXTrackBinding.Exposure?) -> TrackState {
+            var row = TrackState(
+                id: index, name: "Track \(index)", type: .audio,
+                isMuted: nil, isSoloed: nil, isArmed: nil, isInputMonitoring: nil,
+                color: nil, placeholder: nil, isStackHeader: false, stackCollapsed: nil)
+            row.physicalBinding = .init(
+                window: f.window, header: header, document: f.bundle.absoluteString,
+                runtime: runtime, exposure: exposure, observedStackHeader: false,
+                observedHeaders: exposure == nil ? f.headers : expandedHeaders)
+            return row
+        }
+        func strip(_ index: Int) -> ChannelStripState {
+            var row = ChannelStripState(trackIndex: index)
+            row.physicalBinding = .init(
+                window: f.window, mixer: f.mixer, strip: f.strips[index],
+                document: f.bundle.absoluteString)
+            return row
+        }
+
+        let expandedTracks = expandedHeaders.indices.map {
+            track($0, header: expandedHeaders[$0], exposure: exposure)
+        }
+        let restoredTracks = f.headers.indices.map {
+            track($0, header: f.headers[$0], exposure: nil)
+        }
+        let restoredStrips = f.strips.indices.map(strip)
+        let renewedIndices = f.headers.indices.dropLast()
+        let renewedPairs = renewedIndices.map { index in
+            AccessibilityChannel.HeldSelectionAssociation.Pair(
+                track: restoredTracks[index].physicalBinding!,
+                strip: restoredStrips[index].physicalBinding!,
+                source: "post_hide_selection_challenge")
+        }
+        exposure.end()
+
+        let reconciled = try #require(AccessibilityChannel.reconciledHiddenViewAssociations(
+            expandedTracks: expandedTracks,
+            restoredTracks: restoredTracks, restoredStrips: restoredStrips,
+            renewedPairs: renewedPairs))
+
+        #expect(reconciled.pairs.count == renewedPairs.count,
+                "All-held association collection is an exact partial observation")
+        #expect(reconciled.tracks.count == expandedHeaders.count)
+        #expect(reconciled.strips.count == restoredStrips.count)
+        #expect(reconciled.tracks.last?.physicalBinding == nil,
+                "The newly hidden row has no current identity after Hide View restoration")
+        for index in renewedIndices {
+            let binding = try #require(reconciled.tracks[index].physicalBinding)
+            #expect(binding.matches(restoredTracks[index].physicalBinding!))
+            #expect(reconciled.pairs[index].track.matches(
+                restoredTracks[index].physicalBinding!))
+            #expect(reconciled.pairs[index].source == "post_hide_selection_challenge")
         }
     }
 
