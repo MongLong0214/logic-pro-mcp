@@ -22,6 +22,7 @@ import Foundation
 struct LogicProjectMetadata: Sendable, Equatable {
     let bundlePath: URL
     let tempo: Double?
+    let sampleRate: Int?
     let signatureNumerator: Int?
     let signatureDenominator: Int?
     let trackCount: Int?
@@ -166,6 +167,7 @@ enum LogicProjectFileReader {
             return LogicProjectMetadata(
                 bundlePath: bundlePath,
                 tempo: parsed.tempo,
+                sampleRate: parsed.sampleRate,
                 signatureNumerator: parsed.numerator,
                 signatureDenominator: parsed.denominator,
                 trackCount: parsed.trackCount,
@@ -187,6 +189,7 @@ enum LogicProjectFileReader {
 
     private struct ParsedFields {
         var tempo: Double?
+        var sampleRate: Int?
         var numerator: Int?
         var denominator: Int?
         var trackCount: Int?
@@ -207,6 +210,9 @@ enum LogicProjectFileReader {
         // fallback rather than honest data.
         if let tempo = (plist["BeatsPerMinute"] as? NSNumber)?.doubleValue, tempo > 0, tempo.isFinite {
             fields.tempo = tempo
+        }
+        if let sampleRate = (plist["SampleRate"] as? NSNumber)?.intValue, sampleRate > 0 {
+            fields.sampleRate = sampleRate
         }
         if let n = (plist["SongSignatureNumerator"] as? NSNumber)?.intValue,
            let d = (plist["SongSignatureDenominator"] as? NSNumber)?.intValue,
