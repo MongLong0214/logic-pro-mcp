@@ -27,10 +27,12 @@ final class OperationTraceWriteBoundaryArm: @unchecked Sendable {
 
     private let lock = NSLock()
     private let traceID: TraceID?
+    private let deadlineStage: String
     private var committed = false
 
-    init(traceID: TraceID?) {
+    init(traceID: TraceID?, deadlineStage: String) {
         self.traceID = traceID
+        self.deadlineStage = deadlineStage
     }
 
     /// Once-commit bit: true for the first armed channel.started only, so a
@@ -45,8 +47,9 @@ final class OperationTraceWriteBoundaryArm: @unchecked Sendable {
 
     /// Called by `ChannelRouter` at each channel.started. No arm (read route,
     /// or a write route outside an arm scope) means no-op.
-    static func commitIfArmed() async {
-        guard let arm = current, arm.claimCommit() else { return }
+    static func commitIfArmed() async -> Bool {
+        guard let arm = current, arm.claimCommit() else { return true }
+        guard OperationTraceContext.claimDeadlineEffect(arm.deadlineStage) else { return false }
         // Saga parents inherit the corrected timing through the same hook the
         // pre-route emit used, so a child's first real write moves the parent
         // boundary too.
@@ -56,13 +59,21 @@ final class OperationTraceWriteBoundaryArm: @unchecked Sendable {
         // Explicit ID: `OperationTraceContext.record` no-ops when the op's
         // trace is not registered in this task's context (dispatcher-scoped
         // tests, saga children), but the boundary is still honest there.
-        guard let traceID = arm.traceID else { return }
+        guard let traceID = arm.traceID else { return true }
         await OperationTraceStore.shared.record(traceID, phase: .writeBoundaryCrossed)
+        return true
     }
 
     /// Arm the boundary for the duration of `route` only.
-    static func armed<T>(_ traceID: TraceID?, _ route: () async -> T) async -> T {
-        await $current.withValue(OperationTraceWriteBoundaryArm(traceID: traceID)) {
+    static func armed<T>(
+        _ traceID: TraceID?,
+        deadlineStage: String = "routed_write",
+        _ route: () async -> T
+    ) async -> T {
+        await $current.withValue(OperationTraceWriteBoundaryArm(
+            traceID: traceID,
+            deadlineStage: deadlineStage
+        )) {
             await route()
         }
     }
@@ -99,19 +110,26 @@ final class OperationTraceContext: @unchecked Sendable {
     let deadline: ContinuousClock.Instant?
     /// The caller's remembered cancellation, independent of detached-task registration.
     let cancellationRequested: @Sendable () -> Bool
+    /// #1551: atomically reserve an irreversible effect against the command
+    /// deadline. Only operations that opt into the deadline/effect handshake
+    /// install this closure; every existing context otherwise preserves its
+    /// current behavior.
+    let claimDeadlineEffect: (@Sendable (String) -> Bool)?
 
     init(
         parentTraceID: TraceID? = nil,
         mutationGateAcquired: Bool = false,
         ownsGate: @escaping @Sendable () -> Bool = { true },
         deadline: ContinuousClock.Instant? = nil,
-        cancellationRequested: @escaping @Sendable () -> Bool = { false }
+        cancellationRequested: @escaping @Sendable () -> Bool = { false },
+        claimDeadlineEffect: (@Sendable (String) -> Bool)? = nil
     ) {
         self.parentTraceID = parentTraceID
         self.mutationGateAcquired = mutationGateAcquired
         self.ownsGate = ownsGate
         self.deadline = deadline
         self.cancellationRequested = cancellationRequested
+        self.claimDeadlineEffect = claimDeadlineEffect
     }
 
     var traceID: TraceID? {
@@ -124,6 +142,23 @@ final class OperationTraceContext: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
         registeredTraceID = id
+    }
+
+    /// The deadline and the effect boundary must choose one winner under the
+    /// same lock. A plain `Task.isCancelled` check leaves a gap in which the
+    /// timer can reply and the orphaned task can still begin its write.
+    ///
+    /// Direct channel tests do not have a server deadline context, so the one
+    /// deep seam that promises cancellation handling may opt into the ordinary
+    /// task-cancellation fallback.
+    static func claimDeadlineEffect(
+        _ stage: String,
+        rejectTaskCancellationWithoutContext: Bool = false
+    ) -> Bool {
+        if let claim = current?.claimDeadlineEffect {
+            return claim(stage)
+        }
+        return !rejectTaskCancellationWithoutContext || !Task.isCancelled
     }
 
     /// Record a phase on the active trace, if one is registered in the current

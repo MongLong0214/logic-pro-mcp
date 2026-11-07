@@ -582,6 +582,26 @@ extension AccessibilityChannel {
         end importMIDI
         return importMIDI()
         """
+        // #1551: this reservation and the server timeout choose one winner
+        // under the same lock. If the timeout already replied, neither this
+        // script nor any later record_sequence write may begin. If the boundary
+        // wins first, the timeout response can truthfully warn that Logic may
+        // still materialize the imported track and region.
+        guard OperationTraceContext.claimDeadlineEffect(
+            "midi_import_script",
+            rejectTaskCancellationWithoutContext: true
+        ) else {
+            return .error(HonestContract.encodeStateC(
+                error: .cancelled,
+                hint: "midi.import_file stopped before the import script because the request deadline or cancellation won the write boundary.",
+                extras: [
+                    "failure_stage": "before_import_script",
+                    "write_attempted": false,
+                    "import_started": false,
+                    "safe_to_retry": true,
+                ]
+            ))
+        }
         // #452: the only measurement of the segment the osascript bound governs.
         // The clock brackets the call rather than the executor, so it observes
         // whatever actually ran — wrapping the injected closure instead would

@@ -8,6 +8,13 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+- `record_sequence` no longer starts its MIDI import after the request has already returned
+  `operation_timeout` (#1551). The deadline and each irreversible write now share an atomic
+  boundary: a timeout before import blocks the script and later relocation writes, while a timeout
+  after import reports `write_attempted: true`, `import_started: true`, and warns that a track and
+  MIDI region may still appear. Such a result is explicitly unsafe to retry blindly. A running
+  import script is not killed mid-dialog.
+
 ---
 
 ## [3.19.0] — 2026-11-03
