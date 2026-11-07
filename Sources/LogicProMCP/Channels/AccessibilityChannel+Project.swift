@@ -214,6 +214,8 @@ extension AccessibilityChannel {
             candidates = enumerated
         }
         let matches = candidates.filter { window in
+            let windowTitle = AXHelpers.getTitle(window, runtime: runtime.ax)
+            guard isExactProjectChooserWindowTitle(windowTitle) else { return false }
             let emptyProjectLabels = AXHelpers.findAllDescendants(
                 of: window, role: kAXStaticTextRole as String, maxDepth: 12, runtime: runtime.ax
             ).filter {
@@ -229,7 +231,7 @@ extension AccessibilityChannel {
                 AXHelpers.getAttribute($0, kAXEnabledAttribute as String, runtime: runtime.ax)
             } ?? false
             return chooserSelectionIsUnambiguous(
-                windowTitle: AXHelpers.getTitle(window, runtime: runtime.ax),
+                windowTitle: windowTitle,
                 emptyProjectLabelCount: emptyProjectLabels.count,
                 chooseButtonCount: chooseButtons.count,
                 chooseEnabled: chooseEnabled
@@ -244,10 +246,14 @@ extension AccessibilityChannel {
         chooseButtonCount: Int,
         chooseEnabled: Bool
     ) -> Bool {
-        AXLocalePolicy.projectChooserWindowTitle.matches(windowTitle, mode: .exactStrict)
+        isExactProjectChooserWindowTitle(windowTitle)
             && emptyProjectLabelCount == 1
             && chooseButtonCount == 1
             && chooseEnabled
+    }
+
+    private static func isExactProjectChooserWindowTitle(_ title: String?) -> Bool {
+        AXLocalePolicy.projectChooserWindowTitle.matches(title, mode: .exactStrict)
     }
 
     static func isExactEmptyProjectLabel(title: String?, value: String?) -> Bool {
