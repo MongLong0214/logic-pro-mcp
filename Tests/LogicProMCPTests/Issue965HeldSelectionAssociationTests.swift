@@ -665,6 +665,8 @@ struct Issue965HeldSelectionAssociationTests {
         var transientViewportEntryObserved = false
         var transientViewportEntryArmed = false
         var transientViewportEntryInjected = false
+        var postInverseViewportReads = 0
+        var postInverseViewportFailureInjected = false
         var referenceCurrent = true
         var useBulkReads = false
         var batchReadCalls = 0
@@ -1293,6 +1295,15 @@ struct Issue965HeldSelectionAssociationTests {
                     return nil
                 }, attributeValueResultHandler: { [self] element, attribute in
                     if let result = routingReadResult?(element, attribute) { return result }
+                    if fault == "transient_post_inverse_viewport",
+                       selections == [1, 2, 3, 0], CFEqual(element, scroll),
+                       attribute == kAXValueAttribute as String {
+                        postInverseViewportReads += 1
+                        if postInverseViewportReads == 2 {
+                            postInverseViewportFailureInjected = true
+                            return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                        }
+                    }
                     if fault == "transient_viewport_entry", transientViewportEntryArmed,
                        !transientViewportEntryInjected, CFEqual(element, scroll),
                        attribute == kAXValueAttribute as String {
@@ -12891,6 +12902,20 @@ struct Issue965HeldSelectionAssociationTests {
         let rows = try #require((body["associations"] as? [String: Any])?["rows"] as? [[String: Any]])
 
         #expect(f.transientViewportEntryObserved && f.transientViewportEntryInjected)
+        #expect(rows.count == 4)
+        #expect(f.selections == [1, 2, 3, 0])
+        #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "restored")
+    }
+
+    @Test("A transient viewport rebuild after the original selection inverse is retried")
+    func transientViewportRebuildAfterOriginalSelectionInverseIsRetried() async throws {
+        let f = try Fixture(withViewport: true, fourTracks: true)
+        f.fault = "transient_post_inverse_viewport"
+
+        let body = try await inspect(f)
+        let rows = try #require((body["associations"] as? [String: Any])?["rows"] as? [[String: Any]])
+
+        #expect(f.postInverseViewportFailureInjected)
         #expect(rows.count == 4)
         #expect(f.selections == [1, 2, 3, 0])
         #expect((body["ui_effects"] as? [String: Any])?["restoration"] as? String == "restored")

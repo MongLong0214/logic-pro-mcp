@@ -2160,7 +2160,9 @@ extension AccessibilityChannel {
         /// A newer viewport, replacement control/path or scope loss ends cleanup authority.
         private func restoreViewport(referenceIsCurrent: @Sendable () async -> Bool,
                                      stoppingWhen stop: @Sendable () -> Bool) async -> Bool {
-            guard let current = currentViewport(), Self.sameViewport(current, expectedViewport) else { return false }
+            guard let current = await selectionEntryViewport(
+                referenceIsCurrent: referenceIsCurrent, stoppingWhen: stop),
+                Self.sameViewport(current, expectedViewport) else { return false }
             for index in viewport.indices where viewport[index].1 != expectedViewport[index].1 {
                 let (control, original, _) = viewport[index]
                 guard !stop(), await referenceIsCurrent(), permitsRead(),
