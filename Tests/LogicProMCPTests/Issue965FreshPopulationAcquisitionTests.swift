@@ -980,7 +980,8 @@ struct Issue965FreshPopulationAcquisitionTests {
     @Test func registeredHiddenViewRetainsOnlyPreExposurePhysicalAssociationsAfterExactRestoration() async throws {
         try await observeStack(navigation: true, initiallyExpanded: false,
             focusRestoration: "restored", originalFocusRole: kAXGroupRole as String, hiddenView: true,
-            fullDomainMixerOpen: true, fullDomainAssociation: true, hiddenOnlyAssociation: true)
+            fullDomainMixerOpen: true, fullDomainAssociation: true, hiddenOnlyAssociation: true,
+            retireHiddenNavigationOwnerAfterAssociation: true)
     }
 
     @Test func registeredHiddenViewRefusesExposureAfterPreExposureAssociationInverseFails() async throws {
@@ -2088,6 +2089,7 @@ struct Issue965FreshPopulationAcquisitionTests {
                               completeHierarchy: String? = nil, fullDomainMixerOpen: Bool = false,
                               fullDomainAssociation: Bool = false, fullDomainAssociationFault: String? = nil,
                               hiddenOnlyAssociation: Bool = false,
+                              retireHiddenNavigationOwnerAfterAssociation: Bool = false,
                               fullDomainMixerEnd: Bool = false, mixerEndFault: String? = nil,
                               mixerFocusACKHasNoEffect: Bool = false, mixerFocusClickDelayed: Bool = false,
                               mixerFocusClickFault: String? = nil, headerFocusSetterOpensEditor: Bool = false,
@@ -2128,6 +2130,8 @@ struct Issue965FreshPopulationAcquisitionTests {
         let shownLabel = fixture.builder.element(965_243)
         let hide = fixture.builder.element(965_244)
         let hideMenu = fixture.builder.element(965_245)
+        let renewedHideMenu = fixture.builder.element(965_498)
+        let hideMenuContainer = fixture.builder.element(965_499)
         if let focusRestoration {
             fixture.builder.setRole(workspace, originalFocusRole)
             fixture.builder.setAttribute(workspace, kAXWindowAttribute as String, fixture.window)
@@ -2279,16 +2283,18 @@ struct Issue965FreshPopulationAcquisitionTests {
             }
             for header in headers { fixture.builder.setAttribute(header, kAXParentAttribute as String, fixture.rail) }
             let menuBar = fixture.builder.element(965_251), trackMenu = fixture.builder.element(965_252)
-            let menu = fixture.builder.element(965_253)
             fixture.builder.setRole(menuBar, kAXMenuBarRole as String)
             fixture.builder.setRole(trackMenu, kAXMenuBarItemRole as String)
             fixture.builder.setAttribute(trackMenu, kAXTitleAttribute as String, "Track")
-            fixture.builder.setRole(menu, kAXMenuRole as String)
-            fixture.builder.setRole(hideMenu, kAXMenuItemRole as String)
-            fixture.builder.setAttribute(hideMenu, kAXTitleAttribute as String, "Toggle Hide View")
-            fixture.builder.setAttribute(hideMenu, kAXEnabledAttribute as String, true)
-            fixture.builder.setActionNames(hideMenu, [kAXPressAction as String])
-            fixture.builder.setChildren(menu, [hideMenu]); fixture.builder.setChildren(trackMenu, [menu])
+            fixture.builder.setRole(hideMenuContainer, kAXMenuRole as String)
+            for item in [hideMenu, renewedHideMenu] {
+                fixture.builder.setRole(item, kAXMenuItemRole as String)
+                fixture.builder.setAttribute(item, kAXTitleAttribute as String, "Toggle Hide View")
+                fixture.builder.setAttribute(item, kAXEnabledAttribute as String, true)
+                fixture.builder.setActionNames(item, [kAXPressAction as String])
+            }
+            fixture.builder.setChildren(hideMenuContainer, [hideMenu])
+            fixture.builder.setChildren(trackMenu, [hideMenuContainer])
             fixture.builder.setChildren(menuBar, [trackMenu])
             fixture.builder.setAttribute(fixture.app, kAXMenuBarAttribute as String, menuBar)
         }
@@ -2680,7 +2686,8 @@ struct Issue965FreshPopulationAcquisitionTests {
                         }
                         return true
                     }
-                    guard hiddenView, CFEqual(element, hideMenu), action == kAXPressAction as String else { return nil }
+                    guard hiddenView, (CFEqual(element, hideMenu) || CFEqual(element, renewedHideMenu)),
+                          action == kAXPressAction as String else { return nil }
                     fixture.events.record("hidden_menu")
                     let wasShown = (fixture.builder.attributeValue(hide, kAXValueAttribute as String) as? NSNumber)?.intValue == 1
                     fixture.builder.setAttribute(hide, kAXValueAttribute as String, wasShown ? 0 : 1)
@@ -2772,6 +2779,10 @@ struct Issue965FreshPopulationAcquisitionTests {
                         // deliberately unrelated to display names or strip ordinals.
                         fixture.builder.setAttribute(exposedMixer, kAXSelectedChildrenAttribute as String,
                             [exposedStrips[associationStripIndices[index]]])
+                        if retireHiddenNavigationOwnerAfterAssociation, index == 0 {
+                            fixture.reads.record("hidden_navigation_owner_retired_after_association")
+                            fixture.builder.setChildren(hideMenuContainer, [renewedHideMenu])
+                        }
                         if fullDomainAssociationFault == "editing", index == 1 {
                             fixture.reads.record("exposed_association_passive_field_changed")
                             fixture.builder.setAttributeSettable(passiveLabel, kAXValueAttribute as String, true)
@@ -3336,6 +3347,9 @@ struct Issue965FreshPopulationAcquisitionTests {
                 // non-rail/non-selection call rather than pretending it is absent.
                 #expect(fixture.reads.recorded.filter { $0 == "exposed_association_setter_call" }.count
                     == (hiddenOnlyAssociation ? 2 : 4))
+                if retireHiddenNavigationOwnerAfterAssociation {
+                    #expect(fixture.reads.recorded.contains("hidden_navigation_owner_retired_after_association"))
+                }
             } else { #expect(fixture.builder.setCalls.isEmpty) }
             #expect(fixture.builder.actionCalls.isEmpty && gate.currentOperation() == nil)
             let body = try #require(sharedJSONObject(sharedToolText(result)))

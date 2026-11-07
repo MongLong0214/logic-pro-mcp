@@ -410,6 +410,8 @@ actor AccessibilityChannel: Channel {
                navigation.map({ CFEqual(candidate.window, $0.window)
                    && candidate.title.utf8.elementsEqual($0.title.utf8)
                    && candidate.document.utf8.elementsEqual($0.document.utf8) }) ?? true {
+                var expansionCandidate = candidate
+                var permitsExpansion = true
                 // A possible stack exposure still needs its original pre-action
                 // view baseline. Only the held-association-only path reuses rows.
                 if association != nil, originalPresentation == nil {
@@ -430,9 +432,38 @@ actor AccessibilityChannel: Channel {
                         referenceIsCurrent: navigationReferenceIsCurrent,
                         stoppingWhen: stop, allHeldHeaders: true,
                         populationReadDuration: .zero)
+                    // The selection challenge can renew Logic's focused AX
+                    // object even after its exact inverse. Do not carry the
+                    // pre-challenge Hide View authority across that boundary.
+                    // Reacquire every focus, rail, menu and project witness, or
+                    // refuse exposure without falling back to the stale owner.
+                    permitsExpansion = false
+                    if association.effects.reason == nil,
+                       association.effects.navigationPerformed,
+                       association.effects.restoration == "restored",
+                       !hiddenViewAssociationPairs.isEmpty,
+                       association.permitsRead(), await navigationReferenceIsCurrent(), !stop(),
+                       let renewed = OwnedTrackStackObservationNavigation(
+                            window: candidate.window, logic: runtime.logicRuntime, mouse: mouse,
+                            expectedProject: navigationProject,
+                            requiresProjectReference: request.projectRef != nil,
+                            referenceIsCurrent: navigationReferenceIsCurrent),
+                       renewed.hasPendingHiddenTrackViewExposure,
+                       CFEqual(renewed.window, candidate.window),
+                       renewed.title.utf8.elementsEqual(candidate.title.utf8),
+                       renewed.document.utf8.elementsEqual(candidate.document.utf8),
+                       navigation.map({ CFEqual(renewed.window, $0.window)
+                           && renewed.title.utf8.elementsEqual($0.title.utf8)
+                           && renewed.document.utf8.elementsEqual($0.document.utf8) }) ?? true {
+                        expansionCandidate = renewed
+                        stackNavigation = renewed
+                        permitsExpansion = true
+                    }
                 }
-                readFocusScope?.retain(candidate)
-                await candidate.expand(stoppingWhen: stop)
+                if permitsExpansion {
+                    readFocusScope?.retain(expansionCandidate)
+                    await expansionCandidate.expand(stoppingWhen: stop)
+                }
             }
         }
         func mergedEffects(_ stack: SessionPopulationObservation.UIEffects, _ mixer: SessionPopulationObservation.UIEffects) -> SessionPopulationObservation.UIEffects {
