@@ -329,6 +329,9 @@ extension TrackDispatcher {
         if let observed = beforePosition?.positionReadback?.observedComponents,
            !observed.isEmpty, observed.count < TransportPositionComponent.allCases.count {
             // Selecting a menu item is this operation's first write, and it bypasses ChannelRouter.
+            guard OperationTraceContext.claimDeadlineEffect("position_display_switch") else {
+                return recordSequenceDeadlineBoundaryRefusal("position_display_switch")
+            }
             preparationWriteAttempted = true
             await recordWriteBoundary(traceID)
             switch selectFullPositionDisplay() {
@@ -358,6 +361,9 @@ extension TrackDispatcher {
                 displayModeFields["display_mode_switch_unsettled"] = reason
                 if let lease {
                     displayModeFields["display_mode_switched_from"] = lease.original
+                    guard OperationTraceContext.claimDeadlineEffect("position_display_restore") else {
+                        return recordSequenceDeadlineBoundaryRefusal("position_display_restore")
+                    }
                     switch restorePositionDisplay(lease) {
                     case .restored:
                         displayModeFields["display_mode_restored"] = true
@@ -389,7 +395,10 @@ extension TrackDispatcher {
             gotoResult = unchanged
         } else {
             preparationWriteAttempted = true
-            let routedGoto = await withWriteBoundaryArmed(traceID) {
+            let routedGoto = await withWriteBoundaryArmed(
+                traceID,
+                deadlineStage: "playhead_preparation"
+            ) {
                 await router.route(operation: "transport.goto_position", params: ["bar": "1"])
             }
             gotoResult = await TransportDispatcher.finalizeGotoPositionResult(
@@ -398,6 +407,9 @@ extension TrackDispatcher {
             )
         }
         if let lease = displayModeLease {
+            guard OperationTraceContext.claimDeadlineEffect("position_display_restore") else {
+                return recordSequenceDeadlineBoundaryRefusal("position_display_restore")
+            }
             switch restorePositionDisplay(lease) {
             case .restored:
                 displayModeFields["display_mode_restored"] = true
@@ -681,6 +693,17 @@ extension TrackDispatcher {
         )
     }
 
+    private static func recordSequenceDeadlineBoundaryRefusal(_ stage: String) -> CallTool.Result {
+        jsonToolTextResult([
+            "success": false,
+            "verified": false,
+            "error": HonestContract.FailureError.cancelled.rawValue,
+            "failure_stage": stage,
+            "write_attempted": false,
+            "hint": "record_sequence stopped because its request deadline won before this write boundary.",
+        ], isError: true)
+    }
+
     /// Copies a single-lane GM Device import onto a caller-named Software Instrument track.
     ///
     /// Measured on Logic 12.4 (build 6707): File > Import > MIDI File always creates a new GM Device
@@ -791,7 +814,10 @@ extension TrackDispatcher {
             )
         }
 
-        let selectSource = await withWriteBoundaryArmed(traceID) {
+        let selectSource = await withWriteBoundaryArmed(
+            traceID,
+            deadlineStage: "relocation_select_source"
+        ) {
             await router.route(operation: "track.select", params: ["index": String(gmLane)])
         }
         guard channelResultIsVerified(selectSource) else {
@@ -806,13 +832,16 @@ extension TrackDispatcher {
                 hint: "The exact GM Device source was no longer the sole selected track immediately before copy; nothing was copied."
             )
         }
-        let copy = await withWriteBoundaryArmed(traceID) {
+        let copy = await withWriteBoundaryArmed(traceID, deadlineStage: "relocation_copy") {
             await router.route(operation: "edit.copy")
         }
         guard copy.isSuccess else {
             return failure("copy_failed", stage: "relocation_copy", hint: "Copy was not delivered: \(copy.message).")
         }
-        let selectTarget = await withWriteBoundaryArmed(traceID) {
+        let selectTarget = await withWriteBoundaryArmed(
+            traceID,
+            deadlineStage: "relocation_select_target"
+        ) {
             await router.route(operation: "track.select", params: ["index": String(target.index)])
         }
         guard channelResultIsVerified(selectTarget) else {
@@ -825,7 +854,10 @@ extension TrackDispatcher {
         if TransportDispatcher.gotoPositionUnchangedResult(
             requestedPosition: "1.1.1.1", beforeTransport: beforePosition
         ) == nil {
-            let routedGoto = await withWriteBoundaryArmed(traceID) {
+            let routedGoto = await withWriteBoundaryArmed(
+                traceID,
+                deadlineStage: "relocation_playhead"
+            ) {
                 await router.route(operation: "transport.goto_position", params: ["bar": "1"])
             }
             let gotoResult = await TransportDispatcher.finalizeGotoPositionResult(
@@ -860,7 +892,7 @@ extension TrackDispatcher {
             )
         }
 
-        let paste = await withWriteBoundaryArmed(traceID) {
+        let paste = await withWriteBoundaryArmed(traceID, deadlineStage: "relocation_paste") {
             await router.route(operation: "edit.paste")
         }
         guard paste.isSuccess else {

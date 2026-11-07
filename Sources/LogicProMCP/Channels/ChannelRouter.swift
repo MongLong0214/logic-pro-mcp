@@ -497,7 +497,7 @@ actor ChannelRouter {
                     await OperationTraceContext.record(.channelStarted, attributes: [
                         "channel": channelID.rawValue,
                     ])
-                    await OperationTraceWriteBoundaryArm.commitIfArmed()
+                    guard await OperationTraceWriteBoundaryArm.commitIfArmed() else { return false }
                     return true
                 }
                 switch claimed {
@@ -513,7 +513,13 @@ actor ChannelRouter {
                 // #389: an armed write boundary commits HERE — the first channel
                 // that actually executes — and never on a route that resolved no
                 // channel. Reads route without an arm, so this is a no-op for them.
-                await OperationTraceWriteBoundaryArm.commitIfArmed()
+                guard await OperationTraceWriteBoundaryArm.commitIfArmed() else {
+                    return .error(HonestContract.encodeStateC(
+                        error: .cancelled,
+                        hint: "The request deadline won before this write channel started.",
+                        extras: ["operation": operation, "write_attempted": false]
+                    ))
+                }
                 if channelID == .mcu && !Self.passiveMCUOperations.contains(operation),
                    stopping || !Self.mcuUsePermitted {
                     return .error(HonestContract.encodeStateC(
