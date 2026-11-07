@@ -498,8 +498,8 @@ extension ResourceHandlers {
     ///   2. Live track cache — fills `trackCount` from the same trusted
     ///      cache used by `logic://tracks` when ProjectInfo itself is name-only
     ///      and file metadata has no positive count.
-    ///   3. LogicProjectFileReader — reads MetaData.plist for tempo / tsig /
-    ///      trackCount when live cache is at struct defaults. Source:
+    ///   3. LogicProjectFileReader — reads MetaData.plist for tempo /
+    ///      sample-rate / tsig / trackCount. Source:
     ///      "project_file" + last_saved_age_sec extra.
     ///   4. Struct defaults (ProjectInfo()). Source: "default".
     ///
@@ -537,11 +537,13 @@ extension ResourceHandlers {
         // "cache fresh wins" rule would therefore mask the file's correct
         // values whenever the poller has run at least once. Instead, we:
         //   1. Start with cached values (preserves the AX-only `name`).
-        //   2. Fill tempo/sample-rate from live transport when available.
-        //   3. Fill trackCount from the trusted live track cache when
+        //   2. Fill tempo from live transport when available.
+        //   3. Fill sample-rate from saved metadata, falling back to live
+        //      transport when the saved field is unavailable.
+        //   4. Fill trackCount from the trusted live track cache when
         //      ProjectInfo itself is still at its default count.
-        //   4. Fill any remaining defaults from file metadata.
-        //   5. `source` is "ax_live"/"cache" if any non-default field came
+        //   5. Fill any remaining defaults from file metadata.
+        //   6. `source` is "ax_live"/"cache" if any non-default field came
         //      from cache; otherwise "project_file"; otherwise "default".
         // The project identity read is intentionally performed for every
         // resource request.  A live AX cache entry must never mask the exact
@@ -577,8 +579,13 @@ extension ResourceHandlers {
             info.tempo = tempo
             fileContributed = true
         }
-        if transportFresh {
+        if let sampleRate = metadata?.sampleRate {
+            info.sampleRate = sampleRate
+            fileContributed = true
+        } else if transportFresh {
             info.sampleRate = cachedTransport.sampleRate
+            cacheContributedLive = true
+            cacheContributionDates.append(cachedTransport.lastUpdated)
         }
         // timeSignature
         if cacheFresh && cached.timeSignature != "4/4" {

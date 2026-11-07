@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+- `logic://project/info.sampleRate` now prefers a positive `SampleRate` from the validated current
+  project's saved `MetaData.plist` over a disagreeing live transport value (#1552). Fresh transport
+  remains the fallback when the saved field is missing or invalid, and the resource stays read-only
+  with respect to shared cache state.
 - `record_sequence` no longer starts its MIDI import after the request has already returned
   `operation_timeout` (#1551). The deadline and each irreversible write now share an atomic
   boundary: a timeout before import blocks the script and later relocation writes, while a timeout

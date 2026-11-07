@@ -367,7 +367,7 @@ Live E2E defaults to the release binary. Protocol/security assertions run on any
 - **Audible-bounce guardrails** — `record_sequence` refuses unverified GM Device / External MIDI imports, `logic://project/audit` reports External MIDI tracks with MIDI regions as export blockers, standalone `logic_project bounce` terminates unsupported, and confirmed `export_run` is the automated artifact path.
 - **Audit phase split** — audit logs distinguish rejected calls, confirmation prompts, and executed route invocations.
 - **Verified project saves** — `project.save_as` verifies the target `.logicx` package exists and that existing packages advance modification time.
-- **Live project metadata** — `logic://project/info` promotes live transport tempo/sample-rate when available and falls back per-field to saved project metadata.
+- **Live project metadata** — `logic://project/info` promotes live transport tempo, reads sample rate from validated saved project metadata, and falls back to live transport for sample rate only when that saved field is unavailable.
 - **Side-effect-free reads** — resources expose state, metadata, and cached inventory without mutating Logic.
 
 ## Release & Distribution
