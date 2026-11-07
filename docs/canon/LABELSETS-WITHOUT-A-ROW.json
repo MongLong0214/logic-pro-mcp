@@ -1,6 +1,40 @@
 {
-  "note": "LabelSets added after 2026-09-18 that name no row in `derivedFrom`, each with the proof that there is none to name. Checked by Scripts/check-new-labelsets-name-a-row.py, which re-derives the absence from Apple's bytes rather than believing this file. The list may only SHRINK -- that ratchet lives in Scripts/check-canon-citations.py, so a branch cannot add an entry and waive itself in one commit.",
+  "note": "LabelSets that name no row in `derivedFrom`, each with a proof that there is none to name. Scripts/check-new-labelsets-name-a-row.py re-derives absence and every declared composition from Apple's pinned bytes rather than trusting this file; an unproved entry does not waive a new LabelSet.",
   "labelsets": {
+    "metronomeClickKeyCommandName": {
+      "why_no_row": "The bundle ships no standalone row for the catalog's existing `Toggle Metronome Click` command name. This set derives exact localized candidates from the `Toggle %@` template and `Metronome Click` noun; native UI qualification remains separate. The similar whole row `Toggle Metronome Click - Smart Tempo Editor` names a different editor-only command and is deliberately excluded.",
+      "date": "2026-11-08",
+      "issue": 1516,
+      "composed_from": {
+        "template": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Toggle%20%25%40#value",
+        "noun": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Metronome%20Click#value",
+        "why_this_noun": "The existing transport.toggle_metronome binding names the Key Commands command `Toggle Metronome Click`; `Metronome Click` is the exact noun row that yields that title under Logic's `Toggle %@` template. The Smart Tempo Editor suffix belongs to another command and is not part of this noun.",
+        "template_values": {
+          "en": "Toggle %@",
+          "ko": "토글 %@",
+          "ja": "%@を切り替え",
+          "de": "%@ ein/aus",
+          "es": "Activar/desactivar %@",
+          "fr": "Activer/Désactiver %@",
+          "it": "Attiva/disattiva %@",
+          "pt": "Alternar %@",
+          "zh_CN": "开关%@",
+          "zh_TW": "切換 %@"
+        },
+        "noun_values": {
+          "en": "Metronome Click",
+          "ko": "메트로놈 클릭",
+          "ja": "メトロノームクリック",
+          "de": "Metronom-Klick",
+          "es": "Sonido del metrónomo",
+          "fr": "Clic du métronome",
+          "it": "Clic metronomo",
+          "pt": "Clique do metrônomo",
+          "zh_CN": "节拍器咔嗒声",
+          "zh_TW": "節拍器卡嗒聲"
+        }
+      }
+    },
     "showLibraryMenuItem": {
       "why_no_row": "Logic ASSEMBLES this menu item; Apple ships no string for it. `Show %@` is the template and the Library noun is the argument, so `Show Library` is the value of nothing in any source's English corpus -- and neither is any of its nine translations, which is why this set reaches ten languages while the string itself exists in none. Composition is what gives it its locales, and `check-labelsets-are-derived.py` verifies a ROW, so nothing offline checks the composition itself. That gap is #910; this entry records that the gap is composition and not an unread row.",
       "date": "2026-09-18",
