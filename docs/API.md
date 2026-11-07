@@ -128,7 +128,7 @@ This exact set is pinned by census — it may only shrink, and any new operation
 
 Since v3.8.0, `logic://tracks` reports each track's `volume`, `pan`, and `automationMode` as REAL values read from the live track header (the same AX fader the mixer write path drives). These three were previously fabricated (`0.0` / `0.0` / `off`) by the production builder. The correction is **value-only** — the `TrackState` keys and types are unchanged (no new field, sentinel, or nullable), so existing parsers are unaffected. On a rare AX-read failure a field falls back to its former default, and the envelope's `source` / `ax_occluded` fields already flag degraded reads.
 
-Track objects do **not** carry a sample rate. Sample rate is a project/transport-level value exposed on `logic://project/info`, which still falls back to a fabricated `44100` default when a live transport sample-rate is unavailable (documented limitation).
+Track objects do **not** carry a sample rate. Sample rate is a project/transport-level value exposed on `logic://project/info`: a positive value from the validated current project's saved metadata is authoritative, fresh live transport is the fallback when that field is unavailable, and the `44100` struct default remains only when neither source provides a value.
 
 ## Command Notes
 
