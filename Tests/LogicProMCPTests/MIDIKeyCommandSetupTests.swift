@@ -399,3 +399,20 @@ private func midiSetupRuntime(
     ))
     #expect(await probe.recorded.isEmpty)
 }
+
+@Test func midiSetupLearnNewAssignmentLabelIsExactAndDistinct() {
+    let labels = AXLocalePolicy.learnNewAssignmentControl
+
+    for title in [
+        "Learn New Assignment", "새로운 할당 학습", "新規割り当てを登録",
+        "Neue Zuweisung lernen", "Aprender nueva asignación",
+        "Apprendre une nouvelle assignation", "Impara nuova assegnazione",
+        "Aprender Nova Atribuição", "学习新的分配", "學習新指定"
+    ] {
+        #expect(labels.matches(title, mode: .exact))
+    }
+
+    #expect(!labels.matches("1", mode: .exact))
+    #expect(!labels.matches("Learn by Key Label", mode: .exact))
+    #expect(!labels.matches("키 레이블로 학습", mode: .exact))
+}

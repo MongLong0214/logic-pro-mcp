@@ -1479,6 +1479,20 @@ enum AXLocalePolicy {
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FKeyCommands.strings/ko/300557.title#value"
     )
 
+    static let learnNewAssignmentControl = LabelSet(
+        canonical: "Learn New Assignment",
+        variants: ["새로운 할당 학습", "新規割り当てを登録", "Neue Zuweisung lernen",
+                   "Aprender nueva asignación", "Apprendre une nouvelle assignation",
+                   "Impara nuova assegnazione", "Aprender Nova Atribuição", "学习新的分配", "學習新指定"],
+        rationale: "Identifies the Key Commands control that MIDIKeyCommandSetup must arm before"
+            + " sending an assignment. This is KeyCommands `100505.title`, read directly from the"
+            + " preserved Logic 12.3 build 6674 bundle on 2026-11-08. It is deliberately distinct"
+            + " from `Learn by Key Label` (`300557.title`); setup must exact-match the control title"
+            + " and must never accept a provisional numeric AX label such as `1`.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FKeyCommands.strings/ko/100505.title#value",
+        alsoDerivedFrom: ["logic-canon://nibstrings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FKeyCommands.strings/en/100505.title#value"]
+    )
+
     static let cancelButton = LabelSet(
         canonical: "Cancel",
         variants: ["취소", "キャンセル", "Abbrechen", "Cancelar", "Annuler", "Annulla", "取消"],
@@ -3655,6 +3669,7 @@ enum AXLocalePolicy {
         keyCommandsWindowTitle,
         recordArmKeyCommandName,
         learnByKeyLabelCheckbox,
+        learnNewAssignmentControl,
         viewMenuBar,
         pluginWindowViewSwitcher,
         pluginWindowControlsViewMenuItem,
