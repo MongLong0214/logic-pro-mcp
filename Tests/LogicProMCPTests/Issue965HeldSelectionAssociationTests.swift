@@ -12955,10 +12955,10 @@ struct Issue965HeldSelectionAssociationTests {
         #expect(reconciled.tracks.last?.physicalBinding == nil,
                 "The newly hidden row has no current identity after Hide View restoration")
         for index in renewedIndices {
-            #expect(reconciled.tracks[index].physicalBinding?.matches(
-                restoredTracks[index].physicalBinding!) == true)
+            let binding = try #require(reconciled.tracks[index].physicalBinding)
+            #expect(binding.matches(restoredTracks[index].physicalBinding!))
             #expect(reconciled.pairs[index].track.matches(
-                restoredTracks[index].physicalBinding!) == true)
+                restoredTracks[index].physicalBinding!))
             #expect(reconciled.pairs[index].source == "post_hide_selection_challenge")
         }
     }
