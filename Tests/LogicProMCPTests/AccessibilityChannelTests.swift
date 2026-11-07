@@ -32,6 +32,41 @@ func creatorStudioChooserSelectionGate() {
     ))
 }
 
+@Test("Project chooser probe rejects a normal project window before walking descendants")
+func projectChooserProbeRejectsNonChooserTitleBeforeDescendantTraversal() {
+    final class DescendantReads: @unchecked Sendable {
+        private let lock = NSLock()
+        private var value = 0
+
+        func record() { lock.withLock { value += 1 } }
+        var count: Int { lock.withLock { value } }
+    }
+
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(9_100)
+    let projectWindow = builder.element(9_101)
+    let reads = DescendantReads()
+    builder.setAttribute(app, kAXWindowsAttribute as String, [projectWindow])
+    builder.setAttribute(projectWindow, kAXTitleAttribute as String, "ko-rerun2-logic13 - 트랙")
+
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        childrenHandler: { element in
+            if CFEqual(element, projectWindow) { reads.record() }
+            return nil
+        },
+        childrenResultHandler: { element in
+            if CFEqual(element, projectWindow) { reads.record() }
+            return nil
+        },
+        setAttributeHandler: nil,
+        performActionHandler: nil
+    )
+
+    #expect(!AccessibilityChannel.exactEmptyProjectChooserIsVisible(runtime: runtime))
+    #expect(reads.count == 0)
+}
+
 @Test("Creator Studio Empty Project label accepts exact AXTitle or AXValue only")
 func creatorStudioEmptyProjectLabelGate() {
     #expect(AccessibilityChannel.isExactEmptyProjectLabel(title: "Empty Project", value: nil))
