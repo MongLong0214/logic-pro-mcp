@@ -16,8 +16,8 @@ enum SessionPopulationObservation {
     /// Native values from this request, never a fallback to an earlier poll's rows.
     struct FreshPopulation: Sendable {
         let project: ProjectInfo?
-        let tracks: [TrackState]?
-        let strips: [ChannelStripState]?
+        var tracks: [TrackState]?
+        var strips: [ChannelStripState]?
         let fileTrackCount: Int?
         let beganAt: Date
         let endedAt: Date
