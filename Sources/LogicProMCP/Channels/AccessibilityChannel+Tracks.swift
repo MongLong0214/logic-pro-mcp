@@ -500,6 +500,10 @@ extension AccessibilityChannel {
         private(set) var exposure: AXTrackBinding.Exposure?
         private(set) var effects = SessionPopulationObservation.UIEffects()
 
+        var hasPendingHiddenTrackViewExposure: Bool {
+            hiddenControl != nil && !restorationStarted && !effects.navigationPerformed
+        }
+
         init?(window: AXUIElement, logic: AXLogicProElements.Runtime, mouse: AXMouseHelper.Runtime,
               expectedProject: TargetDescriptor?, requiresProjectReference: Bool,
               referenceIsCurrent: @escaping @Sendable () async -> Bool) {

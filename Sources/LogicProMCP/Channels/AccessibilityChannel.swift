@@ -350,6 +350,8 @@ actor AccessibilityChannel: Channel {
         var reusesAssociationPresentation = false
         var routingPresentationRenewal: OriginalHeaderSourceRenewal?
         var association: HeldSelectionAssociation?
+        var hiddenViewAssociationCaptureAttempted = false
+        var hiddenViewAssociationPairs: [HeldSelectionAssociation.Pair] = []
         var routingEffects = SessionPopulationObservation.UIEffects()
         var exposedMixerEndEffects = SessionPopulationObservation.UIEffects()
         var associationFocusPreparation: Bool?
@@ -414,6 +416,21 @@ actor AccessibilityChannel: Channel {
                     originalPresentation = try readPresentationBaseline(stoppingWhen: stopBeforeAXRead ?? stop)
                 }
                 stackNavigation = candidate
+                if candidate.hasPendingHiddenTrackViewExposure,
+                   request.scope == .wholeProject,
+                   Set(request.domains) == Set([.tracks, .hierarchy, .strips, .associations]),
+                   let association, association.permitsRead(), await navigationReferenceIsCurrent(), !stop() {
+                    // Hide View changes the physical header census, so the
+                    // association cannot be discovered after exposure. Observe
+                    // only the exact currently visible header/strip pairs now;
+                    // publication remains deferred until Hide View, selection,
+                    // focus, and the original rail have all been restored.
+                    hiddenViewAssociationCaptureAttempted = true
+                    hiddenViewAssociationPairs = await association.observe(
+                        referenceIsCurrent: navigationReferenceIsCurrent,
+                        stoppingWhen: stop, allHeldHeaders: true,
+                        populationReadDuration: .zero)
+                }
                 readFocusScope?.retain(candidate)
                 await candidate.expand(stoppingWhen: stop)
             }
@@ -454,6 +471,17 @@ actor AccessibilityChannel: Channel {
                 preparingBookend: canPrepare ? prepare : nil,
                 stoppingBeforeAXRead: stopBeforeAXRead ?? stop, stoppingWhen: stop
             )
+            if hiddenViewAssociationCaptureAttempted, let association {
+                population.uiEffects = mergedEffects(population.uiEffects, association.effects)
+                if association.effects.reason != nil
+                    || !association.effects.navigationPerformed
+                    || association.effects.restoration != "restored"
+                    || hiddenViewAssociationPairs.isEmpty {
+                    population.stable = false
+                    population.uiEffects.reason = population.uiEffects.reason
+                        ?? association.effects.reason ?? "association_capture_unavailable"
+                }
+            }
             if let finishBookend {
                 if let association, let navigation,
                    population.hiddenTracksShown == true,
@@ -1062,6 +1090,7 @@ actor AccessibilityChannel: Channel {
                 population.uiEffects.reason = "navigation_baseline_unavailable"
             }
             population.uiEffects = mergedEffects(stackEffects, population.uiEffects)
+            var restoredAssociationPopulation: SessionPopulationObservation.FreshPopulation?
             if stackEffects.navigationPerformed {
                 population.hasCapturedTrackExposure = true
                 // An ended capture is not a current cache reading. Independently acquire
@@ -1073,8 +1102,39 @@ actor AccessibilityChannel: Channel {
                    currentPath.utf8.elementsEqual(observedPath.utf8),
                    stackNavigation?.matchesRestoredTracks(current.tracks) == true {
                     population.restoredTracks = current.tracks
+                    restoredAssociationPopulation = current
                 }
                 if population.restoredTracks == nil || stackEffects.restoration != "restored" { population.stable = false }
+            }
+            if hiddenViewAssociationCaptureAttempted {
+                if population.stable, stackEffects.restoration == "restored",
+                   let restored = restoredAssociationPopulation,
+                   let expandedTracks = population.tracks,
+                   let expandedStrips = population.strips,
+                   let restoredTracks = restored.tracks,
+                   let restoredStrips = restored.strips,
+                   let association,
+                   hiddenViewAssociationPairs.count == association.headers.count {
+                    let pairs = hiddenViewAssociationPairs.filter { pair in
+                        expandedTracks.filter({ $0.physicalBinding?.matches(pair.track) == true }).count == 1
+                            && expandedStrips.filter({ $0.physicalBinding?.matches(pair.strip) == true }).count == 1
+                            && restoredTracks.filter({ $0.physicalBinding?.matches(pair.track) == true }).count == 1
+                            && restoredStrips.filter({ $0.physicalBinding?.matches(pair.strip) == true }).count == 1
+                    }
+                    if pairs.count == hiddenViewAssociationPairs.count,
+                       association.permitsRead(), await navigationReferenceIsCurrent(), !stop() {
+                        population.selectionAssociations = pairs
+                        population.associationReadbackBoundary = await associationReadbackBoundary()
+                    } else {
+                        population.stable = false
+                        population.uiEffects.reason = population.uiEffects.reason
+                            ?? "association_population_moved"
+                    }
+                } else {
+                    population.stable = false
+                    population.uiEffects.reason = population.uiEffects.reason
+                        ?? "association_population_moved"
+                }
             }
             if population.stable, stackEffects.restoration == "restored" {
                 population.disclosureExposures = disclosureExposures

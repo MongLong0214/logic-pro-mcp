@@ -977,6 +977,19 @@ struct Issue965FreshPopulationAcquisitionTests {
             fullDomainAssociation: true)
     }
 
+    @Test func registeredHiddenViewRetainsOnlyPreExposurePhysicalAssociationsAfterExactRestoration() async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false,
+            focusRestoration: "restored", originalFocusRole: kAXGroupRole as String, hiddenView: true,
+            fullDomainMixerOpen: true, fullDomainAssociation: true, hiddenOnlyAssociation: true)
+    }
+
+    @Test func registeredHiddenViewRefusesExposureAfterPreExposureAssociationInverseFails() async throws {
+        try await observeStack(navigation: true, initiallyExpanded: false,
+            focusRestoration: "restored", originalFocusRole: kAXGroupRole as String, hiddenView: true,
+            fullDomainMixerOpen: true, fullDomainAssociation: true, fullDomainAssociationFault: "inverse",
+            hiddenOnlyAssociation: true)
+    }
+
     @Test(arguments: ["editing", "inverse"])
     func registeredExposedStackAssociationsRequirePassiveCustodyAndOriginalSelectionInverse(fault: String) async throws {
         try await observeStack(navigation: true, initiallyExpanded: false, nested: true,
@@ -2074,6 +2087,7 @@ struct Issue965FreshPopulationAcquisitionTests {
                               sliderMetadataObservations: Reads? = nil, sliderMutationAt: Int? = nil,
                               completeHierarchy: String? = nil, fullDomainMixerOpen: Bool = false,
                               fullDomainAssociation: Bool = false, fullDomainAssociationFault: String? = nil,
+                              hiddenOnlyAssociation: Bool = false,
                               fullDomainMixerEnd: Bool = false, mixerEndFault: String? = nil,
                               mixerFocusACKHasNoEffect: Bool = false, mixerFocusClickDelayed: Bool = false,
                               mixerFocusClickFault: String? = nil, headerFocusSetterOpensEditor: Bool = false,
@@ -2084,7 +2098,9 @@ struct Issue965FreshPopulationAcquisitionTests {
         let bundle = FileManager.default.temporaryDirectory.appendingPathComponent("lpm965-stack-\(UUID().uuidString).logicx")
         try FileManager.default.createDirectory(at: bundle, withIntermediateDirectories: false)
         defer { try? FileManager.default.removeItem(at: bundle) }
-        let headers = (1...(fullDomainAssociation ? 2 : 42)).map { fixture.builder.element(965_100 + $0) }
+        let headers = (1...(hiddenOnlyAssociation ? 3 : fullDomainAssociation ? 2 : 42)).map {
+            fixture.builder.element(965_100 + $0)
+        }
         let disclosure = fixture.builder.element(965_200)
         fixture.builder.setRole(disclosure, kAXDisclosureTriangleRole as String)
         fixture.builder.setAttribute(disclosure, kAXValueAttribute as String, initiallyExpanded ? 1 : 0)
@@ -2095,9 +2111,10 @@ struct Issue965FreshPopulationAcquisitionTests {
             fixture.builder.setAttribute(header, kAXTitleAttribute as String,
                                          index == 1 || index == 2 ? "Repeated child" : "Track \(index + 1)")
             fixture.builder.setAttribute(header, kAXSelectedAttribute as String, index == 0)
-            fixture.builder.setChildren(header, index == 0 ? [disclosure] : [])
+            fixture.builder.setChildren(header, index == 0 && !hiddenOnlyAssociation ? [disclosure] : [])
         }
-        let collapsed = fullDomainMixerOpen ? [headers[0]] : [headers[0]] + Array(headers[24...])
+        let collapsed = hiddenOnlyAssociation ? Array(headers.prefix(2))
+            : fullDomainMixerOpen ? [headers[0]] : [headers[0]] + Array(headers[24...])
         if mouseCase == "held_header_focus" {
             fixture.builder.setAttribute(headers[0], kAXWindowAttribute as String, fixture.window)
         }
@@ -2203,6 +2220,11 @@ struct Issue965FreshPopulationAcquisitionTests {
         fixture.builder.setAttribute(fixture.app, kAXFocusedWindowAttribute as String, fixture.window)
         fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String,
                                      focusRestoration == nil ? fixture.rail : workspace)
+        if hiddenOnlyAssociation {
+            fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, fixture.rail)
+            fixture.builder.setAttributeSettable(fixture.rail, kAXFocusedAttribute as String, true)
+            fixture.builder.setAttributeSettable(fixture.rail, kAXValueAttribute as String, false)
+        }
         if let headerFocus, headerFocus.hasPrefix("initial_") {
             fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String,
                 headerFocus == "initial_foreign" ? otherLabel : passiveLabel)
@@ -2246,6 +2268,15 @@ struct Issue965FreshPopulationAcquisitionTests {
             fixture.builder.setChildren(legendSplit, [legend]); fixture.builder.setChildren(headerSplit, [scroll])
             fixture.builder.setChildren(split, [legendSplit, headerSplit])
             fixture.builder.setChildren(fixture.window, [split, controlBar, workspace])
+            if hiddenOnlyAssociation {
+                for element in [fixture.rail, scroll, headerSplit, split] {
+                    fixture.builder.setAttribute(element, kAXWindowAttribute as String, fixture.window)
+                }
+                fixture.builder.setAttribute(fixture.rail, kAXParentAttribute as String, scroll)
+                fixture.builder.setAttribute(scroll, kAXParentAttribute as String, headerSplit)
+                fixture.builder.setAttribute(headerSplit, kAXParentAttribute as String, split)
+                fixture.builder.setAttribute(split, kAXParentAttribute as String, fixture.window)
+            }
             for header in headers { fixture.builder.setAttribute(header, kAXParentAttribute as String, fixture.rail) }
             let menuBar = fixture.builder.element(965_251), trackMenu = fixture.builder.element(965_252)
             let menu = fixture.builder.element(965_253)
@@ -2300,7 +2331,7 @@ struct Issue965FreshPopulationAcquisitionTests {
         }
         let exposedMixer = fixture.builder.element(965_270)
         let exposedStrips = (0..<9).map { fixture.builder.element(965_271 + $0) }
-        let associationStripIndices = [5, 1, 7, 3]
+        let associationStripIndices = hiddenOnlyAssociation ? [5, 1, 7] : [5, 1, 7, 3]
         let endFocusPoint = CGPoint(x: CGFloat((associationStripIndices[0] + 1) * 80 + 40), y: 500)
         let headerReturnPoint = CGPoint(x: 70, y: 109)
         let endEdit = fixture.builder.element(965_310), endSelectAll = fixture.builder.element(965_311)
@@ -2327,8 +2358,16 @@ struct Issue965FreshPopulationAcquisitionTests {
                 fixture.builder.setRole(strip, kAXLayoutItemRole as String)
                 fixture.builder.setAttribute(strip, kAXDescriptionAttribute as String, "Physical strip \(index)")
                 fixture.builder.setChildren(strip, [])
+                if hiddenOnlyAssociation {
+                    fixture.builder.setAttribute(strip, kAXParentAttribute as String, mixer)
+                    fixture.builder.setAttribute(strip, kAXWindowAttribute as String, fixture.window)
+                }
             }
             fixture.builder.setChildren(mixer, strips)
+            if hiddenOnlyAssociation {
+                fixture.builder.setAttribute(mixer, kAXParentAttribute as String, fixture.window)
+                fixture.builder.setAttribute(mixer, kAXWindowAttribute as String, fixture.window)
+            }
             let originalChildren = fixture.builder.makeAXRuntime().children(fixture.window)
             fixture.builder.setChildren(fixture.window, originalChildren + [mixer])
             fixture.builder.setAttribute(headers[0], kAXHelpAttribute as String, "Track header. Mute or solo the track.")
@@ -2338,8 +2377,8 @@ struct Issue965FreshPopulationAcquisitionTests {
                 fixture.builder.setAttributeSettable(fixture.rail, kAXSelectedChildrenAttribute as String, true)
                 #expect(fullyExposed.count == associationStripIndices.count)
             }
-            #expect(collapsed.count == 1)
-            #expect(fixture.builder.makeAXRuntime().children(headers[0]).count == 2)
+            #expect(collapsed.count == (hiddenOnlyAssociation ? 2 : 1))
+            #expect(fixture.builder.makeAXRuntime().children(headers[0]).count == (hiddenOnlyAssociation ? 0 : 2))
         }
         if fullDomainMixerEnd {
             let owner = fixture.builder.element(965_300), toolbar = fixture.builder.element(965_301)
@@ -2645,7 +2684,12 @@ struct Issue965FreshPopulationAcquisitionTests {
                     fixture.events.record("hidden_menu")
                     let wasShown = (fixture.builder.attributeValue(hide, kAXValueAttribute as String) as? NSNumber)?.intValue == 1
                     fixture.builder.setAttribute(hide, kAXValueAttribute as String, wasShown ? 0 : 1)
-                    fixture.builder.setChildren(headers[0], [disclosure, wasShown ? passiveLabel : shownLabel])
+                    if hiddenOnlyAssociation {
+                        fixture.builder.setChildren(fixture.rail, wasShown ? collapsed : fullyExposed)
+                    }
+                    if !hiddenOnlyAssociation {
+                        fixture.builder.setChildren(headers[0], [disclosure, wasShown ? passiveLabel : shownLabel])
+                    }
                     if wasShown {
                         let focus: AXUIElement? = AXHelpers.getAttribute(fixture.app, kAXFocusedUIElementAttribute as String,
                             runtime: fixture.builder.makeAXRuntime())
@@ -2673,6 +2717,12 @@ struct Issue965FreshPopulationAcquisitionTests {
                     }
                     return exposedStrips[associationStripIndices[0]]
                 }, wrongDisclosureHit: mouseCase == "wrong_hit", focusSetter: { element, attribute, value in
+                    if hiddenOnlyAssociation, CFEqual(element, fixture.rail),
+                       attribute == kAXFocusedAttribute as String {
+                        fixture.reads.record("hidden_rail_focus_setter")
+                        fixture.builder.setAttribute(fixture.app, kAXFocusedUIElementAttribute as String, fixture.rail)
+                        return true
+                    }
                     if fullDomainMixerEnd {
                         if attribute == kAXFocusedAttribute as String,
                            CFEqual(element, passiveLabel) || CFEqual(element, exposedStrips[associationStripIndices[0]]) {
@@ -2917,6 +2967,12 @@ struct Issue965FreshPopulationAcquisitionTests {
                         fixture.builder.setChildren(fixture.rail, changed)
                     }
                 }, readingAttribute: { element, attribute in
+                    if hiddenOnlyAssociation, CFEqual(element, fixture.rail),
+                       [kAXValueAttribute, kAXSelectedTextAttribute,
+                        kAXNumberOfCharactersAttribute, kAXInsertionPointLineNumberAttribute]
+                        .map({ $0 as String }).contains(attribute) {
+                        return .failure(.init(raw: AXError.noValue.rawValue))
+                    }
                     if headerReturnSelection == "selection_conflict", CFEqual(element, fixture.rail),
                        attribute == kAXSelectedChildrenAttribute as String,
                        fixture.reads.recorded.contains("owned_end_select_all"),
@@ -3144,8 +3200,13 @@ struct Issue965FreshPopulationAcquisitionTests {
         if let fullDomainAssociationFault {
             #expect(fixture.reads.recorded.contains(fullDomainAssociationFault == "inverse"
                 ? "exposed_association_inverse_refused" : "exposed_association_passive_field_changed"))
-            #expect(fixture.events.recorded == ["disclosure_down", "disclosure_up", "inner_down", "inner_up"],
-                "a failed selection inverse or lost passive custody cannot authorize disclosure cleanup")
+            if hiddenOnlyAssociation {
+                #expect(fixture.events.recorded.isEmpty,
+                    "a failed pre-exposure selection inverse cannot authorize Hide View navigation")
+            } else {
+                #expect(fixture.events.recorded == ["disclosure_down", "disclosure_up", "inner_down", "inner_up"],
+                    "a failed selection inverse or lost passive custody cannot authorize disclosure cleanup")
+            }
             #expect(fixture.builder.actionCalls.isEmpty && gate.currentOperation() == nil)
             let body = try #require(sharedJSONObject(sharedToolText(result)))
             let effects = try #require(body["ui_effects"] as? [String: Any])
@@ -3251,21 +3312,30 @@ struct Issue965FreshPopulationAcquisitionTests {
             }
             let headerHelpReads = fixture.reads.recorded.filter { $0 == "initial_header_help_moved_focus" }.count
             #expect(headerHelpReads == 0, "The request-owned reveal must retain the fresh census's proved control-forest Help omission")
-            #expect(fixture.events.recorded == ["disclosure_down", "disclosure_up", "inner_down", "inner_up",
-                "inner_down", "inner_up", "disclosure_down", "disclosure_up"])
+            if hiddenOnlyAssociation {
+                #expect(fixture.events.recorded == ["hidden_menu", "hidden_menu"])
+            } else {
+                #expect(fixture.events.recorded == ["disclosure_down", "disclosure_up", "inner_down", "inner_up",
+                    "inner_down", "inner_up", "disclosure_down", "disclosure_up"])
+            }
             let currentFocus = try #require(fixture.builder.attributeValue(fixture.app, kAXFocusedUIElementAttribute as String))
-            #expect(CFEqual(currentFocus as AnyObject, passiveLabel))
-            #expect((fixture.builder.attributeValue(disclosure, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
-            #expect((fixture.builder.attributeValue(inner, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
-            #expect(fixture.builder.makeAXRuntime().children(fixture.rail).count == 1)
+            #expect(CFEqual(currentFocus as AnyObject, hiddenOnlyAssociation ? fixture.rail : passiveLabel))
+            if !hiddenOnlyAssociation {
+                #expect((fixture.builder.attributeValue(disclosure, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+                #expect((fixture.builder.attributeValue(inner, kAXValueAttribute as String) as? NSNumber)?.intValue == 0)
+            }
+            #expect(fixture.builder.makeAXRuntime().children(fixture.rail).count == collapsed.count)
             if fullDomainAssociation {
                 let associationSelections = fixture.reads.recorded.filter { $0.hasPrefix("exposed_association_selection_") }
-                #expect(associationSelections == ["exposed_association_selection_1", "exposed_association_selection_2",
-                    "exposed_association_selection_3", "exposed_association_selection_0"])
+                #expect(associationSelections == (hiddenOnlyAssociation
+                    ? ["exposed_association_selection_1", "exposed_association_selection_0"]
+                    : ["exposed_association_selection_1", "exposed_association_selection_2",
+                        "exposed_association_selection_3", "exposed_association_selection_0"]))
                 // A custom builder setter bypasses its default setCalls array.
                 // Count that actual entrypoint; its guard above rejects any
                 // non-rail/non-selection call rather than pretending it is absent.
-                #expect(fixture.reads.recorded.filter { $0 == "exposed_association_setter_call" }.count == 4)
+                #expect(fixture.reads.recorded.filter { $0 == "exposed_association_setter_call" }.count
+                    == (hiddenOnlyAssociation ? 2 : 4))
             } else { #expect(fixture.builder.setCalls.isEmpty) }
             #expect(fixture.builder.actionCalls.isEmpty && gate.currentOperation() == nil)
             let body = try #require(sharedJSONObject(sharedToolText(result)))
@@ -3277,9 +3347,9 @@ struct Issue965FreshPopulationAcquisitionTests {
             if fullDomainAssociation {
                 let associations = try #require(body["associations"] as? [String: Any])
                 let pairs = try #require(associations["rows"] as? [[String: Any]])
-                #expect(pairs.count == fullyExposed.count)
+                #expect(pairs.count == (hiddenOnlyAssociation ? collapsed.count : fullyExposed.count))
                 #expect(pairs.allSatisfy { $0["source"] as? String == "held_exclusive_selection_selected_child" })
-                #expect(fixture.builder.makeAXRuntime().children(fixture.rail).count == 1)
+                #expect(fixture.builder.makeAXRuntime().children(fixture.rail).count == collapsed.count)
                 let selected = try #require(fixture.builder.attributeValue(exposedMixer, kAXSelectedChildrenAttribute as String))
                 let selectedStrips = AXHelpers.decodeChildrenArray(selected as CFTypeRef)
                 #expect(selectedStrips.count == 1 && CFEqual(selectedStrips[0], exposedStrips[associationStripIndices[0]]))
