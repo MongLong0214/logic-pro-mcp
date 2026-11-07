@@ -336,9 +336,10 @@ extension OperationTraceDispatching {
     /// this replaces.
     static func withWriteBoundaryArmed<T>(
         _ traceID: TraceID?,
+        deadlineStage: String = "routed_write",
         _ route: () async -> T
     ) async -> T {
-        await OperationTraceWriteBoundaryArm.armed(traceID, route)
+        await OperationTraceWriteBoundaryArm.armed(traceID, deadlineStage: deadlineStage, route)
     }
 
     /// Immediate, unconditional boundary for genuine first writes that do NOT

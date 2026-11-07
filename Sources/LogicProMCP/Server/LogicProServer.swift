@@ -789,7 +789,8 @@ actor LogicProServer {
         seconds: Double,
         mutationMayStillBeRunning: Bool = false,
         mutationGateReclaimableAfterGrace: Bool = true,
-        readOnlyPopulationRead: Bool = false
+        readOnlyPopulationRead: Bool = false,
+        deadlineEffect: DeadlineEffectSnapshot? = nil
     ) -> CallTool.Result {
         let operation = operationName(tool: tool, command: command)
         var extras: [String: Any] = [
@@ -821,6 +822,24 @@ actor LogicProServer {
                 extras["mutation_gate"] = "held_until_saga_unwinds"
             }
         }
+        var timeoutHint = "\(operation) exceeded the \(Int(seconds))s server-side deadline and was abandoned so the stdio loop stays responsive."
+        if let deadlineEffect {
+            extras["write_attempted"] = deadlineEffect.writeAttempted
+            extras["import_started"] = deadlineEffect.importStarted
+            extras["future_writes_blocked"] = true
+            if let lastStage = deadlineEffect.lastStage {
+                extras["last_write_boundary"] = lastStage
+            }
+            if deadlineEffect.importStarted {
+                extras["safe_to_retry"] = false
+                extras["underlying_operation_stopped"] = false
+                timeoutHint = "\(operation) reached its deadline after the MIDI import was committed to start. A new track and MIDI region may still appear; do not retry blindly because that would risk a duplicate import."
+            } else if deadlineEffect.writeAttempted {
+                timeoutHint = "\(operation) reached its deadline after a preparation write, but before the MIDI import boundary. No MIDI import or later relocation write can start after this response."
+            } else {
+                timeoutHint = "\(operation) reached its deadline before its first Logic write. No MIDI import or later write can start after this response."
+            }
+        }
         if readOnlyPopulationRead {
             // An exclusive read claim must not be mistaken for an unknown
             // project write. A retry may be refused while that claim drains,
@@ -831,7 +850,7 @@ actor LogicProServer {
         }
         let body = HonestContract.encodeStateC(
             error: .operationTimeout,
-            hint: "\(operation) exceeded the \(Int(seconds))s server-side deadline and was abandoned so the stdio loop stays responsive.",
+            hint: timeoutHint,
             extras: extras
         )
         return toolTextResult(body, isError: true)
@@ -964,6 +983,12 @@ actor LogicProServer {
             await withCheckedContinuation { continuation in
                 let race = DeadlineRace()
                 let timeoutHandle = DeadlineTimeoutHandle()
+                let deadlineEffectClaim: (@Sendable (String) -> Bool)?
+                if tool == ToolID.logicTracks.rawValue, command == "record_sequence" {
+                    deadlineEffectClaim = { stage in race.claimEffect(stage) }
+                } else {
+                    deadlineEffectClaim = nil
+                }
                 // ADR-005: the trace context scope must open INSIDE the detached
                 // task — Task.detached severs TaskLocal inheritance, so a scope
                 // opened in the caller would be invisible to the dispatcher and
@@ -980,7 +1005,8 @@ actor LogicProServer {
                         return heldMutationGate.stillOwns(heldClaim)
                     },
                     deadline: operationDeadline,
-                    cancellationRequested: { ownedObservationRead && callerCancellation.isCancelled }
+                    cancellationRequested: { ownedObservationRead && callerCancellation.isCancelled },
+                    claimDeadlineEffect: deadlineEffectClaim
                 )
                 let workTask = Task.detached(priority: .userInitiated) {
                     if ownedObservationRead && callerCancellation.isCancelled {
@@ -998,29 +1024,30 @@ actor LogicProServer {
                 }
                 if ownedObservationRead { callerCancellation.set(workTask) }
                 let timeoutTask = DispatchWorkItem {
-                    let didWin = race.resume(
-                        continuation,
-                        returning: Self.deadlineTimeoutResult(
-                            tool: tool,
-                            command: command,
-                            seconds: deadline,
-                            mutationMayStillBeRunning: heldMutationGate != nil
-                                || externallyManagedMutation,
-                            mutationGateReclaimableAfterGrace: !externallyManagedMutation,
-                            readOnlyPopulationRead: freshPopulationRead
-                                && commandParams["allow_ui_navigation"]?.boolValue != true
-                        )
+                    let timeout = race.claimTimeout()
+                    guard timeout.didWin else { return }
+                    let result = Self.deadlineTimeoutResult(
+                        tool: tool,
+                        command: command,
+                        seconds: deadline,
+                        mutationMayStillBeRunning: heldMutationGate != nil
+                            || externallyManagedMutation,
+                        mutationGateReclaimableAfterGrace: !externallyManagedMutation,
+                        readOnlyPopulationRead: freshPopulationRead
+                            && commandParams["allow_ui_navigation"]?.boolValue != true,
+                        deadlineEffect: tool == ToolID.logicTracks.rawValue && command == "record_sequence"
+                            ? timeout.effect
+                            : nil
                     )
-                    if didWin {
-                        workTask.cancel()
-                        // #201: the deadline has abandoned this op. Start the gate's
-                        // bounded reclaim grace so a successor mutation recovers
-                        // without waiting for the (possibly wedged) work to return or
-                        // for the multi-minute stale-holder TTL. Epoch-guarded: if the
-                        // work later returns and releases, that wins harmlessly first.
-                        if let heldMutationGate, let heldClaim {
-                            heldMutationGate.markTimedOut(heldClaim)
-                        }
+                    continuation.resume(returning: result)
+                    workTask.cancel()
+                    // #201: the deadline has abandoned this op. Start the gate's
+                    // bounded reclaim grace so a successor mutation recovers
+                    // without waiting for the (possibly wedged) work to return or
+                    // for the multi-minute stale-holder TTL. Epoch-guarded: if the
+                    // work later returns and releases, that wins harmlessly first.
+                    if let heldMutationGate, let heldClaim {
+                        heldMutationGate.markTimedOut(heldClaim)
                     }
                 }
                 timeoutHandle.set(timeoutTask)
@@ -1135,9 +1162,34 @@ actor LogicProServer {
         command.isEmpty ? tool : "\(tool).\(command)"
     }
 
+    struct DeadlineEffectSnapshot: Sendable {
+        var writeAttempted = false
+        var importStarted = false
+        var lastStage: String?
+    }
+
     private final class DeadlineRace: @unchecked Sendable {
         private let lock = NSLock()
         private var resumed = false
+        private var effect = DeadlineEffectSnapshot()
+
+        func claimEffect(_ stage: String) -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            guard !resumed else { return false }
+            effect.writeAttempted = true
+            effect.importStarted = effect.importStarted || stage == "midi_import_script"
+            effect.lastStage = stage
+            return true
+        }
+
+        func claimTimeout() -> (didWin: Bool, effect: DeadlineEffectSnapshot) {
+            lock.lock()
+            defer { lock.unlock() }
+            guard !resumed else { return (false, effect) }
+            resumed = true
+            return (true, effect)
+        }
 
         @discardableResult
         func resume(

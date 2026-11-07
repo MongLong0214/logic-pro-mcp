@@ -182,6 +182,8 @@ Select an instrument track, verify the channel is `1..16`, and confirm the track
 
 MIDI imports are constrained to safe locations. Prefer `record_sequence`, which uses private server-managed temp files.
 
+If `record_sequence` returns `operation_timeout`, inspect `import_started`. `false` means the deadline won before the import boundary and the server blocked the import plus all later relocation writes. `true` means the import had already been committed to start; Logic may still add the track and MIDI region, so do not retry blindly. The timeout deliberately does not kill an active `osascript`, because interrupting it between the menu action and Import confirmation can leave Logic's file panel open.
+
 ## MIDI Key Commands and Scripter
 
 ### `unattended_unavailable`
