@@ -46,6 +46,21 @@
         "zh_TW": "顯示「%@」"
       }
     },
+    "Toggle %@": {
+      "unit": "Contents/Frameworks/Logic.framework/Versions/A/Resources/Localizable.strings",
+      "values": {
+        "de": "%@ ein/aus",
+        "en": "Toggle %@",
+        "es": "Activar/desactivar %@",
+        "fr": "Activer/Désactiver %@",
+        "it": "Attiva/disattiva %@",
+        "ja": "%@を切り替え",
+        "ko": "토글 %@",
+        "pt": "Alternar %@",
+        "zh_CN": "开关%@",
+        "zh_TW": "切換 %@"
+      }
+    },
     "on Track %@": {
       "unit": "Contents/Frameworks/Logic.framework/Versions/A/Resources/Localizable.strings",
       "values": {

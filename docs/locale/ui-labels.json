@@ -3182,6 +3182,34 @@
     "zh-TW": "unmeasured"
    }
   },
+  "keyCommandsControlSurfaceColumnTitle": {
+   "canonical": "Control Surface",
+   "variants": [
+    "컨트롤 서피스",
+    "コントロールサーフェス",
+    "Bedienoberfläche",
+    "Superficie de control",
+    "Surface de contrôle",
+    "Superficie di controllo",
+    "Superfície de controle",
+    "控制表面",
+    "控制介面"
+   ],
+   "rationale": "Identifies the Key Commands assignment column before accepting the cell on the selected command row.",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
   "keyCommandsWindowTitle": {
    "canonical": "Key Command Assignments",
    "variants": [
@@ -3251,6 +3279,34 @@
     "依照按鍵標籤學習"
    ],
    "rationale": "The Key Commands checkbox `system.setup_arm_key` toggles before posting its chord,",
+   "match": "exact",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
+  "learnNewAssignmentControl": {
+   "canonical": "Learn New Assignment",
+   "variants": [
+    "새로운 할당 학습",
+    "新規割り当てを登録",
+    "Neue Zuweisung lernen",
+    "Aprender nueva asignación",
+    "Apprendre une nouvelle assignation",
+    "Impara nuova assegnazione",
+    "Aprender Nova Atribuição",
+    "学习新的分配",
+    "學習新指定"
+   ],
+   "rationale": "Identifies the Key Commands control that MIDIKeyCommandSetup must arm before",
    "match": "exact",
    "coverage": {
     "en-US": "derived",
@@ -3447,6 +3503,34 @@
    ],
    "rationale": "Recognizes a menu-opening AX action name. Korean read live 2026-09-18; the other nine are the same row's values, each of which is a substring of that locale's `Open plug-in menu with legacy plug-ins`. Checked offline by Scripts/check-labelsets-are-derived.py.",
    "match": "contains",
+   "coverage": {
+    "en-US": "derived",
+    "ko-KR": "derived",
+    "ja-JP": "derived",
+    "de-DE": "derived",
+    "es-ES": "derived",
+    "fr-FR": "derived",
+    "it-IT": "derived",
+    "pt-BR": "derived",
+    "zh-CN": "derived",
+    "zh-TW": "derived"
+   }
+  },
+  "metronomeClickKeyCommandName": {
+   "canonical": "Toggle Metronome Click",
+   "variants": [
+    "토글 메트로놈 클릭",
+    "メトロノームクリックを切り替え",
+    "Metronom-Klick ein/aus",
+    "Activar/desactivar Sonido del metrónomo",
+    "Activer/Désactiver Clic du métronome",
+    "Attiva/disattiva Clic metronomo",
+    "Alternar Clique do metrônomo",
+    "开关节拍器咔嗒声",
+    "切換 節拍器卡嗒聲"
+   ],
+   "rationale": "Provides exact bundle-derived candidates for the transport.toggle_metronome Key Commands row; native UI qualification remains separate.",
+   "match": "exact",
    "coverage": {
     "en-US": "derived",
     "ko-KR": "derived",

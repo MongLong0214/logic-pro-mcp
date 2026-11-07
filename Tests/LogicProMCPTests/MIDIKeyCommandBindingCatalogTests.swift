@@ -17,6 +17,42 @@ import Testing
         ).isEmpty)
     }
 
+    @Test func metronomeCommandLabelsAreTheExactBundleDerivedCompositions() {
+        #expect(AXLocalePolicy.metronomeClickKeyCommandName.labels == [
+            "Toggle Metronome Click",
+            "토글 메트로놈 클릭",
+            "メトロノームクリックを切り替え",
+            "Metronom-Klick ein/aus",
+            "Activar/desactivar Sonido del metrónomo",
+            "Activer/Désactiver Clic du métronome",
+            "Attiva/disattiva Clic metronomo",
+            "Alternar Clique do metrônomo",
+            "开关节拍器咔嗒声",
+            "切換 節拍器卡嗒聲",
+        ])
+        #expect(AXLocalePolicy.allLabelSets.contains(
+            AXLocalePolicy.metronomeClickKeyCommandName
+        ))
+    }
+
+    @Test func controlSurfaceColumnLabelsAreTheExactKeyCommandsNibValues() {
+        #expect(AXLocalePolicy.keyCommandsControlSurfaceColumnTitle.labels == [
+            "Control Surface",
+            "컨트롤 서피스",
+            "コントロールサーフェス",
+            "Bedienoberfläche",
+            "Superficie de control",
+            "Surface de contrôle",
+            "Superficie di controllo",
+            "Superfície de controle",
+            "控制表面",
+            "控制介面",
+        ])
+        #expect(AXLocalePolicy.allLabelSets.contains(
+            AXLocalePolicy.keyCommandsControlSurfaceColumnTitle
+        ))
+    }
+
     @Test func catalogAgreementReportsMissingAndChangedMappings() {
         var changed = MIDIKeyCommandsChannel.mappingTable
         changed["transport.toggle_metronome"] = 97
