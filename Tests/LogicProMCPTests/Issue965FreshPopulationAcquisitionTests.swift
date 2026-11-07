@@ -977,7 +977,7 @@ struct Issue965FreshPopulationAcquisitionTests {
             fullDomainAssociation: true)
     }
 
-    @Test func registeredHiddenViewRetainsOnlyPreExposurePhysicalAssociationsAfterExactRestoration() async throws {
+    @Test func registeredHiddenViewRenewsOnlySurvivingPreExposurePhysicalAssociationsAfterExactRestoration() async throws {
         try await observeStack(navigation: true, initiallyExpanded: false,
             focusRestoration: "restored", originalFocusRole: kAXGroupRole as String, hiddenView: true,
             fullDomainMixerOpen: true, fullDomainAssociation: true, hiddenOnlyAssociation: true,
@@ -2689,6 +2689,9 @@ struct Issue965FreshPopulationAcquisitionTests {
                     guard hiddenView, (CFEqual(element, hideMenu) || CFEqual(element, renewedHideMenu)),
                           action == kAXPressAction as String else { return nil }
                     fixture.events.record("hidden_menu")
+                    if hiddenOnlyAssociation {
+                        fixture.reads.record("hidden_view_action")
+                    }
                     let wasShown = (fixture.builder.attributeValue(hide, kAXValueAttribute as String) as? NSNumber)?.intValue == 1
                     fixture.builder.setAttribute(hide, kAXValueAttribute as String, wasShown ? 0 : 1)
                     if hiddenOnlyAssociation {
@@ -3339,16 +3342,27 @@ struct Issue965FreshPopulationAcquisitionTests {
             if fullDomainAssociation {
                 let associationSelections = fixture.reads.recorded.filter { $0.hasPrefix("exposed_association_selection_") }
                 #expect(associationSelections == (hiddenOnlyAssociation
-                    ? ["exposed_association_selection_1", "exposed_association_selection_0"]
+                    ? ["exposed_association_selection_1", "exposed_association_selection_0",
+                        "exposed_association_selection_1", "exposed_association_selection_0"]
                     : ["exposed_association_selection_1", "exposed_association_selection_2",
                         "exposed_association_selection_3", "exposed_association_selection_0"]))
                 // A custom builder setter bypasses its default setCalls array.
                 // Count that actual entrypoint; its guard above rejects any
                 // non-rail/non-selection call rather than pretending it is absent.
-                #expect(fixture.reads.recorded.filter { $0 == "exposed_association_setter_call" }.count
-                    == (hiddenOnlyAssociation ? 2 : 4))
+                #expect(fixture.reads.recorded.filter { $0 == "exposed_association_setter_call" }.count == 4)
                 if retireHiddenNavigationOwnerAfterAssociation {
-                    #expect(fixture.reads.recorded.contains("hidden_navigation_owner_retired_after_association"))
+                    let acquisitionOrder = fixture.reads.recorded.filter {
+                        $0.hasPrefix("exposed_association_selection_")
+                            || $0 == "hidden_navigation_owner_retired_after_association"
+                            || $0 == "hidden_view_action"
+                    }
+                    #expect(acquisitionOrder == [
+                        "exposed_association_selection_1", "exposed_association_selection_0",
+                        "hidden_navigation_owner_retired_after_association",
+                        "hidden_view_action", "hidden_view_action",
+                        "exposed_association_selection_1", "exposed_association_selection_0",
+                        "hidden_navigation_owner_retired_after_association",
+                    ], "Hide View uses a renewed pre-exposure owner, then only surviving restored headers receive fresh associations")
                 }
             } else { #expect(fixture.builder.setCalls.isEmpty) }
             #expect(fixture.builder.actionCalls.isEmpty && gate.currentOperation() == nil)
