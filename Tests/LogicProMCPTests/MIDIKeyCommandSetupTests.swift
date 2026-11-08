@@ -99,9 +99,12 @@ private func midiSetupRuntime(
     #expect(body["state"] as? String == "C")
     #expect(body["error"] as? String == "consent_required")
     #expect(body["stage"] as? String == "consent")
-    #expect(body["write_attempted"] as? Bool == false)
-    #expect(body["configuration_write_attempted"] as? Bool == false)
-    #expect(body["terminal"] as? Bool == true)
+    let writeAttempted = try #require(body["write_attempted"] as? Bool)
+    let configurationWriteAttempted = try #require(body["configuration_write_attempted"] as? Bool)
+    let terminal = try #require(body["terminal"] as? Bool)
+    #expect(!writeAttempted)
+    #expect(!configurationWriteAttempted)
+    #expect(terminal)
     #expect(body["terminal_scope"] as? String == "mcp_request_only")
     #expect(body["trace_id"] == nil)
     #expect(SystemDispatcher.setupMIDIKeyCommandsConsentRequiredResult([
@@ -142,7 +145,8 @@ private func midiSetupRuntime(
     #expect(body["error"] as? String == "consent_required")
     #expect(body["stage"] as? String == "consent")
     #expect(body["trace_id"] == nil)
-    #expect(body["write_attempted"] as? Bool == false)
+    let writeAttempted = try #require(body["write_attempted"] as? Bool)
+    #expect(!writeAttempted)
 }
 
 @Test func midiSetupDispatcherKeepsMatchingLabelSourceUnverified() async throws {
@@ -163,10 +167,14 @@ private func midiSetupRuntime(
     #expect(body["reason"] as? String == "readback_unavailable")
     #expect(body["operation"] as? String == "system.setup_midi_key_commands")
     #expect(body["mode"] as? String == "check")
-    #expect(body["verified"] as? Bool == false)
-    #expect(body["write_attempted"] as? Bool == false)
-    #expect(body["configuration_write_attempted"] as? Bool == false)
-    #expect(body["cleanup_confirmed"] as? Bool == true)
+    let verified = try #require(body["verified"] as? Bool)
+    let writeAttempted = try #require(body["write_attempted"] as? Bool)
+    let configurationWriteAttempted = try #require(body["configuration_write_attempted"] as? Bool)
+    let cleanupConfirmed = try #require(body["cleanup_confirmed"] as? Bool)
+    #expect(!verified)
+    #expect(!writeAttempted)
+    #expect(!configurationWriteAttempted)
+    #expect(cleanupConfirmed)
     #expect(body["bound_operations"] as? [String] == [])
     #expect(body["source_unverified_operations"] as? [String] == ["transport.toggle_metronome"])
 }
@@ -190,10 +198,14 @@ private func midiSetupRuntime(
     #expect(body["state"] as? String == "C")
     #expect(body["error"] as? String == "readback_unavailable")
     #expect(body["stage"] as? String == "close_key_commands")
-    #expect(body["cleanup_confirmed"] as? Bool == false)
-    #expect(body["write_attempted"] as? Bool == false)
-    #expect(body["safe_to_retry"] as? Bool == false)
-    #expect(body["human_intervention_required"] as? Bool == true)
+    let cleanupConfirmed = try #require(body["cleanup_confirmed"] as? Bool)
+    let writeAttempted = try #require(body["write_attempted"] as? Bool)
+    let safeToRetry = try #require(body["safe_to_retry"] as? Bool)
+    let humanInterventionRequired = try #require(body["human_intervention_required"] as? Bool)
+    #expect(!cleanupConfirmed)
+    #expect(!writeAttempted)
+    #expect(!safeToRetry)
+    #expect(humanInterventionRequired)
 }
 
 @Test func midiSetupApplyLearnsMissingBindingThenRequiresBackgroundVerificationAndRestore() async {
