@@ -113,8 +113,19 @@ Expected health after registration:
 
 ### MIDI Key Commands
 
-Reference only. Logic 12.2+ does not reliably import the legacy `.plist`, and the server cannot
-establish or read back the corresponding Logic bindings programmatically.
+Logic 12.2+ does not reliably import the legacy `.plist`. The public check-only command can inspect
+the first fixed MIDI Key Command catalog row through Logic's Key Commands window:
+
+```
+logic_system { "command": "setup_midi_key_commands", "params": { "consent": "true", "mode": "check" } }
+```
+
+It refuses before validation without the exact string `consent: "true"`, because even checking opens
+and searches Logic's UI. Check mode never presses Learn, sends a controller message, or writes Logic
+configuration. A visible matching assignment remains `source_unverified`: Logic's assignment column
+does not identify which MIDI port supplied it, so the command does not mark the binding or channel
+ready. Missing, conflicting, ambiguous, provisional, and unreadable rows remain separate outcomes.
+Apply/Learn and source-aware functional verification are not part of this check-only slice.
 
 The following mapped keycmd-only/channel-only paths therefore report `unattended_unavailable`:
 

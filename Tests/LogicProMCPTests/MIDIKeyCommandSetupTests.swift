@@ -25,7 +25,7 @@ private func midiSetupRuntime(
     MIDIKeyCommandSetup.Runtime(
         inspect: { _ in
             await probe.inspected()
-            return inspection
+            return .inspected(inspection)
         },
         learn: { _ in
             await probe.learned()
@@ -68,6 +68,132 @@ private func midiSetupRuntime(
     #expect(await probe.learns == 0)
     #expect(await probe.verifications == 0)
     #expect(await probe.recorded.isEmpty)
+}
+
+@Test func midiSetupCheckPreservesDriverFailureAndCleanupState() async {
+    let runtime = MIDIKeyCommandSetup.Runtime(
+        inspect: { _ in
+            .failed(stage: "key_commands_window_unreadable", cleanupConfirmed: false)
+        },
+        learn: { _ in .failed(stage: "unexpected_learn", cleanupConfirmed: false, writeAttempted: true) },
+        verifyBackgroundExecution: { _ in .noObservedEffect },
+        recordVerifiedIfOwned: { _ in false },
+        permitsMutation: { true }
+    )
+
+    let outcome = await MIDIKeyCommandSetup.run(consent: true, mode: .check, runtime: runtime)
+
+    #expect(outcome == .failed(
+        stage: "key_commands_window_unreadable",
+        cleanupConfirmed: false,
+        writeAttempted: false
+    ))
+}
+
+@Test func midiSetupConsentRefusalIsTerminalAndWriteFreeBeforeDispatch() throws {
+    let refusal = try #require(SystemDispatcher.setupMIDIKeyCommandsConsentRequiredResult([
+        "consent": .string("false"),
+    ]))
+    let body = try #require(sharedJSONObject(sharedToolText(refusal)))
+
+    #expect(body["state"] as? String == "C")
+    #expect(body["error"] as? String == "consent_required")
+    #expect(body["stage"] as? String == "consent")
+    #expect(body["write_attempted"] as? Bool == false)
+    #expect(body["configuration_write_attempted"] as? Bool == false)
+    #expect(body["terminal"] as? Bool == true)
+    #expect(body["terminal_scope"] as? String == "mcp_request_only")
+    #expect(body["trace_id"] == nil)
+    #expect(SystemDispatcher.setupMIDIKeyCommandsConsentRequiredResult([
+        "consent": .string("true"),
+    ]) == nil)
+}
+
+@Test func midiSetupPublicContractAdvertisesOnlyCheckMode() throws {
+    let contract = try #require(
+        OperationRegistry.parameterContracts[.systemSetupMIDIKeyCommands]
+    )
+    let consent = try #require(contract.params["consent"])
+    let mode = try #require(contract.params["mode"])
+
+    #expect(Set(contract.params.keys) == ["consent", "mode"])
+    #expect(consent.kind == .string)
+    #expect(consent.allowed == ["true"])
+    #expect(mode.kind == .string)
+    #expect(mode.allowed == ["check"])
+    #expect(contract.required == [["consent"], ["mode"]])
+}
+
+@Test func midiSetupServerRefusesConsentBeforeStrictParameterValidation() async throws {
+    let server = LogicProServer()
+    let handlers = await server.makeHandlers()
+    let result = await handlers.callTool(.init(
+        name: "logic_system",
+        arguments: [
+            "command": .string("setup_midi_key_commands"),
+            "params": .object([
+                "consent": .string("false"),
+                "unexpected": .string("must not reach strict validation"),
+            ]),
+        ]
+    ))
+    let body = try #require(sharedJSONObject(sharedToolText(result)))
+
+    #expect(body["error"] as? String == "consent_required")
+    #expect(body["stage"] as? String == "consent")
+    #expect(body["trace_id"] == nil)
+    #expect(body["write_attempted"] as? Bool == false)
+}
+
+@Test func midiSetupDispatcherKeepsMatchingLabelSourceUnverified() async throws {
+    let result = await SystemDispatcher.handle(
+        command: "setup_midi_key_commands",
+        params: ["consent": .string("true"), "mode": .string("check")],
+        router: ChannelRouter(),
+        cache: StateCache(),
+        midiKeyCommandSetup: { consent, mode in
+            #expect(consent)
+            #expect(mode == .check)
+            return .checked(.matchingLabelUnverifiedSource)
+        }
+    )
+    let body = try #require(sharedJSONObject(sharedToolText(result)))
+
+    #expect(body["state"] as? String == "B")
+    #expect(body["reason"] as? String == "readback_unavailable")
+    #expect(body["operation"] as? String == "system.setup_midi_key_commands")
+    #expect(body["mode"] as? String == "check")
+    #expect(body["verified"] as? Bool == false)
+    #expect(body["write_attempted"] as? Bool == false)
+    #expect(body["configuration_write_attempted"] as? Bool == false)
+    #expect(body["cleanup_confirmed"] as? Bool == true)
+    #expect(body["bound_operations"] as? [String] == [])
+    #expect(body["source_unverified_operations"] as? [String] == ["transport.toggle_metronome"])
+}
+
+@Test func midiSetupDispatcherPreservesFailureStageAndCleanupState() async throws {
+    let result = await SystemDispatcher.handle(
+        command: "setup_midi_key_commands",
+        params: ["consent": .string("true"), "mode": .string("check")],
+        router: ChannelRouter(),
+        cache: StateCache(),
+        midiKeyCommandSetup: { _, _ in
+            .failed(
+                stage: "close_key_commands",
+                cleanupConfirmed: false,
+                writeAttempted: false
+            )
+        }
+    )
+    let body = try #require(sharedJSONObject(sharedToolText(result)))
+
+    #expect(body["state"] as? String == "C")
+    #expect(body["error"] as? String == "readback_unavailable")
+    #expect(body["stage"] as? String == "close_key_commands")
+    #expect(body["cleanup_confirmed"] as? Bool == false)
+    #expect(body["write_attempted"] as? Bool == false)
+    #expect(body["safe_to_retry"] as? Bool == false)
+    #expect(body["human_intervention_required"] as? Bool == true)
 }
 
 @Test func midiSetupApplyLearnsMissingBindingThenRequiresBackgroundVerificationAndRestore() async {
