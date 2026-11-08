@@ -14,11 +14,16 @@ private func t7StoreURL(_ tag: String) -> URL {
         .appendingPathExtension("json")
 }
 
-private func t7StartedChannel(tag: String) async throws -> ChannelHealth {
+private func t7StartedChannelInstance(tag: String) async throws -> MIDIKeyCommandsChannel {
     let store = ManualValidationStore(fileURL: t7StoreURL(tag))
     let transport = MockKeyCmdTransport()
     let channel = MIDIKeyCommandsChannel(transport: transport, approvalStore: store)
     try await channel.start()
+    return channel
+}
+
+private func t7StartedChannel(tag: String) async throws -> ChannelHealth {
+    let channel = try await t7StartedChannelInstance(tag: tag)
     return await channel.healthCheck()
 }
 
@@ -89,4 +94,41 @@ private func t7StartedChannel(tag: String) async throws -> ChannelHealth {
     let health = try await t7StartedChannel(tag: "ar")
     #expect(health.available)
     #expect(!(health.ready))
+}
+
+@Test func testKeyCmdChannelDetailReportsNoProcessLocalVerifiedBindingsInitially() async throws {
+    let health = try await t7StartedChannel(tag: "verified-empty")
+    #expect(health.detail.contains("Process-local verified bindings: 0."))
+}
+
+@Test func testKeyCmdChannelDetailReportsProcessLocalVerifiedBinding() async throws {
+    let channel = try await t7StartedChannelInstance(tag: "verified-one")
+    await channel.recordVerifiedBinding(operation: "transport.toggle_metronome")
+
+    let health = await channel.healthCheck()
+
+    #expect(health.detail.contains("Process-local verified bindings: 1 [transport.toggle_metronome]."))
+    #expect(!(health.ready))
+    #expect(health.verificationStatus == .unattendedUnavailable)
+}
+
+@Test func testKeyCmdChannelDetailDoesNotReportNonCatalogAssertion() async throws {
+    let channel = try await t7StartedChannelInstance(tag: "verified-non-catalog")
+    await channel.recordVerifiedBinding(operation: "not.catalogued")
+
+    let health = await channel.healthCheck()
+
+    #expect(health.detail.contains("Process-local verified bindings: 0."))
+    #expect(!health.detail.contains("not.catalogued"))
+}
+
+@Test func testKeyCmdChannelStopClearsReportedProcessLocalVerifiedBindings() async throws {
+    let channel = try await t7StartedChannelInstance(tag: "verified-stop")
+    await channel.recordVerifiedBinding(operation: "transport.toggle_metronome")
+    await channel.stop()
+
+    let health = await channel.healthCheck()
+
+    #expect(health.detail.contains("Process-local verified bindings: 0."))
+    #expect(!health.detail.contains("[transport.toggle_metronome]"))
 }

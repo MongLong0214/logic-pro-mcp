@@ -729,9 +729,18 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel, OperationReadinessProviding {
         // The port remains usable by raw-MIDI bypass operations. Mapped Logic
         // commands have no programmatic setup/readback and never become ready
         // from a stored assertion.
-        await unattendedSendOnlyHealth {
-            "Port: LogicProMCP-KeyCmd-Internal — \($0.detail). \(Self.manualValidationDetailSuffix)"
+        let bindingDetail = verifiedBindingHealthDetail
+        return await unattendedSendOnlyHealth {
+            "Port: LogicProMCP-KeyCmd-Internal — \($0.detail). \(bindingDetail) \(Self.manualValidationDetailSuffix)"
         }
+    }
+
+    private var verifiedBindingHealthDetail: String {
+        let operations = verifiedOperations.sorted()
+        guard !operations.isEmpty else {
+            return "Process-local verified bindings: 0."
+        }
+        return "Process-local verified bindings: \(operations.count) [\(operations.joined(separator: ", "))]."
     }
 
     /// Internal (not private) so `RoutingAuditInvariantTests` can assert it
