@@ -581,6 +581,12 @@ actor LogicProServer {
                    ) {
                     return refusal
                 }
+                if name == ToolID.logicSystem.rawValue, command == "setup_midi_key_commands",
+                   let refusal = SystemDispatcher.setupMIDIKeyCommandsConsentRequiredResult(
+                    rawCmdParams?.objectValue ?? [:]
+                   ) {
+                    return refusal
+                }
                 // #413: an optional operator override of setup_arm_key's deadline
                 // (LOGIC_PRO_MCP_SETUP_DEADLINE_MS). Read ONCE here at dispatch
                 // entry, AFTER consent and BEFORE the gate/trace/activation. A
