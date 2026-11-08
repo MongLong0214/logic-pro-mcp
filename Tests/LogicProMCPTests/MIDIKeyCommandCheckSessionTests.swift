@@ -27,6 +27,11 @@ import Testing
         frontmost: Bool = true,
         closeSucceeds: Bool = true,
         loseOwnershipAfterTyping: Bool = false,
+        titleReadFails: Bool = false,
+        titleIsMalformed: Bool = false,
+        windowAppearsDuringActivation: Bool = false,
+        ambiguousWindowsAfterPost: Bool = false,
+        reusesBaselineWindowAfterPost: Bool = false,
         matchingAssignment: String = "CC 98 (127)"
     ) -> Fixture {
         let builder = FakeAXRuntimeBuilder()
@@ -39,11 +44,22 @@ import Testing
         let header = builder.element(5)
         let command = builder.element(6)
         let assignment = builder.element(7)
+        let competingWindow = builder.element(8)
 
         builder.setRole(window, kAXWindowRole as String)
-        builder.setAttribute(window, kAXTitleAttribute as String, "Key Command Assignments – U.S.")
+        builder.setAttribute(
+            window,
+            kAXTitleAttribute as String,
+            titleIsMalformed ? 42 : "Key Command Assignments – U.S."
+        )
         builder.setAttribute(window, "AXCloseButton", close)
         builder.setRole(close, kAXButtonRole as String)
+        builder.setRole(competingWindow, kAXWindowRole as String)
+        builder.setAttribute(
+            competingWindow,
+            kAXTitleAttribute as String,
+            "Other Window"
+        )
 
         builder.setRole(search, kAXTextFieldRole as String)
         builder.setAttribute(search, kAXSubroleAttribute as String, kAXSearchFieldSubrole as String)
@@ -66,11 +82,18 @@ import Testing
         builder.setAttribute(
             app,
             kAXWindowsAttribute as String,
-            windowInitiallyOpen ? [window] : [AXUIElement]()
+            windowInitiallyOpen ? [window]
+                : (reusesBaselineWindowAfterPost ? [competingWindow] : [AXUIElement]())
         )
 
         let ax = builder.makeAXRuntime(
             appElement: app,
+            attributeValueResultHandler: { element, attribute in
+                guard titleReadFails,
+                      CFEqual(element, window),
+                      attribute == (kAXTitleAttribute as String) else { return nil }
+                return .failure(.init(raw: AXError.cannotComplete.rawValue))
+            },
             setAttributeHandler: { element, attribute, value in
                 builder.setAttribute(element, attribute, value)
                 return true
@@ -86,11 +109,28 @@ import Testing
         )
         let elements = AXLogicProElements.Runtime(logicProPID: { 4242 }, ax: ax)
         let runtime = MIDIKeyCommandCheckSession.Runtime(
-            activateLogic: { probe.activated += 1 },
+            activateLogic: {
+                probe.activated += 1
+                if windowAppearsDuringActivation {
+                    builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+                }
+            },
             logicIsFrontmost: { probe.frontmost },
             postOptionK: {
                 probe.optionKPosts += 1
-                builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+                if ambiguousWindowsAfterPost || reusesBaselineWindowAfterPost {
+                    builder.setAttribute(
+                        competingWindow,
+                        kAXTitleAttribute as String,
+                        "Key Command Assignments – Competing"
+                    )
+                }
+                builder.setAttribute(
+                    app,
+                    kAXWindowsAttribute as String,
+                    ambiguousWindowsAfterPost ? [window, competingWindow]
+                        : (reusesBaselineWindowAfterPost ? [competingWindow] : [window])
+                )
                 return true
             },
             typeText: { text in
@@ -146,6 +186,72 @@ import Testing
         #expect(fixture.probe.activated == 0)
         #expect(fixture.probe.optionKPosts == 0)
         #expect(fixture.probe.typed.isEmpty)
+    }
+
+    @Test func unreadableExistingWindowTitleFailsClosedBeforeAnyInput() throws {
+        let fixture = fixture(windowInitiallyOpen: true, titleReadFails: true)
+        let entry = try #require(MIDIKeyCommandBindingCatalog.entries.first)
+
+        let outcome = MIDIKeyCommandCheckSession.inspect(entry: entry, runtime: fixture.runtime)
+
+        #expect(outcome == .failed(stage: "key_commands_window_unreadable", cleanupConfirmed: true))
+        #expect(fixture.probe.activated == 0)
+        #expect(fixture.probe.optionKPosts == 0)
+        #expect(fixture.probe.typed.isEmpty)
+        #expect(fixture.probe.closePresses == 0)
+    }
+
+    @Test func malformedExistingWindowTitleFailsClosedBeforeAnyInput() throws {
+        let fixture = fixture(windowInitiallyOpen: true, titleIsMalformed: true)
+        let entry = try #require(MIDIKeyCommandBindingCatalog.entries.first)
+
+        let outcome = MIDIKeyCommandCheckSession.inspect(entry: entry, runtime: fixture.runtime)
+
+        #expect(outcome == .failed(stage: "key_commands_window_unreadable", cleanupConfirmed: true))
+        #expect(fixture.probe.activated == 0)
+        #expect(fixture.probe.optionKPosts == 0)
+        #expect(fixture.probe.typed.isEmpty)
+        #expect(fixture.probe.closePresses == 0)
+    }
+
+    @Test func windowAppearingDuringActivationIsNotToggledOrAdopted() throws {
+        let fixture = fixture(windowAppearsDuringActivation: true)
+        let entry = try #require(MIDIKeyCommandBindingCatalog.entries.first)
+
+        let outcome = MIDIKeyCommandCheckSession.inspect(entry: entry, runtime: fixture.runtime)
+
+        #expect(outcome == .failed(stage: "key_commands_in_use", cleanupConfirmed: true))
+        #expect(fixture.probe.activated == 1)
+        #expect(fixture.probe.optionKPosts == 0)
+        #expect(fixture.probe.typed.isEmpty)
+        #expect(fixture.probe.closePresses == 0)
+    }
+
+    @Test func multiplePostKeyCandidatesAreNeverFilteredOrClosed() throws {
+        let fixture = fixture(ambiguousWindowsAfterPost: true)
+        let entry = try #require(MIDIKeyCommandBindingCatalog.entries.first)
+
+        let outcome = MIDIKeyCommandCheckSession.inspect(entry: entry, runtime: fixture.runtime)
+
+        #expect(outcome == .failed(stage: "key_commands_window_ambiguous", cleanupConfirmed: false))
+        #expect(fixture.probe.optionKPosts == 1)
+        #expect(fixture.probe.typed.isEmpty)
+        #expect(fixture.probe.closePresses == 0)
+    }
+
+    @Test func postKeyCandidateMustHaveANewWindowIdentity() throws {
+        let fixture = fixture(reusesBaselineWindowAfterPost: true)
+        let entry = try #require(MIDIKeyCommandBindingCatalog.entries.first)
+
+        let outcome = MIDIKeyCommandCheckSession.inspect(entry: entry, runtime: fixture.runtime)
+
+        #expect(outcome == .failed(
+            stage: "key_commands_window_identity_mismatch",
+            cleanupConfirmed: false
+        ))
+        #expect(fixture.probe.optionKPosts == 1)
+        #expect(fixture.probe.typed.isEmpty)
+        #expect(fixture.probe.closePresses == 0)
     }
 
     @Test func missingPositiveFocusProofPostsNoQueryAndClosesOwnedWindow() throws {

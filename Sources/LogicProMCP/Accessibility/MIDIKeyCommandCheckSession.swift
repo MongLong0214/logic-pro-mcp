@@ -47,10 +47,19 @@ enum MIDIKeyCommandCheckSession {
         }
     }
 
-    private enum WindowLookup {
-        case found(AXUIElement)
-        case notPresent
+    private struct WindowCensus {
+        let allWindowIDs: Set<Int>
+        let candidates: [AXUIElement]
+    }
+
+    private enum WindowCensusResult {
+        case observed(WindowCensus)
         case undetermined
+    }
+
+    private enum OpenedWindowResult {
+        case found(AXUIElement)
+        case failed(stage: String)
     }
 
     static func inspect(
@@ -67,13 +76,15 @@ enum MIDIKeyCommandCheckSession {
             return .failed(stage: "command_name_unknown_for_locale", cleanupConfirmed: true)
         }
 
-        switch keyCommandsWindowLookup(runtime: runtime) {
-        case .found:
-            return .failed(stage: "key_commands_in_use", cleanupConfirmed: true)
+        let initialCensus: WindowCensus
+        switch keyCommandsWindowCensus(runtime: runtime) {
+        case .observed(let census):
+            initialCensus = census
         case .undetermined:
             return .failed(stage: "key_commands_window_unreadable", cleanupConfirmed: true)
-        case .notPresent:
-            break
+        }
+        guard initialCensus.candidates.isEmpty else {
+            return .failed(stage: "key_commands_in_use", cleanupConfirmed: true)
         }
 
         runtime.activateLogic()
@@ -81,14 +92,29 @@ enum MIDIKeyCommandCheckSession {
         guard runtime.ownsGate(), !runtime.isCancelled() else {
             return .failed(stage: "ownership_lost", cleanupConfirmed: true)
         }
+        // Activation and its settling delay create a user-interaction race. Re-read
+        // immediately before Option-K and retain every existing window identity;
+        // only one subsequently observed Key Commands window whose identity is new
+        // can become session-owned.
+        let baseline: WindowCensus
+        switch keyCommandsWindowCensus(runtime: runtime) {
+        case .observed(let census):
+            baseline = census
+        case .undetermined:
+            return .failed(stage: "key_commands_window_unreadable", cleanupConfirmed: true)
+        }
+        guard baseline.candidates.isEmpty else {
+            return .failed(stage: "key_commands_in_use", cleanupConfirmed: true)
+        }
         guard runtime.postOptionK() else {
             return .failed(stage: "open_key_commands", cleanupConfirmed: true)
         }
-        guard let window = poll(runtime: runtime, deadline: 4.0, {
-            if case .found(let window) = keyCommandsWindowLookup(runtime: runtime) { return window }
-            return nil
-        }) else {
-            return .failed(stage: "open_key_commands", cleanupConfirmed: false)
+        let window: AXUIElement
+        switch openedWindow(after: baseline, runtime: runtime) {
+        case .found(let observed):
+            window = observed
+        case .failed(let stage):
+            return .failed(stage: stage, cleanupConfirmed: false)
         }
 
         func cleanup() -> Bool {
@@ -161,7 +187,7 @@ enum MIDIKeyCommandCheckSession {
         }
     }
 
-    private static func keyCommandsWindowLookup(runtime: Runtime) -> WindowLookup {
+    private static func keyCommandsWindowCensus(runtime: Runtime) -> WindowCensusResult {
         guard let app = AXLogicProElements.appRoot(runtime: runtime.elements) else {
             return .undetermined
         }
@@ -171,12 +197,29 @@ enum MIDIKeyCommandCheckSession {
             runtime: runtime.ax
         )
         guard case .success(let maybeWindows) = read else { return .undetermined }
-        var sawUnclassifiable = false
-        for window in maybeWindows ?? [] {
-            guard AXLocalePolicy.keyCommandsWindowTitle.matches(
-                AXHelpers.getTitle(window, runtime: runtime.ax),
-                mode: .contains
-            ) else { continue }
+        let windows = maybeWindows ?? []
+        var candidates: [AXUIElement] = []
+        for window in windows {
+            let titleRead: Result<AnyObject?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+                window,
+                kAXTitleAttribute,
+                runtime: runtime.ax
+            )
+            let title: String?
+            switch titleRead {
+            case .success(nil):
+                title = nil
+            case .success(let value):
+                guard let text = value as? String else { return .undetermined }
+                title = text
+            case .failure(let error) where error.isDefinitiveAbsence:
+                title = nil
+            case .failure:
+                return .undetermined
+            }
+            guard AXLocalePolicy.keyCommandsWindowTitle.matches(title, mode: .contains) else {
+                continue
+            }
             let document: Result<AnyObject?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
                 window,
                 kAXDocumentAttribute,
@@ -184,16 +227,50 @@ enum MIDIKeyCommandCheckSession {
             )
             switch document {
             case .success(nil):
-                return .found(window)
+                candidates.append(window)
             case .failure(let error) where error.isDefinitiveAbsence:
-                return .found(window)
+                candidates.append(window)
             case .success:
                 continue
             case .failure:
-                sawUnclassifiable = true
+                return .undetermined
             }
         }
-        return sawUnclassifiable ? .undetermined : .notPresent
+        return .observed(.init(
+            allWindowIDs: Set(windows.map(elementID)),
+            candidates: candidates
+        ))
+    }
+
+    private static func openedWindow(
+        after baseline: WindowCensus,
+        runtime: Runtime,
+        deadline: Double = 4.0
+    ) -> OpenedWindowResult {
+        let step = 0.2
+        var elapsed = 0.0
+        while elapsed <= deadline {
+            switch keyCommandsWindowCensus(runtime: runtime) {
+            case .undetermined:
+                return .failed(stage: "key_commands_window_unreadable")
+            case .observed(let census):
+                if census.candidates.count > 1 {
+                    return .failed(stage: "key_commands_window_ambiguous")
+                }
+                if let candidate = census.candidates.first {
+                    guard !baseline.allWindowIDs.contains(elementID(candidate)) else {
+                        return .failed(stage: "key_commands_window_identity_mismatch")
+                    }
+                    return .found(candidate)
+                }
+            }
+            if runtime.isCancelled() || !runtime.ownsGate() {
+                return .failed(stage: "ownership_lost")
+            }
+            runtime.sleep(step)
+            elapsed += step
+        }
+        return .failed(stage: "open_key_commands")
     }
 
     private static func searchField(in root: AXUIElement, runtime: Runtime) -> AXUIElement? {
@@ -234,8 +311,10 @@ enum MIDIKeyCommandCheckSession {
 
     private static func close(window: AXUIElement, runtime: Runtime) -> Bool {
         func gone() -> Bool {
-            if case .notPresent = keyCommandsWindowLookup(runtime: runtime) { return true }
-            return false
+            guard case .observed(let census) = keyCommandsWindowCensus(runtime: runtime) else {
+                return false
+            }
+            return !census.candidates.contains { CFEqual($0, window) }
         }
         if gone() { return true }
         guard let button: AXUIElement = AXHelpers.getAttribute(
@@ -261,5 +340,9 @@ enum MIDIKeyCommandCheckSession {
             elapsed += step
         }
         return nil
+    }
+
+    private static func elementID(_ element: AXUIElement) -> Int {
+        Int(bitPattern: Unmanaged.passUnretained(element).toOpaque())
     }
 }
