@@ -6,6 +6,7 @@ package enum LogicProMCPMain {
         permissionCheck: () -> PermissionChecker.PermissionStatus = PermissionChecker.check,
         serverFactory: () -> any ServerStarting = { LogicProServer() },
         approvalStoreFactory: () -> any ManualValidationStoring = { ManualValidationStore() },
+        bindingRecordStore: MIDIKeyCommandBindingRecordStore = MIDIKeyCommandBindingRecordStore(),
         doctorRuntime: SetupDoctor.Runtime = .production,
         lifecycleRuntime: SetupLifecycle.Runtime = .production,
         writeStdout: (String) -> Void = { message in
@@ -20,6 +21,7 @@ package enum LogicProMCPMain {
             permissionCheck: permissionCheck,
             serverFactory: serverFactory,
             approvalStoreFactory: approvalStoreFactory,
+            bindingRecordStore: bindingRecordStore,
             doctorRuntime: doctorRuntime,
             lifecycleRuntime: lifecycleRuntime,
             writeStdout: writeStdout,

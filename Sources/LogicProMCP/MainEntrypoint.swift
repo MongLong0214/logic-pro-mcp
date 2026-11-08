@@ -61,7 +61,7 @@ enum MainEntrypoint {
         permissionCheck: () -> PermissionChecker.PermissionStatus = PermissionChecker.check,
         serverFactory: () -> any ServerStarting = { LogicProServer() },
         approvalStoreFactory: () -> any ManualValidationStoring = { ManualValidationStore() },
-        bindingRecordStore: MIDIKeyCommandBindingRecordStore = MIDIKeyCommandBindingRecordStore(),
+        bindingRecordStore: MIDIKeyCommandBindingRecordStore? = nil,
         doctorRuntime: SetupDoctor.Runtime = .production,
         lifecycleRuntime: SetupLifecycle.Runtime = .production,
         // Injected so doctor's color/TTY gating is pinnable in tests (AC-5.4).
@@ -120,17 +120,22 @@ enum MainEntrypoint {
             if arguments.contains("--check-updates"), runtime.latestReleaseLookup == nil {
                 runtime.latestReleaseLookup = { SetupDoctor.productionLatestReleaseLookup() }
             }
-            let bindingRecords = await bindingRecordStore.matchingRecords(
-                portName: MIDIKeyCommandsChannel.portName,
-                channel: 16
-            )
+            let bindingObservationCount: Int
+            if let bindingRecordStore {
+                bindingObservationCount = await bindingRecordStore.matchingRecords(
+                    portName: MIDIKeyCommandsChannel.portName,
+                    channel: 16
+                ).count
+            } else {
+                bindingObservationCount = 0
+            }
             let report = SetupDoctor.generate(
                 arguments: arguments,
                 permissionStatus: permissionCheck(),
                 approvals: await approvalStore.list(),
                 runtime: runtime,
                 manualStoreHealth: await approvalStore.health(),
-                midiKeyCommandBindingObservationCount: bindingRecords.count
+                midiKeyCommandBindingObservationCount: bindingObservationCount
             )
             if arguments.contains("--json") {
                 // --json is the machine contract: identical bytes regardless of

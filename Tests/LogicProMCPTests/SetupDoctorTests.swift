@@ -567,7 +567,7 @@ private func issue26RepositoryRootURL() -> URL {
     )
 
     var stdout = ""
-    let exitCode = await MainEntrypoint.run(
+    let exitCode = await LogicProMCPMain.defaultRunner(
         arguments: ["LogicProMCP", "doctor", "--json"],
         permissionCheck: { grantedPermissionStatus() },
         serverFactory: {
