@@ -142,6 +142,16 @@ extension KeyCmdCCChannel {
         detail: @Sendable (KeyCmdTransportReadiness) -> String
     ) async -> ChannelHealth {
         let readiness = await transport.readiness()
+        return unattendedSendOnlyHealth(readiness: readiness, detail: detail)
+    }
+
+    /// Build conservative health from a readiness value the actor already awaited.
+    /// The synchronous overload lets a concrete channel read actor-owned state after
+    /// that suspension and publish one current snapshot without another reentrancy gap.
+    func unattendedSendOnlyHealth(
+        readiness: KeyCmdTransportReadiness,
+        detail: @Sendable (KeyCmdTransportReadiness) -> String
+    ) -> ChannelHealth {
         guard readiness.available else {
             return .unavailable(readiness.detail)
         }

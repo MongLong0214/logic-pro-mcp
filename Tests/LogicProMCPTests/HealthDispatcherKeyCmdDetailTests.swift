@@ -14,6 +14,54 @@ private func t7StoreURL(_ tag: String) -> URL {
         .appendingPathExtension("json")
 }
 
+private actor T7BlockingReadinessTransport: KeyCmdTransportProtocol {
+    private var prepared = false
+    private var shouldBlockNextReadiness = false
+    private var readinessEntered = false
+    private var enteredWaiters: [CheckedContinuation<Void, Never>] = []
+    private var releaseWaiter: CheckedContinuation<Void, Never>?
+
+    func prepare() async throws {
+        prepared = true
+    }
+
+    func send(_ bytes: [UInt8]) async throws {}
+
+    func blockNextReadiness() {
+        shouldBlockNextReadiness = true
+        readinessEntered = false
+    }
+
+    func waitUntilReadinessEntered() async {
+        if readinessEntered { return }
+        await withCheckedContinuation { continuation in
+            enteredWaiters.append(continuation)
+        }
+    }
+
+    func releaseReadiness() {
+        releaseWaiter?.resume()
+        releaseWaiter = nil
+    }
+
+    func readiness() async -> KeyCmdTransportReadiness {
+        if shouldBlockNextReadiness {
+            shouldBlockNextReadiness = false
+            readinessEntered = true
+            let waiters = enteredWaiters
+            enteredWaiters.removeAll()
+            for waiter in waiters { waiter.resume() }
+            await withCheckedContinuation { continuation in
+                releaseWaiter = continuation
+            }
+        }
+        return KeyCmdTransportReadiness(
+            available: prepared,
+            detail: prepared ? "blocking transport ready" : "blocking transport unavailable"
+        )
+    }
+}
+
 private func t7StartedChannelInstance(tag: String) async throws -> MIDIKeyCommandsChannel {
     let store = ManualValidationStore(fileURL: t7StoreURL(tag))
     let transport = MockKeyCmdTransport()
@@ -128,6 +176,24 @@ private func t7StartedChannel(tag: String) async throws -> ChannelHealth {
     await channel.stop()
 
     let health = await channel.healthCheck()
+
+    #expect(health.detail.contains("Process-local verified bindings: 0."))
+    #expect(!health.detail.contains("[transport.toggle_metronome]"))
+}
+
+@Test func testKeyCmdChannelStopDuringReadinessClearsReportedProcessLocalVerifiedBindings() async throws {
+    let transport = T7BlockingReadinessTransport()
+    let store = ManualValidationStore(fileURL: t7StoreURL("verified-stop-race"))
+    let channel = MIDIKeyCommandsChannel(transport: transport, approvalStore: store)
+    try await channel.start()
+    await channel.recordVerifiedBinding(operation: "transport.toggle_metronome")
+    await transport.blockNextReadiness()
+
+    let healthTask = Task { await channel.healthCheck() }
+    await transport.waitUntilReadinessEntered()
+    await channel.stop()
+    await transport.releaseReadiness()
+    let health = await healthTask.value
 
     #expect(health.detail.contains("Process-local verified bindings: 0."))
     #expect(!health.detail.contains("[transport.toggle_metronome]"))

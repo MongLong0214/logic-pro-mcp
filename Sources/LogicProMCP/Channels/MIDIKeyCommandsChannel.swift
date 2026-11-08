@@ -729,8 +729,9 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel, OperationReadinessProviding {
         // The port remains usable by raw-MIDI bypass operations. Mapped Logic
         // commands have no programmatic setup/readback and never become ready
         // from a stored assertion.
+        let readiness = await transport.readiness()
         let bindingDetail = verifiedBindingHealthDetail
-        return await unattendedSendOnlyHealth {
+        return unattendedSendOnlyHealth(readiness: readiness) {
             "Port: LogicProMCP-KeyCmd-Internal — \($0.detail). \(bindingDetail) \(Self.manualValidationDetailSuffix)"
         }
     }
