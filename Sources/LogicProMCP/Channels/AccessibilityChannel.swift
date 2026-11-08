@@ -14,11 +14,10 @@ actor AccessibilityChannel: Channel {
     // v3.1.0 (T6) — split the single `lastScan` into three source-keyed caches.
     // Panel scans certify Panel presence; disk scans provide the full local
     // candidate catalog; `lastScan` remains populated for legacy callers that
-    // only ask for "any recent scan".
-    private var lastScan: LibraryRoot? = nil
-    private var lastPanelScan: LibraryRoot? = nil
-    private var lastDiskScan: LibraryRoot? = nil
-    private var lastScanSource: String? = nil
+    // only ask for "any recent scan". Held outside actor isolation so a
+    // resolve_path lookup does not queue behind synchronous AX work on this
+    // actor; see `execute`.
+    private let libraryScans = LibraryScanCache()
     private var lastRoutedCategory: String? = nil
     private var lastRoutedPreset: String? = nil
 
@@ -1936,11 +1935,27 @@ actor AccessibilityChannel: Channel {
         Log.info("Accessibility channel stopped", subsystem: "ax")
     }
 
-    func execute(operation: String, params: [String: String]) async -> ChannelResult {
+    nonisolated func execute(operation: String, params: [String: String]) async -> ChannelResult {
         guard runtime.isLogicProRunning() else {
             return .error("Logic Pro is not running")
         }
+        // library.resolve_path reads only the cached scan trees, so it is
+        // answered without entering the actor. All AX reads and mutations stay
+        // in executeIsolated below.
+        if operation == "library.resolve_path" {
+            let scans = libraryScans.snapshot
+            return AccessibilityChannel.resolveLibraryPath(
+                params: params,
+                lastPanelScan: scans.lastPanelScan,
+                lastDiskScan: scans.lastDiskScan,
+                lastScan: scans.lastScan,
+                lastScanSource: scans.lastScanSource
+            )
+        }
+        return await executeIsolated(operation: operation, params: params)
+    }
 
+    private func executeIsolated(operation: String, params: [String: String]) async -> ChannelResult {
         switch operation {
         // MARK: - Transport reads
         case "transport.get_state":
@@ -2108,16 +2123,6 @@ actor AccessibilityChannel: Channel {
             case .ax:
                 return await self.runLiveScan(runtime: runtime.logicRuntime, allowAutoOpen: true)
             }
-        case "library.resolve_path":
-            // v3.1.0 (T6) + #222 — panel hits win; disk hits are loadable
-            // candidates only when no panel cache has proved the path absent.
-            return AccessibilityChannel.resolveLibraryPath(
-                params: params,
-                lastPanelScan: lastPanelScan,
-                lastDiskScan: lastDiskScan,
-                lastScan: lastScan,
-                lastScanSource: lastScanSource
-            )
         case "plugin.scan_presets":
             // F2 minimal scan handler — relies on currently-focused plugin window.
             // Full T6 (cache, persistence, axScanInProgress rename, AC-1.5b trackIndex
@@ -2138,8 +2143,9 @@ actor AccessibilityChannel: Channel {
             // create a fresh disk scan here. Disk inventory is not the same
             // denominator as the live Panel inventory, and treating an implicit
             // disk miss as a hard Panel miss reintroduces the #222 contract bug.
-            let panelScanSnapshot = self.lastPanelScan
-            let diskScanSnapshot = self.lastDiskScan
+            let scans = libraryScans.snapshot
+            let panelScanSnapshot = scans.lastPanelScan
+            let diskScanSnapshot = scans.lastDiskScan
             let staging = AccessibilityChannel.LibraryPanelStaging(
                 isPanelOpen: { rt in LibraryAccessor.isLibraryPanelOpen(runtime: rt) },
                 openPanel: { rt in await AccessibilityChannel.openLibraryPanelViaKeyCommand(runtime: rt) },
@@ -2522,7 +2528,7 @@ actor AccessibilityChannel: Channel {
                 return LibraryAccessor.selectPreset(named: p, runtime: runtime)
             },
             writeJSON: { root in Self.writeInventoryJSON(root, source: "ax") },
-            onComplete: { root in await channel.setLastScan(root, source: "panel") },
+            onComplete: { root in channel.libraryScans.record(root, source: "panel") },
             settleDelayMs: 150
         )
         guard let r = result else {
@@ -2542,20 +2548,7 @@ actor AccessibilityChannel: Channel {
     /// through `runLiveScan` / `runDiskScan` / `runBothScan`. Internal so
     /// the `@testable import` surface sees it, external does not.
     func seedLastScanForTest(_ root: LibraryRoot, source: String) {
-        setLastScan(root, source: source)
-    }
-
-    private func setLastScan(_ root: LibraryRoot, source: String) {
-        self.lastScan = root
-        self.lastScanSource = source
-        switch source {
-        case "panel":
-            self.lastPanelScan = root
-        case "disk":
-            self.lastDiskScan = root
-        default:
-            break
-        }
+        libraryScans.record(root, source: source)
     }
 
     // MARK: - v3.0.5 disk-backed scan
@@ -2576,7 +2569,7 @@ actor AccessibilityChannel: Channel {
                 "scan_all: disk scan ok — \(root.leafCount) leaves, \(root.folderCount) folders in \(durationMs)ms",
                 subsystem: "ax"
             )
-            self.setLastScan(root, source: "disk")
+            libraryScans.record(root, source: "disk")
             _ = Self.writeInventoryJSON(root, source: "disk")
             return Self.encodeLibraryRoot(root, sourceTag: "disk")
         } catch {
@@ -2602,7 +2595,7 @@ actor AccessibilityChannel: Channel {
         } catch {
             return .error("Disk scan failed: \(error); fall back to mode=ax")
         }
-        self.setLastScan(diskRoot, source: "both")
+        libraryScans.record(diskRoot, source: "both")
         _ = Self.writeInventoryJSON(diskRoot, source: "disk")
 
         // Best-effort AX scan. If the panel is closed we still emit a diff
@@ -2627,7 +2620,7 @@ actor AccessibilityChannel: Channel {
                 // now seed `lastPanelScan` from the inline AX scan too so
                 // Panel-loadable paths are correctly classified after
                 // `scan_library {mode:"both"}`.
-                self.lastPanelScan = axRoot
+                libraryScans.recordPanel(axRoot)
             }
         }
 
