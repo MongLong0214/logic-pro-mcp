@@ -32,6 +32,8 @@ import Testing
         windowAppearsDuringActivation: Bool = false,
         ambiguousWindowsAfterPost: Bool = false,
         reusesBaselineWindowAfterPost: Bool = false,
+        refreshesBaselineWindowWrapperAfterPost: Bool = false,
+        closeLeavesWindowWithDifferentTitle: Bool = false,
         matchingAssignment: String = "CC 98 (127)"
     ) -> Fixture {
         let builder = FakeAXRuntimeBuilder()
@@ -45,12 +47,16 @@ import Testing
         let command = builder.element(6)
         let assignment = builder.element(7)
         let competingWindow = builder.element(8)
+        let refreshedWindow = AXUIElementCreateApplication(pid_t(1002))
 
         builder.setRole(window, kAXWindowRole as String)
         builder.setAttribute(
             window,
             kAXTitleAttribute as String,
-            titleIsMalformed ? 42 : "Key Command Assignments – U.S."
+            titleIsMalformed ? 42
+                : (refreshesBaselineWindowWrapperAfterPost
+                    ? "Other Window"
+                    : "Key Command Assignments – U.S.")
         )
         builder.setAttribute(window, "AXCloseButton", close)
         builder.setRole(close, kAXButtonRole as String)
@@ -59,6 +65,12 @@ import Testing
             competingWindow,
             kAXTitleAttribute as String,
             "Other Window"
+        )
+        builder.setRole(refreshedWindow, kAXWindowRole as String)
+        builder.setAttribute(
+            refreshedWindow,
+            kAXTitleAttribute as String,
+            "Key Command Assignments – Refreshed Wrapper"
         )
 
         builder.setRole(search, kAXTextFieldRole as String)
@@ -83,7 +95,9 @@ import Testing
             app,
             kAXWindowsAttribute as String,
             windowInitiallyOpen ? [window]
-                : (reusesBaselineWindowAfterPost ? [competingWindow] : [AXUIElement]())
+                : ((reusesBaselineWindowAfterPost || refreshesBaselineWindowWrapperAfterPost)
+                    ? [refreshesBaselineWindowWrapperAfterPost ? window : competingWindow]
+                    : [AXUIElement]())
         )
 
         let ax = builder.makeAXRuntime(
@@ -101,7 +115,10 @@ import Testing
             performActionHandler: { element, action in
                 guard CFEqual(element, close), action == (kAXPressAction as String) else { return true }
                 probe.closePresses += 1
-                if closeSucceeds {
+                if closeLeavesWindowWithDifferentTitle {
+                    builder.setAttribute(window, kAXTitleAttribute as String, "Other Window")
+                    builder.setAttribute(app, kAXWindowsAttribute as String, [window])
+                } else if closeSucceeds {
                     builder.setAttribute(app, kAXWindowsAttribute as String, [AXUIElement]())
                 }
                 return true
@@ -129,7 +146,8 @@ import Testing
                     app,
                     kAXWindowsAttribute as String,
                     ambiguousWindowsAfterPost ? [window, competingWindow]
-                        : (reusesBaselineWindowAfterPost ? [competingWindow] : [window])
+                        : (reusesBaselineWindowAfterPost ? [competingWindow]
+                            : (refreshesBaselineWindowWrapperAfterPost ? [refreshedWindow] : [window]))
                 )
                 return true
             },
@@ -254,6 +272,21 @@ import Testing
         #expect(fixture.probe.closePresses == 0)
     }
 
+    @Test func equivalentRefreshedWrapperCannotMakeABaselineWindowLookNew() throws {
+        let fixture = fixture(refreshesBaselineWindowWrapperAfterPost: true)
+        let entry = try #require(MIDIKeyCommandBindingCatalog.entries.first)
+
+        let outcome = MIDIKeyCommandCheckSession.inspect(entry: entry, runtime: fixture.runtime)
+
+        #expect(outcome == .failed(
+            stage: "key_commands_window_identity_mismatch",
+            cleanupConfirmed: false
+        ))
+        #expect(fixture.probe.optionKPosts == 1)
+        #expect(fixture.probe.typed.isEmpty)
+        #expect(fixture.probe.closePresses == 0)
+    }
+
     @Test func missingPositiveFocusProofPostsNoQueryAndClosesOwnedWindow() throws {
         let fixture = fixture(frontmost: false)
         let entry = try #require(MIDIKeyCommandBindingCatalog.entries.first)
@@ -267,6 +300,17 @@ import Testing
 
     @Test func failedCloseCannotPublishAnInspection() throws {
         let fixture = fixture(closeSucceeds: false)
+        let entry = try #require(MIDIKeyCommandBindingCatalog.entries.first)
+
+        let outcome = MIDIKeyCommandCheckSession.inspect(entry: entry, runtime: fixture.runtime)
+
+        #expect(outcome == .failed(stage: "close_key_commands", cleanupConfirmed: false))
+        #expect(fixture.probe.typed == ["Toggle Metronome Click"])
+        #expect(fixture.probe.closePresses == 1)
+    }
+
+    @Test func titleChangeCannotMakeAStillPresentOwnedWindowLookClosed() throws {
+        let fixture = fixture(closeLeavesWindowWithDifferentTitle: true)
         let entry = try #require(MIDIKeyCommandBindingCatalog.entries.first)
 
         let outcome = MIDIKeyCommandCheckSession.inspect(entry: entry, runtime: fixture.runtime)

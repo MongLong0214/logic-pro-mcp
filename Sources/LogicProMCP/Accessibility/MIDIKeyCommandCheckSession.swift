@@ -48,7 +48,7 @@ enum MIDIKeyCommandCheckSession {
     }
 
     private struct WindowCensus {
-        let allWindowIDs: Set<Int>
+        let allWindows: [AXUIElement]
         let candidates: [AXUIElement]
     }
 
@@ -237,7 +237,7 @@ enum MIDIKeyCommandCheckSession {
             }
         }
         return .observed(.init(
-            allWindowIDs: Set(windows.map(elementID)),
+            allWindows: windows,
             candidates: candidates
         ))
     }
@@ -258,7 +258,7 @@ enum MIDIKeyCommandCheckSession {
                     return .failed(stage: "key_commands_window_ambiguous")
                 }
                 if let candidate = census.candidates.first {
-                    guard !baseline.allWindowIDs.contains(elementID(candidate)) else {
+                    guard !baseline.allWindows.contains(where: { CFEqual($0, candidate) }) else {
                         return .failed(stage: "key_commands_window_identity_mismatch")
                     }
                     return .found(candidate)
@@ -314,7 +314,7 @@ enum MIDIKeyCommandCheckSession {
             guard case .observed(let census) = keyCommandsWindowCensus(runtime: runtime) else {
                 return false
             }
-            return !census.candidates.contains { CFEqual($0, window) }
+            return !census.allWindows.contains { CFEqual($0, window) }
         }
         if gone() { return true }
         guard let button: AXUIElement = AXHelpers.getAttribute(
@@ -340,9 +340,5 @@ enum MIDIKeyCommandCheckSession {
             elapsed += step
         }
         return nil
-    }
-
-    private static func elementID(_ element: AXUIElement) -> Int {
-        Int(bitPattern: Unmanaged.passUnretained(element).toOpaque())
     }
 }
