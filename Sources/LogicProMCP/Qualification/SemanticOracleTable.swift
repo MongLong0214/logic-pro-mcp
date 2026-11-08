@@ -303,6 +303,10 @@ enum SemanticOracleTable {
     /// mutating spec, is DISJOINT from the covered set, and carries a reason —
     /// so the uncovered complement is never fully implicit.
     static let structurallyUnverifiedMutatingOperationIDs: [OperationID: String] = [
+        .systemSetupMIDIKeyCommands:
+            "the public surface is check-only and drives Logic's Key Commands UI, but its exact-row "
+            + "inspection is the operation's own evidence; no independent logic:// resource publishes "
+            + "the assignment source or current binding, so it cannot earn semantic qualification credit",
         .systemSetupControlSurface:
             // Arrived on main after this inventory closed (#891). NOT back-dated into one of the
             // phase sets: those record what was pinned when, and putting a later operation into
