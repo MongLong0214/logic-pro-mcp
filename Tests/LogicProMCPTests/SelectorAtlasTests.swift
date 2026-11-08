@@ -445,6 +445,22 @@ struct SelectorAtlasOperationMapTests {
         #expect(AXLogicProElements.toggleSelector(
             labels: AXLocalePolicy.trackRecordEnableCheckbox.labels).id == .trackHeaderArmToggle)
     }
+
+    @Test("the Control Bar selector accepts the measured Logic 12 and Logic 13 roles")
+    func controlBarSelectorAcceptsGroupAndToolbarRoles() {
+        let selector = AXLogicProElements.controlBarSelector
+        func candidate(role: String) -> ResolvableCandidate {
+            ResolvableCandidate(
+                axIdentifier: nil, role: role, subrole: nil, title: nil, ancestors: [],
+                attributes: [kAXDescriptionAttribute as String: "Control Bar"],
+                valueSignature: nil, geometry: nil)
+        }
+        let group = candidate(role: kAXGroupRole as String)
+        let toolbar = candidate(role: kAXToolbarRole as String)
+
+        #expect(resolve(selector, in: [group], locale: "en") == .exact(index: 0))
+        #expect(resolve(selector, in: [toolbar], locale: "en") == .exact(index: 0))
+    }
 }
 
 /// #290 — a fixture cannot carry a user's project, track or plugin name.
