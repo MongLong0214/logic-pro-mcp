@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 
 /// The exact assignment label Logic displays after a MIDI Key Command binding settles.
@@ -42,6 +43,131 @@ enum MIDIKeyCommandBindingObservation: Equatable, Sendable {
     case matchingLabelUnverifiedSource(MIDIKeyCommandAssignment)
     case conflicting(MIDIKeyCommandAssignment)
     case unreadable(raw: String?)
+}
+
+/// Resolves one filtered Key Commands result without treating a global Y value as
+/// row identity. Logic exposes this list as flat cells rather than AX rows, so the
+/// assignment must be anchored to the exact Control Surface column and overlap the
+/// exact, unique command cell vertically. Any ambiguity fails closed.
+enum MIDIKeyCommandSurfaceResolver {
+    /// Exact labels selected for the Logic UI locale by the caller. The resolver
+    /// deliberately has no English fallback: an unsupported locale must refuse
+    /// before it can associate or mutate a row.
+    struct Labels: Equatable {
+        let commandNames: Set<String>
+        let controlSurfaceColumnTitles: Set<String>
+    }
+
+    struct Cell: Equatable {
+        enum Role: Equatable {
+            case searchField
+            case textField
+            case staticText
+            case other
+        }
+
+        let id: Int
+        let role: Role
+        let text: String?
+        let frame: CGRect?
+    }
+
+    enum Resolution: Equatable {
+        case resolved(
+            commandCellID: Int,
+            assignmentCellID: Int,
+            observation: MIDIKeyCommandBindingObservation
+        )
+        case commandUnavailable
+        case ambiguousCommand
+        case columnUnavailable
+        case assignmentUnavailable
+        case ambiguousAssignment
+        case geometryUnreadable
+
+        var isResolved: Bool {
+            if case .resolved = self { return true }
+            return false
+        }
+    }
+
+    static func resolve(
+        entry: MIDIKeyCommandBindingCatalog.Entry,
+        labels: Labels,
+        cells: [Cell]
+    ) -> Resolution {
+        guard !labels.commandNames.isEmpty,
+              !labels.controlSurfaceColumnTitles.isEmpty else {
+            return .commandUnavailable
+        }
+        let commands = cells.filter { cell in
+            cell.role == .textField
+                && normalizedCommand(cell.text).map(labels.commandNames.contains) == true
+        }
+        guard !commands.isEmpty else { return .commandUnavailable }
+        guard commands.count == 1, let command = commands.first else {
+            return .ambiguousCommand
+        }
+
+        let headers = cells.filter { cell in
+            cell.role == .staticText
+                && cell.text.map(labels.controlSurfaceColumnTitles.contains) == true
+        }
+        guard headers.count == 1, let header = headers.first else {
+            return .columnUnavailable
+        }
+        guard let commandFrame = validFrame(command.frame),
+              let headerFrame = validFrame(header.frame) else {
+            return .geometryUnreadable
+        }
+
+        let assignments = cells.filter { cell in
+            guard cell.role == .staticText,
+                  cell.id != header.id,
+                  let frame = validFrame(cell.frame)
+            else { return false }
+            return headerFrame.minX <= frame.midX
+                && frame.midX <= headerFrame.maxX
+                && sameRowBand(commandFrame, frame)
+        }
+        guard !assignments.isEmpty else { return .assignmentUnavailable }
+        guard assignments.count == 1, let assignment = assignments.first else {
+            return .ambiguousAssignment
+        }
+
+        return .resolved(
+            commandCellID: command.id,
+            assignmentCellID: assignment.id,
+            observation: MIDIKeyCommandBindingCatalog.observe(
+                rawLabel: assignment.text,
+                expected: entry
+            )
+        )
+    }
+
+    private static func normalizedCommand(_ raw: String?) -> String? {
+        guard var text = raw?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty else { return nil }
+        if text.hasSuffix("*") {
+            text = String(text.dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return text
+    }
+
+    private static func validFrame(_ frame: CGRect?) -> CGRect? {
+        guard let frame,
+              frame.origin.x.isFinite,
+              frame.origin.y.isFinite,
+              frame.width.isFinite,
+              frame.height.isFinite,
+              frame.width > 0,
+              frame.height > 0 else { return nil }
+        return frame
+    }
+
+    private static func sameRowBand(_ lhs: CGRect, _ rhs: CGRect) -> Bool {
+        lhs.minY == rhs.minY && lhs.maxY == rhs.maxY
+    }
 }
 
 /// The deliberately small set of bindings that setup automation may reason about.

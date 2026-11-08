@@ -1466,6 +1466,45 @@ enum AXLocalePolicy {
         alsoDerivedFrom: ["logic-canon://quickhelp/QuickHelp/en/KCE_390_ToggTrackRec#Title"]
     )
 
+    /// The catalog's existing English Key Commands name is reproduced by substituting the localized
+    /// `Metronome Click` noun into Logic's localized `Toggle %@` template. The composed title is not
+    /// a standalone row in the shipped tables, so it deliberately has no `derivedFrom` citation.
+    /// These are exact bundle-derived candidates; native UI qualification remains separate. All ten values were
+    /// produced by `Scripts/derive_label_variants.py --compose "Toggle %@" "Metronome Click"`
+    /// against the preserved Logic 12.3 build 6674 bundle on 2026-11-08.
+    /// value: Toggle %@
+    /// logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Toggle%20%25%40#value
+    /// value: Metronome Click
+    /// logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Metronome%20Click#value
+    static let metronomeClickKeyCommandName = LabelSet(
+        canonical: "Toggle Metronome Click",
+        variants: ["토글 메트로놈 클릭", "メトロノームクリックを切り替え", "Metronom-Klick ein/aus",
+                   "Activar/desactivar Sonido del metrónomo", "Activer/Désactiver Clic du métronome",
+                   "Attiva/disattiva Clic metronomo", "Alternar Clique do metrônomo",
+                   "开关节拍器咔嗒声", "切換 節拍器卡嗒聲"],
+        rationale: "Provides exact bundle-derived candidates for the transport.toggle_metronome Key Commands row; native UI qualification remains separate."
+            + " Every"
+            + " member is a mechanical composition of two rows Apple ships in the same locale;"
+            + " none is a hand translation. Exact matching prevents a similarly named editor-only"
+            + " command such as `Toggle Metronome Click - Smart Tempo Editor` from being selected."
+            + " Bundle derivation does not promote an unobserved native title to verified."
+    )
+
+    /// value: 컨트롤 서피스
+    static let keyCommandsControlSurfaceColumnTitle = LabelSet(
+        canonical: "Control Surface",
+        variants: ["컨트롤 서피스", "コントロールサーフェス", "Bedienoberfläche",
+                   "Superficie de control", "Surface de contrôle", "Superficie di controllo",
+                   "Superfície de controle", "控制表面", "控制介面"],
+        rationale: "Identifies the Key Commands assignment column before accepting the cell on the selected command row."
+            + " These are the preserved Logic 12.3 build 6674 values of"
+            + " KeyCommands `295.headerCell.title` (Korean: `컨트롤 서피스`); the singular German"
+            + " value is intentionally not"
+            + " the plural Control Surfaces application-menu title.",
+        derivedFrom: "logic-canon://nibstrings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FKeyCommands.strings/en/295.headerCell.title#value",
+        alsoDerivedFrom: ["logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FKeyCommands.strings/ko/295.headerCell.title#value"]
+    )
+
     static let learnByKeyLabelCheckbox = LabelSet(
         canonical: "Learn by Key Label",
         variants: ["키 레이블로 학습", "キーのラベルで登録", "Tastenbeschriftung lernen",
@@ -1477,6 +1516,20 @@ enum AXLocalePolicy {
             + " Apple's row is KeyCommands `300557.title`, ANCHORED AT ko for the same reason as the"
             + " window title's KeyCommands `5.title`: the row has no `en` on the `strings` side.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FKeyCommands.strings/ko/300557.title#value"
+    )
+
+    static let learnNewAssignmentControl = LabelSet(
+        canonical: "Learn New Assignment",
+        variants: ["새로운 할당 학습", "新規割り当てを登録", "Neue Zuweisung lernen",
+                   "Aprender nueva asignación", "Apprendre une nouvelle assignation",
+                   "Impara nuova assegnazione", "Aprender Nova Atribuição", "学习新的分配", "學習新指定"],
+        rationale: "Identifies the Key Commands control that MIDIKeyCommandSetup must arm before"
+            + " sending an assignment. This is KeyCommands `100505.title`, read directly from the"
+            + " preserved Logic 12.3 build 6674 bundle on 2026-11-08. It is deliberately distinct"
+            + " from `Learn by Key Label` (`300557.title`); setup must exact-match the control title"
+            + " and must never accept a provisional numeric AX label such as `1`.",
+        derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FKeyCommands.strings/ko/100505.title#value",
+        alsoDerivedFrom: ["logic-canon://nibstrings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FKeyCommands.strings/en/100505.title#value"]
     )
 
     static let cancelButton = LabelSet(
@@ -3654,7 +3707,10 @@ enum AXLocalePolicy {
     static let allLabelSets: [LabelSet] = [
         keyCommandsWindowTitle,
         recordArmKeyCommandName,
+        metronomeClickKeyCommandName,
+        keyCommandsControlSurfaceColumnTitle,
         learnByKeyLabelCheckbox,
+        learnNewAssignmentControl,
         viewMenuBar,
         pluginWindowViewSwitcher,
         pluginWindowControlsViewMenuItem,
