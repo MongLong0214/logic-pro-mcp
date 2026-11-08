@@ -554,6 +554,49 @@ private func issue26RepositoryRootURL() -> URL {
     #expect(stdout.contains("mcp.claude_code_registration"))
 }
 
+@Test func testMainEntrypointDoctorReadsPersistedMIDIKeyCommandBindingObservations() async throws {
+    let storeDirectory = FileManager.default.temporaryDirectory
+        .appendingPathComponent("doctor-keycmd-bindings-\(UUID().uuidString)", isDirectory: true)
+    let storeURL = storeDirectory.appendingPathComponent("bindings.json")
+    defer { try? FileManager.default.removeItem(at: storeDirectory) }
+    let bindingStore = MIDIKeyCommandBindingRecordStore(fileURL: storeURL)
+    try await bindingStore.replaceVerified(
+        entries: MIDIKeyCommandBindingCatalog.entries,
+        portName: MIDIKeyCommandsChannel.portName,
+        observedAt: Date(timeIntervalSince1970: 1)
+    )
+
+    var stdout = ""
+    let exitCode = await MainEntrypoint.run(
+        arguments: ["LogicProMCP", "doctor", "--json"],
+        permissionCheck: { grantedPermissionStatus() },
+        serverFactory: {
+            Issue.record("Server should not start for doctor")
+            return DoctorMockMainServer()
+        },
+        approvalStoreFactory: {
+            ManualValidationStore(
+                fileURL: FileManager.default.temporaryDirectory
+                    .appendingPathComponent("doctor-keycmd-approval-\(UUID().uuidString)")
+                    .appendingPathExtension("json")
+            )
+        },
+        bindingRecordStore: bindingStore,
+        doctorRuntime: doctorRuntime(),
+        writeStdout: { stdout += $0 },
+        writeStderr: { _ in }
+    )
+
+    #expect(exitCode == 0)
+    let json = try #require(sharedJSONObject(stdout))
+    let checks = try #require(json["checks"] as? [[String: Any]])
+    let keycmd = try #require(checks.first { $0["id"] as? String == "channels.keycmd_reference" })
+    let evidence = try #require(keycmd["evidence"] as? [String: String])
+    #expect(evidence["persisted_binding_observations"] == "1")
+    #expect(evidence["unattended_qualification"] == "unaffected")
+    #expect(keycmd["status"] as? String == "skipped")
+}
+
 @Test func testSetupDocsContainEveryDoctorRemediationAnchor() throws {
     let setup = try String(
         contentsOf: issue26RepositoryRootURL().appendingPathComponent("docs/SETUP.md"),

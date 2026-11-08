@@ -11,6 +11,7 @@ extension SetupDoctor {
         let approvals: [ManualValidationChannel: ManualValidationApproval]
         let runtime: Runtime
         let manualStoreHealth: ManualValidationStoreHealth
+        let midiKeyCommandBindingObservationCount: Int
         let logicApps: [LogicAppInfo]
         let staticVersionForPath: (String) -> StaticVersionResult
     }
@@ -129,7 +130,11 @@ extension SetupDoctor {
                 checks: checks
             )
         case .channelsKeycmdReference:
-            return keycmdReferenceCheck(runtime: context.runtime, profile: context.doctorProfile)
+            return keycmdReferenceCheck(
+                runtime: context.runtime,
+                profile: context.doctorProfile,
+                persistedBindingObservationCount: context.midiKeyCommandBindingObservationCount
+            )
         case .channelsMCUWiringHint:
             return mcuWiringHintCheck(runtime: context.runtime, profile: context.doctorProfile)
         case .dependenciesClickFallback:

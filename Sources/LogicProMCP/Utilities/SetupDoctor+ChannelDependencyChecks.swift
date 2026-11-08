@@ -57,14 +57,27 @@ extension SetupDoctor {
     }
 
 
-    static func keycmdReferenceCheck(runtime: Runtime, profile: DoctorProfile) -> Check {
+    static func keycmdReferenceCheck(
+        runtime: Runtime,
+        profile: DoctorProfile,
+        persistedBindingObservationCount: Int = 0
+    ) -> Check {
+        let observationCount = max(0, persistedBindingObservationCount)
+        let observationNoun = observationCount == 1 ? "observation" : "observations"
+        let observationSummary = "\(observationCount) persisted binding \(observationNoun) recorded; "
+            + "observations do not qualify unattended execution."
         guard isProfileRequired("channels.keycmd_reference", profile: profile) else {
             return check(
                 id: "channels.keycmd_reference",
                 domain: "channels",
                 status: .skipped,
-                summary: "Key Commands preset is not required for profile \(profile.rawValue).",
-                evidence: ["profile": profile.rawValue],
+                summary: "Key Commands preset is not required for profile \(profile.rawValue). "
+                    + observationSummary,
+                evidence: [
+                    "profile": profile.rawValue,
+                    "persisted_binding_observations": String(observationCount),
+                    "unattended_qualification": "unaffected",
+                ],
                 remediationType: .none,
                 optional: true,
                 skipReason: .profileNotRequired
@@ -76,10 +89,13 @@ extension SetupDoctor {
             domain: "channels",
             status: staged ? .pass : .warn,
             summary: staged
-                ? "Key Commands mapping reference is staged; it does not qualify mapped Logic execution."
-                : "Key Commands mapping reference is absent; staging cannot qualify mapped Logic execution.",
+                ? "Key Commands mapping reference is staged; it does not qualify mapped Logic execution. "
+                    + observationSummary
+                : "Key Commands mapping reference is absent; staging cannot qualify mapped Logic execution. "
+                    + observationSummary,
             evidence: [
                 "preset_staged": String(staged),
+                "persisted_binding_observations": String(observationCount),
                 "unattended_qualification": "unaffected",
                 "human_intervention_required": "false",
                 "human_intervention_requests": "0",

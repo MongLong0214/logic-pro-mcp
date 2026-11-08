@@ -121,14 +121,16 @@ private func doctorV4Report(
     arguments: [String] = ["LogicProMCP", "doctor", "--json"],
     runtime: SetupDoctor.Runtime = doctorV4Runtime(),
     approvals: [ManualValidationChannel: ManualValidationApproval] = doctorV4Approvals(),
-    storeHealth: ManualValidationStoreHealth = .ok
+    storeHealth: ManualValidationStoreHealth = .ok,
+    midiKeyCommandBindingObservationCount: Int = 0
 ) -> SetupDoctor.Report {
     SetupDoctor.generate(
         arguments: arguments,
         permissionStatus: doctorV4Permissions(),
         approvals: approvals,
         runtime: runtime,
-        manualStoreHealth: storeHealth
+        manualStoreHealth: storeHealth,
+        midiKeyCommandBindingObservationCount: midiKeyCommandBindingObservationCount
     )
 }
 
@@ -496,6 +498,24 @@ private struct DoctorCapabilityEnvelope: Encodable {
     #expect(manual.blockedBy == nil)
     #expect(!report.fixPlan.contains("channels.keycmd_reference"))
     #expect(!report.fixPlan.contains("channels.manual_validation"))
+}
+
+@Test func doctorV4ReportsPersistedKeycmdObservationsWithoutQualifyingExecution() throws {
+    var runtime = doctorV4Runtime()
+    runtime.keyCommandsPresetStaged = { false }
+    let report = doctorV4Report(
+        arguments: ["LogicProMCP", "doctor", "--json", "--profile", "keycmd"],
+        runtime: runtime,
+        approvals: [:],
+        midiKeyCommandBindingObservationCount: 1
+    )
+
+    let reference = try #require(report.checks.first { $0.id == "channels.keycmd_reference" })
+    #expect(reference.status == .warn)
+    #expect(reference.summary.contains("1 persisted binding observation"))
+    #expect(reference.evidence["persisted_binding_observations"] == "1")
+    #expect(reference.evidence["unattended_qualification"] == "unaffected")
+    #expect(report.capabilities["keycmd_only_ops"]?.status == .notReady)
 }
 
 @Test func doctorV4FullProfileTerminatesUnavailableSendOnlyChannels() throws {

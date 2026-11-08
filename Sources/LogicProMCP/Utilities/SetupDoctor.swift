@@ -387,7 +387,8 @@ enum SetupDoctor {
         permissionStatus: PermissionChecker.PermissionStatus,
         approvals: [ManualValidationChannel: ManualValidationApproval],
         runtime: Runtime = .production,
-        manualStoreHealth: ManualValidationStoreHealth = .ok
+        manualStoreHealth: ManualValidationStoreHealth = .ok,
+        midiKeyCommandBindingObservationCount: Int = 0
     ) -> Report {
         let executablePath = runtime.resolveExecutablePath(arguments.first)
         let installSource = detectInstallSource(executablePath: executablePath, runtime: runtime)
@@ -424,6 +425,7 @@ enum SetupDoctor {
             approvals: approvals,
             runtime: runtime,
             manualStoreHealth: manualStoreHealth,
+            midiKeyCommandBindingObservationCount: midiKeyCommandBindingObservationCount,
             logicApps: logicApps,
             staticVersionForPath: staticVersionForPath
         )
