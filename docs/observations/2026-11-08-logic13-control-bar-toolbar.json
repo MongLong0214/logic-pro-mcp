@@ -38,7 +38,6 @@
       "logic_version": "13.0",
       "logic_build": "7801",
       "root_role": "AXToolbar",
-      "root_description": "컨트롤 막대",
       "direct_child_count": 22,
       "play_control_count": 1,
       "raw_sha256": "d0c06dd6c2a23b2087bc44088c65aeb1e27cfc2dd66720f258f430ce8af3f937"
