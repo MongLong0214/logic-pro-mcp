@@ -8,6 +8,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+- Stem export now identifies the destination volume sidebar by its unique exact volume-name row
+  instead of requiring it to be the export panel's only outline (#1553), so List-view browser
+  outlines without that row are ignored. Duplicate matches, unreadable censuses, failed selection
+  echo, and failed volume-root listing confirmation still refuse without claiming selection.
 - `logic://project/info.sampleRate` now prefers a positive `SampleRate` from the validated current
   project's saved `MetaData.plist` over a disagreeing live transport value (#1552). Fresh transport
   remains the fallback when the saved field is missing or invalid, and the resource stays read-only
