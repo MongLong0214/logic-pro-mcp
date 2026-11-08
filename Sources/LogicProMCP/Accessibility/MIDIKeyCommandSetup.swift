@@ -17,6 +17,7 @@ enum MIDIKeyCommandSetup {
         case matchingLabelUnverifiedSource
         case conflicting
         case provisional
+        case unknownCommand
         case unreadable
         case ambiguous
     }
@@ -125,6 +126,8 @@ enum MIDIKeyCommandSetup {
             return .failed(stage: "binding_conflict", cleanupConfirmed: true, writeAttempted: false)
         case .provisional:
             return .failed(stage: "binding_provisional", cleanupConfirmed: true, writeAttempted: false)
+        case .unknownCommand:
+            return .failed(stage: "command_unavailable", cleanupConfirmed: true, writeAttempted: false)
         case .unreadable:
             return .failed(stage: "binding_unreadable", cleanupConfirmed: true, writeAttempted: false)
         case .ambiguous:
