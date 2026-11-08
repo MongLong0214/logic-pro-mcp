@@ -16,9 +16,11 @@ protocol KeyCmdTransportProtocol: Actor {
 /// Each operation maps to a specific CC# (§4.11 mapping table).
 actor MIDIKeyCommandsChannel: KeyCmdCCChannel, OperationReadinessProviding {
     nonisolated let id = ChannelID.midiKeyCommands
+    nonisolated static let portName = "LogicProMCP-KeyCmd-Internal"
 
     let transport: any KeyCmdTransportProtocol
     let approvalStore: any ManualValidationStoring
+    private let bindingRecordStore: MIDIKeyCommandBindingRecordStore
     private var verifiedOperations: Set<String> = []
     private var stopping = false
     private var verifiedExecutionsInFlight = 0
@@ -26,10 +28,12 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel, OperationReadinessProviding {
 
     init(
         transport: any KeyCmdTransportProtocol,
-        approvalStore: any ManualValidationStoring = ManualValidationStore()
+        approvalStore: any ManualValidationStoring = ManualValidationStore(),
+        bindingRecordStore: MIDIKeyCommandBindingRecordStore = MIDIKeyCommandBindingRecordStore()
     ) {
         self.transport = transport
         self.approvalStore = approvalStore
+        self.bindingRecordStore = bindingRecordStore
     }
 
     /// Operation → CC# mapping table (PRD §4.11).
@@ -726,13 +730,21 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel, OperationReadinessProviding {
     }
 
     func healthCheck() async -> ChannelHealth {
-        // The port remains usable by raw-MIDI bypass operations. Mapped Logic
-        // commands have no programmatic setup/readback and never become ready
-        // from a stored assertion.
+        // The port remains usable by raw-MIDI bypass operations. A persisted
+        // observation is reportable, but never becomes process-local readiness
+        // without a current owned-port functional verification.
         let readiness = await transport.readiness()
+        let persistedRecords = await bindingRecordStore.matchingRecords(
+            portName: Self.portName,
+            channel: 16
+        )
+        // Read actor-owned process state only after every suspension above. A
+        // concurrent stop must not be followed by a stale verified-binding detail.
         let bindingDetail = verifiedBindingHealthDetail
+        let persistedDetail = Self.persistedBindingHealthDetail(persistedRecords)
         return unattendedSendOnlyHealth(readiness: readiness) {
-            "Port: LogicProMCP-KeyCmd-Internal — \($0.detail). \(bindingDetail) \(Self.manualValidationDetailSuffix)"
+            "Port: \(Self.portName) — \($0.detail). \(bindingDetail) \(persistedDetail) "
+                + Self.manualValidationDetailSuffix
         }
     }
 
@@ -744,11 +756,23 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel, OperationReadinessProviding {
         return "Process-local verified bindings: \(operations.count) [\(operations.joined(separator: ", "))]."
     }
 
+    private static func persistedBindingHealthDetail(
+        _ records: [MIDIKeyCommandBindingRecord]
+    ) -> String {
+        let operations = records.map(\.operation).sorted()
+        guard !operations.isEmpty else {
+            return "Persisted verified observations: 0."
+        }
+        return "Persisted verified observations: \(operations.count) "
+            + "[\(operations.joined(separator: ", "))]."
+    }
+
     /// Internal (not private) so `RoutingAuditInvariantTests` can assert it
     /// enumerates the same op set as `expectedKeycmdOnlyOps` — the runtime
     /// health string and the docs SETUP.md §4.1 matrix must agree.
     static let manualValidationDetailSuffix =
-        "Mapped Logic key-command unattended execution unavailable: bindings have no programmatic setup or outcome readback. " +
+        "Channel-wide mapped Logic key-command unattended execution unavailable: persisted observations alone " +
+        "do not prove current-process owned-port delivery or a functional outcome. " +
         "Effectively keycmd-only (no working non-keycmd fallback on Logic 12.2): " +
         "edit.delete, edit.duplicate, edit.normalize, " +
         "nav.goto_marker, transport.capture_recording, view.toggle_inspector, view.toggle_step_editor. " +
