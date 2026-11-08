@@ -91,7 +91,7 @@ private func t7StartedChannel(tag: String) async throws -> ChannelHealth {
     let health = try await t7StartedChannel(tag: "unattended-unavailable")
     #expect(health.detail.contains("unattended execution unavailable"))
     #expect(health.detail.contains(
-        "persisted observations alone do not prove current-process owned-port delivery"
+        "persisted rows do not prove owned-port delivery or outcome"
     ))
     #expect(!health.detail.contains("Manual MIDI Learn required"))
 }
@@ -137,7 +137,27 @@ private func t7StartedChannel(tag: String) async throws -> ChannelHealth {
 }
 
 @Test func testKeyCmdChannelDetailUnderOneKB() async throws {
-    let health = try await t7StartedChannel(tag: "size")
+    let transport = MockKeyCmdTransport()
+    await transport.setReadiness(.init(
+        available: true,
+        detail: "Virtual MIDI port 'LogicProMCP-KeyCmd-Internal' is ready"
+    ))
+    let bindingStore = MIDIKeyCommandBindingRecordStore(
+        fileURL: t7StoreURL("size-binding-records")
+    )
+    try await bindingStore.replaceVerified(
+        entries: [MIDIKeyCommandBindingCatalog.entries[0]],
+        portName: MIDIKeyCommandsChannel.portName
+    )
+    let channel = MIDIKeyCommandsChannel(
+        transport: transport,
+        approvalStore: ManualValidationStore(fileURL: t7StoreURL("size-manual")),
+        bindingRecordStore: bindingStore
+    )
+    try await channel.start()
+    await channel.recordVerifiedBinding(operation: "transport.toggle_metronome")
+
+    let health = await channel.healthCheck()
     let byteCount = health.detail.utf8.count
     #expect(byteCount < 1024, "detail length \(byteCount) bytes exceeds 1024 budget")
 }
@@ -156,7 +176,7 @@ private func t7StartedChannel(tag: String) async throws -> ChannelHealth {
 @Test func testKeyCmdChannelDetailReportsNoProcessLocalVerifiedBindingsInitially() async throws {
     let health = try await t7StartedChannel(tag: "verified-empty")
     #expect(health.detail.contains("Process-local verified bindings: 0."))
-    #expect(health.detail.contains("Persisted verified observations: 0."))
+    #expect(health.detail.contains("Persisted observations: 0."))
 }
 
 @Test func testKeyCmdChannelDetailReportsPersistedObservationWithoutPromotingReadiness() async throws {
@@ -165,7 +185,7 @@ private func t7StartedChannel(tag: String) async throws -> ChannelHealth {
     )
     try await bindingStore.replaceVerified(
         entries: [MIDIKeyCommandBindingCatalog.entries[0]],
-        portName: "LogicProMCP-KeyCmd-Internal"
+        portName: MIDIKeyCommandsChannel.portName
     )
     let channel = MIDIKeyCommandsChannel(
         transport: MockKeyCmdTransport(),
@@ -177,7 +197,7 @@ private func t7StartedChannel(tag: String) async throws -> ChannelHealth {
     let health = await channel.healthCheck()
 
     #expect(health.detail.contains(
-        "Persisted verified observations: 1 [transport.toggle_metronome]."
+        "Persisted observations: 1 [transport.toggle_metronome]."
     ))
     #expect(health.detail.contains("Process-local verified bindings: 0."))
     #expect(!health.ready)
@@ -220,7 +240,13 @@ private func t7StartedChannel(tag: String) async throws -> ChannelHealth {
 @Test func testKeyCmdChannelStopDuringReadinessClearsReportedProcessLocalVerifiedBindings() async throws {
     let transport = T7BlockingReadinessTransport()
     let store = ManualValidationStore(fileURL: t7StoreURL("verified-stop-race"))
-    let channel = MIDIKeyCommandsChannel(transport: transport, approvalStore: store)
+    let channel = MIDIKeyCommandsChannel(
+        transport: transport,
+        approvalStore: store,
+        bindingRecordStore: MIDIKeyCommandBindingRecordStore(
+            fileURL: t7StoreURL("verified-stop-race-binding-records")
+        )
+    )
     try await channel.start()
     await channel.recordVerifiedBinding(operation: "transport.toggle_metronome")
     await transport.blockNextReadiness()

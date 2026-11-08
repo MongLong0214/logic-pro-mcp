@@ -761,9 +761,9 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel, OperationReadinessProviding {
     ) -> String {
         let operations = records.map(\.operation).sorted()
         guard !operations.isEmpty else {
-            return "Persisted verified observations: 0."
+            return "Persisted observations: 0."
         }
-        return "Persisted verified observations: \(operations.count) "
+        return "Persisted observations: \(operations.count) "
             + "[\(operations.joined(separator: ", "))]."
     }
 
@@ -771,8 +771,7 @@ actor MIDIKeyCommandsChannel: KeyCmdCCChannel, OperationReadinessProviding {
     /// enumerates the same op set as `expectedKeycmdOnlyOps` — the runtime
     /// health string and the docs SETUP.md §4.1 matrix must agree.
     static let manualValidationDetailSuffix =
-        "Channel-wide mapped Logic key-command unattended execution unavailable: persisted observations alone " +
-        "do not prove current-process owned-port delivery or a functional outcome. " +
+        "Channel-wide unattended execution unavailable: persisted rows do not prove owned-port delivery or outcome. " +
         "Effectively keycmd-only (no working non-keycmd fallback on Logic 12.2): " +
         "edit.delete, edit.duplicate, edit.normalize, " +
         "nav.goto_marker, transport.capture_recording, view.toggle_inspector, view.toggle_step_editor. " +
