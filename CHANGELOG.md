@@ -107,6 +107,14 @@ contract. Every stated limit remains part of the corresponding change.
   censuses grow to 117 operations; the op joins the `legacy_index_allowed` census.
 
 ### Fixed
+- **Logic 13 transport-container discovery follows the measured toolbar role without selecting a
+  same-described view-toggle group.** The selector and approval transport observation now admit the
+  measured group/toolbar roles and require exact transport-control capability rather than tree
+  order or an arbitrary checkbox. A failed batched census retries through a complete status-bearing
+  traversal; only a freshly verified terminal button may end on an `AXChildren` failure, while
+  unread containers, missing roles, permission loss, depth truncation, unread deciding metadata,
+  and multiple capable candidates still fail closed. Read-only native evidence covers Logic 13.0
+  build 7801 in ko-KR; it is not whole-release or cross-locale qualification.
 - **`record_sequence` works in Logic's default control-bar display mode (#1420).** In "Beats & Project"
   the Playhead Position group exposes only bar and beat, so the seek to `1.1.1.1` could never reach
   State A and every `record_sequence` refused with "failed to reset playhead to bar 1". A bar-and-beat
