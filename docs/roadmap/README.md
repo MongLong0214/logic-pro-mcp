@@ -40,10 +40,10 @@ still list the issue rather than delete its row.
 It does not check the prose. The "waiting on" column, the order, and the state block below are still
 claims dated by the "measured" line, and only issue numbers and open/closed are mechanised.
 
-## State — measured 2026-11-11 20:55 KST at `main` `bc5babee`
+## State — measured 2026-11-11 21:03 KST at `main` `bc5babee`
 
 ```
-29 open issues at measurement time; the pull request carrying this row closes #1530 and leaves 28 if no new issue opens · 3 pre-existing open draft pull requests · latest stable release v3.18.0 · no v3.19.0 tag or release
+30 open issues at measurement time; the pull request carrying this row closes #1530 and leaves 29 if no new issue opens · 3 pre-existing open draft pull requests · latest stable release v3.18.0 · no v3.19.0 tag or release
 ```
 
 The counts above come from paginated GitHub reads. Issue bodies and maintainer comments remain the
@@ -89,6 +89,7 @@ the candidate is not promotable and v3.19.0 must not be tagged or published yet.
 | Poller / refresh | Settle #668 on the exact candidate with the approximately 74-track recurrence, deadline/ceiling evidence, affected tests and hosted exact-head CI. The 31-track result does not close it. |
 | Already included | Preserve the merged Logic 13 control-bar census (#1564), 48 kHz sample-rate correction (#1552/#1558), and display-mode cleanup (#1530/#1539); read them back from the final bytes. |
 | Candidate fixes | Renew #1560 on current `main`; fix #1553 beyond the sidebar step so both List and Column paths retain exact ownership and fail-closed counterexamples. Neither old draft head is release-ready. |
+| Client runtime ownership | Reproduce #1568's Claude Desktop same-parent double-launch against v3.18.0 and the exact candidate. Record which instance serves tools and owns each CoreMIDI/MCU/MIDIKeyCommands/Scripter endpoint, and require Doctor to distinguish setup permission from runtime ownership. The report is not yet confirmed on current `main`; it becomes a release blocker if the candidate reproduces it. |
 | Qualification / trust | Complete the same-final-bytes en-US/ko-KR read-only and approved mutation/restore matrix, independent trusted verification, final signing with the existing authorized private key, public proof publication and unauthenticated retrieval (#284/#816/#1028). An ad-hoc signature or missing key is not promotable evidence. |
 | Deferred claims | Do not make whole-feature claims for #1516, Creator Studio #1546, or the remaining ADR backlog merely because bounded prerequisites ship. Creator remains outside `shipVariants` until contributor evidence and a product-scope decision exist. |
 
@@ -100,10 +101,10 @@ Logic build, locale, fixture and covered acceptance are unchanged.
 
 ### Open-issue execution map
 
-Every one of the 29 issues open at measurement time appears in the table below; #1530 is marked
+Every one of the 30 issues open at measurement time appears in the table below; #1530 is marked
 closed by the pull request carrying this row because its implementation and native acceptance are
 complete. The immediate open release/compatibility lane after that merge is #284, #668, #816,
-#1028, #1550, #1552, #1553 and #1565. The next product lane after the
+#1028, #1550, #1552, #1553, #1565 and #1568. The next product lane after the
 release boundary is #1516, #291 and #1403. The dependency/backlog lane is #299, #302-#306, #862,
 #884, #955, #967, #969-#971, #1417 and #1430. #1546 is contributor-dependent; #308 remains the
 permanent programme ledger and is not closed to make the count look smaller.
@@ -335,6 +336,7 @@ Also open, outside the ADR set:
 | #1552 | OPEN | PR #1558 merged as `ca7e2b63` and prefers the saved project sample rate when the live transport value disagrees. Deterministic tests and hosted CI pass. On Logic 13/en-US the exact merge reports 48000 from both `project_file` and `ax_live` for the same 48 kHz project, matching the Project Settings UI; the pre-fix build reports 44100. This correction is included in the current release candidate. The original Logic 12.4 native rerun is still absent, so that version is not retroactively claimed. |
 | #1553 | OPEN | Draft PR #1561 at `14649e41` structurally fixes the first sidebar-outline ambiguity and its original hosted checks pass, but it does not complete the issue. Three Logic 13 List-view reruns reach the next fail-closed refusal, `stem_destination_component_group_unresolved`, because List view uses `AXTextField > AXCell > AXRow > AXOutline` rather than the Column-view `AXGroup > AXList` chain. Keep the PR draft; add exact ListView component ownership/selection/readback while preserving the Column path and all duplicate, unreadable, wrong-target and no-write refusals, then rerun native List/Column acceptance on the new exact head. |
 | #1565 | OPEN | Release blocker for Logic 13 compatibility. The reporter measured en-US 25 s timeouts across transport, health, refresh, track creation and project creation even though independent AX walks were fast, and a timed-out `project.new` landed roughly 90 seconds later. The current `bc5babee` ko-KR read-only qualification independently fails nine AX-dependent refresh/readback operation cases plus the aggregate, but that is related evidence rather than proof of the same root cause. First use an instrumented read-only timing split to locate actor acquisition/cache-section/first-AX delay; then make mutating operations refuse before issue or report a terminal uncertain-write state until bounded settlement is proven. No destructive reporter rerun is requested. Both en-US and ko-KR exact-candidate qualification must pass before v3.19.0 promotion. |
+| #1568 | OPEN | New v3.18.0/Homebrew report: Claude Desktop starts two same-parent server processes about one second apart, while the tool-serving instance reports CoreMIDI, MCU, MIDIKeyCommands and Scripter all unavailable with endpoint ownership conflicts and Doctor still passes. This has not been independently reproduced or confirmed on current `main`. Reuse #1370/#736 ownership work; capture both process identities, the instance serving tools, per-endpoint owners and Doctor/channel payloads on v3.18.0 and the exact candidate. Preserve live owners and do not terminate unrelated processes or destructively clean endpoints. Deterministic whole-channel ownership and truthful runtime readiness are required; candidate reproduction makes this a v3.19.0 blocker. |
 
 ### Three reopen reasons, checked rather than inferred
 
