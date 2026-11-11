@@ -7,6 +7,7 @@
     "Scripts/check-canon-citations.py --changed",
     "python3 Scripts/check-canon-citations.py --text pr-body.md --changed pr-changed.txt",
     "bash Scripts/ci-coverage-gate.sh",
+    "python3 Scripts/classify-ci-change.py",
     "python3 Scripts/run-helper-suites.py",
     "python3 Scripts/run-repo-guards.py",
     "python3 Scripts/classify-pull-request-event.py --refuse-unvalidated-edit"
@@ -17,6 +18,7 @@
       "required_contexts": ["build", "compile", "test"],
       "why": "the code gate. `build` aggregates every other job here through `needs`, and this is the workflow whose jobs are audited against that list. Its `pull_request` trigger has the default opened, synchronize and reopened events; pr-policy.yml separately refuses unsafe edited events. The full suite runs once on the pull-request merge candidate, not again on the admitted main merge: ruleset 19060230 was re-read on 2026-11-03 with strict required checks active for build, compile, test and pr-policy, merge as the only allowed method, and no bypass actor. Three immediately preceding merges (#1521-#1523) had the same ordered parents and tree as their successful CI candidates; only the merge commit object differed. Re-adding a main push trigger would duplicate the three macOS jobs and contend with the next candidate without validating a different tree.",
       "required_commands": [
+        "python3 Scripts/classify-ci-change.py",
         "python3 Scripts/run-repo-guards.py"
       ]
     },
