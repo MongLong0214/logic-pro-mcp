@@ -141,7 +141,7 @@ A `derived` label has not been read from a running Logic in that locale; it is A
 
 The package manifest uses Swift tools 6.0 for compatibility. Current source verification uses Xcode 16.4 / Swift 6.2 in CI.
 
-The current stable line is `v3.19.0` (cut 2026-11-03 UTC). Its per-release detail — everything added, changed, and fixed since `v3.18.0`, along with every stated limit — is in [CHANGELOG.md](CHANGELOG.md); this README does not restate release history.
+The current stable line is `v3.19.0` (cut 2026-11-11 UTC). Its per-release detail — everything added, changed, and fixed since `v3.18.0`, along with every stated limit — is in [CHANGELOG.md](CHANGELOG.md); this README does not restate release history.
 
 ### 1. Install
 

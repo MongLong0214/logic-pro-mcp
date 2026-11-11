@@ -44,6 +44,42 @@ struct Issue290AtlasEvidenceTests {
         #expect(QualificationRunner.evidenceShapeIsValid(decoded))
     }
 
+    @Test func logic13ToolbarCurrentCanQualifyAgainstGroupBaseline() throws {
+        var documents = try pairs()
+        let index = try #require(documents.firstIndex {
+            AXLocalePolicy.controlBarGroupLabel.matches($0.scope, mode: .exactStrict)
+        })
+        let original = documents[index]
+        let group = original.current.root
+        let toolbar = AXSnapshot.Node(
+            role: "AXToolbar",
+            subrole: group.subrole,
+            description: group.description,
+            help: group.help,
+            identifier: group.identifier,
+            valueRange: group.valueRange,
+            children: group.children
+        )
+        let current = AXSnapshot.Document(
+            logicVersion: "13.0",
+            locale: original.current.locale,
+            scope: original.current.scope,
+            capturedFrom: original.current.capturedFrom,
+            root: toolbar
+        )
+        documents[index] = AtlasQualification.Pair(
+            scope: original.scope,
+            baseline: original.baseline,
+            current: current
+        )
+
+        let result = try retained(documents)
+        #expect(result.qualificationCase.status == .passed)
+        #expect(result.qualificationCase.verified)
+        #expect(result.qualificationCase.reason == nil)
+        #expect(QualificationRunner.evidenceShapeIsValid(result.evidence))
+    }
+
     @Test(arguments: [QualificationLocale.enUS, .koKR])
     func requiredSelectedScopesCannotBeReplacedByAWholeWindow(locale: QualificationLocale) throws {
         let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
