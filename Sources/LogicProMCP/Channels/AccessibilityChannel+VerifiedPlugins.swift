@@ -203,7 +203,9 @@ extension AccessibilityChannel {
         // strip cannot be located — there is nothing to enumerate, so this is
         // State B `readback_unavailable` rather than a fabricated empty chain.
         let ensuredMixer: (mixer: AXUIElement?, result: MixerRevealResult)
-        if let observed = mixerWithoutReveal(runtime:runtime) {
+        if let observed = mixerWithoutRevealForInventory(
+            runtime: runtime, revealRequested: revealRequested
+        ) {
             ensuredMixer = observed
         } else if revealRequested, inventoryRevealWindow(runtime:runtime) != nil {
             ensuredMixer = await revealMixer(runtime)
@@ -390,7 +392,12 @@ extension AccessibilityChannel {
     static func mixerWithoutReveal(
         runtime: AXLogicProElements.Runtime
     ) -> (mixer: AXUIElement?, result: MixerRevealResult)? {
-        let lookup = AXLogicProElements.mixerAreaLookup(runtime: runtime)
+        mixerWithoutReveal(lookup: AXLogicProElements.mixerAreaLookup(runtime: runtime))
+    }
+
+    private static func mixerWithoutReveal(
+        lookup: AXLogicProElements.MixerAreaLookup
+    ) -> (mixer: AXUIElement?, result: MixerRevealResult)? {
         if let mixer = lookup.mixer {
             return (mixer, .alreadyVisible)
         }
@@ -398,6 +405,26 @@ extension AccessibilityChannel {
             return (nil, .childrenUnreadBeforeReveal)
         }
         return nil
+    }
+
+    /// Logic 13 exposes the visible Mixer inside a measured depth-three owner/population envelope.
+    /// A default read that does not authorize reveal can therefore return the existing hidden-
+    /// Mixer State B without walking the unrelated track tree. Unknown and older versions, and
+    /// every explicit reveal, retain the complete legacy lookup.
+    static func mixerWithoutRevealForInventory(
+        runtime: AXLogicProElements.Runtime,
+        revealRequested: Bool
+    ) -> (mixer: AXUIElement?, result: MixerRevealResult)? {
+        guard !revealRequested,
+              let pid = runtime.logicProPID(),
+              let version = runtime.observeHost(pid)?.logicVersion,
+              let major = Int(version.prefix(while: { $0.isNumber })),
+              major == 13,
+              let window = AXLogicProElements.mainWindow(runtime: runtime)
+        else { return mixerWithoutReveal(runtime: runtime) }
+        return mixerWithoutReveal(
+            lookup: AXLogicProElements.shallowMixerAreaLookup(in: window, runtime: runtime)
+        )
     }
 
     /// A missing Mixer is hidden only when its owning Logic window is positively observable.

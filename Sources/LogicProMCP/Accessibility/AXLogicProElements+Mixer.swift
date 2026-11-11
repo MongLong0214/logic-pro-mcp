@@ -262,6 +262,28 @@ extension AXLogicProElements {
             ? .childrenUnread : .notFound, nil)
     }
 
+    /// A bounded version-specific read for callers that may truthfully treat shallow absence as
+    /// absence. It preserves readable legacy-ID candidates and unread Mixer status, but never
+    /// walks beyond the observed Logic 13 Mixer envelope.
+    static func shallowMixerAreaLookup(
+        in window: AXUIElement, runtime: Runtime, maximumDepth: Int = 3
+    ) -> MixerAreaLookup {
+        guard let scan = try? mixerAreaCandidates(
+            in: window, runtime: runtime.ax, maximumDepth: maximumDepth,
+            requiresCompleteAbsence: false, observingExposure: nil, checking: {}
+        ) else { return .childrenUnread }
+        let legacy = scan.candidates.first { $0.legacyRole == (kAXGroupRole as String) }
+            ?? scan.candidates.first { $0.legacyRole == (kAXScrollAreaRole as String) }
+        let best = legacy ?? scan.candidates
+            .sorted { lhs, rhs in
+                if lhs.stripCount != rhs.stripCount { return lhs.stripCount > rhs.stripCount }
+                return lhs.totalChildCount > rhs.totalChildCount
+            }
+            .first
+        if let best { return .found(best.element) }
+        return scan.sawUnreadMixerContainer ? .childrenUnread : .notFound
+    }
+
     /// The state poller only needs a positive acquisition before it falls back to the complete
     /// discovery above. Logic 12.3+ exposes the real Mixer as a named outer owner containing a
     /// named population area whose direct children are strips. A bounded first pass can certify
