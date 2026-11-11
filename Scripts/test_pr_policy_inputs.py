@@ -59,7 +59,11 @@ if '/actions/workflows/ci.yml/runs' in endpoint:
 elif '/git/commits/' in endpoint:
     print(json.dumps(state['commits'].get(endpoint.rsplit('/', 1)[-1], {})))
 elif endpoint.endswith('/logs'):
-    print(state['logs'])
+    logs = state['logs']
+    if isinstance(logs, dict):
+        print(logs.get(endpoint.rsplit('/', 2)[-2], ''))
+    else:
+        print(logs)
 elif '/jobs' in endpoint:
     print(json.dumps({'jobs': state['jobs']}))
 elif '/files' in endpoint:
@@ -156,7 +160,7 @@ fi
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertEqual(files, b"a\nb\n")
 
-    def test_empty_fork_run_association_requires_actual_compile_checkout_binding(self):
+    def test_empty_fork_run_association_accepts_legacy_compile_checkout_binding(self):
         snapshot = pr()
         revision = "c" * 40
         run = {"id": 17, "run_attempt": 1, "event": "pull_request", "status": "completed",
@@ -195,6 +199,48 @@ fi
                     runs=[current_run], jobs=[current_job], commits={revision: current_commit}, logs=current_logs)
                 if accepted:
                     self.assertEqual(result.returncode, 0, result.stderr)
+                else:
+                    self.assert_refused(result, body, files, "code validation")
+
+    def test_fork_run_uses_platform_validation_checkout_not_compile_aggregator(self):
+        snapshot = pr()
+        revision = "c" * 40
+        run = {"id": 17, "run_attempt": 1, "event": "pull_request", "status": "completed",
+               "conclusion": "success", "head_sha": "head-sha", "head_branch": "feature",
+               "repository": {"full_name": "owner/repo"},
+               "head_repository": {"full_name": "fork/repo"}, "pull_requests": []}
+        platform = {"id": 23, "name": "platform-validation", "conclusion": "success",
+                    "run_id": 17, "run_attempt": 1}
+        compile_gate = {"id": 24, "name": "compile", "conclusion": "success",
+                        "run_id": 17, "run_attempt": 1}
+        commit = {"sha": revision, "parents": [{"sha": "base-sha"}, {"sha": "head-sha"}],
+                  "tree": {"sha": "tree-sha"}}
+        checkout_log = (
+            "2026-10-25T17:04:03Z ##[group]Run actions/checkout@" + "a" * 40 + "\n"
+            "2026-10-25T17:04:04Z ##[endgroup]\n"
+            "2026-10-25T17:04:12Z [command]/opt/homebrew/bin/git checkout --progress --force refs/remotes/pull/42/merge\n"
+            "2026-10-25T17:04:13Z [command]/opt/homebrew/bin/git log -1 --format=%H\n"
+            "2026-10-25T17:04:14Z " + revision + "\n"
+            "2026-10-25T17:04:15Z ##[group]Run swift build -c release\n"
+        )
+        cases = [
+            ([platform, compile_gate],
+             {"23": checkout_log, "24": "compile aggregation only\n"}, True),
+            ([dict(platform, conclusion="failure"), compile_gate],
+             {"23": checkout_log, "24": checkout_log}, False),
+            ([platform, dict(platform, id=25), compile_gate],
+             {"23": checkout_log, "25": checkout_log, "24": checkout_log}, False),
+        ]
+        for jobs, logs, accepted in cases:
+            with self.subTest(jobs=jobs):
+                result, body, files = self.run_helper(
+                    [snapshot, snapshot], [[{"filename": "a"}], [{"filename": "b"}]],
+                    event=event_for(snapshot, "edited"), runs=[run],
+                    jobs=jobs, commits={revision: commit}, logs=logs)
+                if accepted:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    self.assertEqual(body, b"No Logic facts.")
+                    self.assertEqual(files, b"a\nb\n")
                 else:
                     self.assert_refused(result, body, files, "code validation")
 
