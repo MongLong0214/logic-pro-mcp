@@ -197,16 +197,19 @@ enum AtlasQualification {
         }
 
         private static func hasSelectedScopeRoot(_ document: AXSnapshot.Document) -> Bool {
-            guard document.root.role == "AXGroup" else { return false }
             // Rail descriptions are privacy-shaped; its existing selector repetitions must
             // belong directly to this root, not to a nested rail in a relabelled whole window.
             if AXLocalePolicy.trackHeadersDescription.matches(document.scope, mode: .exactStrict) {
+                guard document.root.role == "AXGroup" else { return false }
                 return AtlasDiff.selectors(for: document).allSatisfy { selector in
                     guard let path = AtlasDiff.unitPath(in: document, for: selector) else { return false }
                     return path.isEmpty
                 }
             }
             if AXLocalePolicy.controlBarGroupLabel.matches(document.scope, mode: .exactStrict) {
+                guard document.root.role == "AXGroup" || document.root.role == "AXToolbar" else {
+                    return false
+                }
                 let candidates = AtlasDiff.candidates(in: document.root).map(\.candidate)
                 return resolve(AXLogicProElements.controlBarSelector,
                     in: candidates, locale: document.locale) == .exact(index: 0)
