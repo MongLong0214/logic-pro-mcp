@@ -47,6 +47,7 @@ private func confidence(
     let localizedSelector = SemanticSelector(
         id: selector.id,
         requiredRole: selector.requiredRole,
+        alternateRoles: selector.alternateRoles,
         allowedSubroles: selector.allowedSubroles,
         titleAliases: selector.titleAliases[locale].map { [locale: $0] } ?? [:],
         ancestorConstraints: selector.ancestorConstraints,
