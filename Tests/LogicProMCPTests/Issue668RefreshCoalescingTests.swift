@@ -25,7 +25,10 @@ struct Issue668RefreshCoalescingTests {
     /// test passes for the wrong reason. That is exactly what happened: the cycle-count assertion
     /// below stayed green against a mutant with coalescing removed, and only re-aiming the
     /// instrument exposed it.
-    private static func channel() -> AccessibilityChannel {
+    private static func channel(
+        foregroundTrackReads: Counter? = nil,
+        pollerTrackReads: Counter? = nil
+    ) -> AccessibilityChannel {
         let builder = FakeAXRuntimeBuilder()
         return AccessibilityChannel(runtime: .init(
             isTrusted: { true }, isLogicProRunning: { true }, appRoot: { nil },
@@ -34,7 +37,14 @@ struct Issue668RefreshCoalescingTests {
             setTempo: { _ in .error("unused mutation") },
             setCycleRange: { _ in .error("unused mutation") },
             tracks: { .success("[]") },
-            trackStates: { [TrackState(id: 0, name: "Fixture", type: .audio)] },
+            trackStates: {
+                foregroundTrackReads?.bump()
+                return [TrackState(id: 0, name: "Fixture", type: .audio)]
+            },
+            trackStatesStopping: { _ in
+                pollerTrackReads?.bump()
+                return ([TrackState(id: 0, name: "Fixture", type: .audio)], false)
+            },
             selectedTrack: { .error("unused read") },
             selectTrack: { _ in .error("unused mutation") },
             setTrackToggle: { _, _ in .error("unused mutation") },
@@ -49,6 +59,24 @@ struct Issue668RefreshCoalescingTests {
                 executeAppleScript: { _ in .error("fixture forbids AppleScript") }
             )
         ))
+    }
+
+    @Test("explicit refresh uses the poller track transport, not the foreground reader")
+    func explicitRefreshUsesPollerTrackTransport() async {
+        let foreground = Counter(), pollerOwned = Counter()
+        let poller = StatePoller(
+            axChannel: Self.channel(
+                foregroundTrackReads: foreground,
+                pollerTrackReads: pollerOwned
+            ),
+            cache: StateCache(),
+            runtime: .init(hasVisibleWindow: { true })
+        )
+
+        #expect(await poller.refreshNow())
+        #expect(pollerOwned.value() == 1)
+        #expect(foreground.value() == 0,
+                "refresh_cache bypassed the poller-only bounded track acquisition")
     }
 
     private static func makePoller(

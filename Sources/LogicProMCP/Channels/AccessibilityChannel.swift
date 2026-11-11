@@ -254,7 +254,9 @@ actor AccessibilityChannel: Channel {
                 tracks: { AccessibilityChannel.defaultGetTracks(runtime: logicRuntime) },
                 trackStates: { AccessibilityChannel.defaultGetTrackStates(runtime: logicRuntime) },
                 trackStatesStopping: { stop in
-                    let read = AccessibilityChannel.defaultGetTrackStates(runtime: logicRuntime, stoppingWhen: stop)
+                    let read = AccessibilityChannel.defaultGetTrackStates(
+                        runtime: logicRuntime, preferringShallowExactRail: true, stoppingWhen: stop
+                    )
                     return (read.states, read.yielded)
                 },
                 selectedTrack: { AccessibilityChannel.defaultGetSelectedTrack(runtime: logicRuntime) },

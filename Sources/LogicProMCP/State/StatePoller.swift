@@ -697,7 +697,10 @@ actor StatePoller {
                 Self.backgroundTickYields(to: focus())
             })
         } else {
-            trackRead = (await axChannel.readTrackStates(), false)
+            // Explicit refreshes do not yield to text editing, but they are still poller cycles.
+            // Keep them on the same bounded population transport as the background loop; the
+            // ordinary foreground reader retains its depth-32 compatibility discovery.
+            trackRead = await axChannel.readTrackStates(stoppingWhen: { false })
         }
         if trackRead.yielded || Self.helpReadsStopped { return yieldCycle(cacheKeys) }
         if let tracks = trackRead.states {
