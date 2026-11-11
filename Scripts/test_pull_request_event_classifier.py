@@ -5,9 +5,10 @@
 ruleset's newest suite without its required contexts. Retarget validation instead belongs to
 `pr-policy.yml`, which runs `review_edit()` with `--refuse-unvalidated-edit`.
 
-The code workflow has fixed check names and no event classifier job. Its macOS offline guards run
-independently of Swift tests, and the aggregate reports either failure. Comment lines are stripped
-before workflow assertions: comments must not satisfy a rule about executed configuration.
+The code workflow has fixed check names and one exact merge change-scope job. Its macOS offline
+guards run independently of Swift tests, and the aggregate reports either failure. Comment lines
+are stripped before workflow assertions: comments must not satisfy a rule about executed
+configuration.
 """
 import json
 import os
@@ -31,7 +32,9 @@ _spec.loader.exec_module(classifier)
 CI = os.path.join(REPO, ".github", "workflows", "ci.yml")
 
 REQUIRED_CONTEXTS = ("build", "compile", "test")
-AGGREGATE_JOBS = ("guards", "offline-guards", "platform-validation", "compile", "test", "formula")
+AGGREGATE_JOBS = (
+    "change-scope", "guards", "offline-guards", "platform-validation", "compile", "test", "formula",
+)
 SETUP_PYTHON_SHA = "a26af69be951a213d495a4c3e4e4022e16d87065"
 UPLOAD_ARTIFACT_SHA = "ea165f8d65b6e75b540449e92b4886f43607fa02"
 
@@ -188,7 +191,7 @@ class WorkflowWiring(unittest.TestCase):
         self.executable = "\n".join(executable_lines(self.text))
         self.jobs = job_blocks(self.text)
 
-    def test_code_ci_has_fixed_jobs_without_event_classification(self):
+    def test_code_ci_has_fixed_jobs_with_exact_change_scope(self):
         self.assertNotIn("classify", self.jobs)
         self.assertNotIn("code_validation_required", self.executable)
         for job in (*AGGREGATE_JOBS, "build"):
@@ -199,8 +202,12 @@ class WorkflowWiring(unittest.TestCase):
     def test_independent_offline_guards_use_pinned_python_and_stream_logs(self):
         guards = self.jobs["offline-guards"]
         self.assertRegex(guards, r"(?m)^    runs-on: macos-15-intel$")
-        self.assertRegex(self.jobs["platform-validation"], r"(?m)^    runs-on: macos-15$")
-        self.assertEqual(self.text.count("    runs-on: macos-15\n"), 1)
+        self.assertIn(
+            "runs-on: ${{ needs.change-scope.outputs.full-validation == 'true' && "
+            "'macos-15' || 'ubuntu-latest' }}",
+            self.jobs["platform-validation"],
+        )
+        self.assertEqual(self.text.count("'macos-15'"), 1)
         self.assertIn(f"actions/setup-python@{SETUP_PYTHON_SHA}", guards)
         self.assertIn("python-version: '3.11'", guards)
         self.assertIn("cache-dependency-path: Scripts/requirements-ci.txt", guards)
@@ -229,17 +236,19 @@ class WorkflowWiring(unittest.TestCase):
 
     def test_one_arm_allocation_preserves_release_build_full_tests_and_coverage(self):
         platform = self.jobs["platform-validation"]
-        self.assertNotRegex(platform, r"(?m)^    needs:")
+        self.assertRegex(platform, r"(?m)^    needs: change-scope$")
         self.assertRegex(platform, r"(?m)^    timeout-minutes: 150$")
         self.assertIn("release-compile: ${{ steps.release-compile.outcome }}", platform)
         self.assertIn("test-suite: ${{ steps.test-suite.outcome }}", platform)
         self.assertIn("coverage-gate: ${{ steps.coverage-gate.outcome }}", platform)
+        self.assertIn("docs-only: ${{ steps.docs-only.outcome }}", platform)
         self.assertIn("id: release-compile", platform)
         self.assertIn("swift build -c release", platform)
         self.assertIn("git diff --exit-code Package.resolved", platform)
         self.assertIn("id: test-suite", platform)
         self.assertIn(
-            "if: ${{ !cancelled() && (steps.release-compile.outcome == 'success' || "
+            "if: ${{ needs.change-scope.outputs.full-validation == 'true' && !cancelled() && "
+            "(steps.release-compile.outcome == 'success' || "
             "steps.release-compile.outcome == 'failure') }}",
             platform,
         )
@@ -248,7 +257,11 @@ class WorkflowWiring(unittest.TestCase):
         self.assertNotIn("--filter", platform)
         self.assertNotIn("--skip ", platform)
         self.assertIn("id: coverage-gate", platform)
-        self.assertIn("if: ${{ !cancelled() && steps.test-suite.outcome == 'success' }}", platform)
+        self.assertIn(
+            "if: ${{ needs.change-scope.outputs.full-validation == 'true' && !cancelled() && "
+            "steps.test-suite.outcome == 'success' }}",
+            platform,
+        )
         self.assertIn("bash Scripts/ci-coverage-gate.sh", platform)
         self.assertEqual(platform.count("continue-on-error: true"), 3)
         self.assertIn(f"actions/setup-python@{SETUP_PYTHON_SHA}", platform)
@@ -257,14 +270,16 @@ class WorkflowWiring(unittest.TestCase):
 
         compile_job = self.jobs["compile"]
         self.assertRegex(compile_job, r"(?m)^    runs-on: ubuntu-latest$")
-        self.assertRegex(compile_job, r"(?m)^    needs: \[offline-guards, platform-validation\]$")
+        self.assertRegex(
+            compile_job, r"(?m)^    needs: \[change-scope, offline-guards, platform-validation\]$",
+        )
         self.assertRegex(compile_job, r"(?m)^    if: always\(\)$")
         for producer in ("OFFLINE_GUARDS", "PLATFORM_VALIDATION", "RELEASE_COMPILE"):
             self.assertIn(f'[ "${producer}" = "success" ]', compile_job)
 
         test = self.jobs["test"]
         self.assertRegex(test, r"(?m)^    runs-on: ubuntu-latest$")
-        self.assertRegex(test, r"(?m)^    needs: platform-validation$")
+        self.assertRegex(test, r"(?m)^    needs: \[change-scope, platform-validation\]$")
         self.assertRegex(test, r"(?m)^    if: always\(\)$")
         for producer in ("PLATFORM_VALIDATION", "TEST_SUITE", "COVERAGE_GATE"):
             self.assertIn(f'[ "${producer}" = "success" ]', test)

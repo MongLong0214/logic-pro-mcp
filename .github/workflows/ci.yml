@@ -29,6 +29,25 @@ defaults:
     shell: bash
 
 jobs:
+  # Route only one byte-exact, regular-file roadmap modification away from the product build.
+  # The classifier validates the checked-out PR merge and fails closed before publishing outputs;
+  # source, mixed, structural and uncertain changes all retain the complete macOS path.
+  change-scope:
+    name: change-scope
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      mode: ${{ steps.scope.outputs.mode }}
+      full-validation: ${{ steps.scope.outputs.full-validation }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Classify the exact pull-request merge
+        id: scope
+        run: python3 Scripts/classify-ci-change.py
+
   # WAS `roadmap`, and carried four things: two that compare GitHub issue state against
   # `docs/roadmap/README.md` and the ADR index, and two about the Homebrew Formula. Only the
   # second pair protects the product -- a wrong `sha256` is `brew install` failing for everyone --
@@ -161,12 +180,14 @@ jobs:
     # arm64 runner immediately and keep the release build, full serial suite, and coverage gate on
     # that runner. The 150-minute bound combines the former 60m compile and 120m test budgets while
     # retaining one checkout, dependency setup, cache restore, and toolchain selection.
-    runs-on: macos-15
+    needs: change-scope
+    runs-on: ${{ needs.change-scope.outputs.full-validation == 'true' && 'macos-15' || 'ubuntu-latest' }}
     timeout-minutes: 150
     outputs:
       release-compile: ${{ steps.release-compile.outcome }}
       test-suite: ${{ steps.test-suite.outcome }}
       coverage-gate: ${{ steps.coverage-gate.outcome }}
+      docs-only: ${{ steps.docs-only.outcome }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -175,6 +196,7 @@ jobs:
           fetch-depth: 0
 
       - name: Set up Python 3.11
+        if: ${{ needs.change-scope.outputs.full-validation == 'true' }}
         uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
         with:
           python-version: '3.11'
@@ -182,6 +204,7 @@ jobs:
           cache-dependency-path: Scripts/requirements-ci.txt
 
       - name: Install Swift test subprocess dependencies
+        if: ${{ needs.change-scope.outputs.full-validation == 'true' }}
         run: |
           python3 -m venv "$RUNNER_TEMP/logic-pro-ci-venv"
           source "$RUNNER_TEMP/logic-pro-ci-venv/bin/activate"
@@ -189,6 +212,7 @@ jobs:
           python3 -c "import yaml; print('PyYAML', yaml.__version__)"
 
       - name: Cache SwiftPM downloads
+        if: ${{ needs.change-scope.outputs.full-validation == 'true' }}
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4.2.4
         with:
           # Cache downloads only. Reusing `.build` would let stale binaries or profiles qualify.
@@ -198,6 +222,7 @@ jobs:
             spm-${{ runner.os }}-${{ runner.arch }}-xcode164-validation-
 
       - name: Select Xcode and say which toolchain this is
+        if: ${{ needs.change-scope.outputs.full-validation == 'true' }}
         run: |
           sudo xcode-select -s /Applications/Xcode_16.4.app
           xcodebuild -version
@@ -208,6 +233,7 @@ jobs:
 
       - name: Build
         id: release-compile
+        if: ${{ needs.change-scope.outputs.full-validation == 'true' }}
         # Preserve independent full-suite evidence when only the release configuration fails.
         continue-on-error: true
         run: |
@@ -222,7 +248,7 @@ jobs:
         # Positive outcomes prove checkout, dependencies, cache, and Xcode selection all ran. A
         # skipped release step means one of those prerequisites failed, so do not test with an
         # unqualified fallback environment.
-        if: ${{ !cancelled() && (steps.release-compile.outcome == 'success' || steps.release-compile.outcome == 'failure') }}
+        if: ${{ needs.change-scope.outputs.full-validation == 'true' && !cancelled() && (steps.release-compile.outcome == 'success' || steps.release-compile.outcome == 'failure') }}
         continue-on-error: true
         env:
           GH_TOKEN: ${{ github.token }}
@@ -250,12 +276,24 @@ jobs:
 
       - name: Coverage gate
         id: coverage-gate
-        if: ${{ !cancelled() && steps.test-suite.outcome == 'success' }}
+        if: ${{ needs.change-scope.outputs.full-validation == 'true' && !cancelled() && steps.test-suite.outcome == 'success' }}
         continue-on-error: true
         run: bash Scripts/ci-coverage-gate.sh
 
+      - name: Preserve required validation identity for the exact roadmap-only change
+        id: docs-only
+        if: ${{ needs.change-scope.outputs.full-validation != 'true' }}
+        env:
+          CHANGE_MODE: ${{ needs.change-scope.outputs.mode }}
+          FULL_VALIDATION: ${{ needs.change-scope.outputs.full-validation }}
+        run: |
+          set -euo pipefail
+          [ "$CHANGE_MODE" = "roadmap-docs-only" ]
+          [ "$FULL_VALIDATION" = "false" ]
+          echo "Exact roadmap-only change: product build and test are not applicable." >> "$GITHUB_STEP_SUMMARY"
+
       - name: Keep the test and coverage reports whatever happened
-        if: always()
+        if: ${{ always() && needs.change-scope.outputs.full-validation == 'true' }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: coverage-${{ github.run_id }}-${{ github.run_attempt }}
@@ -270,7 +308,7 @@ jobs:
   compile:
     name: compile
     runs-on: ubuntu-latest
-    needs: [offline-guards, platform-validation]
+    needs: [change-scope, offline-guards, platform-validation]
     if: always()
     timeout-minutes: 5
     steps:
@@ -278,37 +316,51 @@ jobs:
         env:
           OFFLINE_GUARDS: ${{ needs.offline-guards.result }}
           PLATFORM_VALIDATION: ${{ needs.platform-validation.result }}
+          CHANGE_MODE: ${{ needs.change-scope.outputs.mode }}
           RELEASE_COMPILE: ${{ needs.platform-validation.outputs.release-compile }}
+          DOCS_ONLY: ${{ needs.platform-validation.outputs.docs-only }}
         run: |
-          echo "offline-guards=$OFFLINE_GUARDS platform-validation=$PLATFORM_VALIDATION release-compile=$RELEASE_COMPILE"
+          echo "offline-guards=$OFFLINE_GUARDS platform-validation=$PLATFORM_VALIDATION mode=$CHANGE_MODE release-compile=$RELEASE_COMPILE docs-only=$DOCS_ONLY"
           [ "$OFFLINE_GUARDS" = "success" ] || { echo "::error::offline-guards did not succeed"; exit 1; }
           [ "$PLATFORM_VALIDATION" = "success" ] || { echo "::error::platform-validation did not succeed"; exit 1; }
-          [ "$RELEASE_COMPILE" = "success" ] || { echo "::error::release compile did not succeed"; exit 1; }
+          if [ "$CHANGE_MODE" = "full" ]; then
+            [ "$RELEASE_COMPILE" = "success" ] || { echo "::error::release compile did not succeed"; exit 1; }
+          else
+            [ "$CHANGE_MODE" = "roadmap-docs-only" ] || { echo "::error::unknown change mode"; exit 1; }
+            [ "$DOCS_ONLY" = "success" ] || { echo "::error::roadmap-only validation did not succeed"; exit 1; }
+          fi
 
   test:
     name: test
     runs-on: ubuntu-latest
-    needs: platform-validation
+    needs: [change-scope, platform-validation]
     if: always()
     timeout-minutes: 5
     steps:
       - name: The full serial suite and coverage gate must have passed
         env:
           PLATFORM_VALIDATION: ${{ needs.platform-validation.result }}
+          CHANGE_MODE: ${{ needs.change-scope.outputs.mode }}
           TEST_SUITE: ${{ needs.platform-validation.outputs.test-suite }}
           COVERAGE_GATE: ${{ needs.platform-validation.outputs.coverage-gate }}
+          DOCS_ONLY: ${{ needs.platform-validation.outputs.docs-only }}
         run: |
-          echo "platform-validation=$PLATFORM_VALIDATION test-suite=$TEST_SUITE coverage-gate=$COVERAGE_GATE"
+          echo "platform-validation=$PLATFORM_VALIDATION mode=$CHANGE_MODE test-suite=$TEST_SUITE coverage-gate=$COVERAGE_GATE docs-only=$DOCS_ONLY"
           [ "$PLATFORM_VALIDATION" = "success" ] || { echo "::error::platform-validation did not succeed"; exit 1; }
-          [ "$TEST_SUITE" = "success" ] || { echo "::error::full serial test suite did not succeed"; exit 1; }
-          [ "$COVERAGE_GATE" = "success" ] || { echo "::error::coverage gate did not succeed"; exit 1; }
+          if [ "$CHANGE_MODE" = "full" ]; then
+            [ "$TEST_SUITE" = "success" ] || { echo "::error::full serial test suite did not succeed"; exit 1; }
+            [ "$COVERAGE_GATE" = "success" ] || { echo "::error::coverage gate did not succeed"; exit 1; }
+          else
+            [ "$CHANGE_MODE" = "roadmap-docs-only" ] || { echo "::error::unknown change mode"; exit 1; }
+            [ "$DOCS_ONLY" = "success" ] || { echo "::error::roadmap-only validation did not succeed"; exit 1; }
+          fi
 
   # The branch ruleset requires `build`, `compile` and `test`. Every other job is connected through
   # `needs`, which `check-every-ci-job-is-required.py` audits.
   build:
     name: build
     runs-on: ubuntu-latest
-    needs: [guards, offline-guards, platform-validation, compile, test, formula]
+    needs: [change-scope, guards, offline-guards, platform-validation, compile, test, formula]
     # A skipped required context is not evidence. Run the explicit result checks after every
     # dependency outcome, including cancellations.
     if: always()
@@ -317,13 +369,15 @@ jobs:
       - name: Every gate must have passed
         env:
           GUARDS: ${{ needs.guards.result }}
+          CHANGE_SCOPE: ${{ needs.change-scope.result }}
           OFFLINE_GUARDS: ${{ needs.offline-guards.result }}
           PLATFORM_VALIDATION: ${{ needs.platform-validation.result }}
           COMPILE: ${{ needs.compile.result }}
           TEST: ${{ needs.test.result }}
           FORMULA: ${{ needs.formula.result }}
         run: |
-          echo "guards=$GUARDS offline-guards=$OFFLINE_GUARDS platform-validation=$PLATFORM_VALIDATION compile=$COMPILE test=$TEST formula=$FORMULA"
+          echo "change-scope=$CHANGE_SCOPE guards=$GUARDS offline-guards=$OFFLINE_GUARDS platform-validation=$PLATFORM_VALIDATION compile=$COMPILE test=$TEST formula=$FORMULA"
+          [ "$CHANGE_SCOPE" = "success" ] || { echo "::error::change-scope did not succeed"; exit 1; }
           [ "$GUARDS" = "success" ] || { echo "::error::guards did not succeed"; exit 1; }
           [ "$OFFLINE_GUARDS" = "success" ] || { echo "::error::offline-guards did not succeed"; exit 1; }
           [ "$PLATFORM_VALIDATION" = "success" ] || { echo "::error::platform-validation did not succeed"; exit 1; }

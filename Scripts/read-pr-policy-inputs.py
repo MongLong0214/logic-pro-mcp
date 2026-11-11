@@ -185,10 +185,17 @@ def fork_checkout_validated(gh, repository, run, identity, tree):
     jobs = response.get("jobs") if isinstance(response, dict) else None
     if not isinstance(jobs, list):
         return False
-    compile_jobs = [job for job in jobs if isinstance(job, dict) and job.get("name") == "compile"]
-    if len(compile_jobs) != 1:
+    # Current CI performs the pinned checkout and validation in platform-validation; compile is
+    # only an Ubuntu result aggregator. Older successful runs may predate that split, so use the
+    # legacy compile producer only when no platform-validation job exists. Never fall back from a
+    # present failed or ambiguous current producer to an older-looking aggregation job.
+    platform_jobs = [job for job in jobs
+                     if isinstance(job, dict) and job.get("name") == "platform-validation"]
+    producer_jobs = platform_jobs or [job for job in jobs
+                                      if isinstance(job, dict) and job.get("name") == "compile"]
+    if len(producer_jobs) != 1:
         return False
-    job = compile_jobs[0]
+    job = producer_jobs[0]
     job_id = job.get("id")
     if (job.get("conclusion") != "success" or job.get("run_id") != run_id
             or job.get("run_attempt") != attempt or type(job_id) is not int or job_id <= 0):
@@ -223,7 +230,7 @@ def has_validated_current_merge(gh, repository, identity, tree):
         pull_requests = run.get("pull_requests")
         if not isinstance(pull_requests, list):
             continue
-        # GitHub may omit fork PR associations. Its existing successful compile
+        # GitHub may omit fork PR associations. The successful validation producer's pinned
         # checkout supplies the missing PR/base binding; source SHA alone does not.
         if not pull_requests and fork_checkout_validated(gh, repository, run, identity, tree):
             return True
