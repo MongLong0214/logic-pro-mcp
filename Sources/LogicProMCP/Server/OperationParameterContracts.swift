@@ -419,6 +419,10 @@ extension OperationRegistry {
             "system.setup_arm_key": .init(params: [
                 "consent": .unconstrained("only the string \"true\" consents; any other value, a JSON true included, reads as no consent"),
             ], required: []),
+            "system.setup_midi_key_commands": .init(params: [
+                "consent": .enforced(.string, .string("true"), allowed: ["true"]),
+                "mode": .enforced(.string, .string("check"), allowed: ["check"]),
+            ], required: [["consent"], ["mode"]]),
             "system.setup_control_surface": .init(params: [
                 "consent": .unconstrained("only the string \"true\" consents; any other value, a JSON true included, reads as no consent"),
             ], required: []),

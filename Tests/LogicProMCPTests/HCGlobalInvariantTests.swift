@@ -54,13 +54,18 @@ struct HCGlobalInvariantTests {
         // reached the drive it exists to perform. That is a check that cannot fail, and this file
         // would then report full coverage of a route it had never entered.
         "logic_system.setup_control_surface",
+        // Consent-gated live Key Commands inspection (#1516): the public route opens Logic's real
+        // Key Commands window. A no-consent RouteCase would only prove the refusal envelope and
+        // falsely credit the live inspection as HC-checked. Focused tests inject the inspection
+        // outcome and cover both the conservative readback and cleanup-preserving failure paths.
+        "logic_system.setup_midi_key_commands",
     ]
 
     // Ratchet: this may only shrink as live-only / legacy non-HC routes become headlessly
-    // HC-checkable. Raised 7 -> 8 on 2026-09-15 for `logic_system.setup_control_surface` — a NEW
+    // HC-checkable. Raised 8 -> 9 on 2026-11-08 for `logic_system.setup_midi_key_commands` — a NEW
     // live-only route rather than an old one lingering, and the reason it cannot be checked
     // headlessly is written beside it above.
-    private static let hcInvariantAllowlistMaxCount = 8
+    private static let hcInvariantAllowlistMaxCount = 9
 
     private static func makeLogicProjectPath(name: String = UUID().uuidString, create: Bool) throws -> String {
         let path = FileManager.default.temporaryDirectory
@@ -481,6 +486,7 @@ struct HCGlobalInvariantTests {
             "logic_project.quit",
             "logic_system.setup_arm_key",
             "logic_system.setup_control_surface",
+            "logic_system.setup_midi_key_commands",
         ]))
     }
 

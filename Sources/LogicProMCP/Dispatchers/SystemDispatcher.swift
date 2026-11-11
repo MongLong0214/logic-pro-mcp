@@ -41,6 +41,28 @@ struct SystemDispatcher: OperationTraceDispatching {
         ), isError: true)
     }
 
+    /// Consent-first refusal for `setup_midi_key_commands`. The public check still
+    /// opens and searches Logic's Key Commands window, so it requires explicit
+    /// authorization before validation, tracing, activation, or inspection.
+    static func setupMIDIKeyCommandsConsentRequiredResult(
+        _ params: [String: Value]
+    ) -> CallTool.Result? {
+        guard params["consent"]?.stringValue == "true" else {
+            return toolTextResult(HonestContract.encodeStateC(
+                error: .consentRequired,
+                hint: "Checking the MCP MIDI Key Command setup opens and searches Logic's Key Commands "
+                    + "window. No Logic window was opened or inspected because this request has no "
+                    + "accepted setup authorization. The request terminated.",
+                extras: ["stage": "consent", "write_source": "none",
+                         "write_attempted": false, "configuration_write_attempted": false,
+                         "terminal": true, "terminal_scope": "mcp_request_only",
+                         "safe_to_retry": false, "human_intervention_required": false,
+                         "human_intervention_requests": 0, "human_dependent_transitions": 0]
+            ), isError: true)
+        }
+        return nil
+    }
+
     /// #884 — the control-surface consent gate. Separate from the arm-key gate because it names a
     /// different configuration write: this one installs a device into Logic's control-surface setup
     /// and rebinds two MIDI ports, and a consent sentence that described the Key Commands window
@@ -299,7 +321,7 @@ struct SystemDispatcher: OperationTraceDispatching {
             Diagnostics, help, and saga coordination for the Logic Pro MCP server. \
             Commands: health, permissions, refresh_cache, export_support_bundle, saga_preflight, \
             saga_execute, saga_status, saga_cancel, list_recent_traces, get_trace, clear_traces, \
-            setup_arm_key, setup_control_surface, help. \
+            setup_arm_key, setup_midi_key_commands, setup_control_surface, help. \
             Params by command: \
             help -> { category: String } (returns full param docs for a dispatcher); \
             refresh_cache -> {} (force AX re-poll); \
@@ -331,6 +353,9 @@ struct SystemDispatcher: OperationTraceDispatching {
             saga_status/saga_cancel -> { idempotency_key: String }; \
             setup_arm_key -> { consent: "true" } (one-time consent-gated Key Commands GUI \
             drive that assigns the coordinate-free record-arm chord; no mouse); \
+            setup_midi_key_commands -> { consent: "true", mode: "check" } (consented \
+            check of the first fixed MIDI Key Command row; this slice does not press Learn, \
+            write configuration, or certify the assignment source); \
             setup_control_surface -> { consent: "true" } (one-time consent-gated install of the \
             Mackie Control surface plus binding of both its MIDI ports to this server's port, \
             which is what makes MCU operations take effect; no mouse). \
@@ -421,6 +446,42 @@ struct SystemDispatcher: OperationTraceDispatching {
                     },
                     ownsGate: ownsGate
                 )
+            )
+        },
+        midiKeyCommandSetup: @escaping @Sendable (
+            Bool, MIDIKeyCommandSetup.Mode
+        ) async -> MIDIKeyCommandSetup.Outcome = { consent, mode in
+            let context = OperationTraceContext.current
+            let ownsGate: @Sendable () -> Bool = { context?.ownsGate() ?? false }
+            let runtime = MIDIKeyCommandSetup.Runtime(
+                inspect: { entry in
+                    await Task.detached(priority: .userInitiated) {
+                        switch MIDIKeyCommandCheckSession.inspect(
+                            entry: entry,
+                            runtime: .production(ownsGate: ownsGate)
+                        ) {
+                        case .inspected(let inspection):
+                            return .inspected(inspection)
+                        case .failed(let stage, let cleanupConfirmed):
+                            return .failed(stage: stage, cleanupConfirmed: cleanupConfirmed)
+                        }
+                    }.value
+                },
+                learn: { _ in
+                    .failed(
+                        stage: "apply_not_supported",
+                        cleanupConfirmed: true,
+                        writeAttempted: false
+                    )
+                },
+                verifyBackgroundExecution: { _ in .noObservedEffect },
+                recordVerifiedIfOwned: { _ in false },
+                permitsMutation: ownsGate
+            )
+            return await MIDIKeyCommandSetup.run(
+                consent: consent,
+                mode: mode,
+                runtime: runtime
             )
         },
         // #884 — the consent-gated control-surface install. The default wires the production
@@ -715,6 +776,112 @@ struct SystemDispatcher: OperationTraceDispatching {
                 ), isError: true)
             }
             return await finalizeTrace(armResult, traceID: armTraceID)
+
+        case "setup_midi_key_commands":
+            if let refusal = Self.setupMIDIKeyCommandsConsentRequiredResult(params) { return refusal }
+            guard params["mode"]?.stringValue == MIDIKeyCommandSetup.Mode.check.rawValue else {
+                return toolInvalidParamsResult("mode must be \"check\"")
+            }
+            let traceID = await startTraceIfEnabled(command: command)
+            let setupOutcome = await midiKeyCommandSetup(true, .check)
+            let setupResult: CallTool.Result
+            switch setupOutcome {
+            case .consentRequired:
+                setupResult = Self.setupMIDIKeyCommandsConsentRequiredResult([:])
+                    ?? toolTextResult(
+                        HonestContract.encodeStateC(
+                            error: .consentRequired,
+                            extras: ["stage": "consent", "write_attempted": false]
+                        ),
+                        isError: true
+                    )
+            case .checked(let inspection):
+                let operation = MIDIKeyCommandBindingCatalog.entries.first?.operation
+                    ?? "transport.toggle_metronome"
+                var sourceUnverified: [String] = []
+                var missing: [String] = []
+                var conflicting: [String] = []
+                var unknown: [String] = []
+                var provisional: [String] = []
+                var unreadable: [String] = []
+                var ambiguous: [String] = []
+                let inspectionName: String
+                switch inspection {
+                case .matchingLabelUnverifiedSource:
+                    inspectionName = "matching_label_unverified_source"
+                    sourceUnverified = [operation]
+                case .missing:
+                    inspectionName = "missing"
+                    missing = [operation]
+                case .conflicting:
+                    inspectionName = "conflicting"
+                    conflicting = [operation]
+                case .unknownCommand:
+                    inspectionName = "unknown_command"
+                    unknown = [operation]
+                case .provisional:
+                    inspectionName = "provisional"
+                    provisional = [operation]
+                case .unreadable:
+                    inspectionName = "unreadable"
+                    unreadable = [operation]
+                case .ambiguous:
+                    inspectionName = "ambiguous"
+                    ambiguous = [operation]
+                }
+                setupResult = toolTextResult(HonestContract.encodeStateB(
+                    reason: .readbackUnavailable,
+                    extras: [
+                        "operation": OperationID.systemSetupMIDIKeyCommands.rawValue,
+                        "mode": MIDIKeyCommandSetup.Mode.check.rawValue,
+                        "inspection": inspectionName,
+                        "catalog_count": 1,
+                        "checked_operations": [operation],
+                        "bound_operations": [String](),
+                        "source_unverified_operations": sourceUnverified,
+                        "missing_operations": missing,
+                        "conflicting_operations": conflicting,
+                        "unknown_commands": unknown,
+                        "provisional_operations": provisional,
+                        "unreadable_operations": unreadable,
+                        "ambiguous_operations": ambiguous,
+                        "write_attempted": false,
+                        "configuration_write_attempted": false,
+                        "cleanup_confirmed": true,
+                        "detail": "The Key Commands row was checked, but this slice does not certify "
+                            + "the assignment source or promote routing readiness.",
+                    ]
+                ))
+            case .verified:
+                setupResult = toolTextResult(HonestContract.encodeStateC(
+                    error: .readbackUnavailable,
+                    hint: "Check mode cannot promote a binding to verified readiness.",
+                    extras: [
+                        "stage": "unexpected_verification",
+                        "write_attempted": false,
+                        "configuration_write_attempted": false,
+                        "cleanup_confirmed": true,
+                    ]
+                ), isError: true)
+            case .failed(let stage, let cleanupConfirmed, let writeAttempted):
+                setupResult = toolTextResult(HonestContract.encodeStateC(
+                    error: writeAttempted ? .axWriteFailed : .readbackUnavailable,
+                    hint: "The MIDI Key Commands check did not complete.",
+                    extras: [
+                        "stage": stage,
+                        "operation": OperationID.systemSetupMIDIKeyCommands.rawValue,
+                        "mode": MIDIKeyCommandSetup.Mode.check.rawValue,
+                        "write_attempted": writeAttempted,
+                        "configuration_write_attempted": writeAttempted,
+                        "cleanup_confirmed": cleanupConfirmed,
+                        "terminal": true,
+                        "terminal_scope": "mcp_request_only",
+                        "safe_to_retry": cleanupConfirmed && !writeAttempted,
+                        "human_intervention_required": !cleanupConfirmed,
+                    ]
+                ), isError: true)
+            }
+            return await finalizeTrace(setupResult, traceID: traceID)
 
         case "setup_control_surface":
             // Consent-first, ahead of the trace and any app activation: this writes to the user's
