@@ -33,7 +33,7 @@ struct ResourceProvider {
     }
 
     /// Stable release timestamp stamped into every resource's `lastModified`.
-    /// Set this to the actual UTC release cut, never a planned or observation date.
+    /// Match the latest CHANGELOG release date, never a planned or observation date.
     /// Lets caching clients invalidate their local mirror on server upgrade.
     private static let versionReleaseTimestamp: String = "2026-11-11T00:00:00Z"
 
