@@ -87,9 +87,10 @@ import Testing
     #expect(ci.contains("'macos-15-intel'"))
     #expect(!ci.contains("&& 'macos-15' ||"))
     #expect(release.contains("runs-on: macos-15-intel"))
-    #expect(release.contains("os: [macos-15-intel, macos-26-intel]"))
+    #expect(release.contains("os: [macos-15-intel, macos-26]"))
     #expect(!release.contains("macos-14"))
     #expect(!release.contains("os: [macos-15,"))
+    #expect(!release.contains("os: [macos-15-intel, macos-26-intel]"))
 }
 
 @Test func ci_documentationShortcutCannotHideSourceRenames() throws {
