@@ -40,11 +40,149 @@ still list the issue rather than delete its row.
 It does not check the prose. The "waiting on" column, the order, and the state block below are still
 claims dated by the "measured" line, and only issue numbers and open/closed are mechanised.
 
-## State — measured 2026-10-28 at integration head `16f6cc69`
+## State — measured 2026-11-12 17:03 KST at `main` `b7053947`
 
 ```
-24 open issues and 4 open pull requests after paginated GitHub API reads · issue bodies and owner comments remain the acceptance authority
+29 open issues · 4 open pull requests, all pre-existing drafts · latest stable release v3.18.0 · Homebrew installation v3.18.0 · source version 3.19.0 · no v3.19.0 tag or release
 ```
+
+The counts above come from paginated GitHub reads. Issue bodies and maintainer comments remain the
+acceptance authority; neither a local pass, a partial native run, nor an issue-closing action alone is
+completion.
+
+### Current delivery readback
+
+- PR #1573 merged exact head `068f92e6` as `25baaf85`. It repairs CommitLore release-cut
+  provenance only; it does not change product behaviour or qualify a release candidate.
+- PR #1574 merged exact head `de509595` normally as `b7053947`. The product commit `5500bd70` defers all four virtual-MIDI
+  endpoint families until first demand, and its native two-process test passed twice: two
+  same-parent children started one second apart, the passive process owned no MIDI endpoints,
+  the tool-serving process acquired its demanded endpoint, and late demand from the passive
+  process received the terminal ownership conflict. The follow-up commit changes only Doctor
+  aggregate expectations; product, package and script bytes are unchanged. Focused tests pass
+  10/10, affected tests pass 130/130 (133/133 in independent review), and review approved. Exact-head
+  run 43161685694 attempt 3 passed all required checks; platform validation passed 7,929 tests and
+  the 83.78% region / 90.93% line coverage gate. The merge has parents `25baaf85` and the exact
+  reviewed head, and the ten expected product/test paths were read back from `origin/main`. Issue
+  #1568 closed only after that merge receipt; the broader release gate remains open.
+- PR #1569 merged exact head `ecb147d8` as `f5280f59` after policy, guards, full serial
+  platform tests and coverage passed. It binds validation evidence to the exact pull-request merge
+  and routes only an exact two-parent, regular-file-only `docs/roadmap/README.md` change to the
+  Ubuntu applicability lane; every other change still fails closed to full macOS validation. This
+  roadmap pull request is the first downstream exercise of that narrow route.
+- PR #1564 merged exact head `543cd876` as `bc5babee` after the required hosted checks passed. It
+  corrects Logic 13 control-bar container discovery, but #1565 demonstrates that the wider live-AX
+  timeout and late-mutation problem is not explained by control-bar discovery alone.
+- Draft PR #1566 is exact head `97874a2f`; its code-validation checks pass, but the latest
+  `pr-policy` is red because no completed code validation matches the edited pull-request merge,
+  and the branch is behind `main`. The larger bundled tutorial fixture identifies 165 project tracks while the
+  collapsed visible-track read exposes 11 rows, and repeated refreshes still reach the 25 s
+  ceiling. A bounded background-Mixer preemption correction has deterministic RED/GREEN focused
+  coverage and independent review and is now on the PR head, but has no renewed native proof. The
+  preserved `AX-Native-Techno-124.logicx` package reports `NumberOfTracks = 74` and its evidence
+  copy matches the original `ProjectData` and metadata hashes, but it has not been opened or proven
+  to expose 74 AX-visible rows on Logic 13. The native recurrence therefore remains open.
+- Draft PR #1560 is exact head `12e2bd06`; its original hosted checks pass and Logic 13 native
+  evidence shows cache-only `resolve_path` calls remain below 24 ms, including below 4 ms while an
+  AX read is in flight. A merge-tree check against both current `main` and the prospective #1574
+  integration finds one conflict, `CHANGELOG.md`; all three product/test paths auto-merge. Renewal
+  must keep current main's release text and add only #1550's Unreleased entry, then run exact-head
+  gates before merge.
+- Draft PR #1561 is exact head `14649e41`; its original hosted checks pass, but three Logic 13
+  reruns prove List-view stem export still refuses at component selection. Column view uses the
+  existing `AXTextField → AXGroup → AXList/AXSelectedChildren` chain; Logic 13 List view exposes
+  only the measured ancestry `AXTextField → AXCell → AXRow → AXOutline (ListView)`.
+  `AXSelectedRows` is a candidate mechanism that still requires fail-closed write/readback and
+  navigation proof. A merge-tree check against current `main` finds one conflict,
+  `CHANGELOG.md`; the existing product/test paths auto-merge. Its current head is not the complete
+  #1553 fix and must not merge as such.
+- Draft PR #1572 is exact head `06205243`; all hosted checks on that head pass. It is the bounded
+  late-mutation safety slice for #1565, not the whole issue: mutation deadlines retain ownership
+  through settlement and refuse unproved late success, while the broad first-AX/read timeout still
+  needs timing instrumentation and exact-candidate native qualification. The branch is behind
+  `main` and must be renewed before merge.
+- The #1530 display-mode fix is merged and now has positive Logic 12.4 native readback on a main
+  commit containing it; #1530 is closed. The #1552 sample-rate fix is merged and has
+  positive Logic 13 native readback, while its original Logic 12.4 rerun remains unclaimed.
+
+### CI throughput plan — awaiting explicit approval, not implemented
+
+- Evidence does not establish account concurrency or hosted-runner capacity as the queue root
+  cause, so this plan does not add runners, change billing or alter account settings. A measured
+  macOS job took 105 min 03 s: 12 min 31 s release build, 37 min 21 s instrumented build and
+  54 min 18 s tests. Exact merge identity remains bound to the event base/head and ordered parents.
+- PR #1574 run 43161685694 supplies a second exact measurement: 7,929 tests passed in 3,128.693 s
+  with seven known issues, followed by the coverage gate at 83.78% regions / 90.93% lines. The
+  separate `offline-guards` job completed in 26 min 35 s on attempt 1 but had one two-second
+  wall-bound failure; attempt 2 then crossed its declared 30-minute job budget and GitHub cancelled
+  it. Attempt 3 passed in 15 min 14 s and allowed the fail-closed compile/build fan-in to pass. That
+  runtime variance is a measured bottleneck, not permission to weaken the guard or replace
+  exact-candidate validation with a local pass.
+- The reference audit used `pingdotgg/t3code` head `ddc4f576`; its successful run completed in
+  177 seconds with up to 15 concurrent jobs, but one server shard reused 35 of 58 remote test
+  results and rechecked only one hit. We borrow bounded independent fan-out, deterministic shard
+  allocation, `fail-fast: false` and a required final fan-in—not cached test success as a substitute
+  for this repository's fresh full suite, coverage, identity or native qualification.
+- Slice 1 changes only `Scripts/run-repo-guards.py` and its self-test: run discovered Python guards
+  with at most four child processes, keep both canon-index writers exclusive from every reader and
+  writer, avoid nesting the internal six-worker verifier, and require exact-once inventory plus
+  timeout/failure/zero-test/skip propagation. Worker count one is the rollback. No guard, assertion
+  or skip budget is removed; paired serial/parallel measurement decides whether it is retained.
+- Slice 2 reorders the existing macOS job after its one instrumented build: run the 74 Doctor
+  enterprise contracts as a smoke prefix, then the unchanged full serial suite and coverage gate.
+  A wrong or empty selection fails, smoke failure still runs the full suite, smoke profiles do not
+  enter final coverage, and both results remain required. This would have exposed the observed
+  aggregate failure about 54 minutes earlier without claiming lower runner occupancy.
+- Only after separate equivalence proof may Slice 3 test a maximum two-process Swift split. It
+  must prove serial-inventory exact-once, result/coverage equivalence, isolated profiles and full
+  failure/cancellation propagation on the same HEAD, binary and toolchain; native opt-in remains
+  serial. The measured ideal upper bound is about 13 minutes and may be zero under contention.
+- Every slice is WIP 1 with RED/GREEN contracts, independent exact-head review, required CI,
+  normal merge and readback. `build`, `compile`, `test`, `pr-policy`, identity guards, coverage
+  floors, pinned actions/toolchain, least privilege, security/failure/restore paths and native
+  qualification stay required. Workflow or settings bytes wait for explicit approval.
+
+### v3.19.0 release gate and Logic 13 compatibility
+
+The current source candidate is `b7053947a89c2ea3802c5f19f60aa6f52c002881`, version 3.19.0.
+No final universal release binary has been built and qualified from these exact bytes. The prior
+`bc5babee` candidate's universal binary SHA-256 was
+`e0af37e39ba40a793bd2c6226a7707af84cc99b1896eb7df243bfe61e0d19c41`; its release build,
+ad-hoc code-sign verification and four required local permissions passed, but those earlier bytes
+are not the current candidate and that result was not a release verdict.
+
+The prior `bc5babee` candidate's Logic Pro 13.0 desktop/ko-KR/core/cold/empty read-only qualification completed
+140 cases: **20 passed, 10 failed, 110 not qualified, 0 waived**. Nine operation cases fail while
+refreshing the read probe or independent readback, and the axis aggregate fails with them. Therefore
+the candidate is not promotable and v3.19.0 must not be tagged or published yet.
+
+| release decision | exact requirement before the cut |
+|---|---|
+| Logic 13 runtime | Resolve #1565's broad live-AX timeout and prove that a timed-out mutation cannot land later without a terminal uncertain-write result. Re-run the exact candidate in en-US and ko-KR; one locale or control-bar-only evidence is insufficient. |
+| Poller / refresh | Settle #668 on the exact candidate with the approximately 74-track recurrence, deadline/ceiling evidence, affected tests and hosted exact-head CI. The 31-track result does not close it. |
+| Already included | Preserve the merged Logic 13 control-bar census (#1564), 48 kHz sample-rate correction (#1552/#1558), and display-mode cleanup (#1530/#1539); read them back from the final bytes. |
+| Candidate fixes | Renew #1560 on current `main`; fix #1553 beyond the sidebar step so both List and Column paths retain exact ownership and fail-closed counterexamples. Neither old draft head is release-ready. |
+| Client runtime ownership | PR #1574 merged exact head `de509595` as `b7053947` after its two-process native proof and every exact-head hosted gate passed. The merge parents and ten expected paths were read back from `origin/main`. Doctor explicitly reports runtime ownership as not checked and hands live verification to `logic://system/health`; it does not itself prove readiness. Preserve this receipt in the final candidate. |
+| Qualification / trust | Complete the same-final-bytes en-US/ko-KR read-only and approved mutation/restore matrix, independent trusted verification, final signing with the existing authorized private key, public proof publication and unauthenticated retrieval (#284/#816/#1028). An ad-hoc signature or missing key is not promotable evidence. |
+| Deferred claims | Do not make whole-feature claims for #1516, Creator Studio #1546, or the remaining ADR backlog merely because bounded prerequisites ship. Creator remains outside `shipVariants` until contributor evidence and a product-scope decision exist. |
+
+The full Logic 13 gate is: exact binary identity; both supported locales; public read-only surface;
+approved mutation plus owned restoration; timeout/cancellation and late-effect observation; wrong
+target, modal, menu and project-identity refusals; final project/menu/transport readback; trusted
+signature and public-proof verification. Existing evidence is reused only when the candidate bytes,
+Logic build, locale, fixture and covered acceptance are unchanged.
+
+### Open-issue execution map
+
+Every one of the 29 issues open at measurement time appears in the table below. The immediate open
+release/compatibility lane is #284, #668, #816,
+#1028, #1550, #1552, #1553 and #1565. The next product lane after the
+release boundary is #1516, #1571, #291 and #1403. The dependency/backlog lane is #299, #302-#306, #862,
+#884, #955, #967, #969-#971, #1417 and #1430. #1546 is contributor-dependent; #308 remains the
+permanent programme ledger and is not closed to make the count look smaller.
+
+The 2026-11-08 target was missed. No acceptance is downgraded and no issue is closed merely to match
+that date; the next release cut is controlled by the exact blockers above.
 
 Historical delivery readback for the 2026-10-28 census (this block controls when an older snapshot below names a
 pre-integration head):
@@ -86,7 +224,7 @@ the current PR-state readback when they name an older head or say that a now-mer
 
 | ADR | issue | state | what it is waiting on |
 |---|---|---|---|
-| ADR-001 | #284 | OPEN | **CORRECTION (#956): the removal described next was reversed.** The owner reopened #284 on 2026-09-14 and that decision supersedes the retirement; #926 (`5519079e`) restored the runner, transport, contracts/promotion and CLI on 2026-09-19, and restoration alone did not wire independent enforcement or publish evidence (#284 §2). #373 owns implementation, #290 the atlas evidence adapter and #816 publication. The 2026-09-13 reading, kept as history: The subject was removed on 2026-09-13. The qualification CLI (`--qualify`, `--verify-promotion`), the attestation/waiver types, the `trusted-verifier` product, the managed fixtures and the release-workflow gates that consumed them are all gone; `release.yml` carries no qualification step and `Package.resolved` dropped the sixteen transitive dependencies the verifier pulled in. The row that stood here described a critical path — #373 produces a bundle, #816 publishes it, #815 makes the gates unconditional — through machinery that no longer exists. A future release gate is new work with its own contracts, not a continuation of this. |
+| ADR-001 | #284 | OPEN | The qualification runner, transport, promotion contracts, trusted verifier, final-artifact consumer and controlled public-evidence path are present again; #1416 merged the bounded publication/consumer preparation. No current exact final candidate has completed terminal acceptance. A release must bind the actual promoted executable and both release archives to source and version; reconcile every required operation as live-credited or covered by a valid governed, unexpired, visible waiver; carry required same-target mutation readback and owned restore/compensation evidence; and pass Desktop en-US/ko-KR `core/cold/empty` qualification on those same bytes. Independent trusted acceptance and rejection must be load-bearing before publication, after which #816 still requires unauthenticated retrieval plus independently anchored external consumer verification, tamper/substitution rejection and truthful public links/scope. The complete ADR backlog is not an invented release prerequisite; unsupported or deferred claims remain explicit. Closed #373 supplied the candidate/private-bundle path and closed #290 the atlas adapter; open #284 and #816 own the remaining parent acceptance and publication. |
 | ADR-002 | #285 | closed | |
 | ADR-003 | #286 | closed | |
 | ADR-004 | #287 | closed | |
@@ -111,7 +249,7 @@ Also open, outside the ADR set:
 |---|---|---|
 | #308 | OPEN | **The ADR programme's scheduling entry (START HERE).** It selects work and points to one owning issue body per implementation contract, and it stays open permanently and outside release and completion milestones (#308 §1, #956 §4). History: closed 2026-09-05 as superseded by the phases below, on the reasoning that a second copy of the order would drift; reopened 2026-09-21 by the owner, which moved order out of this file rather than into both. The phases below are now dated history (see *Order — the phases*). |
 | #369 | closed | shipped #737 (`466dc20f`) — the drive works against a localized Logic. Seven live rounds found six independent defects, each fatal alone: English-only matching, the panel read ~1 s before it could exist, `AXURL` read as a String, the destination searching the wrong AX roles, navigation confirmed by a *change* when the panel reopens on the last destination, and a progress dialog titled `Logic<U+00A0>Pro`. Terminal State B is the design: three tracks named "Studio Grand" came out as `Studio Grand.aif`/`_1`/`_2`, names Logic assigns after the export |
-| #373 | OPEN | **CORRECTION 2026-09-20: this row opened with "THE SUBJECT OF EVERYTHING BELOW WAS REMOVED ON 2026-09-13", and that stopped being true on 2026-09-19.** #926 (`5519079e`) restored the qualification subsystem: `Sources/LogicProMCP/Qualification/` holds `ProductionReadinessContracts.swift`, `PromotionGate.swift`, `QualificationRunner.swift`, `SemanticOracles.swift` and the rest, and `--qualify`/`--verify-promotion` are back in `MainEntrypoint.swift:66`. It also fixed the defect that made the old evidence unverifiable — a mutating operation's probe is required to have been REFUSED fail-closed while its record was filed under a shape rule demanding `operationIsError == false`, which is not satisfiable, so the verifier rejected every mutating pass while the runner reported it passed; a case now carries the SHA-256 of its record and the verifier checks that binding. WHAT IS STILL MISSING IS THE GATE, not the subject: the seven release steps all carried `if: vars.ADR001_QUALIFICATION_ENFORCED == 'true'` and that variable is set nowhere, deleting the `if:` makes every tag require a `QUALIFICATION_EVIDENCE_URL` secret that does not exist (release OFF, not gate ON), and the old pin is 7,522 lines behind and would reject all 21 Phase-A passes. Wiring it is its own change with a run URL as its acceptance. The Phase-A measurements below are kept and are still facts about the binary they were taken against. Historical record follows. Phase A IS ALREADY DONE and was invisible. Driven live 2026-09-07 against the release binary, **21 of 23** read-only operations report `passed` with `semanticReadback` — not the 15 this row carried, and not the zero the contract evaluator reports. The two that do not are both already understood: `tracks.list_library` is the failure pinned in `knownLiveGateFailures`, and `tracks.scan_plugin_presets` needs a plug-in window. All 90 mutating operations report `notQualified`/`typedDeferral` BY DESIGN — the runner probes them with parameters that must be refused and asserts `writeAttempted == false`, so a qualification run cannot modify a project, and adding a `.passed` branch would be moving the grader. So the remaining work for the read-only surface is NOT producing coverage; it is carrying coverage that exists into the release evidence bundle and into a form the static evaluator can read — that evaluator HAD no live `.passed` input at all and `waivers.json` holds zero entries, so its 113/113 measured its own blindness rather than the product's. The channel now exists: `ProductionReadinessContractEvaluator.evaluate` takes `liveCreditedOperationIDs`, produced only by `PromotionGate.liveCreditedOperationIDs(in:)` applying the release gate's own pass predicate to a real attestation, and defaulting to empty so a bare tree answers as it did before. So the 113/113 is still what this tree reports, but it is now a statement about missing evidence rather than about a missing input. NOT established: that the 21 live passes survive being carried through a bundle — no attestation has been fed to this parameter yet. NOT established: whether a different fixture moves any of the 21, and whether the transport's verdict is release-grade — a bundle also needs the raw transcript, the manifest entry and the signature **MEASURED 2026-09-14 — the subject is gone from the code, and now it is counted rather than asserted.** Grepping `Sources/` for each named type: `QualificationAttestation` 0 files, `ProductionReadinessContractEvaluator` 0, `PromotionGate` 0, `QualificationTransport` 0, `liveCreditedOperationIDs` 0. `QualificationCase` appears **once in the whole tree and it is a doc comment** — the type does not exist. That comment lived in `SelectorAtlas/AtlasQualification.swift`, describing a case it would emit into an attestation and a case manifest; it is corrected in this pass to say the run it was built to feed was removed with ADR-001, and that what survives is the pure decision plus its `--probe-atlas-diff` driver. So this issue's parent (#284) closed as retired and its machinery is measurably absent: what it needs before coverage is a SUBJECT, and the 21-of-23 live read-only passes recorded above remain true about the product's read surface either way. |
+| #373 | closed | GitHub closed this execution issue on 2026-11-07. Closure is not a release PASS: its last native candidate `6e900b1b` produced 40 passed, 3 failed, 90 not qualified and 6 protocol-smoke cases on Logic 12.3/ko-KR, and explicitly left the en-US matrix, stable request-owned Mixer associations, signed two-axis evidence and publication open. Those live obligations remain load-bearing under parent #284, publication #816 and fixed-verifier #1028; the current v3.19.0 candidate is judged by the release gate above rather than by the closed issue state. |
 | #448 | closed | **Closed 2026-09-09 as not planned; a non-completion transfer, not delivery (#308 §3).** The shipped sort stays. The remainder moved: population and hierarchy to #965, naming to #968, arbitrary order and stacks to #969, colour to #970, plan and execution to #966/#971. The row as written before that transfer: `tracks.sort_verified` ships: it drives `Track > Sort Tracks by`, binds the verdict to the menu leaf actually pressed, and checks the effect against a complete caller-supplied order — so a sort by the wrong criterion cannot pass, and an already-sorted project stays State B because a no-op cannot prove the command ran. It refuses a collapsed stack (a scope it cannot enumerate) and a duplicate-name project (an identity it cannot key). Driven live 2026-09-03: 4 of 4 State A. Two things measured and NOT fixed here — Logic 12.3's `트랙 이름` leaf performs no operation at all while `악기 이름` and `생성일` work, all seven reading `AXEnabled = true`; and the settle witness is #757. Still open: anchor-based reorder is drag-only, and colour still needs a definition of verified for a write nothing reads back  MEASURED 2026-09-08: the colour half is not a design question. `AXUIElementCopyAttributeNames` over every element reachable from the main window — **91 distinct attribute names, 0 containing colour, 0 failed name calls, 0 empty answers — and 20 child lists the sweep could NOT read**, so twenty subtrees were never entered. The Mixer, revealed by pressing its own named button, added zero names. A track header declares nineteen attribute names in total and none could carry a colour. So the question moves from what `verified` should mean to whether any observable consequence exists — and none was found anywhere the sweep reached. The record is `partial`, not a wall: this is a census of attribute NAMES, a value could still be carried inside `AXValue` or spelled into `AXDescription`, and twenty subtrees refused to be read. Remaining routes are a different surface (project file, palette window) or an explicit refusal. Limits stated in the record: names not values, palette and dialogs unswept, depth 16 ||
 | #678 | closed | the drift guard and this file's update rule shipped in #684 |
 | #735 | closed | legacy `MIDIPacketList` traversal walked past a value copy and killed the server (SIGBUS), reachable by anyone sending to a published port. `MIDIPacket.data` imports as a fixed 256-byte tuple, so a value copy captures one packet's storage however many the list holds; both sites now walk the ORIGINAL pointer with `unsafeSequence()` and reject rather than truncate an oversized packet. `MIDIFeedback.parse` took the list BY VALUE, so no change inside its body could have fixed it — the signature takes a pointer now. Independently confirmed by #683's reporter: 5 of 5 crashes in isolation at 40 packets per list with the defect, 0 of 8 with the fix, and 2 of 3 in-server deaths on `LogicProMCP-MIDI-In`. The live-gate rule that could not express this proof is #754; the inbound destination nothing reads is #755 |
@@ -262,6 +400,16 @@ Also open, outside the ADR set:
 | #1420 | closed | Closed by #1431, merged normally as `e5e0af92`. The tested source tree is byte-identical to the merge tree and the required final-head checks passed. `record_sequence` now acquires the four-component Beats display mode under retained ownership, restores the originally checked mode with observed menu cleanup on every exit, and blocks import until that restoration is verified. This closure does not claim the separate Logic 12.4 activation failure in #1084 is fixed; reporter retest remains requested there. |
 | #1422 | closed | Closed by PR #1429, merged normally at `3227b459` after exact-head review and all required checks passed. Default duplicate-name requests remain nonmutating and return every collision; only explicit `allow_temporary_track_rename` consents to the owned temporary rename. The merged path retains physical-target continuity, publishes only through the managed no-overwrite boundary, restores on success/failure/cancellation/deadline while custody still holds, and refuses verified success rather than overwriting a later user rename when restoration cannot be proved. |
 | #1430 | OPEN | Add read-only `get_param_verified` coverage for ChromaVerb, Space Designer, Tape Delay, Stereo Delay and Overdrive in the issue's priority order. An explicit occupied `plugin_insert_ref`, verbatim display value, truthful partial coverage and verified editor cleanup are required. Exact AX row/control evidence for these plug-ins has not yet been captured, so no parameter metadata is inferred from UI names alone. |
+| #668 | OPEN | Reopened on the Logic 13 qualification path after the published recurrence criterion fired again. Draft PR #1566 at `97874a2f` has its code-validation checks and independent review passing but is behind `main`; its latest `pr-policy` is red because no completed code validation matches the edited pull-request merge. The larger bundled tutorial fixture identifies 165 project tracks while the collapsed visible-track read exposes only 11 rows; three warmups take 25.56–26.67 s, the five measured solo cycles have 21.34 s median/25.70 s maximum with one ceiling hit, four contended cycles have 22.45 s median with no ceiling hit, and coalesced worst case is about 42.68 s. Sampling places the owner cycle in `defaultGetMixerStates`. The exact PR head contains the bounded explicit-refresh preemption correction and passes 15/15 coalescing tests, 23/23 text-edit-yield tests and 26/26 `StatePoller` tests, but has no renewed native result. A preserved `AX-Native-Techno-124.logicx` candidate reports metadata `NumberOfTracks = 74`; a new evidence copy is byte-identical for `ProjectData` and `MetaData.plist`, but metadata count is not AX-visible-row proof and the copy has not been opened in Logic 13. Remaining acceptance is current-main renewal and an exact-candidate native recurrence proving approximately 74 visible rows below the deadline without fields being skipped, then affected/release gates, exact-head CI and independent review. |
+| #1516 | OPEN | PR #1522 (`cc2edb33`) merged the strict first binding-catalog entry; #1562 (`dcd10403`) merged the internal fail-closed read-only binding check; #1563 (`9dee61e6`) merged the public consented check command. These are prerequisites, not the whole feature. Remaining acceptance is Learn through the owned MIDI port, source-aware functional verification, persistence/invalidation, per-operation readiness and fallback suppression, health/doctor/docs, a qualified region command, and live background execution with independent result and focus/restoration evidence. Local health/record-doctor branches exist but have no current-main PR or fresh exact-head gate and are not release claims. |
+| #1530 | closed | Closed by the pull request carrying this row. PR #1539 merged as `8c926dc8` with deterministic stuck-AXCancel fallback and fail-closed counterexamples. A reporter then reran a main commit containing that merge on Logic 12.4/en-US: `record_sequence` imported the eight-note region, restored Beats & Project with no stuck menu, and the project survived save/reopen. The separately observed untitled-project, GM-lane, Bounce-dialog and MIDI-note-read behaviors are not silently folded into this menu fix. |
+| #1546 | OPEN | Creator Studio remains outside `QualificationAxis.shipVariants`, and the maintainer host has no `com.apple.mobilelogic`, so native Creator support cannot be claimed locally. Waiting on the reporter's bounded draft PR and Creator Studio 13 disposable-project evidence: explicit developer opt-in only, desktop still default, RED/GREEN test, exact app/macOS/locale/operation/readback/cleanup, and no private paths or attestation. Stable support and the separate #683 MCU question remain unclaimed until that evidence and a product-scope decision exist. |
+| #1550 | OPEN | Draft PR #1560 at `12e2bd06` moves only cache-only `library.resolve_path` reads onto an atomic snapshot; all original hosted checks pass. Logic 13 native comparison found at most 24 ms on the candidate and under 4 ms while `get_regions` held AX work, with structured response equivalence across leaf/folder/miss/malformed/cold-cache cases. Merge-tree checks against current `main` and the prospective #1574 integration identify only a `CHANGELOG.md` conflict; the three product/test paths auto-merge. Renew by preserving current main's release text and adding only #1550's Unreleased entry, without widening AX/mutation ownership; rerun focused/affected/exact-head gates and reuse native evidence only if the relevant bytes are proven unchanged. The original Logic 12.4 long-wait case remains version-specific. |
+| #1552 | OPEN | PR #1558 merged as `ca7e2b63` and prefers the saved project sample rate when the live transport value disagrees. Deterministic tests and hosted CI pass. On Logic 13/en-US the exact merge reports 48000 from both `project_file` and `ax_live` for the same 48 kHz project, matching the Project Settings UI; the pre-fix build reports 44100. This correction is included in the current release candidate. The original Logic 12.4 native rerun is still absent, so that version is not retroactively claimed. |
+| #1553 | OPEN | Draft PR #1561 at `14649e41` structurally fixes the first sidebar-outline ambiguity and its original hosted checks pass, but it does not complete the issue. Its current merge-tree has only a `CHANGELOG.md` conflict; the existing product/test paths auto-merge. Three Logic 13 List-view reruns reach the next fail-closed refusal, `stem_destination_component_group_unresolved`. Preserve Column view's exact `AXTextField → AXGroup → AXList/AXSelectedChildren` path and add only List view's measured ancestry `AXTextField → AXCell → AXRow → AXOutline (ListView)`. Treat `AXSelectedRows` only as a candidate mechanism until exact owner, write/readback and navigation are proven. Duplicate path fields, broken ancestry, unreadable selection, wrong-owner rows, rejected writes and echoed-without-navigation cases must still refuse. Then rerun native List/Column acceptance on the new exact head. |
+| #1565 | OPEN | Release blocker for Logic 13 compatibility. The reporter measured en-US 25 s timeouts across transport, health, refresh, track creation and project creation even though independent AX walks were fast, and a timed-out `project.new` landed roughly 90 seconds later. Draft PR #1572 at exact head `06205243` makes the late-mutation boundary fail closed and has all hosted checks passing, but it is behind `main` and is only the bounded safety slice. The earlier `bc5babee` ko-KR read-only qualification independently fails nine AX-dependent refresh/readback operation cases plus the aggregate, but that is related evidence rather than proof of the same root cause and is not current-candidate proof. After renewing and merging the safety slice, add opt-in read-only timing that preserves default response bytes and separates actor acquisition, cache section and first-AX delay; do not repeat destructive `project.new`. Both en-US and ko-KR exact-candidate qualification must pass before v3.19.0 promotion. |
+| #1568 | closed | PR #1574 merged exact head `de509595` normally as `b7053947` after deterministic focused/affected tests, independent review, native two-process acceptance twice and all exact-head hosted gates passed. The passive child owned no endpoints, routed demand made the serving child acquire the demanded MIDI group, the passive child's late demand received the terminal ownership conflict, MCU stayed honestly deferred, and both owned processes exited cleanly through stdin close. The merge parents and ten expected product/test paths were read back from `origin/main`; Doctor remains truthful that setup checks do not themselves prove runtime ownership. |
+| #1571 | OPEN | Preserve the existing pan value and add a read-only mode classification from the owned knob identity: `balance`, `stereo_pan`, or an explicit unrecognised/null result. Report spread only when an exact owned read source exists; otherwise return null with a machine-readable reason rather than guessing from labels or geometry. No mutation is authorized. Logic 13 read-only inspection found only the generic balance-style pan identity and no independently identifiable stereo-pan/spread control, so that result must stay explicit null/unrecognised rather than becoming an inferred spread value. The locale canon index is stale for this surface and must be renewed from exact observed controls before implementation claims. |
 
 ### Three reopen reasons, checked rather than inferred
 

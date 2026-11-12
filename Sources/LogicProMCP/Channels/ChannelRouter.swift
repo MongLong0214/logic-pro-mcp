@@ -72,8 +72,12 @@ actor ChannelRouter {
     private var mcuDeferred = false
     private var mcuStarted = false
     private var mcuStartTask: (id: UUID, task: Task<String?, Never>)?
+    private var midiGroupDeferred = false
+    private var midiGroupStartTask: (id: UUID, task: Task<Void, Never>)?
+    private var midiGroupStartFailures: [ChannelID: String] = [:]
     private var stopping = false
     private static let passiveMCUOperations: Set<String> = ["mixer.get_state", "mixer.get_channel_strip"]
+    private static let deferredMIDIGroup: Set<ChannelID> = [.midiKeyCommands, .scripter, .coreMIDI]
 
     // Operations for which an Accessibility `element_not_found` is provably a
     // PRE-WRITE miss, so a later channel may still run. Three conditions must all
@@ -139,14 +143,19 @@ actor ChannelRouter {
         }
     }
 
-    func startAll(deferMCU: Bool = true) async -> StartReport {
+    func startAll(deferMCU: Bool = true, deferMIDIGroup: Bool = true) async -> StartReport {
         stopping = false
+        if !deferMIDIGroup { midiGroupDeferred = false }
         var started: [ChannelID] = []
         var failures: [ChannelID: String] = [:]
         var degraded: [ChannelID: String] = [:]
 
         for id in channelStartOrder {
             guard let channel = channels[id] else { continue }
+            if deferMIDIGroup, Self.deferredMIDIGroup.contains(id) {
+                midiGroupDeferred = true
+                continue
+            }
             // Publishing the MCU pair makes Logic display control-surface bars, moving its
             // viewport even without a tool call. Passive server startup must not publish it.
             do {
@@ -179,11 +188,45 @@ actor ChannelRouter {
         )
     }
 
+    private func startDeferredMIDIGroupIfNeeded() async {
+        guard midiGroupDeferred else { return }
+        let start: (id: UUID, task: Task<Void, Never>)
+        if let existing = midiGroupStartTask {
+            start = existing
+        } else {
+            let task = Task<Void, Never> { [weak self] in
+                guard let self else { return }
+                await self.performDeferredMIDIGroupStart()
+            }
+            start = (UUID(), task)
+            midiGroupStartTask = start
+        }
+        await start.task.value
+        guard midiGroupStartTask?.id == start.id else { return }
+        midiGroupStartTask = nil
+        midiGroupDeferred = false
+    }
+
+    private func performDeferredMIDIGroupStart() async {
+        for id in channelStartOrder where Self.deferredMIDIGroup.contains(id) {
+            guard !stopping else { return }
+            guard let channel = channels[id] else { continue }
+            do {
+                try await channel.start()
+                Log.info("Channel \(id.rawValue) started on first MIDI demand", subsystem: "router")
+            } catch {
+                midiGroupStartFailures[id] = String(describing: error)
+                Log.warn("Channel \(id.rawValue) failed deferred start: \(error)", subsystem: "router")
+            }
+        }
+    }
+
     func stopAll(excluding excluded: Set<ChannelID> = []) async {
         stopping = true
         // A start suspended inside CoreMIDI must finish before the owned client is disposed.
         // Keep its single-flight task through the drain; late routes cannot republish endpoints.
         if let mcuStartTask { _ = await mcuStartTask.task.value }
+        if let midiGroupStartTask { await midiGroupStartTask.task.value }
         for (id, channel) in channels where !excluded.contains(id) {
             await channel.stop()
         }
@@ -192,6 +235,9 @@ actor ChannelRouter {
             mcuStarted = false
             mcuDeferred = channels[.mcu] != nil
         }
+        midiGroupStartTask = nil
+        midiGroupStartFailures = [:]
+        midiGroupDeferred = channelStartOrder.contains(where: Self.deferredMIDIGroup.contains)
     }
 
     static var mcuUsePermitted: Bool {
@@ -356,19 +402,48 @@ actor ChannelRouter {
         let message: String
     }
 
-    func route(operation: String, params: [String: String] = [:]) async -> ChannelResult {
+    func route(
+        operation: String,
+        params: [String: String] = [:],
+        debugRestriction: DebugOnlyChannel = ChannelRouter.debugOnlyChannel,
+        debugPassOperations: Set<String> = ChannelRouter.debugPassOperations
+    ) async -> ChannelResult {
         guard let tableChain = Self.routingTable[operation] else {
             return .error("Unknown operation: \(operation)")
         }
 
-        // Operations with empty chain don't need a channel
+        // Operations with empty chain don't need a channel.
         if tableChain.isEmpty {
-            return Self.emptyChainResult(operation: operation, restriction: Self.debugOnlyChannel)
+            return Self.emptyChainResult(operation: operation, restriction: debugRestriction)
+        }
+
+        let restrictedTableChain: [ChannelID]
+        switch Self.effectiveChain(
+            tableChain,
+            operation: operation,
+            restriction: debugRestriction,
+            pass: debugPassOperations
+        ) {
+        case let .success(kept):
+            restrictedTableChain = kept
+        case let .failure(refusal):
+            return .error(refusal.message)
+        }
+
+        if !Self.deferredMIDIGroup.isDisjoint(with: restrictedTableChain) {
+            await startDeferredMIDIGroupIfNeeded()
+            guard !stopping else {
+                return .error(HonestContract.encodeStateC(
+                    error: .cancelled,
+                    hint: "MIDI channel startup was interrupted by shutdown",
+                    extras: ["operation": operation, "write_attempted": false]
+                ))
+            }
         }
 
         var operationReadyChannels: Set<ChannelID> = []
         for (id, channel) in channels {
-            guard tableChain.contains(id),
+            guard restrictedTableChain.contains(id),
                   let provider = channel as? any OperationReadinessProviding,
                   await provider.isReady(operation: operation) else { continue }
             operationReadyChannels.insert(id)
@@ -377,15 +452,15 @@ actor ChannelRouter {
         // An operation-specific proof may promote that channel without changing
         // the static table or the channel-wide health contract. Unverified routes
         // retain the byte-for-byte table order.
-        let prioritizedTableChain = tableChain.filter(operationReadyChannels.contains)
-            + tableChain.filter { !operationReadyChannels.contains($0) }
+        let prioritizedTableChain = restrictedTableChain.filter(operationReadyChannels.contains)
+            + restrictedTableChain.filter { !operationReadyChannels.contains($0) }
 
         let chain: [ChannelID]
         switch Self.effectiveChain(
             prioritizedTableChain,
             operation: operation,
-            restriction: Self.debugOnlyChannel,
-            pass: Self.debugPassOperations
+            restriction: debugRestriction,
+            pass: debugPassOperations
         ) {
         case let .success(kept):
             chain = kept
@@ -412,6 +487,18 @@ actor ChannelRouter {
         for channelID in chain {
             guard let channel = channels[channelID] else {
                 Log.debug("Channel \(channelID.rawValue) not registered, skipping", subsystem: "router")
+                continue
+            }
+
+            if let failure = midiGroupStartFailures[channelID] {
+                if isBypass {
+                    return .error(HonestContract.encodeStateC(
+                        error: .portUnavailable,
+                        hint: "Channel \(channelID.rawValue) failed deferred startup: \(failure)",
+                        extras: ["operation": operation]
+                    ))
+                }
+                lastError = "Channel \(channelID.rawValue): deferred startup failed: \(failure)"
                 continue
             }
 
@@ -494,6 +581,9 @@ actor ChannelRouter {
                 ) { [weak self] in
                     guard let self,
                           await self.isCurrentChannel(channel, id: channelID) else { return false }
+                    guard OperationTraceContext.routePermittedAfterDeadlineEffect() else {
+                        return false
+                    }
                     await OperationTraceContext.record(.channelStarted, attributes: [
                         "channel": channelID.rawValue,
                     ])
@@ -507,6 +597,13 @@ actor ChannelRouter {
                     result = executed
                 }
             } else {
+                guard OperationTraceContext.routePermittedAfterDeadlineEffect() else {
+                    return .error(HonestContract.encodeStateC(
+                        error: .cancelled,
+                        hint: "The request deadline won before this later channel started.",
+                        extras: ["operation": operation, "write_attempted": false]
+                    ))
+                }
                 await OperationTraceContext.record(.channelStarted, attributes: [
                     "channel": channelID.rawValue,
                 ])
@@ -691,9 +788,15 @@ actor ChannelRouter {
     func healthReport() async -> [ChannelID: ChannelHealth] {
         var report: [ChannelID: ChannelHealth] = [:]
         for (id, channel) in channels {
-            report[id] = id == .mcu && mcuDeferred
-                ? .unavailable("MCU is deferred until an MCU write or consented setup")
-                : await channel.healthCheck()
+            if id == .mcu && mcuDeferred {
+                report[id] = .unavailable("MCU is deferred until an MCU write or consented setup")
+            } else if Self.deferredMIDIGroup.contains(id), midiGroupDeferred {
+                report[id] = .unavailable("MIDI endpoint startup is deferred until routed demand")
+            } else if let failure = midiGroupStartFailures[id] {
+                report[id] = .unavailable("Deferred MIDI endpoint startup failed: \(failure)")
+            } else {
+                report[id] = await channel.healthCheck()
+            }
         }
         return report
     }

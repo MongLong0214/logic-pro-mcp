@@ -1,6 +1,35 @@
 import Testing
 @testable import LogicProMCP
 
+@Test(arguments: [
+    ("en-US", "Toggle Metronome Click"),
+    ("ko-KR", "토글 메트로놈 클릭"),
+    ("ja-JP", "メトロノームクリックを切り替え"),
+    ("de-DE", "Metronom-Klick ein/aus"),
+    ("es-ES", "Activar/desactivar Sonido del metrónomo"),
+    ("fr-FR", "Activer/Désactiver Clic du métronome"),
+    ("it-IT", "Attiva/disattiva Clic metronomo"),
+    ("pt-BR", "Alternar Clique do metrônomo"),
+    ("zh-CN", "开关节拍器咔嗒声"),
+    ("zh-TW", "切換 節拍器卡嗒聲"),
+])
+func midiKeyCommandSearchQueryUsesTheExactPolicyCandidate(
+    locale: String,
+    expected: String
+) throws {
+    let entry = try #require(MIDIKeyCommandBindingCatalog.entries.first)
+    let query = MIDIKeyCommandBindingCatalog.searchQuery(for: entry, locale: locale)
+
+    #expect(query == expected)
+    #expect(AXLocalePolicy.metronomeClickKeyCommandName.matches(query, mode: .exact))
+}
+
+@Test func midiKeyCommandSearchQueryRefusesObservedUnsupportedLocale() throws {
+    let entry = try #require(MIDIKeyCommandBindingCatalog.entries.first)
+
+    #expect(MIDIKeyCommandBindingCatalog.searchQuery(for: entry, locale: "nl-NL") == nil)
+}
+
 @Suite struct MIDIKeyCommandBindingCatalogTests {
     @Test func firstCatalogEntryMatchesTheExistingMIDITransportMapping() {
         #expect(MIDIKeyCommandBindingCatalog.entries == [

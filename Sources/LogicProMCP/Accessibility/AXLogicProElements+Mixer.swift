@@ -262,6 +262,52 @@ extension AXLogicProElements {
             ? .childrenUnread : .notFound, nil)
     }
 
+    /// A bounded version-specific read for callers that may truthfully treat shallow absence as
+    /// absence. It preserves readable legacy-ID candidates and unread Mixer status, but never
+    /// walks beyond the observed Logic 13 Mixer envelope.
+    static func shallowMixerAreaLookup(
+        in window: AXUIElement, runtime: Runtime, maximumDepth: Int = 3
+    ) -> MixerAreaLookup {
+        guard let scan = try? mixerAreaCandidates(
+            in: window, runtime: runtime.ax, maximumDepth: maximumDepth,
+            requiresCompleteAbsence: false, observingExposure: nil, checking: {}
+        ) else { return .childrenUnread }
+        let legacy = scan.candidates.first { $0.legacyRole == (kAXGroupRole as String) }
+            ?? scan.candidates.first { $0.legacyRole == (kAXScrollAreaRole as String) }
+        let best = legacy ?? scan.candidates
+            .sorted { lhs, rhs in
+                if lhs.stripCount != rhs.stripCount { return lhs.stripCount > rhs.stripCount }
+                return lhs.totalChildCount > rhs.totalChildCount
+            }
+            .first
+        if let best { return .found(best.element) }
+        return scan.sawUnreadMixerContainer ? .childrenUnread : .notFound
+    }
+
+    /// The state poller only needs a positive acquisition before it falls back to the complete
+    /// discovery above. Logic 12.3+ exposes the real Mixer as a named outer owner containing a
+    /// named population area whose direct children are strips. A bounded first pass can certify
+    /// that structure without descending an earlier, unrelated track tree. It deliberately does
+    /// not decide absence or accept legacy ID candidates; those retain the complete lookup's
+    /// Group-before-ScrollArea ordering and failure semantics.
+    static func shallowOwnedMixerPopulationAreaBinding(
+        in window: AXUIElement, runtime: Runtime, maximumDepth: Int = 3,
+        checking check: () throws -> Void = {}
+    ) throws -> MixerAreaBinding? {
+        let scan = try mixerAreaCandidates(
+            in: window, runtime: runtime.ax, maximumDepth: maximumDepth,
+            requiresCompleteAbsence: false, observingExposure: nil, checking: check
+        )
+        let best = scan.candidates
+            .filter { $0.legacyRole == nil && $0.stripCount > 0 && !$0.owners.isEmpty }
+            .sorted { lhs, rhs in
+                if lhs.stripCount != rhs.stripCount { return lhs.stripCount > rhs.stripCount }
+                return lhs.totalChildCount > rhs.totalChildCount
+            }
+            .first
+        return best.map { .init(mixer: $0.element, owners: $0.owners, path: $0.path) }
+    }
+
     /// #107: the per-track volume fader inside the track HEADER (an AXSlider
     /// whose value-indicator reads "Volume"). Same channel parameter as the
     /// mixer-strip fader, but identity-safe — it belongs to exactly track
@@ -443,6 +489,7 @@ extension AXLogicProElements {
     private static func mixerAreaCandidates(
         in root: AXUIElement,
         runtime: AXHelpers.Runtime,
+        maximumDepth: Int = 12,
         requiresCompleteAbsence: Bool,
         observingExposure: AXTrackBinding.Exposure?,
         checking check: () throws -> Void
@@ -455,6 +502,7 @@ extension AXLogicProElements {
             root,
             runtime: runtime,
             depth: 0,
+            maximumDepth: maximumDepth,
             ancestorIsInspector: false,
             ancestorIsMixer: false,
             parentRequiresNonStripRole: false,
@@ -476,6 +524,7 @@ extension AXLogicProElements {
         _ element: AXUIElement,
         runtime: AXHelpers.Runtime,
         depth: Int,
+        maximumDepth: Int,
         ancestorIsInspector: Bool,
         ancestorIsMixer: Bool,
         parentRequiresNonStripRole: Bool,
@@ -491,7 +540,7 @@ extension AXLogicProElements {
         sawIncompleteAbsence: inout Bool
     ) throws -> Bool {
         try check()
-        guard depth <= 12 else { sawIncompleteAbsence = true; return false }
+        guard depth <= maximumDepth else { sawIncompleteAbsence = true; return false }
         guard remainingNodes > 0, !ancestors.contains(where: { CFEqual($0, element) }) else {
             if ancestorIsMixer { sawUnreadMixerContainer = true }
             sawIncompleteAbsence = true
@@ -588,7 +637,7 @@ extension AXLogicProElements {
                             kAXTextFieldRole, kAXStaticTextRole, kAXValueIndicatorRole] as [String]
         let scalarLeafRoles = [kAXValueIndicatorRole, kAXSliderRole, kAXStaticTextRole] as [String]
         var hasOnlyControlLeaves = false
-        if requiresCompleteAbsence, !sawIncompleteAbsence, !canBeEmptyLegacyMixer, depth < 12,
+        if requiresCompleteAbsence, !sawIncompleteAbsence, !canBeEmptyLegacyMixer, depth < maximumDepth,
            let observedChildren, observedChildren.count <= remainingNodes {
             hasOnlyControlLeaves = true
             var remainingLeafNodes = remainingNodes - observedChildren.count
@@ -609,7 +658,7 @@ extension AXLogicProElements {
                 }
                 observingExposure?.observeChildren(element: child, children: grandchildren)
                 if !grandchildren.isEmpty {
-                    guard childRole == (kAXSliderRole as String), depth + 2 <= 12,
+                    guard childRole == (kAXSliderRole as String), depth + 2 <= maximumDepth,
                           grandchildren.count <= remainingLeafNodes else {
                         hasOnlyControlLeaves = false; break
                     }
@@ -696,6 +745,7 @@ extension AXLogicProElements {
                 child,
                 runtime: runtime,
                 depth: depth + 1,
+                maximumDepth: maximumDepth,
                 ancestorIsInspector: isInspector,
                 ancestorIsMixer: !isInspector && (ancestorIsMixer || isMixerContainer),
                 parentRequiresNonStripRole: requiresNonStripChildren,

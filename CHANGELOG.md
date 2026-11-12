@@ -12,26 +12,22 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
   without entering the Accessibility actor (#1550). It no longer waits behind unrelated synchronous
   AX reads, while panel, disk, disk-only, folder, miss, malformed-path, and cold-cache responses keep
   their existing fields and meanings.
-- `logic://project/info.sampleRate` now prefers a positive `SampleRate` from the validated current
-  project's saved `MetaData.plist` over a disagreeing live transport value (#1552). Fresh transport
-  remains the fallback when the saved field is missing or invalid, and the resource stays read-only
-  with respect to shared cache state.
-- `record_sequence` no longer starts its MIDI import after the request has already returned
-  `operation_timeout` (#1551). The deadline and each irreversible write now share an atomic
-  boundary: a timeout before import blocks the script and later relocation writes, while a timeout
-  after import reports `write_attempted: true`, `import_started: true`, and warns that a track and
-  MIDI region may still appear. Such a result is explicitly unsafe to retry blindly. A running
-  import script is not killed mid-dialog.
 
 ---
 
-## [3.19.0] — 2026-11-03
+## [3.19.0] — 2026-11-11
 
 Caller-facing changes since v3.18.0. Guard scripts, CI, qualification infrastructure, live
 harnesses, roadmap work, and issue bookkeeping are excluded unless they changed a shipped
 contract. Every stated limit remains part of the corresponding change.
 
 ### Added
+- **`logic_system setup_midi_key_commands` exposes the consent-first read-only binding check
+  (#1516).** The public command currently accepts only `consent: "true"` and `mode: "check"`, invokes
+  the repository's existing inspection driver under its ownership and cleanup rules, and reports bound,
+  missing, conflicting, and unknown catalog rows without pressing Learn or sending a controller
+  message. A visible matching assignment remains source-unverified and does not promote routing
+  readiness; apply mode and native binding success remain unimplemented.
 - **Gain, Sample Delay, and Noise Gate expose their measured parameters through read-only
   `logic_plugins get_param_verified` (#1396).** Gain returns its level and polarity selections;
   Sample Delay returns sample-unit delay values; and Noise Gate returns threshold, reduction,
@@ -111,6 +107,24 @@ contract. Every stated limit remains part of the corresponding change.
   censuses grow to 117 operations; the op joins the `legacy_index_allowed` census.
 
 ### Fixed
+- **Logic 13 transport-container discovery follows the measured toolbar role without selecting a
+  same-described view-toggle group.** The selector and approval transport observation now admit the
+  measured group/toolbar roles and require exact transport-control capability rather than tree
+  order or an arbitrary checkbox. A failed batched census retries through a complete status-bearing
+  traversal; only a freshly verified terminal button may end on an `AXChildren` failure, while
+  unread containers, missing roles, permission loss, depth truncation, unread deciding metadata,
+  and multiple capable candidates still fail closed. Read-only native evidence covers Logic 13.0
+  build 7801 in ko-KR; it is not whole-release or cross-locale qualification.
+- `logic://project/info.sampleRate` now prefers a positive `SampleRate` from the validated current
+  project's saved `MetaData.plist` over a disagreeing live transport value (#1552). Fresh transport
+  remains the fallback when the saved field is missing or invalid, and the resource stays read-only
+  with respect to shared cache state.
+- `record_sequence` no longer starts its MIDI import after the request has already returned
+  `operation_timeout` (#1551). The deadline and each irreversible write now share an atomic
+  boundary: a timeout before import blocks the script and later relocation writes, while a timeout
+  after import reports `write_attempted: true`, `import_started: true`, and warns that a track and
+  MIDI region may still appear. Such a result is explicitly unsafe to retry blindly. A running
+  import script is not killed mid-dialog.
 - **`record_sequence` works in Logic's default control-bar display mode (#1420).** In "Beats & Project"
   the Playhead Position group exposes only bar and beat, so the seek to `1.1.1.1` could never reach
   State A and every `record_sequence` refused with "failed to reset playhead to bar 1". A bar-and-beat

@@ -32,37 +32,56 @@ extension AXLogicProElements {
         }
         // Completeness covers the whole window, including deeper Arrange/Mixer
         // siblings. Use its viewport census bound; an unvisited subtree still refuses.
-        guard case .success(let groups) = AXHelpers.censusDescendantResult(
-            of: window, role: kAXGroupRole, maxDepth: 32, runtime: runtime.ax,
-            requiresCompleteTraversal: true, permittingRead: permits,
+        guard case .success(let containers) = completeControlBarCensus(
+            of: window,
+            matching: [kAXGroupRole as String, kAXToolbarRole as String],
+            terminalRoles: [kAXButtonRole as String],
+            maxDepth: 32,
+            runtime: runtime.ax,
+            permittingRead: permits,
             observingRole: { observingExposure?.observeRole(element: $0, role: $1) },
-            observingChildren: { observingExposure?.observeChildren(element: $0, children: $1) }) else {
+            observingChildren: { observingExposure?.observeChildren(element: $0, children: $1) }
+        ) else {
             try check(); return nil
         }
         var labelled: [AXUIElement] = []
         var withControls: [AXUIElement] = []
+        var observedControls: [(container: AXUIElement, controls: [AXUIElement])] = []
         do {
-            for group in groups.matches {
-                guard AXLocalePolicy.controlBarGroupLabel.matches(try text(group, kAXDescriptionAttribute), mode: .exactStrict) else { continue }
-                labelled.append(group)
-                try check()
-                guard case .success(let children) = AXHelpers.childrenResult(group, runtime: runtime.ax) else { return nil }
-                var holdsCheckbox = false
-                for child in children {
-                    guard let role = try text(child, kAXRoleAttribute) else { return nil }
-                    holdsCheckbox = holdsCheckbox || role == kAXCheckBoxRole as String
+            for container in containers.matches {
+                guard AXLocalePolicy.controlBarGroupLabel.matches(
+                    try text(container, kAXDescriptionAttribute), mode: .exactStrict
+                ) else { continue }
+                labelled.append(container)
+                guard case .success(let census) = completeControlBarCensus(
+                    of: container,
+                    matching: [kAXCheckBoxRole as String],
+                    terminalRoles: [kAXButtonRole as String, kAXCheckBoxRole as String],
+                    maxDepth: 4,
+                    runtime: runtime.ax,
+                    permittingRead: permits,
+                    observingRole: { observingExposure?.observeRole(element: $0, role: $1) },
+                    observingChildren: { observingExposure?.observeChildren(element: $0, children: $1) }
+                ) else { try check(); return nil }
+                var holdsTransportControl = false
+                for control in census.matches {
+                    guard try text(control, kAXRoleAttribute) == kAXCheckBoxRole as String else {
+                        return nil
+                    }
+                    let title = try text(control, kAXTitleAttribute)
+                    let description = try text(control, kAXDescriptionAttribute)
+                    holdsTransportControl = holdsTransportControl
+                        || exactTransportControl(title: title, description: description)
                 }
-                if holdsCheckbox { withControls.append(group) }
+                if holdsTransportControl { withControls.append(container) }
+                observedControls.append((container, census.matches))
             }
             guard let bar = controlBarCandidate(labelled: labelled, withControls: withControls) else { return nil }
-            guard case .success(let controls) = AXHelpers.censusDescendantResult(
-                of: bar, role: kAXCheckBoxRole, maxDepth: 4, runtime: runtime.ax,
-                requiresCompleteTraversal: true, permittingRead: permits) else {
-                try check(); return nil
-            }
+            guard let controls = observedControls.first(where: { CFEqual($0.container, bar) })?
+                .controls else { return nil }
             var play: [AXUIElement] = []
             var record: [AXUIElement] = []
-            for control in controls.matches {
+            for control in controls {
                 let title = try text(control, kAXTitleAttribute)
                 let description = try text(control, kAXDescriptionAttribute)
                 if AXLocalePolicy.transportPlayControl.matches(title, mode: .exactStrict)
@@ -207,16 +226,22 @@ extension AXLogicProElements {
     /// the site refuses on, so this is also the number worth measuring.
     /// The atlas selector for the control bar, by name.
     ///
-    /// `.exactStrict` because that is what `getControlBar` uses: a group described exactly
+    /// `.exactStrict` because that is what `getControlBar` uses: a container described exactly
     /// `Control Bar` / `컨트롤 막대` / `コントロールバー`, not one whose description merely contains
     /// it. A containment match would let `Hide Control Bar` be taken for the bar — the same
     /// false-friend class the keyword scan already fails on.
+    ///
+    /// Logic 12 exposes that container as `AXGroup`; Logic 13.0 build 7801 exposes the actual
+    /// transport-bearing container as a top-level `AXToolbar` and leaves a same-named `AXGroup`
+    /// containing only view toggles. Both measured roles are accepted; capability still decides
+    /// between same-named candidates.
     ///
     /// Identity only. Whether the named bar actually HOLDS a transport control is a separate
     /// question, and `transportContainerFinalists` asks it separately.
     static let controlBarSelector = SemanticSelector(
         id: .controlBar,
         requiredRole: kAXGroupRole as String,
+        alternateRoles: [kAXToolbarRole as String],
         allowedSubroles: [],
         titleAliases: [:],
         ancestorConstraints: [],
@@ -333,7 +358,7 @@ extension AXLogicProElements {
         return nil
     }
 
-    /// Locate Logic Pro 12's control bar (컨트롤 막대 / Control Bar) — the AXGroup
+    /// Locate Logic Pro's control bar (컨트롤 막대 / Control Bar) — the AXGroup/AXToolbar
     /// below the main arrange area that contains Play, Record, Cycle, Metronome,
     /// etc. as AXCheckBox widgets.
     static func getControlBar(runtime: Runtime = .production) -> AXUIElement? {
@@ -355,13 +380,52 @@ extension AXLogicProElements {
         // it is called.
         var labelled: [AXUIElement] = []
         if runtime.attributeValuesResult != nil {
-            // The new batch path uses the existing status-bearing whole-window
-            // census and approval transport bound. A failed/malformed branch
-            // cannot disappear and make two bars appear unique.
-            guard case .success(let census) = AXHelpers.censusDescendantResult(
+            // Keep the fresh batched census on healthy trees. Logic 13 can reject a
+            // multiple-attribute read on an unrelated descendant even though the same role and
+            // children reads remain individually available, so a failed batch is followed by an
+            // independent status-bearing scalar census of the whole window. The retry still has
+            // the complete-traversal bound and ambiguity refusal; no failed branch is skipped.
+            let batched = AXHelpers.censusDescendantResult(
                 of: window, role: kAXGroupRole, maxDepth: 32, runtime: runtime,
                 requiresCompleteTraversal: true, batchingRoleAndChildren: true
-            ) else { return nil }
+            )
+            let census: AXHelpers.Census
+            switch batched {
+            case .success(let observed):
+                var matches = observed.matches
+                let directChildren: [AXUIElement]
+                let children = AXHelpers.getNonHelpAttributes(
+                    window, [kAXChildrenAttribute as String], runtime: runtime)
+                switch children[0] {
+                case .success(.some(let raw)):
+                    guard case .success(let observed) = AXHelpers.projectChildrenStatus(
+                        .success, raw) else { return nil }
+                    directChildren = observed
+                case .success(.none): directChildren = []
+                case .failure: return nil
+                }
+                for child in directChildren {
+                    let reading = AXHelpers.getNonHelpAttributes(
+                        child, [kAXRoleAttribute as String], runtime: runtime)
+                    guard case .success(.some(let rawRole)) = reading[0],
+                          CFGetTypeID(rawRole) == CFStringGetTypeID(),
+                          let role = rawRole as? String else { return nil }
+                    if role == kAXToolbarRole as String { matches.append(child) }
+                }
+                census = .init(
+                    element: matches.count == 1 ? matches[0] : nil,
+                    candidates: matches.count,
+                    matches: matches)
+            case .failure:
+                guard case .success(let observed) = completeControlBarCensus(
+                    of: window,
+                    matching: [kAXGroupRole as String, kAXToolbarRole as String],
+                    terminalRoles: [kAXButtonRole as String],
+                    maxDepth: 32,
+                    runtime: runtime
+                ) else { return nil }
+                census = observed
+            }
             for group in census.matches {
                 let reading: Result<AnyObject?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
                     group, kAXDescriptionAttribute as String, runtime: runtime)
@@ -380,8 +444,11 @@ extension AXLogicProElements {
         } else {
             // Preserve the existing scalar discovery contract for runtimes
             // without batching; do not expand unrelated readers' failure scope.
-            labelled = AXHelpers.findAllDescendants(
-                of: window, role: kAXGroupRole, maxDepth: 8, runtime: runtime).filter { group in
+            let candidates = AXHelpers.findAllDescendants(
+                of: window, role: kAXGroupRole, maxDepth: 8, runtime: runtime)
+                + AXHelpers.findAllDescendants(
+                    of: window, role: kAXToolbarRole, maxDepth: 8, runtime: runtime)
+            labelled = candidates.filter { group in
                     AXLocalePolicy.controlBarGroupLabel.matches(
                         AXHelpers.getDescription(group, runtime: runtime) ?? "", mode: .exactStrict)
                 }
@@ -389,40 +456,163 @@ extension AXLogicProElements {
         var withControls: [AXUIElement] = []
         for group in labelled {
             if runtime.attributeValuesResult == nil {
-                if AXHelpers.getChildren(group, runtime: runtime).contains(where: { child in
-                    AXHelpers.getRole(child, runtime: runtime) == kAXCheckBoxRole as String
-                }) { withControls.append(group) }
+                let controls = AXHelpers.findAllDescendants(
+                    of: group, role: kAXCheckBoxRole, maxDepth: 4, runtime: runtime)
+                if controls.contains(where: { exactTransportControl($0, runtime: runtime) }) {
+                    withControls.append(group)
+                }
                 continue
             }
-            // The deciding reread is fresh too. A failure after the complete
-            // census must not make a competing candidate disappear.
-            let children: [AXUIElement]
-            switch AXHelpers.childrenResult(group, runtime: runtime) {
-            case .success(let observed): children = observed
-            case .failure(let error) where error.isDefinitiveAbsence: children = []
-            case .failure: return nil
+            let batchedControls = AXHelpers.censusDescendantResult(
+                of: group, role: kAXCheckBoxRole, maxDepth: 4, runtime: runtime,
+                requiresCompleteTraversal: true, batchingRoleAndChildren: true)
+            let controls: AXHelpers.Census
+            switch batchedControls {
+            case .success(let observed): controls = observed
+            case .failure:
+                guard case .success(let observed) = completeControlBarCensus(
+                    of: group,
+                    matching: [kAXCheckBoxRole as String],
+                    terminalRoles: [kAXButtonRole as String, kAXCheckBoxRole as String],
+                    maxDepth: 4,
+                    runtime: runtime
+                ) else { return nil }
+                controls = observed
             }
-            var holdsCheckbox = false
-            var unreadRole = false
-            for child in children {
-                let reading: Result<String?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
-                    child, kAXRoleAttribute as String, runtime: runtime)
-                guard case .success(.some(let role)) = reading else {
-                    unreadRole = true; continue
+            var holdsTransportControl = false
+            var unreadControlMetadata = false
+            for control in controls.matches {
+                let role: Result<String?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+                    control, kAXRoleAttribute as String, runtime: runtime)
+                guard case .success(.some(let observedRole)) = role else {
+                    unreadControlMetadata = true
+                    continue
                 }
-                if role == kAXCheckBoxRole as String {
-                    holdsCheckbox = true; break
+                guard observedRole == kAXCheckBoxRole as String else { continue }
+                let title: Result<String?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+                    control, kAXTitleAttribute as String, runtime: runtime)
+                let description: Result<String?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+                    control, kAXDescriptionAttribute as String, runtime: runtime)
+                let readTitle: String?
+                let readDescription: String?
+                switch title {
+                case .success(let value): readTitle = value
+                case .failure(let error) where error.isDefinitiveAbsence: readTitle = nil
+                case .failure:
+                    unreadControlMetadata = true
+                    continue
+                }
+                switch description {
+                case .success(let value): readDescription = value
+                case .failure(let error) where error.isDefinitiveAbsence: readDescription = nil
+                case .failure:
+                    unreadControlMetadata = true
+                    continue
+                }
+                if exactTransportControl(title: readTitle, description: readDescription) {
+                    holdsTransportControl = true
                 }
             }
-            // One actual checkbox establishes presence even when a different
-            // child's role is unknown. Without that positive evidence, unknown
-            // roles cannot establish absence or eliminate this candidate.
-            if !holdsCheckbox && unreadRole { return nil }
-            if holdsCheckbox { withControls.append(group) }
+            if !holdsTransportControl && unreadControlMetadata { return nil }
+            if holdsTransportControl { withControls.append(group) }
         }
         // Exactly one, or nothing. Two bars that both hold transport controls is a tree this code
         // has never seen and must not guess about; the callers all fail closed on nil.
         return controlBarCandidate(labelled: labelled, withControls: withControls)
+    }
+
+    /// Logic 13.0 build 7801 returns `AXError.failure` for `AXChildren` on an audio-patch
+    /// `AXButton` even though its role is readable and the button is a leaf. A Control Bar is an
+    /// `AXGroup` or `AXToolbar`, so that verified terminal role cannot conceal another candidate.
+    /// Container read failures remain unknown and fail the whole census, as do missing roles and a
+    /// non-empty tree beyond the depth bound.
+    private static func completeControlBarCensus(
+        of root: AXUIElement,
+        matching roles: Set<String>,
+        terminalRoles: Set<String>,
+        maxDepth: Int,
+        runtime: AXHelpers.Runtime,
+        permittingRead: () -> Bool = { true },
+        observingRole: (AXUIElement, String?) -> Void = { _, _ in },
+        observingChildren: (AXUIElement, [AXUIElement]) -> Void = { _, _ in }
+    ) -> Result<AXHelpers.Census, AXHelpers.AXStatusError> {
+        var matches: [AXUIElement] = []
+        let unavailable = AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)
+
+        func visit(_ element: AXUIElement, knownRole: String?, remaining: Int)
+            -> Result<Void, AXHelpers.AXStatusError> {
+            guard permittingRead() else { return .failure(unavailable) }
+            let children: [AXUIElement]
+            switch AXHelpers.childrenResult(element, runtime: runtime) {
+            case .success(let observed): children = observed
+            case .failure(let error) where error.isDefinitiveAbsence: children = []
+            case .failure where knownRole.map(terminalRoles.contains) == true:
+                return .success(())
+            case .failure(let error):
+                return .failure(error)
+            }
+            guard permittingRead() else { return .failure(unavailable) }
+            observingChildren(element, children)
+            guard remaining > 0 else {
+                return children.isEmpty
+                    ? .success(())
+                    : .failure(.init(raw: AXError.cannotComplete.rawValue))
+            }
+            for child in children {
+                guard permittingRead() else { return .failure(unavailable) }
+                let reading: Result<String?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+                    child, kAXRoleAttribute as String, runtime: runtime)
+                let role: String
+                switch reading {
+                case .success(.some(let observed)): role = observed
+                case .success(.none): return .failure(.malformedAttribute)
+                case .failure(let error): return .failure(error)
+                }
+                guard permittingRead() else { return .failure(unavailable) }
+                observingRole(child, role)
+                if roles.contains(role) { matches.append(child) }
+                if case .failure(let error) = visit(child, knownRole: role, remaining: remaining - 1) {
+                    return .failure(error)
+                }
+            }
+            return .success(())
+        }
+
+        switch visit(root, knownRole: nil, remaining: maxDepth) {
+        case .success:
+            return .success(.init(
+                element: matches.count == 1 ? matches[0] : nil,
+                candidates: matches.count,
+                matches: matches
+            ))
+        case .failure(let error):
+            return .failure(error)
+        }
+    }
+
+    private static func exactTransportControl(
+        _ element: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> Bool {
+        exactTransportControl(
+            title: AXHelpers.getTitle(element, runtime: runtime),
+            description: AXHelpers.getDescription(element, runtime: runtime))
+    }
+
+    private static func exactTransportControl(title: String?, description: String?) -> Bool {
+        let labels = [
+            AXLocalePolicy.transportPlayControl,
+            AXLocalePolicy.transportRecordControl,
+            AXLocalePolicy.transportCycleControl,
+            AXLocalePolicy.transportMetronomeControl,
+            AXLocalePolicy.transportStopControl,
+            AXLocalePolicy.transportRewindControl,
+            AXLocalePolicy.transportForwardControl,
+        ]
+        return labels.contains { label in
+            label.matches(title, mode: .exactStrict)
+                || label.matches(description, mode: .exactStrict)
+        }
     }
 
     /// Shared selection rule; strict callers preserve read failures before reaching it.

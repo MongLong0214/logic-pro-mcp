@@ -581,6 +581,12 @@ actor LogicProServer {
                    ) {
                     return refusal
                 }
+                if name == ToolID.logicSystem.rawValue, command == "setup_midi_key_commands",
+                   let refusal = SystemDispatcher.setupMIDIKeyCommandsConsentRequiredResult(
+                    rawCmdParams?.objectValue ?? [:]
+                   ) {
+                    return refusal
+                }
                 // #413: an optional operator override of setup_arm_key's deadline
                 // (LOGIC_PRO_MCP_SETUP_DEADLINE_MS). Read ONCE here at dispatch
                 // entry, AFTER consent and BEFORE the gate/trace/activation. A
@@ -825,19 +831,27 @@ actor LogicProServer {
         var timeoutHint = "\(operation) exceeded the \(Int(seconds))s server-side deadline and was abandoned so the stdio loop stays responsive."
         if let deadlineEffect {
             extras["write_attempted"] = deadlineEffect.writeAttempted
-            extras["import_started"] = deadlineEffect.importStarted
             extras["future_writes_blocked"] = true
             if let lastStage = deadlineEffect.lastStage {
                 extras["last_write_boundary"] = lastStage
             }
-            if deadlineEffect.importStarted {
-                extras["safe_to_retry"] = false
-                extras["underlying_operation_stopped"] = false
-                timeoutHint = "\(operation) reached its deadline after the MIDI import was committed to start. A new track and MIDI region may still appear; do not retry blindly because that would risk a duplicate import."
+            if tool == ToolID.logicTracks.rawValue, command == "record_sequence" {
+                extras["import_started"] = deadlineEffect.importStarted
+                if deadlineEffect.importStarted {
+                    extras["safe_to_retry"] = false
+                    extras["underlying_operation_stopped"] = false
+                    timeoutHint = "\(operation) reached its deadline after the MIDI import was committed to start. A new track and MIDI region may still appear; do not retry blindly because that would risk a duplicate import."
+                } else if deadlineEffect.writeAttempted {
+                    timeoutHint = "\(operation) reached its deadline after a preparation write, but before the MIDI import boundary. No MIDI import or later relocation write can start after this response."
+                } else {
+                    timeoutHint = "\(operation) reached its deadline before its first Logic write. No MIDI import or later write can start after this response."
+                }
             } else if deadlineEffect.writeAttempted {
-                timeoutHint = "\(operation) reached its deadline after a preparation write, but before the MIDI import boundary. No MIDI import or later relocation write can start after this response."
+                extras["effect_unknown"] = true
+                timeoutHint = "\(operation) reached its deadline after its first write boundary. The effect is unknown and is not safe to retry; no later routed write can start after this response."
             } else {
-                timeoutHint = "\(operation) reached its deadline before its first Logic write. No MIDI import or later write can start after this response."
+                extras["effect_unknown"] = false
+                timeoutHint = "\(operation) reached its deadline before its first routed write. No routed write can start after this response."
             }
         }
         if readOnlyPopulationRead {
@@ -954,6 +968,7 @@ actor LogicProServer {
             && commandParams["snapshot_id"] == nil
         let selectedRegionEventRead = tool == "logic_midi"
             && command == "read_selected_region_events"
+        let mutatingCommand = isMutatingCommand(tool: tool, command: command)
         let ownedObservationRead = freshPopulationRead
             || selectedRegionEventRead
             || (tool == "logic_mixer" && (command == "get_input_bus_verified" || command == "get_send_bypass_verified"))
@@ -961,7 +976,7 @@ actor LogicProServer {
             return toolStateCResult(.cancelled,
                 extras: ["write_attempted": false, "navigation_performed": false])
         }
-        if (isMutatingCommand(tool: tool, command: command) || ownedObservationRead), let mutationGate {
+        if (mutatingCommand || ownedObservationRead), let mutationGate {
             switch mutationGate.acquire(operation: operation) {
             case .contended(let contention):
                 return mutationInProgressResult(
@@ -984,10 +999,13 @@ actor LogicProServer {
                 let race = DeadlineRace()
                 let timeoutHandle = DeadlineTimeoutHandle()
                 let deadlineEffectClaim: (@Sendable (String) -> Bool)?
-                if tool == ToolID.logicTracks.rawValue, command == "record_sequence" {
+                let deadlineRoutePermission: (@Sendable () -> Bool)?
+                if mutatingCommand {
                     deadlineEffectClaim = { stage in race.claimEffect(stage) }
+                    deadlineRoutePermission = { race.allowsRouteAfterEffect() }
                 } else {
                     deadlineEffectClaim = nil
+                    deadlineRoutePermission = nil
                 }
                 // ADR-005: the trace context scope must open INSIDE the detached
                 // task — Task.detached severs TaskLocal inheritance, so a scope
@@ -1006,7 +1024,8 @@ actor LogicProServer {
                     },
                     deadline: operationDeadline,
                     cancellationRequested: { ownedObservationRead && callerCancellation.isCancelled },
-                    claimDeadlineEffect: deadlineEffectClaim
+                    claimDeadlineEffect: deadlineEffectClaim,
+                    allowRouteAfterDeadlineEffect: deadlineRoutePermission
                 )
                 let workTask = Task.detached(priority: .userInitiated) {
                     if ownedObservationRead && callerCancellation.isCancelled {
@@ -1035,9 +1054,7 @@ actor LogicProServer {
                         mutationGateReclaimableAfterGrace: !externallyManagedMutation,
                         readOnlyPopulationRead: freshPopulationRead
                             && commandParams["allow_ui_navigation"]?.boolValue != true,
-                        deadlineEffect: tool == ToolID.logicTracks.rawValue && command == "record_sequence"
-                            ? timeout.effect
-                            : nil
+                        deadlineEffect: mutatingCommand ? timeout.effect : nil
                     )
                     continuation.resume(returning: result)
                     workTask.cancel()
@@ -1181,6 +1198,15 @@ actor LogicProServer {
             effect.importStarted = effect.importStarted || stage == "midi_import_script"
             effect.lastStage = stage
             return true
+        }
+
+        /// Reads before the first effect remain harmless. Once an effect has
+        /// begun, however, a timeout winner forbids every later channel/direct
+        /// effect from starting in the detached worker.
+        func allowsRouteAfterEffect() -> Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return !(resumed && effect.writeAttempted)
         }
 
         func claimTimeout() -> (didWin: Bool, effect: DeadlineEffectSnapshot) {

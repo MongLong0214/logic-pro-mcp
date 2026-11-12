@@ -524,6 +524,7 @@ struct OperationRegistryTests {
         ("logic_system", "system.saga_status", "saga_status", .readOnly, .short, .none),
         ("logic_system", "system.saga_cancel", "saga_cancel", .mutating, .short, .readbackRequired),
         ("logic_system", "system.setup_arm_key", "setup_arm_key", .mutating, .long, .readbackRequired),
+        ("logic_system", "system.setup_midi_key_commands", "setup_midi_key_commands", .mutating, .long, .readbackRequired),
         ("logic_system", "system.setup_control_surface", "setup_control_surface", .mutating, .long, .readbackRequired),
         ("logic_plugins", "plugins.get_inventory", "get_inventory", .readOnly, .short, .none),
         ("logic_plugins", "plugins.get_host_parameter_manifest", "get_host_parameter_manifest", .readOnly, .medium, .none),

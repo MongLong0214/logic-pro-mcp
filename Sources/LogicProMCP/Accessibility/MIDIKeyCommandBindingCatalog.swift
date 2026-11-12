@@ -193,6 +193,36 @@ struct MIDIKeyCommandBindingCatalog {
         ),
     ]
 
+    /// Exact text to type into Logic's live Key Commands filter for the first
+    /// bounded catalog entry. A filtered query is an input action, so an observed
+    /// but unsupported UI locale must refuse instead of guessing English.
+    static func searchQuery(for entry: Entry, locale: String?) -> String? {
+        guard entry.operation == "transport.toggle_metronome" else { return nil }
+        guard let locale else { return entry.commandName }
+        return metronomeSearchNames[locale]
+    }
+
+    private static let metronomeSearchNames: [String: String] = [
+        "en-US": "Toggle Metronome Click",
+        "ko-KR": "토글 메트로놈 클릭",
+        "ja-JP": "メトロノームクリックを切り替え",
+        "de-DE": "Metronom-Klick ein/aus",
+        "es-ES": "Activar/desactivar Sonido del metrónomo",
+        "fr-FR": "Activer/Désactiver Clic du métronome",
+        "it-IT": "Attiva/disattiva Clic metronomo",
+        "pt-BR": "Alternar Clique do metrônomo",
+        "zh-CN": "开关节拍器咔嗒声",
+        "zh-TW": "切換 節拍器卡嗒聲",
+        "de": "Metronom-Klick ein/aus",
+        "en": "Toggle Metronome Click",
+        "es": "Activar/desactivar Sonido del metrónomo",
+        "fr": "Activer/Désactiver Clic du métronome",
+        "it": "Attiva/disattiva Clic metronomo",
+        "ja": "メトロノームクリックを切り替え",
+        "ko": "토글 메트로놈 클릭",
+        "pt": "Alternar Clique do metrônomo",
+    ]
+
     static func disagreements(with mapping: [String: UInt8]) -> [String] {
         entries.compactMap { entry in
             guard mapping[entry.operation] != entry.cc else { return nil }

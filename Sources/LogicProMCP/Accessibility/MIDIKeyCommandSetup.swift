@@ -17,8 +17,14 @@ enum MIDIKeyCommandSetup {
         case matchingLabelUnverifiedSource
         case conflicting
         case provisional
+        case unknownCommand
         case unreadable
         case ambiguous
+    }
+
+    enum CheckResult: Equatable, Sendable {
+        case inspected(Inspection)
+        case failed(stage: String, cleanupConfirmed: Bool)
     }
 
     enum LearnResult: Equatable, Sendable {
@@ -43,7 +49,7 @@ enum MIDIKeyCommandSetup {
     }
 
     struct Runtime: Sendable {
-        let inspect: @Sendable (MIDIKeyCommandBindingCatalog.Entry) async -> Inspection
+        let inspect: @Sendable (MIDIKeyCommandBindingCatalog.Entry) async -> CheckResult
         let learn: @Sendable (MIDIKeyCommandBindingCatalog.Entry) async -> LearnResult
         let verifyBackgroundExecution: @Sendable (
             MIDIKeyCommandBindingCatalog.Entry
@@ -54,7 +60,7 @@ enum MIDIKeyCommandSetup {
         let permitsMutation: @Sendable () -> Bool
 
         init(
-            inspect: @escaping @Sendable (MIDIKeyCommandBindingCatalog.Entry) async -> Inspection,
+            inspect: @escaping @Sendable (MIDIKeyCommandBindingCatalog.Entry) async -> CheckResult,
             learn: @escaping @Sendable (MIDIKeyCommandBindingCatalog.Entry) async -> LearnResult,
             verifyBackgroundExecution: @escaping @Sendable (
                 MIDIKeyCommandBindingCatalog.Entry
@@ -85,7 +91,18 @@ enum MIDIKeyCommandSetup {
 
         var writeAttempted = false
         var learnedBindingPersisted = false
-        let inspection = await runtime.inspect(entry)
+        let checkResult = await runtime.inspect(entry)
+        let inspection: Inspection
+        switch checkResult {
+        case .inspected(let value):
+            inspection = value
+        case .failed(let stage, let cleanupConfirmed):
+            return .failed(
+                stage: stage,
+                cleanupConfirmed: cleanupConfirmed,
+                writeAttempted: false
+            )
+        }
         if mode == .check {
             return .checked(inspection)
         }
@@ -125,6 +142,8 @@ enum MIDIKeyCommandSetup {
             return .failed(stage: "binding_conflict", cleanupConfirmed: true, writeAttempted: false)
         case .provisional:
             return .failed(stage: "binding_provisional", cleanupConfirmed: true, writeAttempted: false)
+        case .unknownCommand:
+            return .failed(stage: "command_unavailable", cleanupConfirmed: true, writeAttempted: false)
         case .unreadable:
             return .failed(stage: "binding_unreadable", cleanupConfirmed: true, writeAttempted: false)
         case .ambiguous:

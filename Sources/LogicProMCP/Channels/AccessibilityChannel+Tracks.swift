@@ -26,14 +26,20 @@ extension AccessibilityChannel {
     /// the walk ends there: `yielded` is true and no states are returned, since a partial list
     /// would read as a project with fewer tracks. Help reads already under way run to their end.
     static func defaultGetTrackStates(
-        runtime: AXLogicProElements.Runtime = .production, stoppingWhen stop: () -> Bool
+        runtime: AXLogicProElements.Runtime = .production,
+        preferringShallowExactRail: Bool = false,
+        stoppingWhen stop: () -> Bool
     ) -> (states: [TrackState]?, yielded: Bool) {
         // Keep acquisition failure distinct from a successfully observed empty rail.
         // The shared reader tolerates unrelated loading subtrees, but rejects an
         // unreadable rail or row role rather than shifting the remaining row indices.
-        guard case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime),
-              case .read(let headers) = AXLogicProElements.allTrackHeadersRead(in: window, runtime: runtime)
+        guard case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime)
         else { return (nil, false) }
+        let headerRead = preferringShallowExactRail
+            ? AXLogicProElements.shallowExactTrackHeadersRead(in: window, runtime: runtime)
+                ?? AXLogicProElements.allTrackHeadersRead(in: window, runtime: runtime)
+            : AXLogicProElements.allTrackHeadersRead(in: window, runtime: runtime)
+        guard case .read(let headers) = headerRead else { return (nil, false) }
         return readTrackStates(from: headers, in: window, runtime: runtime, stoppingWhen: stop)
     }
 
