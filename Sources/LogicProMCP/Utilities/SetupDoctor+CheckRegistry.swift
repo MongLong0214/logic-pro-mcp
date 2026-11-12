@@ -27,6 +27,7 @@ extension SetupDoctor {
         case channelsManualValidation = "channels.manual_validation"
         case channelsKeycmdReference = "channels.keycmd_reference"
         case channelsMCUWiringHint = "channels.mcu_wiring_hint"
+        case channelsRuntimeEndpointOwnership = "channels.runtime_endpoint_ownership"
         case dependenciesClickFallback = "dependencies.click_fallback"
         case updatesLatestRelease = "updates.latest_release"
     }
@@ -119,6 +120,7 @@ extension SetupDoctor {
         // verifies Logic, so this terminal check has no actionable dependency.
         .init(.channelsManualValidation, capabilityGroups: ["keycmd_only_ops", "legacy_scripter"], remediationAnchor: "docs/SETUP.md#doctor-channelsmanual-validation", profileRule: "keycmd|legacy-scripter|full"),
         .init(.channelsMCUWiringHint, capabilityGroups: ["mixer_mcu"], remediationAnchor: "docs/SETUP.md#doctor-channelsmcu-wiring-hint", profileRule: "full"),
+        .init(.channelsRuntimeEndpointOwnership, optionalByDefault: true),
         .init(.dependenciesClickFallback, remediationAnchor: "docs/SETUP.md#doctor-dependenciesclick-fallback"),
         .init(
             .updatesLatestRelease,

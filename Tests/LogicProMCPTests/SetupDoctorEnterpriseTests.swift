@@ -154,7 +154,7 @@ private func check(_ report: SetupDoctor.Report, _ id: String) -> SetupDoctor.Ch
     #expect(report.summary.failed == 0)
     #expect(report.summary.manual == 0)
     #expect(report.summary.warnings == 0)
-    #expect(report.summary.skipped == 4)
+    #expect(report.summary.skipped == 5)
 }
 
 @Test func test_t1_optional_skip_does_not_degrade_aggregate() {
@@ -186,13 +186,13 @@ private func check(_ report: SetupDoctor.Report, _ id: String) -> SetupDoctor.Ch
     let c = try #require(check(report, "mcp.claude_desktop_registration"))
     #expect(c.status == .skipped)
     #expect(c.optional)
-    #expect(report.summary.skipped == 4)
+    #expect(report.summary.skipped == 5)
     #expect(report.status == .ok)
 }
 
 @Test func test_t1_summary_duration_is_sum_of_per_check() {
     // Deterministic monotonic clock: 0,1,2,3,... Each check = 2 calls (start,end),
-    // delta 1ms. 13 checks (no update check) → summary == 13.0, and >= max per-check.
+    // delta 1ms. 27 checks (no update check) → summary == 27.0, and >= max per-check.
     var tick = 0.0
     let report = makeReport(
         runtime: enterpriseRuntime(monotonicNowMs: {
@@ -201,10 +201,10 @@ private func check(_ report: SetupDoctor.Report, _ id: String) -> SetupDoctor.Ch
             return value
         })
     )
-    #expect(report.checks.count == 26)
+    #expect(report.checks.count == 27)
     let perCheckSum = report.checks.reduce(0.0) { $0 + $1.durationMs }
     #expect(report.summary.durationMs == perCheckSum)
-    #expect(report.summary.durationMs == 26.0)
+    #expect(report.summary.durationMs == 27.0)
     let maxPerCheck = report.checks.map(\.durationMs).max() ?? 0
     #expect(report.summary.durationMs >= maxPerCheck)
     #expect(report.summary.durationMs >= 0)
@@ -707,11 +707,11 @@ private func runEntrypoint(
 }
 
 @Test func test_t1_summary_counts_invariant_with_update_check_14() {
-    // The invariant must hold with the opt-in update check present (14 checks).
+    // The invariant must hold with the opt-in update check present (28 checks).
     let report = makeReport(runtime: enterpriseRuntime(latestReleaseLookup: { .found(version: ServerConfig.serverVersion) }))
-    #expect(report.checks.count == 27)
+    #expect(report.checks.count == 28)
     let s = report.summary
-    #expect(s.total == 27)
+    #expect(s.total == 28)
     #expect(s.passed + s.failed + s.warnings + s.manual + s.skipped == s.total)
 }
 
