@@ -148,3 +148,46 @@ jobs:
             LogicProMCP-macOS-arm64.tar.gz
             RELEASE-METADATA.json
             SHA256SUMS.txt
+
+  verify-published:
+    name: verify-published
+    needs: [package, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ needs.package.outputs.artifact-name }}
+          path: verified
+      - name: Published assets match the validated artifact
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir published
+          assets=(
+            LogicProMCP
+            LogicProMCP-macOS-universal.tar.gz
+            LogicProMCP-macOS-arm64.tar.gz
+            RELEASE-METADATA.json
+            SHA256SUMS.txt
+          )
+          for asset in "${assets[@]}"; do
+            curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors \
+              -o "published/$asset" \
+              "https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG/$asset"
+            verified_hash=$(shasum -a 256 "verified/$asset" | awk '{print $1}')
+            published_hash=$(shasum -a 256 "published/$asset" | awk '{print $1}')
+            test "$verified_hash" = "$published_hash"
+          done
+
+  publish-registry:
+    needs: verify-published
+    permissions:
+      contents: read
+      id-token: write
+    uses: ./.github/workflows/publish-mcp.yml
+    with:
+      version: ${{ github.ref_name }}

@@ -55,6 +55,32 @@ struct ReleaseOrderingContractTests {
         #expect(publish.contains("fail_on_unmatched_files: true"))
     }
 
+    @Test("the release page is byte-checked before the registry is updated")
+    func publishedBytesAreVerifiedBeforeRegistryPublication() throws {
+        let workflow = try releaseWorkflow()
+        for job in ["verify-published", "publish-registry"] {
+            #expect(workflow.contains("\n  \(job):\n"), "release.yml has no \(job) job")
+        }
+        #expect(Set(needs(of: "verify-published", in: workflow)) == Set(["package", "publish"]))
+        #expect(needs(of: "publish-registry", in: workflow) == ["verify-published"])
+        #expect(workflow.contains("uses: ./.github/workflows/publish-mcp.yml"))
+        #expect(workflow.contains("version: ${{ github.ref_name }}"))
+    }
+
+    @Test("published release assets are compared with the validated artifact")
+    func publishedAssetsMatchTheValidatedArtifact() throws {
+        let workflow = try releaseWorkflow()
+        guard let verifyRange = workflow.range(of: "\n  verify-published:\n") else {
+            Issue.record("release.yml has no verify-published job")
+            return
+        }
+        let verify = workflow[verifyRange.upperBound...]
+        #expect(verify.contains("name: ${{ needs.package.outputs.artifact-name }}"))
+        #expect(verify.contains("releases/download/$TAG/$asset"))
+        #expect(verify.contains("shasum -a 256 \"verified/$asset\""))
+        #expect(verify.contains("shasum -a 256 \"published/$asset\""))
+    }
+
     @Test("release uses Command Line Tools and no Apple signing pipeline")
     func releaseHasNoXcodeOrAppleSigningDependency() throws {
         let workflow = try releaseWorkflow()
