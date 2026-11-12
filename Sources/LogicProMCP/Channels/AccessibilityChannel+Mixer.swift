@@ -36,12 +36,38 @@ extension AccessibilityChannel {
     static func defaultGetMixerStates(
         runtime: AXLogicProElements.Runtime, stoppingWhen stop: () -> Bool
     ) -> (states: [ChannelStripState]?, yielded: Bool) {
+        enum PollYield: Error { case requested }
         if stop() { return (nil, true) }
-        guard case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime),
-              case .found(let mixer) = AXLogicProElements.mixerAreaLookup(in: window, runtime: runtime),
+        guard case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime)
+        else { return (nil, false) }
+        let lookup: AXLogicProElements.MixerAreaLookup
+        do {
+            let shallow = try AXLogicProElements.shallowOwnedMixerPopulationAreaBinding(
+                in: window, runtime: runtime, checking: {
+                    if stop() { throw PollYield.requested }
+                }
+            )
+            if let shallow {
+                lookup = .found(shallow.mixer)
+            } else {
+                lookup = try AXLogicProElements.mixerPopulationAreaLookup(
+                    in: window, runtime: runtime, checking: {
+                        if stop() { throw PollYield.requested }
+                    }
+                ).lookup
+            }
+        } catch PollYield.requested {
+            return (nil, true)
+        } catch {
+            return (nil, false)
+        }
+        guard case .found(let mixer) = lookup,
               let enumeration = AXLogicProElements.mixerChannelStripsIfCompletelyRead(in: mixer, runtime: runtime.ax)
         else { return (nil, false) }
-        let states = readChannelStrips(from: enumeration.strips, runtime: runtime, window: window, mixer: mixer, stoppingWhen: stop)
+        let states = readChannelStrips(
+            from: enumeration.strips, runtime: runtime, window: window, mixer: mixer,
+            sharingHelpWithinBoundStripRead: true, stoppingWhen: stop
+        )
         return (states, stop())
     }
 
@@ -50,7 +76,8 @@ extension AccessibilityChannel {
         from strips: [AXUIElement], runtime: AXLogicProElements.Runtime,
         window: AXUIElement? = nil, mixer: AXUIElement? = nil,
         readingPlugins: Bool = true, readingRouting: Bool = true,
-        readingScalarHelp: Bool = true, stoppingWhen stop: () -> Bool
+        readingScalarHelp: Bool = true, sharingHelpWithinBoundStripRead: Bool = false,
+        stoppingWhen stop: () -> Bool
     ) -> [ChannelStripState]? {
         var channelStrips: [ChannelStripState] = []
         let document: String?
@@ -62,8 +89,15 @@ extension AccessibilityChannel {
 
         for (index, strip) in strips.enumerated() {
             if stop() { return nil }
-            let samples = (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil
-                ? AXHelpers.StripHelpSamples() : nil
+            let ownsAcquisition = (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil
+            // A poller's strip came from this exact window/Mixer population, and is read-only.
+            // Freeze only its raw Help statuses for this one strip extraction so independent
+            // classifiers do not repeat the same focus-moving native read. The next strip and
+            // next poll get new samples; callers without the bound-poll signal retain the owned
+            // acquisition requirement.
+            let readOnlyBound = sharingHelpWithinBoundStripRead && window != nil && mixer != nil
+            let samples = ownsAcquisition || readOnlyBound
+                ? AXHelpers.StripHelpSamples(permitsReadOnlyBoundExtraction: readOnlyBound) : nil
             let state = AXHelpers.StripHelpSamples.$current.withValue(samples) {
                 func readScalars() -> (volume: Double?, pan: Double?, observedVolume: ChannelStripState.ScalarReadback?, observedPan: ChannelStripState.ScalarReadback?) {
                     func observed(_ control: AXUIElement?, failures: AXPluginInstanceIdentity.FailedReads) -> ChannelStripState.ScalarReadback? {
