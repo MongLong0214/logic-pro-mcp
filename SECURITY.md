@@ -142,94 +142,28 @@ The one `nonisolated(unsafe)` variable (`pidProcessListCache` in `ProcessUtils`)
 
 ## Deployment security
 
-Release binaries ship in **ADHOC mode** unless Apple Developer Program credentials are explicitly configured for the workflow (see §Release types below). When Developer ID credentials are available, releases are:
-
-1. Built on `macos-15` runners via GitHub Actions
-2. Codesigned with a Developer ID Application certificate
-3. Notarized via `notarytool` (Apple)
-4. Stapled so they run without Gatekeeper prompts
-5. Verified with `spctl` post-signing
-6. Checksummed (SHA256) and published with `RELEASE-METADATA.json`
-
-Without those credentials, ADHOC releases provide SHA256 + codesign verification while skipping Gatekeeper assessment.
-
-See `.github/workflows/release.yml` and `CONTRIBUTING.md`.
+Releases are built with Command Line Tools and published without an Apple signing or notarization
+step. The release workflow packages the exact release build, verifies the archive manifest, checks
+SHA256 again after artifact transfer, and installs the archive on supported macOS runners before
+publication.
 
 ### Installer trust model
 
-Three supported install paths, in descending order of trust:
-
-| Path | What signs the script | What signs the binary | Recommended for |
-|------|----------------------|----------------------|-----------------|
-| **Homebrew tap** | Homebrew's own signature chain over the formula | Formula pins both URL + SHA256 | Production |
-| **Download-inspect-run** | You inspect the script locally before executing it | `LOGIC_PRO_MCP_SHA256` + TeamID env overrides | Security-sensitive deployments |
-| **`bash <(curl ...)` one-liner** | ⚠️ No signature — script is fetched fresh on every run | `LOGIC_PRO_MCP_SHA256` + TeamID env overrides | Casual/single-user installs |
-
-The env-var overrides (`LOGIC_PRO_MCP_SHA256`, `LOGIC_PRO_MCP_TEAM_ID`) protect the **downloaded binary** against tampering of the GitHub release surface. They do **not** cover the installer script itself when piped through `bash`. If the installer script in the repo is compromised, `bash <(curl ...)` will execute the compromised script before any pin check runs.
-
-For hardened installs, prefer Homebrew (Option A in README) or the download-inspect-run pattern:
+The Homebrew Formula pins the release URL and SHA256. The shell installer likewise requires
+`LOGIC_PRO_MCP_SHA256` by default and verifies the archive before extraction or installation.
+Operators should obtain that hash through a channel they trust:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/<release-tag>/Scripts/install.sh -o install.sh
-# inspect install.sh
-shasum -a 256 install.sh    # cross-check against a trusted second channel
-LOGIC_PRO_MCP_SHA256=<hex> LOGIC_PRO_MCP_TEAM_ID=ADHOC bash install.sh
+# Inspect the script and obtain the archive hash independently.
+LOGIC_PRO_MCP_SHA256=<known-good-archive-hash> bash install.sh
 ```
 
-### Installation verification
-
-Users can verify the signature:
-
-```bash
-codesign --verify --verbose=4 /usr/local/bin/LogicProMCP
-spctl --assess --type execute --verbose /usr/local/bin/LogicProMCP
-shasum -a 256 /usr/local/bin/LogicProMCP
-```
-
-### Supply-chain hardening (v2.3.0+)
-
-`Scripts/install.sh` enforces **pinned SHA256** verification by default:
-
-1. Downloads the binary from `releases/download/$VERSION/LogicProMCP`
-2. Fetches `SHA256SUMS.txt` from the same release
-3. Recomputes SHA256 of the downloaded binary
-4. **Aborts on mismatch** before writing anything to the install path
-5. Additionally verifies `codesign --verify --strict` and `spctl --assess --type execute` — UNLESS this is an **ADHOC release**, in which case `spctl` is skipped (see below).
-6. Pins the expected `TeamIdentifier` against `RELEASE-METADATA.json`
-
-### Release types
-
-Two release modes exist depending on whether Apple Developer Program credentials are configured for the build:
-
-| Mode | TeamID | codesign | spctl / Gatekeeper | SHA256 | Quarantine xattr |
-|------|--------|----------|-------------------|--------|------------------|
-| **Notarized** (optional) | Developer ID | strict check | assess required | pinned | not applied (stapled) |
-| **ADHOC** (current) | `ADHOC` literal | strict check | skipped | pinned | stripped by installer |
-
-ADHOC releases are signed with an ephemeral adhoc identity (`codesign --sign -`). They cannot pass Gatekeeper assessment because they are not notarized by Apple. The installer recognises `LOGIC_PRO_MCP_TEAM_ID=ADHOC` (or `team_id` in `RELEASE-METADATA.json`) and:
-
-- Skips `spctl --assess`
-- Still runs `codesign --verify --strict` (detects tampering post-signing)
-- Still enforces SHA256 pin (detects tampering in transit)
-- Strips `com.apple.quarantine` from the installed binary so it runs on first launch
-
-**Trust model for ADHOC**: root of trust is the SHA256 hash published in `SHA256SUMS.txt` in the same GitHub release. A compromise of the release asset would change the hash and the installer would abort. Enterprise operators can supply a hash out-of-band via `LOGIC_PRO_MCP_SHA256=...`.
-
-**Known residual risk**: A compromised GitHub release can tamper with the binary, SHA256SUMS.txt, and RELEASE-METADATA.json in lockstep (see the release workflow and `CONTRIBUTING.md`). Mitigate with **out-of-band verification**:
-
-```bash
-# Override with a hash obtained from a trusted second channel
-# (Homebrew tap, maintainer's signed commit, corporate vault):
-LOGIC_PRO_MCP_SHA256="<known-good-hash>" \
-LOGIC_PRO_MCP_TEAM_ID="<expected-team-id>" \
-bash Scripts/install.sh
-```
-
-For the strongest guarantee, enterprise deployments should pin the hash in a configuration management system (Jamf profile, Ansible vault, MDM), not trust the GitHub-hosted `SHA256SUMS.txt` as the root of trust.
-
-### Notarization posture (M3)
-
-An ADHOC release gives **integrity, not authenticity**. `codesign --verify --strict` plus the pinned SHA256 prove the binary was not altered after signing or in transit, but an adhoc signature (`codesign --sign -`) carries no Apple-verified identity — anyone can produce one, so it does not attest *who* built the artifact. Therefore, on the ADHOC line, the only enterprise-grade install is an **out-of-band-pinned** one: supply `LOGIC_PRO_MCP_SHA256` and `LOGIC_PRO_MCP_TEAM_ID` from a trusted second channel (Homebrew tap, corporate vault, MDM profile) so the root of trust is not the same GitHub release surface being verified. A notarized path exists in the release workflow and is used automatically when Apple Developer ID credentials are configured; when they are absent the project ships ADHOC by design. (The release-signing decision may be revisited in a future release-preparation pass.)
+`LOGIC_PRO_MCP_ALLOW_SAME_ORIGIN=1` is an explicit convenience mode that fetches
+`SHA256SUMS.txt` from the same GitHub release as the archive. It detects transfer corruption but
+does not protect against compromise of that release surface. Piping a remote installer directly
+to a shell also executes it before any archive check; download and inspect it first for sensitive
+deployments.
 
 ---
 

@@ -27,18 +27,6 @@ binary_name=$(basename "$binary_path")
 binary_file="$binary_dir/$binary_name"
 root_binary="$(pwd -P)/LogicProMCP"
 
-if [ "${RELEASE_MODE:-}" = "notarized" ]; then
-  team_id="${APPLE_NOTARY_TEAM_ID:-}"
-  signing="notarized"
-  if [ -z "$team_id" ]; then
-    echo "::error::APPLE_NOTARY_TEAM_ID is required when RELEASE_MODE=notarized"
-    exit 1
-  fi
-else
-  team_id="ADHOC"
-  signing="adhoc"
-fi
-
 if [ "$binary_name" != "LogicProMCP" ]; then
   echo "::error::Release binary basename must be LogicProMCP (got $binary_name)"
   exit 1
@@ -73,15 +61,14 @@ else
   arch_json="[$arch_list]"
 fi
 
-python3 - "$release_version" "$team_id" "$signing" "$arch_json" > RELEASE-METADATA.json <<'PY'
+python3 - "$release_version" "$arch_json" > RELEASE-METADATA.json <<'PY'
 import json
 import sys
 
-version, team_id, signing, arch_json = sys.argv[1:]
+version, arch_json = sys.argv[1:]
 metadata = {
     "version": version,
-    "team_id": team_id,
-    "signing": signing,
+    "signing": "unsigned",
     "architectures": json.loads(arch_json),
 }
 print(json.dumps(metadata, separators=(",", ":")))

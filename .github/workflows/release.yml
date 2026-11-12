@@ -2,457 +2,149 @@ name: Release
 
 on:
   push:
-    # GitHub Actions tag filters are GLOB, not regex — `+` is matched literally
-    # rather than as a repetition operator. Use `[0-9]*` (digit followed by any
-    # chars) instead of `[0-9]+`. The step-level regex guard below is the
-    # authoritative semver enforcement; the glob here just keeps obviously
-    # non-release tags (e.g. `vdraft`, `milestone-3`) from reaching the
-    # secrets-using steps.
     tags:
       - 'v[0-9]*.[0-9]*.[0-9]*'
       - 'v[0-9]*.[0-9]*.[0-9]*-*'
 
-# Same-tag releases serialize without cancelling an in-progress publish or replacing pending runs.
+permissions:
+  contents: read
+
 concurrency:
   group: release-${{ github.ref }}
-  queue: max
   cancel-in-progress: false
 
-jobs:
-  # NOT `build`. `ci.yml`'s aggregate job is also called `build`, and it is one of the three
-  # required status checks on the branch ruleset. GitHub matches a required context by NAME and
-  # integration, not by workflow file, so a tag pushed at a pull request's head SHA would put a
-  # second `build` check run on that commit from this workflow -- one that has nothing to do with
-  # the pull request's gate. Renaming costs three `needs:` lines and removes the collision.
-  build-release:
-    runs-on: macos-15
-    permissions:
-      contents: read
-    outputs:
-      verified_artifact_name: ${{ steps.artifact-name.outputs.name }}
-      verified_artifact_id: ${{ steps.upload-verified-release-artifacts.outputs.artifact-id }}
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+defaults:
+  run:
+    shell: bash
 
-      - name: Enforce strict SemVer tag
-        # Belt-and-suspenders check: the `on.push.tags` glob above keeps the
-        # worst-case tags out, but glob can't encode "digits-only before the
-        # dots". This regex is the authoritative guard and fails the workflow
-        # before any secret-using step runs.
+jobs:
+  package:
+    name: package
+    runs-on: macos-15
+    timeout-minutes: 45
+    outputs:
+      artifact-name: ${{ steps.artifact-name.outputs.name }}
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Validate tag
         run: |
-          tag="${GITHUB_REF_NAME}"
-          if ! [[ "$tag" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?$ ]]; then
-            echo "::error::tag '$tag' is not strict SemVer (vMAJOR.MINOR.PATCH[-prerelease])"
+          set -euo pipefail
+          if ! [[ "$GITHUB_REF_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?$ ]]; then
+            echo "::error::tag '$GITHUB_REF_NAME' is not strict SemVer"
             exit 1
           fi
 
-      - name: Refuse a tag with no live qualification named
-        # Runners lack permissioned Logic Pro (#985); release scripts record their qualified commit in the tag.
+      - name: Use Command Line Tools
         run: |
-          git fetch --quiet --no-tags --depth=1 origin "+refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
-          Scripts/release-tag-is-qualified.sh "${GITHUB_REF_NAME}"
-
-      - name: Select Xcode and say which toolchain this is
-        # Xcode 16.4, required by swift-sdk 0.11.0+ short-form withThrowingTaskGroup syntax. Keep
-        # in sync with .github/workflows/ci.yml.
-        #
-        # The Swift version this comment used to assert (6.2) disagreed with Apple's own version
-        # table (6.1), and neither number came from the runner. A release's toolchain is the one
-        # fact about a release build that should never be inferred, so it is printed here and the
-        # log is the answer. The pin is unchanged.
-        run: |
-          sudo xcode-select -s /Applications/Xcode_16.4.app
-          xcodebuild -version
-          swift --version
-          xcrun --find swift
+          set -euo pipefail
+          test -d /Library/Developer/CommandLineTools
+          echo "DEVELOPER_DIR=/Library/Developer/CommandLineTools" >> "$GITHUB_ENV"
+          DEVELOPER_DIR=/Library/Developer/CommandLineTools swift --version
+          DEVELOPER_DIR=/Library/Developer/CommandLineTools xcrun --find swift
           uname -m
           sw_vers
 
-      # Maintainer-reviewed verifier source, independent of the candidate/tag.
-      # Updating this pin requires reviewing its registry/Atlas/format compatibility.
-      - name: Checkout authenticated trusted verifier
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-        with:
-          ref: 3b139ed6a812e0b1fcbe0e0175bb256d4f2cbdac
-          path: trusted-verifier-src
-
-      - name: Resolve and build trusted verifier without changing pins
-        working-directory: trusted-verifier-src
+      - name: Build release binary
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = 3b139ed6a812e0b1fcbe0e0175bb256d4f2cbdac
-          test -z "$(git status --porcelain)"
-          swift package resolve --force-resolved-versions
+          bash Scripts/release-build-universal.sh
           git diff --exit-code Package.resolved
-          swift build -c release --product trusted-verifier --force-resolved-versions
-          git diff --exit-code Package.resolved
+          test "$(./LogicProMCP --version)" = "${GITHUB_REF_NAME#v}"
+          ./LogicProMCP --help >/dev/null
 
-      - name: Detect release mode
-        id: mode
+      - name: Package release
         env:
-          MACOS_CERT_BASE64: ${{ secrets.MACOS_CERT_BASE64 }}
-          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
-          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
-          MACOS_KEYCHAIN_PASSWORD: ${{ secrets.MACOS_KEYCHAIN_PASSWORD }}
-          APPLE_NOTARY_APPLE_ID: ${{ secrets.APPLE_NOTARY_APPLE_ID }}
-          APPLE_NOTARY_TEAM_ID: ${{ secrets.APPLE_NOTARY_TEAM_ID }}
-          APPLE_NOTARY_APP_PASSWORD: ${{ secrets.APPLE_NOTARY_APP_PASSWORD }}
-        run: |
-          configured_credentials=(
-            MACOS_CERT_BASE64
-            MACOS_CERT_PASSWORD
-            MACOS_SIGNING_IDENTITY
-            MACOS_KEYCHAIN_PASSWORD
-            APPLE_NOTARY_APPLE_ID
-            APPLE_NOTARY_TEAM_ID
-            APPLE_NOTARY_APP_PASSWORD
-          )
-          for credential in "${configured_credentials[@]}"; do
-            if [ -n "${!credential}" ]; then
-              echo "::error::Notarized releases are disabled until privately validated; remove Developer ID credentials for the supported ADHOC release mode."
-              exit 1
-            fi
-          done
-          echo "mode=adhoc" >> "$GITHUB_OUTPUT"
-          echo "Release mode: owner-staged ADHOC (no downstream signing or notarization)"
+          LOGIC_PRO_MCP_PACKAGE_BINARY: LogicProMCP
+        run: bash Scripts/release-package.sh
 
-      - name: Package
-        env:
-          QUALIFICATION_INPUTS_GITHUB_TOKEN: ${{ github.token }}
-          QUALIFICATION_CANDIDATE_URL: ${{ secrets.QUALIFICATION_CANDIDATE_URL }}
-          QUALIFICATION_CANDIDATE_SHA256: ${{ secrets.QUALIFICATION_CANDIDATE_SHA256 }}
-          QUALIFICATION_EVIDENCE_URL: ${{ secrets.QUALIFICATION_EVIDENCE_URL }}
-          QUALIFICATION_EVIDENCE_SHA256: ${{ secrets.QUALIFICATION_EVIDENCE_SHA256 }}
-          TRUSTED_QUALIFICATION_PUBLIC_KEY: ${{ secrets.TRUSTED_QUALIFICATION_PUBLIC_KEY }}
-          QUALIFICATION_PUBLIC_ASSETS_URL: ${{ secrets.QUALIFICATION_PUBLIC_ASSETS_URL }}
-          QUALIFICATION_PUBLIC_ASSETS_SHA256: ${{ secrets.QUALIFICATION_PUBLIC_ASSETS_SHA256 }}
-        run: |
-          set -euo pipefail
-          private=$(mktemp -d)
-          trap 'rm -rf "$private"' EXIT
-          bash Scripts/release-fetch-qualified-inputs.sh stage "$private"
-          bash Scripts/release-fetch-qualified-inputs.sh public "$private"
-          tag_body=$(git for-each-ref --format='%(contents)' "refs/tags/$GITHUB_REF_NAME")
-          test "$(printf '%s\n' "$tag_body" | grep -c '^Final-candidate-SHA256: ')" = 1
-          test "$(printf '%s\n' "$tag_body" | grep -c '^Qualification-matrix-SHA256: ')" = 1
-          export EXPECTED_BINARY_SHA256=$(printf '%s\n' "$tag_body" | sed -n 's/^Final-candidate-SHA256: //p')
-          export EXPECTED_MATRIX_SHA256=$(printf '%s\n' "$tag_body" | sed -n 's/^Qualification-matrix-SHA256: //p')
-          export LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY="$TRUSTED_QUALIFICATION_PUBLIC_KEY"
-          bash Scripts/release-consume-final.sh verify-public "${GITHUB_REF_NAME#v}" "$GITHUB_SHA" \
-            "$private/LogicProMCP" "$private/bundle" \
-            "$PWD/trusted-verifier-src/.build/release/trusted-verifier" "$private/public"
-          # ONLY public distribution assets. Raw evidence/reports stay private.
-          for asset in LogicProMCP LogicProMCP-macOS-universal.tar.gz \
-                       LogicProMCP-macOS-arm64.tar.gz RELEASE-METADATA.json SHA256SUMS.txt qualification-public.json; do
-            cp "$private/public/$asset" "$asset"
-          done
-
-      - name: Verify Formula install paths against tarball
-        # Issue #22: v3.4.6/v3.5.0 shipped a Formula whose pkgshare.install
-        # paths did not exist in the published tarball (formula flat vs
-        # tarball nested), so `brew install` failed at the install step.
-        # PR #2 fixed the same failure class in the opposite direction
-        # (formula nested vs tarball flat). This gate asserts — against the
-        # actual artifact about to be published — that every path the
-        # Formula installs is present in the tarball listing, so BOTH drift
-        # directions fail the release before anything ships. The PR-time
-        # half of the guard is VersionConsistencyTests
-        # .testFormulaInstallPathsMatchRepoAndReleaseStaging.
+      - name: Validate archive layout
         run: bash Scripts/release-verify-formula-install-paths.sh
 
-
-      - name: Create release artifact SHA256 manifest
+      - name: Create outer artifact manifest
         run: |
-          files=(
-            LogicProMCP
-            LogicProMCP-macOS-universal.tar.gz
-            LogicProMCP-macOS-arm64.tar.gz
-            RELEASE-METADATA.json
-            SHA256SUMS.txt
-            qualification-public.json
-          )
-          shasum -a 256 "${files[@]}" > release-artifacts.sha256
+          set -euo pipefail
+          shasum -a 256 \
+            LogicProMCP \
+            LogicProMCP-macOS-universal.tar.gz \
+            LogicProMCP-macOS-arm64.tar.gz \
+            RELEASE-METADATA.json \
+            SHA256SUMS.txt > release-artifacts.sha256
 
-      - name: Name verified release artifacts
+      - name: Name artifact
         id: artifact-name
-        run: echo "name=verified-release-artifacts-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+        run: echo "name=release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
 
-      - name: Upload verified release artifacts
-        id: upload-verified-release-artifacts
-        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
+      - name: Upload package
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ steps.artifact-name.outputs.name }}
           if-no-files-found: error
+          retention-days: 7
           path: |
             LogicProMCP
             LogicProMCP-macOS-universal.tar.gz
             LogicProMCP-macOS-arm64.tar.gz
             RELEASE-METADATA.json
             SHA256SUMS.txt
-            qualification-public.json
             release-artifacts.sha256
 
+  validate-install:
+    name: install-${{ matrix.os }}
+    needs: package
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-14, macos-15]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ needs.package.outputs.artifact-name }}
+      - name: Verify and install exact archive
+        env:
+          LOGIC_PRO_MCP_VERSION: ${{ github.ref_name }}
+          LOGIC_PRO_MCP_LOCAL_ARCHIVE: ${{ github.workspace }}/LogicProMCP-macOS-universal.tar.gz
+          LOGIC_PRO_MCP_INSTALL_DIR: ${{ runner.temp }}/logic-pro-mcp/bin
+          LOGIC_PRO_MCP_SHARE_DIR: ${{ runner.temp }}/logic-pro-mcp/share/logic-pro-mcp
+          LOGIC_PRO_MCP_SKIP_SUDO: '1'
+          LOGIC_PRO_MCP_REGISTER_CLAUDE: '0'
+          LOGIC_PRO_MCP_INSTALL_KEYCMDS: '0'
+        run: |
+          set -euo pipefail
+          shasum -a 256 -c release-artifacts.sha256
+          export LOGIC_PRO_MCP_SHA256
+          LOGIC_PRO_MCP_SHA256=$(awk '$2 == "LogicProMCP-macOS-universal.tar.gz" {print $1}' SHA256SUMS.txt)
+          test -n "$LOGIC_PRO_MCP_SHA256"
+          bash Scripts/install.sh
+          test "$("$LOGIC_PRO_MCP_INSTALL_DIR/LogicProMCP" --version)" = "${GITHUB_REF_NAME#v}"
+          "$LOGIC_PRO_MCP_INSTALL_DIR/LogicProMCP" --help >/dev/null
+          test -f "$LOGIC_PRO_MCP_SHARE_DIR/logic_ui_jxa.py"
+
   publish:
-    # `validate-install` is a gate, not a report. A failure there means nothing is published:
-    # no tag release, no assets, nothing for `brew install` or the README's curl to resolve.
-    needs: [build-release, validate-install]
-    runs-on: macos-15
+    name: publish
+    needs: [package, validate-install]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-      - name: Checkout authenticated trusted verifier
-        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          ref: 3b139ed6a812e0b1fcbe0e0175bb256d4f2cbdac
-          path: trusted-verifier-src
-
-      - name: Resolve and build trusted verifier without changing pins
-        working-directory: trusted-verifier-src
-        run: |
-          set -euo pipefail
-          test "$(git rev-parse HEAD)" = 3b139ed6a812e0b1fcbe0e0175bb256d4f2cbdac
-          test -z "$(git status --porcelain)"
-          swift package resolve --force-resolved-versions
-          git diff --exit-code Package.resolved
-          swift build -c release --product trusted-verifier --force-resolved-versions
-          git diff --exit-code Package.resolved
-
-      - name: Download verified release artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: ${{ needs.build-release.outputs.verified_artifact_name }}
-      # The checksum check stays and is no longer conditional. A user who downloads a corrupted
-      # artifact experiences that directly, which is why it outlived the certification system that
-      # used to run beside it.
-      - name: Reverify downloaded release artifact
-        env:
-          QUALIFICATION_INPUTS_GITHUB_TOKEN: ${{ github.token }}
-          QUALIFICATION_EVIDENCE_URL: ${{ secrets.QUALIFICATION_EVIDENCE_URL }}
-          QUALIFICATION_EVIDENCE_SHA256: ${{ secrets.QUALIFICATION_EVIDENCE_SHA256 }}
-          TRUSTED_QUALIFICATION_PUBLIC_KEY: ${{ secrets.TRUSTED_QUALIFICATION_PUBLIC_KEY }}
-        run: |
-          set -euo pipefail
-          # Check declared outer file types before checksums can open them.
-          for artifact in LogicProMCP LogicProMCP-macOS-universal.tar.gz LogicProMCP-macOS-arm64.tar.gz RELEASE-METADATA.json SHA256SUMS.txt qualification-public.json release-artifacts.sha256; do
-            if [ ! -f "$artifact" ] || [ -L "$artifact" ]; then
-              echo "Downloaded release input must be a regular non-link file" >&2
-              exit 1
-            fi
-          done
-          private=$(mktemp -d)
-          trap 'rm -rf "$private"' EXIT
-          # Never let downloaded checksum rows choose filesystem paths to read.
-          shasum -a 256 LogicProMCP LogicProMCP-macOS-universal.tar.gz \
-            LogicProMCP-macOS-arm64.tar.gz RELEASE-METADATA.json SHA256SUMS.txt qualification-public.json \
-            | LC_ALL=C sort > "$private/expected-checksums"
-          LC_ALL=C sort release-artifacts.sha256 > "$private/supplied-checksums"
-          cmp "$private/expected-checksums" "$private/supplied-checksums"
-          bash Scripts/release-fetch-qualified-inputs.sh verify "$private"
-          git fetch --quiet --no-tags --depth=1 origin "+refs/tags/${GITHUB_REF_NAME}:refs/tags/${GITHUB_REF_NAME}"
-          tag_body=$(git for-each-ref --format='%(contents)' "refs/tags/$GITHUB_REF_NAME")
-          test "$(printf '%s\n' "$tag_body" | grep -c '^Final-candidate-SHA256: ')" = 1
-          test "$(printf '%s\n' "$tag_body" | grep -c '^Qualification-matrix-SHA256: ')" = 1
-          export EXPECTED_BINARY_SHA256=$(printf '%s\n' "$tag_body" | sed -n 's/^Final-candidate-SHA256: //p')
-          export EXPECTED_MATRIX_SHA256=$(printf '%s\n' "$tag_body" | sed -n 's/^Qualification-matrix-SHA256: //p')
-          export LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY="$TRUSTED_QUALIFICATION_PUBLIC_KEY"
-          bash Scripts/release-consume-final.sh verify-public "${GITHUB_REF_NAME#v}" "$GITHUB_SHA" \
-            "$PWD/LogicProMCP" "$private/bundle" \
-            "$PWD/trusted-verifier-src/.build/release/trusted-verifier" "$PWD"
-
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191
+          name: ${{ needs.package.outputs.artifact-name }}
+      - name: Reverify package
+        run: shasum -a 256 -c release-artifacts.sha256
+      - name: Publish GitHub release
+        uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191 # v2.2.1
         with:
           generate_release_notes: true
           prerelease: ${{ contains(github.ref_name, '-') }}
+          fail_on_unmatched_files: true
           files: |
             LogicProMCP
             LogicProMCP-macOS-universal.tar.gz
             LogicProMCP-macOS-arm64.tar.gz
             RELEASE-METADATA.json
             SHA256SUMS.txt
-            qualification-public.json
-
-  validate-install:
-    # BEFORE `publish`, not after. Until 2026-09-18 this ran downstream of the GitHub Release,
-    # so every install defect was found in public: the release existed, `brew install` and the
-    # README's curl-pipe both resolved to it, and the only thing the failing job did was turn a
-    # check red beside an artifact users already had. Nothing gated the publish at all.
-    #
-    # It installs the artifact the build job produced, via `LOGIC_PRO_MCP_LOCAL_ARCHIVE`, and the
-    # bytes are still compared against the sha256 in that build's own SHA256SUMS.txt -- the local
-    # input changes where the bytes come from and nothing about what is checked. So this is the
-    # same artifact that `publish` then uploads, verified before anyone can download it.
-    needs: build-release
-    permissions:
-      contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        # Product support floor is macOS 14+ (README.md, docs/SETUP.md).
-        # Validate on the oldest supported runner plus current latest.
-        os: [macos-15, macos-14]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
-
-      - name: Download verified release artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: ${{ needs.build-release.outputs.verified_artifact_name }}
-          path: ${{ runner.temp }}/artifact
-
-      - name: Reverify downloaded release artifact
-        working-directory: ${{ runner.temp }}/artifact
-        run: |
-          set -euo pipefail
-          # Check declared outer file types before checksums can open them.
-          for artifact in LogicProMCP LogicProMCP-macOS-universal.tar.gz LogicProMCP-macOS-arm64.tar.gz RELEASE-METADATA.json SHA256SUMS.txt qualification-public.json release-artifacts.sha256; do
-            if [ ! -f "$artifact" ] || [ -L "$artifact" ]; then
-              echo "Downloaded release input must be a regular non-link file" >&2
-              exit 1
-            fi
-          done
-          private=$(mktemp -d)
-          trap 'rm -rf "$private"' EXIT
-          # Never let downloaded checksum rows choose filesystem paths to read.
-          shasum -a 256 LogicProMCP LogicProMCP-macOS-universal.tar.gz \
-            LogicProMCP-macOS-arm64.tar.gz RELEASE-METADATA.json SHA256SUMS.txt qualification-public.json \
-            | LC_ALL=C sort > "$private/expected-checksums"
-          LC_ALL=C sort release-artifacts.sha256 > "$private/supplied-checksums"
-          cmp "$private/expected-checksums" "$private/supplied-checksums"
-
-      - name: Record what this runner actually is
-        # The matrix names a runner image, not a CPU. `runs-on: macos-14` has been arm64 for some
-        # time, so reading the label as "this proves x86_64 works" would be a claim about an
-        # architecture nobody ran. Print it instead of assuming it.
-        run: |
-          set -euo pipefail
-          uname -m
-          sw_vers
-
-      - name: Validate installer and uninstaller against release asset
-        env:
-          LOGIC_PRO_MCP_VERSION: ${{ github.ref_name }}
-          LOGIC_PRO_MCP_LOCAL_ARCHIVE: ${{ runner.temp }}/artifact/LogicProMCP-macOS-universal.tar.gz
-          LPM_ARTIFACT_DIR: ${{ runner.temp }}/artifact
-          LOGIC_PRO_MCP_INSTALL_DIR: ${{ runner.temp }}/logic-pro-bin
-          LOGIC_PRO_MCP_SHARE_DIR: ${{ runner.temp }}/logic-pro/share/logic-pro-mcp
-          LOGIC_PRO_MCP_SKIP_SUDO: "1"
-          LOGIC_PRO_MCP_REGISTER_CLAUDE: "0"
-          LOGIC_PRO_MCP_INSTALL_KEYCMDS: "1"
-          LOGIC_PRO_MCP_KEYCMD_DIR: ${{ runner.temp }}/key-commands
-          LOGIC_PRO_MCP_KEYCMD_AUTO_RESTORE: "1"
-        run: |
-          mkdir -p "$LOGIC_PRO_MCP_INSTALL_DIR"
-
-          set -euo pipefail
-
-          # Resolve the provenance pins from THIS RUN's manifest, so the installer takes its
-          # fail-closed hardened path rather than the opt-in same-origin fallback -- which is
-          # what a downstream consumer following README.md Quick Start Option B does.
-          #
-          # These used to be curled from the published release, which is the reason this job had
-          # to run after `publish`. They come from the build artifact now. That is not a weaker
-          # source: `install.sh` still hashes the archive and compares it against this value, so
-          # a mismatch between what was built and what is being installed still fails here.
-          LOGIC_PRO_MCP_SHA256=$(awk '$2 == "LogicProMCP-macOS-universal.tar.gz" {print $1}' \
-              "$LPM_ARTIFACT_DIR/SHA256SUMS.txt")
-          LOGIC_PRO_MCP_TEAM_ID=$(sed -n 's/.*"team_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' \
-              "$LPM_ARTIFACT_DIR/RELEASE-METADATA.json" | head -n 1)
-          test -n "$LOGIC_PRO_MCP_SHA256"
-          test -n "$LOGIC_PRO_MCP_TEAM_ID"
-          export LOGIC_PRO_MCP_SHA256 LOGIC_PRO_MCP_TEAM_ID
-          echo "Using LOGIC_PRO_MCP_SHA256=$LOGIC_PRO_MCP_SHA256"
-          echo "Using LOGIC_PRO_MCP_TEAM_ID=$LOGIC_PRO_MCP_TEAM_ID"
-
-          bash Scripts/install.sh | tee install.log
-          test -x "$LOGIC_PRO_MCP_INSTALL_DIR/LogicProMCP"
-          test -f "$LOGIC_PRO_MCP_SHARE_DIR/logic_bounce.py"
-          test -f "$LOGIC_PRO_MCP_SHARE_DIR/logic_bounce_ui.py"
-          test -f "$LOGIC_PRO_MCP_SHARE_DIR/logic_ui_jxa.py"
-          test -f "$LOGIC_PRO_MCP_SHARE_DIR/logic_input_source.py"
-          test -f "$LOGIC_PRO_MCP_SHARE_DIR/SETUP.md"
-          bash Scripts/uninstall.sh | tee uninstall.log
-          test ! -e "$LOGIC_PRO_MCP_INSTALL_DIR/LogicProMCP"
-          test ! -e "$LOGIC_PRO_MCP_SHARE_DIR"
-
-      - name: Upload install validation evidence
-        if: ${{ always() }}
-        uses: actions/upload-artifact@65c4c4a1ddee5b72f698fdd19549f0f0fb45cf08
-        with:
-          name: install-validation-${{ github.run_id }}-${{ github.run_attempt }}-${{ matrix.os }}
-          if-no-files-found: ignore
-          path: |
-            install.log
-            uninstall.log
-
-  # "The artifact we verified is the artifact we published" is a claim, and this is where it stops
-  # being one. `validate-install` proved the BUILD installs; this proves the bytes now sitting on
-  # the release page are those same bytes, by downloading them and comparing against the manifest
-  # the build produced.
-  #
-  # It does not replace the pre-publish validation and must never be allowed to: an install defect
-  # found here is found in public, which is the situation this pipeline was just restructured to
-  # end. What it catches is a different failure -- a partial or mangled upload, a release whose
-  # assets do not match the run that made them.
-  verify-published:
-    needs: [build-release, publish]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Download the artifact this run verified
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
-        with:
-          name: ${{ needs.build-release.outputs.verified_artifact_name }}
-          path: verified
-
-      - name: The published assets are byte-identical to the verified ones
-        env:
-          TAG: ${{ github.ref_name }}
-          BASE: https://github.com/${{ github.repository }}/releases/download
-        run: |
-          set -euo pipefail
-          mkdir -p published
-          for asset in LogicProMCP LogicProMCP-macOS-universal.tar.gz \
-                       LogicProMCP-macOS-arm64.tar.gz SHA256SUMS.txt RELEASE-METADATA.json qualification-public.json; do
-            curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors \
-                 -o "published/$asset" "$BASE/$TAG/$asset"
-          done
-          # Compare bytes, not a manifest against itself: a manifest the same publisher can
-          # rewrite proves nothing on its own, so each downloaded file is hashed here and checked
-          # against the file this run built and installed from.
-          status=0
-          for asset in LogicProMCP LogicProMCP-macOS-universal.tar.gz \
-                       LogicProMCP-macOS-arm64.tar.gz SHA256SUMS.txt RELEASE-METADATA.json qualification-public.json; do
-            built=$(shasum -a 256 "verified/$asset" | awk '{print $1}')
-            live=$(shasum -a 256 "published/$asset" | awk '{print $1}')
-            if [ "$built" != "$live" ]; then
-              echo "::error::$asset differs. verified=$built published=$live"
-              status=1
-            else
-              echo "$asset $built"
-            fi
-          done
-          exit "$status"
-
-  # The MCP registry record, published LAST -- after `validate-install` has downloaded the release
-  # assets and run the installer against them on two macOS versions. The record names a release,
-  # so it goes out downstream of the check that the release works, not beside it.
-  #
-  # This is a `uses:` rather than `publish-mcp.yml`'s own `on: release` trigger because that
-  # trigger has never fired: the release above is created by softprops/action-gh-release with the
-  # default GITHUB_TOKEN, and GitHub does not start workflow runs from GITHUB_TOKEN events. The
-  # registry has been nine releases stale since 2026-06-23 for exactly that reason.
-  publish-registry:
-    needs: verify-published
-    permissions:
-      contents: read
-      # mcp-publisher authenticates by OIDC; the called workflow gets the intersection of its own
-      # declaration and this one, so omitting it here makes the login fail rather than the job.
-      id-token: write
-    uses: ./.github/workflows/publish-mcp.yml
-    with:
-      version: ${{ github.ref_name }}

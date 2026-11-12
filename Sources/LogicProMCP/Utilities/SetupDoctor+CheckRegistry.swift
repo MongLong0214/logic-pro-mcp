@@ -8,7 +8,6 @@ extension SetupDoctor {
         case installSource = "install.source"
         case installBinaryInventory = "install.binary_inventory"
         case installShareDir = "install.share_dir"
-        case releaseSignature = "release.signature"
         case releaseQuarantine = "release.quarantine"
         case mcpClaudeCodeRegistration = "mcp.claude_code_registration"
         case mcpRegistrationTarget = "mcp.registration_target"
@@ -99,7 +98,6 @@ extension SetupDoctor {
         .init(.installSource, remediationAnchor: "docs/SETUP.md#doctor-installsource"),
         .init(.installBinaryInventory, remediationAnchor: "docs/SETUP.md#doctor-installbinary-inventory"),
         .init(.installShareDir, remediationAnchor: "docs/SETUP.md#doctor-installshare-dir"),
-        .init(.releaseSignature, dependencies: [.binaryPath], remediationAnchor: "docs/SETUP.md#doctor-releasesignature"),
         .init(.releaseQuarantine, dependencies: [.binaryPath], remediationAnchor: "docs/SETUP.md#doctor-releasequarantine"),
         .init(.mcpClaudeCodeRegistration, remediationAnchor: "docs/SETUP.md#doctor-mcpclaude-code-registration", clientRule: "claude-code"),
         .init(.mcpRegistrationTarget, dependencies: [.mcpClaudeCodeRegistration], remediationAnchor: "docs/SETUP.md#doctor-mcpregistration-target", clientRule: "claude-code"),

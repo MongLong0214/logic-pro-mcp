@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
-# Stable tags use the same final-artifact consumer and hosted sole publisher.
+# Stable tags use the same CLT qualification and hosted sole publisher.
 set -euo pipefail
-if [ "$#" != 4 ] || ! [[ "$1" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "Usage: $0 vMAJOR.MINOR.PATCH FINAL_CANDIDATE PRIVATE_MATRIX TRUSTED_VERIFIER" >&2
+if [ "$#" != 1 ] || ! [[ "$1" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "Usage: $0 vMAJOR.MINOR.PATCH" >&2
   exit 1
 fi
 REPO="${GITHUB_REPOSITORY:-MongLong0214/logic-pro-mcp}"

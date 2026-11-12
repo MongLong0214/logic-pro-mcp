@@ -3,11 +3,12 @@ set -euo pipefail
 
 runner_temp_root="${RUNNER_TEMP:-${TMPDIR:-/tmp}}"
 mkdir -p "$runner_temp_root"
+build_root=$(mktemp -d "$runner_temp_root/logicpromcp-universal.XXXXXX")
 
 find_arch_binary() {
   local build_dir="$1"
   local arch="$2"
-  local candidates_file="$runner_temp_root/logicpromcp-${arch}-candidates.txt"
+  local candidates_file="$build_root/${arch}-candidates.txt"
   local candidate=""
   local file_out=""
   local bin=""
@@ -37,16 +38,25 @@ find_arch_binary() {
     exit 1
   fi
 
-  rm -f "$candidates_file"
   printf '%s\n' "$bin"
 }
 
-arm64_build_dir="$runner_temp_root/logicpromcp-build-arm64"
-x64_build_dir="$runner_temp_root/logicpromcp-build-x86_64"
-rm -rf "$arm64_build_dir" "$x64_build_dir"
+arm64_build_dir="$build_root/arm64"
+x64_build_dir="$build_root/x86_64"
 
-swift build -c release --arch arm64 --scratch-path "$arm64_build_dir"
-swift build -c release --arch x86_64 --scratch-path "$x64_build_dir"
+swift build -c release --product LogicProMCP --arch arm64 --scratch-path "$arm64_build_dir" &
+arm64_pid=$!
+swift build -c release --product LogicProMCP --arch x86_64 --scratch-path "$x64_build_dir" &
+x64_pid=$!
+
+arm64_status=0
+x64_status=0
+wait "$arm64_pid" || arm64_status=$?
+wait "$x64_pid" || x64_status=$?
+if [ "$arm64_status" -ne 0 ] || [ "$x64_status" -ne 0 ]; then
+  echo "::error::universal build failed (arm64=$arm64_status, x86_64=$x64_status)" >&2
+  exit 1
+fi
 
 arm64_bin=$(find_arch_binary "$arm64_build_dir" "arm64")
 x64_bin=$(find_arch_binary "$x64_build_dir" "x86_64")

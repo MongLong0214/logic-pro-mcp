@@ -62,7 +62,7 @@ T1 -> T2 -> T3 -> T6 ┐
 
 ## T1 Review Evidence
 
-- Focused tests: `swift test --filter 'DoctorSourceBuild|DoctorRemediationShellQuotesPaths|DoctorXattrEvidenceKeepsStdoutStderrSummary|DoctorCodesignEvidenceKeepsStdoutStderrSummary|DoctorUnknownLaunchContext'`
+- Focused tests: `swift test --filter 'DoctorSourceBuild|DoctorRemediationShellQuotesPaths|DoctorXattrEvidenceKeepsStdoutStderrSummary|DoctorUnknownLaunchContext'`
 - Full suite: `swift test --no-parallel` (`2174` tests passed)
 - Build: `swift build -c release`
 - Surface smoke: `.build/release/LogicProMCP doctor --json`

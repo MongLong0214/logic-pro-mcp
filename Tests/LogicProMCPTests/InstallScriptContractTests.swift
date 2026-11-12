@@ -27,25 +27,16 @@ import Testing
     #expect(!setup.contains("sha256 for bare LogicProMCP entry"))
 }
 
-@Test func testInstallScriptIncludesSignatureAndGatekeeperVerification() throws {
-    let script = try scriptContents("Scripts/install.sh")
-    let removedTool = "cli" + "click"
-
-    #expect(script.contains("verify_signature()"))
-    #expect(script.contains("verify_gatekeeper()"))
-    #expect(script.contains("codesign --verify --strict --verbose=2"))
-    #expect(script.contains("spctl --assess --type execute"))
-    #expect(script.contains("RELEASE-METADATA.json"))
-    #expect(script.contains("could not resolve TeamIdentifier from release metadata"))
-    #expect(!script.contains("require_command \"\(removedTool)\""))
-}
-
-@Test func testInstallScriptExtractsTeamIDFromSingleLineReleaseMetadata() throws {
+@Test func testInstallScriptUsesChecksumWithoutAppleSigning() throws {
     let script = try scriptContents("Scripts/install.sh")
 
-    #expect(script.contains("METADATA_JSON=$(curl -fsSL \"$METADATA_URL\")"))
-    #expect(script.contains("\"team_id\"[[:space:]]*:[[:space:]]*\""))
-    #expect(!script.contains("awk -F'\"' '/\"team_id\"[[:space:]]*:/ {print $4; exit}'"))
+    #expect(script.contains("LOGIC_PRO_MCP_SHA256"))
+    #expect(script.contains("Verifying SHA256"))
+    #expect(script.contains("validate_release_archive_manifest"))
+    for forbidden in ["codesign", "spctl", "notarytool", "LOGIC_PRO_MCP_TEAM_ID",
+                      "EXPECTED_TEAM_ID", "RELEASE-METADATA.json"] {
+        #expect(!script.contains(forbidden), "installer contains \(forbidden)")
+    }
 }
 
 @Test func testInstallScriptRegistersClaudeAndKeyCommandsByDefault() throws {
@@ -89,35 +80,12 @@ import Testing
     #expect(script.contains("path_writable_without_sudo \"$INSTALL_DIR\" && path_writable_without_sudo \"$SHARE_DIR\""))
 }
 
-@Test func testReleaseWorkflowRejectsUnvalidatedSigningAndPublishesMetadata() throws {
+@Test func testReleaseWorkflowPublishesUnsignedChecksumVerifiedArchives() throws {
     let workflow = try scriptContents(".github/workflows/release.yml")
     let packageScript = try scriptContents("Scripts/release-package.sh")
 
-    // Developer ID credentials fail closed until notarization is validated.
-    // Credential-free stable and prerelease tags retain the ADHOC path.
-    #expect(workflow.contains("Detect release mode"))
-    #expect(!workflow.contains("mode=notarized"))
-    #expect(workflow.contains("mode=adhoc"))
-    #expect(workflow.contains("Release mode: owner-staged ADHOC"))
-    #expect(!workflow.contains("Stable ADHOC releases are not permitted"))
-    #expect(!workflow.contains("Do not push stable tags manually"))
-    #expect(!workflow.contains("ALLOW_ADHOC_STABLE"))
-    #expect(workflow.contains("configured_credentials=("))
-    #expect(workflow.contains("Notarized releases are disabled until privately validated"))
-    #expect(!workflow.contains("Codesign binary (Developer ID)"))
-    #expect(workflow.contains("if [ -n \"${!credential}\" ]; then"))
-    for credential in ["MACOS_CERT_BASE64", "MACOS_CERT_PASSWORD", "MACOS_SIGNING_IDENTITY",
-                       "MACOS_KEYCHAIN_PASSWORD", "APPLE_NOTARY_APPLE_ID",
-                       "APPLE_NOTARY_TEAM_ID", "APPLE_NOTARY_APP_PASSWORD"] {
-        #expect(workflow.contains("\(credential): ${{ secrets.\(credential) }}"))
-    }
-    #expect(!workflow.contains("Codesign binary (ADHOC)"))
-    #expect(!workflow.contains("codesign --force"))
-    #expect(workflow.contains("bash Scripts/release-consume-final.sh verify-public"))
-    #expect(workflow.contains("Qualification-matrix-SHA256: "))
-    #expect(workflow.contains("EXPECTED_MATRIX_SHA256"))
-    #expect(!workflow.contains("Qualification-manifest-SHA256: "))
-    #expect(!workflow.contains("EXPECTED_MANIFEST_SHA256"))
+    #expect(workflow.contains("DEVELOPER_DIR=/Library/Developer/CommandLineTools"))
+    #expect(workflow.contains("bash Scripts/release-build-universal.sh"))
     #expect(workflow.contains("bash Scripts/release-verify-formula-install-paths.sh"))
     #expect(workflow.contains("validate-install"))
     #expect(workflow.contains("macos-15"))
@@ -131,10 +99,13 @@ import Testing
     #expect(packageScript.contains("Scripts/logic_bounce_ui.py"))
     #expect(packageScript.contains("Scripts/logic_ui_jxa.py"))
     #expect(packageScript.contains("Scripts/logic_input_source.py"))
-    #expect(packageScript.contains("APPLE_NOTARY_TEAM_ID is required when RELEASE_MODE=notarized"))
     #expect(packageScript.contains("rm -f LogicProMCP-macOS-universal.tar.gz LogicProMCP-macOS-arm64.tar.gz SHA256SUMS.txt RELEASE-METADATA.json"))
     #expect(packageScript.contains("binary_file=\"$binary_dir/$binary_name\""))
-    #expect(packageScript.contains("python3 - \"$release_version\" \"$team_id\" \"$signing\" \"$arch_json\""))
+    #expect(packageScript.contains("\"signing\": \"unsigned\""))
+    for forbidden in ["codesign", "spctl", "notarytool", "APPLE_NOTARY", "MACOS_CERT"] {
+        #expect(!workflow.contains(forbidden), "release workflow contains \(forbidden)")
+        #expect(!packageScript.contains(forbidden), "package script contains \(forbidden)")
+    }
     let removedTool = "cli" + "click"
     #expect(!workflow.contains("brew install \(removedTool)"))
     #expect(!(try scriptContents("Formula/logic-pro-mcp.rb")).contains("depends_on \"\(removedTool)\""))
@@ -189,47 +160,24 @@ import Testing
     }
 }
 
-/// The coverage gate, across the two files it now lives in.
-///
-/// The thresholds moved to `Scripts/ci-coverage-gate.sh` on 2026-09-18, because inline in the
-/// workflow the only way to watch the gate refuse anything was to push a branch whose coverage had
-/// actually dropped. This case follows them. Asserting `MIN_REGION=70` against `ci.yml` after the
-/// number moved would be a test looking in the wrong file and passing for it -- the shape this
-/// repository keeps finding, and the reason each claim below names which file holds it.
 @Test func testCoverageGateFailsClosedAndUsesWritableProfilePath() throws {
     let workflow = try scriptContents(".github/workflows/ci.yml")
     let gate = try scriptContents("Scripts/ci-coverage-gate.sh")
 
-    // Running the tests and collecting the profile stays in the workflow: it is the one part a
-    // fixture cannot stand in for.
     #expect(workflow.contains("set -euo pipefail"))
     #expect(workflow.contains("PROFRAW_DIR=\"$RUNNER_TEMP/logicpromcp-profraw\""))
     #expect(workflow.contains("export LLVM_PROFILE_FILE=\"$PROFRAW_DIR/%m-%p.profraw\""))
     #expect(workflow.contains("COVERAGE_LOG=\"$RUNNER_TEMP/logicpromcp-coverage.log\""))
-    #expect(workflow.contains("PROFILE_WARNING_COUNT=$(grep -c \"LLVM Profile Error\" \"$COVERAGE_LOG\" || true)"))
-    #expect(workflow.contains("continuing to profdata/report validation"))
-    #expect(workflow.contains("LLVM profile warnings: ${PROFILE_WARNING_COUNT:-0}."))
-
-    // A cached `default.profdata` is the previous run's answer to a question nobody asked again.
-    #expect(workflow.contains("find .build -type d -name codecov"))
-
-    // The workflow must actually CALL the gate. A gate nothing invokes is the defect one level up.
+    #expect(workflow.contains("swift test --enable-code-coverage"))
     #expect(workflow.contains("bash Scripts/ci-coverage-gate.sh"))
-
-    // GitHub's default `run:` shell is `bash -e` with no pipefail, so `a | tee log` reports tee's
-    // exit code. Naming `bash` selects `bash --noprofile --norc -eo pipefail`.
     #expect(workflow.contains("defaults:"))
     #expect(workflow.contains("shell: bash"))
 
-    // The thresholds, where they now are. Unchanged at 70/78, with 90 a notice and not a gate.
     #expect(gate.contains("set -euo pipefail"))
     #expect(gate.contains("LPM_COVERAGE_MIN_REGION:-70"))
     #expect(gate.contains("LPM_COVERAGE_MIN_LINE:-78"))
     #expect(gate.contains("LPM_COVERAGE_TARGET:-90"))
 
-    // H-4: the coverage step disabled error handling and exited 0, so regressions never blocked a
-    // merge. Neither file may turn it off, in code OR in a comment -- this is a substring search
-    // and cannot tell them apart, which has already cost one red run.
     let forbidden = "set " + "+e"
     #expect(!workflow.contains(forbidden))
     #expect(!gate.contains(forbidden))
@@ -306,38 +254,25 @@ import Testing
     }
 }
 
-@Test func testLocalReleaseScriptSupportsStableAdhocAndFailsClosedOnRemoteCheck() throws {
+@Test func testLocalReleaseScriptUsesCLTNativeQualificationAndHostedPublication() throws {
     let script = try scriptContents("Scripts/release.sh")
-    let consumer = try scriptContents("Scripts/release-consume-final.sh")
 
-    #expect(script.contains("Owner-staged ADHOC release consumption"))
-    #expect(script.contains("FINAL_CANDIDATE PRIVATE_MATRIX TRUSTED_VERIFIER"))
-    #expect(!script.contains("refuses stable tags"))
-    #expect(!script.contains("There is intentionally no override"))
-    #expect(!script.contains("LOGIC_PRO_MCP_ALLOW_ADHOC_STABLE"))
+    #expect(script.contains("DEVELOPER_DIR=/Library/Developer/CommandLineTools"))
+    #expect(script.contains("bash Scripts/release-qualify.sh"))
+    #expect(script.contains("git diff --exit-code Package.resolved"))
     #expect(script.contains("set -euo pipefail"))
-    #expect(script.contains("REMOTE_TAGS=$(git ls-remote --tags origin \"$VERSION\")"))
-    #expect(script.contains("Final-candidate-SHA256: $BINARY_SHA"))
-    #expect(script.contains("Qualification-matrix-SHA256: $MATRIX_SHA"))
-    #expect(!script.contains("Qualification-manifest-SHA256: "))
-    #expect(consumer.contains("verify-matrix --candidate"))
-    #expect(consumer.contains("verify-public-matrix --public-directory"))
-    #expect(consumer.contains("release-qualification-matrix.json"))
-    #expect(consumer.contains("EXPECTED_MATRIX_SHA256"))
-    #expect(!consumer.contains("EXPECTED_MANIFEST_SHA256"))
+    #expect(script.contains("git ls-remote --exit-code --tags origin"))
+    #expect(script.contains("Native-qualified: $QUALIFIED"))
     #expect(!script.contains("gh release create"))
+    #expect(!script.contains("ADHOC"))
+    #expect(!script.contains("codesign"))
 }
 
-@Test func testStableReleaseScriptPreflightsAdhocTagBeforePush() throws {
+@Test func testStableReleaseScriptPreflightsTagBeforePush() throws {
     let script = try scriptContents("Scripts/release-stable.sh")
 
     #expect(script.contains("release.sh"))
-    #expect(script.contains("FINAL_CANDIDATE PRIVATE_MATRIX TRUSTED_VERIFIER"))
-    #expect(!script.contains("PRIVATE_BUNDLE"))
-    #expect(!script.contains("gh secret list --repo \"$REPO\" --app actions"))
-    #expect(!script.contains("Stable tag '$VERSION' was NOT created."))
-    #expect(!script.contains("MACOS_CERT_BASE64"))
-    #expect(!script.contains("APPLE_NOTARY_APPLE_ID"))
+    #expect(script.contains("Usage: $0 vMAJOR.MINOR.PATCH"))
     #expect(script.contains("gh release view \"$1\""))
     let availability = try #require(script.range(of: "gh release view \"$1\""))
     let delegate = try #require(script.range(of: "exec bash \"$(dirname \"$0\")/release.sh\" \"$@\""))

@@ -174,15 +174,6 @@ private func issue26RepositoryRootURL() -> URL {
     }
     #expect(quarantineAnchor.contains("terminal unavailable state"))
 
-    let signatureStart = try #require(setup.range(of: "<a id=\"doctor-releasesignature\"></a>"))
-    let signatureTail = setup[signatureStart.lowerBound...]
-    let signatureNextAnchor = try #require(signatureTail.dropFirst().range(of: "<a id="))
-    let signatureAnchor = String(signatureTail[..<signatureNextAnchor.lowerBound])
-    for staleContinuation in ["Reinstall", "sign a local", "codesign --force", "remediation action", "continuation"] {
-        #expect(!signatureAnchor.contains(staleContinuation))
-    }
-    #expect(signatureAnchor.contains("terminal unavailable state"))
-
     let macOSStart = try #require(setup.range(of: "<a id=\"doctor-systemmacos-version\"></a>"))
     let macOSTail = setup[macOSStart.lowerBound...]
     let macOSNextAnchor = try #require(macOSTail.dropFirst().range(of: "<a id="))
@@ -227,7 +218,6 @@ private func issue26RepositoryRootURL() -> URL {
         "install.source",
         "install.binary_inventory",
         "install.share_dir",
-        "release.signature",
         "release.quarantine",
         "mcp.claude_code_registration",
         "mcp.registration_target",
@@ -377,7 +367,7 @@ private func issue26RepositoryRootURL() -> URL {
     #expect(path.evidence["human_intervention_required"] == "false")
     #expect(path.evidence["human_intervention_requests"] == "0")
 
-    for id in ["binary.executable", "release.signature", "release.quarantine"] {
+    for id in ["binary.executable", "release.quarantine"] {
         let dependent = try #require(report.checks.first { $0.id == id })
         #expect(dependent.status == .skipped)
         #expect(dependent.blockedBy == "binary.path")
@@ -385,7 +375,7 @@ private func issue26RepositoryRootURL() -> URL {
         #expect(dependent.remediation.type == .none)
         #expect(dependent.remediation.value.isEmpty)
     }
-    for id in ["binary.path", "binary.executable", "release.signature", "release.quarantine"] {
+    for id in ["binary.path", "binary.executable", "release.quarantine"] {
         #expect(!report.fixPlan.contains(id))
     }
 }
@@ -403,7 +393,7 @@ private func issue26RepositoryRootURL() -> URL {
     )
     let path = try #require(report.checks.first { $0.id == "binary.path" })
     #expect(path.status == .fail)
-    for id in ["binary.executable", "release.signature", "release.quarantine"] {
+    for id in ["binary.executable", "release.quarantine"] {
         let dependent = try #require(report.checks.first { $0.id == id })
         #expect(dependent.status == .skipped)
         #expect(dependent.blockedBy == "binary.path")
@@ -425,7 +415,7 @@ private func issue26RepositoryRootURL() -> URL {
     )
     let path = try #require(report.checks.first { $0.id == "binary.path" })
     #expect(path.status == .pass)
-    for id in ["binary.executable", "release.signature", "release.quarantine"] {
+    for id in ["binary.executable", "release.quarantine"] {
         let dependent = try #require(report.checks.first { $0.id == id })
         #expect(dependent.status == .fail)
         #expect(dependent.blockedBy == nil)
@@ -455,7 +445,6 @@ private func issue26RepositoryRootURL() -> URL {
     let terminalOutcomeIDs: Set<String> = [
         "binary.path",
         "binary.executable",
-        "release.signature",
         "release.quarantine",
         "permissions.accessibility",
         "permissions.automation_logic_pro",
@@ -915,37 +904,6 @@ private func issue26RepositoryRootURL() -> URL {
     #expect(quarantine.evidence["stdout_truncated"] == "false")
     #expect(quarantine.evidence["stderr"] == "present")
     #expect(quarantine.evidence["stderr_truncated"] == "true")
-}
-
-@Test func testDoctorCodesignEvidenceKeepsStdoutStderrSummary() throws {
-    let longOutput = String(repeating: "authority ", count: 600)
-    let report = SetupDoctor.generate(
-        arguments: ["LogicProMCP", "doctor", "--json"],
-        permissionStatus: grantedPermissionStatus(),
-        approvals: allApprovals(),
-        runtime: doctorRuntime(commandHandler: { executable, _ in
-            if executable == "/usr/bin/codesign" {
-                return .init(exitCode: 1, stdout: longOutput, stderr: "invalid signature\n")
-            }
-            if executable == "/usr/bin/xattr" {
-                return .init(exitCode: 1, stdout: "", stderr: "No such xattr")
-            }
-            return nil
-        })
-    )
-    let signature = try #require(report.checks.first { $0.id == "release.signature" })
-    #expect(signature.status == .fail)
-    #expect(signature.remediation.type == .none)
-    #expect(signature.remediation.value.isEmpty)
-    #expect(signature.evidence["exit_code"] == "1")
-    #expect(signature.evidence["stdout"] == "present")
-    #expect(signature.evidence["stdout_truncated"] == "true")
-    #expect(signature.evidence["stderr"] == "present")
-    #expect(signature.evidence["stderr_truncated"] == "false")
-    #expect(signature.evidence["terminal"] == "true")
-    #expect(signature.evidence["human_intervention_required"] == "false")
-    #expect(signature.evidence["human_intervention_requests"] == "0")
-    #expect(!report.fixPlan.contains(signature.id))
 }
 
 @Test func testReleaseQuarantineTerminatesWhenStateUndeterminable() throws {

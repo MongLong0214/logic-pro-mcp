@@ -80,7 +80,7 @@ does not replace the live evidence required to accept a native behavior change.
 ## Prerequisites
 
 - macOS 14+
-- Swift 6.0+ (Xcode 16 or Command Line Tools)
+- Swift 6.0+ from Command Line Tools
 - Logic Pro — latest release prioritized (currently 12.3), works down to the 12.0.1 floor best-effort (only for live E2E testing — unit tests run without it). Live-verify against the newest Logic Pro version you have; that is the first-class target.
 
 ## Low-Risk PRs
@@ -97,7 +97,7 @@ Avoid these unless the issue explicitly asks for them:
 
 - New automation fallbacks
 - Logic-facing write behavior
-- Release, signing, Homebrew, or installer trust changes
+- Release, Homebrew, or installer trust changes
 - Broad rewrites across multiple channel/router surfaces
 - Claims that something is "verified" without independent readback evidence
 
@@ -125,19 +125,6 @@ swift test --filter <testName>
 ```
 
 Use `swift test --no-parallel` before asking for review when the change touches shared routing, state, resource envelopes, or safety-sensitive behavior.
-
-### Python CI guards
-
-The offline CI guards use Python 3.11 and `Scripts/requirements-ci.txt`. To run them locally without
-changing your system Python:
-
-```bash
-python3.11 -m venv "${TMPDIR:-$HOME/.cache}/logic-pro-ci-venv"
-source "${TMPDIR:-$HOME/.cache}/logic-pro-ci-venv/bin/activate"
-python -m pip install -r Scripts/requirements-ci.txt
-python -u Scripts/run-repo-guards.py
-```
-
 
 ## Live E2E Testing
 
