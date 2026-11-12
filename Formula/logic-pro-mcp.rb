@@ -7,9 +7,7 @@ class LogicProMcp < Formula
   license "MIT"
 
   # GitHub Actions release artifacts are expected to be true universal
-  # tarballs. Historical/local ADHOC prerelease cuts may still record
-  # arm64-only metadata, so inspect RELEASE-METADATA.json when auditing a
-  # specific tag.
+  # tarballs. RELEASE-METADATA.json records the architectures for each tag.
   #
   # SHA256 is copied from the published SHA256SUMS.txt for the current
   # LogicProMCP-macOS-universal.tar.gz release artifact.

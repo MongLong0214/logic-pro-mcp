@@ -248,7 +248,7 @@ LogicProMCP --check-permissions
 LogicProMCP doctor
 ```
 
-Because release binaries are ad-hoc signed, every new build or reinstall is a new signed identity to macOS: expect to re-grant Accessibility/Automation after upgrading, not only on first install. If permissions look wrong after reinstalling, remove the stale TCC entries in System Settings and grant them again to the actual launcher app ([docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)).
+Because published release binaries are unsigned, every new build or reinstall is a new executable identity to macOS: expect to re-grant Accessibility/Automation after upgrading, not only on first install. If permissions look wrong after reinstalling, remove the stale TCC entries in System Settings and grant them again to the actual launcher app ([docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)).
 
 ### Forcing a Logic Pro variant
 
