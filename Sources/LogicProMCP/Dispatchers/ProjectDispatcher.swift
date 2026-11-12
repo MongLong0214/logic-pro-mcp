@@ -169,8 +169,11 @@ struct ProjectDispatcher: OperationTraceDispatching {
             let existingFirstWrite = exportOptions.onFirstWrite
             var tracedExportOptions = exportOptions
             tracedExportOptions.onFirstWrite = {
-                await existingFirstWrite()
-                await recordWriteBoundary(traceID)
+                guard await existingFirstWrite() else { return false }
+                return await recordWriteBoundary(
+                    traceID,
+                    deadlineStage: "project_export_first_write"
+                )
             }
             let run: ProjectExportExecutor.RunResult
             switch confirmation {
@@ -967,7 +970,17 @@ struct ProjectDispatcher: OperationTraceDispatching {
         // explicit parent emit here; propagating a child's committed boundary up
         // to its parent trace (so this becomes observation, not intent, like the
         // routed ops) is future work.
-        await recordWriteBoundary(traceID)
+        guard await recordWriteBoundary(
+            traceID,
+            deadlineStage: "cleanup_apply_first_write"
+        ) else {
+            return cleanupApplyStateC(
+                .cancelled,
+                stepID: step.id,
+                hint: "cleanup_apply deadline won before the first rename began.",
+                extras: ["write_attempted": false]
+            )
+        }
         for (target, newName) in zip(targets, names) {
             let result = await TrackDispatcher.handle(
                 command: "rename",
@@ -1425,7 +1438,19 @@ struct ProjectDispatcher: OperationTraceDispatching {
         // #389: no router involved — the AppleScript launch/quit IS the external
         // effect, and it is about to run unconditionally, so the immediate emit
         // is an honest observation of the genuine first write.
-        await recordWriteBoundary(traceID)
+        guard await recordWriteBoundary(
+            traceID,
+            deadlineStage: "project_\(actionLabel)"
+        ) else {
+            return toolStateCResult(
+                .cancelled,
+                hint: "The request deadline won before the Logic Pro \(actionLabel) effect began.",
+                extras: [
+                    "operation": "project.\(actionLabel)",
+                    "write_attempted": false,
+                ]
+            )
+        }
         let execution = await execute(script)
         if let executionError = execution.executionError {
             return toolTextResult("Failed to \(actionLabel) Logic Pro: \(executionError)", isError: true)

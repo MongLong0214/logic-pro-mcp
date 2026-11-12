@@ -132,6 +132,8 @@ extension SetupDoctor {
             return keycmdReferenceCheck(runtime: context.runtime, profile: context.doctorProfile)
         case .channelsMCUWiringHint:
             return mcuWiringHintCheck(runtime: context.runtime, profile: context.doctorProfile)
+        case .channelsRuntimeEndpointOwnership:
+            return runtimeEndpointOwnershipCheck()
         case .dependenciesClickFallback:
             return clickFallbackCheck(
                 runtime: context.runtime,

@@ -145,6 +145,7 @@ private func doctorV4Report(
         "path_dependent_unresolved",
         "principal_not_found",
         "profile_not_required",
+        "runtime_server_not_started",
         "share_dir_invalid",
         "source_build_no_share_dir",
         "source_unavailable",

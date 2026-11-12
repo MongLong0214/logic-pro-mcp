@@ -209,7 +209,7 @@ private func issue26RepositoryRootURL() -> URL {
 
 @Test func testSetupDoctorJSONContractStableCheckIDsAndOKAggregation() throws {
     let report = SetupDoctor.generate(
-        arguments: ["LogicProMCP", "doctor", "--json", "--client", "claude-code"],
+        arguments: ["LogicProMCP", "doctor", "--json"],
         permissionStatus: grantedPermissionStatus(),
         approvals: allApprovals(),
         runtime: doctorRuntime()
@@ -250,6 +250,7 @@ private func issue26RepositoryRootURL() -> URL {
         "channels.keycmd_reference",
         "channels.manual_validation",
         "channels.mcu_wiring_hint",
+        "channels.runtime_endpoint_ownership",
         "dependencies.click_fallback",
     ])
 
@@ -275,6 +276,26 @@ private func issue26RepositoryRootURL() -> URL {
     let remediationType = try #require(remediation["type"] as? String)
     #expect(remediationType == "none")
     #expect(remediation["value"] as? String != nil)
+}
+
+@Test func issue1568DoctorDefersRuntimeEndpointOwnershipToLiveHealth() throws {
+    let report = SetupDoctor.generate(
+        arguments: ["LogicProMCP", "doctor", "--json"],
+        permissionStatus: grantedPermissionStatus(),
+        approvals: allApprovals(),
+        runtime: doctorRuntime()
+    )
+
+    let check = try #require(report.checks.first {
+        $0.id == "channels.runtime_endpoint_ownership"
+    })
+    #expect(check.status == .skipped)
+    #expect(check.skipReason?.rawValue == "runtime_server_not_started")
+    #expect(check.optional)
+    #expect(check.evidence["live_verification"] == "logic://system/health")
+    #expect(check.evidence["runtime_server_started"] == "false")
+    #expect(check.remediation.type == .none)
+    #expect(report.status == .ok)
 }
 
 @Test func testTerminalLogicInstallationSuppressesBlockedVersionContinuation() throws {
