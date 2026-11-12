@@ -1003,15 +1003,27 @@ struct SystemDispatcher: OperationTraceDispatching {
             do {
                 let result: SupportBundleBuilder.Result
                 if let supportBundleExporter {
+                    guard OperationTraceContext.claimDeadlineEffect(
+                        "support_bundle_materialization"
+                    ) else {
+                        return await finalizeTrace(
+                            toolStateCResult(
+                                .cancelled,
+                                hint: "The request deadline won before support-bundle materialization began.",
+                                extras: ["write_attempted": false]
+                            ),
+                            traceID: traceID
+                        )
+                    }
                     result = try await supportBundleExporter(directory) {
-                        await recordWriteBoundary(traceID)
+                        await recordClaimedWriteBoundary(traceID)
                     }
                 } else {
                     result = try await exportSupportBundle(
                         to: directory,
                         createdAt: createdAt,
                         router: router,
-                        onFirstWrite: { await recordWriteBoundary(traceID) }
+                        onFirstWrite: { await recordClaimedWriteBoundary(traceID) }
                     )
                 }
                 // PRD-011 TOCTOU close: the pre-write containment check ran
