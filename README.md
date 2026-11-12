@@ -162,7 +162,7 @@ cd logic-pro-mcp
 swift build -c release
 ```
 
-To upgrade an existing install: Homebrew installs use `brew update && brew upgrade logic-pro-mcp`; source builds use `git pull && swift build -c release`; pinned shell-installer installs re-run the installer with the new release's pins (below). Published binaries are unsigned (no Apple Developer ID; see [SECURITY.md](SECURITY.md#release-signing)), so treat a freshly built or reinstalled binary as a new executable identity — **Accessibility and Automation grants may need to be granted again after an upgrade** ([docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) covers removing stale TCC entries and re-granting them).
+To upgrade an existing install: Homebrew installs use `brew update && brew upgrade logic-pro-mcp`; source builds use `git pull && swift build -c release`; pinned shell-installer installs re-run the installer with the new release's pins (below). Published binaries are unsigned (no Apple Developer ID; see [SECURITY.md](SECURITY.md#deployment-security)), so treat a freshly built or reinstalled binary as a new executable identity — **Accessibility and Automation grants may need to be granted again after an upgrade** ([docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) covers removing stale TCC entries and re-granting them).
 
 ### 2. Register with an MCP client
 
