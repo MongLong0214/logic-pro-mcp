@@ -124,6 +124,13 @@ extension ProjectExportExecutor {
 
         let producedPath: String
         if let bounce = options.bounceToPath {
+            guard OperationTraceContext.claimDeadlineEffect("project_export_bounce") else {
+                return failedArtifact(
+                    artifact,
+                    error: "deadline_won_before_bounce",
+                    bounceFired: false
+                )
+            }
             let bounceResult = await bounce(artifact.path)
             guard let produced = bounceResult.artifactPath else {
                 return RunArtifact(
@@ -294,6 +301,19 @@ extension ProjectExportExecutor {
             )
         }
 
+        guard OperationTraceContext.claimDeadlineEffect("project_export_stem") else {
+            return stemSubjectArtifacts(
+                artifact: artifact,
+                destination: destination,
+                subjects: subjects,
+                state: "C",
+                bounceFired: false,
+                writeAttempted: false,
+                error: "deadline_won_before_stem_export",
+                reason: nil,
+                observations: nil
+            )
+        }
         switch await drive(destination) {
         case .refused(let error):
             return stemSubjectArtifacts(

@@ -347,7 +347,19 @@ extension OperationTraceDispatching {
     /// project lifecycle AppleScript, the cleanup_apply parent). Router-backed
     /// writes must use `withWriteBoundaryArmed` instead — this call cannot know
     /// whether a channel was ever dispatched.
-    static func recordWriteBoundary(_ traceID: TraceID?) async {
+    static func recordWriteBoundary(
+        _ traceID: TraceID?,
+        deadlineStage: String = "direct_write"
+    ) async -> Bool {
+        guard OperationTraceContext.claimDeadlineEffect(deadlineStage) else { return false }
+        await recordClaimedWriteBoundary(traceID)
+        return true
+    }
+
+    /// Record a boundary whose deadline/effect authorization was already
+    /// claimed at the immediate effect seam. Used by callback-shaped writers
+    /// whose public callback type must remain source-compatible.
+    static func recordClaimedWriteBoundary(_ traceID: TraceID?) async {
         if let onWriteBoundary = OperationTraceParentBoundary.onWriteBoundary {
             await onWriteBoundary()
         }

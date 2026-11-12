@@ -494,6 +494,9 @@ actor ChannelRouter {
                 ) { [weak self] in
                     guard let self,
                           await self.isCurrentChannel(channel, id: channelID) else { return false }
+                    guard OperationTraceContext.routePermittedAfterDeadlineEffect() else {
+                        return false
+                    }
                     await OperationTraceContext.record(.channelStarted, attributes: [
                         "channel": channelID.rawValue,
                     ])
@@ -507,6 +510,13 @@ actor ChannelRouter {
                     result = executed
                 }
             } else {
+                guard OperationTraceContext.routePermittedAfterDeadlineEffect() else {
+                    return .error(HonestContract.encodeStateC(
+                        error: .cancelled,
+                        hint: "The request deadline won before this later channel started.",
+                        extras: ["operation": operation, "write_attempted": false]
+                    ))
+                }
                 await OperationTraceContext.record(.channelStarted, attributes: [
                     "channel": channelID.rawValue,
                 ])
