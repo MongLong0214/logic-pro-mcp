@@ -27,7 +27,10 @@ struct Issue668RefreshCoalescingTests {
     /// instrument exposed it.
     private static func channel(
         foregroundTrackReads: Counter? = nil,
-        pollerTrackReads: Counter? = nil
+        pollerTrackReads: Counter? = nil,
+        mixerStates: (@Sendable (@escaping @Sendable () -> Bool) -> (
+            states: [ChannelStripState]?, yielded: Bool
+        ))? = nil
     ) -> AccessibilityChannel {
         let builder = FakeAXRuntimeBuilder()
         return AccessibilityChannel(runtime: .init(
@@ -50,6 +53,7 @@ struct Issue668RefreshCoalescingTests {
             setTrackToggle: { _, _ in .error("unused mutation") },
             renameTrack: { _ in .error("unused mutation") },
             mixerState: { .error("unused read") },
+            mixerStates: mixerStates,
             channelStrip: { _ in .error("unused read") },
             setMixerValue: { _, _ in .error("unused mutation") },
             projectInfo: { .error("unavailable") }, markers: { .error("unused read") },
@@ -77,6 +81,48 @@ struct Issue668RefreshCoalescingTests {
         #expect(pollerOwned.value() == 1)
         #expect(foreground.value() == 0,
                 "refresh_cache bypassed the poller-only bounded track acquisition")
+    }
+
+    @Test("an explicit refresh asks a background Mixer read to yield at its next owned boundary")
+    func explicitRefreshPreemptsBackgroundMixerRead() async {
+        let mixerCalls = Counter()
+        let backgroundEnteredMixer = Flag()
+        let stopObserved = Flag()
+        let cleanupEscape = Flag()
+        defer { cleanupEscape.set() }
+
+        let channel = Self.channel(mixerStates: { stop in
+            guard mixerCalls.next() == 1 else { return ([], false) }
+            backgroundEnteredMixer.set()
+            while !stop(), !cleanupEscape.isSet() {
+                Thread.sleep(forTimeInterval: 0.001)
+            }
+            let yielded = stop()
+            if yielded { stopObserved.set() }
+            return (yielded ? nil : [], yielded)
+        })
+        let poller = StatePoller(
+            axChannel: channel,
+            cache: StateCache(),
+            runtime: .init(hasVisibleWindow: { true }, sleep: { _ in
+                try await Task.sleep(for: .seconds(3600))
+            })
+        )
+
+        await poller.start()
+        #expect(await Self.waitUntil { backgroundEnteredMixer.isSet() },
+                "the background cycle never reached its Mixer read")
+
+        let explicit = Task { await poller.refreshNow() }
+        let yieldedForExplicitRefresh = await Self.waitUntil { stopObserved.isSet() }
+        if !yieldedForExplicitRefresh { cleanupEscape.set() }
+        #expect(yieldedForExplicitRefresh,
+                "the explicit refresh waited for the whole background Mixer walk")
+
+        _ = await explicit.value
+        await poller.stop()
+        #expect(mixerCalls.value() == 2,
+                "the explicit request did not receive exactly one fresh complete cycle")
     }
 
     private static func makePoller(

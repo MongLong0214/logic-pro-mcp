@@ -16,6 +16,28 @@ actor StatePoller {
         static let unchanged = RefreshReceipt(changedSections: [])
     }
 
+    /// An explicit refresh can arrive while the background cycle is suspended inside the AX
+    /// channel. The actor is free to accept that request, but the synchronous AX reader needs a
+    /// thread-safe signal it can ask at its existing owned stop boundaries.
+    private final class BackgroundCycleYieldSignal: @unchecked Sendable {
+        private let lock = NSLock()
+        private var requested = false
+
+        func request() {
+            lock.lock()
+            requested = true
+            lock.unlock()
+        }
+
+        var isRequested: Bool {
+            lock.lock()
+            defer { lock.unlock() }
+            return requested
+        }
+    }
+
+    @TaskLocal private static var backgroundCycleYieldSignal: BackgroundCycleYieldSignal?
+
     struct Runtime: Sendable {
         let hasVisibleWindow: @Sendable () -> Bool
         /// v3.1.4 (#4) — true when Logic currently has a modal dialog/sheet
@@ -135,6 +157,9 @@ actor StatePoller {
     /// owed reads taken after their own request.
     private var cycleInProgress = false
     private var waitingForNextCycle: [CheckedContinuation<RefreshReceipt, Never>] = []
+    /// Set only while the periodic loop owns the cycle. Explicit callers request a cooperative
+    /// stop through it, then retain their existing guarantee of a new complete cycle.
+    private var activeBackgroundCycleYieldSignal: BackgroundCycleYieldSignal?
     /// Fresh acquisitions keep their request task/context; they are not a shared refresh Bool.
     private var populationWaiters: [(UUID, CheckedContinuation<Bool, Never>)] = []
     /// The handed-off drain, tracked rather than detached so `stop()` still means what it says.
@@ -401,10 +426,29 @@ actor StatePoller {
         // A stop is under way; starting a cycle now is the AX work that stop exists to end.
         if stopped { return .unchanged }
         if cycleInProgress {
+            if !yieldingToTextEditing {
+                activeBackgroundCycleYieldSignal?.request()
+            }
             return await withCheckedContinuation { waitingForNextCycle.append($0) }
         }
         cycleInProgress = true
-        let mine = await pollOnce(axChannel: axChannel, cache: cache, yieldingToTextEditing: yieldingToTextEditing)
+        let mine: RefreshReceipt
+        if yieldingToTextEditing {
+            let signal = BackgroundCycleYieldSignal()
+            activeBackgroundCycleYieldSignal = signal
+            mine = await Self.$backgroundCycleYieldSignal.withValue(signal) {
+                await pollOnce(
+                    axChannel: axChannel, cache: cache,
+                    yieldingToTextEditing: yieldingToTextEditing
+                )
+            }
+            activeBackgroundCycleYieldSignal = nil
+        } else {
+            mine = await pollOnce(
+                axChannel: axChannel, cache: cache,
+                yieldingToTextEditing: yieldingToTextEditing
+            )
+        }
         handOffCycle()
         return mine
     }
@@ -571,7 +615,7 @@ actor StatePoller {
         let guardian = AXHelpers.HelpReadGuard.current
         let stop: @Sendable () -> Bool
         if yieldingToTextEditing {
-            stop = { guardian?.stopped == true || Self.backgroundTickYields(to: focus()) }
+            stop = { guardian?.stopped == true || Self.backgroundReadYields(to: focus()) }
         } else {
             stop = { false }
         }
@@ -600,7 +644,13 @@ actor StatePoller {
     /// already under way runs to its end: the track walk is one AX call chain with no point to stop
     /// it at, so a rename opened during it waits for that one read, not for the cycle.
     private func backgroundCycleYields(_ yieldingToTextEditing: Bool) -> Bool {
-        yieldingToTextEditing && Self.backgroundTickYields(to: runtime.keyboardFocus())
+        yieldingToTextEditing && Self.backgroundReadYields(to: runtime.keyboardFocus())
+    }
+
+    private static func backgroundReadYields(
+        to focus: AccessibilityChannel.LogicKeyboardFocus
+    ) -> Bool {
+        backgroundCycleYieldSignal?.isRequested == true || backgroundTickYields(to: focus)
     }
 
     @discardableResult
@@ -614,7 +664,7 @@ actor StatePoller {
             return await pollOnceReading(axChannel: axChannel, cache: cache, yieldingToTextEditing: false)
         }
         let focus = runtime.keyboardFocus
-        let guardian = AXHelpers.HelpReadGuard(stop: { Self.backgroundTickYields(to: focus()) })
+        let guardian = AXHelpers.HelpReadGuard(stop: { Self.backgroundReadYields(to: focus()) })
         return await AXHelpers.HelpReadGuard.$current.withValue(guardian) {
             await pollOnceReading(axChannel: axChannel, cache: cache, yieldingToTextEditing: true)
         }
@@ -672,7 +722,7 @@ actor StatePoller {
                 // #1079 review R2: a yield here must not write the pathless info. The cache reads a
                 // path that went missing as a different project and clears every section, so the
                 // write is skipped and the cycle ends at the next check.
-                if yieldingToTextEditing && Self.backgroundTickYields(to: runtime.keyboardFocus()) {
+                if yieldingToTextEditing && Self.backgroundReadYields(to: runtime.keyboardFocus()) {
                     yieldedAtPathQuery = true
                     return false
                 }
@@ -694,7 +744,7 @@ actor StatePoller {
         if yieldingToTextEditing {
             let focus = runtime.keyboardFocus
             trackRead = await axChannel.readTrackStates(stoppingWhen: {
-                Self.backgroundTickYields(to: focus())
+                Self.backgroundReadYields(to: focus())
             })
         } else {
             // Explicit refreshes do not yield to text editing, but they are still poller cycles.
@@ -783,7 +833,7 @@ actor StatePoller {
         let mixerVersion = await cache.currentVersion(for: .mixer)
         let focus = runtime.keyboardFocus
         let mixerRead = await axChannel.readMixerStates(stoppingWhen: {
-            yieldingToTextEditing && Self.backgroundTickYields(to: focus())
+            yieldingToTextEditing && Self.backgroundReadYields(to: focus())
         })
         if mixerRead.yielded || Self.helpReadsStopped { return yieldCycle(cacheKeys) }
         let mixerReady: PollOutcome
