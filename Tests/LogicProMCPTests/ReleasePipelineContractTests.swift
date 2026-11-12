@@ -80,6 +80,18 @@ import Testing
             "the tests must run before the gate reads the profile they produced")
 }
 
+@Test func ci_and_release_use_supported_standard_intel_macos_runners() throws {
+    let ci = try scriptContents(".github/workflows/ci.yml")
+    let release = try scriptContents(".github/workflows/release.yml")
+
+    #expect(ci.contains("'macos-15-intel'"))
+    #expect(!ci.contains("&& 'macos-15' ||"))
+    #expect(release.contains("runs-on: macos-15-intel"))
+    #expect(release.contains("os: [macos-15-intel, macos-26-intel]"))
+    #expect(!release.contains("macos-14"))
+    #expect(!release.contains("os: [macos-15,"))
+}
+
 @Test func ci_documentationShortcutCannotHideSourceRenames() throws {
     let workflow = try scriptContents(".github/workflows/ci.yml")
 

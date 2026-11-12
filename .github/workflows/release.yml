@@ -20,7 +20,7 @@ defaults:
 jobs:
   package:
     name: package
-    runs-on: macos-15
+    runs-on: macos-15-intel
     timeout-minutes: 45
     outputs:
       artifact-name: ${{ steps.artifact-name.outputs.name }}
@@ -95,7 +95,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-14, macos-15]
+        os: [macos-15-intel, macos-26-intel]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
     steps:

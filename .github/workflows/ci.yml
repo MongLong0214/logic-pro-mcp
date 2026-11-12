@@ -51,7 +51,7 @@ jobs:
   product-validation:
     name: product-validation
     needs: change-scope
-    runs-on: ${{ needs.change-scope.outputs.full-validation == 'true' && 'macos-15' || 'ubuntu-latest' }}
+    runs-on: ${{ needs.change-scope.outputs.full-validation == 'true' && 'macos-15-intel' || 'ubuntu-latest' }}
     timeout-minutes: 150
     outputs:
       outcome: ${{ steps.product.outcome }}
