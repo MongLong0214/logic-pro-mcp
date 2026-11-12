@@ -325,7 +325,8 @@ struct Issue1565MutationDeadlineBoundaryTests {
         _ = await resultTask.value
         preWrite.unblock()
         #expect(try await waitUntil { claim.value != nil })
-        #expect(claim.value == false)
+        let claimed = try #require(claim.value as Bool?)
+        #expect(!claimed)
     }
 }
 
