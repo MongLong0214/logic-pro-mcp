@@ -725,12 +725,16 @@ struct QualificationOperationResult: Equatable, Sendable {
     /// Kept available to the live-gate report so a missing refusal is reported
     /// as the reason for failure rather than as an unexplained operation ID.
     var expectedZeroWriteRefusalObserved: Bool {
-        isError == true
+        let expectedError: Bool
+        if let id = OperationID(rawValue: operationID),
+           QualificationTransport.consentFirstMutationProbeOperationIDs.contains(id) {
+            expectedError = error == "consent_required" || error == "invalid_params"
+        } else {
+            expectedError = error == "invalid_params"
+        }
+        return isError == true
             && state == "C"
-            // setup_arm_key's no-write probe refuses consent-first with
-            // `consent_required` (before param validation); every other mutating
-            // op's no-write probe is an `invalid_params` typed refusal (#413).
-            && ["consent_required", "invalid_params"].contains(error)
+            && expectedError
             && writeAttempted == false
     }
 
@@ -5491,6 +5495,11 @@ struct QualificationTransport: Sendable {
         .mixerGetInputBusVerified,
         .mixerGetSendDestinationVerified,
         .mixerGetSendBypassVerified,
+    ]
+    static let consentFirstMutationProbeOperationIDs: Set<OperationID> = [
+        .systemSetupArmKey,
+        .systemSetupControlSurface,
+        .systemSetupMIDIKeyCommands,
     ]
     enum SessionInspectionSeedPurpose: Sendable {
         case planner

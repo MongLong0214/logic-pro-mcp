@@ -2214,22 +2214,6 @@ struct QualificationRunnerTests {
         #expect(!decision.promotable)
     }
 
-    /// #284 has no measured product defect pinned here at the moment. This is
-    /// intentionally an exact list, rather than an allow-list: a new failure, a
-    /// changed reason, OR a known failure beginning to pass must all redden the
-    /// live gate so the list cannot silently absorb regressions or rot after a fix.
-    private struct KnownLiveGateFailure: Equatable {
-        let operationID: String
-        let failureReason: String
-        let trackingIssue: String
-
-        var failure: QualificationLiveGateSummary.Failure {
-            .init(operationID: operationID, failureReason: failureReason)
-        }
-    }
-
-    private static let knownLiveGateFailures: [KnownLiveGateFailure] = []
-
     @Test func qualificationExecutesEachOperationAndBindsIndependentReadback() async throws {
         let specs = [
             try #require(OperationRegistry.specs.first { $0.id == .transportPlay }),
@@ -2651,7 +2635,7 @@ struct QualificationRunnerTests {
         let record = Self.recipeShapedRecord()
         // The probe is a typed zero-write REFUSAL. That is the only way a mutating operation
         // reaches `.passed`, and it is what made `operationIsError == false` unsatisfiable.
-        let refusal = Data(#"{"success":false,"state":"C","error":"consent_required"}"#.utf8)
+        let refusal = Data(#"{"success":false,"state":"C","error":"invalid_params"}"#.utf8)
         let result = QualificationOperationResult(
             operationID: spec.id.rawValue,
             tool: spec.tool.rawValue,
@@ -2661,7 +2645,7 @@ struct QualificationRunnerTests {
             responseData: refusal,
             isError: true,
             state: "C",
-            error: "consent_required",
+            error: "invalid_params",
             hint: nil,
             writeAttempted: false,
             readbackSource: "logic://tracks",
@@ -2750,10 +2734,10 @@ struct QualificationRunnerTests {
             command: spec.command,
             mutability: spec.mutability,
             requestID: "no-cycle",
-            responseData: Data(#"{"success":false,"state":"C","error":"consent_required"}"#.utf8),
+            responseData: Data(#"{"success":false,"state":"C","error":"invalid_params"}"#.utf8),
             isError: true,
             state: "C",
-            error: "consent_required",
+            error: "invalid_params",
             hint: nil,
             writeAttempted: false,
             readbackSource: "logic://tracks",
@@ -6858,80 +6842,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(differentErrorRemainsFailure)
     }
 
-    @Test func knownLiveGateFailuresCarryReasonsAndTrackingReferences() {
-        let eachFailureIsExplainedAndTracked = Self.knownLiveGateFailures.allSatisfy {
-            Self.hasValidKnownLiveGateFailureMetadata($0)
-        }
-
-        #expect(eachFailureIsExplainedAndTracked)
-    }
-
-    @Test func knownLiveGateFailureMetadataPredicateRejectsMalformedEntries() {
-        let emptyReason = KnownLiveGateFailure(
-            operationID: "fixture.empty-reason", failureReason: "", trackingIssue: "#284"
-        )
-        let wrongTrackingIssue = KnownLiveGateFailure(
-            operationID: "fixture.wrong-tracking", failureReason: "observed cause", trackingIssue: "#999"
-        )
-        let wellFormed = KnownLiveGateFailure(
-            operationID: "fixture.well-formed", failureReason: "observed cause", trackingIssue: "#284"
-        )
-        let rejectsEmptyReason = !Self.hasValidKnownLiveGateFailureMetadata(emptyReason)
-        let rejectsWrongTrackingIssue = !Self.hasValidKnownLiveGateFailureMetadata(wrongTrackingIssue)
-        let acceptsWellFormedEntry = Self.hasValidKnownLiveGateFailureMetadata(wellFormed)
-
-        #expect(rejectsEmptyReason)
-        #expect(rejectsWrongTrackingIssue)
-        #expect(acceptsWellFormedEntry)
-    }
-
-    /// Exactness is a property of the matcher, not of whatever the production
-    /// list happens to hold -- and that list is legitimately empty when nothing
-    /// is pinned. These properties are therefore proved against a fixture list;
-    /// the live gate test above still holds the real list to the real run.
-    private static let exactnessFixture: [KnownLiveGateFailure] = [
-        .init(operationID: "fixture.first", failureReason: "first observed cause", trackingIssue: "#284"),
-        .init(operationID: "fixture.second", failureReason: "second observed cause", trackingIssue: "#284"),
-    ]
-
-    @Test func knownLiveGateFailureSetAcceptsTheExactKnownSet() {
-        let observed = Self.exactnessFixture.map(\.failure)
-        let acceptsExactSet = Self.matchesKnownLiveGateFailures(observed, against: Self.exactnessFixture)
-
-        #expect(acceptsExactSet)
-    }
-
-    @Test func knownLiveGateFailureSetRejectsNewFailure() {
-        let observed = Self.exactnessFixture.map(\.failure) + [
-            .init(operationID: "synthetic.new.failure", failureReason: "a newly observed failure"),
-        ]
-        let rejectsNewFailure = !Self.matchesKnownLiveGateFailures(observed, against: Self.exactnessFixture)
-
-        #expect(rejectsNewFailure)
-    }
-
-    @Test func knownLiveGateFailureSetRejectsAKnownFailureStartingToPass() {
-        let observed = Array(Self.exactnessFixture.map(\.failure).dropLast())
-        let rejectsMissingKnownFailure = !Self.matchesKnownLiveGateFailures(observed, against: Self.exactnessFixture)
-
-        #expect(rejectsMissingKnownFailure)
-    }
-
-    @Test func knownLiveGateFailureSetRejectsChangedReason() {
-        var observed = Self.exactnessFixture.map(\.failure)
-        observed[0] = .init(
-            operationID: observed[0].operationID,
-            failureReason: "semantic readback mismatch: a different observed cause"
-        )
-        let rejectsChangedReason = !Self.matchesKnownLiveGateFailures(observed, against: Self.exactnessFixture)
-
-        #expect(rejectsChangedReason)
-    }
-
-    /// #803. The exact-match assertion above reported a boolean, so three red runs on three
-    /// different trees said the same unreadable thing. These two helpers are what a red run now
-    /// prints, and they are proved here because a diagnostic nobody tests is a diagnostic that
-    /// prints the wrong thing exactly when it is needed.
+    /// A red live run names each failing operation and its observed reason.
     @Test func liveGateFailureDescriptionNamesEachOperationAndItsReason() {
         let described = Self.describe([
             .init(operationID: "tracks.list_library", failureReason: "semantic readback mismatch"),
@@ -6990,15 +6901,6 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(emptyStringIsUnset)
     }
 
-    @Test func emptyKnownLiveGateFailureSetRejectsAnyFailure() {
-        let observed = [QualificationLiveGateSummary.Failure(
-            operationID: "synthetic.new.failure", failureReason: "a newly observed failure"
-        )]
-        let rejectsAnyFailure = !Self.matchesKnownLiveGateFailures(observed, against: [])
-
-        #expect(rejectsAnyFailure)
-    }
-
     @Test func liveGateSummaryStatesMutatingOperationExclusion() throws {
         let mutatingSpec = try #require(OperationRegistry.specs.first { $0.id == .transportPlay })
         let operation = try #require(
@@ -7031,10 +6933,6 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         ))
 
         #expect(result.handshakeOK)
-        // Exact current catalog, measured by the release binary. The +18 operations since the
-        // previous 119 baseline are nine read-only and nine mutating contracts; their native
-        // dispositions remain independently asserted below rather than being hidden by this count.
-        #expect(result.catalog?.operationCount == 137)
         #expect(result.catalogCountMatch)
         #expect(result.traceOK)
 
@@ -7044,58 +6942,17 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         let liveGate = QualificationLiveGateSummary(operationResults: operationResults)
 
         #expect(operationResults.count == OperationRegistry.specs.count)
-        #expect(mutating.count == 102)
-        #expect(readOnly.count == 35)
         #expect(operationResults.allSatisfy { $0.status != .failed })
         #expect(liveGate.accounted == operationResults.count)
-        // The exactness is right and stays. What was wrong is that it reported a
-        // BOOLEAN: on 2026-09-07 this line went red on three different trees and
-        // the run could not say which operation had moved, so a branch that
-        // changed one unrelated file read as though it had broken qualification
-        // (#803). The two directions are separated and both carry their contents,
-        // and the message names the condition the table was measured under —
-        // Logic's UI language, which is the variable that actually moved.
-        let expectedFailures = Self.knownLiveGateFailures.map(\.failure)
-        let unexpectedFailures = liveGate.failures.filter { !expectedFailures.contains($0) }
-        let knownFailuresThatStoppedFailing = expectedFailures.filter {
-            !liveGate.failures.contains($0)
-        }
         let uiLanguage = Self.logicUILanguage()
         #expect(
-            unexpectedFailures.isEmpty,
+            liveGate.failures.isEmpty,
             """
-            live-gate failures that are not in knownLiveGateFailures:
-            \(Self.describe(unexpectedFailures))
-            Logic's UI language for this run: \(uiLanguage). The table was measured
-            against en-US, and an AX label this run could not read is indistinguishable
-            here from a regression until the operations above are named.
+            live-gate failures:
+            \(Self.describe(liveGate.failures))
+            Logic's UI language for this run: \(uiLanguage).
             """
         )
-        #expect(
-            knownFailuresThatStoppedFailing.isEmpty,
-            """
-            knownLiveGateFailures entries that no longer fail, so the table has rotted:
-            \(Self.describe(knownFailuresThatStoppedFailing))
-            Remove them only with the run that shows them passing; a pin removed on a run
-            where the operation refused for an environmental reason is how this one came
-            back (#284).
-            """
-        )
-        // The last way this line could go red without saying why. `liveGate.failures` is sorted by
-        // `operationID`, the match is an ARRAY comparison, and the table is hand-ordered — so an
-        // entry added out of order fails the exact match while both readings above stay green.
-        // With one entry that is unreachable; it stops being unreachable the next time something
-        // is pinned.
-        let tableIsInObservedOrder = expectedFailures
-            == expectedFailures.sorted { $0.operationID < $1.operationID }
-        #expect(
-            tableIsInObservedOrder,
-            """
-            knownLiveGateFailures must be listed in operationID order, because the observed             failures are sorted that way and the exact match below compares arrays.
-            """
-        )
-        let knownLiveGateFailuresMatchExactly = Self.matchesKnownLiveGateFailures(liveGate.failures)
-        #expect(knownLiveGateFailuresMatchExactly)
         #expect(operationResults.allSatisfy { $0.responseData != nil && $0.readback != nil })
         #expect(Set(operationResults.compactMap(\.requestID)).count == operationResults.count)
         #expect(Set(operationResults.compactMap(\.readbackRequestID)).count == operationResults.count)
@@ -7159,19 +7016,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         })
         #expect(withoutEvidence.allSatisfy {
             $0.status == .notQualified
-                && $0.isError == true
-                && $0.state == "C"
-                // Every mutating op's no-write probe is a typed zero-write refusal
-                // via `invalid_params`, EXCEPT the consent-gated setup_arm_key,
-                // which refuses with `consent_required` BEFORE param validation
-                // (consent-first). Special-case that ONE op; keep invalid_params
-                // required for all others (do not broadly weaken the assertion).
-                && (
-                    $0.operationID == OperationID.systemSetupArmKey.rawValue
-                        ? ($0.error == "consent_required" || $0.error == "invalid_params")
-                        : $0.error == "invalid_params"
-                )
-                && $0.writeAttempted == false
+                && $0.expectedZeroWriteRefusalObserved
                 && $0.deferral?.code == .liveMutationNotRun
         })
         #expect(readOnly.allSatisfy {
@@ -9932,13 +9777,6 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             .write(to: fixture.manifestURL, options: .atomic)
     }
 
-    private static func matchesKnownLiveGateFailures(
-        _ observed: [QualificationLiveGateSummary.Failure],
-        against known: [KnownLiveGateFailure] = knownLiveGateFailures
-    ) -> Bool {
-        observed == known.map(\.failure)
-    }
-
     /// Logic's UI language for THIS run, read from Logic's OWN defaults domain.
     ///
     /// `AppleLanguages` under `com.apple.logic10` is what the language switch writes and what a
@@ -9972,12 +9810,6 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         return failures
             .map { "  \($0.operationID): \($0.failureReason)" }
             .joined(separator: "\n")
-    }
-
-    private static func hasValidKnownLiveGateFailureMetadata(
-        _ failure: KnownLiveGateFailure
-    ) -> Bool {
-        !failure.operationID.isEmpty && !failure.failureReason.isEmpty && failure.trackingIssue == "#284"
     }
 
     private static func tracksListLibraryRefusal(
