@@ -1348,7 +1348,8 @@ struct QualificationRunnerTests {
             from: try JSONSerialization.data(withJSONObject: unknownSend)
         )
 
-        #expect(empty?.isEmpty == true)
+        let emptyParams = try #require(empty)
+        #expect(emptyParams.isEmpty)
         #expect(rejected == nil)
         #expect(rejectedReference == nil)
         #expect(rejectedObservation == nil)
@@ -1522,9 +1523,10 @@ struct QualificationRunnerTests {
             ]],
         ])
 
-        #expect(QualificationTransport.validatedPluginReadProbeParams(
-            from: [validEmpty]
-        )?.isEmpty == true)
+        let validEmptyParams = try #require(
+            QualificationTransport.validatedPluginReadProbeParams(from: [validEmpty])
+        )
+        #expect(validEmptyParams.isEmpty)
         #expect(QualificationTransport.validatedPluginReadProbeParams(
             from: [incomplete]
         ) == nil)
