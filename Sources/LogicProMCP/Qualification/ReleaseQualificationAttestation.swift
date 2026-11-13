@@ -1,5 +1,91 @@
 import Foundation
 
+/// Strict SemVer parser shared by qualification input validation.
+struct SemanticVersion: Comparable {
+    let major: Int
+    let minor: Int
+    let patch: Int
+    let prerelease: [Substring]
+
+    init?(_ rawValue: String) {
+        var value = rawValue
+        if value.first == "v" || value.first == "V" { value.removeFirst() }
+        let withoutBuild = value.split(
+            separator: "+", maxSplits: 1, omittingEmptySubsequences: false
+        )
+        guard withoutBuild.count <= 2,
+              withoutBuild.allSatisfy({ !$0.isEmpty }),
+              withoutBuild.dropFirst().allSatisfy({
+                  Self.validIdentifiers($0, rejectNumericLeadingZero: false)
+              }) else { return nil }
+        let releaseParts = withoutBuild[0].split(
+            separator: "-", maxSplits: 1, omittingEmptySubsequences: false
+        )
+        guard releaseParts.count <= 2,
+              releaseParts.allSatisfy({ !$0.isEmpty }),
+              releaseParts.dropFirst().allSatisfy({
+                  Self.validIdentifiers($0, rejectNumericLeadingZero: true)
+              }) else { return nil }
+        let parts = releaseParts[0].split(separator: ".", omittingEmptySubsequences: false)
+        guard parts.count == 3,
+              parts.allSatisfy(Self.validCoreNumber),
+              let major = Int(parts[0]),
+              let minor = Int(parts[1]),
+              let patch = Int(parts[2]) else { return nil }
+        self.major = major
+        self.minor = minor
+        self.patch = patch
+        prerelease = releaseParts.count == 2
+            ? releaseParts[1].split(separator: ".", omittingEmptySubsequences: false)
+            : []
+    }
+
+    static func < (lhs: SemanticVersion, rhs: SemanticVersion) -> Bool {
+        if lhs.major != rhs.major { return lhs.major < rhs.major }
+        if lhs.minor != rhs.minor { return lhs.minor < rhs.minor }
+        if lhs.patch != rhs.patch { return lhs.patch < rhs.patch }
+        if lhs.prerelease.isEmpty { return false }
+        if rhs.prerelease.isEmpty { return true }
+        for (left, right) in zip(lhs.prerelease, rhs.prerelease) where left != right {
+            let leftNumeric = Self.isASCIINumeric(left)
+            let rightNumeric = Self.isASCIINumeric(right)
+            switch (leftNumeric, rightNumeric) {
+            case (true, true):
+                return left.count == right.count
+                    ? left.lexicographicallyPrecedes(right)
+                    : left.count < right.count
+            case (true, false): return true
+            case (false, true): return false
+            case (false, false): return left.lexicographicallyPrecedes(right)
+            }
+        }
+        return lhs.prerelease.count < rhs.prerelease.count
+    }
+
+    private static func validIdentifiers(
+        _ value: Substring,
+        rejectNumericLeadingZero: Bool
+    ) -> Bool {
+        value.split(separator: ".", omittingEmptySubsequences: false).allSatisfy { identifier in
+            !identifier.isEmpty
+                && identifier.utf8.allSatisfy {
+                    (48...57).contains($0) || (65...90).contains($0)
+                        || (97...122).contains($0) || $0 == 45
+                }
+                && (!rejectNumericLeadingZero || !isASCIINumeric(identifier)
+                    || identifier == "0" || identifier.first != "0")
+        }
+    }
+
+    private static func validCoreNumber(_ value: Substring) -> Bool {
+        isASCIINumeric(value) && (value == "0" || value.first != "0")
+    }
+
+    private static func isASCIINumeric(_ value: Substring) -> Bool {
+        !value.isEmpty && value.utf8.allSatisfy { (48...57).contains($0) }
+    }
+}
+
 enum QualificationStatus: String, Codable, Sendable {
     case passed
     case failed
@@ -198,8 +284,7 @@ struct QualificationCase: Codable, Equatable, Sendable {
     let verificationKind: QualificationVerificationKind
     let deferral: QualificationDeferral?
     let readback: QualificationReadbackEvidence?
-    /// The write cycle's restore, or nil for a case that rests on no cycle. Read by
-    /// `PromotionGate.operationIsLiveCredited` for a `.verifiedWriteCycle` case (#984).
+    /// The write cycle's restore, or nil for a case that rests on no cycle.
     let restore: QualificationRestoreEvidence?
     let availabilityReason: QualificationAvailabilityReason?
     let availabilityObservation: QualificationAvailabilityObservation?
@@ -573,15 +658,8 @@ struct QualificationProvenanceRecord: Codable, Equatable, Sendable {
     let completedAt: Date
     let evidenceManifestSHA256: String
     let operationCatalogSHA256: String?
-    // Optional only so historical v1 records remain decodable; v2 qualification
-    // requires this signed observation and never fills it from the attestation.
+    // Optional only so historical v1 records remain decodable.
     let logicVersion: String?
-}
-
-struct QualificationProvenanceSignature: Codable, Equatable, Sendable {
-    let algorithm: String
-    let keyID: String
-    let value: String
 }
 
 struct ReleaseQualificationAttestation: Codable, Equatable, Sendable {
@@ -606,7 +684,6 @@ struct ReleaseQualificationAttestation: Codable, Equatable, Sendable {
     let evidenceManifestSHA256: String
     let operationCatalogSHA256: String?
     let provenance: QualificationProvenanceRecord?
-    let provenanceSignature: QualificationProvenanceSignature?
 
     init(
         schema: String,
@@ -629,8 +706,7 @@ struct ReleaseQualificationAttestation: Codable, Equatable, Sendable {
         waivers: [QualificationWaiver],
         evidenceManifestSHA256: String,
         operationCatalogSHA256: String? = nil,
-        provenance: QualificationProvenanceRecord? = nil,
-        provenanceSignature: QualificationProvenanceSignature? = nil
+        provenance: QualificationProvenanceRecord? = nil
     ) {
         self.schema = schema
         self.serverVersion = serverVersion
@@ -653,83 +729,13 @@ struct ReleaseQualificationAttestation: Codable, Equatable, Sendable {
         self.evidenceManifestSHA256 = evidenceManifestSHA256
         self.operationCatalogSHA256 = operationCatalogSHA256
         self.provenance = provenance
-        self.provenanceSignature = provenanceSignature
-    }
-}
-
-/// Operator-authored inventory of independently captured qualification runs.
-/// Paths are resolved below one matrix directory; the trusted signer never
-/// accepts absolute paths, parent traversal, or symlinked child directories.
-struct QualificationMatrixInput: Codable, Equatable, Sendable {
-    struct Run: Codable, Equatable, Sendable {
-        let path: String
-    }
-
-    static let currentSchema = "qualification-matrix-input/v1"
-
-    let schema: String
-    let runs: [Run]
-}
-
-/// One signature binds the exact, already-produced child attestations. Child
-/// attestations remain unsigned: the matrix signer is the sole trust authority
-/// and cannot silently rewrite or merge their per-run evidence.
-struct ReleaseQualificationMatrixAttestation: Codable, Equatable, Sendable {
-    struct Run: Codable, Equatable, Sendable {
-        let axis: QualificationAxis
-        let path: String
-        let childAttestationSHA256: String
-    }
-
-    struct Payload: Codable, Equatable, Sendable {
-        let schema: String
-        let releaseVersion: String
-        let commitSHA: String
-        let binarySHA256: String
-        let logicVersion: String
-        let profile: SetupProfile
-        let cache: CacheState
-        let fixture: ProjectFixture
-        let operationCatalogSHA256: String
-        let runs: [Run]
-    }
-
-    static let currentSchema = "release-qualification-matrix/v1"
-
-    let schema: String
-    let releaseVersion: String
-    let commitSHA: String
-    let binarySHA256: String
-    let logicVersion: String
-    let profile: SetupProfile
-    let cache: CacheState
-    let fixture: ProjectFixture
-    let operationCatalogSHA256: String
-    let runs: [Run]
-    let signature: QualificationProvenanceSignature?
-
-    var payload: Payload {
-        Payload(
-            schema: schema,
-            releaseVersion: releaseVersion,
-            commitSHA: commitSHA,
-            binarySHA256: binarySHA256,
-            logicVersion: logicVersion,
-            profile: profile,
-            cache: cache,
-            fixture: fixture,
-            operationCatalogSHA256: operationCatalogSHA256,
-            runs: runs
-        )
     }
 }
 
 /// `total`, `passed`, `failed` and `waived` as a list of cases implies them.
 ///
-/// #373 Q4: the producer writes an attestation's counts through this type and the promotion gate
-/// recomputes them through it, so a count and its cases are judged by one rule. The counts are NOT
-/// in the signed provenance record, so this recomputation -- not the signature -- is what binds them:
-/// before it, a signed bundle with every count edited to zero verified unchanged.
+/// The producer writes an attestation's counts through this type, so a count
+/// and its cases are derived by one rule.
 struct QualificationSummaryCounts: Equatable, Sendable {
     let total: Int
     let passed: Int
