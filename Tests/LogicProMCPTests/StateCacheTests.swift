@@ -171,10 +171,12 @@ import Testing
 
     let changed = await cache.applyObservedProjectChooser()
     let afterFirst = await cache.captureBoundary(watching: watched)
+    let hasDocument = await cache.getHasDocument()
+    let axOccluded = await cache.getAXOccluded()
 
     #expect(changed)
-    #expect(await cache.getHasDocument() == false)
-    #expect(await cache.getAXOccluded() == false)
+    #expect(!hasDocument)
+    #expect(!axOccluded)
     #expect(await cache.getBlockingDialogButtons() == nil)
     #expect(afterFirst != before)
 

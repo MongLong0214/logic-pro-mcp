@@ -181,11 +181,13 @@ private func makeStatePollerAccessibilityRuntime(
     let afterFirst = await cache.captureBoundary(watching: [.project, .tracks])
     let second = await poller.refreshNowReceipt()
     let afterSecond = await cache.captureBoundary(watching: [.project, .tracks])
+    let hasDocument = await cache.getHasDocument()
+    let axOccluded = await cache.getAXOccluded()
 
     #expect(first.changedSections == [ResourceCacheKey.document])
     #expect(second == .unchanged)
-    #expect(await cache.getHasDocument() == false)
-    #expect(await cache.getAXOccluded() == false)
+    #expect(!hasDocument)
+    #expect(!axOccluded)
     #expect(await cache.getBlockingDialogButtons() == nil)
     #expect(afterSecond == afterFirst)
     #expect(probe.counts.window == 0)
@@ -223,7 +225,8 @@ private func makeStatePollerAccessibilityRuntime(
     _ = await poller.refreshNowReceipt()
     #expect(await cache.getHasDocument())
     _ = await poller.refreshNowReceipt()
-    #expect(await cache.getHasDocument() == false)
+    let hasDocumentAfterThreshold = await cache.getHasDocument()
+    #expect(!hasDocumentAfterThreshold)
 }
 
 @Test func testStatePollerPositiveChooserResetsProjectAndTrackMissCounter() async {
@@ -260,7 +263,8 @@ private func makeStatePollerAccessibilityRuntime(
     _ = await poller.refreshNowReceipt()
     #expect(await cache.getHasDocument())
     _ = await poller.refreshNowReceipt()
-    #expect(await cache.getHasDocument() == false)
+    let hasDocumentAfterThreshold = await cache.getHasDocument()
+    #expect(!hasDocumentAfterThreshold)
 }
 
 @Test func testStatePollerPreservesAXTrackIdentityProvenance() async {

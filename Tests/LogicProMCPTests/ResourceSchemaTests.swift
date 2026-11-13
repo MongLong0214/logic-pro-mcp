@@ -444,8 +444,9 @@ func testHealthResponseIncludesExactProjectChooserObservation() async throws {
     )
     let json = try! sharedParseJSON(toolText(result)) as! [String: Any]
     let chooserVisible = try #require(json["logic_pro_project_chooser_visible"] as? Bool)
+    let hasDocument = try #require(json["logic_pro_has_document"] as? Bool)
     #expect(chooserVisible)
-    #expect(json["logic_pro_has_document"] as? Bool == false)
+    #expect(!hasDocument)
     #expect(samples.count == 1)
 }
 
