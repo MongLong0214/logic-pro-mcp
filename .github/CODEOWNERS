@@ -1,14 +1,13 @@
 # Release-surface review.
 #
-# This file used to guard an "independent release-qualification trust boundary"
-# (#367 LPMCP-PRD-001 / B4) across four paths — the standalone verifier, the
-# qualification runner, the promotion gate and the production-readiness
-# contracts. All four were removed on 2026-09-13, and a CODEOWNERS rule on a
-# path that does not exist protects nothing while reading as though it does.
+# This file used to guard a separate release-promotion subsystem. That
+# standalone verifier, signed-evidence gate and its policy-only contracts no
+# longer exist, and a CODEOWNERS rule on a removed path protects nothing while
+# reading as though it does.
 #
-# What remains is worth owning on its own terms: the release workflow publishes
-# the artifact, this file decides who reviews, and Package.swift decides what
-# gets built into it.
+# What remains is worth owning on its own terms: direct qualification tests the
+# product, the release workflow verifies and publishes its exact bytes, this
+# file decides who reviews, and Package.swift decides what gets built into it.
 /.github/workflows/release.yml  @MongLong0214
 /.github/CODEOWNERS             @MongLong0214
 /Package.swift                  @MongLong0214
