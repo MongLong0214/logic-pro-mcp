@@ -66,6 +66,27 @@ struct Issue971SingleWindowLookupTests {
     }
 
     @Test(arguments: [false, true])
+    func localizedArrangeTitleOutranksMarkerListRowsThatMimicTheTrackRail(verified: Bool) throws {
+        let b = FakeAXRuntimeBuilder()
+        let app = b.element(971_650), markerList = b.element(971_651)
+        let arrange = b.element(971_652), markerRows = b.element(971_653)
+        let markerRow = b.element(971_654)
+        b.setAttribute(markerList, kAXTitleAttribute as String, "Fixture - Marker List")
+        b.setAttribute(arrange, kAXTitleAttribute as String, "Fixture - Tracks")
+        b.setRole(markerRows, kAXGroupRole as String)
+        b.setRole(markerRow, kAXLayoutItemRole as String)
+        b.setChildren(markerRows, [markerRow])
+        b.setAttribute(markerRows, kAXSelectedChildrenAttribute as String, [markerRow])
+        b.setChildren(markerList, [markerRows])
+        b.setChildren(arrange, [])
+        b.setAttribute(app, kAXWindowsAttribute as String, [markerList, arrange])
+
+        let resolved = try #require(resolve(b.makeLogicRuntime(appElement: app), verified: verified))
+        #expect(CFEqual(resolved, arrange))
+        #expect(b.actionCalls.isEmpty && b.setCalls.isEmpty)
+    }
+
+    @Test(arguments: [false, true])
     func dialogOnlyWindowsStillSupplyNoArrangeWindow(verified: Bool) {
         let b = FakeAXRuntimeBuilder()
         let app = b.element(971_710), dialog = b.element(971_711)

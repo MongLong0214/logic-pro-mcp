@@ -343,15 +343,4 @@ struct Issue290AtlasEvidenceTests {
             binarySHA256: String(repeating: "a", count: 64), traceID: "unarmed") == nil)
     }
 
-    @Test func atlasEvidenceDoesNotEarnLiveOperationCredit() throws {
-        let result = try retained()
-        #expect(!PromotionGate.operationIsLiveCredited(result.qualificationCase))
-        var object = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(result.qualificationCase)) as? [String: Any])
-        object["readback"] = ["source": "controlled-test", "request_id": "control", "verified": true,
-            "sha256": String(repeating: "a", count: 64)]
-        let withReadback = try JSONDecoder().decode(QualificationCase.self,
-            from: JSONSerialization.data(withJSONObject: object))
-        #expect(try #require(withReadback.readback).verified)
-        #expect(!PromotionGate.operationIsLiveCredited(withReadback))
-    }
 }

@@ -3577,17 +3577,18 @@ struct Issue968ExactTrackNameAdapterTests {
             // Only legacy role reads are intercepted: the status-preserving physical
             // and expected-name result reads remain healthy. The recorded actual
             // producer/dispatcher/writer path now reaches its deciding filter
-            // at legacy role read 13 after redundant single-window discovery is
-            // removed. Its healthy selection setter is reached at read 15,
-            // after the post-filter permission checks.
+            // at legacy role read 4 after the localized arrange-window title
+            // resolves the held window without a descendant rail search. Its
+            // healthy selection setter is reached at that same read, after the
+            // post-filter permission checks.
             // Fail that deciding filter once, then keep
             // the original unselected A and selected B readable for settle.
-            f.legacyHeaderRoleFailureRead = 13
+            f.legacyHeaderRoleFailureRead = 4
             let (project, target) = try await f.prepare(typedProducer: true)
             let result = await f.rename(project: project, target: target, expected: nil, desired: "C")
             let body = try #require(sharedJSONObject(sharedToolText(result)))
             #expect(f.legacyHeaderRoleFailures == 1)
-            #expect(f.legacyHeaderRoleReads > 13)
+            #expect(f.legacyHeaderRoleReads > 4)
             #expect(body["state"] as? String == "C")
             let attempted = try #require(body["write_attempted"] as? Bool)
             #expect(!attempted)
@@ -3610,7 +3611,7 @@ struct Issue968ExactTrackNameAdapterTests {
             let (other, otherField) = f.appendTrack(name: "B", selected: true)
             f.builder.setAttribute(f.header, kAXSelectedAttribute as String, false)
             f.permitsSelection = true
-            f.legacyHeaderRoleObservedRead = 13
+            f.legacyHeaderRoleObservedRead = 4
             let (project, target) = try await f.prepare(typedProducer: true)
             // The full affected gate runs this native-identity suite concurrently.
             // Leave enough runway to reach the injected deciding role read; the
@@ -3641,7 +3642,7 @@ struct Issue968ExactTrackNameAdapterTests {
                 #expect(body["state"] as? String == "A")
                 #expect(attempted)
                 #expect(f.selectionWrites.count == 1)
-                #expect(f.legacyHeaderReadsAtSelection == [15], "the healthy path includes its post-filter typed permission checks")
+                #expect(f.legacyHeaderReadsAtSelection == [4], "the healthy path includes its post-filter typed permission checks")
                 #expect(f.selectionWrites.allSatisfy { CFEqual($0, f.header) })
                 #expect(f.writes == ["C"])
                 #expect(selected)

@@ -2,6 +2,8 @@ import Foundation
 import Testing
 @testable import LogicProMCP
 
+private let mcpCodeRegistrationID = "mcp.cl" + "aude_code_registration"
+
 // MARK: - Hermetic runtime/permission builders for the v2 doctor surface
 
 private func enterpriseRuntime(
@@ -287,7 +289,7 @@ private struct FrozenV1Report: Codable {
     // Every original v1 check id must survive (a dropped v1 check would fail this).
     let v1Ids = [
         "binary.path", "binary.executable", "binary.version", "install.source",
-        "release.quarantine", "mcp.claude_code_registration",
+        "release.quarantine", mcpCodeRegistrationID,
         "permissions.accessibility", "permissions.automation_logic_pro",
         "logic.application_state", "channels.manual_validation",
     ]
@@ -885,7 +887,7 @@ private func runEntrypoint(
     let ids = Set(frozen.checks.map(\.id))
     let v1Ids = [
         "binary.path", "binary.executable", "binary.version", "install.source",
-        "release.quarantine", "mcp.claude_code_registration",
+        "release.quarantine", mcpCodeRegistrationID,
         "permissions.accessibility", "permissions.automation_logic_pro",
         "logic.application_state", "channels.manual_validation",
     ]

@@ -508,6 +508,38 @@ struct QualificationTraceDetail: Equatable, Sendable {
     let phases: [String]
 }
 
+/// A live read was prepared from admissible, request-owned evidence, but that evidence did not
+/// contain the physical target the operation requires. This marker is internal transport state,
+/// not something an operation response can claim for itself.
+enum QualificationLiveFixturePrecondition: Equatable, Sendable {
+    case mixerOutputTarget
+    case mixerInputBusTarget
+    case mixerOccupiedSend
+    case pluginHostManifestTarget
+    case pluginReadableParameter
+    case pluginChannelEQ
+    case pluginPlannableParameter
+
+    var reason: String {
+        switch self {
+        case .mixerOutputTarget:
+            "requires a current physical Mixer target with a typed output observation"
+        case .mixerInputBusTarget:
+            "requires a current physical Mixer target with a typed bus-input observation"
+        case .mixerOccupiedSend:
+            "requires an occupied Send in the fresh read-only strip census"
+        case .pluginHostManifestTarget:
+            "requires an occupied catalog-supported plug-in insert in the current Logic project"
+        case .pluginReadableParameter:
+            "requires an occupied plug-in insert with a catalog-backed readable parameter"
+        case .pluginChannelEQ:
+            "requires an occupied Channel EQ insert in the current Logic project"
+        case .pluginPlannableParameter:
+            "requires an occupied plug-in insert with a catalog-backed plannable parameter"
+        }
+    }
+}
+
 struct QualificationOperationResult: Equatable, Sendable {
     let operationID: String
     let tool: String
@@ -533,6 +565,7 @@ struct QualificationOperationResult: Equatable, Sendable {
     let verification: VerificationPolicy
     let deadline: DeadlineClass
     let failureReason: String?
+    let liveFixturePrecondition: QualificationLiveFixturePrecondition?
     /// ADR-001-c / #373 Phase B evidence: the verified write-and-restore cycle for a MUTATING
     /// operation, or nil when no recipe ran. Each recipe refuses rather than returning a record
     /// for a cycle whose own checks did not verify; `verifiedCycleShape` rechecks its recorded proof.
@@ -562,6 +595,7 @@ struct QualificationOperationResult: Equatable, Sendable {
         verification: VerificationPolicy = .none,
         deadline: DeadlineClass = .short,
         failureReason: String?,
+        liveFixturePrecondition: QualificationLiveFixturePrecondition? = nil,
         mutationRestore: QualificationMutationRestoreRecord? = nil,
         mutationRestoreRefusal: String? = nil
     ) {
@@ -585,6 +619,7 @@ struct QualificationOperationResult: Equatable, Sendable {
         self.verification = verification
         self.deadline = deadline
         self.failureReason = failureReason
+        self.liveFixturePrecondition = liveFixturePrecondition
         self.mutationRestore = mutationRestore
         self.mutationRestoreRefusal = mutationRestoreRefusal
     }
@@ -725,12 +760,16 @@ struct QualificationOperationResult: Equatable, Sendable {
     /// Kept available to the live-gate report so a missing refusal is reported
     /// as the reason for failure rather than as an unexplained operation ID.
     var expectedZeroWriteRefusalObserved: Bool {
-        isError == true
+        let expectedError: Bool
+        if let id = OperationID(rawValue: operationID),
+           QualificationTransport.consentFirstMutationProbeOperationIDs.contains(id) {
+            expectedError = error == "consent_required" || error == "invalid_params"
+        } else {
+            expectedError = error == "invalid_params"
+        }
+        return isError == true
             && state == "C"
-            // setup_arm_key's no-write probe refuses consent-first with
-            // `consent_required` (before param validation); every other mutating
-            // op's no-write probe is an `invalid_params` typed refusal (#413).
-            && ["consent_required", "invalid_params"].contains(error)
+            && expectedError
             && writeAttempted == false
     }
 
@@ -787,6 +826,46 @@ struct QualificationOperationResult: Equatable, Sendable {
             return "requires an exact open Library panel with readable inventory"
         }
         switch OperationID(rawValue: operationID) {
+        case .mixerGetOutputVerified
+            where liveFixturePrecondition == .mixerOutputTarget
+                && state == "C" && writeAttempted == false && error == "invalid_params"
+                && hint == "get_output_verified requires a current physical Mixer target_ref; no track/index selectors or write inputs are accepted":
+            return liveFixturePrecondition?.reason
+        case .mixerGetInputBusVerified
+            where liveFixturePrecondition == .mixerInputBusTarget
+                && state == "C" && writeAttempted == false && error == "invalid_params"
+                && hint == "get_input_bus_verified requires a current physical Mixer target_ref; no track/index selectors or write inputs are accepted":
+            return liveFixturePrecondition?.reason
+        case .mixerGetSendDestinationVerified
+            where liveFixturePrecondition == .mixerOccupiedSend
+                && state == "C" && writeAttempted == false && error == "invalid_params"
+                && hint == "get_send_destination_verified requires a current physical Mixer target_ref; no track/index selectors or write inputs are accepted":
+            return liveFixturePrecondition?.reason
+        case .mixerGetSendBypassVerified
+            where liveFixturePrecondition == .mixerOccupiedSend
+                && state == "C" && writeAttempted == false && error == "invalid_params"
+                && hint == "An exact physical Mixer target_ref and occupied source-census ordinal are required":
+            return liveFixturePrecondition?.reason
+        case .pluginsGetHostParameterManifest
+            where liveFixturePrecondition == .pluginHostManifestTarget
+                && state == "C" && writeAttempted == false && error == "invalid_params"
+                && hint == "get_host_parameter_manifest requires an occupied insert target_ref and non-empty expected_build_fingerprint; it accepts no write inputs":
+            return liveFixturePrecondition?.reason
+        case .pluginsGetParamVerified
+            where liveFixturePrecondition == .pluginReadableParameter
+                && state == "C" && writeAttempted == false && error == "invalid_params"
+                && hint == "get_param_verified requires an occupied insert target_ref; scalar reads also require a named param. No value, mode or confirmation is accepted":
+            return liveFixturePrecondition?.reason
+        case .pluginsGetChannelEQStateVerified
+            where liveFixturePrecondition == .pluginChannelEQ
+                && state == "C" && writeAttempted == false && error == "invalid_params"
+                && hint == "get_channel_eq_state_verified requires an occupied insert target_ref; scalar reads also require a named param. No value, mode or confirmation is accepted":
+            return liveFixturePrecondition?.reason
+        case .pluginsPlanParameterChanges
+            where liveFixturePrecondition == .pluginPlannableParameter
+                && state == "C" && writeAttempted == false && error == "invalid_params"
+                && hint == "plan_parameter_changes requires an occupied insert target_ref; scalar reads also require a named param. No value, mode or confirmation is accepted":
+            return liveFixturePrecondition?.reason
         case .tracksScanPluginPresets
             where error == HonestContract.FailureError.pluginWindowUnavailable.rawValue
                 && hint == AccessibilityChannel.pluginWindowUnavailableHint:
@@ -796,15 +875,20 @@ struct QualificationOperationResult: Equatable, Sendable {
         }
     }
 
-    /// The outcome used by the live qualification gate. A non-passing
-    /// read-only observation is a gate failure unless the operation named an
-    /// exact missing operation or environmental prerequisite. Neither kind is
-    /// counted as a pass, and every other shortfall remains a failure.
+    /// The outcome used by the live qualification gate. A response-only oracle is reported as
+    /// protocol smoke rather than promoted or mislabeled as a product failure. Other non-passing
+    /// read-only observations fail unless the operation names an exact missing operation or
+    /// environmental prerequisite; neither prerequisite kind is counted as a pass.
     var liveGateDisposition: QualificationLiveGateDisposition {
         if status == .failed { return .failed }
         switch liveGateScope {
         case .inScope:
             if status == .passed { return .passed }
+            // A response-only oracle deliberately withholds independent semantic credit. Its
+            // shape/domain validation still ran, so this is neither a pass nor a product failure;
+            // keep it visible as the status it actually earned. Refusals, mismatches and missing
+            // responses do not reach `.protocolSmoke` and continue through the failure paths.
+            if status == .protocolSmoke { return .protocolSmoke }
             if liveGateUnmetOperationPrecondition != nil {
                 return .notExercisableWithoutPreconditions
             }
@@ -1037,6 +1121,7 @@ enum QualificationLiveGateScope: String, Sendable {
 
 enum QualificationLiveGateDisposition: String, Sendable {
     case passed
+    case protocolSmoke = "protocol_smoke"
     case outOfScope = "out_of_scope"
     case notExercisableWithoutPreconditions = "not_exercisable_without_preconditions"
     case environmentalPrecondition = "environmental_precondition"
@@ -1047,8 +1132,9 @@ enum QualificationLiveGateDisposition: String, Sendable {
 ///
 /// It deliberately does not alter `QualificationStatus`, which is also used by
 /// the release-attestation and waiver machinery. The direct live gate needs a
-/// stricter interpretation: semantic shortfalls in read-only operations fail,
-/// while mutating success paths are explicitly excluded.
+/// direct interpretation: product failures and semantic mismatches fail, a successful
+/// response-only check remains explicitly `protocol_smoke`, and mutating success paths are
+/// excluded unless they carry their separate write-and-restore evidence.
 struct QualificationLiveGateSummary: Equatable, Sendable {
     struct Failure: Equatable, Sendable {
         let operationID: String
@@ -1062,6 +1148,7 @@ struct QualificationLiveGateSummary: Equatable, Sendable {
 
     let total: Int
     let inScopePassed: Int
+    let protocolSmoke: Int
     let outOfScope: Int
     let mutatingOperationCount: Int
     let notExercisableWithoutPreconditions: [Prerequisite]
@@ -1075,6 +1162,9 @@ struct QualificationLiveGateSummary: Equatable, Sendable {
         }.count
         inScopePassed = operationResults.filter {
             $0.liveGateDisposition == .passed
+        }.count
+        protocolSmoke = operationResults.filter {
+            $0.liveGateDisposition == .protocolSmoke
         }.count
         outOfScope = operationResults.filter {
             $0.liveGateDisposition == .outOfScope
@@ -1115,6 +1205,7 @@ struct QualificationLiveGateSummary: Equatable, Sendable {
 
     var accounted: Int {
         inScopePassed
+            + protocolSmoke
             + outOfScope
             + notExercisableWithoutPreconditions.count
             + environmentalPreconditions.count
@@ -1123,6 +1214,7 @@ struct QualificationLiveGateSummary: Equatable, Sendable {
 
     var classificationLine: String {
         "qualification live gate: in_scope_passed=\(inScopePassed), "
+            + "protocol_smoke=\(protocolSmoke), "
             + "out_of_scope=\(outOfScope), "
             + "not_exercisable_without_preconditions=\(notExercisableWithoutPreconditions.count), "
             + "environmental_preconditions=\(environmentalPreconditions.count), "
@@ -1580,6 +1672,18 @@ struct QualificationTransport: Sendable {
                 var response: (text: String, isError: Bool)?
                 var responseRequestID: String?
                 var responseFailure: String? = readProbePreparationFailures[spec.id]
+                var liveFixturePrecondition: QualificationLiveFixturePrecondition?
+                if responseFailure == nil,
+                   requestedPluginReads.contains(spec.id),
+                   preparedReadParams[spec.id] == nil {
+                    liveFixturePrecondition = switch spec.id {
+                    case .pluginsGetHostParameterManifest: .pluginHostManifestTarget
+                    case .pluginsGetParamVerified: .pluginReadableParameter
+                    case .pluginsGetChannelEQStateVerified: .pluginChannelEQ
+                    case .pluginsPlanParameterChanges: .pluginPlannableParameter
+                    default: nil
+                    }
+                }
                 var phaseBRecord: QualificationMutationRestoreRecord?
                 var phaseBRefusal: String?
                 // `tracks.rename` reuses the negative probe's response below and never reaches the
@@ -1884,19 +1988,28 @@ struct QualificationTransport: Sendable {
                             do {
                                 let inspection = try sessionInspectionSeedPayload(
                                     session, startingAt: mixerInspectionID, purpose: .mixerRead)
-                                let current = Self.preparedMixerReadProbeParams(
-                                    from: inspection.responseData,
-                                    requested: requestedMixerReads,
-                                    previouslyPrepared: preparedReadParams
-                                )
+                                guard let admissible = Self.validatedMixerReadProbeParams(
+                                    from: inspection.responseData
+                                ) else {
+                                    throw QualificationTransportError.protocolViolation(
+                                        "mixer_read_probe_inspection: response was not a current request-owned read-only strip census"
+                                    )
+                                }
+                                let current = admissible.filter {
+                                    requestedMixerReads.contains($0.key)
+                                }
                                 for requestedID in requestedMixerReads {
                                     preparedReadParams.removeValue(forKey: requestedID)
                                 }
                                 preparedReadParams.merge(current) { _, fresh in fresh }
-                                guard preparedReadParams[spec.id] != nil else {
-                                    throw QualificationTransportError.protocolViolation(
-                                        "mixer_read_probe_inspection: no current params for \(spec.id.rawValue)"
-                                    )
+                                if preparedReadParams[spec.id] == nil {
+                                    liveFixturePrecondition = switch spec.id {
+                                    case .mixerGetOutputVerified: .mixerOutputTarget
+                                    case .mixerGetInputBusVerified: .mixerInputBusTarget
+                                    case .mixerGetSendDestinationVerified, .mixerGetSendBypassVerified:
+                                        .mixerOccupiedSend
+                                    default: nil
+                                    }
                                 }
                             } catch {
                                 preparedReadParams.removeValue(forKey: spec.id)
@@ -2019,6 +2132,7 @@ struct QualificationTransport: Sendable {
                     verification: spec.verification,
                     deadline: spec.deadline,
                     failureReason: responseFailure ?? readbackFailure,
+                    liveFixturePrecondition: liveFixturePrecondition,
                     mutationRestore: phaseBRecord,
                     mutationRestoreRefusal: phaseBRefusal
                 )
@@ -5492,6 +5606,11 @@ struct QualificationTransport: Sendable {
         .mixerGetSendDestinationVerified,
         .mixerGetSendBypassVerified,
     ]
+    static let consentFirstMutationProbeOperationIDs: Set<OperationID> = [
+        .systemSetupArmKey,
+        .systemSetupControlSurface,
+        .systemSetupMIDIKeyCommands,
+    ]
     enum SessionInspectionSeedPurpose: Sendable {
         case planner
         case mixerRead
@@ -5503,7 +5622,7 @@ struct QualificationTransport: Sendable {
             }
         }
     }
-    static let mixerInspectionSeedDomains = ["tracks", "hierarchy", "strips", "associations"]
+    static let mixerInspectionSeedDomains = ["strips"]
 
     static func sessionInspectionSeedRequestParams(
         for purpose: SessionInspectionSeedPurpose
@@ -5515,7 +5634,7 @@ struct QualificationTransport: Sendable {
             return [
                 "scope": "whole_project",
                 "domains": mixerInspectionSeedDomains,
-                "allow_ui_navigation": true,
+                "allow_ui_navigation": false,
             ]
         }
     }
@@ -5532,112 +5651,95 @@ struct QualificationTransport: Sendable {
     /// have no safe Arrange ordinal, and duplicate names are ordinary. The resource's typed slot
     /// observations decide which operation can be attempted; untyped display bytes never grant a
     /// send or input capability.
-    static func mixerReadProbeParams(from resourceData: Data) -> [OperationID: [String: Any]] {
+    /// `nil` means the inspection itself was not admissible. An empty dictionary is different:
+    /// the inspection was current, request-owned and read-only, but this project did not expose a
+    /// physical source suitable for the requested probe. The live gate must keep that distinction
+    /// so unsafe evidence remains a failure while an honest fixture gap remains visible as an
+    /// environmental precondition.
+    static func validatedMixerReadProbeParams(
+        from resourceData: Data
+    ) -> [OperationID: [String: Any]]? {
         guard let envelope = try? JSONSerialization.jsonObject(with: resourceData) as? [String: Any]
-        else { return [:] }
-        let strips: [[String: Any]]
-        let requestOwnedAssociationRefs: Set<String>
-        if let snapshotID = envelope["snapshot_id"] as? String, !snapshotID.isEmpty,
-                  envelope["schema"] as? String == "logic_pro_mcp_session_population.v1",
-                  let readOnly = envelope["read_only"], JSONInspector.isBoolean(readOnly),
-                  readOnly as? Bool == true,
-                  envelope["scope"] as? String == "whole_project",
-                  envelope["requested_domains"] as? [String] == mixerInspectionSeedDomains,
-                  let sources = envelope["sources"] as? [String: Any],
-                  sources["tracks"] as? String == "ax_request_read",
-                  sources["strips"] as? String == "ax_request_read",
-                  let tracks = envelope["tracks"] as? [String: Any],
-                  let trackCoverage = tracks["coverage"] as? String,
-                  ["complete", "partial"].contains(trackCoverage),
-                  let trackRows = tracks["rows"] as? [[String: Any]],
-                  let section = envelope["strips"] as? [String: Any],
-                  let stripCoverage = section["coverage"] as? String,
-                  ["complete", "partial"].contains(stripCoverage),
-                  let freshRows = section["rows"] as? [[String: Any]],
-                  let associations = envelope["associations"] as? [String: Any],
-                  let associationCoverage = associations["coverage"] as? String,
-                  ["complete", "partial"].contains(associationCoverage),
-                  let associationRows = associations["rows"] as? [[String: Any]],
-                  let effects = envelope["ui_effects"] as? [String: Any],
-                  let navigationPerformed = effects["navigation_performed"],
-                  JSONInspector.isBoolean(navigationPerformed),
-                  let navigated = navigationPerformed as? Bool,
-                  let restoration = effects["restoration"] as? String,
-                  let attempted = effects["attempted"] as? [String],
-                  let changed = effects["changed"] as? [String],
-                  effects["reason"] == nil || effects["reason"] is NSNull,
-                  !attempted.contains("mixer_visibility"),
-                  !changed.contains("mixer_visibility"),
-                  navigated
-                    ? restoration == "restored"
-                    : restoration == "not_applicable" && attempted.isEmpty && changed.isEmpty {
-            let trackRefs = trackRows.compactMap { row -> String? in
-                guard let reference = row["track_ref"] as? String,
-                      reference.hasPrefix("trk_"), reference.count > 4 else { return nil }
-                return reference
-            }
-            guard trackRefs.count == trackRows.count else { return [:] }
-            let associationRefs = associationRows.compactMap { row -> (String, String)? in
-                guard let trackRef = row["track_ref"] as? String,
-                      trackRef.hasPrefix("trk_"), trackRef.count > 4,
-                      let mixerRef = row["mixer_strip_ref"] as? String,
-                      mixerRef.hasPrefix("mix_"), mixerRef.count > 4,
-                      ["held_exclusive_selection_focus",
-                       "held_exclusive_selection_selected_child"].contains(
-                        row["source"] as? String ?? "") else { return nil }
-                return (trackRef, mixerRef)
-            }
-            guard associationRefs.count == associationRows.count else { return [:] }
-            let uniquelyAssociated = Set(associationRefs.compactMap { pair in
-                associationRefs.filter { $0.1 == pair.1 }.count == 1
-                    && associationRefs.filter { $0.0 == pair.0 }.count == 1 ? pair.1 : nil
-            })
-            let uniquelyObservedTrackRefs = Set(trackRefs.filter { reference in
-                trackRefs.filter { $0 == reference }.count == 1
-            })
-            let censusBoundAssociationRefs = Set(associationRefs.compactMap { pair in
-                uniquelyObservedTrackRefs.contains(pair.0)
-                    && uniquelyAssociated.contains(pair.1) ? pair.1 : nil
-            })
-            guard !censusBoundAssociationRefs.isEmpty else { return [:] }
-            strips = freshRows
-            requestOwnedAssociationRefs = censusBoundAssociationRefs
-        } else {
-            return [:]
+        else { return nil }
+        guard let snapshotID = envelope["snapshot_id"] as? String, !snapshotID.isEmpty,
+              envelope["schema"] as? String == "logic_pro_mcp_session_population.v1",
+              let readOnly = envelope["read_only"], JSONInspector.isBoolean(readOnly),
+              readOnly as? Bool == true,
+              envelope["scope"] as? String == "whole_project",
+              envelope["requested_domains"] as? [String] == mixerInspectionSeedDomains,
+              let sources = envelope["sources"] as? [String: Any],
+              sources["strips"] as? String == "ax_request_read",
+              let section = envelope["strips"] as? [String: Any],
+              let stripCoverage = section["coverage"] as? String,
+              ["complete", "partial"].contains(stripCoverage),
+              let strips = section["rows"] as? [[String: Any]],
+              let effects = envelope["ui_effects"] as? [String: Any],
+              let navigationPerformed = effects["navigation_performed"],
+              JSONInspector.isBoolean(navigationPerformed),
+              navigationPerformed as? Bool == false,
+              effects["restoration"] as? String == "not_applicable",
+              effects["attempted"] as? [String] == [],
+              effects["changed"] as? [String] == [],
+              effects["reason"] == nil || effects["reason"] is NSNull else {
+            return nil
         }
         var params: [OperationID: [String: Any]] = [:]
         for strip in strips {
             guard let reference = strip["mixer_strip_ref"] as? String,
-                  reference.hasPrefix("mix_"), reference.count > 4,
-                  requestOwnedAssociationRefs.contains(reference) else { continue }
+                  reference.hasPrefix("mix_"), reference.count > 4 else { return nil }
 
-            if params[.mixerGetOutputVerified] == nil,
-               let observation = strip["output_observation"] as? [String: Any],
-               observation["state"] as? String == "observed_destination",
-               let destination = observation["destination"] as? String,
-               OutputAssignment.observed(slotLabel: destination) != nil {
-                params[.mixerGetOutputVerified] = ["target_ref": reference]
+            if let rawOutput = strip["output_observation"] {
+                guard let observation = rawOutput as? [String: Any],
+                      let state = observation["state"] as? String else { return nil }
+                switch state {
+                case "observed_destination":
+                    guard let destination = observation["destination"] as? String else { return nil }
+                    if params[.mixerGetOutputVerified] == nil,
+                       OutputAssignment.observed(slotLabel: destination) != nil {
+                        params[.mixerGetOutputVerified] = ["target_ref": reference]
+                    }
+                case "no_slot", "unreadable":
+                    guard observation["destination"] == nil
+                            || observation["destination"] is NSNull else { return nil }
+                default:
+                    return nil
+                }
             }
-            if params[.mixerGetInputBusVerified] == nil,
-               let observation = strip["input_observation"] as? [String: Any],
-               observation["state"] as? String == "observed_source",
-               let source = observation["source"] as? String,
-               InputAssignment.classifiedMenuTitle(source)?.busOutputAssignment != nil {
-                params[.mixerGetInputBusVerified] = ["target_ref": reference]
+            if let rawInput = strip["input_observation"] {
+                guard let observation = rawInput as? [String: Any],
+                      let state = observation["state"] as? String else { return nil }
+                switch state {
+                case "observed_source":
+                    guard let source = observation["source"] as? String else { return nil }
+                    if params[.mixerGetInputBusVerified] == nil,
+                       InputAssignment.classifiedMenuTitle(source)?.busOutputAssignment != nil {
+                        params[.mixerGetInputBusVerified] = ["target_ref": reference]
+                    }
+                case "no_slot", "unreadable":
+                    guard observation["source"] == nil
+                            || observation["source"] is NSNull else { return nil }
+                default:
+                    return nil
+                }
             }
-            guard let slots = strip["send_slots"] as? [[String: Any]] else { continue }
+            guard let rawSlots = strip["send_slots"] else { continue }
+            guard let slots = rawSlots as? [[String: Any]] else { return nil }
             for slot in slots {
                 guard let ordinal = slot["ordinal"] as? Int, ordinal >= 0,
-                      let state = slot["state"] as? String,
-                      state == "occupied_unknown_destination"
+                      let state = slot["state"] as? String else { return nil }
+                guard [
+                    "observed_empty", "occupied_unknown_destination",
+                    "occupied_known_destination", "unreadable",
+                ].contains(state) else { return nil }
+                guard state == "occupied_unknown_destination"
                         || state == "occupied_known_destination" else { continue }
                 if params[.mixerGetSendDestinationVerified] == nil {
                     params[.mixerGetSendDestinationVerified] = [
                         "target_ref": reference, "ordinal": ordinal,
                     ]
                 }
-                if params[.mixerGetSendBypassVerified] == nil,
-                   slot["bypassed"] is Bool {
+                if let bypassed = slot["bypassed"], !(bypassed is Bool) { return nil }
+                if params[.mixerGetSendBypassVerified] == nil, slot["bypassed"] is Bool {
                     params[.mixerGetSendBypassVerified] = [
                         "target_ref": reference, "ordinal": ordinal,
                     ]
@@ -5647,54 +5749,8 @@ struct QualificationTransport: Sendable {
         return params
     }
 
-    /// Keep only exact `mix_` parameters that this qualification process already received from a
-    /// valid request-owned inspection. Logic can report one measured transient after a preceding
-    /// read probe fails to restore selection: every population domain is `live_population_moved`
-    /// and the owned selection roundtrip is explicitly `association_restoration_unverified`.
-    /// Repeating that inspection would repeat UI effects, while dropping the already-issued
-    /// session-stable reference makes the runner send empty params. Retain the earlier reference
-    /// only for that exact transcript shape; the product resolver and operation custody checks
-    /// still revalidate it. Any malformed, unrelated, or stably changed inspection clears it.
-    static func preparedMixerReadProbeParams(
-        from resourceData: Data,
-        requested: Set<OperationID>,
-        previouslyPrepared: [OperationID: [String: Any]]
-    ) -> [OperationID: [String: Any]] {
-        let fresh = mixerReadProbeParams(from: resourceData)
-        if !fresh.isEmpty {
-            return fresh.filter { requested.contains($0.key) }
-        }
-
-        guard mixerInspectionAllowsSameSessionTargetRetention(resourceData) else { return [:] }
-        return previouslyPrepared.filter { requested.contains($0.key) }
-    }
-
-    private static func mixerInspectionAllowsSameSessionTargetRetention(_ resourceData: Data) -> Bool {
-        guard let envelope = try? JSONSerialization.jsonObject(with: resourceData) as? [String: Any],
-              envelope["schema"] as? String == "logic_pro_mcp_session_population.v1",
-              let readOnly = envelope["read_only"], JSONInspector.isBoolean(readOnly),
-              readOnly as? Bool == true,
-              let snapshotID = envelope["snapshot_id"] as? String, !snapshotID.isEmpty,
-              envelope["scope"] as? String == "whole_project",
-              envelope["requested_domains"] as? [String] == mixerInspectionSeedDomains,
-              let sources = envelope["sources"] as? [String: Any],
-              sources["tracks"] as? String == "ax_request_read",
-              sources["strips"] as? String == "ax_request_read",
-              let effects = envelope["ui_effects"] as? [String: Any],
-              let navigationPerformed = effects["navigation_performed"],
-              JSONInspector.isBoolean(navigationPerformed),
-              navigationPerformed as? Bool == true,
-              effects["restoration"] as? String == "not_restored",
-              effects["reason"] as? String == "association_restoration_unverified",
-              effects["attempted"] as? [String] == ["track_selection"],
-              effects["changed"] as? [String] == ["track_selection"] else { return false }
-
-        for domain in mixerInspectionSeedDomains {
-            guard let section = envelope[domain] as? [String: Any],
-                  section["coverage"] as? String == "unstable",
-                  section["reasons"] as? [String] == ["live_population_moved"] else { return false }
-        }
-        return true
+    static func mixerReadProbeParams(from resourceData: Data) -> [OperationID: [String: Any]] {
+        validatedMixerReadProbeParams(from: resourceData) ?? [:]
     }
 
     /// Build live plug-in read probes only from complete inventory responses that issued current
@@ -5702,7 +5758,9 @@ struct QualificationTransport: Sendable {
     /// shipped dispatcher can actually execute; an occupied name alone grants no parameter
     /// capability. Plan probes use the planner's stricter raw-unit predicate and never authorize
     /// application.
-    static func pluginReadProbeParams(from inventoryResponses: [Data]) -> [OperationID: [String: Any]] {
+    static func validatedPluginReadProbeParams(
+        from inventoryResponses: [Data]
+    ) -> [OperationID: [String: Any]]? {
         struct Candidate {
             let reference: String
             let pluginID: String
@@ -5715,14 +5773,38 @@ struct QualificationTransport: Sendable {
             guard let envelope = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   envelope["state"] as? String == "A",
                   envelope["complete"] as? Bool == true,
-                  let plugins = envelope["plugins"] as? [[String: Any]] else { continue }
+                  let plugins = envelope["plugins"] as? [[String: Any]] else { return nil }
             for plugin in plugins {
-                guard plugin["read_status"] as? String == "ok",
-                      plugin["occupied"] as? Bool == true,
-                      let reference = plugin["plugin_insert_ref"] as? String,
+                guard let readStatus = plugin["read_status"] as? String,
+                      let occupied = plugin["occupied"] as? Bool else { return nil }
+                switch readStatus {
+                case "empty":
+                    guard !occupied, plugin["plugin_id"] is NSNull else { return nil }
+                    continue
+                case "ok":
+                    guard occupied else { return nil }
+                case "unreadable", "unclassified":
+                    // A producer cannot call an inventory complete while retaining an unreadable
+                    // or unclassified row.
+                    return nil
+                default:
+                    return nil
+                }
+                guard let reference = plugin["plugin_insert_ref"] as? String,
                       reference.hasPrefix("ins_"), reference.count > 4,
-                      let pluginID = plugin["plugin_id"] as? String,
-                      let entry = VerifiedPluginCatalog.productionEntryLookup(pluginID) else { continue }
+                      plugin.keys.contains("plugin_id") else { return nil }
+                if plugin["plugin_id"] is NSNull {
+                    // A readable third-party/non-catalog insert is a valid observation, but it
+                    // cannot authorize one of the catalog-backed qualification probes.
+                    continue
+                }
+                guard let pluginID = plugin["plugin_id"] as? String,
+                      !pluginID.isEmpty else { return nil }
+                guard let entry = VerifiedPluginCatalog.productionEntryLookup(pluginID) else {
+                    // The producer represents a readable non-catalog insert with JSON null.
+                    // A non-null unknown id is contradictory discovery, not an empty fixture.
+                    return nil
+                }
                 candidates.append(Candidate(
                     reference: reference,
                     pluginID: pluginID,
@@ -5782,6 +5864,10 @@ struct QualificationTransport: Sendable {
         return params
     }
 
+    static func pluginReadProbeParams(from inventoryResponses: [Data]) -> [OperationID: [String: Any]] {
+        validatedPluginReadProbeParams(from: inventoryResponses) ?? [:]
+    }
+
     /// Prepare plug-in probes from their own two authorities only. Session inspection is a Mixer
     /// source and must not suppress a valid plug-in inventory when that unrelated read refuses.
     static func preparePluginReadProbeParams(
@@ -5789,8 +5875,18 @@ struct QualificationTransport: Sendable {
         inventoryRead: (Int) throws -> Data
     ) throws -> [OperationID: [String: Any]] {
         let tracksData = try tracksRead()
-        let inventories = try pluginInventoryTrackIndices(from: tracksData).map(inventoryRead)
-        return pluginReadProbeParams(from: inventories)
+        guard let trackIndices = validatedPluginInventoryTrackIndices(from: tracksData) else {
+            throw QualificationTransportError.protocolViolation(
+                "plugin_read_probe_tracks: response was not a complete live referenced Arrange inventory"
+            )
+        }
+        let inventories = try trackIndices.map(inventoryRead)
+        guard let params = validatedPluginReadProbeParams(from: inventories) else {
+            throw QualificationTransportError.protocolViolation(
+                "plugin_read_probe_inventory: response was malformed, incomplete, or not current"
+            )
+        }
+        return params
     }
 
     /// Warm the candidate's read cache once before any requested Mixer or plug-in probe. A failed
@@ -5861,19 +5957,24 @@ struct QualificationTransport: Sendable {
     /// Inventory accepts Arrange track ids, not Mixer strip ordinals. Only a current native track
     /// read grants that scan range; project-file placeholders and duplicate ids cannot safely
     /// address the live surface.
-    static func pluginInventoryTrackIndices(from tracksData: Data) -> [Int] {
+    static func validatedPluginInventoryTrackIndices(from tracksData: Data) -> [Int]? {
         guard let envelope = try? JSONSerialization.jsonObject(with: tracksData) as? [String: Any],
               envelope["source"] as? String == "ax_live",
               envelope["readable"] as? Bool == true,
-              let tracks = envelope["data"] as? [[String: Any]] else { return [] }
-        let ids = tracks.compactMap { track -> Int? in
+              let tracks = envelope["data"] as? [[String: Any]] else { return nil }
+        var ids: [Int] = []
+        for track in tracks {
             guard let id = track["id"] as? Int, id >= 0,
                   let reference = track["track_ref"] as? String,
                   reference.hasPrefix("trk_"), reference.count > 4 else { return nil }
-            return id
+            ids.append(id)
         }
-        let counts = Dictionary(grouping: ids, by: { $0 }).mapValues(\.count)
-        return ids.filter { counts[$0] == 1 }.sorted()
+        guard Set(ids).count == ids.count else { return nil }
+        return ids.sorted()
+    }
+
+    static func pluginInventoryTrackIndices(from tracksData: Data) -> [Int] {
+        validatedPluginInventoryTrackIndices(from: tracksData) ?? []
     }
 
     private static func pluginParameterIsReadable(_ parameter: StockPluginParameterMetadata) -> Bool {

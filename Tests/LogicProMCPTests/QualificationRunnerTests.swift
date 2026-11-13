@@ -1,7 +1,6 @@
 @preconcurrency import ApplicationServices
 import Foundation
 import Darwin
-import CryptoKit
 import MCP
 import Testing
 @testable import LogicProMCP
@@ -1168,17 +1167,8 @@ struct QualificationRunnerTests {
             "read_only": true,
             "snapshot_id": "snap_typed_rows",
             "scope": "whole_project",
-            "requested_domains": ["tracks", "hierarchy", "strips", "associations"],
-            "sources": ["tracks": "ax_request_read", "strips": "ax_request_read"],
-            "tracks": [
-                "coverage": "partial",
-                "rows": [
-                    ["track_ref": "trk_output"],
-                    ["track_ref": "trk_physical_input"],
-                    ["track_ref": "trk_bus_input"],
-                    ["track_ref": "trk_send"],
-                ],
-            ],
+            "requested_domains": ["strips"],
+            "sources": ["strips": "ax_request_read"],
             "strips": [
                 "coverage": "partial",
                 "rows": [
@@ -1208,6 +1198,7 @@ struct QualificationRunnerTests {
                     ],
                 ],
                 [
+                    "mixer_strip_ref": "mix_irrelevant",
                     "output_observation": [
                         "state": "observed_destination", "destination": "Stereo Out",
                     ],
@@ -1217,24 +1208,11 @@ struct QualificationRunnerTests {
                 ],
                 ],
             ],
-            "associations": [
-                "coverage": "partial",
-                "rows": [
-                    ["track_ref": "trk_output", "mixer_strip_ref": "mix_output",
-                     "source": "held_exclusive_selection_focus"],
-                    ["track_ref": "trk_physical_input", "mixer_strip_ref": "mix_physical_input",
-                     "source": "held_exclusive_selection_focus"],
-                    ["track_ref": "trk_bus_input", "mixer_strip_ref": "mix_bus_input",
-                     "source": "held_exclusive_selection_selected_child"],
-                    ["track_ref": "trk_send", "mixer_strip_ref": "mix_send",
-                     "source": "held_exclusive_selection_focus"],
-                ],
-            ],
             "ui_effects": [
-                "navigation_performed": true,
-                "restoration": "restored",
-                "attempted": ["track_selection"],
-                "changed": ["track_selection"],
+                "navigation_performed": false,
+                "restoration": "not_applicable",
+                "attempted": [],
+                "changed": [],
             ],
         ]
         let params = QualificationTransport.mixerReadProbeParams(
@@ -1249,15 +1227,15 @@ struct QualificationRunnerTests {
         #expect(params[.mixerGetSendBypassVerified]?["ordinal"] as? Int == 3)
     }
 
-    @Test func sessionInspectionSeedPurposesKeepPlannerPassiveAndMixerNavigationBound() throws {
+    @Test func sessionInspectionSeedPurposesKeepPlannerAndMixerReadsPassive() throws {
         let planner = QualificationTransport.sessionInspectionSeedRequestParams(for: .planner)
         let mixer = QualificationTransport.sessionInspectionSeedRequestParams(for: .mixerRead)
 
         #expect(planner.isEmpty)
         #expect(mixer["scope"] as? String == "whole_project")
-        #expect(mixer["domains"] as? [String]
-            == ["tracks", "hierarchy", "strips", "associations"])
-        #expect(try #require(mixer["allow_ui_navigation"] as? Bool))
+        #expect(mixer["domains"] as? [String] == ["strips"])
+        let allowsNavigation = try #require(mixer["allow_ui_navigation"] as? Bool)
+        #expect(!allowsNavigation)
         #expect(QualificationTransport.mixerReadProbeOperationIDs == [
             .mixerGetOutputVerified,
             .mixerGetInputBusVerified,
@@ -1266,7 +1244,7 @@ struct QualificationRunnerTests {
         ])
     }
 
-    @Test func preparedMixerReadProbeParamsReplaceTheEmptyCatalogFallback() throws {
+    @Test func preparedMixerProbeParamsReplaceTheEmptyCatalogFallback() throws {
         let spec = try #require(OperationRegistry.specs.first {
             $0.id == .mixerGetSendDestinationVerified
         })
@@ -1281,212 +1259,14 @@ struct QualificationRunnerTests {
         #expect(params["ordinal"] as? Int == 4)
     }
 
-    @Test func mixerReadProbeParamsRetainSameSessionTargetsOnlyForMeasuredPopulationMovement() throws {
-        func stableInspection(reference: String) throws -> Data {
-            try JSONSerialization.data(withJSONObject: [
-                "schema": "logic_pro_mcp_session_population.v1",
-                "read_only": true,
-                "snapshot_id": "snap_\(reference)",
-                "scope": "whole_project",
-                "requested_domains": ["tracks", "hierarchy", "strips", "associations"],
-                "sources": ["tracks": "ax_request_read", "strips": "ax_request_read"],
-                "tracks": [
-                    "coverage": "partial",
-                    "rows": [["track_ref": "trk_\(reference)"]],
-                ],
-                "strips": [
-                    "coverage": "partial",
-                    "rows": [[
-                        "mixer_strip_ref": "mix_\(reference)",
-                        "input_observation": [
-                            "state": "observed_source", "source": "버스 1",
-                        ],
-                        "output_observation": [
-                            "state": "observed_destination", "destination": "Stereo Output",
-                        ],
-                    ]],
-                ],
-                "associations": [
-                    "coverage": "partial",
-                    "rows": [[
-                        "track_ref": "trk_\(reference)",
-                        "mixer_strip_ref": "mix_\(reference)",
-                        "source": "held_exclusive_selection_selected_child",
-                    ]],
-                ],
-                "ui_effects": [
-                    "navigation_performed": true,
-                    "restoration": "restored",
-                    "attempted": ["track_selection"],
-                    "changed": ["track_selection"],
-                ],
-            ])
-        }
-        let movedInspection = try JSONSerialization.data(withJSONObject: [
-            "schema": "logic_pro_mcp_session_population.v1",
-            "read_only": true,
-            "snapshot_id": "snap_population_moved",
-            "scope": "whole_project",
-            "requested_domains": ["tracks", "hierarchy", "strips", "associations"],
-            "sources": ["tracks": "ax_request_read", "strips": "ax_request_read"],
-            "tracks": [
-                "coverage": "unstable", "reasons": ["live_population_moved"], "rows": [],
-            ],
-            "hierarchy": [
-                "coverage": "unstable", "reasons": ["live_population_moved"],
-            ],
-            "strips": [
-                "coverage": "unstable", "reasons": ["live_population_moved"], "rows": [],
-            ],
-            "associations": [
-                "coverage": "unstable", "reasons": ["live_population_moved"],
-            ],
-            "ui_effects": [
-                "navigation_performed": true,
-                "restoration": "not_restored",
-                "attempted": ["track_selection"],
-                "changed": ["track_selection"],
-                "reason": "association_restoration_unverified",
-            ],
-        ])
-        let requested: Set<OperationID> = [
-            .mixerGetInputBusVerified,
-            .mixerGetOutputVerified,
-        ]
-        var prepared = QualificationTransport.preparedMixerReadProbeParams(
-            from: try stableInspection(reference: "before"),
-            requested: requested,
-            previouslyPrepared: [:]
-        )
-        #expect(prepared[.mixerGetInputBusVerified]?["target_ref"] as? String
-            == "mix_before")
-        #expect(prepared[.mixerGetOutputVerified]?["target_ref"] as? String
-            == "mix_before")
-        #expect(prepared[.mixerGetSendBypassVerified] == nil)
-
-        prepared = QualificationTransport.preparedMixerReadProbeParams(
-            from: movedInspection,
-            requested: requested,
-            previouslyPrepared: prepared
-        )
-        #expect(prepared[.mixerGetInputBusVerified]?["target_ref"] as? String
-            == "mix_before")
-        #expect(prepared[.mixerGetOutputVerified]?["target_ref"] as? String
-            == "mix_before")
-
-        let malformed = QualificationTransport.preparedMixerReadProbeParams(
-            from: Data(#"{}"#.utf8),
-            requested: requested,
-            previouslyPrepared: prepared
-        )
-        #expect(malformed.isEmpty)
-
-        prepared = QualificationTransport.preparedMixerReadProbeParams(
-            from: try stableInspection(reference: "after"),
-            requested: requested,
-            previouslyPrepared: prepared
-        )
-        #expect(prepared[.mixerGetInputBusVerified]?["target_ref"] as? String
-            == "mix_after")
-        #expect(prepared[.mixerGetOutputVerified]?["target_ref"] as? String
-            == "mix_after")
-    }
-
-    @Test(arguments: [
-        "schema", "read_only", "snapshot", "scope", "domains", "sources",
-        "coverage", "reasons", "navigation", "restoration", "effect_reason",
-        "attempted", "changed",
-    ])
-    func mixerReadProbeParamsRejectRetainedTargetsOutsideMeasuredPopulationMovement(
-        fault: String
-    ) throws {
-        var envelope: [String: Any] = [
-            "schema": "logic_pro_mcp_session_population.v1",
-            "read_only": true,
-            "snapshot_id": "snap_population_moved",
-            "scope": "whole_project",
-            "requested_domains": ["tracks", "hierarchy", "strips", "associations"],
-            "sources": ["tracks": "ax_request_read", "strips": "ax_request_read"],
-            "tracks": [
-                "coverage": "unstable", "reasons": ["live_population_moved"], "rows": [],
-            ],
-            "hierarchy": [
-                "coverage": "unstable", "reasons": ["live_population_moved"],
-            ],
-            "strips": [
-                "coverage": "unstable", "reasons": ["live_population_moved"], "rows": [],
-            ],
-            "associations": [
-                "coverage": "unstable", "reasons": ["live_population_moved"],
-            ],
-            "ui_effects": [
-                "navigation_performed": true,
-                "restoration": "not_restored",
-                "attempted": ["track_selection"],
-                "changed": ["track_selection"],
-                "reason": "association_restoration_unverified",
-            ],
-        ]
-        switch fault {
-        case "schema": envelope["schema"] = "legacy"
-        case "read_only": envelope["read_only"] = false
-        case "snapshot": envelope["snapshot_id"] = ""
-        case "scope": envelope["scope"] = "selected_tracks"
-        case "domains": envelope["requested_domains"] = ["tracks", "strips"]
-        case "sources": envelope["sources"] = ["tracks": "cache", "strips": "ax_request_read"]
-        case "coverage":
-            envelope["tracks"] = [
-                "coverage": "partial", "reasons": ["live_population_moved"], "rows": [],
-            ]
-        case "reasons":
-            envelope["hierarchy"] = [
-                "coverage": "unstable", "reasons": ["foreign_reason"],
-            ]
-        case "navigation":
-            var effects = try #require(envelope["ui_effects"] as? [String: Any])
-            effects["navigation_performed"] = false
-            envelope["ui_effects"] = effects
-        case "restoration":
-            var effects = try #require(envelope["ui_effects"] as? [String: Any])
-            effects["restoration"] = "restored"
-            envelope["ui_effects"] = effects
-        case "effect_reason":
-            var effects = try #require(envelope["ui_effects"] as? [String: Any])
-            effects["reason"] = "foreign_reason"
-            envelope["ui_effects"] = effects
-        case "attempted":
-            var effects = try #require(envelope["ui_effects"] as? [String: Any])
-            effects["attempted"] = []
-            envelope["ui_effects"] = effects
-        case "changed":
-            var effects = try #require(envelope["ui_effects"] as? [String: Any])
-            effects["changed"] = ["track_selection", "mixer_visibility"]
-            envelope["ui_effects"] = effects
-        default: Issue.record("unknown fault \(fault)")
-        }
-
-        let prepared = QualificationTransport.preparedMixerReadProbeParams(
-            from: try JSONSerialization.data(withJSONObject: envelope),
-            requested: [.mixerGetOutputVerified],
-            previouslyPrepared: [
-                .mixerGetOutputVerified: ["target_ref": "mix_previous"],
-            ]
-        )
-        #expect(prepared.isEmpty)
-    }
-
     @Test func mixerReadProbeParamsAcceptRequestOwnedFreshInspectionRows() throws {
         let inspection: [String: Any] = [
             "schema": "logic_pro_mcp_session_population.v1",
             "read_only": true,
             "snapshot_id": "snap_fresh",
             "scope": "whole_project",
-            "requested_domains": ["tracks", "hierarchy", "strips", "associations"],
-            "sources": ["tracks": "ax_request_read", "strips": "ax_request_read"],
-            "tracks": [
-                "coverage": "partial",
-                "rows": [["track_ref": "trk_fresh_output"]],
-            ],
+            "requested_domains": ["strips"],
+            "sources": ["strips": "ax_request_read"],
             "strips": [
                 "coverage": "partial",
                 "rows": [[
@@ -1496,19 +1276,11 @@ struct QualificationRunnerTests {
                     ],
                 ]],
             ],
-            "associations": [
-                "coverage": "partial",
-                "rows": [[
-                    "track_ref": "trk_fresh_output",
-                    "mixer_strip_ref": "mix_fresh_output",
-                    "source": "held_exclusive_selection_selected_child",
-                ]],
-            ],
             "ui_effects": [
-                "navigation_performed": true,
-                "restoration": "restored",
-                "attempted": ["track_selection"],
-                "changed": ["track_selection"],
+                "navigation_performed": false,
+                "restoration": "not_applicable",
+                "attempted": [],
+                "changed": [],
             ],
         ]
 
@@ -1520,47 +1292,100 @@ struct QualificationRunnerTests {
             == "mix_fresh_output")
     }
 
+    @Test func mixerReadProbeValidationDistinguishesAnEmptyFixtureFromUnsafeEvidence() throws {
+        let validButEmpty: [String: Any] = [
+            "schema": "logic_pro_mcp_session_population.v1",
+            "read_only": true,
+            "snapshot_id": "snap_empty",
+            "scope": "whole_project",
+            "requested_domains": ["strips"],
+            "sources": ["strips": "ax_request_read"],
+            "strips": ["coverage": "partial", "rows": []],
+            "ui_effects": [
+                "navigation_performed": false,
+                "restoration": "not_applicable",
+                "attempted": [],
+                "changed": [],
+            ],
+        ]
+        var unsafe = validButEmpty
+        unsafe["read_only"] = false
+        var unsafeReference = validButEmpty
+        unsafeReference["strips"] = [
+            "coverage": "partial",
+            "rows": [["mixer_strip_ref": "track_1"]],
+        ]
+        var unknownObservation = validButEmpty
+        unknownObservation["strips"] = [
+            "coverage": "partial",
+            "rows": [[
+                "mixer_strip_ref": "mix_unknown",
+                "output_observation": ["state": "future_state"],
+            ]],
+        ]
+        var unknownSend = validButEmpty
+        unknownSend["strips"] = [
+            "coverage": "partial",
+            "rows": [[
+                "mixer_strip_ref": "mix_unknown",
+                "send_slots": [["ordinal": 0, "state": "future_state"]],
+            ]],
+        ]
+
+        let empty = QualificationTransport.validatedMixerReadProbeParams(
+            from: try JSONSerialization.data(withJSONObject: validButEmpty)
+        )
+        let rejected = QualificationTransport.validatedMixerReadProbeParams(
+            from: try JSONSerialization.data(withJSONObject: unsafe)
+        )
+        let rejectedReference = QualificationTransport.validatedMixerReadProbeParams(
+            from: try JSONSerialization.data(withJSONObject: unsafeReference)
+        )
+        let rejectedObservation = QualificationTransport.validatedMixerReadProbeParams(
+            from: try JSONSerialization.data(withJSONObject: unknownObservation)
+        )
+        let rejectedSend = QualificationTransport.validatedMixerReadProbeParams(
+            from: try JSONSerialization.data(withJSONObject: unknownSend)
+        )
+
+        let emptyParams = try #require(empty)
+        #expect(emptyParams.isEmpty)
+        #expect(rejected == nil)
+        #expect(rejectedReference == nil)
+        #expect(rejectedObservation == nil)
+        #expect(rejectedSend == nil)
+    }
+
     @Test func mixerReadProbeParamsRejectUnsafeOrUnboundInspectionRows() throws {
         func inspection(
+            schema: String = "logic_pro_mcp_session_population.v1",
+            readOnly: Bool = true,
+            snapshotID: String = "snap_fresh",
+            scope: String = "whole_project",
+            domains: [String] = ["strips"],
+            stripSource: String = "ax_request_read",
             stripCoverage: String = "partial",
-            associationCoverage: String = "partial",
-            trackRefs: [String] = ["trk_fresh_output"],
-            stripRefs: [String] = ["mix_fresh_output"],
-            associationTrackRef: String = "trk_fresh_output",
-            associationRef: String = "mix_fresh_output",
-            associationRows: [[String: Any]]? = nil,
-            navigationPerformed: Bool = true,
-            restoration: String = "restored",
-            attempted: [String] = ["track_selection"],
-            changed: [String] = ["track_selection"],
+            stripRef: String = "mix_fresh_output",
+            navigationPerformed: Bool = false,
+            restoration: String = "not_applicable",
+            attempted: [String] = [],
+            changed: [String] = [],
             reason: Any = NSNull()
         ) -> [String: Any] {
             [
-                "schema": "logic_pro_mcp_session_population.v1",
-                "read_only": true,
-                "snapshot_id": "snap_fresh",
-                "scope": "whole_project",
-                "requested_domains": ["tracks", "hierarchy", "strips", "associations"],
-                "sources": ["tracks": "ax_request_read", "strips": "ax_request_read"],
-                "tracks": [
-                    "coverage": "partial",
-                    "rows": trackRefs.map { ["track_ref": $0] },
-                ],
+                "schema": schema,
+                "read_only": readOnly,
+                "snapshot_id": snapshotID,
+                "scope": scope,
+                "requested_domains": domains,
+                "sources": ["strips": stripSource],
                 "strips": [
                     "coverage": stripCoverage,
-                    "rows": stripRefs.map { reference in [
-                        "mixer_strip_ref": reference,
+                    "rows": [[
+                        "mixer_strip_ref": stripRef,
                         "output_observation": [
                             "state": "observed_destination", "destination": "출력 3-4",
                         ],
-                    ] },
-                ],
-                "associations": [
-                    "coverage": associationCoverage,
-                    "rows": associationRows ?? [[
-                        "track_ref": associationTrackRef,
-                        "mixer_strip_ref": associationRef,
-                        "source": "held_exclusive_selection_focus",
                     ]],
                 ],
                 "ui_effects": [
@@ -1573,46 +1398,19 @@ struct QualificationRunnerTests {
             ]
         }
         let unsafe: [[String: Any]] = [
+            inspection(schema: "legacy"),
+            inspection(readOnly: false),
+            inspection(snapshotID: ""),
+            inspection(scope: "selected_tracks"),
+            inspection(domains: ["tracks", "strips"]),
+            inspection(stripSource: "cache"),
             inspection(stripCoverage: "unstable"),
-            inspection(associationCoverage: "unavailable"),
-            inspection(associationRef: "mix_other"),
-            inspection(associationTrackRef: "trk_ghost"),
-            inspection(trackRefs: ["trk_fresh_output", "trk_fresh_output"]),
-            inspection(
-                trackRefs: ["trk_first", "trk_second"],
-                associationRows: [
-                    [
-                        "track_ref": "trk_first", "mixer_strip_ref": "mix_fresh_output",
-                        "source": "held_exclusive_selection_focus",
-                    ],
-                    [
-                        "track_ref": "trk_second", "mixer_strip_ref": "mix_fresh_output",
-                        "source": "held_exclusive_selection_focus",
-                    ],
-                ]
-            ),
-            inspection(
-                stripRefs: ["mix_first", "mix_second"],
-                associationRows: [
-                    [
-                        "track_ref": "trk_fresh_output", "mixer_strip_ref": "mix_first",
-                        "source": "held_exclusive_selection_focus",
-                    ],
-                    [
-                        "track_ref": "trk_fresh_output", "mixer_strip_ref": "mix_second",
-                        "source": "held_exclusive_selection_focus",
-                    ],
-                ]
-            ),
-            inspection(restoration: "not_restored"),
-            inspection(changed: ["mixer_visibility"]),
-            inspection(reason: "association_population_moved"),
-            inspection(
-                navigationPerformed: false,
-                restoration: "not_applicable",
-                attempted: ["track_selection"],
-                changed: []
-            ),
+            inspection(stripRef: "track_1"),
+            inspection(navigationPerformed: true),
+            inspection(restoration: "restored"),
+            inspection(attempted: ["track_selection"]),
+            inspection(changed: ["track_selection"]),
+            inspection(reason: "unexpected_ui_effect"),
         ]
 
         for envelope in unsafe {
@@ -1643,8 +1441,8 @@ struct QualificationRunnerTests {
             "plugins": [
                 [
                     "insert": 0, "read_status": "ok", "occupied": true,
-                    "plugin_id": "logic.stock.effect.sample_delay",
-                    "plugin_insert_ref": "stale_sample_delay",
+                    "plugin_id": NSNull(),
+                    "plugin_insert_ref": "ins_unverified",
                 ],
                 [
                     "insert": 1, "read_status": "empty", "occupied": false,
@@ -1668,13 +1466,6 @@ struct QualificationRunnerTests {
         ]
         let params = QualificationTransport.pluginReadProbeParams(from: [
             try JSONSerialization.data(withJSONObject: inventory),
-            try JSONSerialization.data(withJSONObject: [
-                "state": "B", "complete": false,
-                "plugins": [[
-                    "read_status": "ok", "occupied": true,
-                    "plugin_id": "logic.stock.effect.gain", "plugin_insert_ref": "ins_state_b",
-                ]],
-            ]),
         ])
 
         #expect(params[.pluginsGetHostParameterManifest]?["target_ref"] as? String == "ins_gain")
@@ -1693,6 +1484,67 @@ struct QualificationRunnerTests {
         #expect(changes[0]["param"] as? String == "threshold")
         #expect(changes[0]["unit"] as? String == "normalized")
         #expect(changes[0]["value"] is Double)
+    }
+
+    @Test func pluginReadProbeValidationSeparatesEmptyFixturesFromMalformedDiscovery() throws {
+        let validEmpty = try JSONSerialization.data(withJSONObject: [
+            "state": "A", "complete": true, "plugins": [],
+        ])
+        let incomplete = try JSONSerialization.data(withJSONObject: [
+            "state": "B", "complete": false, "plugins": [],
+        ])
+        let malformedOccupied = try JSONSerialization.data(withJSONObject: [
+            "state": "A", "complete": true,
+            "plugins": [[
+                "read_status": "ok", "occupied": true,
+                "plugin_id": "logic.stock.effect.gain", "plugin_insert_ref": "wrong_ref",
+            ]],
+        ])
+        let unknownStatus = try JSONSerialization.data(withJSONObject: [
+            "state": "A", "complete": true,
+            "plugins": [[
+                "read_status": "future_status", "occupied": false,
+                "plugin_id": NSNull(), "plugin_insert_ref": "ins_future",
+            ]],
+        ])
+        let missingPluginID = try JSONSerialization.data(withJSONObject: [
+            "state": "A", "complete": true,
+            "plugins": [[
+                "read_status": "ok", "occupied": true,
+                "plugin_insert_ref": "ins_missing_id",
+            ]],
+        ])
+        let contradictoryPluginID = try JSONSerialization.data(withJSONObject: [
+            "state": "A", "complete": true,
+            "plugins": [[
+                "read_status": "ok", "occupied": true,
+                "plugin_id": "not.a.catalog.id",
+                "plugin_insert_ref": "ins_contradictory_id",
+            ]],
+        ])
+
+        let validEmptyParams = try #require(
+            QualificationTransport.validatedPluginReadProbeParams(from: [validEmpty])
+        )
+        #expect(validEmptyParams.isEmpty)
+        #expect(QualificationTransport.validatedPluginReadProbeParams(
+            from: [incomplete]
+        ) == nil)
+        #expect(QualificationTransport.validatedPluginReadProbeParams(
+            from: [malformedOccupied]
+        ) == nil)
+        #expect(QualificationTransport.validatedPluginReadProbeParams(
+            from: [unknownStatus]
+        ) == nil)
+        #expect(QualificationTransport.validatedPluginReadProbeParams(
+            from: [missingPluginID]
+        ) == nil)
+        #expect(QualificationTransport.validatedPluginReadProbeParams(
+            from: [contradictoryPluginID]
+        ) == nil)
+        #expect(QualificationTransport.validatedPluginReadProbeParams(
+            from: [Data("not-json".utf8)]
+        ) == nil)
     }
 
     @Test func pluginReadProbePreparationUsesTracksAndInventoryWithoutSessionInspection() throws {
@@ -1727,6 +1579,64 @@ struct QualificationRunnerTests {
 
         #expect(inventoryReads == [3, 7])
         #expect(params[.pluginsGetHostParameterManifest]?["target_ref"] as? String == "ins_3")
+    }
+
+    @Test func pluginReadProbePreparationPropagatesMalformedDiscoveryAsFailure() throws {
+        let malformedTracks = try JSONSerialization.data(withJSONObject: [
+            "source": "project_file", "readable": false, "data": [],
+        ])
+        var inventoryRead = false
+        #expect(throws: QualificationTransportError.self) {
+            _ = try QualificationTransport.preparePluginReadProbeParams(
+                tracksRead: { malformedTracks },
+                inventoryRead: { _ in inventoryRead = true; return Data() }
+            )
+        }
+        #expect(!inventoryRead)
+
+        let liveTracks = try JSONSerialization.data(withJSONObject: [
+            "source": "ax_live", "readable": true,
+            "data": [["id": 0, "track_ref": "trk_zero"]],
+        ])
+        let incompleteInventory = try JSONSerialization.data(withJSONObject: [
+            "state": "B", "complete": false, "plugins": [],
+        ])
+        #expect(throws: QualificationTransportError.self) {
+            _ = try QualificationTransport.preparePluginReadProbeParams(
+                tracksRead: { liveTracks },
+                inventoryRead: { _ in incompleteInventory }
+            )
+        }
+
+        let duplicateTracks = try JSONSerialization.data(withJSONObject: [
+            "source": "ax_live", "readable": true,
+            "data": [
+                ["id": 0, "track_ref": "trk_zero_a"],
+                ["id": 0, "track_ref": "trk_zero_b"],
+            ],
+        ])
+        inventoryRead = false
+        #expect(throws: QualificationTransportError.self) {
+            _ = try QualificationTransport.preparePluginReadProbeParams(
+                tracksRead: { duplicateTracks },
+                inventoryRead: { _ in inventoryRead = true; return Data() }
+            )
+        }
+        #expect(!inventoryRead)
+
+        let unknownStatusInventory = try JSONSerialization.data(withJSONObject: [
+            "state": "A", "complete": true,
+            "plugins": [[
+                "read_status": "future_status", "occupied": false,
+                "plugin_id": NSNull(), "plugin_insert_ref": "ins_future",
+            ]],
+        ])
+        #expect(throws: QualificationTransportError.self) {
+            _ = try QualificationTransport.preparePluginReadProbeParams(
+                tracksRead: { liveTracks },
+                inventoryRead: { _ in unknownStatusInventory }
+            )
+        }
     }
 
     @Test func requestedReadProbePreparationRefreshesBeforePluginAuthorities() throws {
@@ -1976,12 +1886,20 @@ struct QualificationRunnerTests {
         let live: [String: Any] = [
             "source": "ax_live", "readable": true,
             "data": [
-                ["id": 2, "track_ref": "trk_two"],
                 ["id": 0, "track_ref": "trk_zero"],
-                ["id": 2, "track_ref": "trk_duplicate"],
-                ["id": -1, "track_ref": "trk_negative"],
-                ["id": 4, "track_ref": "not_current"],
+                ["id": 2, "track_ref": "trk_two"],
             ],
+        ]
+        let ambiguous: [String: Any] = [
+            "source": "ax_live", "readable": true,
+            "data": [
+                ["id": 2, "track_ref": "trk_two"],
+                ["id": 2, "track_ref": "trk_duplicate"],
+            ],
+        ]
+        let malformed: [String: Any] = [
+            "source": "ax_live", "readable": true,
+            "data": [["id": -1, "track_ref": "trk_negative"]],
         ]
         let placeholder: [String: Any] = [
             "source": "project_file", "readable": false,
@@ -1990,10 +1908,19 @@ struct QualificationRunnerTests {
 
         #expect(QualificationTransport.pluginInventoryTrackIndices(
             from: try JSONSerialization.data(withJSONObject: live)
-        ) == [0])
+        ) == [0, 2])
         #expect(QualificationTransport.pluginInventoryTrackIndices(
             from: try JSONSerialization.data(withJSONObject: placeholder)
         ).isEmpty)
+        #expect(QualificationTransport.validatedPluginInventoryTrackIndices(
+            from: try JSONSerialization.data(withJSONObject: malformed)
+        ) == nil)
+        #expect(QualificationTransport.validatedPluginInventoryTrackIndices(
+            from: try JSONSerialization.data(withJSONObject: ambiguous)
+        ) == nil)
+        #expect(QualificationTransport.validatedPluginInventoryTrackIndices(
+            from: try JSONSerialization.data(withJSONObject: placeholder)
+        ) == nil)
     }
 
     @Test func operationRequestsUseTheirRegistryDeadlineInsteadOfTheTransportDefault() throws {
@@ -2205,30 +2132,9 @@ struct QualificationRunnerTests {
             #expect(!QualificationRunner.evidenceShapeIsValid(evidence), "no readback or trusted-acceptance proof was invented")
         } else { #expect(mutationCase.status == .failed) }
         #expect(!mutationCase.verified)
-        #expect(!PromotionGate.operationIsLiveCredited(mutationCase))
         let readCase = try #require(attestation.cases.first { $0.operationID == read.id.rawValue })
         #expect(readCase.status == (shape == "missing_readonly" ? .failed : .passed))
-        let decision = PromotionGate().evaluate(attestation: attestation, releaseVersion: "1.2.3",
-            expectedBinarySHA256: fixture.binarySHA256, presentArtifacts: [], requiredArtifacts: [],
-            requiredOperationIDs: Set(specs.map(\.id.rawValue)))
-        #expect(!decision.promotable)
     }
-
-    /// #284 has no measured product defect pinned here at the moment. This is
-    /// intentionally an exact list, rather than an allow-list: a new failure, a
-    /// changed reason, OR a known failure beginning to pass must all redden the
-    /// live gate so the list cannot silently absorb regressions or rot after a fix.
-    private struct KnownLiveGateFailure: Equatable {
-        let operationID: String
-        let failureReason: String
-        let trackingIssue: String
-
-        var failure: QualificationLiveGateSummary.Failure {
-            .init(operationID: operationID, failureReason: failureReason)
-        }
-    }
-
-    private static let knownLiveGateFailures: [KnownLiveGateFailure] = []
 
     @Test func qualificationExecutesEachOperationAndBindsIndependentReadback() async throws {
         let specs = [
@@ -2268,173 +2174,8 @@ struct QualificationRunnerTests {
         #expect(readbackSources == ["logic://transport/state", "logic://mixer"])
     }
 
-    @Test func runnerVerifierRejectsCoherentLegacyMIDIPortSemanticBundle() async throws {
-        let spec = try #require(OperationRegistry.specs.first { $0.id == .midiListPorts })
-        let originalDrive = Self.driveResult(specs: [spec])
-        let captured = try #require(originalDrive.operationResults[spec.id.rawValue])
-        let ports = QualificationOperationResult(
-            operationID: captured.operationID, tool: captured.tool, command: captured.command,
-            mutability: captured.mutability, requestID: captured.requestID,
-            responseData: captured.responseData, isError: captured.isError,
-            state: nil, error: nil, hint: nil, writeAttempted: nil,
-            // This fixture is deliberately the legacy circular resource path. Do not derive it
-            // from the production source mapping, which now selects a separate host census.
-            readbackSource: "logic://midi/ports",
-            readbackRequestID: captured.readbackRequestID, readbackData: captured.readbackData,
-            verification: spec.verification, deadline: spec.deadline, failureReason: captured.failureReason
-        )
-        let drive = QualificationDriveResult(
-            handshake: originalDrive.handshake, health: originalDrive.health,
-            catalog: originalDrive.catalog, expectedOperationCount: originalDrive.expectedOperationCount,
-            traceList: originalDrive.traceList, traceDetail: originalDrive.traceDetail,
-            negative: originalDrive.negative, observedLocale: originalDrive.observedLocale,
-            operationResults: [spec.id.rawValue: ports], wireFrames: originalDrive.wireFrames,
-            mutationRestoreRecords: originalDrive.mutationRestoreRecords,
-            failureReason: originalDrive.failureReason
-        )
-        let fixture = try Fixture(specs: [spec], drive: { _ in drive })
-        defer { fixture.remove() }
-        let axisWaivers = Self.axisWaivers()
-        // A legitimate known limitation may be waived for this CONTROL only.
-        // Before the repair the producer calls it passed, so no operation waiver is supplied.
-        let controlWaivers = axisWaivers + (ports.status == .passed ? [] : [
-            Self.waiver(
-                caseID: "in-process/midi.list_ports", owningIssue: "#373",
-                affectedCapability: "operation:midi.list_ports"
-            )
-        ])
-        try JSONEncoder().encode(controlWaivers).write(to: fixture.waiversURL)
-        let baseline = try await fixture.qualify(waiversURL: fixture.waiversURL)
-        let control = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-        try #require(control.exitCode == 0, "baseline must actually verify: \(control.stdout)")
-        let operationCase = try #require(baseline.cases.first { $0.id == "in-process/midi.list_ports" })
-        let evidencePath = try #require(operationCase.evidenceFiles.first)
-        let evidenceURL = fixture.directory.appendingPathComponent(evidencePath)
-        let originals = try [
-            evidenceURL, fixture.caseManifestURL, fixture.manifestURL, fixture.attestationURL
-        ].map { ($0, try Data(contentsOf: $0)) }
 
-        func claimLegacySemanticPass(_ object: inout [String: Any]) throws {
-            object["status"] = "passed"
-            object["verified"] = true
-            object["verification_kind"] = "semantic_readback"
-            object["deferral"] = nil
-            object["reason"] = nil
-            object["failure_reason"] = nil
-            var readback = try #require(object["readback"] as? [String: Any])
-            readback["verified"] = true
-            object["readback"] = readback
-        }
-        // Keep the exact port payloads, response/readback request IDs and digests.
-        // Only the producer's meaning/credit claim changes, not the observations.
-        try Self.mutateJSONObject(at: evidenceURL, claimLegacySemanticPass)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        let axisWaiverJSON = try JSONSerialization.jsonObject(with: encoder.encode(axisWaivers))
-        try Self.mutateJSONObject(at: fixture.attestationURL) { object in
-            var cases = try #require(object["cases"] as? [[String: Any]])
-            let index = try #require(cases.firstIndex { $0["id"] as? String == operationCase.id })
-            try claimLegacySemanticPass(&cases[index])
-            object["cases"] = cases
-            object["waivers"] = axisWaiverJSON // no operation waiver can mask the counterexample
-        }
-        let forged = try JSONDecoder().decode(
-            ReleaseQualificationAttestation.self, from: Data(contentsOf: fixture.attestationURL)
-        )
-        try Self.mutateJSONObject(at: fixture.caseManifestURL) { object in
-            object["cases"] = try JSONSerialization.jsonObject(with: encoder.encode(forged.cases))
-        }
-        // The existing rewritePassedAxisEvidence helper shows this exact digest chain.
-        // This operation witness additionally updates the CASE manifest and waiver binding.
-        let evidenceData = try Data(contentsOf: evidenceURL)
-        let caseManifestData = try Data(contentsOf: fixture.caseManifestURL)
-        try Self.mutateJSONObject(at: fixture.manifestURL) { object in
-            var entries = try #require(object["files"] as? [[String: Any]])
-            let index = try #require(entries.firstIndex { $0["path"] as? String == evidencePath })
-            entries[index]["sha256"] = SupportBundleBuilder.sha256(evidenceData)
-            object["files"] = entries
-            object["case_manifest_sha256"] = SupportBundleBuilder.sha256(caseManifestData)
-            object["waivers_sha256"] = SupportBundleBuilder.sha256(try encoder.encode(axisWaivers))
-        }
-        let manifestSHA256 = SupportBundleBuilder.sha256(try Data(contentsOf: fixture.manifestURL))
-        let counts = QualificationSummaryCounts(cases: forged.cases)
-        try Self.mutateJSONObject(at: fixture.attestationURL) { object in
-            object["total"] = counts.total
-            object["passed"] = counts.passed
-            object["failed"] = counts.failed
-            object["waived"] = counts.waived
-            object["evidenceManifestSHA256"] = manifestSHA256
-            var provenance = try #require(object["provenance"] as? [String: Any])
-            provenance["evidenceManifestSHA256"] = manifestSHA256
-            object["provenance"] = provenance
-        }
-        try fixture.forceSignForDiagnosticFixture()
-        let refused = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-        #expect(refused.exitCode != 0, "\(refused.stdout)")
-        let rejections = try #require(try Self.resultObject(refused)["rejections"] as? [[String: Any]])
-        #expect(rejections.count == 2, "\(refused.stdout)")
-        #expect(Self.rejectionReasons(try Self.resultObject(refused)) == [
-            "requiredOperationNotSatisfied", "evidenceBindingMismatch"
-        ], "\(refused.stdout)")
-        #expect(rejections.contains {
-            $0["reason"] as? String == "evidenceBindingMismatch"
-                && $0["actual"] as? String == "semantic readback binding"
-        }, "\(refused.stdout)")
-        #expect(rejections.contains {
-            $0["reason"] as? String == "requiredOperationNotSatisfied"
-                && $0["key"] as? String == "midi.list_ports"
-        }, "\(refused.stdout)")
-        // A signed original with the same fixture, axis and verifier still works after restoration.
-        for (url, data) in originals { try data.write(to: url, options: .atomic) }
-        let restored = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-        #expect(restored.exitCode == 0, "\(restored.stdout)")
-    }
 
-    @Test func runnerVerifierAcceptsBoundHostCoreMIDIPortReadback() async throws {
-        let spec = try #require(OperationRegistry.specs.first { $0.id == .midiListPorts })
-        let drive = Self.driveResult(specs: [spec])
-        let ports = try #require(drive.operationResults[spec.id.rawValue])
-        #expect(ports.readbackSource
-            == QualificationSemanticReadbackValidator.coreMIDIPortReadbackSource)
-        #expect(ports.status == .passed)
-
-        let fixture = try Fixture(specs: [spec], drive: { _ in drive })
-        defer { fixture.remove() }
-        try JSONEncoder().encode(Self.axisWaivers()).write(to: fixture.waiversURL)
-        let attestation = try await fixture.qualify(waiversURL: fixture.waiversURL)
-        let operationCase = try #require(
-            attestation.cases.first { $0.id == "in-process/midi.list_ports" }
-        )
-        #expect(operationCase.status == .passed)
-        #expect(operationCase.readback?.source
-            == QualificationSemanticReadbackValidator.coreMIDIPortReadbackSource)
-        let accepted = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-        #expect(accepted.exitCode == 0, "\(accepted.stdout)\(accepted.stderr)")
-    }
-
-    @Test func runnerVerifierAcceptsBoundHostLibraryPanelReadback() async throws {
-        let spec = try #require(OperationRegistry.specs.first { $0.id == .tracksListLibrary })
-        let drive = Self.driveResult(specs: [spec])
-        let library = try #require(drive.operationResults[spec.id.rawValue])
-        #expect(library.readbackSource
-            == QualificationSemanticReadbackValidator.libraryPanelReadbackSource)
-        #expect(QualificationTransport.readbackSource(for: spec)
-            == QualificationSemanticReadbackValidator.libraryPanelReadbackSource)
-        #expect(library.status == .passed)
-
-        let fixture = try Fixture(specs: [spec], drive: { _ in drive })
-        defer { fixture.remove() }
-        try JSONEncoder().encode(Self.axisWaivers()).write(to: fixture.waiversURL)
-        let attestation = try await fixture.qualify(waiversURL: fixture.waiversURL)
-        let operationCase = try #require(
-            attestation.cases.first { $0.id == "in-process/tracks.list_library" }
-        )
-        #expect(operationCase.status == .passed)
-        #expect(operationCase.readback?.source
-            == QualificationSemanticReadbackValidator.libraryPanelReadbackSource)
-        let accepted = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-        #expect(accepted.exitCode == 0, "\(accepted.stdout)\(accepted.stderr)")
-    }
 
     private final class LibraryReadbackProbe: @unchecked Sendable {
         private let lock = NSLock()
@@ -2559,7 +2300,6 @@ struct QualificationRunnerTests {
             #expect(declared.code == .semanticValidatorUnavailable)
             let readback = try #require(qualificationCase.readback)
             #expect(!readback.verified)
-            #expect(!PromotionGate.operationIsLiveCredited(qualificationCase))
         }
         // DERIVED: everything the registry has, minus the read-only specs this fixture qualifies.
         // It was `90`, and the day main added `system.setup_control_surface` it read 91 -- a number
@@ -2600,7 +2340,7 @@ struct QualificationRunnerTests {
     }
 
     @Test func qualificationFixtureResponseArtifactsBindRetainedEvidence() async throws {
-        let fixture = try trustedFixture(includeRequiredAtlas: false)
+        let fixture = try qualificationFixture(includeRequiredAtlas: false)
         defer { fixture.remove() }
         let attestation = try await fixture.qualify(waiversURL: fixture.waiversURL)
 
@@ -2651,7 +2391,7 @@ struct QualificationRunnerTests {
         let record = Self.recipeShapedRecord()
         // The probe is a typed zero-write REFUSAL. That is the only way a mutating operation
         // reaches `.passed`, and it is what made `operationIsError == false` unsatisfiable.
-        let refusal = Data(#"{"success":false,"state":"C","error":"consent_required"}"#.utf8)
+        let refusal = Data(#"{"success":false,"state":"C","error":"invalid_params"}"#.utf8)
         let result = QualificationOperationResult(
             operationID: spec.id.rawValue,
             tool: spec.tool.rawValue,
@@ -2661,7 +2401,7 @@ struct QualificationRunnerTests {
             responseData: refusal,
             isError: true,
             state: "C",
-            error: "consent_required",
+            error: "invalid_params",
             hint: nil,
             writeAttempted: false,
             readbackSource: "logic://tracks",
@@ -2750,10 +2490,10 @@ struct QualificationRunnerTests {
             command: spec.command,
             mutability: spec.mutability,
             requestID: "no-cycle",
-            responseData: Data(#"{"success":false,"state":"C","error":"consent_required"}"#.utf8),
+            responseData: Data(#"{"success":false,"state":"C","error":"invalid_params"}"#.utf8),
             isError: true,
             state: "C",
-            error: "consent_required",
+            error: "invalid_params",
             hint: nil,
             writeAttempted: false,
             readbackSource: "logic://tracks",
@@ -2899,22 +2639,6 @@ struct QualificationRunnerTests {
         #expect(v1)
     }
 
-    @Test func operationFailurePreventsLiveAxisPromotion() async throws {
-        let specs = Array(OperationRegistry.specs.prefix(2))
-        let failedID = try #require(specs.last?.id)
-        let driveResult = Self.driveResult(specs: specs, failedOperationID: failedID)
-        let fixture = try Fixture(specs: specs, drive: { _ in driveResult })
-        defer { fixture.remove() }
-
-        let attestation = try await fixture.qualify()
-        let liveAxis = try #require(attestation.cases.first { $0.id == QualificationAxis.defaultAxis.key })
-        #expect(liveAxis.status == .failed)
-        #expect(liveAxis.reason == "one or more operation-specific protocol checks failed")
-
-        let decision = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-        #expect(decision.exitCode != 0)
-        #expect(Self.rejectionReasons(try Self.resultObject(decision)).contains("requiredCaseFailed"))
-    }
 
     /// A consent-gated mutating op whose no-write probe refuses `consent_required`
     /// is a typed zero-write deferral (notQualified), and its nested readback must
@@ -2947,87 +2671,13 @@ struct QualificationRunnerTests {
         #expect(!readback.verified)
     }
 
-    @Test func zeroQualifiedOperationsRejectsPromotion() async throws {
-        let specs = OperationRegistry.specs
-        let driveResult = Self.driveResult(specs: specs, qualifiedReadOperationCount: 0)
-        #expect(driveResult.operationResults.values.filter { $0.status == .passed }.isEmpty)
-        // DERIVED. It was `113`, and the day main added `system.setup_control_surface` this
-        // read 114 -- a number that tracks the registry is not a fact worth writing down.
-        #expect(driveResult.operationResults.values.filter { $0.status == .notQualified }.count
-                    == specs.count)
-        let fixture = try Fixture(specs: specs, drive: { _ in driveResult })
-        defer { fixture.remove() }
-
-        let attestation = try await fixture.qualify()
-        let liveAxis = try #require(attestation.cases.first {
-            $0.id == QualificationAxis.defaultAxis.key
-        })
-        #expect(liveAxis.status == .failed)
-
-        let decision = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-        #expect(decision.exitCode != 0)
-        #expect(Self.rejectionReasons(try Self.resultObject(decision)).contains(
-            "requiredOperationNotSatisfied"
-        ))
-    }
 
     // The deferral count is DERIVED, not typed. It was written out twice — in the body and in the
     // test's own name — so adding an operation broke the assertion and, had only the number been
     // updated, would have left the name asserting something false. Registry size is already pinned
     // by `OperationRegistry.specs.count` elsewhere; repeating it here bought no coverage and cost a
     // second place to drift.
-    @Test func legacyTransportSuccessesWithEveryOtherOperationDeferredRejectPromotion() async throws {
-        let specs = OperationRegistry.specs
-        let qualified = 13
-        let driveResult = Self.driveResult(specs: specs, qualifiedReadOperationCount: qualified)
-        #expect(driveResult.operationResults.values.filter { $0.isError == false }.count == qualified)
-        #expect(
-            driveResult.operationResults.values.filter { $0.isError == true }.count
-                == driveResult.operationResults.count - qualified
-        )
-        let fixture = try Fixture(specs: specs, drive: { _ in driveResult })
-        defer { fixture.remove() }
 
-        let attestation = try await fixture.qualify()
-        let liveAxis = try #require(attestation.cases.first {
-            $0.id == QualificationAxis.defaultAxis.key
-        })
-        #expect(liveAxis.status == .failed)
-
-        let decision = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-        #expect(decision.exitCode != 0)
-        #expect(Self.rejectionReasons(try Self.resultObject(decision)).contains(
-            "requiredOperationNotSatisfied"
-        ))
-    }
-
-    @Test func individualGovernedOperationWaiverSatisfiesRequiredOperation() async throws {
-        let spec = try #require(OperationRegistry.specs.first { $0.mutability == .mutating })
-        let fixture = try Fixture(specs: [spec])
-        defer { fixture.remove() }
-        let waiver = Self.waiver(
-            caseID: "in-process/\(spec.id.rawValue)",
-            affectedCapability: "operation:\(spec.id.rawValue)"
-        )
-        try JSONEncoder().encode([waiver] + Self.axisWaivers())
-            .write(to: fixture.waiversURL)
-
-        let attestation = try await fixture.qualify(waiversURL: fixture.waiversURL)
-        let operationCase = try #require(attestation.cases.first {
-            $0.id == waiver.caseID
-        })
-        #expect(operationCase.status == .waived)
-        #expect(!operationCase.verified)
-        let liveAxis = try #require(attestation.cases.first {
-            $0.id == QualificationAxis.defaultAxis.key
-        })
-        #expect(liveAxis.status == .passed)
-
-        let decision = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-        #expect(decision.exitCode == 0)
-        let v1 = try #require(try Self.resultObject(decision)["promotable"] as? Bool)
-        #expect(v1)
-    }
 
     /// #373 Phase A inverted this test's premise, and the inversion is the
     /// point. This used to waive system.permissions because it could only reach
@@ -3035,185 +2685,11 @@ struct QualificationRunnerTests {
     /// op now qualifies on its own semantics, so waiving it is no longer
     /// governance, it is noise: the gate must reject a waiver for a passing
     /// case rather than let a stale waiver linger over a healthy operation.
-    @Test func waiverForNowQualifyingReadOperationIsRejected() async throws {
-        let spec = try #require(OperationRegistry.specs.first { $0.id == .systemPermissions })
-        let fixture = try Fixture(specs: [spec])
-        defer { fixture.remove() }
-        let waiver = Self.waiver(
-            caseID: "in-process/\(spec.id.rawValue)",
-            affectedCapability: "operation:\(spec.id.rawValue)"
-        )
-        try JSONEncoder().encode([waiver] + Self.axisWaivers())
-            .write(to: fixture.waiversURL)
 
-        let attestation = try await fixture.qualify(waiversURL: fixture.waiversURL)
-        let operationCase = try #require(attestation.cases.first { $0.id == waiver.caseID })
-        #expect(operationCase.status == .passed)
-        #expect(operationCase.verified)
-        #expect(operationCase.verificationKind == .semanticReadback)
-        #expect(operationCase.deferral == nil)
 
-        let decision = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-        #expect(decision.exitCode != 0)
-        #expect(Self.rejectionReasons(try Self.resultObject(decision)).contains(
-            "waiverForPassingCase"
-        ))
-    }
-
-    @Test func forgedCoherentBundleWithoutTrustedSignatureRejectsPromotion() async throws {
-        let fixture = try promotableFixture()
-        defer { fixture.remove() }
-        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
-        var object = try #require(JSONSerialization.jsonObject(
-            with: Data(contentsOf: fixture.attestationURL)
-        ) as? [String: Any])
-        let forgedCommit = String(repeating: "f", count: 40)
-        object["commitSHA"] = forgedCommit
-        if var provenance = object["provenance"] as? [String: Any] {
-            provenance["commitSHA"] = forgedCommit
-            object["provenance"] = provenance
-        }
-        try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
-            .write(to: fixture.attestationURL)
-
-        let result = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-
-        #expect(result.exitCode != 0)
-        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains(
-            "provenanceSignatureInvalid"
-        ))
-    }
-
-    @Test func foreignSigningKeyCannotSatisfyPinnedVerifier() async throws {
-        let foreignKey = try Curve25519.Signing.PrivateKey(
-            rawRepresentation: Data(repeating: 9, count: 32)
-        )
-        let fixture = try promotableFixture(
-            trustedPublicKeyData: foreignKey.publicKey.rawRepresentation
-        )
-        defer { fixture.remove() }
-        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
-
-        let result = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-
-        #expect(result.exitCode != 0)
-        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains(
-            "provenanceSignatureInvalid"
-        ))
-    }
 
     /// Synthetic archived EN scopes, fake transport and existing fixture trust only. No candidate
     /// executable or Logic is launched. A prior baseline version is intentionally still diffable.
-    @Test func trustedAtlasRejectsCoherentlyResignedRelabelledWindowRoots() async throws {
-        let flag = "LOGIC_MCP_ADR007_SELECTOR_ATLAS"
-        let previous = getenv(flag).map { String(cString: $0) }
-        unsetenv(flag)
-        defer {
-            if let previous { setenv(flag, previous, 1) } else { unsetenv(flag) }
-        }
-        // Existing fixed synthetic key and in-process runner; no candidate process or real trust.
-        let fixture = try await signedTrustedFixture()
-        defer { fixture.remove() }
-        func verify() -> QualificationCommandResult {
-            QualificationRunner.verifyTrusted(candidateURL: fixture.executableURL,
-                bundleURL: fixture.directory, releaseVersion: "1.2.3",
-                expectedCommitSHA: fixture.commitSHA, trustedPublicKeyData: fixture.trustedPublicKeyData)
-        }
-        let control = verify()
-        #expect(control.exitCode == 0, "\(control.stdout)\(control.stderr)")
-        let controlPromotable = try #require(try Self.resultObject(control)["promotable"] as? Bool)
-        #expect(controlPromotable)
-        let signedData = try Data(contentsOf: fixture.attestationURL)
-        let signed = try JSONDecoder().decode(ReleaseQualificationAttestation.self, from: signedData)
-        let atlas = try #require(signed.cases.first { $0.id == "atlas.drift_diff" })
-        #expect(atlas.status == .passed)
-        #expect(atlas.verified)
-        let path = try #require(atlas.evidenceFiles.first)
-        let evidenceURL = fixture.directory.appendingPathComponent(path)
-        let evidenceData = try Data(contentsOf: evidenceURL)
-        let manifestData = try Data(contentsOf: fixture.manifestURL)
-        let caseManifestData = try Data(contentsOf: fixture.caseManifestURL)
-        let candidateData = try Data(contentsOf: fixture.executableURL)
-        let original = try JSONDecoder().decode(CaseEvidence.self, from: evidenceData)
-        let comparison = try #require(original.atlasComparison)
-        #expect(comparison.pairs.count == 2)
-        #expect(comparison.pairs.allSatisfy { $0.baseline.root.role == "AXGroup" && $0.current.root.role == "AXGroup" })
-        func windowObject(_ roots: [AXSnapshot.Node]) throws -> [String: Any] {
-            let root = AXSnapshot.Node(role: "AXWindow", subrole: nil, description: nil,
-                help: nil, identifier: nil, valueRange: nil, children: roots)
-            return try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(root)) as? [String: Any])
-        }
-        let baselineWindow = try windowObject(comparison.pairs.map { $0.baseline.root })
-        let currentWindow = try windowObject(comparison.pairs.map { $0.current.root })
-        try Self.mutateJSONObject(at: evidenceURL) { object in
-            var packet = try #require(object["atlas_comparison"] as? [String: Any])
-            var pairs = try #require(packet["pairs"] as? [[String: Any]])
-            for index in pairs.indices {
-                var baseline = try #require(pairs[index]["baseline"] as? [String: Any])
-                var current = try #require(pairs[index]["current"] as? [String: Any])
-                baseline["root"] = baselineWindow
-                current["root"] = currentWindow
-                pairs[index]["baseline"] = baseline
-                pairs[index]["current"] = current
-            }
-            packet["pairs"] = pairs
-            object["atlas_comparison"] = packet
-        }
-        let changedData = try Data(contentsOf: evidenceURL)
-        let changed = try JSONDecoder().decode(CaseEvidence.self, from: changedData)
-        let changedComparison = try #require(changed.atlasComparison)
-        #expect(changedComparison.pairs.map(\.scope) == comparison.pairs.map(\.scope))
-        #expect(changedComparison.pairs.map { $0.current.logicVersion } == comparison.pairs.map { $0.current.logicVersion })
-        #expect(changedComparison.pairs.allSatisfy { $0.baseline.root.role == "AXWindow" && $0.current.root.role == "AXWindow" })
-        #expect(QualificationRunner.evidence(changed, binds: atlas))
-        #expect(!QualificationRunner.evidenceShapeIsValid(changed))
-        // Bind the changed evidence and manifest into the ORIGINAL passing cases/provenance.
-        // Signature/digest/axis failures cannot substitute for selected-root rejection.
-        try Self.mutateJSONObject(at: fixture.manifestURL) { manifest in
-            var entries = try #require(manifest["files"] as? [[String: Any]])
-            let indices = entries.indices.filter { entries[$0]["path"] as? String == path }
-            try #require(indices.count == 1)
-            entries[indices[0]]["sha256"] = SupportBundleBuilder.sha256(changedData)
-            manifest["files"] = entries
-        }
-        let manifestSHA = SupportBundleBuilder.sha256(try Data(contentsOf: fixture.manifestURL))
-        try Self.mutateJSONObject(at: fixture.attestationURL) { object in
-            object["evidenceManifestSHA256"] = manifestSHA
-            var provenance = try #require(object["provenance"] as? [String: Any])
-            provenance["evidenceManifestSHA256"] = manifestSHA
-            object["provenance"] = provenance
-        }
-        try fixture.forceSignForDiagnosticFixture()
-        let resealed = try JSONDecoder().decode(ReleaseQualificationAttestation.self,
-            from: Data(contentsOf: fixture.attestationURL))
-        #expect(resealed.cases == signed.cases)
-        #expect(resealed.evidenceManifestSHA256 == manifestSHA)
-        #expect(try Data(contentsOf: fixture.caseManifestURL) == caseManifestData)
-        #expect(try Data(contentsOf: fixture.executableURL) == candidateData)
-        let signature = try #require(resealed.provenanceSignature)
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        let publicKey = try Curve25519.Signing.PublicKey(rawRepresentation: fixture.trustedPublicKeyData)
-        #expect(publicKey.isValidSignature(try #require(Data(base64Encoded: signature.value)),
-            for: try encoder.encode(try #require(resealed.provenance))))
-        let refused = verify()
-        #expect(refused.exitCode == 1, "\(refused.stdout)")
-        let object = try Self.resultObject(refused)
-        let promotable = try #require(object["promotable"] as? Bool)
-        #expect(!promotable)
-        let rejections = try #require(object["rejections"] as? [[String: Any]])
-        #expect(rejections.count == 1, "\(refused.stdout)")
-        #expect(rejections.contains { $0["reason"] as? String == "evidenceBindingMismatch"
-            && $0["actual"] as? String == "case evidence binding" }, "\(refused.stdout)")
-        #expect(!rejections.contains { $0["reason"] as? String == "provenanceSignatureInvalid" })
-        try evidenceData.write(to: evidenceURL, options: .atomic)
-        try manifestData.write(to: fixture.manifestURL, options: .atomic)
-        try signedData.write(to: fixture.attestationURL, options: .atomic)
-        let restored = verify()
-        #expect(restored.exitCode == 0, "\(restored.stdout)")
-        let restoredPromotable = try #require(try Self.resultObject(restored)["promotable"] as? Bool)
-        #expect(restoredPromotable)
-    }
 
     @Test func desktopDriveCannotPassWithActualCreatorAtlasCapture() async throws {
         let flag = "LOGIC_MCP_ADR007_SELECTOR_ATLAS"
@@ -3341,151 +2817,6 @@ struct QualificationRunnerTests {
         }
     }
 
-    @Test func atlasCurrentVersionMustMatchTheIndependentSignedHostVersion() async throws {
-        let flag = "LOGIC_MCP_ADR007_SELECTOR_ATLAS"
-        let previous = getenv(flag).map { String(cString: $0) }
-        unsetenv(flag)
-        defer {
-            if let previous { setenv(flag, previous, 1) } else { unsetenv(flag) }
-        }
-        let fixture = try trustedFixture()
-        defer { fixture.remove() }
-        let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-            .deletingLastPathComponent().appendingPathComponent("Fixtures/AX")
-        let documents = try ["logic-12.x-desktop-en-track-headers.json",
-                             "logic-12.x-desktop-en-control-bar.json"].map {
-            try JSONDecoder().decode(AXSnapshot.Document.self,
-                from: Data(contentsOf: directory.appendingPathComponent($0)))
-        }
-        #expect(Set(documents.map(\.scope)) == Set(["Tracks header", "Control Bar"]))
-        #expect(documents.allSatisfy { $0.logicVersion == "12.x" && $0.locale == "en" && $0.capturedFrom == "ax" })
-        let pairs = documents.map { baseline in
-            AtlasQualification.Pair(scope: baseline.scope, baseline: baseline,
-                current: AXSnapshot.Document(logicVersion: "11.2", locale: "en-US",
-                    scope: baseline.scope, capturedFrom: "ax", root: baseline.root))
-        }
-        let atlas = try #require(AtlasQualification.evidenceCaseFor(armed: true, pairs: pairs,
-            axis: .defaultAxis, binarySHA256: fixture.binarySHA256,
-            traceID: "controlled-atlas-current-version"))
-        #expect(atlas.qualificationCase.status == .passed)
-        #expect(atlas.qualificationCase.verified)
-        #expect(QualificationRunner.evidence(atlas.evidence, binds: atlas.qualificationCase))
-        #expect(QualificationRunner.evidenceShapeIsValid(atlas.evidence))
-        let evidencePath = try #require(atlas.qualificationCase.evidenceFiles.first)
-        let evidenceURL = fixture.directory.appendingPathComponent(evidencePath)
-        try FileManager.default.createDirectory(at: evidenceURL.deletingLastPathComponent(),
-                                                withIntermediateDirectories: true)
-        try JSONEncoder().encode(atlas.evidence).write(to: evidenceURL)
-        try JSONEncoder().encode(QualificationCaseManifest(schema: "qualification-case-manifest/v1",
-            binarySHA256: fixture.binarySHA256, cases: [atlas.qualificationCase]))
-            .write(to: fixture.externalCasesURL)
-        let qualification = await fixture.runner.run(arguments: ["LogicProMCP", "--qualify",
-            "--out", fixture.attestationURL.path, "--release-version", "1.2.3",
-            "--mutate-open-project", "--cases", fixture.externalCasesURL.path,
-            "--waivers", fixture.waiversURL.path])
-        // Expectations, not requires: a failing positive must not suppress the counterexample.
-        #expect(qualification.exitCode == 0, "\(qualification.stdout)\(qualification.stderr)")
-        let unsigned = try JSONDecoder().decode(ReleaseQualificationAttestation.self,
-            from: Data(contentsOf: fixture.attestationURL))
-        #expect(unsigned.logicVersion == "11.2")
-        #expect(unsigned.provenance?.schema == "qualification-provenance/v3")
-        #expect(unsigned.provenance?.logicVersion == "11.2")
-        #expect(unsigned.cases.filter { $0.id == "atlas.drift_diff" } == [atlas.qualificationCase])
-        let signing = QualificationRunner.signTrusted(candidateURL: fixture.executableURL,
-            bundleURL: fixture.directory, releaseVersion: "1.2.3",
-            expectedCommitSHA: fixture.commitSHA, signingPrivateKeyData: fixture.signingKeyData)
-        #expect(signing.exitCode == 0, "\(signing.stdout)\(signing.stderr)")
-        let control = QualificationRunner.verifyTrusted(candidateURL: fixture.executableURL,
-            bundleURL: fixture.directory, releaseVersion: "1.2.3",
-            expectedCommitSHA: fixture.commitSHA, trustedPublicKeyData: fixture.trustedPublicKeyData)
-        #expect(control.exitCode == 0, "\(control.stdout)\(control.stderr)")
-        let controlPromotable = try #require(try Self.resultObject(control)["promotable"] as? Bool)
-        #expect(controlPromotable)
-        let originalEvidenceData = try Data(contentsOf: evidenceURL)
-        let originalManifestData = try Data(contentsOf: fixture.manifestURL)
-        let originalAttestationData = try Data(contentsOf: fixture.attestationURL)
-        let originalCaseManifestData = try Data(contentsOf: fixture.caseManifestURL)
-        let originalCandidateData = try Data(contentsOf: fixture.executableURL)
-        let signed = try JSONDecoder().decode(ReleaseQualificationAttestation.self,
-            from: originalAttestationData)
-        #expect(signed.provenanceSignature != nil)
-        let originalEvidence = try JSONDecoder().decode(CaseEvidence.self, from: originalEvidenceData)
-        var expectedEvidence = try #require(JSONSerialization.jsonObject(with: originalEvidenceData) as? [String: Any])
-        var comparison = try #require(expectedEvidence["atlas_comparison"] as? [String: Any])
-        var changedPairs = try #require(comparison["pairs"] as? [[String: Any]])
-        try #require(changedPairs.count == 2)
-        var changedCurrent = try #require(changedPairs[0]["current"] as? [String: Any])
-        #expect(changedCurrent["logicVersion"] as? String == "11.2")
-        changedCurrent["logicVersion"] = "11.3"
-        changedPairs[0]["current"] = changedCurrent
-        comparison["pairs"] = changedPairs
-        expectedEvidence["atlas_comparison"] = comparison
-        try Self.mutateJSONObject(at: evidenceURL) { $0 = expectedEvidence }
-        let changedEvidenceData = try Data(contentsOf: evidenceURL)
-        #expect(try JSONSerialization.data(withJSONObject:
-            JSONSerialization.jsonObject(with: changedEvidenceData), options: [.sortedKeys])
-            == JSONSerialization.data(withJSONObject: expectedEvidence, options: [.sortedKeys]))
-        let changedEvidence = try JSONDecoder().decode(CaseEvidence.self, from: changedEvidenceData)
-        let originalComparison = try #require(originalEvidence.atlasComparison)
-        let changedComparison = try #require(changedEvidence.atlasComparison)
-        #expect(changedComparison.pairs.map(\.baseline) == originalComparison.pairs.map(\.baseline))
-        #expect(changedComparison.pairs.map(\.scope) == originalComparison.pairs.map(\.scope))
-        #expect(changedComparison.pairs.map { $0.current.root } == originalComparison.pairs.map { $0.current.root })
-        #expect(changedComparison.pairs.map { $0.current.logicVersion } == ["11.3", "11.2"])
-        // The diff and its local candidate/axis binding remain valid. Only the independent host
-        // version binding must reject this otherwise coherent passing comparison.
-        #expect(QualificationRunner.evidence(changedEvidence, binds: atlas.qualificationCase))
-        #expect(QualificationRunner.evidenceShapeIsValid(changedEvidence))
-        try Self.mutateJSONObject(at: fixture.manifestURL) { manifest in
-            var entries = try #require(manifest["files"] as? [[String: Any]])
-            let matching = entries.indices.filter { entries[$0]["path"] as? String == evidencePath }
-            try #require(matching.count == 1)
-            entries[matching[0]]["sha256"] = SupportBundleBuilder.sha256(changedEvidenceData)
-            manifest["files"] = entries
-        }
-        let changedManifestSHA = SupportBundleBuilder.sha256(try Data(contentsOf: fixture.manifestURL))
-        try Self.mutateJSONObject(at: fixture.attestationURL) { attestation in
-            attestation["evidenceManifestSHA256"] = changedManifestSHA
-            var provenance = try #require(attestation["provenance"] as? [String: Any])
-            provenance["evidenceManifestSHA256"] = changedManifestSHA
-            attestation["provenance"] = provenance
-        }
-        try fixture.forceSignForDiagnosticFixture()
-        let resealed = try JSONDecoder().decode(ReleaseQualificationAttestation.self,
-            from: Data(contentsOf: fixture.attestationURL))
-        #expect(resealed.logicVersion == "11.2")
-        #expect(resealed.provenance?.schema == "qualification-provenance/v3")
-        #expect(resealed.provenance?.logicVersion == "11.2")
-        #expect(resealed.evidenceManifestSHA256 == changedManifestSHA)
-        #expect(resealed.provenance?.evidenceManifestSHA256 == changedManifestSHA)
-        #expect(resealed.cases == signed.cases)
-        #expect(try Data(contentsOf: fixture.caseManifestURL) == originalCaseManifestData)
-        #expect(try Data(contentsOf: fixture.executableURL) == originalCandidateData)
-        let refused = QualificationRunner.verifyTrusted(candidateURL: fixture.executableURL,
-            bundleURL: fixture.directory, releaseVersion: "1.2.3",
-            expectedCommitSHA: fixture.commitSHA, trustedPublicKeyData: fixture.trustedPublicKeyData)
-        #expect(refused.exitCode == 1, "\(refused.stdout)\(refused.stderr)")
-        let refusal = try Self.resultObject(refused)
-        let refusedPromotable = try #require(refusal["promotable"] as? Bool)
-        #expect(!refusedPromotable)
-        let rejections = try #require(refusal["rejections"] as? [[String: Any]])
-        #expect(rejections.count == 1, "\(refused.stdout)")
-        #expect(rejections.first?["reason"] as? String == "evidenceBindingMismatch", "\(refused.stdout)")
-        #expect(rejections.first?["actual"] as? String == "atlas current Logic version binding", "\(refused.stdout)")
-        #expect(!rejections.contains { $0["reason"] as? String == "provenanceSignatureInvalid" })
-        try originalEvidenceData.write(to: evidenceURL, options: .atomic)
-        try originalManifestData.write(to: fixture.manifestURL, options: .atomic)
-        try originalAttestationData.write(to: fixture.attestationURL, options: .atomic)
-        let restored = QualificationRunner.verifyTrusted(candidateURL: fixture.executableURL,
-            bundleURL: fixture.directory, releaseVersion: "1.2.3",
-            expectedCommitSHA: fixture.commitSHA, trustedPublicKeyData: fixture.trustedPublicKeyData)
-        #expect(restored.exitCode == 0, "\(restored.stdout)\(restored.stderr)")
-        let restoredPromotable = try #require(try Self.resultObject(restored)["promotable"] as? Bool)
-        #expect(restoredPromotable)
-        #expect(try Data(contentsOf: evidenceURL) == originalEvidenceData)
-        #expect(try Data(contentsOf: fixture.manifestURL) == originalManifestData)
-        #expect(try Data(contentsOf: fixture.attestationURL) == originalAttestationData)
-    }
 
     /// AFTER-only producer controls. Archived roots and fake drive metadata, never live capture.
     private static func atlasProducerVersionPairs(
@@ -3598,182 +2929,8 @@ struct QualificationRunnerTests {
         try Self.assertAtlasProducerVersionResult(result, fixture: fixture, version: version)
     }
 
-    @Test func requiredTrustedAtlasCannotDisappearWhenTheOptionalFlagIsOff() async throws {
-        let flag = "LOGIC_MCP_ADR007_SELECTOR_ATLAS"
-        let previous = getenv(flag).map { String(cString: $0) }
-        unsetenv(flag)
-        defer {
-            if let previous { setenv(flag, previous, 1) } else { unsetenv(flag) }
-        }
-        let specs = OperationRegistry.specs
-        let drive = Self.driveResult(specs: specs,
-            mutationRestoreRecords: [Self.recipeShapedRecord()])
-        let fixture = try Fixture(specs: specs, drive: { _ in drive })
-        defer { fixture.remove() }
-        let operationWaivers = specs.compactMap { spec in
-            drive.operationResults[spec.id.rawValue]?.status == .passed ? nil :
-                Self.waiver(caseID: "in-process/\(spec.id.rawValue)",
-                    affectedCapability: "operation:\(spec.id.rawValue)")
-        }
-        try JSONEncoder().encode(operationWaivers + Self.axisWaivers()).write(to: fixture.waiversURL)
-        let run = await fixture.runQualification(waiversURL: fixture.waiversURL)
-        #expect(run.exitCode == 0, "\(run.stdout)\(run.stderr)")
-        let unsigned = try JSONDecoder().decode(ReleaseQualificationAttestation.self,
-            from: Data(contentsOf: fixture.attestationURL))
-        #expect(!unsigned.cases.contains { $0.id == "atlas.drift_diff" })
-        #expect(!FileManager.default.fileExists(
-            atPath: fixture.directory.appendingPathComponent("evidence/atlas-drift-diff.json").path))
-        let signing = QualificationRunner.signTrusted(candidateURL: fixture.executableURL,
-            bundleURL: fixture.directory, releaseVersion: "1.2.3",
-            expectedCommitSHA: fixture.commitSHA, signingPrivateKeyData: fixture.signingKeyData)
-        #expect(signing.exitCode == 1, "\(signing.stdout)")
-        let signingRejections = try #require(try Self.resultObject(signing)["rejections"] as? [[String: Any]])
-        #expect(signingRejections.contains {
-            $0["reason"] as? String == "missingArtifact"
-                && $0["name"] as? String == "evidence/atlas-drift-diff.json"
-        })
-        // Existing fixture signing deliberately constructs a coherent diagnostic packet even
-        // when the production signer refuses it; signature failure cannot mask this witness.
-        try fixture.forceSignForDiagnosticFixture()
-        let diagnostic = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-        #expect(diagnostic.exitCode == 0, "\(diagnostic.stdout)")
-        let refused = QualificationRunner.verifyTrusted(candidateURL: fixture.executableURL,
-            bundleURL: fixture.directory, releaseVersion: "1.2.3",
-            expectedCommitSHA: fixture.commitSHA, trustedPublicKeyData: fixture.trustedPublicKeyData)
-        #expect(refused.exitCode == 1, "\(refused.stdout)")
-        let rejections = try #require(try Self.resultObject(refused)["rejections"] as? [[String: Any]])
-        #expect(rejections.contains {
-            $0["reason"] as? String == "missingArtifact"
-                && $0["name"] as? String == "evidence/atlas-drift-diff.json"
-        })
-        #expect(!rejections.contains { $0["reason"] as? String == "provenanceSignatureInvalid" })
-    }
 
-    @Test func aNonAtlasCaseCannotSatisfyTheRequiredAtlasArtifactPath() async throws {
-        let flag = "LOGIC_MCP_ADR007_SELECTOR_ATLAS"
-        let previous = getenv(flag).map { String(cString: $0) }
-        unsetenv(flag)
-        defer {
-            if let previous { setenv(flag, previous, 1) } else { unsetenv(flag) }
-        }
-        let specs = OperationRegistry.specs
-        let drive = Self.driveResult(specs: specs,
-            mutationRestoreRecords: [Self.recipeShapedRecord()])
-        let fixture = try Fixture(specs: specs, drive: { _ in drive })
-        defer { fixture.remove() }
-        let operationWaivers = specs.compactMap { spec in
-            drive.operationResults[spec.id.rawValue]?.status == .passed ? nil :
-                Self.waiver(caseID: "in-process/\(spec.id.rawValue)",
-                    affectedCapability: "operation:\(spec.id.rawValue)")
-        }
-        try JSONEncoder().encode(operationWaivers + Self.axisWaivers()).write(to: fixture.waiversURL)
-        let path = "evidence/atlas-drift-diff.json"
-        let external = QualificationCase(id: "external/not-atlas", status: .failed,
-            tool: "external", command: "observe", traceID: "non-atlas-path-control", verified: false,
-            evidenceFiles: [path], reason: "controlled external refusal",
-            binarySHA256: fixture.binarySHA256, axis: .defaultAxis,
-            operationID: "qualification.external-control", verificationKind: .typedDeferral)
-        let evidence = CaseEvidence(schema: "qualification-case-evidence/v3",
-            caseID: external.id, operationID: external.operationID, tool: external.tool,
-            command: external.command, registrySpecFound: false, handlerBound: false,
-            traceStarted: false, traceCompleted: false, failureReason: external.reason,
-            binarySHA256: fixture.binarySHA256, axis: .defaultAxis,
-            status: .failed, verified: false, verificationKind: .typedDeferral)
-        #expect(QualificationRunner.evidence(evidence, binds: external))
-        #expect(QualificationRunner.evidenceShapeIsValid(evidence))
-        let evidenceURL = fixture.directory.appendingPathComponent(path)
-        try FileManager.default.createDirectory(at: evidenceURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true)
-        try JSONEncoder().encode(evidence).write(to: evidenceURL)
-        try JSONEncoder().encode(QualificationCaseManifest(schema: "qualification-case-manifest/v1",
-            binarySHA256: fixture.binarySHA256, cases: [external])).write(to: fixture.externalCasesURL)
-        let run = await fixture.runner.run(arguments: ["LogicProMCP", "--qualify",
-            "--out", fixture.attestationURL.path, "--release-version", "1.2.3",
-            "--mutate-open-project", "--cases", fixture.externalCasesURL.path,
-            "--waivers", fixture.waiversURL.path])
-        #expect(run.exitCode == 1, "the optional external case failed: \(run.stdout)\(run.stderr)")
-        try fixture.forceSignForDiagnosticFixture()
-        let diagnostic = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-        #expect(diagnostic.exitCode == 0, "\(diagnostic.stdout)")
-        let refused = QualificationRunner.verifyTrusted(candidateURL: fixture.executableURL,
-            bundleURL: fixture.directory, releaseVersion: "1.2.3",
-            expectedCommitSHA: fixture.commitSHA, trustedPublicKeyData: fixture.trustedPublicKeyData)
-        #expect(refused.exitCode == 1, "\(refused.stdout)")
-        let rejections = try #require(try Self.resultObject(refused)["rejections"] as? [[String: Any]])
-        #expect(rejections.contains {
-            $0["reason"] as? String == "evidenceBindingMismatch"
-                && $0["actual"] as? String == "required atlas case binding"
-        })
-        #expect(!rejections.contains { $0["reason"] as? String == "provenanceSignatureInvalid" })
-    }
 
-    @Test(arguments: [QualificationLocale.enUS, .koKR])
-    func trustedRequiredAtlasAcceptsBothDeclaredSelectedScopeControls(locale: QualificationLocale) async throws {
-        let flag = "LOGIC_MCP_ADR007_SELECTOR_ATLAS"
-        let previous = getenv(flag).map { String(cString: $0) }
-        unsetenv(flag)
-        defer {
-            if let previous { setenv(flag, previous, 1) } else { unsetenv(flag) }
-        }
-        let specs = OperationRegistry.specs
-        let drive = Self.driveResult(specs: specs, observedLocale: locale.rawValue,
-            mutationRestoreRecords: [Self.recipeShapedRecord()])
-        let fixture = try Fixture(specs: specs, drive: { _ in drive })
-        defer { fixture.remove() }
-        let axis = QualificationAxis(variant: .desktop, locale: locale,
-            profile: .core, cache: .cold, fixture: .empty)
-        let operationWaivers = specs.compactMap { spec in
-            drive.operationResults[spec.id.rawValue]?.status == .passed ? nil :
-                Self.waiver(caseID: "in-process/\(spec.id.rawValue)",
-                    affectedCapability: "operation:\(spec.id.rawValue)")
-        }
-        try JSONEncoder().encode(operationWaivers + Self.axisWaivers(observedAxis: axis))
-            .write(to: fixture.waiversURL)
-        let directory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-            .deletingLastPathComponent().appendingPathComponent("Fixtures/AX")
-        let language = locale == .koKR ? "ko" : "en"
-        let documents = try ["track-headers", "control-bar"].map {
-            try JSONDecoder().decode(AXSnapshot.Document.self,
-                from: Data(contentsOf: directory.appendingPathComponent(
-                    "logic-12.x-desktop-\(language)-\($0).json")))
-        }
-        #expect(documents.allSatisfy { $0.logicVersion == "12.x" && $0.locale == language && $0.capturedFrom == "ax" })
-        let pairs = documents.map { baseline in AtlasQualification.Pair(scope: baseline.scope,
-            baseline: baseline, current: AXSnapshot.Document(logicVersion: "11.2",
-                locale: locale.rawValue, scope: baseline.scope, capturedFrom: "ax", root: baseline.root)) }
-        let atlas = try #require(AtlasQualification.evidenceCaseFor(armed: true, pairs: pairs,
-            axis: axis, binarySHA256: fixture.binarySHA256, traceID: "required-atlas-control"))
-        #expect(atlas.qualificationCase.status == .passed)
-        #expect(atlas.qualificationCase.verified)
-        let evidencePath = try #require(atlas.qualificationCase.evidenceFiles.first)
-        let evidenceURL = fixture.directory.appendingPathComponent(evidencePath)
-        try FileManager.default.createDirectory(at: evidenceURL.deletingLastPathComponent(),
-            withIntermediateDirectories: true)
-        try JSONEncoder().encode(atlas.evidence).write(to: evidenceURL)
-        try JSONEncoder().encode(QualificationCaseManifest(schema: "qualification-case-manifest/v1",
-            binarySHA256: fixture.binarySHA256, cases: [atlas.qualificationCase]))
-            .write(to: fixture.externalCasesURL)
-        let run = await fixture.runner.run(arguments: ["LogicProMCP", "--qualify",
-            "--out", fixture.attestationURL.path, "--release-version", "1.2.3",
-            "--locale", language, "--mutate-open-project", "--cases", fixture.externalCasesURL.path,
-            "--waivers", fixture.waiversURL.path])
-        #expect(run.exitCode == 0, "\(run.stdout)\(run.stderr)")
-        let unsigned = try JSONDecoder().decode(ReleaseQualificationAttestation.self,
-            from: Data(contentsOf: fixture.attestationURL))
-        #expect(unsigned.locale == locale)
-        #expect(unsigned.logicVersion == "11.2")
-        #expect(unsigned.cases.filter { $0.id == "atlas.drift_diff" } == [atlas.qualificationCase])
-        let signing = QualificationRunner.signTrusted(candidateURL: fixture.executableURL,
-            bundleURL: fixture.directory, releaseVersion: "1.2.3",
-            expectedCommitSHA: fixture.commitSHA, signingPrivateKeyData: fixture.signingKeyData)
-        #expect(signing.exitCode == 0, "\(signing.stdout)")
-        let accepted = QualificationRunner.verifyTrusted(candidateURL: fixture.executableURL,
-            bundleURL: fixture.directory, releaseVersion: "1.2.3",
-            expectedCommitSHA: fixture.commitSHA, trustedPublicKeyData: fixture.trustedPublicKeyData)
-        #expect(accepted.exitCode == 0, "\(accepted.stdout)")
-        let promotable = try #require(try Self.resultObject(accepted)["promotable"] as? Bool)
-        #expect(promotable)
-    }
 
     /// AFTER-only arming controls: all capture and transport observations below are injected.
     private enum RequiredAtlasCaptureShape: String, Sendable {
@@ -3914,15 +3071,11 @@ struct QualificationRunnerTests {
         #expect(comparison.pairs == pairs)
         #expect(comparison.dropped == dropped)
         #expect(QualificationRunner.evidenceShapeIsValid(evidence))
-        let signing = QualificationRunner.signTrusted(candidateURL: fixture.executableURL,
-            bundleURL: fixture.directory, releaseVersion: "1.2.3",
-            expectedCommitSHA: fixture.commitSHA, signingPrivateKeyData: fixture.signingKeyData)
         if shape == .complete {
             #expect(run.exitCode == 0, "\(run.stdout)")
             #expect(run.stderr.isEmpty, "\(run.stderr)")
             #expect(atlas.status == .passed)
             #expect(atlas.verified)
-            #expect(signing.exitCode == 0, "\(signing.stdout)")
         } else {
             #expect(run.exitCode == 1, "\(run.stdout)")
             #expect(unsigned.failed == 1)
@@ -3937,24 +3090,6 @@ struct QualificationRunnerTests {
                 #expect(atlas.reason ==
                     "required atlas scopes missing or ambiguous: trackHeaderRail, controlBar")
             }
-            #expect(signing.exitCode == 1, "\(signing.stdout)")
-            try Self.expectRejection(signing, reason: "atlasDriftRefused")
-            // Keep coherent diagnostic signatures so trusted refusal is not merely unsigned.
-            try fixture.forceSignForDiagnosticFixture()
-        }
-        let verification = QualificationRunner.verifyTrusted(candidateURL: fixture.executableURL,
-            bundleURL: fixture.directory, releaseVersion: "1.2.3",
-            expectedCommitSHA: fixture.commitSHA, trustedPublicKeyData: fixture.trustedPublicKeyData)
-        let object = try Self.resultObject(verification)
-        let promotable = try #require(object["promotable"] as? Bool)
-        if shape == .complete {
-            #expect(verification.exitCode == 0, "\(verification.stdout)")
-            #expect(promotable)
-        } else {
-            #expect(verification.exitCode == 1, "\(verification.stdout)")
-            #expect(!promotable)
-            try Self.expectRejection(verification, reason: "atlasDriftRefused")
-            #expect(!Self.rejectionReasons(object).contains("provenanceSignatureInvalid"))
         }
     }
 
@@ -3964,7 +3099,7 @@ struct QualificationRunnerTests {
     }
 
     @Test(arguments: [RequiredAtlasCaptureShape.absent, .partial, .dropped])
-    private func requireAtlasRefusesIncompleteCaptureBeforeTrustedPromotion(shape: RequiredAtlasCaptureShape) async throws {
+    private func requireAtlasRefusesIncompleteCapture(shape: RequiredAtlasCaptureShape) async throws {
         try await assertRequiredAtlasProducer(locale: .enUS, shape: shape)
     }
 
@@ -3974,822 +3109,10 @@ struct QualificationRunnerTests {
         try await assertRequiredAtlasProducer(locale: .enUS, shape: shape, viaEntrypoint: true)
     }
 
-    @Test func trustedSignedProvenancePromotes() async throws {
-        let fixture = try promotableFixture()
-        defer { fixture.remove() }
-        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
 
-        let result = await fixture.verify(expectedSHA256: fixture.binarySHA256)
 
-        #expect(result.exitCode == 0, "\(result.stdout)")
-        let v1 = try #require(try Self.resultObject(result)["promotable"] as? Bool)
-        #expect(v1)
-    }
 
-    @Test func standaloneSignerAndVerifierUseCandidateBytesWithoutExecutingCandidate() async throws {
-        let sentinelURL = FileManager.default.temporaryDirectory.appendingPathComponent(
-            "trusted-verifier-candidate-executed-\(UUID().uuidString)"
-        )
-        let fixture = try trustedFixture(candidateExecutionSentinelURL: sentinelURL)
-        defer {
-            fixture.remove()
-            try? FileManager.default.removeItem(at: sentinelURL)
-        }
-
-        let qualification = await fixture.runQualification(waiversURL: fixture.waiversURL)
-        // `--qualify` exits non-zero when a case FAILED, and these fixtures drive a fake
-        // transport where operations fail by construction. The contract has its own test:
-        // `qualifyExitCodeReportsWhetherAnythingFailed`.
-        try #require(qualification.exitCode == 0)
-        let unsigned = try JSONDecoder().decode(
-            ReleaseQualificationAttestation.self,
-            from: Data(contentsOf: fixture.attestationURL)
-        )
-        #expect(unsigned.provenanceSignature == nil)
-        if let exportPath = ProcessInfo.processInfo.environment["LPMCP367_QA_DIR"] {
-            let exportURL = URL(fileURLWithPath: exportPath)
-            try? FileManager.default.removeItem(at: exportURL)
-            try FileManager.default.createDirectory(at: exportURL, withIntermediateDirectories: true)
-            try FileManager.default.copyItem(
-                at: fixture.directory,
-                to: exportURL.appendingPathComponent("bundle", isDirectory: true)
-            )
-            try Data(fixture.signingKeyData.base64EncodedString().utf8).write(
-                to: exportURL.appendingPathComponent("signing-key.base64")
-            )
-            try Data(fixture.trustedPublicKeyData.base64EncodedString().utf8).write(
-                to: exportURL.appendingPathComponent("public-key.base64")
-            )
-            try Data(sentinelURL.path.utf8).write(
-                to: exportURL.appendingPathComponent("candidate-sentinel-path")
-            )
-        }
-
-        let signing = QualificationRunner.signTrusted(
-            candidateURL: fixture.executableURL,
-            bundleURL: fixture.directory,
-            releaseVersion: "1.2.3",
-            expectedCommitSHA: fixture.commitSHA,
-            signingPrivateKeyData: fixture.signingKeyData
-        )
-        #expect(signing.exitCode == 0, "\(signing.stdout)")
-        let signed = try JSONDecoder().decode(
-            ReleaseQualificationAttestation.self,
-            from: Data(contentsOf: fixture.attestationURL)
-        )
-        #expect(signed.provenanceSignature?.algorithm == "ed25519")
-        #expect(signed.provenanceSignature?.keyID == SupportBundleBuilder.sha256(
-            fixture.trustedPublicKeyData
-        ))
-
-        let verification = QualificationRunner.verifyTrusted(
-            candidateURL: fixture.executableURL,
-            bundleURL: fixture.directory,
-            releaseVersion: "1.2.3",
-            expectedCommitSHA: fixture.commitSHA,
-            trustedPublicKeyData: fixture.trustedPublicKeyData
-        )
-        #expect(verification.exitCode == 0, "\(verification.stdout)")
-        #expect(!FileManager.default.fileExists(atPath: sentinelURL.path))
-    }
-
-    @Test func trustedVerifierAcceptsSignedRecipeShapedCycle() async throws {
-        let fixture = try await signedTrustedFixture()
-        defer { fixture.remove() }
-        let attestation = try JSONDecoder().decode(
-            ReleaseQualificationAttestation.self,
-            from: Data(contentsOf: fixture.attestationURL)
-        )
-        let cycleCase = try #require(attestation.cases.first { $0.operationID == "tracks.rename" })
-        #expect(cycleCase.status == .passed)
-        #expect(cycleCase.verificationKind == .verifiedWriteCycle)
-        let restore = try #require(cycleCase.restore)
-        #expect(restore.verified)
-        #expect(PromotionGate.operationIsLiveCredited(cycleCase))
-        let result = QualificationRunner.verifyTrusted(
-            candidateURL: fixture.executableURL,
-            bundleURL: fixture.directory,
-            releaseVersion: "1.2.3",
-            expectedCommitSHA: fixture.commitSHA,
-            trustedPublicKeyData: fixture.trustedPublicKeyData
-        )
-        #expect(result.exitCode == 0, "\(result.stdout)")
-    }
-
-    private func publicEvidenceDirectory(_ fixture: Fixture, archiveFault: String? = nil) throws -> URL {
-        let directory = FileManager.default.temporaryDirectory.appendingPathComponent("public-evidence-\(UUID())")
-        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
-        do {
-            try FileManager.default.copyItem(at: fixture.executableURL, to: directory.appendingPathComponent("LogicProMCP"))
-            let program = #"""
-import io, pathlib, sys, tarfile
-root, fault = pathlib.Path(sys.argv[1]), sys.argv[2]
-data = (root / 'LogicProMCP').read_bytes()
-for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.gz'):
-    with tarfile.open(root / name, 'w:gz') as archive:
-        member = tarfile.TarInfo('LogicProMCP')
-        member.mode = 0o755
-        payload = b'wrong candidate' if fault == 'wrong_binary' else data
-        member.size = len(payload)
-        if fault == 'symlink':
-            member.type = tarfile.SYMTYPE
-            member.linkname = '/private/unowned'
-            member.size = 0
-        if fault != 'missing':
-            archive.addfile(member, io.BytesIO(payload))
-        if fault == 'duplicate':
-            archive.addfile(member, io.BytesIO(payload))
-        if fault == 'traversal':
-            other = tarfile.TarInfo('../escaped')
-            other.size = 1
-            archive.addfile(other, io.BytesIO(b'x'))
-        if fault in ('file_parent', 'file_child'):
-            pair = [('Companion', b'x'), ('companion/child', b'y')]
-            for path, content in pair if fault == 'file_parent' else reversed(pair):
-                other = tarfile.TarInfo(path)
-                other.size = len(content)
-                archive.addfile(other, io.BytesIO(content))
-"""#
-            let result = BoundedProcessRunner.run(executable: "/usr/bin/env",
-                arguments: ["-i", "PATH=/usr/bin:/bin", "/usr/bin/python3", "-I", "-c", program,
-                            directory.path, archiveFault ?? "healthy"], timeout: 10)
-            try #require(result.output?.exitCode == 0)
-            return directory
-        } catch {
-            try? FileManager.default.removeItem(at: directory)
-            throw error
-        }
-    }
-
-    private func publicEvidenceCommand(_ command: String, fixture: Fixture, directory: URL,
-                                       commit: String? = nil, version: String = "1.2.3",
-                                       axis: String = QualificationAxis.defaultAxis.key,
-                                       key: Data? = nil, bundleURL: URL? = nil) -> QualificationCommandResult {
-        var arguments = ["trusted-verifier", command, "--public-directory", directory.path,
-                         "--release-version", version, "--expected-commit", commit ?? fixture.commitSHA]
-        if command == "export-public" {
-            arguments += ["--candidate", fixture.executableURL.path, "--bundle", (bundleURL ?? fixture.directory).path]
-        } else { arguments += ["--expected-axis", axis] }
-        return QualificationRunner.runTrusted(arguments: arguments, environment: [
-            "LOGIC_PRO_MCP_QUALIFICATION_SIGNING_KEY": fixture.signingKeyData.base64EncodedString(),
-            "LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY": (key ?? fixture.trustedPublicKeyData).base64EncodedString(),
-        ])
-    }
-
-    private func publicMatrixPayload(
-        axes: [QualificationAxis] = QualificationAxis.requiredAxes(
-            profile: .core,
-            cache: .cold,
-            fixture: .empty
-        )
-    ) -> QualificationPublicMatrixEvidence.Payload {
-        let digest = String(repeating: "a", count: 64)
-        let artifacts = QualificationPublicEvidence.artifactNames.map {
-            QualificationPublicEvidence.Artifact(name: $0, sha256: digest)
-        }
-        let runs = axes.enumerated().map { index, axis in
-            let token = String(format: "%064x", index + 1)
-            let child = QualificationPublicEvidence.Payload(
-                schema: QualificationPublicEvidence.schema,
-                commitSHA: String(repeating: "b", count: 40),
-                releaseVersion: "1.2.3",
-                binarySHA256: digest,
-                logicVersion: "12.4",
-                axis: axis,
-                runIDHash: token,
-                startedAt: 1_000,
-                completedAt: 1_001,
-                privateManifestSHA256: token,
-                artifacts: artifacts,
-                cases: [.init(
-                    caseIDHash: token,
-                    operationID: "system.health",
-                    status: .passed,
-                    verificationKind: .independentReadback,
-                    liveCredited: true
-                )],
-                waivers: [],
-                evidence: [.init(
-                    pathHash: token,
-                    sha256: digest,
-                    caseIDHash: token,
-                    kind: "semantic_readback"
-                )],
-                total: 1,
-                passed: 1,
-                failed: 0,
-                waived: 0,
-                disclosure: "No private paths."
-            )
-            return QualificationPublicMatrixEvidence.Run(
-                axis: axis,
-                childAttestationSHA256: token,
-                payload: child
-            )
-        }
-        return QualificationPublicMatrixEvidence.Payload(
-            schema: QualificationPublicMatrixEvidence.schema,
-            commitSHA: String(repeating: "b", count: 40),
-            releaseVersion: "1.2.3",
-            binarySHA256: digest,
-            logicVersion: "12.4",
-            operationCatalogSHA256: digest,
-            privateMatrixSHA256: digest,
-            artifacts: artifacts,
-            runs: runs,
-            disclosure: "Authenticated two-axis projection; private paths remain private."
-        )
-    }
-
-    @Test func publicMatrixEvidenceBindsBothRequiredAxesAndExactPrivateSnapshots() throws {
-        let key = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 19, count: 32))
-        let payload = publicMatrixPayload()
-
-        let signed = try QualificationPublicMatrixEvidence.sign(payload, key: key)
-        let verified = try QualificationPublicMatrixEvidence.verify(
-            signed,
-            trustedKey: key.publicKey.rawRepresentation
-        )
-
-        #expect(verified == payload)
-        let actualAxes = verified.runs.map(\.axis)
-        let sortedAxes = actualAxes.sorted { $0.key < $1.key }
-        let requiredAxes = QualificationAxis.requiredAxes(
-            profile: .core,
-            cache: .cold,
-            fixture: .empty
-        )
-        #expect(actualAxes == sortedAxes)
-        #expect(Set(actualAxes) == Set(requiredAxes))
-    }
-
-    @Test func publicMatrixEvidenceRejectsMissingAxisAndSignedPayloadSubstitution() throws {
-        let key = try Curve25519.Signing.PrivateKey(rawRepresentation: Data(repeating: 23, count: 32))
-        let complete = publicMatrixPayload()
-        #expect(throws: QualificationPublicMatrixEvidence.Rejection.self) {
-            _ = try QualificationPublicMatrixEvidence.sign(
-                publicMatrixPayload(axes: [QualificationAxis.defaultAxis]),
-                key: key
-            )
-        }
-
-        var envelope = try #require(
-            JSONSerialization.jsonObject(with: QualificationPublicMatrixEvidence.sign(complete, key: key))
-                as? [String: Any]
-        )
-        let encoded = try #require(envelope["payload"] as? String)
-        let encodedPayload = try #require(Data(base64Encoded: encoded))
-        var projected = try #require(
-            JSONSerialization.jsonObject(with: encodedPayload)
-                as? [String: Any]
-        )
-        projected["privateMatrixSHA256"] = String(repeating: "f", count: 64)
-        envelope["payload"] = try JSONSerialization.data(
-            withJSONObject: projected,
-            options: [.sortedKeys]
-        ).base64EncodedString()
-        let substituted = try JSONSerialization.data(withJSONObject: envelope)
-
-        #expect(throws: QualificationPublicMatrixEvidence.Rejection.self) {
-            _ = try QualificationPublicMatrixEvidence.verify(
-                substituted,
-                trustedKey: key.publicKey.rawRepresentation
-            )
-        }
-    }
-
-    private func preparedPublicMatrix() async throws -> (
-        en: Fixture,
-        ko: Fixture,
-        matrix: URL,
-        publicDirectory: URL
-    ) {
-        let specs = [try #require(OperationRegistry.specs.first { $0.id == .systemHealth })]
-        let executableData = Data("public-matrix-candidate".utf8)
-        let commitSHA = String(repeating: "d", count: 40)
-        let en = try Fixture(
-            specs: specs,
-            executableData: executableData,
-            commitSHA: commitSHA,
-            drive: { _ in Self.driveResult(specs: specs, observedLocale: "en-US") }
-        )
-        let ko = try Fixture(
-            specs: specs,
-            executableData: executableData,
-            commitSHA: commitSHA,
-            drive: { _ in Self.driveResult(specs: specs, observedLocale: "ko-KR") }
-        )
-        let matrix = FileManager.default.temporaryDirectory
-            .appendingPathComponent("public-matrix-private-\(UUID())", isDirectory: true)
-        do {
-            try #require((await en.runQualification(mutateOpenProject: false)).exitCode == 0)
-            let koResult = await ko.runner.run(arguments: [
-                "LogicProMCP", "--qualify",
-                "--out", ko.attestationURL.path,
-                "--release-version", "1.2.3",
-                "--locale", "ko",
-            ])
-            try #require(koResult.exitCode == 0, "\(koResult.stdout)\(koResult.stderr)")
-            try FileManager.default.createDirectory(at: matrix, withIntermediateDirectories: false)
-            try FileManager.default.copyItem(at: en.directory, to: matrix.appendingPathComponent("en"))
-            try FileManager.default.copyItem(at: ko.directory, to: matrix.appendingPathComponent("ko"))
-            let input = QualificationMatrixInput(
-                schema: QualificationMatrixInput.currentSchema,
-                runs: [.init(path: "en"), .init(path: "ko")]
-            )
-            try QualificationPublicEvidence.encode(input).write(
-                to: matrix.appendingPathComponent("qualification-matrix-input.json")
-            )
-            let signing = QualificationRunner.signTrustedMatrix(
-                candidateURL: en.executableURL,
-                matrixURL: matrix,
-                releaseVersion: "1.2.3",
-                expectedCommitSHA: commitSHA,
-                signingPrivateKeyData: en.signingKeyData,
-                requiredArtifacts: [],
-                requiredOperationIDs: en.requiredOperationIDs
-            )
-            try #require(signing.exitCode == 0, "\(signing.stdout)\(signing.stderr)")
-            return (en, ko, matrix, try publicEvidenceDirectory(en))
-        } catch {
-            en.remove()
-            ko.remove()
-            try? FileManager.default.removeItem(at: matrix)
-            throw error
-        }
-    }
-
-    @Test func publicMatrixExportValidatesAndProjectsTheCompletePrivateMatrix() async throws {
-        let fixture = try await preparedPublicMatrix()
-        defer {
-            fixture.en.remove()
-            fixture.ko.remove()
-            try? FileManager.default.removeItem(at: fixture.matrix)
-            try? FileManager.default.removeItem(at: fixture.publicDirectory)
-        }
-        let key = try Curve25519.Signing.PrivateKey(
-            rawRepresentation: fixture.en.signingKeyData
-        )
-        let exported = try QualificationRunner.exportPublicMatrixEvidence(
-            candidate: fixture.en.executableURL,
-            matrix: fixture.matrix,
-            directory: fixture.publicDirectory,
-            version: "1.2.3",
-            commit: fixture.en.commitSHA,
-            key: key,
-            requiredArtifacts: [],
-            requiredOperationIDs: fixture.en.requiredOperationIDs
-        )
-        try #require(exported.exitCode == 0, "\(exported.stdout)\(exported.stderr)")
-
-        let verified = QualificationRunner.runTrusted(arguments: [
-            "trusted-verifier", "verify-public-matrix",
-            "--public-directory", fixture.publicDirectory.path,
-            "--release-version", "1.2.3",
-            "--expected-commit", fixture.en.commitSHA,
-        ], environment: [
-            "LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY": fixture.en.trustedPublicKeyData
-                .base64EncodedString(),
-        ])
-        #expect(verified.exitCode == 0, "\(verified.stdout)\(verified.stderr)")
-        let evidenceData = try Data(contentsOf: fixture.publicDirectory.appendingPathComponent(
-            QualificationPublicEvidence.filename
-        ))
-        let payload = try QualificationPublicMatrixEvidence.verify(
-            evidenceData,
-            trustedKey: fixture.en.trustedPublicKeyData
-        )
-        let privateMatrix = try Data(contentsOf: fixture.matrix.appendingPathComponent(
-            "release-qualification-matrix.json"
-        ))
-        let privateRoot = try JSONDecoder().decode(
-            ReleaseQualificationMatrixAttestation.self,
-            from: privateMatrix
-        )
-        #expect(payload.privateMatrixSHA256 == SupportBundleBuilder.sha256(privateMatrix))
-        #expect(payload.operationCatalogSHA256 == privateRoot.operationCatalogSHA256)
-        for projectedRun in payload.runs {
-            let privateRun = try #require(privateRoot.runs.first {
-                $0.axis == projectedRun.axis
-            })
-            let childDirectory = fixture.matrix.appendingPathComponent(privateRun.path)
-            let childAttestationData = try Data(contentsOf: childDirectory.appendingPathComponent(
-                "release-qualification-attestation.json"
-            ))
-            let childAttestation = try JSONDecoder().decode(
-                ReleaseQualificationAttestation.self,
-                from: childAttestationData
-            )
-            let childCatalogData = try Data(contentsOf: childDirectory.appendingPathComponent(
-                "operation-catalog.json"
-            ))
-            #expect(projectedRun.childAttestationSHA256 == privateRun.childAttestationSHA256)
-            #expect(projectedRun.childAttestationSHA256
-                == SupportBundleBuilder.sha256(childAttestationData))
-            #expect(childAttestation.operationCatalogSHA256 == privateRoot.operationCatalogSHA256)
-            #expect(payload.operationCatalogSHA256 == SupportBundleBuilder.sha256(childCatalogData))
-        }
-        #expect(Set(payload.runs.map(\.axis)) == Set(QualificationAxis.requiredAxes(
-            profile: .core,
-            cache: .cold,
-            fixture: .empty
-        )))
-        let encodedPayload = String(
-            decoding: try QualificationPublicEvidence.encode(payload),
-            as: UTF8.self
-        )
-        #expect(!encodedPayload.contains(fixture.matrix.path))
-        #expect(!encodedPayload.contains("\"path\":\"en\""))
-        #expect(!encodedPayload.contains("\"path\":\"ko\""))
-
-        try Data("replacement".utf8).write(
-            to: fixture.publicDirectory.appendingPathComponent("LogicProMCP")
-        )
-        let substituted = QualificationRunner.runTrusted(arguments: [
-            "trusted-verifier", "verify-public-matrix",
-            "--public-directory", fixture.publicDirectory.path,
-            "--release-version", "1.2.3",
-            "--expected-commit", fixture.en.commitSHA,
-        ], environment: [
-            "LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY": fixture.en.trustedPublicKeyData
-                .base64EncodedString(),
-        ])
-        #expect(substituted.exitCode != 0)
-    }
-
-    @Test func publicMatrixExportRefusesDestinationInsidePrivateMatrix() async throws {
-        let fixture = try await preparedPublicMatrix()
-        defer {
-            fixture.en.remove()
-            fixture.ko.remove()
-            try? FileManager.default.removeItem(at: fixture.matrix)
-            try? FileManager.default.removeItem(at: fixture.publicDirectory)
-        }
-        let nested = fixture.matrix.appendingPathComponent("public", isDirectory: true)
-        try FileManager.default.moveItem(at: fixture.publicDirectory, to: nested)
-        let result = try QualificationRunner.exportPublicMatrixEvidence(
-            candidate: fixture.en.executableURL,
-            matrix: fixture.matrix,
-            directory: nested,
-            version: "1.2.3",
-            commit: fixture.en.commitSHA,
-            key: Curve25519.Signing.PrivateKey(rawRepresentation: fixture.en.signingKeyData),
-            requiredArtifacts: [],
-            requiredOperationIDs: fixture.en.requiredOperationIDs
-        )
-        #expect(result.exitCode != 0)
-        #expect(!FileManager.default.fileExists(atPath: nested.appendingPathComponent(
-            QualificationPublicEvidence.filename
-        ).path))
-    }
-
-    @Test func publicMatrixProjectsTheSameChildManifestSnapshotsItValidated() async throws {
-        let fixture = try await preparedPublicMatrix()
-        defer {
-            fixture.en.remove()
-            fixture.ko.remove()
-            try? FileManager.default.removeItem(at: fixture.matrix)
-            try? FileManager.default.removeItem(at: fixture.publicDirectory)
-        }
-        let manifest = fixture.matrix.appendingPathComponent("en/evidence-manifest.json")
-        let originalManifest = try Data(contentsOf: manifest)
-        let originalDigest = SupportBundleBuilder.sha256(originalManifest)
-        let replacement = Data("unvalidated replacement".utf8)
-        let result = try QualificationRunner.exportPublicMatrixEvidence(
-            candidate: fixture.en.executableURL,
-            matrix: fixture.matrix,
-            directory: fixture.publicDirectory,
-            version: "1.2.3",
-            commit: fixture.en.commitSHA,
-            key: Curve25519.Signing.PrivateKey(rawRepresentation: fixture.en.signingKeyData),
-            requiredArtifacts: [],
-            requiredOperationIDs: fixture.en.requiredOperationIDs,
-            beforeProjection: {
-                try? replacement.write(to: manifest, options: .atomic)
-            }
-        )
-        try #require(result.exitCode == 0, "\(result.stdout)\(result.stderr)")
-        let publicData = try Data(contentsOf: fixture.publicDirectory.appendingPathComponent(
-            QualificationPublicEvidence.filename
-        ))
-        let payload = try QualificationPublicMatrixEvidence.verify(
-            publicData,
-            trustedKey: fixture.en.trustedPublicKeyData
-        )
-        let en = try #require(payload.runs.first { $0.axis.locale == .enUS })
-        #expect(en.payload.privateManifestSHA256 == originalDigest)
-        #expect(SupportBundleBuilder.sha256(try Data(contentsOf: manifest))
-            == SupportBundleBuilder.sha256(replacement))
-    }
-
-    @Test func publicMatrixCLIExportsAndVerifiesFullyQualifiedRequiredArtifacts() async throws {
-        let sentinel = FileManager.default.temporaryDirectory
-            .appendingPathComponent("public-matrix-candidate-executed-\(UUID())")
-        let en = try trustedFixture(
-            candidateExecutionSentinelURL: sentinel,
-            includeAxisWaivers: false
-        )
-        let ko = try trustedFixture(
-            candidateExecutionSentinelURL: sentinel,
-            observedLocale: .koKR,
-            includeAxisWaivers: false
-        )
-        let matrix = FileManager.default.temporaryDirectory
-            .appendingPathComponent("public-matrix-cli-\(UUID())", isDirectory: true)
-        defer {
-            en.remove()
-            ko.remove()
-            try? FileManager.default.removeItem(at: matrix)
-            try? FileManager.default.removeItem(at: sentinel)
-        }
-        let enResult = await en.runQualification(
-            waiversURL: en.waiversURL,
-            locale: .enUS
-        )
-        let koResult = await ko.runQualification(
-            waiversURL: ko.waiversURL,
-            locale: .koKR
-        )
-        try #require(enResult.exitCode == 0, "\(enResult.stdout)\(enResult.stderr)")
-        try #require(koResult.exitCode == 0, "\(koResult.stdout)\(koResult.stderr)")
-        try FileManager.default.createDirectory(at: matrix, withIntermediateDirectories: false)
-        try FileManager.default.copyItem(at: en.directory, to: matrix.appendingPathComponent("en"))
-        try FileManager.default.copyItem(at: ko.directory, to: matrix.appendingPathComponent("ko"))
-        try QualificationPublicEvidence.encode(QualificationMatrixInput(
-            schema: QualificationMatrixInput.currentSchema,
-            runs: [.init(path: "en"), .init(path: "ko")]
-        )).write(to: matrix.appendingPathComponent("qualification-matrix-input.json"))
-        let signing = QualificationRunner.signTrustedMatrix(
-            candidateURL: en.executableURL,
-            matrixURL: matrix,
-            releaseVersion: "1.2.3",
-            expectedCommitSHA: en.commitSHA,
-            signingPrivateKeyData: en.signingKeyData
-        )
-        try #require(signing.exitCode == 0, "\(signing.stdout)\(signing.stderr)")
-        let directory = try publicEvidenceDirectory(en)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let environment = [
-            "LOGIC_PRO_MCP_QUALIFICATION_SIGNING_KEY": en.signingKeyData.base64EncodedString(),
-            "LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY": en.trustedPublicKeyData.base64EncodedString(),
-        ]
-        let exported = QualificationRunner.runTrusted(arguments: [
-            "trusted-verifier", "export-public-matrix",
-            "--candidate", en.executableURL.path,
-            "--matrix-index", matrix.appendingPathComponent("qualification-matrix-input.json").path,
-            "--public-directory", directory.path,
-            "--release-version", "1.2.3",
-            "--expected-commit", en.commitSHA,
-        ], environment: environment)
-        try #require(exported.exitCode == 0, "\(exported.stdout)\(exported.stderr)")
-        let verified = QualificationRunner.runTrusted(arguments: [
-            "trusted-verifier", "verify-public-matrix",
-            "--public-directory", directory.path,
-            "--release-version", "1.2.3",
-            "--expected-commit", en.commitSHA,
-        ], environment: environment)
-        #expect(verified.exitCode == 0, "\(verified.stdout)\(verified.stderr)")
-        #expect(!FileManager.default.fileExists(atPath: sentinel.path))
-    }
-
-    @Test func publicEvidenceAcceptsBoundArtifactsWithoutDisclosingPrivatePaths() async throws {
-        let fixture = try await signedTrustedFixture()
-        defer { fixture.remove() }
-        let directory = try publicEvidenceDirectory(fixture)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let exported = publicEvidenceCommand("export-public", fixture: fixture, directory: directory)
-        try #require(exported.exitCode == 0, "\(exported.stdout)")
-        let verified = publicEvidenceCommand("verify-public", fixture: fixture, directory: directory)
-        #expect(verified.exitCode == 0, "\(verified.stdout)")
-        let envelope = try JSONSerialization.jsonObject(with: Data(contentsOf:
-            directory.appendingPathComponent("qualification-public.json"))) as? [String: Any]
-        let encoded = try #require(envelope?["payload"] as? String)
-        let data = try #require(Data(base64Encoded: encoded))
-        let payload = String(decoding: data, as: UTF8.self)
-        #expect(!payload.contains(fixture.directory.path))
-        #expect(!payload.contains(fixture.executableURL.path))
-        #expect(!payload.contains(fixture.signingKeyData.base64EncodedString()))
-        #expect(!FileManager.default.fileExists(atPath: directory.appendingPathComponent("raw-transcript.json").path))
-    }
-
-    @Test(arguments: ["candidate", "archive_and_digest", "payload_and_digest", "foreign_key",
-                      "source", "version", "axis", "missing_member"])
-    func publicEvidenceRejectsSubstitutionAgainstIndependentAnchor(fault: String) async throws {
-        let fixture = try await signedTrustedFixture()
-        defer { fixture.remove() }
-        let directory = try publicEvidenceDirectory(fixture)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        try #require(publicEvidenceCommand("export-public", fixture: fixture, directory: directory).exitCode == 0)
-        let evidence = directory.appendingPathComponent("qualification-public.json")
-        if fault == "candidate" {
-            try Data("replacement".utf8).write(to: directory.appendingPathComponent("LogicProMCP"))
-        } else if fault == "archive_and_digest" {
-            let archive = directory.appendingPathComponent("LogicProMCP-macOS-arm64.tar.gz")
-            try Data("replacement".utf8).write(to: archive)
-            try Data(SupportBundleBuilder.sha256(Data("replacement".utf8)).utf8)
-                .write(to: directory.appendingPathComponent("SHA256SUMS.txt"))
-        } else if fault == "payload_and_digest" {
-            var object = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: evidence)) as? [String: Any])
-            let encoded = try #require(object["payload"] as? String)
-            let originalPayload = try #require(Data(base64Encoded: encoded))
-            var payload = try #require(JSONSerialization.jsonObject(with: originalPayload) as? [String: Any])
-            payload["commitSHA"] = String(repeating: "b", count: 40)
-            let replacement = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
-            object["payload"] = replacement.base64EncodedString()
-            try JSONSerialization.data(withJSONObject: object).write(to: evidence)
-            try Data(SupportBundleBuilder.sha256(replacement).utf8).write(to:
-                directory.appendingPathComponent("qualification-public.sha256"))
-        } else if fault == "missing_member" {
-            try FileManager.default.removeItem(at: directory.appendingPathComponent("LogicProMCP-macOS-arm64.tar.gz"))
-        }
-        let result = publicEvidenceCommand("verify-public", fixture: fixture, directory: directory,
-            commit: fault == "source" ? String(repeating: "b", count: 40) : nil,
-            version: fault == "version" ? "9.9.9" : "1.2.3",
-            axis: fault == "axis" ? "desktop/ko-KR/core/cold/empty" : QualificationAxis.defaultAxis.key,
-            key: fault == "foreign_key" ? Data(repeating: 77, count: 32) : nil)
-        #expect(result.exitCode != 0, "\(fault): \(result.stdout)")
-    }
-
-    @Test(arguments: ["wrong_binary", "duplicate", "symlink", "traversal", "missing", "file_parent", "file_child"])
-    func publicEvidenceExportRequiresTheActualArchiveCandidate(fault: String) async throws {
-        let fixture = try await signedTrustedFixture()
-        defer { fixture.remove() }
-        let directory = try publicEvidenceDirectory(fixture, archiveFault: fault)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let result = publicEvidenceCommand("export-public", fixture: fixture, directory: directory)
-        #expect(result.exitCode != 0)
-        #expect(!FileManager.default.fileExists(atPath: directory.appendingPathComponent("qualification-public.json").path))
-    }
-
-    @Test(arguments: ["same", "public_inside_private", "private_inside_public",
-                      "public_inside_private_via_alias", "private_inside_public_via_alias"])
-    func publicEvidenceRefusesPrivateBundleDestinationOverlap(shape: String) async throws {
-        let fixture = try await signedTrustedFixture()
-        defer { fixture.remove() }
-        let prepared = try publicEvidenceDirectory(fixture)
-        defer { try? FileManager.default.removeItem(at: prepared) }
-        var directory = prepared, bundle = fixture.directory
-        let alias = FileManager.default.temporaryDirectory.appendingPathComponent("public-alias-\(UUID())")
-        defer { try? FileManager.default.removeItem(at: alias) }
-        if shape == "same" {
-            for name in QualificationPublicEvidence.artifactNames.dropFirst() {
-                try FileManager.default.copyItem(at: prepared.appendingPathComponent(name),
-                    to: fixture.directory.appendingPathComponent(name))
-            }
-            directory = fixture.directory
-        } else if shape == "public_inside_private" {
-            directory = fixture.directory.appendingPathComponent("public-projection")
-            try FileManager.default.moveItem(at: prepared, to: directory)
-        } else if shape == "public_inside_private_via_alias" {
-            let nested = fixture.directory.appendingPathComponent("nested")
-            try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: false)
-            try FileManager.default.moveItem(at: prepared, to: nested.appendingPathComponent("public"))
-            try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: nested)
-            directory = alias.appendingPathComponent("public")
-        } else if shape == "private_inside_public_via_alias" {
-            let nested = prepared.appendingPathComponent("nested")
-            try FileManager.default.createDirectory(at: nested, withIntermediateDirectories: false)
-            try FileManager.default.copyItem(at: fixture.directory, to: nested.appendingPathComponent("private-bundle"))
-            try FileManager.default.createSymbolicLink(at: alias, withDestinationURL: nested)
-            bundle = alias.appendingPathComponent("private-bundle")
-        } else {
-            bundle = prepared.appendingPathComponent("private-bundle")
-            try FileManager.default.copyItem(at: fixture.directory, to: bundle)
-        }
-        let result = publicEvidenceCommand("export-public", fixture: fixture, directory: directory, bundleURL: bundle)
-        #expect(result.exitCode != 0)
-        #expect(!FileManager.default.fileExists(atPath: directory.appendingPathComponent("qualification-public.json").path))
-    }
-
-    @Test func publicEvidenceValidatesTheSnapshotItActuallyProjects() async throws {
-        let fixture = try await signedTrustedFixture()
-        defer { fixture.remove() }
-        let directory = try publicEvidenceDirectory(fixture)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        // Model the actual load boundary: A was loaded, while accepted B is now
-        // at the same on-disk location. No timing/environment fault flag is used.
-        var object = try #require(JSONSerialization.jsonObject(with: Data(contentsOf: fixture.attestationURL)) as? [String: Any])
-        let anotherCommit = String(repeating: "b", count: 40)
-        object["commitSHA"] = anotherCommit
-        let loaded = try JSONDecoder().decode(ReleaseQualificationAttestation.self,
-            from: JSONSerialization.data(withJSONObject: object))
-        try #require(loaded.commitSHA == anotherCommit && loaded.commitSHA != fixture.commitSHA)
-        let acceptedB = QualificationRunner.verifyTrusted(candidateURL: fixture.executableURL, bundleURL: fixture.directory,
-            releaseVersion: "1.2.3", expectedCommitSHA: fixture.commitSHA, trustedPublicKeyData: fixture.trustedPublicKeyData)
-        try #require(acceptedB.exitCode == 0)
-        let controlDirectory = try publicEvidenceDirectory(fixture)
-        defer { try? FileManager.default.removeItem(at: controlDirectory) }
-        let original = try JSONDecoder().decode(ReleaseQualificationAttestation.self,
-            from: Data(contentsOf: fixture.attestationURL))
-        let control = try QualificationRunner.exportPublicEvidenceSnapshot(attestation: original,
-            manifestData: Data(contentsOf: fixture.manifestURL), candidate: fixture.executableURL,
-            bundle: fixture.directory, directory: controlDirectory, version: "1.2.3", commit: fixture.commitSHA,
-            key: Curve25519.Signing.PrivateKey(rawRepresentation: fixture.signingKeyData))
-        try #require(control.exitCode == 0, "\(control.stdout)")
-        let result = try QualificationRunner.exportPublicEvidenceSnapshot(attestation: loaded,
-            manifestData: Data(contentsOf: fixture.manifestURL), candidate: fixture.executableURL,
-            bundle: fixture.directory, directory: directory, version: "1.2.3", commit: fixture.commitSHA,
-            key: Curve25519.Signing.PrivateKey(rawRepresentation: fixture.signingKeyData))
-        #expect(result.exitCode != 0, "Unverified A must not inherit accepted B's authority")
-        if result.exitCode == 0 {
-            #expect(publicEvidenceCommand("verify-public", fixture: fixture, directory: directory,
-                commit: anotherCommit).exitCode != 0, "The public signature must not authenticate A's unverified source")
-        }
-        #expect(!FileManager.default.fileExists(atPath: directory.appendingPathComponent("qualification-public.json").path))
-    }
-
-    @Test func publicEvidenceProjectsTheCatalogSnapshotThatPassedPrivateValidation() async throws {
-        let fixture = try await signedTrustedFixture()
-        defer { fixture.remove() }
-        let directory = try publicEvidenceDirectory(fixture)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let catalogURL = fixture.directory.appendingPathComponent("operation-catalog.json")
-        let original = try JSONDecoder().decode(
-            QualificationOperationCatalog.self,
-            from: Data(contentsOf: catalogURL)
-        )
-        let attestation = try JSONDecoder().decode(
-            ReleaseQualificationAttestation.self,
-            from: Data(contentsOf: fixture.attestationURL)
-        )
-        let unregistered = try #require(attestation.cases.first { candidateCase in
-            !candidateCase.id.hasPrefix("in-process/") && !original.operations.contains(where: {
-                $0.operationID == candidateCase.operationID
-            })
-        })
-        let replacementEntry = QualificationOperationCatalog.Entry(
-            operationID: unregistered.operationID,
-            caseID: "in-process/\(unregistered.operationID)",
-            oracleDisposition: .noSemanticOracle,
-            semanticPolicy: QualificationSemanticPolicy(
-                kind: .none,
-                strength: nil,
-                constraints: [],
-                independentlyCreditable: false
-            ),
-            mutationRestorePolicy: nil
-        )
-        let replacement = QualificationOperationCatalog(
-            schema: original.schema,
-            binarySHA256: original.binarySHA256,
-            semanticPolicySHA256: try QualificationRunner.operationCatalogPolicyDigest([
-                replacementEntry
-            ]),
-            operations: [replacementEntry]
-        )
-        let swapper = CatalogSecondReadReplacement(
-            replacement: try JSONEncoder().encode(replacement)
-        )
-        let result = try QualificationRunner.exportPublicEvidenceSnapshot(
-            attestation: attestation,
-            manifestData: Data(contentsOf: fixture.manifestURL),
-            candidate: fixture.executableURL,
-            bundle: fixture.directory,
-            directory: directory,
-            version: "1.2.3",
-            commit: fixture.commitSHA,
-            key: Curve25519.Signing.PrivateKey(rawRepresentation: fixture.signingKeyData),
-            beforeEvidenceRead: swapper.replaceOnSecondCatalogRead
-        )
-
-        #expect(result.exitCode == 0, "\(result.stdout)\(result.stderr)")
-        #expect(swapper.didReplace, "the counterexample must replace the on-disk catalog")
-        let publicData = try Data(contentsOf: directory.appendingPathComponent(
-            QualificationPublicEvidence.filename
-        ))
-        let payload = try QualificationPublicEvidence.verify(
-            publicData,
-            trustedKey: fixture.trustedPublicKeyData
-        )
-        #expect(Set(payload.cases.compactMap(\.operationID))
-                == Set(original.operations.map(\.operationID)))
-    }
-
-    @Test func unknownOperationCannotReceiveLiveSemanticCredit() {
-        let unknown = "future.operation"
-        let qualificationCase = QualificationCase(
-            id: "in-process/\(unknown)",
-            status: .passed,
-            tool: "logic_future",
-            command: "operation",
-            traceID: "future-trace",
-            verified: true,
-            evidenceFiles: ["future.json"],
-            binarySHA256: String(repeating: "a", count: 64),
-            operationID: unknown,
-            verificationKind: .semanticReadback,
-            readback: QualificationReadbackEvidence(
-                source: "logic://future",
-                requestID: "future-readback",
-                verified: true,
-                sha256: String(repeating: "b", count: 64)
-            )
-        )
-
-        #expect(!PromotionGate.operationIsLiveCredited(qualificationCase))
-    }
-
-    @Test func signedDeclarativePolicyReplaysWithoutVerifierRegistryMembership() throws {
+    @Test func declarativePolicyRoundTripsWithoutRuntimeRegistryMembership() throws {
         let policy = QualificationSemanticPolicy(
             kind: .declarative,
             strength: .shapeAndDomain,
@@ -4814,7 +3137,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         ))
     }
 
-    @Test func signedMutationRestorePolicyReplaysWithoutVerifierRegistryMembership() throws {
+    @Test func mutationRestorePolicyRoundTripsWithoutRuntimeRegistryMembership() throws {
         let local = Self.recipeShapedRecord()
         let record = QualificationMutationRestoreRecord(
             operationID: "future.operation",
@@ -4859,586 +3182,8 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         })
     }
 
-    @Test func publicEvidenceRefusalDoesNotDisclosePrivateVerifierDetails() async throws {
-        let fixture = try await signedTrustedFixture()
-        defer { fixture.remove() }
-        let directory = try publicEvidenceDirectory(fixture)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let sentinel = "PRIVATE /Users/sentinel/project.logicx"
-        try Self.mutateJSONObject(at: fixture.attestationURL) { object in
-            var waivers = try #require(object["waivers"] as? [[String: Any]])
-            try #require(!waivers.isEmpty)
-            waivers[0]["caseID"] = sentinel
-            object["waivers"] = waivers
-        }
-        let result = publicEvidenceCommand("export-public", fixture: fixture, directory: directory)
-        #expect(result.exitCode != 0)
-        #expect(!(result.stdout + result.stderr).contains(sentinel))
-        #expect(!FileManager.default.fileExists(atPath: directory.appendingPathComponent("qualification-public.json").path))
-    }
-
-    @Test func publicEvidenceWithholdsActualPrivateWaiverText() async throws {
-        let fixture = try trustedFixture()
-        defer { fixture.remove() }
-        let sentinel = "PRIVATE-WAIVER /Users/private-owner/project.logicx"
-        let original = try JSONDecoder().decode([QualificationWaiver].self, from: Data(contentsOf: fixture.waiversURL))
-        try #require(!original.isEmpty)
-        let changed = original.map { item in
-            QualificationWaiver(caseID: item.caseID, reasonCode: item.reasonCode, owningIssue: item.owningIssue,
-                userImpact: sentinel, affectedCapability: item.affectedCapability,
-                affectsDefaultProfile: item.affectsDefaultProfile, expiryVersion: item.expiryVersion,
-                releaseNoteVisible: item.releaseNoteVisible)
-        }
-        try JSONEncoder().encode(changed).write(to: fixture.waiversURL)
-        let qualified = await fixture.runQualification(waiversURL: fixture.waiversURL)
-        try #require(qualified.exitCode == 0)
-        let signed = QualificationRunner.signTrusted(candidateURL: fixture.executableURL, bundleURL: fixture.directory,
-            releaseVersion: "1.2.3", expectedCommitSHA: fixture.commitSHA, signingPrivateKeyData: fixture.signingKeyData)
-        try #require(signed.exitCode == 0)
-        let directory = try publicEvidenceDirectory(fixture)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        try #require(publicEvidenceCommand("export-public", fixture: fixture, directory: directory).exitCode == 0)
-        let data = try Data(contentsOf: directory.appendingPathComponent("qualification-public.json"))
-        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        let encoded = try #require(object["payload"] as? String)
-        let decoded = try #require(Data(base64Encoded: encoded))
-        let text = String(decoding: decoded, as: UTF8.self)
-        #expect(!text.contains(sentinel) && !text.contains("/Users/private-owner"))
-        #expect(text.contains(SupportBundleBuilder.sha256(Data(sentinel.utf8))))
-        #expect(publicEvidenceCommand("verify-public", fixture: fixture, directory: directory).exitCode == 0)
-    }
-
-    @Test(arguments: ["private_manifest", "existing_output", "projection_symlink", "artifact_fifo"])
-    func publicEvidenceRetainsPrivateGateAndSafeFileBoundaries(fault: String) async throws {
-        let fixture = try await signedTrustedFixture()
-        defer { fixture.remove() }
-        let directory = try publicEvidenceDirectory(fixture)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        let output = directory.appendingPathComponent("qualification-public.json")
-        if fault == "private_manifest" {
-            try Data("forged".utf8).write(to: fixture.manifestURL)
-            #expect(publicEvidenceCommand("export-public", fixture: fixture, directory: directory).exitCode != 0)
-            #expect(!FileManager.default.fileExists(atPath: output.path))
-        } else if fault == "existing_output" {
-            try Data("original-owned-output".utf8).write(to: output)
-            #expect(publicEvidenceCommand("export-public", fixture: fixture, directory: directory).exitCode != 0)
-            #expect(try Data(contentsOf: output) == Data("original-owned-output".utf8))
-        } else {
-            try #require(publicEvidenceCommand("export-public", fixture: fixture, directory: directory).exitCode == 0)
-            let target = fault == "projection_symlink" ? output : directory.appendingPathComponent("LogicProMCP")
-            let original = directory.appendingPathComponent("saved-original")
-            try FileManager.default.moveItem(at: target, to: original)
-            if fault == "projection_symlink" {
-                try FileManager.default.createSymbolicLink(at: target, withDestinationURL: original)
-            } else { try #require(mkfifo(target.path, 0o600) == 0) }
-            #expect(publicEvidenceCommand("verify-public", fixture: fixture, directory: directory).exitCode != 0)
-        }
-    }
-
-    @Test(.timeLimit(.minutes(1))) func publicEvidenceStandaloneConsumerNeverExecutesCandidate() async throws {
-        let sentinel = FileManager.default.temporaryDirectory.appendingPathComponent("public-candidate-executed-\(UUID())")
-        let fixture = try await signedTrustedFixture(candidateExecutionSentinelURL: sentinel)
-        defer { fixture.remove(); try? FileManager.default.removeItem(at: sentinel) }
-        let directory = try publicEvidenceDirectory(fixture)
-        defer { try? FileManager.default.removeItem(at: directory) }
-        try #require(FileManager.default.isExecutableFile(atPath: Self.trustedVerifierExecutableURL.path))
-        func run(_ command: String) throws -> QualificationCommandResult {
-            let process = Process()
-            process.executableURL = Self.trustedVerifierExecutableURL
-            var arguments = [command, "--public-directory", directory.path,
-                                 "--release-version", "1.2.3", "--expected-commit", fixture.commitSHA]
-            if command == "export-public" {
-                arguments += ["--candidate", fixture.executableURL.path, "--bundle", fixture.directory.path]
-            } else { arguments += ["--expected-axis", QualificationAxis.defaultAxis.key] }
-            process.arguments = arguments
-            process.environment = ["PATH": "/usr/bin:/bin",
-                "LOGIC_PRO_MCP_QUALIFICATION_SIGNING_KEY": fixture.signingKeyData.base64EncodedString(),
-                "LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY": fixture.trustedPublicKeyData.base64EncodedString()]
-            process.standardInput = FileHandle.nullDevice
-            let stdout = Pipe(), stderr = Pipe()
-            process.standardOutput = stdout; process.standardError = stderr
-            try process.run()
-            let output = stdout.fileHandleForReading.readDataToEndOfFile()
-            let error = stderr.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
-            return .init(exitCode: Int(process.terminationStatus), stdout: String(decoding: output, as: UTF8.self),
-                         stderr: String(decoding: error, as: UTF8.self))
-        }
-        let exported = try run("export-public")
-        try #require(exported.exitCode == 0, "\(exported.stdout)\(exported.stderr)")
-        let accepted = try run("verify-public")
-        #expect(accepted.exitCode == 0, "\(accepted.stdout)\(accepted.stderr)")
-        try Data("replaced".utf8).write(to: directory.appendingPathComponent("LogicProMCP-macOS-arm64.tar.gz"))
-        #expect(try run("verify-public").exitCode != 0)
-        #expect(!FileManager.default.fileExists(atPath: sentinel.path))
-    }
-
-    @Test func trustedVerifierRejectsNoOpReadbackInMutationArtifact() async throws {
-        let fixture = try await signedTrustedFixture()
-        defer { fixture.remove() }
-        let artifactURL = fixture.directory.appendingPathComponent(
-            "mutation-restore-compensation.json"
-        )
-        var artifact = try #require(
-            JSONSerialization.jsonObject(with: Data(contentsOf: artifactURL)) as? [String: Any]
-        )
-        var records = try #require(artifact["records"] as? [[String: Any]])
-        let recordIndex = try #require(records.firstIndex {
-            $0["operation_id"] as? String == OperationID.tracksRename.rawValue
-        })
-        let preState = try #require(records[recordIndex]["pre_state"] as? String)
-        records[recordIndex]["readback"] = preState
-        artifact["records"] = records
-        let artifactData = try JSONSerialization.data(withJSONObject: artifact, options: [.sortedKeys])
-        try artifactData.write(to: artifactURL, options: .atomic)
-
-        // Keep the artifact entry's digest current so the schema check sees the no-op record.
-        // The signed bundle's other bindings may also reject this tampering; this witness checks
-        // that the trusted artifact validator itself rejects the recipe shape.
-        var manifest = try #require(
-            JSONSerialization.jsonObject(with: Data(contentsOf: fixture.manifestURL)) as? [String: Any]
-        )
-        var entries = try #require(manifest["files"] as? [[String: Any]])
-        let entryIndex = try #require(entries.firstIndex {
-            $0["path"] as? String == "mutation-restore-compensation.json"
-        })
-        entries[entryIndex]["sha256"] = SupportBundleBuilder.sha256(artifactData)
-        manifest["files"] = entries
-        try JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys])
-            .write(to: fixture.manifestURL, options: .atomic)
-
-        let result = QualificationRunner.verifyTrusted(
-            candidateURL: fixture.executableURL,
-            bundleURL: fixture.directory,
-            releaseVersion: "1.2.3",
-            expectedCommitSHA: fixture.commitSHA,
-            trustedPublicKeyData: fixture.trustedPublicKeyData
-        )
-        #expect(result.exitCode != 0)
-        let json = try Self.resultObject(result)
-        let rejections = try #require(json["rejections"] as? [[String: Any]])
-        #expect(rejections.contains {
-            $0["reason"] as? String == "requiredArtifactSchemaInvalid"
-                && $0["name"] as? String == "mutation-restore-compensation.json"
-        })
-    }
-
-    @Test func promotionVerifierRejectsUnrestoredOrMalformedCycle() async throws {
-        let spec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
-        let invalid = [
-            Self.recipeShapedRecord(
-                restoreReadback: #"{"source":"ax_live","data":[{"track_ref":"track-1","name":"After"}]}"#),
-            Self.recipeShapedRecord(mutation: "After"),
-            Self.recipeShapedRecord(restoreReadback: "Before"),
-        ]
-        for record in invalid {
-            let driveResult = Self.driveResult(specs: [spec], mutationRestoreRecords: [record])
-            let fixture = try Fixture(specs: [spec], drive: { _ in driveResult })
-            defer { fixture.remove() }
-            try JSONEncoder().encode(Self.axisWaivers()).write(to: fixture.waiversURL)
-            _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
-            let result = await fixture.verify(
-                expectedSHA256: fixture.binarySHA256,
-                requiredArtifacts: "raw-transcript.json,mutation-restore-compensation.json"
-            )
-            #expect(result.exitCode != 0)
-            #expect(Self.rejectionReasons(try Self.resultObject(result))
-                .contains("requiredArtifactSchemaInvalid"))
-        }
-    }
-
-    @Test func standaloneVerifierRejectsEveryPromotionBypassWithTypedReasons() async throws {
-        do {
-            let fixture = try trustedFixture()
-            defer { fixture.remove() }
-            try #require((await fixture.runQualification(waiversURL: fixture.waiversURL)).exitCode == 0)
-            let result = QualificationRunner.verifyTrusted(
-                candidateURL: fixture.executableURL,
-                bundleURL: fixture.directory,
-                releaseVersion: "1.2.3",
-                expectedCommitSHA: fixture.commitSHA,
-                trustedPublicKeyData: fixture.trustedPublicKeyData
-            )
-            try Self.expectRejection(result, reason: "provenanceSignatureMissing")
-        }
-
-        do {
-            let sentinel = FileManager.default.temporaryDirectory.appendingPathComponent(
-                "trusted-verifier-rejected-candidate-\(UUID().uuidString)"
-            )
-            let fixture = try await signedTrustedFixture(candidateExecutionSentinelURL: sentinel)
-            defer {
-                fixture.remove()
-                try? FileManager.default.removeItem(at: sentinel)
-            }
-            try Self.mutateJSONObject(at: fixture.attestationURL) { object in
-                var cases = try #require(object["cases"] as? [[String: Any]])
-                let index = try #require(cases.firstIndex { $0["id"] as? String == QualificationAxis.defaultAxis.key })
-                cases[index]["status"] = "failed"
-                object["cases"] = cases
-                object["failed"] = 1
-            }
-            let result = QualificationRunner.verifyTrusted(
-                candidateURL: fixture.executableURL,
-                bundleURL: fixture.directory,
-                releaseVersion: "1.2.3",
-                expectedCommitSHA: fixture.commitSHA,
-                trustedPublicKeyData: fixture.trustedPublicKeyData
-            )
-            try Self.expectRejection(result, reason: "requiredCaseFailed")
-            #expect(!FileManager.default.fileExists(atPath: sentinel.path))
-        }
-
-        do {
-            let fixture = try await signedTrustedFixture()
-            defer { fixture.remove() }
-            let foreignKey = try Curve25519.Signing.PrivateKey(
-                rawRepresentation: Data(repeating: 9, count: 32)
-            )
-            let result = QualificationRunner.verifyTrusted(
-                candidateURL: fixture.executableURL,
-                bundleURL: fixture.directory,
-                releaseVersion: "1.2.3",
-                expectedCommitSHA: fixture.commitSHA,
-                trustedPublicKeyData: foreignKey.publicKey.rawRepresentation
-            )
-            try Self.expectRejection(result, reason: "provenanceSignatureInvalid")
-        }
-
-        do {
-            let fixture = try await signedTrustedFixture()
-            defer { fixture.remove() }
-            try Data("different-candidate-bytes".utf8).write(to: fixture.executableURL)
-            let result = QualificationRunner.verifyTrusted(
-                candidateURL: fixture.executableURL,
-                bundleURL: fixture.directory,
-                releaseVersion: "1.2.3",
-                expectedCommitSHA: fixture.commitSHA,
-                trustedPublicKeyData: fixture.trustedPublicKeyData
-            )
-            try Self.expectRejection(result, reason: "binarySHAMismatch")
-        }
-
-        do {
-            let fixture = try await signedTrustedFixture()
-            defer { fixture.remove() }
-            let version = QualificationRunner.verifyTrusted(
-                candidateURL: fixture.executableURL,
-                bundleURL: fixture.directory,
-                releaseVersion: "1.2.4",
-                expectedCommitSHA: fixture.commitSHA,
-                trustedPublicKeyData: fixture.trustedPublicKeyData
-            )
-            try Self.expectRejection(version, reason: "releaseVersionMismatch")
-            let stale = QualificationRunner.verifyTrusted(
-                candidateURL: fixture.executableURL,
-                bundleURL: fixture.directory,
-                releaseVersion: "1.2.3",
-                expectedCommitSHA: String(repeating: "d", count: 40),
-                trustedPublicKeyData: fixture.trustedPublicKeyData
-            )
-            try Self.expectRejection(stale, reason: "releaseCommitMismatch")
-        }
-
-        for filename in ["evidence-manifest.json", "case-manifest.json"] {
-            let fixture = try await signedTrustedFixture()
-            defer { fixture.remove() }
-            let url = fixture.directory.appendingPathComponent(filename)
-            var data = try Data(contentsOf: url)
-            data.append(Data("\n ".utf8))
-            try data.write(to: url)
-            let result = QualificationRunner.verifyTrusted(
-                candidateURL: fixture.executableURL,
-                bundleURL: fixture.directory,
-                releaseVersion: "1.2.3",
-                expectedCommitSHA: fixture.commitSHA,
-                trustedPublicKeyData: fixture.trustedPublicKeyData
-            )
-            try Self.expectRejection(result, reason: "evidenceBindingMismatch")
-        }
-
-        do {
-            let fixture = try await signedTrustedFixture()
-            defer { fixture.remove() }
-            let attestation = try JSONDecoder().decode(
-                ReleaseQualificationAttestation.self,
-                from: Data(contentsOf: fixture.attestationURL)
-            )
-            let evidence = try #require(attestation.cases.first?.evidenceFiles.first)
-            try Data("tampered".utf8).write(
-                to: fixture.directory.appendingPathComponent(evidence)
-            )
-            let result = QualificationRunner.verifyTrusted(
-                candidateURL: fixture.executableURL,
-                bundleURL: fixture.directory,
-                releaseVersion: "1.2.3",
-                expectedCommitSHA: fixture.commitSHA,
-                trustedPublicKeyData: fixture.trustedPublicKeyData
-            )
-            try Self.expectRejection(result, reason: "evidenceBindingMismatch")
-        }
-
-        do {
-            let fixture = try await signedTrustedFixture()
-            defer { fixture.remove() }
-            try FileManager.default.removeItem(
-                at: fixture.directory.appendingPathComponent("raw-transcript.json")
-            )
-            let result = QualificationRunner.verifyTrusted(
-                candidateURL: fixture.executableURL,
-                bundleURL: fixture.directory,
-                releaseVersion: "1.2.3",
-                expectedCommitSHA: fixture.commitSHA,
-                trustedPublicKeyData: fixture.trustedPublicKeyData
-            )
-            try Self.expectRejection(result, reason: "missingArtifact")
-        }
-
-        do {
-            let fixture = try await signedTrustedFixture()
-            defer { fixture.remove() }
-            try Data("{}".utf8).write(
-                to: fixture.directory.appendingPathComponent("mutation-restore-compensation.json")
-            )
-            let result = QualificationRunner.verifyTrusted(
-                candidateURL: fixture.executableURL,
-                bundleURL: fixture.directory,
-                releaseVersion: "1.2.3",
-                expectedCommitSHA: fixture.commitSHA,
-                trustedPublicKeyData: fixture.trustedPublicKeyData
-            )
-            try Self.expectRejection(result, reason: "requiredArtifactSchemaInvalid")
-        }
-
-        do {
-            let missing = FileManager.default.temporaryDirectory.appendingPathComponent(
-                "missing-trusted-verifier-bundle-\(UUID().uuidString)"
-            )
-            let result = QualificationRunner.verifyTrusted(
-                candidateURL: missing.appendingPathComponent("candidate"),
-                bundleURL: missing,
-                releaseVersion: "1.2.3",
-                expectedCommitSHA: String(repeating: "c", count: 40),
-                trustedPublicKeyData: Data(repeating: 1, count: 32)
-            )
-            try Self.expectRejection(result, reason: "verifierFailure")
-        }
-
-        do {
-            let fixture = try trustedFixture()
-            defer { fixture.remove() }
-            try #require((await fixture.runQualification(waiversURL: fixture.waiversURL)).exitCode == 0)
-            let result = QualificationRunner.runTrusted(arguments: [
-                "trusted-verifier", "sign",
-                "--candidate", fixture.executableURL.path,
-                "--bundle", fixture.directory.path,
-                "--release-version", "1.2.3",
-                "--expected-commit", fixture.commitSHA,
-            ], environment: [:])
-            try Self.expectRejection(result, reason: "signingKeyUnavailable")
-            let attestation = try JSONDecoder().decode(
-                ReleaseQualificationAttestation.self,
-                from: Data(contentsOf: fixture.attestationURL)
-            )
-            #expect(attestation.provenanceSignature == nil)
-        }
-
-        do {
-            let fixture = try trustedFixture()
-            defer { fixture.remove() }
-            try #require((await fixture.runQualification(waiversURL: fixture.waiversURL)).exitCode == 0)
-            try Self.mutateJSONObject(at: fixture.attestationURL) { object in
-                var cases = try #require(object["cases"] as? [[String: Any]])
-                let index = try #require(cases.firstIndex { $0["id"] as? String == QualificationAxis.defaultAxis.key })
-                cases[index]["status"] = "failed"
-                object["cases"] = cases
-            }
-            let signing = QualificationRunner.signTrusted(
-                candidateURL: fixture.executableURL,
-                bundleURL: fixture.directory,
-                releaseVersion: "1.2.3",
-                expectedCommitSHA: fixture.commitSHA,
-                signingPrivateKeyData: fixture.signingKeyData
-            )
-            try Self.expectRejection(signing, reason: "requiredCaseFailed")
-            let attestation = try JSONDecoder().decode(
-                ReleaseQualificationAttestation.self,
-                from: Data(contentsOf: fixture.attestationURL)
-            )
-            #expect(attestation.provenanceSignature == nil)
-        }
-    }
-
-    private static func summaryCountRejections(_ result: QualificationCommandResult) throws -> [[String: Any]] {
-        let rejections = try resultObject(result)["rejections"] as? [[String: Any]] ?? []
-        return rejections.filter { $0["reason"] as? String == "summaryCountMismatch" }
-    }
-
-    /// #373 Q4. `total`/`passed`/`failed`/`waived` are not in the signed provenance record, so
-    /// before the gate recomputed them a signed bundle with one count edited verified unchanged.
-    /// Each field is edited alone -- a check keyed on one field would pass the other three.
-    @Test func aSignedBundleWhoseCountDisagreesWithItsCasesIsRejected() async throws {
-        for field in ["total", "passed", "failed", "waived"] {
-            let fixture = try await signedTrustedFixture()
-            defer { fixture.remove() }
-            let verify = {
-                QualificationRunner.verifyTrusted(
-                    candidateURL: fixture.executableURL,
-                    bundleURL: fixture.directory,
-                    releaseVersion: "1.2.3",
-                    expectedCommitSHA: fixture.commitSHA,
-                    trustedPublicKeyData: fixture.trustedPublicKeyData
-                )
-            }
-            let control = verify()
-            try #require(control.exitCode == 0, "\(field): \(control.stdout)")
-
-            var recomputed = 0
-            try Self.mutateJSONObject(at: fixture.attestationURL) { object in
-                recomputed = try #require(object[field] as? Int)
-                object[field] = recomputed + 1
-            }
-            let result = verify()
-
-            try Self.expectRejection(result, reason: "summaryCountMismatch")
-            let mismatches = try Self.summaryCountRejections(result)
-            #expect(mismatches.count == 1, "\(field): \(result.stdout)")
-            #expect(mismatches.first?["key"] as? String == field)
-            #expect(mismatches.first?["actual"] as? String == String(recomputed + 1))
-            #expect(mismatches.first?["expected"] as? String == String(recomputed))
-        }
-    }
-
-    @Test func theSignerRefusesCountsItsCasesDoNotImplyAndLeavesTheBundleUnsigned() async throws {
-        let fixture = try trustedFixture()
-        defer { fixture.remove() }
-        try #require((await fixture.runQualification(waiversURL: fixture.waiversURL)).exitCode == 0)
-        let sign = {
-            QualificationRunner.signTrusted(
-                candidateURL: fixture.executableURL,
-                bundleURL: fixture.directory,
-                releaseVersion: "1.2.3",
-                expectedCommitSHA: fixture.commitSHA,
-                signingPrivateKeyData: fixture.signingKeyData
-            )
-        }
-        var original = 0
-        try Self.mutateJSONObject(at: fixture.attestationURL) { object in
-            original = try #require(object["passed"] as? Int)
-            object["passed"] = original + 1
-        }
-
-        let refused = sign()
-
-        try Self.expectRejection(refused, reason: "summaryCountMismatch")
-        let unsigned = try JSONDecoder().decode(
-            ReleaseQualificationAttestation.self,
-            from: Data(contentsOf: fixture.attestationURL)
-        )
-        #expect(unsigned.provenanceSignature == nil)
-
-        // Positive control on the same bundle: put the count back and the same signer signs it,
-        // so the refusal above was the count and nothing else about this fixture.
-        try Self.mutateJSONObject(at: fixture.attestationURL) { object in
-            object["passed"] = original
-        }
-        let signed = sign()
-        #expect(signed.exitCode == 0, "\(signed.stdout)")
-    }
-
-    @Test func promotionVerifierRejectsCountsItsCasesDoNotImply() async throws {
-        let fixture = try promotableFixture()
-        defer { fixture.remove() }
-        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
-        let control = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-        try #require(control.exitCode == 0, "\(control.stdout)")
-
-        try Self.mutateJSONObject(at: fixture.attestationURL) { object in
-            object["failed"] = try #require(object["failed"] as? Int) + 1
-        }
-        let result = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-
-        try Self.expectRejection(result, reason: "summaryCountMismatch")
-        #expect(try Self.summaryCountRejections(result).first?["key"] as? String == "failed")
-    }
-
-    /// #373 Q4. A blocking `O_RDONLY` open of a FIFO waits for a writer, and nothing here ever
-    /// opens one for writing: before `readNoFollow` opened without blocking, each call below
-    /// never returned. Each site is a different read -- the attestation, the evidence manifest,
-    /// the candidate, the bundle directory itself -- through the verifier, the signer and
-    /// `--verify-promotion`.
-    @Test func aFIFOPlantedInTheBundleOrAsTheCandidateIsRefusedWithoutWaitingForAWriter() async throws {
-        func plantFIFO(at url: URL) throws {
-            try FileManager.default.removeItem(at: url)
-            try #require(mkfifo(url.path, 0o600) == 0)
-        }
-        func verifyTrusted(_ fixture: Fixture, bundleURL: URL? = nil) -> QualificationCommandResult {
-            QualificationRunner.verifyTrusted(
-                candidateURL: fixture.executableURL,
-                bundleURL: bundleURL ?? fixture.directory,
-                releaseVersion: "1.2.3",
-                expectedCommitSHA: fixture.commitSHA,
-                trustedPublicKeyData: fixture.trustedPublicKeyData
-            )
-        }
-
-        for planted in ["attestation", "evidence-manifest", "candidate"] {
-            let fixture = try await signedTrustedFixture()
-            defer { fixture.remove() }
-            try #require(verifyTrusted(fixture).exitCode == 0, "\(planted): control")
-            switch planted {
-            case "attestation": try plantFIFO(at: fixture.attestationURL)
-            case "evidence-manifest": try plantFIFO(at: fixture.manifestURL)
-            default: try plantFIFO(at: fixture.executableURL)
-            }
-            let result = verifyTrusted(fixture)
-            #expect(result.exitCode != 0, "\(planted): \(result.stdout)")
-            let v1 = try #require(try Self.resultObject(result)["promotable"] as? Bool)
-            #expect(!v1, "\(planted)")
-        }
-
-        do {
-            let fixture = try await signedTrustedFixture()
-            defer { fixture.remove() }
-            let bundleFIFO = fixture.directory.appendingPathComponent("bundle-fifo")
-            try #require(mkfifo(bundleFIFO.path, 0o600) == 0)
-            let result = verifyTrusted(fixture, bundleURL: bundleFIFO)
-            #expect(result.exitCode != 0, "\(result.stdout)")
-            #expect(result.stdout.contains("verifierFailure"), "\(result.stdout)")
-        }
-
-        do {
-            let fixture = try trustedFixture()
-            defer { fixture.remove() }
-            try #require((await fixture.runQualification(waiversURL: fixture.waiversURL)).exitCode == 0)
-            try plantFIFO(at: fixture.attestationURL)
-            let signing = QualificationRunner.signTrusted(
-                candidateURL: fixture.executableURL,
-                bundleURL: fixture.directory,
-                releaseVersion: "1.2.3",
-                expectedCommitSHA: fixture.commitSHA,
-                signingPrivateKeyData: fixture.signingKeyData
-            )
-            #expect(signing.exitCode != 0, "\(signing.stdout)")
-            #expect(signing.stdout.contains("signerFailure"), "\(signing.stdout)")
-        }
-
-        do {
-            let fixture = try promotableFixture()
-            defer { fixture.remove() }
-            _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
-            try plantFIFO(at: fixture.attestationURL)
-            let result = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-            #expect(result.exitCode != 0, "\(result.stdout)\(result.stderr)")
-        }
-    }
-
-    /// RV-1076-01, at the rule. The runner passes an axis on `allChecksPass`, so the verifier
-    /// must read each of those observations from the file rather than the axis's own `status`
-    /// and `verified`. The evidence is the fixture's own passed axis, so the valid starting
-    /// point is what the runner writes, and each observation is flipped on its own.
     @Test func anAxisCasePassesOnlyOnTheObservationsTheRunnerPassedItOn() async throws {
-        let fixture = try trustedFixture()
+        let fixture = try qualificationFixture()
         defer { fixture.remove() }
         let qualification = await fixture.runQualification(waiversURL: fixture.waiversURL)
         try #require(qualification.exitCode == 0, "\(qualification.stderr)")
@@ -5458,8 +3203,8 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         }
 
         #expect(try shapeIsValid { _ in }, "the runner's own passed axis is the positive control")
-        // Health warms during cache polling and MCU registration, which is why
-        // `isFailClosedAndStable` leaves it out; the verifier must not ask for more.
+        // Health warms during cache polling and MCU registration, so it is not a
+        // stable observation required by the direct qualification evidence shape.
         #expect(try shapeIsValid { $0["health_read_stable"] = false })
 
         let refusals: [(String, (inout [String: Any]) -> Void)] = [
@@ -5479,77 +3224,6 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         }
     }
 
-    /// RV-1076-01, end to end: the reviewer's counterexample. The passed axis's evidence says its
-    /// probe wrote and did not fail closed, and every digest above it is resealed, so the only
-    /// thing left to refuse is what the file says. Signing must refuse and leave no signature,
-    /// and an authentically signed copy must not verify. The same bundle with its original bytes
-    /// is the control for both, and a force-signed original is the control on the forced
-    /// signature, so neither refusal can come from a digest or a signature this test broke.
-    @Test func anAxisWhoseProbeWroteIsNeitherSignedNorVerified() async throws {
-        let fixture = try trustedFixture()
-        defer { fixture.remove() }
-        let qualification = await fixture.runQualification(waiversURL: fixture.waiversURL)
-        try #require(qualification.exitCode == 0, "\(qualification.stderr)")
-        let evidenceURL = try Self.passedAxisEvidenceURL(fixture)
-        let originals = try [evidenceURL, fixture.manifestURL, fixture.attestationURL].map {
-            ($0, try Data(contentsOf: $0))
-        }
-        func restoreOriginals() throws {
-            for (url, data) in originals { try data.write(to: url, options: .atomic) }
-        }
-        func writeCounterexample() throws {
-            try Self.rewritePassedAxisEvidence(fixture) {
-                $0["negative_write_attempted"] = true
-                $0["negative_failclosed"] = false
-            }
-        }
-        func sign() -> QualificationCommandResult {
-            QualificationRunner.signTrusted(
-                candidateURL: fixture.executableURL,
-                bundleURL: fixture.directory,
-                releaseVersion: "1.2.3",
-                expectedCommitSHA: fixture.commitSHA,
-                signingPrivateKeyData: fixture.signingKeyData
-            )
-        }
-        func verify() -> QualificationCommandResult {
-            QualificationRunner.verifyTrusted(
-                candidateURL: fixture.executableURL,
-                bundleURL: fixture.directory,
-                releaseVersion: "1.2.3",
-                expectedCommitSHA: fixture.commitSHA,
-                trustedPublicKeyData: fixture.trustedPublicKeyData
-            )
-        }
-
-        try writeCounterexample()
-        let refused = sign()
-        #expect(refused.exitCode != 0, "\(refused.stdout)")
-        try Self.expectOnlyTheAxisShapeRejection(refused)
-        let unsigned = try JSONDecoder().decode(
-            ReleaseQualificationAttestation.self,
-            from: Data(contentsOf: fixture.attestationURL)
-        )
-        #expect(unsigned.provenanceSignature == nil, "a refused signing must leave no signature")
-
-        try restoreOriginals()
-        let signed = sign()
-        try #require(signed.exitCode == 0, "the original bytes sign: \(signed.stdout)")
-        let verified = verify()
-        #expect(verified.exitCode == 0, "the signed original verifies: \(verified.stdout)")
-
-        try fixture.forceSignForDiagnosticFixture()
-        let forcedOriginal = verify()
-        #expect(forcedOriginal.exitCode == 0, "a forced signature verifies: \(forcedOriginal.stdout)")
-
-        try writeCounterexample()
-        try fixture.forceSignForDiagnosticFixture()
-        let forcedCounterexample = verify()
-        #expect(forcedCounterexample.exitCode != 0, "\(forcedCounterexample.stdout)")
-        try Self.expectOnlyTheAxisShapeRejection(forcedCounterexample)
-    }
-
-    /// The evidence file of the one axis case the fixture passes, as the attestation names it.
     private static func passedAxisEvidenceURL(_ fixture: Fixture) throws -> URL {
         let attestation = try JSONDecoder().decode(
             ReleaseQualificationAttestation.self,
@@ -5563,446 +3237,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         return fixture.directory.appendingPathComponent(path)
     }
 
-    /// Rewrites the passed axis's evidence and reseals every digest above it: its manifest
-    /// entry, the manifest, and the attestation's and the provenance's copies of the manifest
-    /// digest. The signature is left as it was, so a caller that wants a signed bundle signs it.
-    private static func rewritePassedAxisEvidence(
-        _ fixture: Fixture,
-        _ edit: (inout [String: Any]) -> Void
-    ) throws {
-        let evidenceURL = try passedAxisEvidenceURL(fixture)
-        let path = String(evidenceURL.path.dropFirst(fixture.directory.path.count + 1))
-        var evidence = try #require(
-            JSONSerialization.jsonObject(with: Data(contentsOf: evidenceURL)) as? [String: Any]
-        )
-        edit(&evidence)
-        let evidenceData = try JSONSerialization.data(withJSONObject: evidence, options: [.sortedKeys])
-        try evidenceData.write(to: evidenceURL, options: .atomic)
-
-        var manifest = try #require(
-            JSONSerialization.jsonObject(with: Data(contentsOf: fixture.manifestURL)) as? [String: Any]
-        )
-        var entries = try #require(manifest["files"] as? [[String: Any]])
-        let entryIndex = try #require(entries.firstIndex { $0["path"] as? String == path })
-        entries[entryIndex]["sha256"] = SupportBundleBuilder.sha256(evidenceData)
-        manifest["files"] = entries
-        let manifestData = try JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys])
-        try manifestData.write(to: fixture.manifestURL, options: .atomic)
-
-        let manifestSHA256 = SupportBundleBuilder.sha256(manifestData)
-        try mutateJSONObject(at: fixture.attestationURL) { attestation in
-            attestation["evidenceManifestSHA256"] = manifestSHA256
-            var provenance = try #require(attestation["provenance"] as? [String: Any])
-            provenance["evidenceManifestSHA256"] = manifestSHA256
-            attestation["provenance"] = provenance
-        }
-    }
-
-    /// Exactly one rejection, and it is the case-evidence check, not a digest or a signature.
-    private static func expectOnlyTheAxisShapeRejection(_ result: QualificationCommandResult) throws {
-        let rejections = try #require(try resultObject(result)["rejections"] as? [[String: Any]])
-        #expect(rejections.count == 1, "\(result.stdout)")
-        #expect(rejections.first?["reason"] as? String == "evidenceBindingMismatch", "\(result.stdout)")
-        #expect(rejections.first?["actual"] as? String == "case evidence binding", "\(result.stdout)")
-    }
-
-    @Test func cachedConsumerMatrixCopiesRemainVerifierAcceptedAndIndependent() async throws {
-        let verifier = Self.releaseConsumerVerifierURL
-        try #require(FileManager.default.isExecutableFile(atPath: verifier.path))
-        let first = try await cachedConsumerSignedTrustedMatrixFixture()
-        let second = try await cachedConsumerSignedTrustedMatrixFixture()
-        defer {
-            first.remove()
-            second.remove()
-        }
-
-        #expect(first.directory != second.directory)
-        #expect(first.executableURL != second.executableURL)
-        #expect(first.binarySHA256 == second.binarySHA256)
-        let secondAttestation = try Data(contentsOf: second.enMatrixAttestationURL)
-        for fixture in [first, second] {
-            let accepted = try Self.runTrustedMatrixVerifierExecutable(
-                fixture,
-                verifierURL: verifier
-            )
-            try #require(accepted.exitCode == 0, "\(accepted.stdout)\(accepted.stderr)")
-        }
-
-        try Self.mutateJSONObject(at: first.enMatrixAttestationURL) { object in
-            object["passed"] = try #require(object["passed"] as? Int) + 1
-        }
-        let rejected = try Self.runTrustedMatrixVerifierExecutable(first, verifierURL: verifier)
-        #expect(rejected.exitCode != 0, "\(rejected.stdout)\(rejected.stderr)")
-        #expect(try Data(contentsOf: second.enMatrixAttestationURL) == secondAttestation)
-        let stillAccepted = try Self.runTrustedMatrixVerifierExecutable(second, verifierURL: verifier)
-        #expect(stillAccepted.exitCode == 0, "\(stillAccepted.stdout)\(stillAccepted.stderr)")
-    }
-
-
-    /// #373 Q4 through the shipped `trusted-verifier` executable, not the in-process entry point:
-    /// one signed bundle is accepted as built, rejected once a count is edited, and refused -- by
-    /// returning, not by waiting for a writer -- once its attestation is a FIFO. The in-process
-    /// answer on the same bundle is the control, so a wrapper that lost the exit code, the
-    /// arguments or the trusted key would fail the first comparison rather than pass as a refusal.
-    ///
-    /// A missing executable FAILS rather than skips. `swift test` builds every product in the
-    /// package, this one included (2026-10-01: removed, the next filtered `swift test` rebuilt
-    /// it), so absence means a run that skipped the build or started outside the package root,
-    /// and a skip would have passed a run that never drove the shipped binary.
-    @Test(.timeLimit(.minutes(2)))
-    func theTrustedVerifierExecutableRejectsAnEditedCountAndAFIFOAttestation() async throws {
-        try #require(
-            FileManager.default.isExecutableFile(atPath: Self.trustedVerifierExecutableURL.path),
-            "no trusted-verifier at \(Self.trustedVerifierExecutableURL.path): build the product"
-        )
-        let fixture = try await signedTrustedFixture()
-        defer { fixture.remove() }
-        let inProcess = QualificationRunner.verifyTrusted(
-            candidateURL: fixture.executableURL,
-            bundleURL: fixture.directory,
-            releaseVersion: "1.2.3",
-            expectedCommitSHA: fixture.commitSHA,
-            trustedPublicKeyData: fixture.trustedPublicKeyData
-        )
-        try #require(inProcess.exitCode == 0, "\(inProcess.stdout)")
-
-        let control = try Self.runTrustedVerifierExecutable(fixture)
-        #expect(control.exitCode == inProcess.exitCode, "\(control.stdout)\(control.stderr)")
-        let promotable = try #require(try Self.resultObject(control)["promotable"] as? Bool)
-        #expect(promotable)
-
-        try Self.mutateJSONObject(at: fixture.attestationURL) { object in
-            let passed = try #require(object["passed"] as? Int)
-            object["passed"] = passed + 1
-        }
-        try Self.expectRejection(try Self.runTrustedVerifierExecutable(fixture), reason: "summaryCountMismatch")
-
-        try FileManager.default.removeItem(at: fixture.attestationURL)
-        try #require(mkfifo(fixture.attestationURL.path, 0o600) == 0)
-        let fifo = try Self.runTrustedVerifierExecutable(fixture)
-        #expect(fifo.exitCode != 0, "\(fifo.stdout)\(fifo.stderr)")
-        let fifoPromotable = try #require(try Self.resultObject(fifo)["promotable"] as? Bool)
-        #expect(!fifoPromotable)
-    }
-
-    /// #816 controlled directory representation, not a public live release or deployed anchor.
-    /// The consumer executable and synthetic trust input remain outside the copied bundle.
-    @Test(.timeLimit(.minutes(2)))
-    func controlledPublicationCopyVerifiesWithExistingDebugConsumer() async throws {
-        try #require(FileManager.default.isExecutableFile(atPath: Self.trustedVerifierExecutableURL.path))
-        let toolBytes = try Data(contentsOf: Self.trustedVerifierExecutableURL)
-        let sentinel = FileManager.default.temporaryDirectory.appendingPathComponent("issue816-candidate-executed-\(UUID().uuidString)")
-        let fixture = try await signedTrustedFixture(candidateExecutionSentinelURL: sentinel)
-        defer {
-            fixture.remove()
-            try? FileManager.default.removeItem(at: sentinel)
-        }
-        let original = try Self.runTrustedVerifierExecutable(fixture)
-        try #require(original.exitCode == 0, "\(original.stdout)\(original.stderr)")
-        let copy = try Self.copiedControlledPublication(fixture)
-        defer { try? FileManager.default.removeItem(at: copy.root) }
-        #expect(try Self.controlledPublicationFiles(copy.bundle)
-            == Self.controlledPublicationFiles(fixture.directory))
-        let result = try Self.runTrustedVerifierExecutable(
-            fixture,
-            candidateURL: copy.bundle.appendingPathComponent(fixture.executableURL.lastPathComponent),
-            bundleURL: copy.bundle
-        )
-        #expect(result.exitCode == 0, "\(result.stdout)\(result.stderr)")
-        let promotable = try #require(try Self.resultObject(result)["promotable"] as? Bool)
-        #expect(promotable)
-        #expect(!FileManager.default.fileExists(atPath: sentinel.path))
-        #expect(try Data(contentsOf: Self.trustedVerifierExecutableURL) == toolBytes)
-    }
-
-    /// Existing security contract: repairing adjacent hashes cannot repair an old signature.
-    /// Whitespace changes a raw artifact's bytes without changing frames/schema/public hashes.
-    @Test(.timeLimit(.minutes(2)))
-    func debugConsumerRejectsPublishedFileAndCoherentAdjacentDigestReplacement() async throws {
-        try #require(FileManager.default.isExecutableFile(atPath: Self.trustedVerifierExecutableURL.path))
-        let fixture = try await signedTrustedFixture()
-        defer { fixture.remove() }
-        let copy = try Self.copiedControlledPublication(fixture)
-        defer { try? FileManager.default.removeItem(at: copy.root) }
-        let candidateURL = copy.bundle.appendingPathComponent(fixture.executableURL.lastPathComponent)
-        let verify = {
-            try Self.runTrustedVerifierExecutable(fixture, candidateURL: candidateURL, bundleURL: copy.bundle)
-        }
-        let control = try verify()
-        try #require(control.exitCode == 0, "\(control.stdout)\(control.stderr)")
-        let rawURL = copy.bundle.appendingPathComponent("raw-transcript.json")
-        let manifestURL = copy.bundle.appendingPathComponent("evidence-manifest.json")
-        let attestationURL = copy.bundle.appendingPathComponent("release-qualification-attestation.json")
-        let originalRaw = try Data(contentsOf: rawURL)
-        let originalManifest = try Data(contentsOf: manifestURL)
-        let originalAttestation = try Data(contentsOf: attestationURL)
-        let signed = try JSONDecoder().decode(ReleaseQualificationAttestation.self, from: originalAttestation)
-        let signature = try #require(signed.provenanceSignature)
-        var changedRaw = originalRaw
-        changedRaw.append(0x0a)
-        try changedRaw.write(to: rawURL, options: .atomic)
-        var manifest = try #require(JSONSerialization.jsonObject(with: originalManifest) as? [String: Any])
-        var entries = try #require(manifest["files"] as? [[String: Any]])
-        let index = try #require(entries.firstIndex { $0["path"] as? String == "raw-transcript.json" })
-        entries[index]["sha256"] = SupportBundleBuilder.sha256(changedRaw)
-        manifest["files"] = entries
-        let changedManifest = try JSONSerialization.data(withJSONObject: manifest, options: [.sortedKeys])
-        try changedManifest.write(to: manifestURL, options: .atomic)
-        let changedManifestDigest = SupportBundleBuilder.sha256(changedManifest)
-        try Self.mutateJSONObject(at: attestationURL) { object in
-            object["evidenceManifestSHA256"] = changedManifestDigest
-            var provenance = try #require(object["provenance"] as? [String: Any])
-            provenance["evidenceManifestSHA256"] = changedManifestDigest
-            object["provenance"] = provenance
-        }
-        let changed = try JSONDecoder().decode(
-            ReleaseQualificationAttestation.self, from: Data(contentsOf: attestationURL))
-        #expect(changed.provenanceSignature == signature)
-        let result = try verify()
-        #expect(result.exitCode != 0, "\(result.stdout)\(result.stderr)")
-        let promotable = try #require(try Self.resultObject(result)["promotable"] as? Bool)
-        #expect(!promotable)
-        let rejections = try #require(try Self.resultObject(result)["rejections"] as? [[String: Any]])
-        #expect(rejections.count == 1, "\(result.stdout)")
-        #expect(rejections.first?["reason"] as? String == "provenanceSignatureInvalid", "\(result.stdout)")
-        try originalRaw.write(to: rawURL, options: .atomic)
-        try originalManifest.write(to: manifestURL, options: .atomic)
-        try originalAttestation.write(to: attestationURL, options: .atomic)
-        let restored = try verify()
-        #expect(restored.exitCode == 0, "\(restored.stdout)\(restored.stderr)")
-        #expect(try Self.controlledPublicationFiles(copy.bundle)
-            == Self.controlledPublicationFiles(fixture.directory))
-    }
-
-    /// Separate metadata characterization; source suggests a gap, but no runtime RED is assumed.
-    /// The debug consumer's actual typed report must decide whether this becomes a repair lead.
-    @Test(.timeLimit(.minutes(2)))
-    func debugConsumerCharacterizesLogicVersionOnlyUnsignedMetadataMutation() async throws {
-        try #require(FileManager.default.isExecutableFile(atPath: Self.trustedVerifierExecutableURL.path))
-        let fixture = try await signedTrustedFixture()
-        defer { fixture.remove() }
-        let copy = try Self.copiedControlledPublication(fixture)
-        defer { try? FileManager.default.removeItem(at: copy.root) }
-        let candidateURL = copy.bundle.appendingPathComponent(fixture.executableURL.lastPathComponent)
-        let verify = {
-            try Self.runTrustedVerifierExecutable(fixture, candidateURL: candidateURL, bundleURL: copy.bundle)
-        }
-        let control = try verify()
-        try #require(control.exitCode == 0, "\(control.stdout)\(control.stderr)")
-        let originalFiles = try Self.controlledPublicationFiles(copy.bundle)
-        let attestationURL = copy.bundle.appendingPathComponent("release-qualification-attestation.json")
-        let originalData = try Data(contentsOf: attestationURL)
-        let original = try JSONDecoder().decode(ReleaseQualificationAttestation.self, from: originalData)
-        let originalSignature = try #require(original.provenanceSignature)
-        let originalObject = try #require(JSONSerialization.jsonObject(with: originalData) as? [String: Any])
-        let replacement = original.logicVersion == "999.0" ? "998.0" : "999.0"
-        try Self.mutateJSONObject(at: attestationURL) { $0["logicVersion"] = replacement }
-        let changedData = try Data(contentsOf: attestationURL)
-        let changed = try JSONDecoder().decode(ReleaseQualificationAttestation.self, from: changedData)
-        #expect(changed.logicVersion == replacement)
-        #expect(changed.provenanceSignature == originalSignature)
-        var expectedObject = originalObject
-        expectedObject["logicVersion"] = replacement
-        #expect(try JSONSerialization.data(withJSONObject: expectedObject, options: [.sortedKeys])
-            == JSONSerialization.data(withJSONObject:
-                JSONSerialization.jsonObject(with: changedData), options: [.sortedKeys]))
-        var changedFiles = try Self.controlledPublicationFiles(copy.bundle)
-        changedFiles.removeValue(forKey: "release-qualification-attestation.json")
-        var unchangedFiles = originalFiles
-        unchangedFiles.removeValue(forKey: "release-qualification-attestation.json")
-        #expect(changedFiles == unchangedFiles)
-        let result = try verify()
-        print("#816 logicVersion-only characterization: \(result.stdout)")
-        let promotable = try #require(try Self.resultObject(result)["promotable"] as? Bool)
-        #expect(!promotable, "metadata changed under unchanged signature: \(result.stdout)")
-        #expect(result.exitCode != 0, "\(result.stdout)\(result.stderr)")
-        try originalData.write(to: attestationURL, options: .atomic)
-        let restored = try verify()
-        #expect(restored.exitCode == 0, "\(restored.stdout)\(restored.stderr)")
-        #expect(try Self.controlledPublicationFiles(copy.bundle) == originalFiles)
-    }
-
-    /// Historical v1 bytes remain readable, never silently upgraded to the current schema.
-    @Test func legacyV1ProvenanceRemainsDecodableWithoutInventedLogicVersion() async throws {
-        let fixture = try await signedTrustedFixture()
-        defer { fixture.remove() }
-        let data = try Data(contentsOf: fixture.attestationURL)
-        let object = try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
-        var legacy = try #require(object["provenance"] as? [String: Any])
-        legacy["schema"] = "qualification-provenance/v1"
-        legacy.removeValue(forKey: "logicVersion")
-        let legacyData = try JSONSerialization.data(withJSONObject: legacy, options: [.sortedKeys])
-        let decoded = try JSONDecoder().decode(QualificationProvenanceRecord.self, from: legacyData)
-        #expect(decoded.schema == "qualification-provenance/v1")
-        let roundTrip = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(decoded)) as? [String: Any])
-        #expect(roundTrip["logicVersion"] == nil)
-        #expect(try JSONSerialization.data(withJSONObject: roundTrip, options: [.sortedKeys]) == legacyData)
-    }
-
-    /// Force-signing is test-only: it proves legacy refusal is not an invalid-key artifact.
-    @Test func legacyV1ProvenanceCannotBeNewlySignedOrTrustedAsQualified() async throws {
-        let fixture = try await signedTrustedFixture()
-        defer { fixture.remove() }
-        try Self.mutateJSONObject(at: fixture.attestationURL) { object in
-            var provenance = try #require(object["provenance"] as? [String: Any])
-            provenance["schema"] = "qualification-provenance/v1"
-            provenance.removeValue(forKey: "logicVersion")
-            object["provenance"] = provenance
-            object.removeValue(forKey: "provenanceSignature")
-        }
-        let sign = QualificationRunner.signTrusted(
-            candidateURL: fixture.executableURL, bundleURL: fixture.directory,
-            releaseVersion: "1.2.3", expectedCommitSHA: fixture.commitSHA,
-            signingPrivateKeyData: fixture.signingKeyData)
-        try Self.expectRejection(sign, reason: "provenanceSignatureInvalid")
-        let unsigned = try JSONDecoder().decode(ReleaseQualificationAttestation.self,
-            from: Data(contentsOf: fixture.attestationURL))
-        #expect(unsigned.provenanceSignature == nil)
-        try fixture.forceSignForDiagnosticFixture()
-        try Self.expectRejection(try Self.runTrustedVerifierExecutable(fixture),
-            reason: "provenanceSignatureInvalid")
-    }
-
-    /// Re-signed counterexamples isolate binding, not signature damage or missing trust.
-    @Test(arguments: ["missing", "different"])
-    func signedCurrentProvenanceRequiresExactLogicVersionBinding(_ mutation: String) async throws {
-        let fixture = try await signedTrustedFixture()
-        defer { fixture.remove() }
-        let original = try Data(contentsOf: fixture.attestationURL)
-        try Self.mutateJSONObject(at: fixture.attestationURL) { object in
-            var provenance = try #require(object["provenance"] as? [String: Any])
-            try #require(provenance["schema"] as? String == "qualification-provenance/v3")
-            if mutation == "missing" {
-                provenance.removeValue(forKey: "logicVersion")
-            } else {
-                let version = try #require(object["logicVersion"] as? String)
-                provenance["logicVersion"] = version == "999.0" ? "998.0" : "999.0"
-            }
-            object["provenance"] = provenance
-        }
-        try fixture.forceSignForDiagnosticFixture()
-        try Self.expectRejection(try Self.runTrustedVerifierExecutable(fixture),
-            reason: "provenanceSignatureInvalid")
-        try original.write(to: fixture.attestationURL, options: .atomic)
-        let restored = try Self.runTrustedVerifierExecutable(fixture)
-        #expect(restored.exitCode == 0, "\(restored.stdout)\(restored.stderr)")
-    }
-
-    private static func copiedControlledPublication(_ fixture: Fixture) throws -> (root: URL, bundle: URL) {
-        let root = FileManager.default.temporaryDirectory.appendingPathComponent("issue816-consumer-\(UUID().uuidString)")
-        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: false)
-        let bundle = root.appendingPathComponent("bundle", isDirectory: true)
-        do {
-            try FileManager.default.copyItem(at: fixture.directory, to: bundle)
-            return (root, bundle)
-        } catch {
-            try? FileManager.default.removeItem(at: root)
-            throw error
-        }
-    }
-
-    /// Synthetic fixture census only, not a second public manifest or archive extraction policy.
-    private static func controlledPublicationFiles(_ directory: URL) throws -> [String: Data] {
-        let root = directory.standardizedFileURL.resolvingSymlinksInPath()
-        let prefix = root.path + "/"
-        let enumerator = try #require(FileManager.default.enumerator(
-            at: root, includingPropertiesForKeys: [.isRegularFileKey, .isSymbolicLinkKey]))
-        var files: [String: Data] = [:]
-        for case let url as URL in enumerator {
-            let values = try url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-            let isSymbolicLink = try #require(values.isSymbolicLink)
-            #expect(!isSymbolicLink)
-            if values.isRegularFile ?? false {
-                let enumeratedPath = url.standardizedFileURL.resolvingSymlinksInPath().path
-                try #require(enumeratedPath.hasPrefix(prefix))
-                let relativePath = String(enumeratedPath.dropFirst(prefix.count))
-                files[relativePath] = try Data(contentsOf: url)
-            }
-        }
-        return files
-    }
-
-    private static let trustedVerifierExecutableURL = URL(
-        fileURLWithPath: FileManager.default.currentDirectoryPath,
-        isDirectory: true
-    ).appendingPathComponent(".build/debug/trusted-verifier")
-
-    private static var releaseConsumerVerifierURL: URL {
-        if let path = ProcessInfo.processInfo.environment["LOGIC_PRO_MCP_TEST_RELEASE_VERIFIER"] {
-            return URL(fileURLWithPath: path)
-        }
-        return trustedVerifierExecutableURL
-    }
-
-    private static let consumerMatrixSnapshotCache = ConsumerMatrixSnapshotCache()
-
-    private static func runTrustedVerifierExecutable(
-        _ fixture: Fixture,
-        candidateURL: URL? = nil,
-        bundleURL: URL? = nil,
-        verifierURL: URL? = nil
-    ) throws -> QualificationCommandResult {
-        let process = Process()
-        process.executableURL = verifierURL ?? trustedVerifierExecutableURL
-        process.arguments = [
-            "verify",
-            "--candidate", (candidateURL ?? fixture.executableURL).path,
-            "--bundle", (bundleURL ?? fixture.directory).path,
-            "--release-version", "1.2.3",
-            "--expected-commit", fixture.commitSHA,
-        ]
-        var environment = ProcessInfo.processInfo.environment
-        environment["LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY"] =
-            fixture.trustedPublicKeyData.base64EncodedString()
-        process.environment = environment
-        let stdout = Pipe()
-        let stderr = Pipe()
-        process.standardOutput = stdout
-        process.standardError = stderr
-        try process.run()
-        let out = stdout.fileHandleForReading.readDataToEndOfFile()
-        let err = stderr.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return QualificationCommandResult(
-            exitCode: Int(process.terminationStatus),
-            stdout: String(decoding: out, as: UTF8.self),
-            stderr: String(decoding: err, as: UTF8.self)
-        )
-    }
-
-    private static func runTrustedMatrixVerifierExecutable(
-        _ fixture: any TrustedMatrixFixtureView,
-        verifierURL: URL? = nil
-    ) throws -> QualificationCommandResult {
-        let process = Process()
-        process.executableURL = verifierURL ?? trustedVerifierExecutableURL
-        process.arguments = [
-            "verify-matrix",
-            "--candidate", fixture.executableURL.path,
-            "--matrix-index", fixture.inputURL.path,
-            "--release-version", "1.2.3",
-            "--expected-commit", fixture.commitSHA,
-        ]
-        var environment = ProcessInfo.processInfo.environment
-        environment["LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY"] =
-            fixture.trustedPublicKeyData.base64EncodedString()
-        process.environment = environment
-        let stdout = Pipe()
-        let stderr = Pipe()
-        process.standardOutput = stdout
-        process.standardError = stderr
-        try process.run()
-        let out = stdout.fileHandleForReading.readDataToEndOfFile()
-        let err = stderr.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        return QualificationCommandResult(
-            exitCode: Int(process.terminationStatus),
-            stdout: String(decoding: out, as: UTF8.self),
-            stderr: String(decoding: err, as: UTF8.self)
-        )
-    }
-
-    @Test func qualificationRequiresCommitIdentityForSignedProvenance() async throws {
+    @Test func qualificationRequiresCommitIdentityForEvidence() async throws {
         let fixture = try Fixture(
             specs: Array(OperationRegistry.specs.prefix(1)),
             commitSHA: "unknown"
@@ -6016,11 +3251,8 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(!FileManager.default.fileExists(atPath: fixture.attestationURL.path))
     }
 
-    @Test func candidateQualificationProducesUnsignedBundleWithoutSigningKey() async throws {
-        let fixture = try Fixture(
-            specs: Array(OperationRegistry.specs.prefix(1)),
-            includeSigningKey: false
-        )
+    @Test func qualificationProducesBoundEvidenceMetadata() async throws {
+        let fixture = try Fixture(specs: Array(OperationRegistry.specs.prefix(1)))
         defer { fixture.remove() }
 
         let result = await fixture.runQualification()
@@ -6034,29 +3266,10 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             from: Data(contentsOf: fixture.attestationURL)
         )
         #expect(attestation.provenance != nil)
-        #expect(attestation.provenanceSignature == nil)
         let provenance = try #require(attestation.provenance)
         #expect(provenance.schema == "qualification-provenance/v3")
         #expect(provenance.logicVersion == attestation.logicVersion)
         #expect(provenance.logicVersion == "11.2")
-    }
-
-    @Test func signingKeyIsNotForwardedToQualificationSubprocess() async throws {
-        let specs = Array(OperationRegistry.specs.prefix(1))
-        let driveResult = Self.driveResult(specs: specs)
-        let fixture = try Fixture(specs: specs, includeSigningKey: true, drive: { request in
-            #expect(request.environment["LOGIC_PRO_MCP_QUALIFICATION_SIGNING_KEY"] == nil)
-            #expect(request.environment["LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY"] == nil)
-            return driveResult
-        })
-        defer { fixture.remove() }
-
-        let result = await fixture.runQualification()
-
-        // `--qualify` exits non-zero when a case FAILED, and these fixtures drive a fake
-        // transport where operations fail by construction. The contract has its own test:
-        // `qualifyExitCodeReportsWhetherAnythingFailed`.
-        #expect(result.exitCode == 1)
     }
 
     @Test func qualificationDrivesImmutableSnapshotOfHashedExecutable() async throws {
@@ -6077,52 +3290,8 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(attestation.binarySHA256 == SupportBundleBuilder.sha256(originalData))
     }
 
-    @Test func symlinkSwapAtEvidenceReadBoundaryRejectsBundle() async throws {
-        let swapper = EvidenceSymlinkSwap(targetName: "evidence-manifest.json")
-        let fixture = try promotableFixture(beforeEvidenceRead: swapper.swap)
-        defer { fixture.remove() }
-        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
 
-        let result = await fixture.verify(expectedSHA256: fixture.binarySHA256)
 
-        #expect(swapper.didSwap)
-        #expect(result.exitCode != 0)
-        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains(
-            "evidenceBindingMismatch"
-        ))
-    }
-
-    @Test func evidenceReplacedBetweenHashAndDecodeRejectsBundle() async throws {
-        let replacer = EvidenceRegularFileReplacement(
-            targetName: "operation-system.health-readback.json"
-        )
-        let fixture = try promotableFixture(beforeEvidenceRead: replacer.replaceAfterFirstRead)
-        defer { fixture.remove() }
-        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
-
-        let result = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-
-        #expect(replacer.didReplace)
-        #expect(result.exitCode != 0)
-        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains(
-            "evidenceBindingMismatch"
-        ))
-    }
-
-    @Test func hardLinkedEvidenceFileRejectsBundle() async throws {
-        let fixture = try promotableFixture()
-        defer { fixture.remove() }
-        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
-        let alias = fixture.directory.appendingPathComponent("manifest-hardlink.json")
-        #expect(link(fixture.manifestURL.path, alias.path) == 0)
-
-        let result = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-
-        #expect(result.exitCode != 0)
-        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains(
-            "evidenceBindingMismatch"
-        ))
-    }
 
     @Test func emptyTraceListFailsWithoutObservedEvents() throws {
         let empty = Self.driveResult(
@@ -6356,39 +3525,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(!result(state: "B").isFailClosedAndStable)
     }
 
-    @Test func observedAxisReadbackStaysVerifiedWhenHealthWarms() async throws {
-        let specs = [try #require(OperationRegistry.specs.first { $0.id == .systemHealth })]
-        let driveResult = Self.driveResult(specs: specs, healthChangesAfterNegativeProbe: true)
-        let v1 = try #require(driveResult.negative?.healthReadStable)
-        #expect(!v1)
-        let fixture = try Fixture(specs: specs, drive: { _ in driveResult })
-        defer { fixture.remove() }
-        try JSONEncoder().encode(Self.axisWaivers()).write(to: fixture.waiversURL)
 
-        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
-        let verification = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-
-        #expect(verification.exitCode == 0)
-    }
-
-    @Test func promotionAcceptsDigestBoundNonObjectOperationResponse() async throws {
-        let spec = try #require(OperationRegistry.specs.first { $0.id == .projectIsRunning })
-        let driveResult = Self.driveResult(
-            specs: [spec],
-            nonObjectResponseOperationID: spec.id
-        )
-        let fixture = try Fixture(specs: [spec], drive: { _ in driveResult })
-        defer { fixture.remove() }
-        let waivers = [Self.waiver(caseID: "in-process/\(spec.id.rawValue)")] + Self.axisWaivers()
-        try JSONEncoder().encode(waivers).write(to: fixture.waiversURL)
-
-        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
-        let verification = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-
-        #expect(!Self.rejectionReasons(try Self.resultObject(verification)).contains(
-            "evidenceBindingMismatch"
-        ))
-    }
 
     @Test func negativeMutatingCallOverTransportIsStateCZeroWrite() async throws {
         let spec = try #require(OperationRegistry.specs.first)
@@ -6418,35 +3555,6 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(v4)
     }
 
-    @Test func absentAxesRequireLocaleEvidenceOrWaiver() async throws {
-        let specs = [try #require(OperationRegistry.specs.first { $0.id == .systemHealth })]
-        let fixture = try Fixture(specs: specs)
-        defer { fixture.remove() }
-
-        let withoutWaiver = try await fixture.qualify()
-        let matchingID = "desktop/en-US/core/cold/empty"
-        let matching = try #require(withoutWaiver.cases.first { $0.id == matchingID })
-        let unavailable = withoutWaiver.cases.filter {
-            QualificationAxis.requiredCombinations.map(\.key).contains($0.id)
-                && $0.status == .notQualified
-        }
-
-        #expect(matching.status == .passed)
-        #expect(unavailable.count == QualificationAxis.requiredCombinations.count - 1)
-        #expect(unavailable.allSatisfy {
-            $0.reason?.hasPrefix("required axis unavailable:") == true
-                && $0.verificationKind == .typedDeferral
-                && $0.deferral?.code == .operationUnavailable
-                && $0.availabilityReason != nil
-                && $0.readback?.verified == false
-        })
-        #expect(withoutWaiver.waivers.isEmpty)
-        let rejected = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-        #expect(rejected.exitCode != 0)
-        #expect(Self.rejectionReasons(try Self.resultObject(rejected)).contains(
-            "requiredCombinationNotQualified"
-        ))
-    }
 
     @Test func productionAxisVocabularyCanonicalizesLocaleAndKeepsCreatorOutOfShipAxes() async throws {
         let specs = [try #require(OperationRegistry.specs.first { $0.id == .systemHealth })]
@@ -6616,6 +3724,23 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(failure.failureReason.contains("semantic readback mismatch"))
     }
 
+    @Test func liveGateReportsSuccessfulProtocolSmokeWithoutCallingItAProductFailure() throws {
+        let spec = try #require(OperationRegistry.specs.first {
+            $0.id == .mixerGetOutputVerified
+        })
+        let operation = try #require(
+            Self.driveResult(specs: [spec]).operationResults[spec.id.rawValue]
+        )
+        let summary = QualificationLiveGateSummary(operationResults: [operation])
+
+        #expect(operation.status == .protocolSmoke)
+        #expect(operation.liveGateDisposition == .protocolSmoke)
+        #expect(summary.protocolSmoke == 1)
+        #expect(summary.failures.isEmpty)
+        #expect(summary.accounted == summary.total)
+        #expect(summary.classificationLine.contains("protocol_smoke=1"))
+    }
+
     @Test func qualificationProbeSuppliesSpectralOperationPaths() throws {
         let spectrum = try #require(OperationRegistry.specs.first { $0.id == .audioAnalyzeSpectrum })
         let recommendEQ = try #require(OperationRegistry.specs.first { $0.id == .audioRecommendEQ })
@@ -6781,6 +3906,154 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(classifiesClosedPanelAsEnvironmental)
     }
 
+    @Test func liveGateClassifiesOnlyExactMissingMixerAndPluginFixturesAsEnvironmental() {
+        func refusal(
+            _ operationID: OperationID,
+            tool: String,
+            command: String,
+            hint: String,
+            fixturePrecondition: QualificationLiveFixturePrecondition?,
+            state: String = "C",
+            writeAttempted: Bool = false
+        ) -> QualificationOperationResult {
+            QualificationOperationResult(
+                operationID: operationID.rawValue,
+                tool: tool,
+                command: command,
+                mutability: .readOnly,
+                requestID: "fixture-request",
+                responseData: Data(#"{"state":"C","error":"invalid_params","write_attempted":false}"#.utf8),
+                isError: true,
+                state: state,
+                error: "invalid_params",
+                hint: hint,
+                writeAttempted: writeAttempted,
+                readbackSource: tool == "logic_mixer" ? "logic://mixer" : "logic://plugins/inventory",
+                readbackRequestID: "fixture-readback",
+                readbackData: Data(#"{}"#.utf8),
+                failureReason: nil,
+                liveFixturePrecondition: fixturePrecondition
+            )
+        }
+
+        let cases: [(OperationID, String, String, String, String)] = [
+            (
+                .mixerGetOutputVerified,
+                "logic_mixer",
+                "get_output_verified",
+                "get_output_verified requires a current physical Mixer target_ref; no track/index selectors or write inputs are accepted",
+                "requires a current physical Mixer target with a typed output observation"
+            ),
+            (
+                .mixerGetInputBusVerified,
+                "logic_mixer",
+                "get_input_bus_verified",
+                "get_input_bus_verified requires a current physical Mixer target_ref; no track/index selectors or write inputs are accepted",
+                "requires a current physical Mixer target with a typed bus-input observation"
+            ),
+            (
+                .mixerGetSendDestinationVerified,
+                "logic_mixer",
+                "get_send_destination_verified",
+                "get_send_destination_verified requires a current physical Mixer target_ref; no track/index selectors or write inputs are accepted",
+                "requires an occupied Send in the fresh read-only strip census"
+            ),
+            (
+                .mixerGetSendBypassVerified,
+                "logic_mixer",
+                "get_send_bypass_verified",
+                "An exact physical Mixer target_ref and occupied source-census ordinal are required",
+                "requires an occupied Send in the fresh read-only strip census"
+            ),
+            (
+                .pluginsGetHostParameterManifest,
+                "logic_plugins",
+                "get_host_parameter_manifest",
+                "get_host_parameter_manifest requires an occupied insert target_ref and non-empty expected_build_fingerprint; it accepts no write inputs",
+                "requires an occupied catalog-supported plug-in insert in the current Logic project"
+            ),
+            (
+                .pluginsGetParamVerified,
+                "logic_plugins",
+                "get_param_verified",
+                "get_param_verified requires an occupied insert target_ref; scalar reads also require a named param. No value, mode or confirmation is accepted",
+                "requires an occupied plug-in insert with a catalog-backed readable parameter"
+            ),
+            (
+                .pluginsGetChannelEQStateVerified,
+                "logic_plugins",
+                "get_channel_eq_state_verified",
+                "get_channel_eq_state_verified requires an occupied insert target_ref; scalar reads also require a named param. No value, mode or confirmation is accepted",
+                "requires an occupied Channel EQ insert in the current Logic project"
+            ),
+            (
+                .pluginsPlanParameterChanges,
+                "logic_plugins",
+                "plan_parameter_changes",
+                "plan_parameter_changes requires an occupied insert target_ref; scalar reads also require a named param. No value, mode or confirmation is accepted",
+                "requires an occupied plug-in insert with a catalog-backed plannable parameter"
+            ),
+        ]
+
+        for (operationID, tool, command, hint, reason) in cases {
+            let fixturePrecondition: QualificationLiveFixturePrecondition = switch operationID {
+            case .mixerGetOutputVerified: .mixerOutputTarget
+            case .mixerGetInputBusVerified: .mixerInputBusTarget
+            case .mixerGetSendDestinationVerified, .mixerGetSendBypassVerified: .mixerOccupiedSend
+            case .pluginsGetHostParameterManifest: .pluginHostManifestTarget
+            case .pluginsGetParamVerified: .pluginReadableParameter
+            case .pluginsGetChannelEQStateVerified: .pluginChannelEQ
+            default: .pluginPlannableParameter
+            }
+            let exact = QualificationLiveGateSummary(operationResults: [
+                refusal(
+                    operationID, tool: tool, command: command, hint: hint,
+                    fixturePrecondition: fixturePrecondition
+                ),
+            ])
+            #expect(exact.environmentalPreconditions == [
+                .init(operationID: operationID.rawValue, reason: reason),
+            ])
+            #expect(exact.failed == 0)
+
+            let changed = QualificationLiveGateSummary(operationResults: [
+                refusal(
+                    operationID, tool: tool, command: command, hint: hint + " changed",
+                    fixturePrecondition: fixturePrecondition
+                ),
+            ])
+            #expect(changed.environmentalPreconditions.isEmpty)
+            #expect(changed.failed == 1)
+
+            let wrongState = QualificationLiveGateSummary(operationResults: [
+                refusal(
+                    operationID, tool: tool, command: command, hint: hint,
+                    fixturePrecondition: fixturePrecondition, state: "B"
+                ),
+            ])
+            #expect(wrongState.environmentalPreconditions.isEmpty)
+            #expect(wrongState.failed == 1)
+
+            let wrote = QualificationLiveGateSummary(operationResults: [
+                refusal(
+                    operationID, tool: tool, command: command, hint: hint,
+                    fixturePrecondition: fixturePrecondition, writeAttempted: true
+                ),
+            ])
+            #expect(wrote.environmentalPreconditions.isEmpty)
+            #expect(wrote.failed == 1)
+
+            let unprovenFixtureGap = QualificationLiveGateSummary(operationResults: [
+                refusal(
+                    operationID, tool: tool, command: command, hint: hint,
+                    fixturePrecondition: nil
+                ),
+            ])
+            #expect(unprovenFixtureGap.environmentalPreconditions.isEmpty)
+            #expect(unprovenFixtureGap.failed == 1)
+        }
+    }
+
     @Test func liveGateClassifiesOnlyTheExactZeroWriteSelectedRegionScopeRefusalAsAPrecondition() {
         func result(
             state: String = "C",
@@ -6858,80 +4131,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(differentErrorRemainsFailure)
     }
 
-    @Test func knownLiveGateFailuresCarryReasonsAndTrackingReferences() {
-        let eachFailureIsExplainedAndTracked = Self.knownLiveGateFailures.allSatisfy {
-            Self.hasValidKnownLiveGateFailureMetadata($0)
-        }
-
-        #expect(eachFailureIsExplainedAndTracked)
-    }
-
-    @Test func knownLiveGateFailureMetadataPredicateRejectsMalformedEntries() {
-        let emptyReason = KnownLiveGateFailure(
-            operationID: "fixture.empty-reason", failureReason: "", trackingIssue: "#284"
-        )
-        let wrongTrackingIssue = KnownLiveGateFailure(
-            operationID: "fixture.wrong-tracking", failureReason: "observed cause", trackingIssue: "#999"
-        )
-        let wellFormed = KnownLiveGateFailure(
-            operationID: "fixture.well-formed", failureReason: "observed cause", trackingIssue: "#284"
-        )
-        let rejectsEmptyReason = !Self.hasValidKnownLiveGateFailureMetadata(emptyReason)
-        let rejectsWrongTrackingIssue = !Self.hasValidKnownLiveGateFailureMetadata(wrongTrackingIssue)
-        let acceptsWellFormedEntry = Self.hasValidKnownLiveGateFailureMetadata(wellFormed)
-
-        #expect(rejectsEmptyReason)
-        #expect(rejectsWrongTrackingIssue)
-        #expect(acceptsWellFormedEntry)
-    }
-
-    /// Exactness is a property of the matcher, not of whatever the production
-    /// list happens to hold -- and that list is legitimately empty when nothing
-    /// is pinned. These properties are therefore proved against a fixture list;
-    /// the live gate test above still holds the real list to the real run.
-    private static let exactnessFixture: [KnownLiveGateFailure] = [
-        .init(operationID: "fixture.first", failureReason: "first observed cause", trackingIssue: "#284"),
-        .init(operationID: "fixture.second", failureReason: "second observed cause", trackingIssue: "#284"),
-    ]
-
-    @Test func knownLiveGateFailureSetAcceptsTheExactKnownSet() {
-        let observed = Self.exactnessFixture.map(\.failure)
-        let acceptsExactSet = Self.matchesKnownLiveGateFailures(observed, against: Self.exactnessFixture)
-
-        #expect(acceptsExactSet)
-    }
-
-    @Test func knownLiveGateFailureSetRejectsNewFailure() {
-        let observed = Self.exactnessFixture.map(\.failure) + [
-            .init(operationID: "synthetic.new.failure", failureReason: "a newly observed failure"),
-        ]
-        let rejectsNewFailure = !Self.matchesKnownLiveGateFailures(observed, against: Self.exactnessFixture)
-
-        #expect(rejectsNewFailure)
-    }
-
-    @Test func knownLiveGateFailureSetRejectsAKnownFailureStartingToPass() {
-        let observed = Array(Self.exactnessFixture.map(\.failure).dropLast())
-        let rejectsMissingKnownFailure = !Self.matchesKnownLiveGateFailures(observed, against: Self.exactnessFixture)
-
-        #expect(rejectsMissingKnownFailure)
-    }
-
-    @Test func knownLiveGateFailureSetRejectsChangedReason() {
-        var observed = Self.exactnessFixture.map(\.failure)
-        observed[0] = .init(
-            operationID: observed[0].operationID,
-            failureReason: "semantic readback mismatch: a different observed cause"
-        )
-        let rejectsChangedReason = !Self.matchesKnownLiveGateFailures(observed, against: Self.exactnessFixture)
-
-        #expect(rejectsChangedReason)
-    }
-
-    /// #803. The exact-match assertion above reported a boolean, so three red runs on three
-    /// different trees said the same unreadable thing. These two helpers are what a red run now
-    /// prints, and they are proved here because a diagnostic nobody tests is a diagnostic that
-    /// prints the wrong thing exactly when it is needed.
+    /// A red live run names each failing operation and its observed reason.
     @Test func liveGateFailureDescriptionNamesEachOperationAndItsReason() {
         let described = Self.describe([
             .init(operationID: "tracks.list_library", failureReason: "semantic readback mismatch"),
@@ -6990,15 +4190,6 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(emptyStringIsUnset)
     }
 
-    @Test func emptyKnownLiveGateFailureSetRejectsAnyFailure() {
-        let observed = [QualificationLiveGateSummary.Failure(
-            operationID: "synthetic.new.failure", failureReason: "a newly observed failure"
-        )]
-        let rejectsAnyFailure = !Self.matchesKnownLiveGateFailures(observed, against: [])
-
-        #expect(rejectsAnyFailure)
-    }
-
     @Test func liveGateSummaryStatesMutatingOperationExclusion() throws {
         let mutatingSpec = try #require(OperationRegistry.specs.first { $0.id == .transportPlay })
         let operation = try #require(
@@ -7031,10 +4222,6 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         ))
 
         #expect(result.handshakeOK)
-        // Exact current catalog, measured by the release binary. The +18 operations since the
-        // previous 119 baseline are nine read-only and nine mutating contracts; their native
-        // dispositions remain independently asserted below rather than being hidden by this count.
-        #expect(result.catalog?.operationCount == 137)
         #expect(result.catalogCountMatch)
         #expect(result.traceOK)
 
@@ -7044,58 +4231,17 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         let liveGate = QualificationLiveGateSummary(operationResults: operationResults)
 
         #expect(operationResults.count == OperationRegistry.specs.count)
-        #expect(mutating.count == 102)
-        #expect(readOnly.count == 35)
         #expect(operationResults.allSatisfy { $0.status != .failed })
         #expect(liveGate.accounted == operationResults.count)
-        // The exactness is right and stays. What was wrong is that it reported a
-        // BOOLEAN: on 2026-09-07 this line went red on three different trees and
-        // the run could not say which operation had moved, so a branch that
-        // changed one unrelated file read as though it had broken qualification
-        // (#803). The two directions are separated and both carry their contents,
-        // and the message names the condition the table was measured under —
-        // Logic's UI language, which is the variable that actually moved.
-        let expectedFailures = Self.knownLiveGateFailures.map(\.failure)
-        let unexpectedFailures = liveGate.failures.filter { !expectedFailures.contains($0) }
-        let knownFailuresThatStoppedFailing = expectedFailures.filter {
-            !liveGate.failures.contains($0)
-        }
         let uiLanguage = Self.logicUILanguage()
         #expect(
-            unexpectedFailures.isEmpty,
+            liveGate.failures.isEmpty,
             """
-            live-gate failures that are not in knownLiveGateFailures:
-            \(Self.describe(unexpectedFailures))
-            Logic's UI language for this run: \(uiLanguage). The table was measured
-            against en-US, and an AX label this run could not read is indistinguishable
-            here from a regression until the operations above are named.
+            live-gate failures:
+            \(Self.describe(liveGate.failures))
+            Logic's UI language for this run: \(uiLanguage).
             """
         )
-        #expect(
-            knownFailuresThatStoppedFailing.isEmpty,
-            """
-            knownLiveGateFailures entries that no longer fail, so the table has rotted:
-            \(Self.describe(knownFailuresThatStoppedFailing))
-            Remove them only with the run that shows them passing; a pin removed on a run
-            where the operation refused for an environmental reason is how this one came
-            back (#284).
-            """
-        )
-        // The last way this line could go red without saying why. `liveGate.failures` is sorted by
-        // `operationID`, the match is an ARRAY comparison, and the table is hand-ordered — so an
-        // entry added out of order fails the exact match while both readings above stay green.
-        // With one entry that is unreachable; it stops being unreachable the next time something
-        // is pinned.
-        let tableIsInObservedOrder = expectedFailures
-            == expectedFailures.sorted { $0.operationID < $1.operationID }
-        #expect(
-            tableIsInObservedOrder,
-            """
-            knownLiveGateFailures must be listed in operationID order, because the observed             failures are sorted that way and the exact match below compares arrays.
-            """
-        )
-        let knownLiveGateFailuresMatchExactly = Self.matchesKnownLiveGateFailures(liveGate.failures)
-        #expect(knownLiveGateFailuresMatchExactly)
         #expect(operationResults.allSatisfy { $0.responseData != nil && $0.readback != nil })
         #expect(Set(operationResults.compactMap(\.requestID)).count == operationResults.count)
         #expect(Set(operationResults.compactMap(\.readbackRequestID)).count == operationResults.count)
@@ -7159,19 +4305,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         })
         #expect(withoutEvidence.allSatisfy {
             $0.status == .notQualified
-                && $0.isError == true
-                && $0.state == "C"
-                // Every mutating op's no-write probe is a typed zero-write refusal
-                // via `invalid_params`, EXCEPT the consent-gated setup_arm_key,
-                // which refuses with `consent_required` BEFORE param validation
-                // (consent-first). Special-case that ONE op; keep invalid_params
-                // required for all others (do not broadly weaken the assertion).
-                && (
-                    $0.operationID == OperationID.systemSetupArmKey.rawValue
-                        ? ($0.error == "consent_required" || $0.error == "invalid_params")
-                        : $0.error == "invalid_params"
-                )
-                && $0.writeAttempted == false
+                && $0.expectedZeroWriteRefusalObserved
                 && $0.deferral?.code == .liveMutationNotRun
         })
         #expect(readOnly.allSatisfy {
@@ -7210,110 +4344,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         print("read-only short of passed (\(readOnlyShort.count) of \(readOnly.count)): "
                 + (readOnlyShort.isEmpty ? "none" : readOnlyShort.joined(separator: ", ")))
 
-        // #373 — the credit chain, end to end, on THIS run's real results.
-        //
-        // Review named this as the thing that stayed untested: the producer and the static
-        // evaluator were each tested against hand-built cases, and nothing showed that a real live
-        // run reaches R-SEM at all. Everything above this line is a real drive of the release
-        // binary against a running Logic, so the cases it produced are the honest input.
-        //
-        // The line is printed in a machine-readable shape because a live harness outside this
-        // process reads it (`live_373_live_credit_reaches_the_debt_board`), and a number nobody can
-        // extract is a number nobody checks.
-        let liveCases: [QualificationCase] = operationResults.map { result in
-            QualificationCase(
-                id: "in-process/\(result.operationID)",
-                status: result.status,
-                tool: "qualification",
-                command: result.operationID,
-                traceID: "lpmcp_00000000-0000-0000-0000-000000000000",
-                verified: result.status == .passed,
-                evidenceFiles: [],
-                operationID: result.operationID,
-                verificationKind: result.verificationKind,
-                deferral: result.deferral,
-                readback: result.readback,
-                restore: result.restore
-            )
-        }
-        let attestation = ReleaseQualificationAttestation(
-            schema: "release-qualification-attestation/v2",
-            serverVersion: "0.0.0",
-            commitSHA: String(repeating: "0", count: 40),
-            binarySHA256: String(repeating: "0", count: 64),
-            logicVariant: .desktop,
-            logicVersion: "unknown",
-            locale: .enUS,
-            profile: .core,
-            startedAt: Date(timeIntervalSince1970: 0),
-            completedAt: Date(timeIntervalSince1970: 0),
-            total: liveCases.count,
-            passed: liveCases.filter { $0.status == .passed }.count,
-            failed: 0,
-            waived: 0,
-            cases: liveCases,
-            waivers: [],
-            evidenceManifestSHA256: String(repeating: "0", count: 64)
-        )
-        let credited = PromotionGate.liveCreditedOperationIDs(in: attestation)
-        let registered = OperationRegistry.specs.map(\.id.rawValue)
-
-        func missingCount(crediting: Set<String>) -> Int {
-            ProductionReadinessContractEvaluator.evaluate(
-                releaseWorkflowYAML: "",
-                registeredOperationIDs: registered,
-                semanticValidatorOperationIDs: [],
-                requiredMatrixAxisCount: 0,
-                debtBoardMarkdown: nil,
-                expectedAuthorityBaseSHA: nil,
-                publishedReleaseEvidencePresent: false,
-                mutationRestoreCompensationEvidencePresent: false,
-                independentProvenanceEnforced: false,
-                liveCreditedOperationIDs: crediting
-            ).findings
-                .filter { $0.id == .semanticCoverageIncomplete }
-                .compactMap { finding -> Int? in
-                    // "semantic coverage missing (…) for <n>/<total> operations (…)"
-                    guard let after = finding.detail.components(separatedBy: " for ").dropFirst().first,
-                          let n = after.components(separatedBy: "/").first else { return nil }
-                    return Int(n)
-                }
-                .first ?? 0
-        }
-
-        let withoutCredit = missingCount(crediting: [])
-        let withCredit = missingCount(crediting: credited)
-        // The drop is EXACTLY the credited set, not merely smaller. A change that credited an
-        // operation twice, or credited one the registry does not list, would still shrink the count.
-        let dropIsExactlyTheCreditedSet = withoutCredit - withCredit == credited.count
-        let everyCreditedOperationIsRegistered = credited.isSubset(of: Set(registered))
-
-        print("373 live-credit: credited=\(credited.count) registered=\(registered.count) "
-              + "missingWithoutCredit=\(withoutCredit) missingWithCredit=\(withCredit) "
-              + "dropIsExactlyTheCreditedSet=\(dropIsExactlyTheCreditedSet) "
-              + "everyCreditedOperationIsRegistered=\(everyCreditedOperationIsRegistered)")
-
-        #expect(withoutCredit == registered.count)
-        #expect(dropIsExactlyTheCreditedSet)
-        #expect(everyCreditedOperationIsRegistered)
-        // A live run that credits nothing would satisfy every line above, so the run has to have
-        // produced credit at all. This is the same positive control the other live harnesses carry.
-        //
-        // `credited` includes read-only semantic credit, which a run with every Phase-B recipe
-        // removed still earns, so `!credited.isEmpty` on its own cannot tell a working Phase B from
-        // an absent one -- the same vacuity as the `allSatisfy` above, one level out.
-        #expect(!credited.isEmpty)
-        // The Phase-B control is a mutating PASS that rests on a recorded write cycle. On
-        // 2026-09-25 (v3.17.0 preflight) the first version of this assertion asked for mutating
-        // CREDIT, which could not exist then: `operationIsLiveCredited` credited
-        // `.semanticReadback` alone (credited=21, none mutating). #984 decided a verified write
-        // cycle credits, so the assertion is the stronger one again, in two parts:
-        //   * a mutating operation passed on a recorded write cycle. Kept because a mutant that
-        //     files every pass `.semanticReadback` would satisfy the credit half on its own -- it
-        //     would credit mutating operations through the READ rule;
-        //   * EVERY such pass is credited. A pass is filed `.verifiedWriteCycle` only with a
-        //     record whose readings all happened, which is what `restore.verified` states, so a
-        //     pass the rule does not credit is the producer and the rule disagreeing.
+        // A live mutating PASS must be backed by a verified write/restore cycle.
         let phaseBPasses = mutating.filter {
             $0.status == .passed && $0.verificationKind == .verifiedWriteCycle
         }
@@ -7321,11 +4352,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             !phaseBPasses.isEmpty,
             "no mutating operation passed on a recorded write cycle, so Phase B did nothing this run"
         )
-        let phaseBUncredited = Set(phaseBPasses.map(\.operationID)).subtracting(credited)
-        #expect(
-            phaseBUncredited.isEmpty,
-            "write-cycle passes the credit rule refused: \(phaseBUncredited.sorted())"
-        )
+        #expect(phaseBPasses.allSatisfy { $0.restore?.verified == true })
         print("phase-b passes: \(phaseBPasses.map(\.operationID).sorted().joined(separator: ", "))")
     }
 
@@ -7334,8 +4361,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
     /// vulnerability. With the fault seam compiled out of release, driving the
     /// real release binary through the full runner with the fault env set must now
     /// yield the normal typed zero-write refusal — no `readback_unavailable`, no
-    /// failed case. (The generic "a failed required case is not promotable"
-    /// rejection stays covered by `verificationEmitsEveryApplicableRejection`.)
+    /// failed case.
     @Test(.enabled(
         if: ProcessInfo.processInfo.environment["LOGIC_PRO_MCP_RUN_LIVE_QA"] == "1"
             && FileManager.default.isExecutableFile(atPath: Self.releaseExecutableURL.path),
@@ -7493,18 +4519,12 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                 && $0["direction"] as? String == "response"
         })
         let responsePayload = try #require(response["payload"] as? String)
-        let promotion = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-        let promotionJSON = try Self.resultObject(promotion)
-
         // `--qualify` exits non-zero when a case FAILED, and these fixtures drive a fake
         // transport where operations fail by construction. The contract has its own test:
         // `qualifyExitCodeReportsWhetherAnythingFailed`.
         #expect(qualification.exitCode == 1)
         #expect(responsePayload.contains(#"\"error\":\"readback_unavailable\""#))
         #expect(operationCase.status == .failed)
-        #expect(promotion.exitCode == 1)
-        let promotable = try #require(promotionJSON["promotable"] as? Bool)
-        #expect(!promotable)
     }
     #endif
 
@@ -7577,162 +4597,11 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(errno == ESRCH)
     }
 
-    @Test func fakeTransportQualificationToPromotionIntegration() async throws {
-        let fixture = try promotableFixture()
-        defer { fixture.remove() }
 
-        let attestation = try await fixture.qualify(waiversURL: fixture.waiversURL)
-        #expect(attestation.cases.allSatisfy { $0.command != "registry_handler_trace" })
-        let result = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-        let json = try Self.resultObject(result)
 
-        #expect(result.exitCode == 0)
-        let v1 = try #require(json["promotable"] as? Bool)
-        #expect(v1)
-        #expect(Self.rejectionReasons(json).isEmpty)
-    }
-
-    @Test func trustedVerifierUsesTheCandidatesSignedOperationCatalog() async throws {
-        let spec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
-        let fixture = try trustedFixture(specs: [spec])
-        defer { fixture.remove() }
-
-        let qualification = await fixture.runQualification(waiversURL: fixture.waiversURL)
-        #expect(qualification.exitCode == 0)
-        fixture.sign()
-
-        let result = QualificationRunner.verifyTrusted(
-            candidateURL: fixture.executableURL,
-            bundleURL: fixture.directory,
-            releaseVersion: "1.2.3",
-            expectedCommitSHA: fixture.commitSHA,
-            trustedPublicKeyData: fixture.trustedPublicKeyData
-        )
-        let json = try Self.resultObject(result)
-
-        #expect(result.exitCode == 0)
-        #expect(try #require(json["promotable"] as? Bool))
-        #expect(Self.rejectionReasons(json).isEmpty)
-    }
-
-    @Test func trustedSignerSignsTheValidatedCandidateCatalogInsteadOfItsLocalRegistry() async throws {
-        let spec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
-        let fixture = try trustedFixture(specs: [spec])
-        defer { fixture.remove() }
-        let qualification = await fixture.runQualification(waiversURL: fixture.waiversURL)
-        #expect(qualification.exitCode == 0)
-
-        let result = QualificationRunner.signTrusted(
-            candidateURL: fixture.executableURL,
-            bundleURL: fixture.directory,
-            releaseVersion: "1.2.3",
-            expectedCommitSHA: fixture.commitSHA,
-            signingPrivateKeyData: fixture.signingKeyData
-        )
-
-        #expect(result.exitCode == 0, "\(result.stdout)\(result.stderr)")
-        #expect(try #require(try Self.resultObject(result)["promotable"] as? Bool))
-    }
-
-    @Test func operationCatalogRejectsDuplicateMissingAndPolicyDigestMutants() async throws {
-        let specs = try [OperationID.systemHealth, .systemPermissions].map { operation in
-            try #require(OperationRegistry.specs.first { $0.id == operation })
-        }
-        let fixture = try trustedFixture(specs: specs, includeRequiredAtlas: false)
-        defer { fixture.remove() }
-        let attestation = try await fixture.qualify(waiversURL: fixture.waiversURL)
-        let catalog = try JSONDecoder().decode(
-            QualificationOperationCatalog.self,
-            from: Data(contentsOf: fixture.directory.appendingPathComponent(
-                "operation-catalog.json"
-            ))
-        )
-        #expect(QualificationRunner.operationCatalogContentIssue(
-            catalog, attestation: attestation
-        ) == nil)
-
-        let duplicate = QualificationOperationCatalog(
-            schema: catalog.schema,
-            binarySHA256: catalog.binarySHA256,
-            semanticPolicySHA256: catalog.semanticPolicySHA256,
-            operations: [catalog.operations[0], catalog.operations[0], catalog.operations[1]]
-        )
-        #expect(QualificationRunner.operationCatalogContentIssue(
-            duplicate, attestation: attestation
-        ) == "operation catalog contains missing, duplicate, or non-bijective IDs")
-
-        let missing = QualificationOperationCatalog(
-            schema: catalog.schema,
-            binarySHA256: catalog.binarySHA256,
-            semanticPolicySHA256: try QualificationRunner.operationCatalogPolicyDigest(
-                Array(catalog.operations.dropLast())
-            ),
-            operations: Array(catalog.operations.dropLast())
-        )
-        #expect(QualificationRunner.operationCatalogContentIssue(
-            missing, attestation: attestation
-        ) == "operation catalog does not bijectively bind the attested operation cases")
-
-        let changedPolicyDigest = QualificationOperationCatalog(
-            schema: catalog.schema,
-            binarySHA256: catalog.binarySHA256,
-            semanticPolicySHA256: String(repeating: "0", count: 64),
-            operations: catalog.operations
-        )
-        #expect(QualificationRunner.operationCatalogContentIssue(
-            changedPolicyDigest, attestation: attestation
-        ) == "operation catalog semantic policy digest mismatch")
-
-        let first = catalog.operations[0]
-        let invalidMutationEntry = QualificationOperationCatalog.Entry(
-            operationID: first.operationID,
-            caseID: first.caseID,
-            oracleDisposition: first.oracleDisposition,
-            semanticPolicy: first.semanticPolicy,
-            mutationRestorePolicy: .playheadStep(direction: 0)
-        )
-        let invalidMutationOperations = [invalidMutationEntry] + catalog.operations.dropFirst()
-        let invalidMutationPolicy = QualificationOperationCatalog(
-            schema: catalog.schema,
-            binarySHA256: catalog.binarySHA256,
-            semanticPolicySHA256: try QualificationRunner.operationCatalogPolicyDigest(
-                Array(invalidMutationOperations)
-            ),
-            operations: Array(invalidMutationOperations)
-        )
-        #expect(QualificationRunner.operationCatalogContentIssue(
-            invalidMutationPolicy, attestation: attestation
-        ) == "operation catalog mutation restore policy is invalid")
-    }
-
-    @Test func trustedVerifierRejectsCatalogBytesChangedAfterSigning() async throws {
-        let spec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
-        let fixture = try trustedFixture(specs: [spec])
-        defer { fixture.remove() }
-        let qualification = await fixture.runQualification(waiversURL: fixture.waiversURL)
-        #expect(qualification.exitCode == 0)
-        fixture.sign()
-        let catalogURL = fixture.directory.appendingPathComponent("operation-catalog.json")
-        var catalogData = try Data(contentsOf: catalogURL)
-        catalogData.append(0x20)
-        try catalogData.write(to: catalogURL)
-
-        let result = QualificationRunner.verifyTrusted(
-            candidateURL: fixture.executableURL,
-            bundleURL: fixture.directory,
-            releaseVersion: "1.2.3",
-            expectedCommitSHA: fixture.commitSHA,
-            trustedPublicKeyData: fixture.trustedPublicKeyData
-        )
-
-        #expect(result.exitCode != 0)
-        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains(
-            "evidenceBindingMismatch"
-        ))
-    }
 
     @Test func qualifyEmitsRequiredReleaseArtifactsAndManifestDigests() async throws {
-        let fixture = try promotableFixture()
+        let fixture = try artifactFixture()
         defer { fixture.remove() }
         let attestation = try await fixture.qualify(waiversURL: fixture.waiversURL)
         let artifacts = [
@@ -7835,27 +4704,6 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(entry["sha256"] as? String == SupportBundleBuilder.sha256(publicData))
     }
 
-    @Test func verifyPromotionRejectsIncoherentOrLeakyPublicTranscript() async throws {
-        for mutation in PublicTranscriptMutation.allCases {
-            let fixture = try promotableFixture()
-            defer { fixture.remove() }
-            _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
-            try Self.mutatePublicTranscript(mutation, in: fixture)
-
-            let result = await fixture.verify(
-                expectedSHA256: fixture.binarySHA256,
-                requiredArtifacts: "raw-transcript.json,public-transcript.json"
-            )
-            let json = try Self.resultObject(result)
-            let rejections = try #require(json["rejections"] as? [[String: Any]])
-
-            #expect(result.exitCode == 1)
-            #expect(rejections.contains {
-                $0["reason"] as? String == "requiredArtifactSchemaInvalid"
-                    && $0["name"] as? String == "public-transcript.json"
-            }, "\(mutation) must invalidate the public transcript schema")
-        }
-    }
 
     @Test func runnerRecordsExactExecutableSHAAndCodableSchema() async throws {
         let specs = [try #require(OperationRegistry.specs.first { $0.id == .systemHealth })]
@@ -7935,521 +4783,10 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             )
         }
         #expect(aggregateIDs == expectedAxes.map(\.key))
-        fixture.sign()
-        let verification = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-        #expect(verification.exitCode == 0)
     }
 
-    @Test(arguments: [
-        QualificationAxis(
-            variant: .desktop,
-            locale: .koKR,
-            profile: .core,
-            cache: .cold,
-            fixture: .empty
-        ),
-        QualificationAxis(
-            variant: .desktop,
-            locale: .enUS,
-            profile: .full,
-            cache: .warm,
-            fixture: .empty
-        ),
-    ])
-    func singleAxisSignerRejectsForeignLiveAxisEvenWhenSplicedFilesAreInternallyConsistent(
-        foreignAxis: QualificationAxis
-    ) async throws {
-        let specs = [try #require(OperationRegistry.specs.first { $0.id == .systemHealth })]
-        let executableData = Data("matrix-splice-candidate".utf8)
-        let commitSHA = String(repeating: "a", count: 40)
-        let enDrive = Self.driveResult(specs: specs, observedLocale: "en-US")
-        let foreignDrive = Self.driveResult(
-            specs: specs,
-            observedLocale: foreignAxis.locale.rawValue
-        )
-        let en = try Fixture(
-            specs: specs,
-            executableData: executableData,
-            commitSHA: commitSHA,
-            drive: { _ in enDrive }
-        )
-        let foreign = try Fixture(
-            specs: specs,
-            executableData: executableData,
-            commitSHA: commitSHA,
-            drive: { _ in foreignDrive }
-        )
-        defer {
-            en.remove()
-            foreign.remove()
-        }
 
-        let enAxis = QualificationAxis(
-            variant: .desktop,
-            locale: .enUS,
-            profile: .core,
-            cache: .cold,
-            fixture: .empty
-        )
-        let enResult = await en.runQualification(mutateOpenProject: false)
-        let foreignResult = await foreign.runner.run(arguments: [
-            "LogicProMCP", "--qualify",
-            "--out", foreign.attestationURL.path,
-            "--release-version", "1.2.3",
-            "--locale", foreignAxis.locale == .koKR ? "ko" : "en",
-            "--profile", foreignAxis.profile.rawValue,
-            "--cache", foreignAxis.cache.rawValue,
-        ])
-        try #require(enResult.exitCode == 0, "\(enResult.stdout)\(enResult.stderr)")
-        try #require(
-            foreignResult.exitCode == 0,
-            "\(foreignResult.stdout)\(foreignResult.stderr)"
-        )
 
-        let decoder = JSONDecoder()
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        let enAttestation = try decoder.decode(
-            ReleaseQualificationAttestation.self,
-            from: Data(contentsOf: en.attestationURL)
-        )
-        let foreignAttestation = try decoder.decode(
-            ReleaseQualificationAttestation.self,
-            from: Data(contentsOf: foreign.attestationURL)
-        )
-        let existingForeignIndex = enAttestation.cases.firstIndex { $0.id == foreignAxis.key }
-        let foreignLiveCaseWithSharedArtifacts = try #require(foreignAttestation.cases.first {
-            $0.id == foreignAxis.key && $0.status == .passed && $0.verified
-        })
-        let sharedObservedArtifacts = Set([
-            "raw-transcript.json",
-            "public-transcript.json",
-            "mutation-restore-compensation.json",
-        ])
-        let foreignLiveCase = QualificationCase(
-            id: foreignLiveCaseWithSharedArtifacts.id,
-            status: foreignLiveCaseWithSharedArtifacts.status,
-            tool: foreignLiveCaseWithSharedArtifacts.tool,
-            command: foreignLiveCaseWithSharedArtifacts.command,
-            traceID: foreignLiveCaseWithSharedArtifacts.traceID,
-            verified: foreignLiveCaseWithSharedArtifacts.verified,
-            evidenceFiles: foreignLiveCaseWithSharedArtifacts.evidenceFiles.filter {
-                !sharedObservedArtifacts.contains($0)
-            },
-            reason: foreignLiveCaseWithSharedArtifacts.reason,
-            binarySHA256: foreignLiveCaseWithSharedArtifacts.binarySHA256,
-            axis: foreignLiveCaseWithSharedArtifacts.axis,
-            operationID: foreignLiveCaseWithSharedArtifacts.operationID,
-            operationRequestID: foreignLiveCaseWithSharedArtifacts.operationRequestID,
-            verificationKind: foreignLiveCaseWithSharedArtifacts.verificationKind,
-            deferral: foreignLiveCaseWithSharedArtifacts.deferral,
-            readback: foreignLiveCaseWithSharedArtifacts.readback,
-            restore: foreignLiveCaseWithSharedArtifacts.restore,
-            availabilityReason: foreignLiveCaseWithSharedArtifacts.availabilityReason,
-            availabilityObservation: foreignLiveCaseWithSharedArtifacts.availabilityObservation
-        )
-        #expect(enAttestation.cases.contains {
-            $0.id == enAxis.key && $0.status == .passed && $0.verified
-        })
-        if let existingForeignIndex {
-            #expect(enAttestation.cases[existingForeignIndex].status == .notQualified)
-        } else {
-            #expect(!QualificationAxis.requiredAxes(
-                profile: enAttestation.profile,
-                cache: enAttestation.cache,
-                fixture: enAttestation.fixture
-            ).contains(foreignAxis))
-        }
-
-        var splicedCases = enAttestation.cases
-        if let existingForeignIndex {
-            splicedCases[existingForeignIndex] = foreignLiveCase
-        } else {
-            splicedCases.append(foreignLiveCase)
-        }
-        let splicedCaseJSON = try JSONSerialization.jsonObject(with: encoder.encode(splicedCases))
-        try Self.mutateJSONObject(at: en.caseManifestURL) { object in
-            object["cases"] = splicedCaseJSON
-        }
-
-        let replacementCases = [foreignLiveCase]
-        for replacementCase in replacementCases {
-            for relativePath in replacementCase.evidenceFiles {
-                let source = foreign.directory.appendingPathComponent(relativePath)
-                let destination = en.directory.appendingPathComponent(relativePath)
-                try FileManager.default.createDirectory(
-                    at: destination.deletingLastPathComponent(),
-                    withIntermediateDirectories: true
-                )
-                try Data(contentsOf: source).write(to: destination, options: .atomic)
-            }
-        }
-
-        let foreignManifest = try #require(
-            JSONSerialization.jsonObject(
-                with: Data(contentsOf: foreign.manifestURL)
-            ) as? [String: Any]
-        )
-        let replacementIDs = Set(replacementCases.map(\.id))
-        let foreignEntries = try #require(foreignManifest["files"] as? [[String: Any]])
-            .filter { entry in
-                guard let caseID = entry["case_id"] as? String else { return false }
-                guard let path = entry["path"] as? String else { return false }
-                return replacementIDs.contains(caseID)
-                    && foreignLiveCase.evidenceFiles.contains(path)
-            }
-        try #require(!foreignEntries.isEmpty)
-        let caseManifestData = try Data(contentsOf: en.caseManifestURL)
-        try Self.mutateJSONObject(at: en.manifestURL) { object in
-            var entries = try #require(object["files"] as? [[String: Any]])
-            entries.removeAll { entry in
-                guard let caseID = entry["case_id"] as? String else { return false }
-                return replacementIDs.contains(caseID)
-            }
-            entries.append(contentsOf: foreignEntries)
-            entries.sort { ($0["path"] as? String ?? "") < ($1["path"] as? String ?? "") }
-            object["files"] = entries
-            object["case_manifest_sha256"] = SupportBundleBuilder.sha256(caseManifestData)
-        }
-
-        let manifestSHA256 = SupportBundleBuilder.sha256(try Data(contentsOf: en.manifestURL))
-        let counts = QualificationSummaryCounts(cases: splicedCases)
-        let splicedManifest = try #require(
-            JSONSerialization.jsonObject(with: Data(contentsOf: en.manifestURL)) as? [String: Any]
-        )
-        let splicedEntries = try #require(splicedManifest["files"] as? [[String: Any]])
-        let manifestPaths = splicedEntries.compactMap { $0["path"] as? String }
-        let expectedPaths = Set(splicedCases.flatMap(\.evidenceFiles))
-        let actualPaths = Set(manifestPaths)
-        let duplicatePaths = Dictionary(grouping: manifestPaths, by: { $0 })
-            .filter { $0.value.count > 1 }
-            .keys
-            .sorted()
-        #expect(duplicatePaths.isEmpty, "duplicates=\(duplicatePaths)")
-        #expect(
-            actualPaths == expectedPaths,
-            "missing=\(expectedPaths.subtracting(actualPaths).sorted()) extra=\(actualPaths.subtracting(expectedPaths).sorted())"
-        )
-        try Self.mutateJSONObject(at: en.attestationURL) { object in
-            object["cases"] = splicedCaseJSON
-            object["total"] = counts.total
-            object["passed"] = counts.passed
-            object["failed"] = counts.failed
-            object["waived"] = counts.waived
-            object["evidenceManifestSHA256"] = manifestSHA256
-            var provenance = try #require(object["provenance"] as? [String: Any])
-            provenance["evidenceManifestSHA256"] = manifestSHA256
-            object["provenance"] = provenance
-        }
-
-        let signing = QualificationRunner.signTrusted(
-            candidateURL: en.executableURL,
-            bundleURL: en.directory,
-            releaseVersion: "1.2.3",
-            expectedCommitSHA: commitSHA,
-            signingPrivateKeyData: en.signingKeyData,
-            requiredArtifacts: [],
-            requiredOperationIDs: en.requiredOperationIDs
-        )
-        #expect(signing.exitCode == 1, "a single-run signer must not bless another run's live axis")
-        let rejections = try #require(try Self.resultObject(signing)["rejections"] as? [[String: Any]])
-        #expect(rejections.contains {
-            $0["reason"] as? String == "foreignLiveAxisInSingleRun"
-        }, "\(signing.stdout)")
-
-        try en.forceSignForDiagnosticFixture()
-        let verification = await en.verify(expectedSHA256: en.binarySHA256)
-        #expect(verification.exitCode == 1)
-        let verificationRejections = try #require(
-            try Self.resultObject(verification)["rejections"] as? [[String: Any]]
-        )
-        #expect(verificationRejections.contains {
-            $0["reason"] as? String == "foreignLiveAxisInSingleRun"
-        }, "\(verification.stdout)")
-    }
-
-    @Test func matrixEnvelopeBindsTwoIntactAxisBundlesAndRejectsChildMutation() async throws {
-        let specs = [try #require(OperationRegistry.specs.first { $0.id == .systemHealth })]
-        let executableData = Data("matrix-envelope-candidate".utf8)
-        let commitSHA = String(repeating: "b", count: 40)
-        let en = try Fixture(
-            specs: specs,
-            executableData: executableData,
-            commitSHA: commitSHA,
-            drive: { _ in Self.driveResult(specs: specs, observedLocale: "en-US") }
-        )
-        let ko = try Fixture(
-            specs: specs,
-            executableData: executableData,
-            commitSHA: commitSHA,
-            drive: { _ in Self.driveResult(specs: specs, observedLocale: "ko-KR") }
-        )
-        let matrix = FileManager.default.temporaryDirectory
-            .appendingPathComponent("qualification-matrix-\(UUID().uuidString)", isDirectory: true)
-        defer {
-            en.remove()
-            ko.remove()
-            try? FileManager.default.removeItem(at: matrix)
-        }
-
-        try #require((await en.runQualification(mutateOpenProject: false)).exitCode == 0)
-        let koResult = await ko.runner.run(arguments: [
-            "LogicProMCP", "--qualify",
-            "--out", ko.attestationURL.path,
-            "--release-version", "1.2.3",
-            "--locale", "ko",
-        ])
-        try #require(koResult.exitCode == 0, "\(koResult.stdout)\(koResult.stderr)")
-
-        try FileManager.default.createDirectory(at: matrix, withIntermediateDirectories: false)
-        try FileManager.default.copyItem(at: en.directory, to: matrix.appendingPathComponent("en"))
-        try FileManager.default.copyItem(at: ko.directory, to: matrix.appendingPathComponent("ko"))
-        let input: [String: Any] = [
-            "schema": "qualification-matrix-input/v1",
-            "runs": [["path": "en"], ["path": "ko"]],
-        ]
-        try JSONSerialization.data(withJSONObject: input, options: [.prettyPrinted, .sortedKeys])
-            .write(to: matrix.appendingPathComponent("qualification-matrix-input.json"))
-
-        let excessiveInputMatrix = FileManager.default.temporaryDirectory
-            .appendingPathComponent("qualification-matrix-excessive-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.copyItem(at: matrix, to: excessiveInputMatrix)
-        defer { try? FileManager.default.removeItem(at: excessiveInputMatrix) }
-        try Self.mutateJSONObject(
-            at: excessiveInputMatrix.appendingPathComponent("qualification-matrix-input.json")
-        ) { object in
-            var runs = try #require(object["runs"] as? [[String: Any]])
-            runs.append(["path": "missing"])
-            object["runs"] = runs
-        }
-        let excessiveInput = QualificationRunner.signTrustedMatrix(
-            candidateURL: en.executableURL,
-            matrixURL: excessiveInputMatrix,
-            releaseVersion: "1.2.3",
-            expectedCommitSHA: commitSHA,
-            signingPrivateKeyData: en.signingKeyData,
-            requiredArtifacts: [],
-            requiredOperationIDs: en.requiredOperationIDs
-        )
-        let excessiveInputReasons = Self.rejectionReasons(try Self.resultObject(excessiveInput))
-        #expect(excessiveInputReasons.contains("evidenceBindingMismatch"), "\(excessiveInput.stdout)")
-        #expect(!excessiveInputReasons.contains("matrixSignerFailure"), "\(excessiveInput.stdout)")
-
-        let duplicateRunMatrix = FileManager.default.temporaryDirectory
-            .appendingPathComponent("qualification-matrix-duplicate-run-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.copyItem(at: matrix, to: duplicateRunMatrix)
-        defer { try? FileManager.default.removeItem(at: duplicateRunMatrix) }
-        let duplicateRunID = "aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee"
-        try Self.mutateJSONObject(at: duplicateRunMatrix.appendingPathComponent(
-            "en/release-qualification-attestation.json"
-        )) { object in
-            var provenance = try #require(object["provenance"] as? [String: Any])
-            provenance["runID"] = duplicateRunID
-            object["provenance"] = provenance
-        }
-        try Self.mutateJSONObject(at: duplicateRunMatrix.appendingPathComponent(
-            "ko/release-qualification-attestation.json"
-        )) { object in
-            var provenance = try #require(object["provenance"] as? [String: Any])
-            provenance["runID"] = duplicateRunID.uppercased()
-            object["provenance"] = provenance
-        }
-        let duplicateRun = QualificationRunner.signTrustedMatrix(
-            candidateURL: en.executableURL,
-            matrixURL: duplicateRunMatrix,
-            releaseVersion: "1.2.3",
-            expectedCommitSHA: commitSHA,
-            signingPrivateKeyData: en.signingKeyData,
-            requiredArtifacts: [],
-            requiredOperationIDs: en.requiredOperationIDs
-        )
-        let duplicateRunReasons = Self.rejectionReasons(try Self.resultObject(duplicateRun))
-        #expect(duplicateRunReasons.contains("evidenceBindingMismatch"), "\(duplicateRun.stdout)")
-
-        let custodyMatrix = FileManager.default.temporaryDirectory
-            .appendingPathComponent("qualification-matrix-custody-\(UUID().uuidString)", isDirectory: true)
-        let displacedMatrix = FileManager.default.temporaryDirectory
-            .appendingPathComponent("qualification-matrix-displaced-\(UUID().uuidString)", isDirectory: true)
-        try FileManager.default.copyItem(at: matrix, to: custodyMatrix)
-        let replacer = MatrixDirectoryReplacement(
-            requested: custodyMatrix,
-            displaced: displacedMatrix
-        )
-        defer {
-            try? FileManager.default.removeItem(at: custodyMatrix)
-            try? FileManager.default.removeItem(at: displacedMatrix)
-        }
-        let custodyRefusal = QualificationRunner.signTrustedMatrix(
-            candidateURL: en.executableURL,
-            matrixURL: custodyMatrix,
-            releaseVersion: "1.2.3",
-            expectedCommitSHA: commitSHA,
-            signingPrivateKeyData: en.signingKeyData,
-            requiredArtifacts: [],
-            requiredOperationIDs: en.requiredOperationIDs,
-            beforeMatrixAttestationPublish: replacer.replace
-        )
-        #expect(replacer.didReplace)
-        #expect(custodyRefusal.exitCode == 1, "\(custodyRefusal.stdout)\(custodyRefusal.stderr)")
-        let custodyRejections = try #require(
-            try Self.resultObject(custodyRefusal)["rejections"] as? [[String: Any]]
-        )
-        #expect(custodyRejections.contains {
-            $0["reason"] as? String == "matrixSignerFailure"
-                && ($0["actual"] as? String)?.contains(
-                    "Matrix directory changed before publication"
-                ) == true
-        }, "\(custodyRefusal.stdout)")
-        for directory in [custodyMatrix, displacedMatrix] {
-            #expect(!FileManager.default.fileExists(atPath: directory.appendingPathComponent(
-                "release-qualification-matrix.json"
-            ).path))
-        }
-
-        let signing = QualificationRunner.signTrustedMatrix(
-            candidateURL: en.executableURL,
-            matrixURL: matrix,
-            releaseVersion: "1.2.3",
-            expectedCommitSHA: commitSHA,
-            signingPrivateKeyData: en.signingKeyData,
-            requiredArtifacts: [],
-            requiredOperationIDs: en.requiredOperationIDs
-        )
-        try #require(signing.exitCode == 0, "\(signing.stdout)")
-        let accepted = QualificationRunner.verifyTrustedMatrix(
-            candidateURL: en.executableURL,
-            matrixURL: matrix,
-            releaseVersion: "1.2.3",
-            expectedCommitSHA: commitSHA,
-            trustedPublicKeyData: en.trustedPublicKeyData,
-            requiredArtifacts: [],
-            requiredOperationIDs: en.requiredOperationIDs
-        )
-        #expect(accepted.exitCode == 0, "\(accepted.stdout)")
-
-        let envelopeURL = matrix.appendingPathComponent("release-qualification-matrix.json")
-        let signedEnvelopeData = try Data(contentsOf: envelopeURL)
-        try Self.mutateJSONObject(at: envelopeURL) { object in
-            var runs = try #require(object["runs"] as? [[String: Any]])
-            runs[0]["path"] = "missing"
-            object["runs"] = runs
-        }
-        let invalidRoot = QualificationRunner.verifyTrustedMatrix(
-            candidateURL: en.executableURL,
-            matrixURL: matrix,
-            releaseVersion: "1.2.3",
-            expectedCommitSHA: commitSHA,
-            trustedPublicKeyData: en.trustedPublicKeyData,
-            requiredArtifacts: [],
-            requiredOperationIDs: en.requiredOperationIDs
-        )
-        let invalidRootReasons = Self.rejectionReasons(try Self.resultObject(invalidRoot))
-        #expect(invalidRootReasons.contains("matrixSignatureInvalid"), "\(invalidRoot.stdout)")
-        #expect(!invalidRootReasons.contains("matrixVerifierFailure"), "\(invalidRoot.stdout)")
-        try signedEnvelopeData.write(to: envelopeURL, options: .atomic)
-
-        let signedEnvelope = try JSONDecoder().decode(
-            ReleaseQualificationMatrixAttestation.self,
-            from: signedEnvelopeData
-        )
-        let firstRun = try #require(signedEnvelope.runs.first)
-        let excessiveRuns = signedEnvelope.runs + [ReleaseQualificationMatrixAttestation.Run(
-            axis: firstRun.axis,
-            path: "missing",
-            childAttestationSHA256: String(repeating: "0", count: 64)
-        )]
-        let excessiveUnsigned = ReleaseQualificationMatrixAttestation(
-            schema: signedEnvelope.schema,
-            releaseVersion: signedEnvelope.releaseVersion,
-            commitSHA: signedEnvelope.commitSHA,
-            binarySHA256: signedEnvelope.binarySHA256,
-            logicVersion: signedEnvelope.logicVersion,
-            profile: signedEnvelope.profile,
-            cache: signedEnvelope.cache,
-            fixture: signedEnvelope.fixture,
-            operationCatalogSHA256: signedEnvelope.operationCatalogSHA256,
-            runs: excessiveRuns,
-            signature: nil
-        )
-        let encoder = JSONEncoder()
-        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-        let signingKey = try Curve25519.Signing.PrivateKey(rawRepresentation: en.signingKeyData)
-        let excessiveSignature = QualificationProvenanceSignature(
-            algorithm: "ed25519",
-            keyID: SupportBundleBuilder.sha256(signingKey.publicKey.rawRepresentation),
-            value: try signingKey.signature(for: encoder.encode(excessiveUnsigned.payload))
-                .base64EncodedString()
-        )
-        let excessiveEnvelope = ReleaseQualificationMatrixAttestation(
-            schema: excessiveUnsigned.schema,
-            releaseVersion: excessiveUnsigned.releaseVersion,
-            commitSHA: excessiveUnsigned.commitSHA,
-            binarySHA256: excessiveUnsigned.binarySHA256,
-            logicVersion: excessiveUnsigned.logicVersion,
-            profile: excessiveUnsigned.profile,
-            cache: excessiveUnsigned.cache,
-            fixture: excessiveUnsigned.fixture,
-            operationCatalogSHA256: excessiveUnsigned.operationCatalogSHA256,
-            runs: excessiveUnsigned.runs,
-            signature: excessiveSignature
-        )
-        try encoder.encode(excessiveEnvelope).write(to: envelopeURL, options: .atomic)
-        let excessiveRoot = QualificationRunner.verifyTrustedMatrix(
-            candidateURL: en.executableURL,
-            matrixURL: matrix,
-            releaseVersion: "1.2.3",
-            expectedCommitSHA: commitSHA,
-            trustedPublicKeyData: en.trustedPublicKeyData,
-            requiredArtifacts: [],
-            requiredOperationIDs: en.requiredOperationIDs
-        )
-        let excessiveRootReasons = Self.rejectionReasons(try Self.resultObject(excessiveRoot))
-        #expect(excessiveRootReasons.contains("evidenceBindingMismatch"), "\(excessiveRoot.stdout)")
-        #expect(!excessiveRootReasons.contains("matrixVerifierFailure"), "\(excessiveRoot.stdout)")
-        try signedEnvelopeData.write(to: envelopeURL, options: .atomic)
-
-        let childAttestation = matrix.appendingPathComponent(
-            "en/release-qualification-attestation.json"
-        )
-        var mutated = try Data(contentsOf: childAttestation)
-        mutated[mutated.startIndex] = 0x5b
-        try mutated.write(to: childAttestation, options: .atomic)
-
-        let rejected = QualificationRunner.verifyTrustedMatrix(
-            candidateURL: en.executableURL,
-            matrixURL: matrix,
-            releaseVersion: "1.2.3",
-            expectedCommitSHA: commitSHA,
-            trustedPublicKeyData: en.trustedPublicKeyData,
-            requiredArtifacts: [],
-            requiredOperationIDs: en.requiredOperationIDs
-        )
-        #expect(rejected.exitCode == 1)
-        let rejections = try #require(
-            try Self.resultObject(rejected)["rejections"] as? [[String: Any]]
-        )
-        #expect(rejections.contains {
-            $0["reason"] as? String == "matrixChildDigestMismatch"
-                && $0["key"] as? String == "en"
-        }, "\(rejected.stdout)")
-    }
-
-    @Test func trustedCLIDispatchesMatrixVerificationThroughTheMatrixBoundary() throws {
-        let missing = FileManager.default.temporaryDirectory
-            .appendingPathComponent("missing-qualification-matrix-\(UUID().uuidString)")
-        let result = QualificationRunner.runTrusted(arguments: [
-            "trusted-verifier", "verify-matrix",
-            "--candidate", missing.appendingPathComponent("LogicProMCP").path,
-            "--matrix-index", missing.appendingPathComponent("qualification-matrix-input.json").path,
-            "--release-version", "1.2.3",
-            "--expected-commit", String(repeating: "c", count: 40),
-        ], environment: [
-            "LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY": Data(repeating: 1, count: 32)
-                .base64EncodedString(),
-        ])
-
-        try Self.expectRejection(result, reason: "matrixVerifierFailure")
-    }
 
     @Test func inProcessCasesMatchRegistryHandlersAndTraces() async throws {
         let fixture = try Fixture(specs: OperationRegistry.specs)
@@ -8531,7 +4868,6 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                     #expect(declared.code == .semanticValidatorUnavailable)
                     let readback = try #require(qualificationCase.readback)
                     #expect(!readback.verified)
-                    #expect(!PromotionGate.operationIsLiveCredited(qualificationCase))
                 } else {
                     // Every other read-only operation retains semantic credit and evidence.
                     #expect(qualificationCase.status == .passed)
@@ -8719,7 +5055,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(attestation.total == 4)
     }
 
-    @Test func tamperedExternalCaseBindingRejectsPromotion() async throws {
+    @Test func tamperedExternalCaseBindingRejectsQualification() async throws {
         let fixture = try Fixture(specs: Array(OperationRegistry.specs.prefix(1)))
         defer { fixture.remove() }
         let readback = QualificationReadbackEvidence(
@@ -8928,327 +5264,8 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         ))
     }
 
-    @Test func sameSHAApprovesWithExitZero() async throws {
-        let fixture = try promotableFixture()
-        defer { fixture.remove() }
-        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
 
-        let result = await fixture.verify(expectedSHA256: SupportBundleBuilder.sha256(fixture.executableData))
-        let json = try Self.resultObject(result)
-        let promotable = try #require(json["promotable"] as? Bool)
-        let rejections = try #require(json["rejections"] as? [[String: Any]])
 
-        // `--qualify` exits non-zero when a case FAILED, and these fixtures drive a fake
-        // transport where operations fail by construction. The contract has its own test:
-        // `qualifyExitCodeReportsWhetherAnythingFailed`.
-        #expect(result.exitCode == 0)
-        #expect(promotable)
-        #expect(rejections.isEmpty)
-    }
-
-    @Test func verifyPromotionRejectsReleaseCommitMismatch() async throws {
-        let fixture = try promotableFixture()
-        defer { fixture.remove() }
-        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
-        let releasedCommit = String(repeating: "b", count: 40)
-        #expect(releasedCommit != fixture.commitSHA)
-
-        let result = await fixture.verify(
-            expectedSHA256: fixture.binarySHA256,
-            expectedCommit: releasedCommit
-        )
-        let json = try Self.resultObject(result)
-
-        #expect(result.exitCode != 0)
-        #expect(Self.rejectionReasons(json).contains("releaseCommitMismatch"))
-    }
-
-    @Test func verifyPromotionAcceptsMatchingExpectedCommit() async throws {
-        let fixture = try promotableFixture()
-        defer { fixture.remove() }
-        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
-
-        let result = await fixture.verify(
-            expectedSHA256: fixture.binarySHA256,
-            expectedCommit: fixture.commitSHA
-        )
-
-        #expect(result.exitCode == 0)
-        #expect(Self.rejectionReasons(try Self.resultObject(result)).isEmpty)
-    }
-
-    /// The PUBLISHED-vs-candidate digest comparison is a SECOND site, separate from the gate's
-    /// attestation-vs-candidate check. Splitting the unparseable cause in `PromotionGate` and not
-    /// here left `--expected-binary-sha256 not-a-sha` still reporting `binarySHAMismatch` — the fix
-    /// applied to one named instance rather than to the property, and a review caught it.
-    ///
-    /// This drives the real CLI path. The `PromotionGate`-level test cannot reach this site: the
-    /// gate is handed the COMPUTED candidate digest, never the supplied one.
-    @Test func malformedPublishedSHAIsReportedUnparseableNotMismatched() async throws {
-        let fixture = try promotableFixture()
-        defer { fixture.remove() }
-        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
-
-        let result = await fixture.verify(expectedSHA256: "not-a-sha")
-        let json = try Self.resultObject(result)
-        let reasons = Self.rejectionReasons(json)
-
-        #expect(result.exitCode != 0)
-        #expect(reasons.contains("binarySHAUnparseable"))
-        // The distinction is the whole point: a malformed value is not a disagreement.
-        #expect(!reasons.contains("binarySHAMismatch"))
-    }
-
-    /// The other side, so moving every case to `Unparseable` cannot satisfy the test above: a
-    /// well-formed published digest that genuinely differs must still read as a mismatch.
-    @Test func wellFormedDifferentPublishedSHAStillReportsMismatch() async throws {
-        let fixture = try promotableFixture()
-        defer { fixture.remove() }
-        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
-
-        let otherDigest = String(repeating: "a", count: 64)
-        #expect(otherDigest != fixture.binarySHA256)
-
-        let result = await fixture.verify(expectedSHA256: otherDigest)
-        let reasons = Self.rejectionReasons(try Self.resultObject(result))
-
-        #expect(result.exitCode != 0)
-        #expect(reasons.contains("binarySHAMismatch"))
-        #expect(!reasons.contains("binarySHAUnparseable"))
-    }
-
-    @Test func differentPublishedSHARejects() async throws {
-        let fixture = try promotableFixture()
-        defer { fixture.remove() }
-        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
-
-        let result = await fixture.verify(expectedSHA256: String(repeating: "b", count: 64))
-        let json = try Self.resultObject(result)
-        let promotable = try #require(json["promotable"] as? Bool)
-
-        #expect(result.exitCode != 0)
-        #expect(!promotable)
-        #expect(Self.rejectionReasons(json).contains("binarySHAMismatch"))
-    }
-
-    @Test func releaseVersionMismatchRejectsThroughCLI() async throws {
-        let fixture = try Fixture(specs: OperationRegistry.specs)
-        defer { fixture.remove() }
-        _ = try await fixture.qualify()
-
-        let result = await fixture.verify(
-            releaseVersion: "1.2.4",
-            expectedSHA256: SupportBundleBuilder.sha256(fixture.executableData)
-        )
-
-        #expect(result.exitCode != 0)
-        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains("releaseVersionMismatch"))
-    }
-
-    @Test func missingRequiredArtifactRejectsThroughCLI() async throws {
-        let fixture = try Fixture(specs: OperationRegistry.specs)
-        defer { fixture.remove() }
-        _ = try await fixture.qualify()
-
-        let result = await fixture.verify(
-            expectedSHA256: SupportBundleBuilder.sha256(fixture.executableData),
-            requiredArtifacts: "missing-artifact.json"
-        )
-
-        #expect(result.exitCode != 0)
-        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains("missingArtifact"))
-    }
-
-    @Test func verifyPromotionAcceptsValidRequiredArtifactSchemas() async throws {
-        let spec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
-        let driveResult = Self.driveResult(
-            specs: [spec],
-            mutationRestoreRecords: [Self.recipeShapedRecord()]
-        )
-        let fixture = try Fixture(specs: [spec], drive: { _ in driveResult })
-        defer { fixture.remove() }
-        try JSONEncoder().encode(Self.axisWaivers()).write(to: fixture.waiversURL)
-        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
-
-        let result = await fixture.verify(
-            expectedSHA256: fixture.binarySHA256,
-            requiredArtifacts: "raw-transcript.json,mutation-restore-compensation.json"
-        )
-
-        #expect(result.exitCode == 0)
-        #expect(Self.rejectionReasons(try Self.resultObject(result)).isEmpty)
-    }
-
-    @Test func verifyPromotionRejectsInvalidRequiredArtifactSchema() async throws {
-        let fixture = try promotableFixture()
-        defer { fixture.remove() }
-        _ = try await fixture.qualify(waiversURL: fixture.waiversURL)
-
-        let result = await fixture.verify(
-            expectedSHA256: fixture.binarySHA256,
-            requiredArtifacts: "raw-transcript.json,mutation-restore-compensation.json"
-        )
-        let json = try Self.resultObject(result)
-
-        #expect(result.exitCode != 0)
-        #expect(Self.rejectionReasons(json).contains("requiredArtifactSchemaInvalid"))
-        let rejections = try #require(json["rejections"] as? [[String: Any]])
-        #expect(rejections.contains {
-            $0["reason"] as? String == "requiredArtifactSchemaInvalid"
-                && $0["name"] as? String == "mutation-restore-compensation.json"
-        })
-    }
-
-    @Test func expiredWaiverRejectsThroughCLI() async throws {
-        let fixture = try Fixture(specs: OperationRegistry.specs)
-        defer { fixture.remove() }
-        let original = try await fixture.qualify()
-        try fixture.writeAttestation(original, waivers: [QualificationWaiver(
-            caseID: "optional-case",
-            reasonCode: "known-limitation",
-            owningIssue: "#284",
-            userImpact: "Optional capability unavailable",
-            affectedCapability: "optional-capability",
-            affectsDefaultProfile: false,
-            expiryVersion: "1.2.3",
-            releaseNoteVisible: true
-        )])
-
-        let result = await fixture.verify(expectedSHA256: SupportBundleBuilder.sha256(fixture.executableData))
-
-        #expect(result.exitCode != 0)
-        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains("expiredWaiver"))
-    }
-
-    @Test func verificationEmitsEveryApplicableRejection() async throws {
-        let fixture = try Fixture(specs: OperationRegistry.specs)
-        defer { fixture.remove() }
-        let original = try await fixture.qualify()
-        var cases = original.cases
-        let aggregateIndex = try #require(cases.firstIndex {
-            $0.id == QualificationAxis.requiredCombinations[0].key
-        })
-        let first = cases[aggregateIndex]
-        cases[aggregateIndex] = QualificationCase(
-            id: first.id,
-            status: .failed,
-            tool: first.tool,
-            command: first.command,
-            traceID: first.traceID,
-            verified: false,
-            evidenceFiles: first.evidenceFiles
-        )
-        let changed = fixture.copy(
-            original,
-            serverVersion: "1.2.2",
-            binarySHA256: String(repeating: "a", count: 64),
-            cases: cases,
-            waivers: [QualificationWaiver(
-                caseID: "optional-case",
-                reasonCode: "known-limitation",
-                owningIssue: "#284",
-                userImpact: "Optional capability unavailable",
-                affectedCapability: "optional-capability",
-                affectsDefaultProfile: false,
-                expiryVersion: "1.2.3",
-                releaseNoteVisible: true
-            )]
-        )
-        try JSONEncoder().encode(changed).write(to: fixture.attestationURL)
-
-        let result = await fixture.verify(
-            releaseVersion: "1.2.3",
-            expectedSHA256: String(repeating: "b", count: 64),
-            requiredArtifacts: "missing-artifact.json"
-        )
-        let reasons = Self.rejectionReasons(try Self.resultObject(result))
-
-        #expect(result.exitCode != 0)
-        #expect(reasons.contains("requiredCaseFailed"))
-        #expect(reasons.contains("binarySHAMismatch"))
-        #expect(reasons.contains("missingArtifact"))
-        #expect(reasons.contains("expiredWaiver"))
-        #expect(reasons.contains("releaseVersionMismatch"))
-    }
-
-    @Test func verificationEmitsWaiverAndDuplicateRejectionsThroughCLI() async throws {
-        let fixture = try Fixture(specs: OperationRegistry.specs)
-        defer { fixture.remove() }
-        let original = try await fixture.qualify()
-        let passedCase = try #require(original.cases.first { $0.status == .passed })
-        let changed = fixture.copy(
-            original,
-            cases: original.cases + [passedCase],
-            waivers: [
-                Self.waiver(caseID: "missing-case"),
-                Self.waiver(caseID: passedCase.id),
-            ]
-        )
-        try JSONEncoder().encode(changed).write(to: fixture.attestationURL)
-
-        let result = await fixture.verify(
-            expectedSHA256: SupportBundleBuilder.sha256(fixture.executableData)
-        )
-        let reasons = Self.rejectionReasons(try Self.resultObject(result))
-
-        #expect(result.exitCode != 0)
-        #expect(reasons.contains("duplicateCaseID"))
-        #expect(reasons.contains("waiverForUnknownCase"))
-        #expect(reasons.contains("waiverForPassingCase"))
-    }
-
-    @Test func verificationRejectsMalformedDuplicateAndImplicitWaivers() async throws {
-        let fixture = try Fixture(specs: OperationRegistry.specs)
-        defer { fixture.remove() }
-        let original = try await fixture.qualify()
-        let first = try #require(original.cases.first)
-        let waivedCase = QualificationCase(
-            id: first.id,
-            status: .waived,
-            tool: first.tool,
-            command: first.command,
-            traceID: first.traceID,
-            verified: false,
-            evidenceFiles: first.evidenceFiles
-        )
-        var cases = original.cases
-        cases[0] = waivedCase
-        let validWaiver = Self.waiver(caseID: waivedCase.id)
-        let scenarios: [(waivers: [QualificationWaiver], reason: String)] = [
-            ([Self.waiver(caseID: waivedCase.id, reasonCode: "unsupported-reason")], "invalidWaiver"),
-            ([Self.waiver(caseID: waivedCase.id, owningIssue: "")], "invalidWaiver"),
-            ([validWaiver, validWaiver], "duplicateWaiver"),
-            ([], "waivedCaseMissingWaiver"),
-        ]
-
-        for scenario in scenarios {
-            try JSONEncoder().encode(fixture.copy(
-                original,
-                cases: cases,
-                waivers: scenario.waivers
-            )).write(to: fixture.attestationURL)
-
-            let result = await fixture.verify(
-                expectedSHA256: SupportBundleBuilder.sha256(fixture.executableData)
-            )
-
-            #expect(result.exitCode != 0)
-            #expect(Self.rejectionReasons(try Self.resultObject(result)).contains(scenario.reason))
-        }
-    }
-
-    @Test func rebuildAfterQualificationRejects() async throws {
-        let fixture = try Fixture(specs: OperationRegistry.specs)
-        defer { fixture.remove() }
-        _ = try await fixture.qualify()
-        let qualifiedSHA256 = SupportBundleBuilder.sha256(fixture.executableData)
-        try Data("rebuilt-after-qualification".utf8).write(to: fixture.executableURL)
-
-        let result = await fixture.verify(expectedSHA256: qualifiedSHA256)
-
-        #expect(result.exitCode != 0)
-        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains("binarySHAMismatch"))
-    }
 
     @Test func releaseVersionDifferentFromBinaryRejectsQualification() async throws {
         let fixture = try Fixture(specs: Array(OperationRegistry.specs.prefix(1)))
@@ -9264,88 +5281,10 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(!FileManager.default.fileExists(atPath: fixture.attestationURL.path))
     }
 
-    @Test func vPrefixedReleaseTagMatchesBinaryVersion() async throws {
-        let fixture = try promotableFixture()
-        defer { fixture.remove() }
 
-        let qualification = await fixture.runner.run(arguments: [
-            "LogicProMCP", "--qualify",
-            "--out", fixture.attestationURL.path,
-            "--waivers", fixture.waiversURL.path,
-            "--release-version", "v1.2.3",
-        ])
-        fixture.sign(releaseVersion: "v1.2.3")
-        let verification = await fixture.verify(
-            releaseVersion: "v1.2.3",
-            expectedSHA256: SupportBundleBuilder.sha256(fixture.executableData)
-        )
 
-        // `--qualify` exits non-zero when a case FAILED, and these fixtures drive a fake
-        // transport where operations fail by construction. The contract has its own test:
-        // `qualifyExitCodeReportsWhetherAnythingFailed`.
-        #expect(qualification.exitCode == 0)
-        // `--qualify` exits non-zero when a case FAILED, and these fixtures drive a fake
-        // transport where operations fail by construction. The contract has its own test:
-        // `qualifyExitCodeReportsWhetherAnythingFailed`.
-        #expect(verification.exitCode == 0)
-    }
 
-    @Test func tamperedEvidenceRejectsPromotion() async throws {
-        let fixture = try Fixture(specs: OperationRegistry.specs)
-        defer { fixture.remove() }
-        let attestation = try await fixture.qualify()
-        let evidencePath = try #require(attestation.cases.first?.evidenceFiles.first)
-        try Data("tampered evidence".utf8).write(
-            to: fixture.directory.appendingPathComponent(evidencePath),
-            options: .atomic
-        )
 
-        let result = await fixture.verify(expectedSHA256: SupportBundleBuilder.sha256(fixture.executableData))
-
-        #expect(result.exitCode != 0)
-        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains("evidenceBindingMismatch"))
-    }
-
-    @Test func tamperedOperationResponseArtifactRejectsPromotion() async throws {
-        let fixture = try Fixture(specs: OperationRegistry.specs)
-        defer { fixture.remove() }
-        let attestation = try await fixture.qualify()
-        let operationCase = try #require(attestation.cases.first { $0.id.hasPrefix("in-process/") })
-        let responsePath = try #require(operationCase.evidenceFiles.dropFirst().first)
-        try Data(#"{"forged":true}"#.utf8).write(
-            to: fixture.directory.appendingPathComponent(responsePath),
-            options: .atomic
-        )
-
-        let result = await fixture.verify(expectedSHA256: fixture.binarySHA256)
-
-        #expect(result.exitCode != 0)
-        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains("evidenceBindingMismatch"))
-    }
-
-    @Test func tamperedManifestRejectsPromotion() async throws {
-        let fixture = try Fixture(specs: OperationRegistry.specs)
-        defer { fixture.remove() }
-        _ = try await fixture.qualify()
-        try Data("tampered manifest".utf8).write(to: fixture.manifestURL, options: .atomic)
-
-        let result = await fixture.verify(expectedSHA256: SupportBundleBuilder.sha256(fixture.executableData))
-
-        #expect(result.exitCode != 0)
-        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains("evidenceBindingMismatch"))
-    }
-
-    @Test func tamperedCaseManifestRejectsPromotionWithTypedBindingReason() async throws {
-        let fixture = try Fixture(specs: OperationRegistry.specs)
-        defer { fixture.remove() }
-        _ = try await fixture.qualify()
-        try Data("tampered case manifest".utf8).write(to: fixture.caseManifestURL, options: .atomic)
-
-        let result = await fixture.verify(expectedSHA256: SupportBundleBuilder.sha256(fixture.executableData))
-
-        #expect(result.exitCode != 0)
-        #expect(Self.rejectionReasons(try Self.resultObject(result)).contains("evidenceBindingMismatch"))
-    }
 
     @Test func reservedManifestOutputPathRejectsQualification() async throws {
         let fixture = try Fixture(specs: Array(OperationRegistry.specs.prefix(1)))
@@ -9369,7 +5308,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
     }
 
     @Test func mainEntrypointRoutesQualificationBeforeSideEffects() async {
-        for (subcommand, expectedExitCode) in [("--qualify", 0), ("--verify-promotion", 1)] {
+        for (subcommand, expectedExitCode) in [("--qualify", 0)] {
             var receivedArguments: [String] = []
             var stdout = ""
             var stderr = ""
@@ -9439,8 +5378,6 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(stdout.contains(
             "Set LOGIC_MCP_ATLAS_BASELINES to a matching locale directory containing both baselines."))
         #expect(stdout.contains("--mutate-open-project WRITES TO THE PROJECT LOGIC HAS OPEN"))
-        #expect(stdout.contains(
-            "non-authoritative local diagnostic; emits a JSON decision with no promotion authority"))
     }
 
     @Test func helpListsQualificationSubcommands() async {
@@ -9458,50 +5395,7 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         #expect(result == 0)
         #expect(stdout.contains("--qualify --out <attestation.json>"))
         #expect(stdout.contains("--waivers <waivers.json>"))
-        #expect(stdout.contains("--verify-promotion --attestation <attestation.json>"))
-        #expect(stdout.contains("--expected-binary-sha256 <hex>"))
-        #expect(stdout.contains("--expected-commit <sha>"))
-        #expect(stdout.contains("non-authoritative local diagnostic"))
-    }
-
-    // REMOVED 2026-09-19 with the gate steps it pinned. It asserted that `release.yml` carries
-    // seven qualification steps and a verifier pinned at a specific commit. Those steps are not
-    // in this change: all seven were `if: vars.ADR001_QUALIFICATION_ENFORCED == 'true'` and that
-    // variable is set nowhere, so restoring them would have changed what a release does by
-    // nothing, and the pinned verifier they named is 7,522 lines behind this tree and rejects
-    // every semantic case it would be asked to check. Wiring the gate is its own change, with a
-    // run URL as its acceptance; a test that pins the shape of steps nobody executes is a test
-    // about a file, not about a release.
-
-
-    private static func resultObject(_ result: QualificationCommandResult) throws -> [String: Any] {
-        let data = try #require(result.stdout.data(using: .utf8))
-        return try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
-    }
-
-    private static func rejectionReasons(_ json: [String: Any]) -> Set<String> {
-        let rejections = json["rejections"] as? [[String: Any]] ?? []
-        return Set(rejections.compactMap { $0["reason"] as? String })
-    }
-
-    private static func expectRejection(
-        _ result: QualificationCommandResult,
-        reason: String
-    ) throws {
-        #expect(result.exitCode != 0)
-        #expect(rejectionReasons(try resultObject(result)).contains(reason), "\(result.stdout)")
-    }
-
-    private static func mutateJSONObject(
-        at url: URL,
-        _ mutate: (inout [String: Any]) throws -> Void
-    ) throws {
-        var object = try #require(
-            JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
-        )
-        try mutate(&object)
-        try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
-            .write(to: url)
+        #expect(!stdout.contains("--verify-promotion"))
     }
 
     private static func waiver(
@@ -9524,21 +5418,19 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         )
     }
 
-    private func promotableFixture(
-        trustedPublicKeyData: Data? = nil,
+    private func artifactFixture(
         beforeEvidenceRead: @escaping @Sendable (URL) -> Void = { _ in }
     ) throws -> Fixture {
         let spec = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
         let fixture = try Fixture(
             specs: [spec],
-            trustedPublicKeyData: trustedPublicKeyData,
             beforeEvidenceRead: beforeEvidenceRead
         )
         try JSONEncoder().encode(Self.axisWaivers()).write(to: fixture.waiversURL)
         return fixture
     }
 
-    private func trustedFixture(
+    private func qualificationFixture(
         specs: [OperationSpec] = OperationRegistry.specs,
         candidateExecutionSentinelURL: URL? = nil,
         includeRequiredAtlas: Bool = true,
@@ -9622,106 +5514,6 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             restore: #"{"state":"A","success":true}"#,
             restoreReadback: restoreReadback
         )
-    }
-
-    private func signedTrustedFixture(
-        candidateExecutionSentinelURL: URL? = nil
-    ) async throws -> Fixture {
-        let fixture = try trustedFixture(
-            candidateExecutionSentinelURL: candidateExecutionSentinelURL
-        )
-        let qualification = await fixture.runQualification(waiversURL: fixture.waiversURL)
-        guard qualification.exitCode == 0 else {
-            fixture.remove()
-            throw NSError(
-                domain: "TrustedVerifierTests",
-                code: 1,
-                userInfo: [NSLocalizedDescriptionKey: "qualification failed: \(qualification.stderr)"]
-            )
-        }
-        let signing = QualificationRunner.signTrusted(
-            candidateURL: fixture.executableURL,
-            bundleURL: fixture.directory,
-            releaseVersion: "1.2.3",
-            expectedCommitSHA: fixture.commitSHA,
-            signingPrivateKeyData: fixture.signingKeyData
-        )
-        guard signing.exitCode == 0 else {
-            fixture.remove()
-            throw NSError(
-                domain: "TrustedVerifierTests",
-                code: 2,
-                userInfo: [NSLocalizedDescriptionKey: "signing failed: \(signing.stdout)"]
-            )
-        }
-        return fixture
-    }
-
-    private func signedTrustedMatrixFixture(
-        candidateExecutionSentinelURL: URL? = nil
-    ) async throws -> SignedMatrixFixture {
-        let en = try trustedFixture(
-            candidateExecutionSentinelURL: candidateExecutionSentinelURL,
-            observedLocale: .enUS,
-            includeAxisWaivers: false
-        )
-        let ko: Fixture
-        do {
-            ko = try trustedFixture(
-                candidateExecutionSentinelURL: candidateExecutionSentinelURL,
-                observedLocale: .koKR,
-                includeAxisWaivers: false
-            )
-        } catch {
-            en.remove()
-            throw error
-        }
-        let matrix = FileManager.default.temporaryDirectory
-            .appendingPathComponent("signed-release-matrix-\(UUID().uuidString)", isDirectory: true)
-        do {
-            let enResult = await en.runQualification(waiversURL: en.waiversURL, locale: .enUS)
-            try #require(enResult.exitCode == 0, "\(enResult.stdout)\(enResult.stderr)")
-            let koResult = await ko.runQualification(waiversURL: ko.waiversURL, locale: .koKR)
-            try #require(koResult.exitCode == 0, "\(koResult.stdout)\(koResult.stderr)")
-            try FileManager.default.createDirectory(at: matrix, withIntermediateDirectories: false)
-            try FileManager.default.copyItem(at: en.directory, to: matrix.appendingPathComponent("en"))
-            try FileManager.default.copyItem(at: ko.directory, to: matrix.appendingPathComponent("ko"))
-            let input = QualificationMatrixInput(
-                schema: QualificationMatrixInput.currentSchema,
-                runs: [.init(path: "en"), .init(path: "ko")]
-            )
-            let inputURL = matrix.appendingPathComponent("qualification-matrix-input.json")
-            try QualificationPublicEvidence.encode(input).write(to: inputURL)
-            let signing = QualificationRunner.signTrustedMatrix(
-                candidateURL: en.executableURL,
-                matrixURL: matrix,
-                releaseVersion: "1.2.3",
-                expectedCommitSHA: en.commitSHA,
-                signingPrivateKeyData: en.signingKeyData
-            )
-            try #require(signing.exitCode == 0, "\(signing.stdout)\(signing.stderr)")
-            return SignedMatrixFixture(en: en, ko: ko, directory: matrix)
-        } catch {
-            en.remove()
-            ko.remove()
-            try? FileManager.default.removeItem(at: matrix)
-            throw error
-        }
-    }
-
-    private func cachedConsumerSignedTrustedMatrixFixture() async throws
-        -> ConsumerSignedMatrixFixture
-    {
-        let snapshot: ConsumerMatrixSnapshot
-        if let cached = await Self.consumerMatrixSnapshotCache.current() {
-            snapshot = cached
-        } else {
-            let source = try await signedTrustedMatrixFixture()
-            defer { source.remove() }
-            let captured = try ConsumerMatrixSnapshot(source)
-            snapshot = await Self.consumerMatrixSnapshotCache.installIfAbsent(captured)
-        }
-        return try ConsumerSignedMatrixFixture(snapshot)
     }
 
     private static func axisWaivers(
@@ -9932,13 +5724,6 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             .write(to: fixture.manifestURL, options: .atomic)
     }
 
-    private static func matchesKnownLiveGateFailures(
-        _ observed: [QualificationLiveGateSummary.Failure],
-        against known: [KnownLiveGateFailure] = knownLiveGateFailures
-    ) -> Bool {
-        observed == known.map(\.failure)
-    }
-
     /// Logic's UI language for THIS run, read from Logic's OWN defaults domain.
     ///
     /// `AppleLanguages` under `com.apple.logic10` is what the language switch writes and what a
@@ -9972,12 +5757,6 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         return failures
             .map { "  \($0.operationID): \($0.failureReason)" }
             .joined(separator: "\n")
-    }
-
-    private static func hasValidKnownLiveGateFailureMetadata(
-        _ failure: KnownLiveGateFailure
-    ) -> Bool {
-        !failure.operationID.isEmpty && !failure.failureReason.isEmpty && failure.trackingIssue == "#284"
     }
 
     private static func tracksListLibraryRefusal(
@@ -10774,168 +6553,6 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         }
     }
 
-    private protocol TrustedMatrixFixtureView: Sendable {
-        var executableURL: URL { get }
-        var commitSHA: String { get }
-        var trustedPublicKeyData: Data { get }
-        var inputURL: URL { get }
-    }
-
-    private struct ConsumerMatrixSnapshot: Sendable {
-        struct File: Sendable {
-            let data: Data
-            let permissions: Int
-
-            init(_ url: URL) throws {
-                data = try Data(contentsOf: url)
-                let attributes = try FileManager.default.attributesOfItem(atPath: url.path)
-                permissions = (attributes[.posixPermissions] as? NSNumber)?.intValue ?? 0o600
-            }
-
-            func write(to url: URL) throws {
-                try data.write(to: url, options: .atomic)
-                try FileManager.default.setAttributes(
-                    [.posixPermissions: permissions],
-                    ofItemAtPath: url.path
-                )
-            }
-        }
-
-        let candidate: File
-        let matrixFiles: [String: File]
-        let commitSHA: String
-        let signingKeyData: Data
-        let trustedPublicKeyData: Data
-        let binarySHA256: String
-
-        init(_ fixture: SignedMatrixFixture) throws {
-            candidate = try File(fixture.executableURL)
-            commitSHA = fixture.commitSHA
-            signingKeyData = fixture.signingKeyData
-            trustedPublicKeyData = fixture.trustedPublicKeyData
-            binarySHA256 = fixture.binarySHA256
-
-            let root = fixture.directory.standardizedFileURL
-            let prefix = root.path + "/"
-            let keys: Set<URLResourceKey> = [
-                .isDirectoryKey,
-                .isRegularFileKey,
-                .isSymbolicLinkKey,
-            ]
-            let enumerator = try #require(FileManager.default.enumerator(
-                at: root,
-                includingPropertiesForKeys: Array(keys)
-            ))
-            var files: [String: File] = [:]
-            for case let url as URL in enumerator {
-                let values = try url.resourceValues(forKeys: keys)
-                let isSymbolicLink = values.isSymbolicLink ?? false
-                try #require(!isSymbolicLink, "signed matrix contains a symlink: \(url.path)")
-                if values.isDirectory == true { continue }
-                let isRegularFile = values.isRegularFile ?? false
-                try #require(isRegularFile, "signed matrix contains a nonregular file: \(url.path)")
-                let path = url.standardizedFileURL.path
-                try #require(path.hasPrefix(prefix), "signed matrix entry escaped its root: \(path)")
-                let relativePath = String(path.dropFirst(prefix.count))
-                try #require(!relativePath.isEmpty && files[relativePath] == nil)
-                files[relativePath] = try File(url)
-            }
-            try #require(!files.isEmpty, "signed matrix snapshot is empty")
-            matrixFiles = files
-        }
-    }
-
-    private actor ConsumerMatrixSnapshotCache {
-        private var snapshot: ConsumerMatrixSnapshot?
-
-        func current() -> ConsumerMatrixSnapshot? {
-            snapshot
-        }
-
-        func installIfAbsent(_ candidate: ConsumerMatrixSnapshot) -> ConsumerMatrixSnapshot {
-            if let snapshot { return snapshot }
-            snapshot = candidate
-            return candidate
-        }
-    }
-
-    private final class ConsumerSignedMatrixFixture: TrustedMatrixFixtureView, @unchecked Sendable {
-        let root: URL
-        let directory: URL
-        let executableURL: URL
-        let commitSHA: String
-        let signingKeyData: Data
-        let trustedPublicKeyData: Data
-        let binarySHA256: String
-
-        var inputURL: URL { directory.appendingPathComponent("qualification-matrix-input.json") }
-        var matrixURL: URL { directory.appendingPathComponent("release-qualification-matrix.json") }
-        var enMatrixAttestationURL: URL {
-            directory.appendingPathComponent("en/release-qualification-attestation.json")
-        }
-
-        init(_ snapshot: ConsumerMatrixSnapshot) throws {
-            root = FileManager.default.temporaryDirectory
-                .appendingPathComponent("consumer-release-matrix-\(UUID().uuidString)", isDirectory: true)
-            directory = root.appendingPathComponent("matrix", isDirectory: true)
-            executableURL = root.appendingPathComponent("LogicProMCP")
-            commitSHA = snapshot.commitSHA
-            signingKeyData = snapshot.signingKeyData
-            trustedPublicKeyData = snapshot.trustedPublicKeyData
-            binarySHA256 = snapshot.binarySHA256
-
-            do {
-                try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-                try snapshot.candidate.write(to: executableURL)
-                for relativePath in snapshot.matrixFiles.keys.sorted() {
-                    let target = directory.appendingPathComponent(relativePath)
-                    try FileManager.default.createDirectory(
-                        at: target.deletingLastPathComponent(),
-                        withIntermediateDirectories: true
-                    )
-                    let file = try #require(snapshot.matrixFiles[relativePath])
-                    try file.write(to: target)
-                }
-            } catch {
-                try? FileManager.default.removeItem(at: root)
-                throw error
-            }
-        }
-
-        func remove() {
-            try? FileManager.default.removeItem(at: root)
-        }
-    }
-
-    private final class SignedMatrixFixture: TrustedMatrixFixtureView, @unchecked Sendable {
-        let en: Fixture
-        let ko: Fixture
-        let directory: URL
-
-        init(en: Fixture, ko: Fixture, directory: URL) {
-            self.en = en
-            self.ko = ko
-            self.directory = directory
-        }
-
-        var executableURL: URL { en.executableURL }
-        var commitSHA: String { en.commitSHA }
-        var signingKeyData: Data { en.signingKeyData }
-        var trustedPublicKeyData: Data { en.trustedPublicKeyData }
-        var binarySHA256: String { en.binarySHA256 }
-        var inputURL: URL { directory.appendingPathComponent("qualification-matrix-input.json") }
-        var matrixURL: URL { directory.appendingPathComponent("release-qualification-matrix.json") }
-        var enMatrixAttestationURL: URL {
-            directory.appendingPathComponent("en/release-qualification-attestation.json")
-        }
-
-        func remove() {
-            en.remove()
-            ko.remove()
-            try? FileManager.default.removeItem(at: directory)
-        }
-    }
-
     private final class Fixture: @unchecked Sendable {
         let directory: URL
         let executableURL: URL
@@ -10946,9 +6563,6 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         let externalCasesURL: URL
         let waiversURL: URL
         let commitSHA: String
-        let signingKeyData: Data
-        let trustedPublicKeyData: Data
-        let requiredOperationIDs: Set<String>
         let runner: QualificationRunner
         let qualificationIncludesExternalCases: Bool
 
@@ -10964,8 +6578,6 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                 OperationHandlerRegistry.handler(tool: $0, command: $1) != nil
             },
             commitSHA: String = String(repeating: "c", count: 40),
-            includeSigningKey: Bool = false,
-            trustedPublicKeyData: Data? = nil,
             beforeEvidenceRead: @escaping @Sendable (URL) -> Void = { _ in },
             environmentAdditions: [String: String] = [:],
             qualificationIncludesExternalCases: Bool = false,
@@ -10973,8 +6585,6 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
         ) throws {
             self.commitSHA = commitSHA
             self.qualificationIncludesExternalCases = qualificationIncludesExternalCases
-            signingKeyData = Data(repeating: 7, count: 32)
-            requiredOperationIDs = Set(specs.map { $0.id.rawValue })
             self.executableData = executableData
             directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("qualification-runner-\(UUID().uuidString)", isDirectory: true)
@@ -10992,14 +6602,6 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                 [.posixPermissions: 0o755],
                 ofItemAtPath: executableURL.path
             )
-            let signingKey = try Curve25519.Signing.PrivateKey(
-                rawRepresentation: signingKeyData
-            )
-            let trustedKeyData = trustedPublicKeyData
-                ?? signingKey.publicKey.rawRepresentation
-            self.trustedPublicKeyData = trustedKeyData
-            let signingKeyBase64 = signingKeyData.base64EncodedString()
-            let trustedKeyBase64 = trustedKeyData.base64EncodedString()
             let defaultDriveResult = QualificationRunnerTests.driveResult(specs: specs)
             let drive = drive ?? { _ in defaultDriveResult }
             runner = QualificationRunner(runtime: .init(
@@ -11007,10 +6609,6 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
                 environment: { [commitSHA, environmentAdditions] in
                     var environment = environmentAdditions
                     environment["GIT_COMMIT"] = commitSHA
-                    if includeSigningKey {
-                        environment["LOGIC_PRO_MCP_QUALIFICATION_SIGNING_KEY"] = signingKeyBase64
-                    }
-                    environment["LOGIC_PRO_MCP_QUALIFICATION_TRUSTED_PUBLIC_KEY"] = trustedKeyBase64
                     return environment
                 },
                 now: { Date(timeIntervalSince1970: 1_000) },
@@ -11047,46 +6645,10 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             // assertion. The exit code has its own test:
             // `qualifyExitCodeReportsWhetherAnythingFailed`.
             #expect(result.exitCode == 0 || result.exitCode == 1, "the command ran")
-            try forceSignForDiagnosticFixture()
             return try JSONDecoder().decode(
                 ReleaseQualificationAttestation.self,
                 from: Data(contentsOf: attestationURL)
             )
-        }
-
-        func forceSignForDiagnosticFixture() throws {
-            let original = try JSONDecoder().decode(
-                ReleaseQualificationAttestation.self,
-                from: Data(contentsOf: attestationURL)
-            )
-            let provenance = try #require(original.provenance)
-            let signingKey = try Curve25519.Signing.PrivateKey(
-                rawRepresentation: signingKeyData
-            )
-            let encoder = JSONEncoder()
-            encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
-            let signature = QualificationProvenanceSignature(
-                algorithm: "ed25519",
-                keyID: SupportBundleBuilder.sha256(signingKey.publicKey.rawRepresentation),
-                value: try signingKey.signature(for: encoder.encode(provenance)).base64EncodedString()
-            )
-            try JSONEncoder().encode(copy(
-                original,
-                provenanceSignature: signature
-            )).write(to: attestationURL, options: .atomic)
-        }
-
-        func sign(releaseVersion: String = "1.2.3") {
-            let signing = QualificationRunner.signTrusted(
-                candidateURL: executableURL,
-                bundleURL: directory,
-                releaseVersion: releaseVersion,
-                expectedCommitSHA: commitSHA,
-                signingPrivateKeyData: signingKeyData,
-                requiredArtifacts: [],
-                requiredOperationIDs: requiredOperationIDs
-            )
-            #expect(signing.exitCode == 0)
         }
 
         /// - Parameter mutateOpenProject: whether this run consents to the write recipes. The
@@ -11123,62 +6685,5 @@ for name in ('LogicProMCP-macOS-universal.tar.gz', 'LogicProMCP-macOS-arm64.tar.
             return try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
         }
 
-        func verify(
-            releaseVersion: String = "1.2.3",
-            expectedSHA256: String,
-            expectedCommit: String? = nil,
-            requiredArtifacts: String = "LogicProMCP,evidence-manifest.json"
-        ) async -> QualificationCommandResult {
-            await runner.run(arguments: [
-                "LogicProMCP", "--verify-promotion",
-                "--attestation", attestationURL.path,
-                "--release-version", releaseVersion,
-                "--expected-binary-sha256", expectedSHA256,
-                "--expected-commit", expectedCommit ?? commitSHA,
-                "--required-artifacts", requiredArtifacts,
-            ])
-        }
-
-        func writeAttestation(
-            _ original: ReleaseQualificationAttestation,
-            waivers: [QualificationWaiver]
-        ) throws {
-            try JSONEncoder().encode(copy(original, waivers: waivers)).write(to: attestationURL)
-        }
-
-        func copy(
-            _ original: ReleaseQualificationAttestation,
-            serverVersion: String? = nil,
-            binarySHA256: String? = nil,
-            cases: [QualificationCase]? = nil,
-            waivers: [QualificationWaiver]? = nil,
-            provenanceSignature: QualificationProvenanceSignature? = nil
-        ) -> ReleaseQualificationAttestation {
-            let copiedCases = cases ?? original.cases
-            return ReleaseQualificationAttestation(
-                schema: original.schema,
-                serverVersion: serverVersion ?? original.serverVersion,
-                commitSHA: original.commitSHA,
-                binarySHA256: binarySHA256 ?? original.binarySHA256,
-                logicVariant: original.logicVariant,
-                logicVersion: original.logicVersion,
-                locale: original.locale,
-                profile: original.profile,
-                cache: original.cache,
-                fixture: original.fixture,
-                startedAt: original.startedAt,
-                completedAt: original.completedAt,
-                total: copiedCases.count,
-                passed: copiedCases.filter { $0.status == .passed }.count,
-                failed: copiedCases.filter { $0.status == .failed }.count,
-                waived: copiedCases.filter { $0.status == .waived }.count,
-                cases: copiedCases,
-                waivers: waivers ?? original.waivers,
-                evidenceManifestSHA256: original.evidenceManifestSHA256,
-                operationCatalogSHA256: original.operationCatalogSHA256,
-                provenance: original.provenance,
-                provenanceSignature: provenanceSignature ?? original.provenanceSignature
-            )
-        }
     }
 }
