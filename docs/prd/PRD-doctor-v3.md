@@ -126,7 +126,7 @@ Doctor v3 keeps v2's single-pass, sequential, non-throwing pipeline (`SetupDocto
 ```
                      ┌──────────────── generate(arguments, permissionStatus, approvals, runtime) ─────────────────┐
  INSTALL   binary.path → binary.executable → binary.version → install.source → install.binary_inventory[N7] →
-                         install.share_dir[N8] → release.signature → release.quarantine
+                         install.share_dir[N8] → release.quarantine
  REGISTER  mcp.claude_code_registration → mcp.registration_target[N5] → mcp.claude_desktop_registration[N6]
  PERMISS.  permissions.accessibility → …automation_logic_pro → …automation_system_events →
                          …post_event_access[N1] → …launch_context[N9] → …tcc_cross_context[N10]
@@ -181,8 +181,7 @@ Runtime seams follow the v2 additive pattern (`Runtime` default-valued `var`s, `
 | 4 | `install.source` | ✓ | install | installation |
 | 5 | `install.binary_inventory` | + N7 | install | installation |
 | 6 | `install.share_dir` | + N8 | install | installation |
-| 7 | `release.signature` | ✓ | release | installation |
-| 8 | `release.quarantine` | ✓ | release | installation |
+| 7 | `release.quarantine` | ✓ | release | installation |
 | 9 | `mcp.claude_code_registration` | ✓ | mcp | configuration |
 | 10 | `mcp.registration_target` | + N5 | mcp | configuration |
 | 11 | `mcp.claude_desktop_registration` | + N6 | mcp | configuration |
@@ -255,7 +254,7 @@ Existing-13 relative order preserved: positions `1,2,3,4,7,8,9,12,13,14,18,21,23
   5. **≥ 2 distinct** semvers remain (e.g. a dependency's version embedded alongside the binary's own; `strings` emits in file-offset order so "first match" is arbitrary) → **`indeterminate`**: emit **no** version-mismatch `warn`; evidence lists all survivors.
   6. **Zero** remain → `indeterminate` (non-Mach-O wrapper / stripped binary — R4).
 - **Status**: `warn` if any candidate's **determinate** static version ≠ running version (live-proven 3.5.0 vs 3.8.0); `pass` if consistent, indeterminate, or zero candidates (source build — evidence notes it). Indeterminate never produces a false `warn` (keeps false-red at 0).
-- **Never executes any candidate (C4/NG7).** `lipo`/`strings`/`codesign`/`xattr` via `BoundedProcessRunner` (timeout 1.5s) are metadata-only and safe (E4 §A4). Arch discrimination is `lipo -archs` alone (no `file` tool — not in the D10 allowlist).
+- **Never executes any candidate (C4/NG7).** `lipo`/`strings`/`xattr` via `BoundedProcessRunner` are metadata-only and safe (E4 §A4). Arch discrimination is `lipo -archs` alone (no `file` tool — not in the D10 allowlist).
 - **evidence**: `{running_version, candidates:"path:arch:version | …", stale:"true"|<omitted>, indeterminate:"path,…"|<omitted>}`. **remediation**: `command` (`brew upgrade`/reinstall). **bb**: none.
 
 #### N8 `install.share_dir` — install/installation
@@ -355,7 +354,7 @@ Checks whose failure is *environmental* (N7/N8/N10/N11/N12/click_fallback) use `
 | D11 | Fix Plan sort granularity + optional-channel noise | (a) 2-tier severity (error→warning) + status tags + optional-channel framing (b) 3-tier status (fail→warn→manual) + same | **(a) 2-tier** (amended by Phase-4 gate OBJ-A; was (b)) | 3-tier broke the headline coupling (counterexample: manual #9 vs warn #11 — headline picks declared-order, a 3-tier plan picks the warn). 2-tier makes fix_plan selection constructionally identical to `computeHeadline`'s lead pick; the noise-management burden moves entirely to the `[fail]/[warn]/[manual]` tags + "ignorable if unused" framing, which are retained. Detail below; §4.3 Fix Plan. (R11/OBJ-A) |
 
 **D10 — Structural guard against arbitrary-binary execution (R10 ← independent review OBJ-7; the E4 incident's most important lesson).** The "never execute any on-disk binary other than self" rule (C4/NG7, Honesty Contract #3) is elevated from prose to **structure**:
-1. **Typed-tool allowlist.** Production `runCommand` routes every subprocess through a typed allowlist — `enum DoctorTool { case codesign, xattr, lipo, strings, sqlite3, plutil, which, brew, osascript, curl, gh }` — each mapped to a **fixed absolute path** (`/usr/bin/codesign`, `/usr/bin/strings`, `/usr/bin/sqlite3`, …). The production implementation **fail-closed rejects** (returns nil, spawns nothing) any executable not in the allowlist; this rejection is **pinned by a unit test**. The `Runtime` seam signature stays `(String, [String]) -> …` for fixture compatibility — enforcement lives **inside the production implementation**, not in the seam type.
+1. **Typed-tool allowlist.** Production `runCommand` routes every subprocess through a typed allowlist — `enum DoctorTool { case xattr, lipo, strings, sqlite3, plutil, which, brew, osascript, curl, gh }` — each mapped to a **fixed absolute path**. The production implementation **fail-closed rejects** (returns nil, spawns nothing) any executable not in the allowlist; this rejection is **pinned by a unit test**. The `Runtime` seam signature stays `(String, [String]) -> …` for fixture compatibility — enforcement lives **inside the production implementation**, not in the seam type.
 2. **Lint test.** A source-grep test asserts `SetupDoctor.swift` (and any new doctor source file) contains **no direct `Process`/`posix_spawn` use outside `BoundedProcessRunner`**, so a future edit cannot silently reintroduce an unbounded/arbitrary spawn.
 
 This closes the E4 incident structurally: an old `/opt/homebrew/bin/LogicProMCP` can never be handed to `runCommand` as an executable (it is not a `DoctorTool`); the only versioning path remains the static `strings` sniff (D2).
@@ -367,7 +366,7 @@ This closes the E4 incident structurally: an old `/opt/homebrew/bin/LogicProMCP`
 1. **False-green = 0.** No check reports `pass` for something it did not verify. Every "cannot verify" path emits `manual` or `skipped` **plus an enumerated `reason`** from the closed set: `config_absent` / `config_unreadable` / `bundle_unreadable` / `share_dir_unresolved` / `share_dir_invalid` / `relative_command` / `full_disk_access_unavailable` / `tcc_query_unavailable` / `tcc_schema_mismatch` / `principal_not_found`. The `binary.version` self-admission ("never fails", `SetupDoctor.swift:449-453`) is the anti-pattern this PRD closes with `install.binary_inventory`.
 2. **False-red = 0.** `fail` is reserved for "confirmed broken" (missing binary, denied Accessibility/PostEvent, Logic not installed, macOS < 14). Environmental capability gaps (no FDA, no brew, source build, Logic not running) degrade to `skipped`/`manual`, mirroring the existing `system.macos_version` unreadable→`skipped` template (`SetupDoctorEnterpriseTests.swift:553-560`).
 3. **Never execute arbitrary on-disk binaries (C4/NG7) — enforced structurally, not by prose (D10).** The E4 incident (running `/opt/homebrew/bin/LogicProMCP --version` on a v3.5.0 binary started the full 7-channel server for ~1.7s and touched `com.apple.logic.pro.cs` mtime; no lasting binding — 0 MCU-port occurrences) is the concrete reason. Version discovery is static `strings` only. **Enforcement (D10):** production `runCommand` routes through the typed `DoctorTool` allowlist (fixed absolute paths; fail-closed nil on anything else, pinned by a unit test) **plus** a source-grep lint test forbidding `Process`/`posix_spawn` outside `BoundedProcessRunner`.
-4. **Read-only contract, precisely (C3).** Doctor never spawns another LogicProMCP/MCP session, never creates a CoreMIDI client/port, and never mutates system state. It runs only well-known Apple metadata tools bounded (`codesign`/`xattr`/`lipo`/`strings`/`plutil`/`sqlite3` read-only SELECT) via `BoundedProcessRunner` (timeouts 1.0–3.5s). TCC.db is opened with the **`file:…?immutable=1` URI (mandatory, R3)** so no `-wal`/`-shm` sidecar is ever created. `com.apple.logic.pro.cs` is **never** parsed with `plutil` (FORM/IFF binary, C6) — positive-only `strings` scan.
+4. **Read-only contract, precisely (C3).** Doctor never spawns another LogicProMCP/MCP session, never creates a CoreMIDI client/port, and never mutates system state. It runs only bounded metadata tools (`xattr`/`lipo`/`strings`/`plutil`/`sqlite3` read-only SELECT) via `BoundedProcessRunner`. TCC.db is opened with the **`file:…?immutable=1` URI (mandatory, R3)** so no `-wal`/`-shm` sidecar is ever created. `com.apple.logic.pro.cs` is **never** parsed with `plutil` (FORM/IFF binary, C6) — positive-only `strings` scan.
 5. **Evidence egress (C7).** Only bundle ids / enums / bools / version strings leave the process. Full paths under `$HOME` are `~`-abbreviated; TCC blobs, `auth_reason`, other apps' human names, and user document paths are never emitted.
 6. **Live-probe authority.** The TCC.db layer is explicitly labeled enrichment; where it and a live probe could disagree, the summary states the live probe (same-context) is authoritative (E3 §C7, deliverable (ii)).
 
@@ -422,7 +421,6 @@ N/A — doctor performs no privileged mutation. It **reads** local files (Info.p
 
 | Tool | Max calls | Per-call ceiling | Consuming checks | Σ worst-case |
 |---|---|---|---|---|
-| `codesign` | 1 | ≤3.5 s | `release.signature` | 3.5 s |
 | `xattr` | 1 | ≤1.0 s | `release.quarantine` | 1.0 s |
 | `brew` | ≤2 | ≤3.5 s | `install.source`, `install.share_dir` (pkgshare, 2 prefixes) | 7.0 s |
 | `which` | ≤1 | ≤1.0 s | dependency resolution | 1.0 s |

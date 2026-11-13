@@ -6,25 +6,25 @@ import Testing
 
     #expect(script.contains("git branch --show-current"))
     #expect(script.contains("!= main"))
-    #expect(script.contains("stable releases must be tagged from the main branch"))
+    #expect(script.contains("releases must be tagged from the main branch"))
     #expect(script.contains("git fetch --quiet origin main --tags"))
     #expect(script.contains("git rev-parse HEAD"))
     #expect(script.contains("git rev-parse origin/main"))
     #expect(script.contains("HEAD must match origin/main"))
-    #expect(script.contains("bash Scripts/release-consume-final.sh stage"))
-    #expect(!script.contains("swift build"))
+    #expect(script.contains("bash Scripts/release-qualify.sh"))
+    #expect(script.contains("DEVELOPER_DIR=/Library/Developer/CommandLineTools"))
     #expect(!script.contains("gh release create"))
 
     let branchGate = try #require(script.range(of: "git branch --show-current"))
     let headGate = try #require(script.range(of: "git rev-parse HEAD"))
-    let consumption = try #require(script.range(of: "bash Scripts/release-consume-final.sh stage"))
-    let pins = try #require(script.range(of: "BINARY_SHA=$(shasum"))
+    let qualification = try #require(script.range(of: "bash Scripts/release-qualify.sh"))
+    let lockfile = try #require(script.range(of: "git diff --exit-code Package.resolved"))
     let tag = try #require(script.range(of: "git tag \"$VERSION\""))
     let tagPush = try #require(script.range(of: "git push origin \"$VERSION\""))
     #expect(branchGate.lowerBound < tagPush.lowerBound)
     #expect(headGate.lowerBound < tagPush.lowerBound)
-    #expect(consumption.lowerBound < pins.lowerBound)
-    #expect(pins.lowerBound < tag.lowerBound)
+    #expect(qualification.lowerBound < lockfile.lowerBound)
+    #expect(lockfile.lowerBound < tag.lowerBound)
     #expect(tag.lowerBound < tagPush.lowerBound)
 }
 
@@ -52,38 +52,61 @@ import Testing
     #expect(liveNames.allSatisfy { gate.contains($0) })
 }
 
-@Test func release_workflow_runs_tests_before_packaging() throws {
+@Test func release_workflow_buildsWithCommandLineToolsBeforePackaging() throws {
     let workflow = try scriptContents(".github/workflows/release.yml")
 
-    let selectXcode = try #require(workflow.range(of: "name: Select Xcode"))
-    // The candidate is already final and qualified. Only the independently
-    // pinned verifier is built; consumer behavior is exercised separately.
-    let resolve = try #require(workflow.range(of: "swift package resolve --force-resolved-versions"))
-    let buildVerifier = try #require(workflow.range(of: "swift build -c release --product trusted-verifier --force-resolved-versions"))
-    let package = try #require(workflow.range(of: "name: Package"))
-
-    #expect(selectXcode.lowerBound < resolve.lowerBound)
-    #expect(resolve.lowerBound < buildVerifier.lowerBound)
-    #expect(buildVerifier.lowerBound < package.lowerBound)
-    #expect(!workflow.contains("name: Build universal binary"))
-    #expect(!workflow.contains("codesign --force"))
+    let toolchain = try #require(workflow.range(of: "name: Use Command Line Tools"))
+    let build = try #require(workflow.range(of: "bash Scripts/release-build-universal.sh"))
+    let package = try #require(workflow.range(of: "name: Package release"))
+    #expect(toolchain.lowerBound < build.lowerBound)
+    #expect(build.lowerBound < package.lowerBound)
+    for forbidden in ["xcode-select", "Xcode_", "codesign", "notarytool", "spctl",
+                      "MACOS_CERT", "APPLE_NOTARY"] {
+        #expect(!workflow.contains(forbidden), "release workflow contains \(forbidden)")
+    }
 }
 
 @Test func ci_workflow_gates_package_resolved_drift() throws {
     let workflow = try scriptContents(".github/workflows/ci.yml")
 
     #expect(workflow.contains("git diff --exit-code Package.resolved"))
-    let build = try #require(workflow.range(of: "name: Build"))
-    let lockfileGate = try #require(workflow.range(of: "git diff --exit-code Package.resolved"))
-    // The step was `Coverage report` until 2026-09-18, when running the tests and deciding on the
-    // numbers became two steps and the decision moved to `Scripts/ci-coverage-gate.sh`. Searching
-    // for the old name failed this case loudly, which is right -- a step this test orders against
-    // must be a step that exists. The claim is unchanged: the lockfile gate runs after the build
-    // and before anything measures coverage.
-    let coverage = try #require(workflow.range(of: "name: Run the tests and collect coverage"))
-    let coverageGate = try #require(workflow.range(of: "name: Coverage gate"))
-    #expect(build.lowerBound < lockfileGate.lowerBound)
-    #expect(lockfileGate.lowerBound < coverage.lowerBound)
+    let releaseBuild = try #require(workflow.range(of: "swift build -c release"))
+    let releaseLockfileGate = try #require(workflow.range(
+        of: "git diff --exit-code Package.resolved",
+        range: releaseBuild.upperBound..<workflow.endIndex
+    ))
+    let testBuild = try #require(workflow.range(of: "swift build --build-tests --enable-code-coverage"))
+    let testLockfileGate = try #require(workflow.range(
+        of: "git diff --exit-code Package.resolved",
+        range: testBuild.upperBound..<workflow.endIndex
+    ))
+    let coverage = try #require(workflow.range(of: "swift test --skip-build --enable-code-coverage"))
+    let coverageGate = try #require(workflow.range(of: "bash Scripts/ci-coverage-gate.sh"))
+    #expect(releaseBuild.lowerBound < releaseLockfileGate.lowerBound)
+    #expect(testBuild.lowerBound < testLockfileGate.lowerBound)
+    #expect(testLockfileGate.lowerBound < coverage.lowerBound)
     #expect(coverage.lowerBound < coverageGate.lowerBound,
             "the tests must run before the gate reads the profile they produced")
+}
+
+@Test func ci_and_release_use_supported_standard_intel_macos_runners() throws {
+    let ci = try scriptContents(".github/workflows/ci.yml")
+    let release = try scriptContents(".github/workflows/release.yml")
+
+    #expect(ci.contains("'macos-15-intel'"))
+    #expect(!ci.contains("&& 'macos-15' ||"))
+    #expect(release.contains("runs-on: macos-15-intel"))
+    #expect(release.contains("os: [macos-15-intel, macos-26]"))
+    #expect(!release.contains("macos-14"))
+    #expect(!release.contains("os: [macos-15,"))
+    #expect(!release.contains("os: [macos-15-intel, macos-26-intel]"))
+}
+
+@Test func ci_documentationShortcutCannotHideSourceRenames() throws {
+    let workflow = try scriptContents(".github/workflows/ci.yml")
+
+    #expect(workflow.contains("git diff --no-renames --name-only -z"))
+    #expect(workflow.contains("docs/*|*.md"))
+    #expect(workflow.contains("*) mode=full"))
+    #expect(workflow.contains("if [ \"$changed\" -eq 0 ]; then mode=full; fi"))
 }

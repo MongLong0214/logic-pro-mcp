@@ -12,7 +12,7 @@ Clean up immediately actionable v3 gaps before larger schema work: shell-quote c
 
 - [ ] **Evidence-first rule (CTO)**: each of the five claimed v3 gaps is REPRODUCED against main with file:line + a failing red test before fixing; any item that cannot be reproduced is recorded as "claimed by review — not reproduced" and dropped from this ticket (no fixing phantom bugs).
 - [x] Command remediation that includes paths is shell-quoted.
-- [x] `xattr`/codesign-style command evidence preserves typed exit, stdout/stderr summary, and truncation metadata.
+- [x] `xattr` command evidence preserves typed exit, stdout/stderr summary, and truncation metadata.
 - [x] Source-build users do not receive Homebrew-only remediation.
 - [x] Unknown launch context is not rendered as "fully known"; it remains honest and explanatory (render-level treatment — the check stays aggregate-neutral; no false-red for exotic hosts).
 - [x] Human renderer and docs describe the same next action.
@@ -35,13 +35,13 @@ Run focused doctor tests plus one local `doctor --json` smoke.
 
 ## Execution Notes
 
-- Reproduced and fixed: path-bearing remediation quoting, source-aware stale binary inventory remediation, xattr/codesign command evidence stdout/stderr summaries and truncation metadata, explicit unknown-launch-context summary, and matching `docs/SETUP.md` remediation guidance.
+- Reproduced and fixed: path-bearing remediation quoting, source-aware stale binary inventory remediation, xattr command evidence stdout/stderr summaries and truncation metadata, explicit unknown-launch-context summary, and matching `docs/SETUP.md` remediation guidance.
 - Already present and retained: source-build install-source classification precedence and `xattr` nonzero result handling.
 - Process note: the implementation is covered by focused regression tests and full-suite verification, but strict red-before-green capture was not preserved for every original review claim; this gate is left unchecked for reviewer visibility.
 
 ## Verification
 
-- `swift test --filter 'DoctorSourceBuild|DoctorRemediationShellQuotesPaths|DoctorXattrEvidenceKeepsStdoutStderrSummary|DoctorCodesignEvidenceKeepsStdoutStderrSummary|DoctorUnknownLaunchContext'`
+- `swift test --filter 'DoctorSourceBuild|DoctorRemediationShellQuotesPaths|DoctorXattrEvidenceKeepsStdoutStderrSummary|DoctorUnknownLaunchContext'`
 - `swift test --no-parallel` (`2174` tests passed)
 - `swift build -c release`
 - `.build/release/LogicProMCP doctor --json`

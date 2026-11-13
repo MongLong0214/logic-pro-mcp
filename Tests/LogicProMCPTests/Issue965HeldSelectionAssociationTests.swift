@@ -1661,14 +1661,14 @@ struct Issue965HeldSelectionAssociationTests {
             }
             return AccessibilityChannel(runtime: .axBacked(isTrusted: { true },
                 isLogicProRunning: { true }, hasVisibleWindow: { true }, logicRuntime: logic(),
-                trackRenameMouseRuntime: routingFocusMouse ?? (routingMenuRename ? .init(
+                trackRenameMouseRuntime: routingFocusMouse ?? .init(
                     postMouseEvent: { _, _, _ in Issue.record("No rename mouse fallback"); return false },
                     postKeyEvent: { [self] key in key == 0x24 && (routingNameReturn?() ?? false) },
                     postUnicodeScalar: { _ in Issue.record("No rename typing fallback"); return false }, sleepMicros: { _ in },
-                    postFlaggedKeyEvent: { _, _ in Issue.record("No flagged rename key"); return false }) : .production),
-                processRuntime: routingMenuRename ? .init(logicProPID: { 4242 }, fallbackLogicProPID: { 4242 },
+                    postFlaggedKeyEvent: { _, _ in Issue.record("No flagged rename key"); return false }),
+                processRuntime: .init(logicProPID: { 4242 }, fallbackLogicProPID: { 4242 },
                     logicProRunning: { true }, activateLogicPro: { false }, logicIsFrontmost: { true },
-                    logicProBundleURL: { nil }) : .production, canPostEvents: { true }))
+                    logicProBundleURL: { nil }), canPostEvents: { true }))
         }
     }
 

@@ -12,9 +12,12 @@
 # inferred, and the final suite remains unfiltered.
 #
 # Release entrypoints consume staged final artifacts; this runner does not publish.
-# Scripts/test_release_builds_before_live_qualification.py runs it with a stubbed `swift`, `pgrep` and release binary.
+# The release contract tests cover the build-before-live ordering without replacing the runtime.
 #
 set -euo pipefail
+
+export DEVELOPER_DIR=/Library/Developer/CommandLineTools
+test -d "$DEVELOPER_DIR"
 
 cd "$(dirname "$0")/.."
 

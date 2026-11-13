@@ -996,7 +996,7 @@ struct SemanticOracleCensusTests {
         let reason = try #require(SemanticOracleTable.structurallyUnverifiedMutatingOperationIDs[.mixerSetInputBusVerified])
         #expect(reason.contains("bounded native round trip"))
         #expect(reason.contains("independent typed-source"))
-        #expect(reason.contains("not promotion evidence"))
+        #expect(reason.contains("not independent qualification evidence"))
         #expect(SemanticOracleTable.mutatingSpecIDs.contains(.mixerSetInputBusVerified))
         #expect(!SemanticOracleTable.coveredMutatingOperationIDs.contains(.mixerSetInputBusVerified))
         #expect(SemanticOracleTable.byOperationID[.mixerSetInputBusVerified] == nil)

@@ -7,9 +7,7 @@ class LogicProMcp < Formula
   license "MIT"
 
   # GitHub Actions release artifacts are expected to be true universal
-  # tarballs. Historical/local ADHOC prerelease cuts may still record
-  # arm64-only metadata, so inspect RELEASE-METADATA.json when auditing a
-  # specific tag.
+  # tarballs. RELEASE-METADATA.json records the architectures for each tag.
   #
   # SHA256 is copied from the published SHA256SUMS.txt for the current
   # LogicProMCP-macOS-universal.tar.gz release artifact.
@@ -28,8 +26,8 @@ class LogicProMcp < Formula
 
   # NOTE (v3.1.6): no `depends_on xcode:` — this Formula installs the
   # pre-built GitHub release binary; it does not invoke `swift build` or any
-  # Apple toolchain. Source builds via `Package.swift` still require Xcode
-  # 15.0+ (Swift 6.0+).
+  # Apple toolchain. Source builds via `Package.swift` use Command Line Tools
+  # with Swift 6.0+.
 
   def install
     bin.install "LogicProMCP"

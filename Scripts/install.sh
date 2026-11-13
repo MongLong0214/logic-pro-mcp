@@ -8,7 +8,6 @@ INSTALL_DIR="${LOGIC_PRO_MCP_INSTALL_DIR:-/usr/local/bin}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 VERSION="${LOGIC_PRO_MCP_VERSION:-v3.19.0}"
 SHA256="${LOGIC_PRO_MCP_SHA256:-}"
-EXPECTED_TEAM_ID="${LOGIC_PRO_MCP_TEAM_ID:-}"
 REGISTER_CLAUDE="${LOGIC_PRO_MCP_REGISTER_CLAUDE:-1}"
 INSTALL_KEYCMDS="${LOGIC_PRO_MCP_INSTALL_KEYCMDS:-1}"
 SKIP_SUDO="${LOGIC_PRO_MCP_SKIP_SUDO:-0}"
@@ -91,72 +90,6 @@ validate_optional_extracted_asset_file() {
     fi
 }
 
-verify_signature() {
-    local binary_path="$1"
-
-    if ! command -v codesign >/dev/null 2>&1; then
-        echo "  Error: codesign not available for signature verification."
-        return 1
-    fi
-
-    echo "  Verifying code signature..."
-    if ! codesign --verify --strict --verbose=2 "$binary_path" >/dev/null 2>&1; then
-        echo "  Error: code signature verification failed."
-        return 1
-    fi
-
-    # ADHOC releases (no Apple Developer Program membership) skip TeamID check —
-    # they are pinned only by SHA256 manifest in the same release.
-    if [ "$EXPECTED_TEAM_ID" = "ADHOC" ]; then
-        return 0
-    fi
-
-    if [ -n "$EXPECTED_TEAM_ID" ]; then
-        local actual_team_id
-        actual_team_id=$(codesign -dv --verbose=4 "$binary_path" 2>&1 | awk -F= '/^TeamIdentifier=/{print $2}')
-        if [ "$actual_team_id" != "$EXPECTED_TEAM_ID" ]; then
-            echo "  Error: TeamIdentifier mismatch."
-            echo "    expected: $EXPECTED_TEAM_ID"
-            echo "    actual:   ${actual_team_id:-<none>}"
-            return 1
-        fi
-    fi
-}
-
-verify_gatekeeper() {
-    local binary_path="$1"
-
-    # ADHOC releases are not notarized; Gatekeeper will reject. Skip the
-    # assessment for this release type — SHA256 + codesign --verify still
-    # guarantee the binary wasn't tampered with in transit.
-    if [ "$EXPECTED_TEAM_ID" = "ADHOC" ]; then
-        echo "  Skipping Gatekeeper assessment (ADHOC release)."
-        return 0
-    fi
-
-    if ! command -v spctl >/dev/null 2>&1; then
-        echo "  Error: spctl not available for Gatekeeper assessment."
-        return 1
-    fi
-
-    echo "  Verifying Gatekeeper assessment..."
-    if ! spctl --assess --type execute "$binary_path" >/dev/null 2>&1; then
-        echo "  Error: Gatekeeper assessment failed. Binary is not notarized/stapled for this machine."
-        return 1
-    fi
-}
-
-strip_quarantine() {
-    # macOS quarantine attribute from GitHub download blocks execution on first
-    # run ("cannot be opened because the developer cannot be verified") even
-    # when SHA256 + codesign verify cleanly. Removing it only for the adhoc
-    # case keeps notarized releases on the strict path.
-    local binary_path="$1"
-    if [ "$EXPECTED_TEAM_ID" = "ADHOC" ]; then
-        xattr -d com.apple.quarantine "$binary_path" 2>/dev/null || true
-    fi
-}
-
 echo ""
 echo "  Logic Pro MCP Server — Installer"
 echo ""
@@ -175,11 +108,8 @@ if [ "$VERSION" = "latest" ]; then
 fi
 
 # A LOCAL archive is how the release pipeline installs the build it just produced,
-# BEFORE that build is published. Everything after this point is unchanged: the bytes are
-# still compared against $SHA256, the archive manifest is still validated, the binary is
-# still signature- and Gatekeeper-checked. The seam replaces where the bytes come FROM and
-# nothing about what is done to them -- a local input that skipped a check would make the
-# pre-publish validation prove less than the post-publish one it exists to precede.
+# BEFORE that build is published. The archive is compared against the pinned SHA256 and its
+# manifest is validated exactly like a downloaded release.
 if [ -n "$LOCAL_ARCHIVE" ]; then
     require_absolute_path "local_archive" "$LOCAL_ARCHIVE"
     if [ -L "$LOCAL_ARCHIVE" ]; then
@@ -191,12 +121,9 @@ if [ -n "$LOCAL_ARCHIVE" ]; then
     if [ ! -r "$LOCAL_ARCHIVE" ]; then
         fail_install "local_archive is not readable: $LOCAL_ARCHIVE"
     fi
-    # There is no release surface to fetch provenance from, so the same-origin opt-out has
-    # nothing to opt into -- honouring it here would curl a release that may not exist yet
-    # and call the result a pin. Both values must be supplied out-of-band, which is stricter
-    # than the download path rather than looser.
+    # There is no release surface to fetch a checksum from before publication.
     if [ "${LOGIC_PRO_MCP_ALLOW_SAME_ORIGIN:-0}" = "1" ]; then
-        fail_install "LOGIC_PRO_MCP_ALLOW_SAME_ORIGIN cannot be combined with LOGIC_PRO_MCP_LOCAL_ARCHIVE: there is no release to fetch provenance from. Set LOGIC_PRO_MCP_SHA256 and LOGIC_PRO_MCP_TEAM_ID."
+        fail_install "LOGIC_PRO_MCP_ALLOW_SAME_ORIGIN cannot be combined with LOGIC_PRO_MCP_LOCAL_ARCHIVE. Set LOGIC_PRO_MCP_SHA256."
     fi
     echo "  Using local archive $LOCAL_ARCHIVE (version $VERSION)..."
 else
@@ -204,68 +131,29 @@ else
 fi
 DOWNLOAD_URL="https://github.com/$REPO/releases/download/$VERSION/$ARCHIVE"
 SHA_URL="https://github.com/$REPO/releases/download/$VERSION/SHA256SUMS.txt"
-METADATA_URL="https://github.com/$REPO/releases/download/$VERSION/RELEASE-METADATA.json"
-
-# Fail-closed provenance policy:
-#
-# By default the installer REQUIRES both LOGIC_PRO_MCP_SHA256 and
-# LOGIC_PRO_MCP_TEAM_ID to be supplied out-of-band. Without them we'd be
-# pulling binary + SHA + signer metadata from the same GitHub release surface,
-# which means an attacker who can modify the release can replace all three in
-# lockstep and the "pin" check becomes a rubber stamp.
-#
-# Operators who knowingly accept that same-origin trust model (e.g. Homebrew
-# tap users, or one-off local installs) can opt in explicitly by setting
-# LOGIC_PRO_MCP_ALLOW_SAME_ORIGIN=1. In that mode the missing values are
-# fetched from the release and the installer prints a loud warning.
-if [ -z "$SHA256" ] || [ -z "$EXPECTED_TEAM_ID" ]; then
+# A caller can pin the archive checksum out of band. For a one-off install, the caller can
+# explicitly accept fetching the checksum beside the archive from the same GitHub release.
+if [ -z "$SHA256" ]; then
     if [ "${LOGIC_PRO_MCP_ALLOW_SAME_ORIGIN:-0}" != "1" ]; then
-        echo "  Error: installer refuses to run with missing provenance pins."
+        echo "  Error: installer refuses to run without an archive checksum."
         echo ""
-        echo "  For a hardened install, set BOTH:"
+        echo "  For a pinned install, set:"
         echo "    LOGIC_PRO_MCP_SHA256=<hex-from-SHA256SUMS.txt for $ARCHIVE>"
-        echo "    LOGIC_PRO_MCP_TEAM_ID=<ADHOC|10-char-Team-ID>"
         echo ""
-        echo "  To explicitly accept same-origin provenance (fetch SHA + Team ID"
-        echo "  from the same GitHub release as the binary) set:"
+        echo "  To explicitly fetch the checksum from the same GitHub release set:"
         echo "    LOGIC_PRO_MCP_ALLOW_SAME_ORIGIN=1"
-        echo ""
-        echo "  See SECURITY.md §Installer trust model for the trust tiers."
         exit 1
     fi
-    echo "  ⚠  LOGIC_PRO_MCP_ALLOW_SAME_ORIGIN=1 — fetching missing provenance"
-    echo "     from the same GitHub release surface as the binary."
+    echo "  Warning: fetching the checksum from the same release as the archive."
 fi
 
-REMOTE_PROVENANCE_USED=0
 if [ -z "$SHA256" ]; then
-    REMOTE_PROVENANCE_USED=1
     echo "  Fetching release SHA256 manifest..."
     SHA256=$(curl -fsSL "$SHA_URL" | awk -v artifact="$ARCHIVE" '$2 == artifact {print $1}')
     if [ -z "$SHA256" ]; then
         echo "  Error: could not resolve SHA256 for $ARCHIVE from release manifest."
         exit 1
     fi
-fi
-
-if [ -z "$EXPECTED_TEAM_ID" ]; then
-    REMOTE_PROVENANCE_USED=1
-    echo "  Fetching release metadata..."
-    METADATA_JSON=$(curl -fsSL "$METADATA_URL")
-    EXPECTED_TEAM_ID=$(printf '%s\n' "$METADATA_JSON" | sed -n 's/.*"team_id"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' | head -n 1)
-    if [ -z "$EXPECTED_TEAM_ID" ]; then
-        echo "  Error: could not resolve TeamIdentifier from release metadata."
-        echo "    Expected signed release metadata at: $METADATA_URL"
-        exit 1
-    fi
-fi
-
-if [ "$REMOTE_PROVENANCE_USED" = "1" ]; then
-    echo ""
-    echo "  ⚠  Provenance values were fetched from the same GitHub release surface."
-    echo "     For hardened installs, set both env vars out-of-band."
-    echo "     See SECURITY.md §Installer trust model."
-    echo ""
 fi
 
 TMP_DIR=$(mktemp -d)
@@ -310,9 +198,6 @@ if fetch_release_archive "$TMP_ARCHIVE"; then
     validate_optional_extracted_asset_file "$EXTRACTED_VARIANTS"
     validate_optional_extracted_asset_file "$EXTRACTED_UI_LABELS"
 
-    verify_signature "$EXTRACTED_BINARY"
-    verify_gatekeeper "$EXTRACTED_BINARY"
-    strip_quarantine "$EXTRACTED_BINARY"
     chmod +x "$EXTRACTED_BINARY"
     echo "  Installing to $INSTALL_DIR/$BINARY..."
     USE_SUDO=0

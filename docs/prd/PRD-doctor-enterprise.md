@@ -336,7 +336,7 @@ env, tokened URLs, or headers. Claude-config reading remains the existing read-o
 
 | Metric | Target | Measurement |
 |--------|--------|-------------|
-| Default `doctor` wall time | typically ≤ ~3s (no network) — **empirical, not a hard bound**; checks run serially and worst-case = sum of bounded timeouts (codesign+xattr+brew dominate; the active new local checks add ~0: `sw_vers` is instant, System Events is already in the permission path) | `summary.duration_ms` |
+| Default `doctor` wall time | typically ≤ ~3s (no network) — **empirical, not a hard bound**; checks run serially and worst-case = sum of bounded timeouts (xattr+brew dominate; the active new local checks add ~0: `sw_vers` is instant, System Events is already in the permission path) | `summary.duration_ms` |
 | Per local external command | bounded by `BoundedProcessRunner` (≤1.5s) | per-check `duration_ms` |
 | `--check-updates` added latency | bounded network call (≤3.0s), opt-in only | `updates.latest_release.duration_ms` |
 

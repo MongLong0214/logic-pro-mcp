@@ -97,12 +97,11 @@ enum MainEntrypoint {
             return 0
         }
 
-        // #284: `--qualify` runs the live qualification against this exact binary;
-        // `--verify-promotion` reads an attestation and answers whether it may promote. Both write
-        // their own stdout/stderr and return their own exit code, so they short-circuit here before
-        // any server or doctor routing.
+        // #284: `--qualify` runs the live qualification against this exact binary. It writes its
+        // own stdout/stderr and returns its own exit code, so it short-circuits here before any
+        // server or doctor routing.
         if let command = arguments.dropFirst().first,
-           command == "--qualify" || command == "--verify-promotion" {
+           command == "--qualify" {
             let result = await qualificationCommand(arguments)
             if !result.stdout.isEmpty { writeStdout(result.stdout) }
             if !result.stderr.isEmpty { writeStderr(result.stderr) }
@@ -812,8 +811,6 @@ enum MainEntrypoint {
                                                --mutate-open-project WRITES TO THE PROJECT LOGIC HAS OPEN: it renames a
                                                track, creates and deletes markers, sets the tempo and moves faders. Without
                                                it every mutating operation is withheld and reported live_mutation_not_run.
-          LogicProMCP --verify-promotion --attestation <attestation.json> --release-version <version> --expected-binary-sha256 <hex> --expected-commit <sha> [--required-artifacts <path,...>]
-                                               non-authoritative local diagnostic; emits a JSON decision with no promotion authority
           LogicProMCP --list-approvals         List legacy manual-channel compatibility records and exit
           LogicProMCP --approve-channel <MIDIKeyCommands|Scripter> [--approval-note <note>]
                                                Record a legacy compatibility assertion; does not qualify unattended execution
