@@ -70,8 +70,27 @@ def verify_union(inventory_path: Path, selected_path: Path, complement_path: Pat
         raise ManifestError(f"shard union differs from inventory; missing={missing} extra={extra}")
 
 
+def _expected_xunit_index(expected: set[str]) -> dict[tuple[str, str], str]:
+    index: dict[tuple[str, str], str] = {}
+    for entry in expected:
+        separator = "/" if "/" in entry else "."
+        if separator not in entry:
+            raise ManifestError(f"malformed expected manifest entry: {entry}")
+        classname, name = entry.rsplit(separator, 1)
+        if not classname or not name:
+            raise ManifestError(f"malformed expected manifest entry: {entry}")
+        key = (classname.replace("/", "."), name)
+        previous = index.get(key)
+        if previous is not None:
+            raise ManifestError(
+                f"canonical xUnit key collision: {previous!r} and {entry!r}")
+        index[key] = entry
+    return index
+
+
 def verify_xunit(expected_path: Path, xunit_directory: Path, actual_path: Path) -> None:
     expected = set(_read(expected_path, label="expected shard manifest", require_sorted=True))
+    expected_xunit_index = _expected_xunit_index(expected)
     try:
         xml_files = sorted(path for path in xunit_directory.iterdir()
                            if path.is_file() and path.suffix == ".xml")
@@ -86,7 +105,8 @@ def verify_xunit(expected_path: Path, xunit_directory: Path, actual_path: Path) 
     except (OSError, ET.ParseError) as error:
         raise ManifestError(f"cannot parse xUnit output {wanted}: {error}") from error
 
-    actual_entries: list[str] = []
+    raw_cases: set[tuple[str, str]] = set()
+    actual: set[str] = set()
     for testcase in root.iter("testcase"):
         classname = testcase.get("classname")
         name = testcase.get("name")
@@ -94,10 +114,19 @@ def verify_xunit(expected_path: Path, xunit_directory: Path, actual_path: Path) 
             raise ManifestError("xUnit testcase lacks classname or name")
         if testcase.find("failure") is not None or testcase.find("error") is not None:
             raise ManifestError(f"xUnit testcase failed: {classname}/{name}")
-        actual_entries.append(f"{classname}/{name}")
-    if len(actual_entries) != len(set(actual_entries)):
-        raise ManifestError("xUnit contains a duplicate testcase")
-    actual = set(actual_entries)
+        raw_case = (classname, name)
+        if raw_case in raw_cases:
+            raise ManifestError(
+                f"xUnit contains a duplicate xUnit testcase key: {classname}/{name}")
+        raw_cases.add(raw_case)
+        resolved = expected_xunit_index.get(raw_case)
+        if resolved is None:
+            raise ManifestError(f"unexpected xUnit testcase: {classname}/{name}")
+        if resolved in actual:
+            raise ManifestError(f"xUnit contains a canonical duplicate: {resolved}")
+        actual.add(resolved)
+    if not raw_cases:
+        raise ManifestError("xUnit contains no testcases")
     if actual != expected:
         missing = sorted(expected - actual)[:3]
         extra = sorted(actual - expected)[:3]
