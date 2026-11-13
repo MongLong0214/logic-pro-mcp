@@ -508,6 +508,38 @@ struct QualificationTraceDetail: Equatable, Sendable {
     let phases: [String]
 }
 
+/// A live read was prepared from admissible, request-owned evidence, but that evidence did not
+/// contain the physical target the operation requires. This marker is internal transport state,
+/// not something an operation response can claim for itself.
+enum QualificationLiveFixturePrecondition: Equatable, Sendable {
+    case mixerOutputTarget
+    case mixerInputBusTarget
+    case mixerOccupiedSend
+    case pluginHostManifestTarget
+    case pluginReadableParameter
+    case pluginChannelEQ
+    case pluginPlannableParameter
+
+    var reason: String {
+        switch self {
+        case .mixerOutputTarget:
+            "requires a current physical Mixer target with a typed output observation"
+        case .mixerInputBusTarget:
+            "requires a current physical Mixer target with a typed bus-input observation"
+        case .mixerOccupiedSend:
+            "requires an occupied Send in the fresh read-only strip census"
+        case .pluginHostManifestTarget:
+            "requires an occupied catalog-supported plug-in insert in the current Logic project"
+        case .pluginReadableParameter:
+            "requires an occupied plug-in insert with a catalog-backed readable parameter"
+        case .pluginChannelEQ:
+            "requires an occupied Channel EQ insert in the current Logic project"
+        case .pluginPlannableParameter:
+            "requires an occupied plug-in insert with a catalog-backed plannable parameter"
+        }
+    }
+}
+
 struct QualificationOperationResult: Equatable, Sendable {
     let operationID: String
     let tool: String
@@ -533,6 +565,7 @@ struct QualificationOperationResult: Equatable, Sendable {
     let verification: VerificationPolicy
     let deadline: DeadlineClass
     let failureReason: String?
+    let liveFixturePrecondition: QualificationLiveFixturePrecondition?
     /// ADR-001-c / #373 Phase B evidence: the verified write-and-restore cycle for a MUTATING
     /// operation, or nil when no recipe ran. Each recipe refuses rather than returning a record
     /// for a cycle whose own checks did not verify; `verifiedCycleShape` rechecks its recorded proof.
@@ -562,6 +595,7 @@ struct QualificationOperationResult: Equatable, Sendable {
         verification: VerificationPolicy = .none,
         deadline: DeadlineClass = .short,
         failureReason: String?,
+        liveFixturePrecondition: QualificationLiveFixturePrecondition? = nil,
         mutationRestore: QualificationMutationRestoreRecord? = nil,
         mutationRestoreRefusal: String? = nil
     ) {
@@ -585,6 +619,7 @@ struct QualificationOperationResult: Equatable, Sendable {
         self.verification = verification
         self.deadline = deadline
         self.failureReason = failureReason
+        self.liveFixturePrecondition = liveFixturePrecondition
         self.mutationRestore = mutationRestore
         self.mutationRestoreRefusal = mutationRestoreRefusal
     }
@@ -792,37 +827,45 @@ struct QualificationOperationResult: Equatable, Sendable {
         }
         switch OperationID(rawValue: operationID) {
         case .mixerGetOutputVerified
-            where error == "invalid_params"
+            where liveFixturePrecondition == .mixerOutputTarget
+                && state == "C" && writeAttempted == false && error == "invalid_params"
                 && hint == "get_output_verified requires a current physical Mixer target_ref; no track/index selectors or write inputs are accepted":
-            return "requires a current physical Mixer target from the fresh read-only strip census"
+            return liveFixturePrecondition?.reason
         case .mixerGetInputBusVerified
-            where error == "invalid_params"
+            where liveFixturePrecondition == .mixerInputBusTarget
+                && state == "C" && writeAttempted == false && error == "invalid_params"
                 && hint == "get_input_bus_verified requires a current physical Mixer target_ref; no track/index selectors or write inputs are accepted":
-            return "requires a current physical Mixer target from the fresh read-only strip census"
+            return liveFixturePrecondition?.reason
         case .mixerGetSendDestinationVerified
-            where error == "invalid_params"
+            where liveFixturePrecondition == .mixerOccupiedSend
+                && state == "C" && writeAttempted == false && error == "invalid_params"
                 && hint == "get_send_destination_verified requires a current physical Mixer target_ref; no track/index selectors or write inputs are accepted":
-            return "requires an occupied Send in the fresh read-only strip census"
+            return liveFixturePrecondition?.reason
         case .mixerGetSendBypassVerified
-            where error == "invalid_params"
+            where liveFixturePrecondition == .mixerOccupiedSend
+                && state == "C" && writeAttempted == false && error == "invalid_params"
                 && hint == "An exact physical Mixer target_ref and occupied source-census ordinal are required":
-            return "requires an occupied Send in the fresh read-only strip census"
+            return liveFixturePrecondition?.reason
         case .pluginsGetHostParameterManifest
-            where error == "invalid_params"
+            where liveFixturePrecondition == .pluginHostManifestTarget
+                && state == "C" && writeAttempted == false && error == "invalid_params"
                 && hint == "get_host_parameter_manifest requires an occupied insert target_ref and non-empty expected_build_fingerprint; it accepts no write inputs":
-            return "requires an occupied supported plug-in insert in the current Logic project"
+            return liveFixturePrecondition?.reason
         case .pluginsGetParamVerified
-            where error == "invalid_params"
+            where liveFixturePrecondition == .pluginReadableParameter
+                && state == "C" && writeAttempted == false && error == "invalid_params"
                 && hint == "get_param_verified requires an occupied insert target_ref; scalar reads also require a named param. No value, mode or confirmation is accepted":
-            return "requires an occupied supported plug-in insert in the current Logic project"
+            return liveFixturePrecondition?.reason
         case .pluginsGetChannelEQStateVerified
-            where error == "invalid_params"
+            where liveFixturePrecondition == .pluginChannelEQ
+                && state == "C" && writeAttempted == false && error == "invalid_params"
                 && hint == "get_channel_eq_state_verified requires an occupied insert target_ref; scalar reads also require a named param. No value, mode or confirmation is accepted":
-            return "requires an occupied supported plug-in insert in the current Logic project"
+            return liveFixturePrecondition?.reason
         case .pluginsPlanParameterChanges
-            where error == "invalid_params"
+            where liveFixturePrecondition == .pluginPlannableParameter
+                && state == "C" && writeAttempted == false && error == "invalid_params"
                 && hint == "plan_parameter_changes requires an occupied insert target_ref; scalar reads also require a named param. No value, mode or confirmation is accepted":
-            return "requires an occupied supported plug-in insert in the current Logic project"
+            return liveFixturePrecondition?.reason
         case .tracksScanPluginPresets
             where error == HonestContract.FailureError.pluginWindowUnavailable.rawValue
                 && hint == AccessibilityChannel.pluginWindowUnavailableHint:
@@ -1629,6 +1672,18 @@ struct QualificationTransport: Sendable {
                 var response: (text: String, isError: Bool)?
                 var responseRequestID: String?
                 var responseFailure: String? = readProbePreparationFailures[spec.id]
+                var liveFixturePrecondition: QualificationLiveFixturePrecondition?
+                if responseFailure == nil,
+                   requestedPluginReads.contains(spec.id),
+                   preparedReadParams[spec.id] == nil {
+                    liveFixturePrecondition = switch spec.id {
+                    case .pluginsGetHostParameterManifest: .pluginHostManifestTarget
+                    case .pluginsGetParamVerified: .pluginReadableParameter
+                    case .pluginsGetChannelEQStateVerified: .pluginChannelEQ
+                    case .pluginsPlanParameterChanges: .pluginPlannableParameter
+                    default: nil
+                    }
+                }
                 var phaseBRecord: QualificationMutationRestoreRecord?
                 var phaseBRefusal: String?
                 // `tracks.rename` reuses the negative probe's response below and never reaches the
@@ -1947,6 +2002,15 @@ struct QualificationTransport: Sendable {
                                     preparedReadParams.removeValue(forKey: requestedID)
                                 }
                                 preparedReadParams.merge(current) { _, fresh in fresh }
+                                if preparedReadParams[spec.id] == nil {
+                                    liveFixturePrecondition = switch spec.id {
+                                    case .mixerGetOutputVerified: .mixerOutputTarget
+                                    case .mixerGetInputBusVerified: .mixerInputBusTarget
+                                    case .mixerGetSendDestinationVerified, .mixerGetSendBypassVerified:
+                                        .mixerOccupiedSend
+                                    default: nil
+                                    }
+                                }
                             } catch {
                                 preparedReadParams.removeValue(forKey: spec.id)
                                 responseFailure = Self.observedFailureReason(
@@ -2068,6 +2132,7 @@ struct QualificationTransport: Sendable {
                     verification: spec.verification,
                     deadline: spec.deadline,
                     failureReason: responseFailure ?? readbackFailure,
+                    liveFixturePrecondition: liveFixturePrecondition,
                     mutationRestore: phaseBRecord,
                     mutationRestoreRefusal: phaseBRefusal
                 )
@@ -5621,35 +5686,60 @@ struct QualificationTransport: Sendable {
         var params: [OperationID: [String: Any]] = [:]
         for strip in strips {
             guard let reference = strip["mixer_strip_ref"] as? String,
-                  reference.hasPrefix("mix_"), reference.count > 4 else { continue }
+                  reference.hasPrefix("mix_"), reference.count > 4 else { return nil }
 
-            if params[.mixerGetOutputVerified] == nil,
-               let observation = strip["output_observation"] as? [String: Any],
-               observation["state"] as? String == "observed_destination",
-               let destination = observation["destination"] as? String,
-               OutputAssignment.observed(slotLabel: destination) != nil {
-                params[.mixerGetOutputVerified] = ["target_ref": reference]
+            if let rawOutput = strip["output_observation"] {
+                guard let observation = rawOutput as? [String: Any],
+                      let state = observation["state"] as? String else { return nil }
+                switch state {
+                case "observed_destination":
+                    guard let destination = observation["destination"] as? String else { return nil }
+                    if params[.mixerGetOutputVerified] == nil,
+                       OutputAssignment.observed(slotLabel: destination) != nil {
+                        params[.mixerGetOutputVerified] = ["target_ref": reference]
+                    }
+                case "no_slot", "unreadable":
+                    guard observation["destination"] == nil
+                            || observation["destination"] is NSNull else { return nil }
+                default:
+                    return nil
+                }
             }
-            if params[.mixerGetInputBusVerified] == nil,
-               let observation = strip["input_observation"] as? [String: Any],
-               observation["state"] as? String == "observed_source",
-               let source = observation["source"] as? String,
-               InputAssignment.classifiedMenuTitle(source)?.busOutputAssignment != nil {
-                params[.mixerGetInputBusVerified] = ["target_ref": reference]
+            if let rawInput = strip["input_observation"] {
+                guard let observation = rawInput as? [String: Any],
+                      let state = observation["state"] as? String else { return nil }
+                switch state {
+                case "observed_source":
+                    guard let source = observation["source"] as? String else { return nil }
+                    if params[.mixerGetInputBusVerified] == nil,
+                       InputAssignment.classifiedMenuTitle(source)?.busOutputAssignment != nil {
+                        params[.mixerGetInputBusVerified] = ["target_ref": reference]
+                    }
+                case "no_slot", "unreadable":
+                    guard observation["source"] == nil
+                            || observation["source"] is NSNull else { return nil }
+                default:
+                    return nil
+                }
             }
-            guard let slots = strip["send_slots"] as? [[String: Any]] else { continue }
+            guard let rawSlots = strip["send_slots"] else { continue }
+            guard let slots = rawSlots as? [[String: Any]] else { return nil }
             for slot in slots {
                 guard let ordinal = slot["ordinal"] as? Int, ordinal >= 0,
-                      let state = slot["state"] as? String,
-                      state == "occupied_unknown_destination"
+                      let state = slot["state"] as? String else { return nil }
+                guard [
+                    "observed_empty", "occupied_unknown_destination",
+                    "occupied_known_destination", "unreadable",
+                ].contains(state) else { return nil }
+                guard state == "occupied_unknown_destination"
                         || state == "occupied_known_destination" else { continue }
                 if params[.mixerGetSendDestinationVerified] == nil {
                     params[.mixerGetSendDestinationVerified] = [
                         "target_ref": reference, "ordinal": ordinal,
                     ]
                 }
-                if params[.mixerGetSendBypassVerified] == nil,
-                   slot["bypassed"] is Bool {
+                if let bypassed = slot["bypassed"], !(bypassed is Bool) { return nil }
+                if params[.mixerGetSendBypassVerified] == nil, slot["bypassed"] is Bool {
                     params[.mixerGetSendBypassVerified] = [
                         "target_ref": reference, "ordinal": ordinal,
                     ]
@@ -5668,7 +5758,9 @@ struct QualificationTransport: Sendable {
     /// shipped dispatcher can actually execute; an occupied name alone grants no parameter
     /// capability. Plan probes use the planner's stricter raw-unit predicate and never authorize
     /// application.
-    static func pluginReadProbeParams(from inventoryResponses: [Data]) -> [OperationID: [String: Any]] {
+    static func validatedPluginReadProbeParams(
+        from inventoryResponses: [Data]
+    ) -> [OperationID: [String: Any]]? {
         struct Candidate {
             let reference: String
             let pluginID: String
@@ -5681,14 +5773,38 @@ struct QualificationTransport: Sendable {
             guard let envelope = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                   envelope["state"] as? String == "A",
                   envelope["complete"] as? Bool == true,
-                  let plugins = envelope["plugins"] as? [[String: Any]] else { continue }
+                  let plugins = envelope["plugins"] as? [[String: Any]] else { return nil }
             for plugin in plugins {
-                guard plugin["read_status"] as? String == "ok",
-                      plugin["occupied"] as? Bool == true,
-                      let reference = plugin["plugin_insert_ref"] as? String,
+                guard let readStatus = plugin["read_status"] as? String,
+                      let occupied = plugin["occupied"] as? Bool else { return nil }
+                switch readStatus {
+                case "empty":
+                    guard !occupied, plugin["plugin_id"] is NSNull else { return nil }
+                    continue
+                case "ok":
+                    guard occupied else { return nil }
+                case "unreadable", "unclassified":
+                    // A producer cannot call an inventory complete while retaining an unreadable
+                    // or unclassified row.
+                    return nil
+                default:
+                    return nil
+                }
+                guard let reference = plugin["plugin_insert_ref"] as? String,
                       reference.hasPrefix("ins_"), reference.count > 4,
-                      let pluginID = plugin["plugin_id"] as? String,
-                      let entry = VerifiedPluginCatalog.productionEntryLookup(pluginID) else { continue }
+                      plugin.keys.contains("plugin_id") else { return nil }
+                if plugin["plugin_id"] is NSNull {
+                    // A readable third-party/non-catalog insert is a valid observation, but it
+                    // cannot authorize one of the catalog-backed qualification probes.
+                    continue
+                }
+                guard let pluginID = plugin["plugin_id"] as? String,
+                      !pluginID.isEmpty else { return nil }
+                guard let entry = VerifiedPluginCatalog.productionEntryLookup(pluginID) else {
+                    // The producer represents a readable non-catalog insert with JSON null.
+                    // A non-null unknown id is contradictory discovery, not an empty fixture.
+                    return nil
+                }
                 candidates.append(Candidate(
                     reference: reference,
                     pluginID: pluginID,
@@ -5748,6 +5864,10 @@ struct QualificationTransport: Sendable {
         return params
     }
 
+    static func pluginReadProbeParams(from inventoryResponses: [Data]) -> [OperationID: [String: Any]] {
+        validatedPluginReadProbeParams(from: inventoryResponses) ?? [:]
+    }
+
     /// Prepare plug-in probes from their own two authorities only. Session inspection is a Mixer
     /// source and must not suppress a valid plug-in inventory when that unrelated read refuses.
     static func preparePluginReadProbeParams(
@@ -5755,8 +5875,18 @@ struct QualificationTransport: Sendable {
         inventoryRead: (Int) throws -> Data
     ) throws -> [OperationID: [String: Any]] {
         let tracksData = try tracksRead()
-        let inventories = try pluginInventoryTrackIndices(from: tracksData).map(inventoryRead)
-        return pluginReadProbeParams(from: inventories)
+        guard let trackIndices = validatedPluginInventoryTrackIndices(from: tracksData) else {
+            throw QualificationTransportError.protocolViolation(
+                "plugin_read_probe_tracks: response was not a complete live referenced Arrange inventory"
+            )
+        }
+        let inventories = try trackIndices.map(inventoryRead)
+        guard let params = validatedPluginReadProbeParams(from: inventories) else {
+            throw QualificationTransportError.protocolViolation(
+                "plugin_read_probe_inventory: response was malformed, incomplete, or not current"
+            )
+        }
+        return params
     }
 
     /// Warm the candidate's read cache once before any requested Mixer or plug-in probe. A failed
@@ -5827,19 +5957,24 @@ struct QualificationTransport: Sendable {
     /// Inventory accepts Arrange track ids, not Mixer strip ordinals. Only a current native track
     /// read grants that scan range; project-file placeholders and duplicate ids cannot safely
     /// address the live surface.
-    static func pluginInventoryTrackIndices(from tracksData: Data) -> [Int] {
+    static func validatedPluginInventoryTrackIndices(from tracksData: Data) -> [Int]? {
         guard let envelope = try? JSONSerialization.jsonObject(with: tracksData) as? [String: Any],
               envelope["source"] as? String == "ax_live",
               envelope["readable"] as? Bool == true,
-              let tracks = envelope["data"] as? [[String: Any]] else { return [] }
-        let ids = tracks.compactMap { track -> Int? in
+              let tracks = envelope["data"] as? [[String: Any]] else { return nil }
+        var ids: [Int] = []
+        for track in tracks {
             guard let id = track["id"] as? Int, id >= 0,
                   let reference = track["track_ref"] as? String,
                   reference.hasPrefix("trk_"), reference.count > 4 else { return nil }
-            return id
+            ids.append(id)
         }
-        let counts = Dictionary(grouping: ids, by: { $0 }).mapValues(\.count)
-        return ids.filter { counts[$0] == 1 }.sorted()
+        guard Set(ids).count == ids.count else { return nil }
+        return ids.sorted()
+    }
+
+    static func pluginInventoryTrackIndices(from tracksData: Data) -> [Int] {
+        validatedPluginInventoryTrackIndices(from: tracksData) ?? []
     }
 
     private static func pluginParameterIsReadable(_ parameter: StockPluginParameterMetadata) -> Bool {

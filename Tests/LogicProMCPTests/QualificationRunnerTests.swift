@@ -1198,6 +1198,7 @@ struct QualificationRunnerTests {
                     ],
                 ],
                 [
+                    "mixer_strip_ref": "mix_irrelevant",
                     "output_observation": [
                         "state": "observed_destination", "destination": "Stereo Out",
                     ],
@@ -1309,6 +1310,27 @@ struct QualificationRunnerTests {
         ]
         var unsafe = validButEmpty
         unsafe["read_only"] = false
+        var unsafeReference = validButEmpty
+        unsafeReference["strips"] = [
+            "coverage": "partial",
+            "rows": [["mixer_strip_ref": "track_1"]],
+        ]
+        var unknownObservation = validButEmpty
+        unknownObservation["strips"] = [
+            "coverage": "partial",
+            "rows": [[
+                "mixer_strip_ref": "mix_unknown",
+                "output_observation": ["state": "future_state"],
+            ]],
+        ]
+        var unknownSend = validButEmpty
+        unknownSend["strips"] = [
+            "coverage": "partial",
+            "rows": [[
+                "mixer_strip_ref": "mix_unknown",
+                "send_slots": [["ordinal": 0, "state": "future_state"]],
+            ]],
+        ]
 
         let empty = QualificationTransport.validatedMixerReadProbeParams(
             from: try JSONSerialization.data(withJSONObject: validButEmpty)
@@ -1316,9 +1338,21 @@ struct QualificationRunnerTests {
         let rejected = QualificationTransport.validatedMixerReadProbeParams(
             from: try JSONSerialization.data(withJSONObject: unsafe)
         )
+        let rejectedReference = QualificationTransport.validatedMixerReadProbeParams(
+            from: try JSONSerialization.data(withJSONObject: unsafeReference)
+        )
+        let rejectedObservation = QualificationTransport.validatedMixerReadProbeParams(
+            from: try JSONSerialization.data(withJSONObject: unknownObservation)
+        )
+        let rejectedSend = QualificationTransport.validatedMixerReadProbeParams(
+            from: try JSONSerialization.data(withJSONObject: unknownSend)
+        )
 
         #expect(empty?.isEmpty == true)
         #expect(rejected == nil)
+        #expect(rejectedReference == nil)
+        #expect(rejectedObservation == nil)
+        #expect(rejectedSend == nil)
     }
 
     @Test func mixerReadProbeParamsRejectUnsafeOrUnboundInspectionRows() throws {
@@ -1406,8 +1440,8 @@ struct QualificationRunnerTests {
             "plugins": [
                 [
                     "insert": 0, "read_status": "ok", "occupied": true,
-                    "plugin_id": "logic.stock.effect.sample_delay",
-                    "plugin_insert_ref": "stale_sample_delay",
+                    "plugin_id": NSNull(),
+                    "plugin_insert_ref": "ins_unverified",
                 ],
                 [
                     "insert": 1, "read_status": "empty", "occupied": false,
@@ -1431,13 +1465,6 @@ struct QualificationRunnerTests {
         ]
         let params = QualificationTransport.pluginReadProbeParams(from: [
             try JSONSerialization.data(withJSONObject: inventory),
-            try JSONSerialization.data(withJSONObject: [
-                "state": "B", "complete": false,
-                "plugins": [[
-                    "read_status": "ok", "occupied": true,
-                    "plugin_id": "logic.stock.effect.gain", "plugin_insert_ref": "ins_state_b",
-                ]],
-            ]),
         ])
 
         #expect(params[.pluginsGetHostParameterManifest]?["target_ref"] as? String == "ins_gain")
@@ -1456,6 +1483,66 @@ struct QualificationRunnerTests {
         #expect(changes[0]["param"] as? String == "threshold")
         #expect(changes[0]["unit"] as? String == "normalized")
         #expect(changes[0]["value"] is Double)
+    }
+
+    @Test func pluginReadProbeValidationSeparatesEmptyFixturesFromMalformedDiscovery() throws {
+        let validEmpty = try JSONSerialization.data(withJSONObject: [
+            "state": "A", "complete": true, "plugins": [],
+        ])
+        let incomplete = try JSONSerialization.data(withJSONObject: [
+            "state": "B", "complete": false, "plugins": [],
+        ])
+        let malformedOccupied = try JSONSerialization.data(withJSONObject: [
+            "state": "A", "complete": true,
+            "plugins": [[
+                "read_status": "ok", "occupied": true,
+                "plugin_id": "logic.stock.effect.gain", "plugin_insert_ref": "wrong_ref",
+            ]],
+        ])
+        let unknownStatus = try JSONSerialization.data(withJSONObject: [
+            "state": "A", "complete": true,
+            "plugins": [[
+                "read_status": "future_status", "occupied": false,
+                "plugin_id": NSNull(), "plugin_insert_ref": "ins_future",
+            ]],
+        ])
+        let missingPluginID = try JSONSerialization.data(withJSONObject: [
+            "state": "A", "complete": true,
+            "plugins": [[
+                "read_status": "ok", "occupied": true,
+                "plugin_insert_ref": "ins_missing_id",
+            ]],
+        ])
+        let contradictoryPluginID = try JSONSerialization.data(withJSONObject: [
+            "state": "A", "complete": true,
+            "plugins": [[
+                "read_status": "ok", "occupied": true,
+                "plugin_id": "not.a.catalog.id",
+                "plugin_insert_ref": "ins_contradictory_id",
+            ]],
+        ])
+
+        #expect(QualificationTransport.validatedPluginReadProbeParams(
+            from: [validEmpty]
+        )?.isEmpty == true)
+        #expect(QualificationTransport.validatedPluginReadProbeParams(
+            from: [incomplete]
+        ) == nil)
+        #expect(QualificationTransport.validatedPluginReadProbeParams(
+            from: [malformedOccupied]
+        ) == nil)
+        #expect(QualificationTransport.validatedPluginReadProbeParams(
+            from: [unknownStatus]
+        ) == nil)
+        #expect(QualificationTransport.validatedPluginReadProbeParams(
+            from: [missingPluginID]
+        ) == nil)
+        #expect(QualificationTransport.validatedPluginReadProbeParams(
+            from: [contradictoryPluginID]
+        ) == nil)
+        #expect(QualificationTransport.validatedPluginReadProbeParams(
+            from: [Data("not-json".utf8)]
+        ) == nil)
     }
 
     @Test func pluginReadProbePreparationUsesTracksAndInventoryWithoutSessionInspection() throws {
@@ -1490,6 +1577,64 @@ struct QualificationRunnerTests {
 
         #expect(inventoryReads == [3, 7])
         #expect(params[.pluginsGetHostParameterManifest]?["target_ref"] as? String == "ins_3")
+    }
+
+    @Test func pluginReadProbePreparationPropagatesMalformedDiscoveryAsFailure() throws {
+        let malformedTracks = try JSONSerialization.data(withJSONObject: [
+            "source": "project_file", "readable": false, "data": [],
+        ])
+        var inventoryRead = false
+        #expect(throws: QualificationTransportError.self) {
+            _ = try QualificationTransport.preparePluginReadProbeParams(
+                tracksRead: { malformedTracks },
+                inventoryRead: { _ in inventoryRead = true; return Data() }
+            )
+        }
+        #expect(!inventoryRead)
+
+        let liveTracks = try JSONSerialization.data(withJSONObject: [
+            "source": "ax_live", "readable": true,
+            "data": [["id": 0, "track_ref": "trk_zero"]],
+        ])
+        let incompleteInventory = try JSONSerialization.data(withJSONObject: [
+            "state": "B", "complete": false, "plugins": [],
+        ])
+        #expect(throws: QualificationTransportError.self) {
+            _ = try QualificationTransport.preparePluginReadProbeParams(
+                tracksRead: { liveTracks },
+                inventoryRead: { _ in incompleteInventory }
+            )
+        }
+
+        let duplicateTracks = try JSONSerialization.data(withJSONObject: [
+            "source": "ax_live", "readable": true,
+            "data": [
+                ["id": 0, "track_ref": "trk_zero_a"],
+                ["id": 0, "track_ref": "trk_zero_b"],
+            ],
+        ])
+        inventoryRead = false
+        #expect(throws: QualificationTransportError.self) {
+            _ = try QualificationTransport.preparePluginReadProbeParams(
+                tracksRead: { duplicateTracks },
+                inventoryRead: { _ in inventoryRead = true; return Data() }
+            )
+        }
+        #expect(!inventoryRead)
+
+        let unknownStatusInventory = try JSONSerialization.data(withJSONObject: [
+            "state": "A", "complete": true,
+            "plugins": [[
+                "read_status": "future_status", "occupied": false,
+                "plugin_id": NSNull(), "plugin_insert_ref": "ins_future",
+            ]],
+        ])
+        #expect(throws: QualificationTransportError.self) {
+            _ = try QualificationTransport.preparePluginReadProbeParams(
+                tracksRead: { liveTracks },
+                inventoryRead: { _ in unknownStatusInventory }
+            )
+        }
     }
 
     @Test func requestedReadProbePreparationRefreshesBeforePluginAuthorities() throws {
@@ -1739,12 +1884,20 @@ struct QualificationRunnerTests {
         let live: [String: Any] = [
             "source": "ax_live", "readable": true,
             "data": [
-                ["id": 2, "track_ref": "trk_two"],
                 ["id": 0, "track_ref": "trk_zero"],
-                ["id": 2, "track_ref": "trk_duplicate"],
-                ["id": -1, "track_ref": "trk_negative"],
-                ["id": 4, "track_ref": "not_current"],
+                ["id": 2, "track_ref": "trk_two"],
             ],
+        ]
+        let ambiguous: [String: Any] = [
+            "source": "ax_live", "readable": true,
+            "data": [
+                ["id": 2, "track_ref": "trk_two"],
+                ["id": 2, "track_ref": "trk_duplicate"],
+            ],
+        ]
+        let malformed: [String: Any] = [
+            "source": "ax_live", "readable": true,
+            "data": [["id": -1, "track_ref": "trk_negative"]],
         ]
         let placeholder: [String: Any] = [
             "source": "project_file", "readable": false,
@@ -1753,10 +1906,19 @@ struct QualificationRunnerTests {
 
         #expect(QualificationTransport.pluginInventoryTrackIndices(
             from: try JSONSerialization.data(withJSONObject: live)
-        ) == [0])
+        ) == [0, 2])
         #expect(QualificationTransport.pluginInventoryTrackIndices(
             from: try JSONSerialization.data(withJSONObject: placeholder)
         ).isEmpty)
+        #expect(QualificationTransport.validatedPluginInventoryTrackIndices(
+            from: try JSONSerialization.data(withJSONObject: malformed)
+        ) == nil)
+        #expect(QualificationTransport.validatedPluginInventoryTrackIndices(
+            from: try JSONSerialization.data(withJSONObject: ambiguous)
+        ) == nil)
+        #expect(QualificationTransport.validatedPluginInventoryTrackIndices(
+            from: try JSONSerialization.data(withJSONObject: placeholder)
+        ) == nil)
     }
 
     @Test func operationRequestsUseTheirRegistryDeadlineInsteadOfTheTransportDefault() throws {
@@ -3747,7 +3909,10 @@ struct QualificationRunnerTests {
             _ operationID: OperationID,
             tool: String,
             command: String,
-            hint: String
+            hint: String,
+            fixturePrecondition: QualificationLiveFixturePrecondition?,
+            state: String = "C",
+            writeAttempted: Bool = false
         ) -> QualificationOperationResult {
             QualificationOperationResult(
                 operationID: operationID.rawValue,
@@ -3757,14 +3922,15 @@ struct QualificationRunnerTests {
                 requestID: "fixture-request",
                 responseData: Data(#"{"state":"C","error":"invalid_params","write_attempted":false}"#.utf8),
                 isError: true,
-                state: "C",
+                state: state,
                 error: "invalid_params",
                 hint: hint,
-                writeAttempted: false,
+                writeAttempted: writeAttempted,
                 readbackSource: tool == "logic_mixer" ? "logic://mixer" : "logic://plugins/inventory",
                 readbackRequestID: "fixture-readback",
                 readbackData: Data(#"{}"#.utf8),
-                failureReason: nil
+                failureReason: nil,
+                liveFixturePrecondition: fixturePrecondition
             )
         }
 
@@ -3774,14 +3940,14 @@ struct QualificationRunnerTests {
                 "logic_mixer",
                 "get_output_verified",
                 "get_output_verified requires a current physical Mixer target_ref; no track/index selectors or write inputs are accepted",
-                "requires a current physical Mixer target from the fresh read-only strip census"
+                "requires a current physical Mixer target with a typed output observation"
             ),
             (
                 .mixerGetInputBusVerified,
                 "logic_mixer",
                 "get_input_bus_verified",
                 "get_input_bus_verified requires a current physical Mixer target_ref; no track/index selectors or write inputs are accepted",
-                "requires a current physical Mixer target from the fresh read-only strip census"
+                "requires a current physical Mixer target with a typed bus-input observation"
             ),
             (
                 .mixerGetSendDestinationVerified,
@@ -3802,34 +3968,46 @@ struct QualificationRunnerTests {
                 "logic_plugins",
                 "get_host_parameter_manifest",
                 "get_host_parameter_manifest requires an occupied insert target_ref and non-empty expected_build_fingerprint; it accepts no write inputs",
-                "requires an occupied supported plug-in insert in the current Logic project"
+                "requires an occupied catalog-supported plug-in insert in the current Logic project"
             ),
             (
                 .pluginsGetParamVerified,
                 "logic_plugins",
                 "get_param_verified",
                 "get_param_verified requires an occupied insert target_ref; scalar reads also require a named param. No value, mode or confirmation is accepted",
-                "requires an occupied supported plug-in insert in the current Logic project"
+                "requires an occupied plug-in insert with a catalog-backed readable parameter"
             ),
             (
                 .pluginsGetChannelEQStateVerified,
                 "logic_plugins",
                 "get_channel_eq_state_verified",
                 "get_channel_eq_state_verified requires an occupied insert target_ref; scalar reads also require a named param. No value, mode or confirmation is accepted",
-                "requires an occupied supported plug-in insert in the current Logic project"
+                "requires an occupied Channel EQ insert in the current Logic project"
             ),
             (
                 .pluginsPlanParameterChanges,
                 "logic_plugins",
                 "plan_parameter_changes",
                 "plan_parameter_changes requires an occupied insert target_ref; scalar reads also require a named param. No value, mode or confirmation is accepted",
-                "requires an occupied supported plug-in insert in the current Logic project"
+                "requires an occupied plug-in insert with a catalog-backed plannable parameter"
             ),
         ]
 
         for (operationID, tool, command, hint, reason) in cases {
+            let fixturePrecondition: QualificationLiveFixturePrecondition = switch operationID {
+            case .mixerGetOutputVerified: .mixerOutputTarget
+            case .mixerGetInputBusVerified: .mixerInputBusTarget
+            case .mixerGetSendDestinationVerified, .mixerGetSendBypassVerified: .mixerOccupiedSend
+            case .pluginsGetHostParameterManifest: .pluginHostManifestTarget
+            case .pluginsGetParamVerified: .pluginReadableParameter
+            case .pluginsGetChannelEQStateVerified: .pluginChannelEQ
+            default: .pluginPlannableParameter
+            }
             let exact = QualificationLiveGateSummary(operationResults: [
-                refusal(operationID, tool: tool, command: command, hint: hint),
+                refusal(
+                    operationID, tool: tool, command: command, hint: hint,
+                    fixturePrecondition: fixturePrecondition
+                ),
             ])
             #expect(exact.environmentalPreconditions == [
                 .init(operationID: operationID.rawValue, reason: reason),
@@ -3837,10 +4015,40 @@ struct QualificationRunnerTests {
             #expect(exact.failed == 0)
 
             let changed = QualificationLiveGateSummary(operationResults: [
-                refusal(operationID, tool: tool, command: command, hint: hint + " changed"),
+                refusal(
+                    operationID, tool: tool, command: command, hint: hint + " changed",
+                    fixturePrecondition: fixturePrecondition
+                ),
             ])
             #expect(changed.environmentalPreconditions.isEmpty)
             #expect(changed.failed == 1)
+
+            let wrongState = QualificationLiveGateSummary(operationResults: [
+                refusal(
+                    operationID, tool: tool, command: command, hint: hint,
+                    fixturePrecondition: fixturePrecondition, state: "B"
+                ),
+            ])
+            #expect(wrongState.environmentalPreconditions.isEmpty)
+            #expect(wrongState.failed == 1)
+
+            let wrote = QualificationLiveGateSummary(operationResults: [
+                refusal(
+                    operationID, tool: tool, command: command, hint: hint,
+                    fixturePrecondition: fixturePrecondition, writeAttempted: true
+                ),
+            ])
+            #expect(wrote.environmentalPreconditions.isEmpty)
+            #expect(wrote.failed == 1)
+
+            let unprovenFixtureGap = QualificationLiveGateSummary(operationResults: [
+                refusal(
+                    operationID, tool: tool, command: command, hint: hint,
+                    fixturePrecondition: nil
+                ),
+            ])
+            #expect(unprovenFixtureGap.environmentalPreconditions.isEmpty)
+            #expect(unprovenFixtureGap.failed == 1)
         }
     }
 
