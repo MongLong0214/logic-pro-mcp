@@ -136,7 +136,8 @@ struct ProjectChooserShellReadinessTests {
     @Test("ambiguous or malformed CG chooser rows fail closed",
           arguments: ["wrong_owner", "wrong_layer", "zero_bounds", "nan_bounds", "missing_bounds",
                       "wrong_name", "missing_name", "second_named", "second_unnamed", "missing_layer",
-                      "missing_number"])
+                      "missing_number", "boolean_layer", "fractional_layer", "nan_layer",
+                      "boolean_number", "fractional_number", "nan_number", "fractional_owner"])
     func invalidCGShapeIsNotPositive(shape: String) {
         var windows = [cgWindow()]
         switch shape {
@@ -150,6 +151,14 @@ struct ProjectChooserShellReadinessTests {
         case "second_named": windows.append(cgWindow(number: 2, name: "Mixer"))
         case "second_unnamed": windows.append(cgWindow(number: 2, name: nil))
         case "missing_layer": windows[0].removeValue(forKey: kCGWindowLayer as String)
+        case "missing_number": windows[0].removeValue(forKey: kCGWindowNumber as String)
+        case "boolean_layer": windows[0][kCGWindowLayer as String] = NSNumber(value: false)
+        case "fractional_layer": windows[0][kCGWindowLayer as String] = NSNumber(value: 0.5)
+        case "nan_layer": windows[0][kCGWindowLayer as String] = NSNumber(value: Double.nan)
+        case "boolean_number": windows[0][kCGWindowNumber as String] = NSNumber(value: false)
+        case "fractional_number": windows[0][kCGWindowNumber as String] = NSNumber(value: 0.5)
+        case "nan_number": windows[0][kCGWindowNumber as String] = NSNumber(value: Double.nan)
+        case "fractional_owner": windows[0][kCGWindowOwnerPID as String] = NSNumber(value: 4_242.5)
         default: windows[0].removeValue(forKey: kCGWindowNumber as String)
         }
         let f = fixture(axWindows: false, windowList: windows)
@@ -206,6 +215,82 @@ struct ProjectChooserShellReadinessTests {
             ),
             executeAppleScript: { _ in .error("unexpected script") },
             onScreenWindowList: { [cgWindow()] },
+            postPopupMenuEscape: { Issue.record("unexpected Escape") }
+        )
+
+        #expect(!AccessibilityChannel.projectChooserShellIsPositivelyObserved(runtime: runtime))
+    }
+
+    @Test("a best-effort AX runtime cannot authorize the CG fallback")
+    func cgFallbackRequiresAStatusPreservingAttributeSeam() {
+        let f = fixture(axWindows: false, windowList: [cgWindow()])
+        let base = f.builder.makeAXRuntime(appElement: f.app)
+        let bestEffortAX = AXHelpers.Runtime(
+            axApp: base.axApp,
+            attributeValue: base.attributeValue,
+            attributeIsSettable: base.attributeIsSettable,
+            setAttributeValue: base.setAttributeValue,
+            children: base.children,
+            performAction: base.performAction,
+            childCount: base.childCount,
+            actionNames: base.actionNames,
+            actionNamesResult: base.actionNamesResult,
+            childrenResult: base.childrenResult,
+            attributeValueResult: nil,
+            performActionResult: base.performActionResult,
+            elementAtPosition: base.elementAtPosition,
+            attributeValuesResult: base.attributeValuesResult,
+            helpReadsAreGuarded: base.helpReadsAreGuarded
+        )
+        let runtime = AXLogicProElements.Runtime(
+            logicProPID: { logicPID },
+            ax: bestEffortAX,
+            executeAppleScript: { _ in .error("unexpected script") },
+            onScreenWindowList: { [cgWindow()] },
+            postPopupMenuEscape: { Issue.record("unexpected Escape") }
+        )
+
+        #expect(!AccessibilityChannel.projectChooserShellIsPositivelyObserved(runtime: runtime))
+    }
+
+    @Test("a singleton chooser is rejected when AXMainWindow names a distinct real document")
+    func singletonChooserRejectsDistinctMainDocument() {
+        let f = fixture()
+        let document = f.builder.element(1_565_003)
+        f.builder.setAttribute(document, kAXTitleAttribute as String, "Existing - Tracks")
+        f.builder.setAttribute(
+            document,
+            kAXDocumentAttribute as String,
+            "file:///fixture/Existing.logicx/"
+        )
+        f.builder.setAttribute(f.app, kAXMainWindowAttribute as String, document)
+
+        #expect(!AccessibilityChannel.projectChooserShellIsPositivelyObserved(runtime: f.runtime))
+    }
+
+    @Test("a singleton chooser rejects failed or malformed AXMainWindow reads",
+          arguments: ["failed", "malformed"])
+    func singletonChooserRequiresDefinitiveMainWindowRead(shape: String) {
+        let f = fixture()
+        let runtime = AXLogicProElements.Runtime(
+            logicProPID: { logicPID },
+            ax: f.builder.makeAXRuntime(
+                appElement: f.app,
+                attributeValueResultHandler: { element, attribute in
+                    guard CFEqual(element, f.app),
+                          attribute == (kAXMainWindowAttribute as String) else {
+                        return nil
+                    }
+                    if shape == "failed" {
+                        return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                    }
+                    return .success(NSNumber(value: 13))
+                },
+                setAttributeHandler: nil,
+                performActionHandler: nil
+            ),
+            executeAppleScript: { _ in .error("unexpected script") },
+            onScreenWindowList: { [] },
             postPopupMenuEscape: { Issue.record("unexpected Escape") }
         )
 

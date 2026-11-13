@@ -77,11 +77,16 @@ extension AccessibilityChannel {
         guard let windows = projectChooserAXWindowsRead(app, runtime: runtime.ax) else {
             return false
         }
+        guard windows.count <= 1,
+              let mainWindow = projectChooserMainWindowRead(app, runtime: runtime.ax) else {
+            return false
+        }
 
         switch windows.count {
         case 1:
             let window = windows[0]
-            guard exactChooserTitleRead(window, runtime: runtime.ax),
+            guard projectChooserMainWindow(mainWindow, permits: window),
+                  exactChooserTitleRead(window, runtime: runtime.ax),
                   case .success(nil) = AXLogicProElements.projectPickerDocumentRead(
                     window,
                     runtime: runtime
@@ -91,13 +96,7 @@ extension AccessibilityChannel {
             return true
 
         case 0:
-            let mainWindowRead: Result<AnyObject?, AXHelpers.AXStatusError> =
-                AXHelpers.getAttributeResult(
-                    app,
-                    kAXMainWindowAttribute as String,
-                    runtime: runtime.ax
-                )
-            guard case .success(nil) = mainWindowRead else { return false }
+            guard case .absent = mainWindow else { return false }
             return cgProjectChooserShellIsPositivelyObserved(
                 logicPID: logicPID,
                 windows: runtime.onScreenWindowList()
@@ -116,12 +115,9 @@ extension AccessibilityChannel {
         _ app: AXUIElement,
         runtime: AXHelpers.Runtime
     ) -> [AXUIElement]? {
+        guard let attributeValueResult = runtime.attributeValueResult else { return nil }
         let read: Result<AnyObject?, AXHelpers.AXStatusError> =
-            AXHelpers.getAttributeResult(
-                app,
-                kAXWindowsAttribute as String,
-                runtime: runtime
-            )
+            attributeValueResult(app, kAXWindowsAttribute as String)
         guard case let .success(value?) = read,
               CFGetTypeID(value) == CFArrayGetTypeID() else {
             return nil
@@ -138,6 +134,39 @@ extension AccessibilityChannel {
             windows.append(unsafeBitCast(item, to: AXUIElement.self))
         }
         return windows
+    }
+
+    private enum ProjectChooserMainWindowRead {
+        case absent
+        case window(AXUIElement)
+    }
+
+    private static func projectChooserMainWindowRead(
+        _ app: AXUIElement,
+        runtime: AXHelpers.Runtime
+    ) -> ProjectChooserMainWindowRead? {
+        guard let attributeValueResult = runtime.attributeValueResult else { return nil }
+        switch attributeValueResult(app, kAXMainWindowAttribute as String) {
+        case .success(nil):
+            return .absent
+        case .success(let value?):
+            guard CFGetTypeID(value) == AXUIElementGetTypeID() else { return nil }
+            return .window(unsafeBitCast(value, to: AXUIElement.self))
+        case .failure:
+            return nil
+        }
+    }
+
+    private static func projectChooserMainWindow(
+        _ observed: ProjectChooserMainWindowRead,
+        permits chooser: AXUIElement
+    ) -> Bool {
+        switch observed {
+        case .absent:
+            return true
+        case .window(let mainWindow):
+            return CFEqual(mainWindow, chooser)
+        }
     }
 
     private static func exactChooserTitleRead(
@@ -166,19 +195,22 @@ extension AccessibilityChannel {
         var normalWindows: [(title: String, bounds: CGRect)] = []
 
         for row in windows {
-            guard let owner = ProcessUtils.pidValue(from: row[kCGWindowOwnerPID as String]),
-                  owner == logicPID else {
-                continue
-            }
-            guard let layer = projectChooserWindowInt(row[kCGWindowLayer as String]) else {
+            guard let ownerValue = projectChooserExactIntegral(
+                    row[kCGWindowOwnerPID as String]
+                  ),
+                  let owner = pid_t(exactly: ownerValue) else {
                 return false
             }
+            guard owner == logicPID else { continue }
+            guard let layerValue = projectChooserExactIntegral(row[kCGWindowLayer as String]),
+                  let layer = Int(exactly: layerValue) else { return false }
             if layer == LogicOnScreenWindows.popupMenuLevel {
                 continue
             }
             guard layer == 0 else { continue }
 
-            guard projectChooserWindowInt(row[kCGWindowNumber as String]) != nil,
+            guard let numberValue = projectChooserExactIntegral(row[kCGWindowNumber as String]),
+                  Int(exactly: numberValue) != nil,
                   let boundsDictionary = row[kCGWindowBounds as String] as? [String: Any],
                   let bounds = CGRect(
                     dictionaryRepresentation: boundsDictionary as CFDictionary
@@ -200,10 +232,18 @@ extension AccessibilityChannel {
         return isExactProjectChooserWindowTitle(normalWindows[0].title)
     }
 
-    private static func projectChooserWindowInt(_ value: Any?) -> Int? {
-        if let value = value as? Int { return value }
-        if let value = value as? NSNumber { return value.intValue }
-        return nil
+    private static func projectChooserExactIntegral(_ value: Any?) -> Int64? {
+        guard let number = value as? NSNumber,
+              CFGetTypeID(number) != CFBooleanGetTypeID() else {
+            return nil
+        }
+        let scalar = number.doubleValue
+        guard scalar.isFinite,
+              let integral = Int64(exactly: scalar),
+              NSNumber(value: integral).compare(number) == .orderedSame else {
+            return nil
+        }
+        return integral
     }
 
     static func createEmptyProjectFromQualifiedState(
