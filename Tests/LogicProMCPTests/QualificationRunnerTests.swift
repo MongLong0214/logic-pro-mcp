@@ -1168,17 +1168,8 @@ struct QualificationRunnerTests {
             "read_only": true,
             "snapshot_id": "snap_typed_rows",
             "scope": "whole_project",
-            "requested_domains": ["tracks", "hierarchy", "strips", "associations"],
-            "sources": ["tracks": "ax_request_read", "strips": "ax_request_read"],
-            "tracks": [
-                "coverage": "partial",
-                "rows": [
-                    ["track_ref": "trk_output"],
-                    ["track_ref": "trk_physical_input"],
-                    ["track_ref": "trk_bus_input"],
-                    ["track_ref": "trk_send"],
-                ],
-            ],
+            "requested_domains": ["strips"],
+            "sources": ["strips": "ax_request_read"],
             "strips": [
                 "coverage": "partial",
                 "rows": [
@@ -1217,24 +1208,11 @@ struct QualificationRunnerTests {
                 ],
                 ],
             ],
-            "associations": [
-                "coverage": "partial",
-                "rows": [
-                    ["track_ref": "trk_output", "mixer_strip_ref": "mix_output",
-                     "source": "held_exclusive_selection_focus"],
-                    ["track_ref": "trk_physical_input", "mixer_strip_ref": "mix_physical_input",
-                     "source": "held_exclusive_selection_focus"],
-                    ["track_ref": "trk_bus_input", "mixer_strip_ref": "mix_bus_input",
-                     "source": "held_exclusive_selection_selected_child"],
-                    ["track_ref": "trk_send", "mixer_strip_ref": "mix_send",
-                     "source": "held_exclusive_selection_focus"],
-                ],
-            ],
             "ui_effects": [
-                "navigation_performed": true,
-                "restoration": "restored",
-                "attempted": ["track_selection"],
-                "changed": ["track_selection"],
+                "navigation_performed": false,
+                "restoration": "not_applicable",
+                "attempted": [],
+                "changed": [],
             ],
         ]
         let params = QualificationTransport.mixerReadProbeParams(
@@ -1249,15 +1227,14 @@ struct QualificationRunnerTests {
         #expect(params[.mixerGetSendBypassVerified]?["ordinal"] as? Int == 3)
     }
 
-    @Test func sessionInspectionSeedPurposesKeepPlannerPassiveAndMixerNavigationBound() throws {
+    @Test func sessionInspectionSeedPurposesKeepPlannerAndMixerReadsPassive() throws {
         let planner = QualificationTransport.sessionInspectionSeedRequestParams(for: .planner)
         let mixer = QualificationTransport.sessionInspectionSeedRequestParams(for: .mixerRead)
 
         #expect(planner.isEmpty)
         #expect(mixer["scope"] as? String == "whole_project")
-        #expect(mixer["domains"] as? [String]
-            == ["tracks", "hierarchy", "strips", "associations"])
-        #expect(try #require(mixer["allow_ui_navigation"] as? Bool))
+        #expect(mixer["domains"] as? [String] == ["strips"])
+        #expect(try #require(mixer["allow_ui_navigation"] as? Bool) == false)
         #expect(QualificationTransport.mixerReadProbeOperationIDs == [
             .mixerGetOutputVerified,
             .mixerGetInputBusVerified,
@@ -1266,7 +1243,7 @@ struct QualificationRunnerTests {
         ])
     }
 
-    @Test func preparedMixerReadProbeParamsReplaceTheEmptyCatalogFallback() throws {
+    @Test func preparedMixerProbeParamsReplaceTheEmptyCatalogFallback() throws {
         let spec = try #require(OperationRegistry.specs.first {
             $0.id == .mixerGetSendDestinationVerified
         })
@@ -1281,212 +1258,14 @@ struct QualificationRunnerTests {
         #expect(params["ordinal"] as? Int == 4)
     }
 
-    @Test func mixerReadProbeParamsRetainSameSessionTargetsOnlyForMeasuredPopulationMovement() throws {
-        func stableInspection(reference: String) throws -> Data {
-            try JSONSerialization.data(withJSONObject: [
-                "schema": "logic_pro_mcp_session_population.v1",
-                "read_only": true,
-                "snapshot_id": "snap_\(reference)",
-                "scope": "whole_project",
-                "requested_domains": ["tracks", "hierarchy", "strips", "associations"],
-                "sources": ["tracks": "ax_request_read", "strips": "ax_request_read"],
-                "tracks": [
-                    "coverage": "partial",
-                    "rows": [["track_ref": "trk_\(reference)"]],
-                ],
-                "strips": [
-                    "coverage": "partial",
-                    "rows": [[
-                        "mixer_strip_ref": "mix_\(reference)",
-                        "input_observation": [
-                            "state": "observed_source", "source": "버스 1",
-                        ],
-                        "output_observation": [
-                            "state": "observed_destination", "destination": "Stereo Output",
-                        ],
-                    ]],
-                ],
-                "associations": [
-                    "coverage": "partial",
-                    "rows": [[
-                        "track_ref": "trk_\(reference)",
-                        "mixer_strip_ref": "mix_\(reference)",
-                        "source": "held_exclusive_selection_selected_child",
-                    ]],
-                ],
-                "ui_effects": [
-                    "navigation_performed": true,
-                    "restoration": "restored",
-                    "attempted": ["track_selection"],
-                    "changed": ["track_selection"],
-                ],
-            ])
-        }
-        let movedInspection = try JSONSerialization.data(withJSONObject: [
-            "schema": "logic_pro_mcp_session_population.v1",
-            "read_only": true,
-            "snapshot_id": "snap_population_moved",
-            "scope": "whole_project",
-            "requested_domains": ["tracks", "hierarchy", "strips", "associations"],
-            "sources": ["tracks": "ax_request_read", "strips": "ax_request_read"],
-            "tracks": [
-                "coverage": "unstable", "reasons": ["live_population_moved"], "rows": [],
-            ],
-            "hierarchy": [
-                "coverage": "unstable", "reasons": ["live_population_moved"],
-            ],
-            "strips": [
-                "coverage": "unstable", "reasons": ["live_population_moved"], "rows": [],
-            ],
-            "associations": [
-                "coverage": "unstable", "reasons": ["live_population_moved"],
-            ],
-            "ui_effects": [
-                "navigation_performed": true,
-                "restoration": "not_restored",
-                "attempted": ["track_selection"],
-                "changed": ["track_selection"],
-                "reason": "association_restoration_unverified",
-            ],
-        ])
-        let requested: Set<OperationID> = [
-            .mixerGetInputBusVerified,
-            .mixerGetOutputVerified,
-        ]
-        var prepared = QualificationTransport.preparedMixerReadProbeParams(
-            from: try stableInspection(reference: "before"),
-            requested: requested,
-            previouslyPrepared: [:]
-        )
-        #expect(prepared[.mixerGetInputBusVerified]?["target_ref"] as? String
-            == "mix_before")
-        #expect(prepared[.mixerGetOutputVerified]?["target_ref"] as? String
-            == "mix_before")
-        #expect(prepared[.mixerGetSendBypassVerified] == nil)
-
-        prepared = QualificationTransport.preparedMixerReadProbeParams(
-            from: movedInspection,
-            requested: requested,
-            previouslyPrepared: prepared
-        )
-        #expect(prepared[.mixerGetInputBusVerified]?["target_ref"] as? String
-            == "mix_before")
-        #expect(prepared[.mixerGetOutputVerified]?["target_ref"] as? String
-            == "mix_before")
-
-        let malformed = QualificationTransport.preparedMixerReadProbeParams(
-            from: Data(#"{}"#.utf8),
-            requested: requested,
-            previouslyPrepared: prepared
-        )
-        #expect(malformed.isEmpty)
-
-        prepared = QualificationTransport.preparedMixerReadProbeParams(
-            from: try stableInspection(reference: "after"),
-            requested: requested,
-            previouslyPrepared: prepared
-        )
-        #expect(prepared[.mixerGetInputBusVerified]?["target_ref"] as? String
-            == "mix_after")
-        #expect(prepared[.mixerGetOutputVerified]?["target_ref"] as? String
-            == "mix_after")
-    }
-
-    @Test(arguments: [
-        "schema", "read_only", "snapshot", "scope", "domains", "sources",
-        "coverage", "reasons", "navigation", "restoration", "effect_reason",
-        "attempted", "changed",
-    ])
-    func mixerReadProbeParamsRejectRetainedTargetsOutsideMeasuredPopulationMovement(
-        fault: String
-    ) throws {
-        var envelope: [String: Any] = [
-            "schema": "logic_pro_mcp_session_population.v1",
-            "read_only": true,
-            "snapshot_id": "snap_population_moved",
-            "scope": "whole_project",
-            "requested_domains": ["tracks", "hierarchy", "strips", "associations"],
-            "sources": ["tracks": "ax_request_read", "strips": "ax_request_read"],
-            "tracks": [
-                "coverage": "unstable", "reasons": ["live_population_moved"], "rows": [],
-            ],
-            "hierarchy": [
-                "coverage": "unstable", "reasons": ["live_population_moved"],
-            ],
-            "strips": [
-                "coverage": "unstable", "reasons": ["live_population_moved"], "rows": [],
-            ],
-            "associations": [
-                "coverage": "unstable", "reasons": ["live_population_moved"],
-            ],
-            "ui_effects": [
-                "navigation_performed": true,
-                "restoration": "not_restored",
-                "attempted": ["track_selection"],
-                "changed": ["track_selection"],
-                "reason": "association_restoration_unverified",
-            ],
-        ]
-        switch fault {
-        case "schema": envelope["schema"] = "legacy"
-        case "read_only": envelope["read_only"] = false
-        case "snapshot": envelope["snapshot_id"] = ""
-        case "scope": envelope["scope"] = "selected_tracks"
-        case "domains": envelope["requested_domains"] = ["tracks", "strips"]
-        case "sources": envelope["sources"] = ["tracks": "cache", "strips": "ax_request_read"]
-        case "coverage":
-            envelope["tracks"] = [
-                "coverage": "partial", "reasons": ["live_population_moved"], "rows": [],
-            ]
-        case "reasons":
-            envelope["hierarchy"] = [
-                "coverage": "unstable", "reasons": ["foreign_reason"],
-            ]
-        case "navigation":
-            var effects = try #require(envelope["ui_effects"] as? [String: Any])
-            effects["navigation_performed"] = false
-            envelope["ui_effects"] = effects
-        case "restoration":
-            var effects = try #require(envelope["ui_effects"] as? [String: Any])
-            effects["restoration"] = "restored"
-            envelope["ui_effects"] = effects
-        case "effect_reason":
-            var effects = try #require(envelope["ui_effects"] as? [String: Any])
-            effects["reason"] = "foreign_reason"
-            envelope["ui_effects"] = effects
-        case "attempted":
-            var effects = try #require(envelope["ui_effects"] as? [String: Any])
-            effects["attempted"] = []
-            envelope["ui_effects"] = effects
-        case "changed":
-            var effects = try #require(envelope["ui_effects"] as? [String: Any])
-            effects["changed"] = ["track_selection", "mixer_visibility"]
-            envelope["ui_effects"] = effects
-        default: Issue.record("unknown fault \(fault)")
-        }
-
-        let prepared = QualificationTransport.preparedMixerReadProbeParams(
-            from: try JSONSerialization.data(withJSONObject: envelope),
-            requested: [.mixerGetOutputVerified],
-            previouslyPrepared: [
-                .mixerGetOutputVerified: ["target_ref": "mix_previous"],
-            ]
-        )
-        #expect(prepared.isEmpty)
-    }
-
     @Test func mixerReadProbeParamsAcceptRequestOwnedFreshInspectionRows() throws {
         let inspection: [String: Any] = [
             "schema": "logic_pro_mcp_session_population.v1",
             "read_only": true,
             "snapshot_id": "snap_fresh",
             "scope": "whole_project",
-            "requested_domains": ["tracks", "hierarchy", "strips", "associations"],
-            "sources": ["tracks": "ax_request_read", "strips": "ax_request_read"],
-            "tracks": [
-                "coverage": "partial",
-                "rows": [["track_ref": "trk_fresh_output"]],
-            ],
+            "requested_domains": ["strips"],
+            "sources": ["strips": "ax_request_read"],
             "strips": [
                 "coverage": "partial",
                 "rows": [[
@@ -1496,19 +1275,11 @@ struct QualificationRunnerTests {
                     ],
                 ]],
             ],
-            "associations": [
-                "coverage": "partial",
-                "rows": [[
-                    "track_ref": "trk_fresh_output",
-                    "mixer_strip_ref": "mix_fresh_output",
-                    "source": "held_exclusive_selection_selected_child",
-                ]],
-            ],
             "ui_effects": [
-                "navigation_performed": true,
-                "restoration": "restored",
-                "attempted": ["track_selection"],
-                "changed": ["track_selection"],
+                "navigation_performed": false,
+                "restoration": "not_applicable",
+                "attempted": [],
+                "changed": [],
             ],
         ]
 
@@ -1522,45 +1293,34 @@ struct QualificationRunnerTests {
 
     @Test func mixerReadProbeParamsRejectUnsafeOrUnboundInspectionRows() throws {
         func inspection(
+            schema: String = "logic_pro_mcp_session_population.v1",
+            readOnly: Bool = true,
+            snapshotID: String = "snap_fresh",
+            scope: String = "whole_project",
+            domains: [String] = ["strips"],
+            stripSource: String = "ax_request_read",
             stripCoverage: String = "partial",
-            associationCoverage: String = "partial",
-            trackRefs: [String] = ["trk_fresh_output"],
-            stripRefs: [String] = ["mix_fresh_output"],
-            associationTrackRef: String = "trk_fresh_output",
-            associationRef: String = "mix_fresh_output",
-            associationRows: [[String: Any]]? = nil,
-            navigationPerformed: Bool = true,
-            restoration: String = "restored",
-            attempted: [String] = ["track_selection"],
-            changed: [String] = ["track_selection"],
+            stripRef: String = "mix_fresh_output",
+            navigationPerformed: Bool = false,
+            restoration: String = "not_applicable",
+            attempted: [String] = [],
+            changed: [String] = [],
             reason: Any = NSNull()
         ) -> [String: Any] {
             [
-                "schema": "logic_pro_mcp_session_population.v1",
-                "read_only": true,
-                "snapshot_id": "snap_fresh",
-                "scope": "whole_project",
-                "requested_domains": ["tracks", "hierarchy", "strips", "associations"],
-                "sources": ["tracks": "ax_request_read", "strips": "ax_request_read"],
-                "tracks": [
-                    "coverage": "partial",
-                    "rows": trackRefs.map { ["track_ref": $0] },
-                ],
+                "schema": schema,
+                "read_only": readOnly,
+                "snapshot_id": snapshotID,
+                "scope": scope,
+                "requested_domains": domains,
+                "sources": ["strips": stripSource],
                 "strips": [
                     "coverage": stripCoverage,
-                    "rows": stripRefs.map { reference in [
-                        "mixer_strip_ref": reference,
+                    "rows": [[
+                        "mixer_strip_ref": stripRef,
                         "output_observation": [
                             "state": "observed_destination", "destination": "출력 3-4",
                         ],
-                    ] },
-                ],
-                "associations": [
-                    "coverage": associationCoverage,
-                    "rows": associationRows ?? [[
-                        "track_ref": associationTrackRef,
-                        "mixer_strip_ref": associationRef,
-                        "source": "held_exclusive_selection_focus",
                     ]],
                 ],
                 "ui_effects": [
@@ -1573,46 +1333,19 @@ struct QualificationRunnerTests {
             ]
         }
         let unsafe: [[String: Any]] = [
+            inspection(schema: "legacy"),
+            inspection(readOnly: false),
+            inspection(snapshotID: ""),
+            inspection(scope: "selected_tracks"),
+            inspection(domains: ["tracks", "strips"]),
+            inspection(stripSource: "cache"),
             inspection(stripCoverage: "unstable"),
-            inspection(associationCoverage: "unavailable"),
-            inspection(associationRef: "mix_other"),
-            inspection(associationTrackRef: "trk_ghost"),
-            inspection(trackRefs: ["trk_fresh_output", "trk_fresh_output"]),
-            inspection(
-                trackRefs: ["trk_first", "trk_second"],
-                associationRows: [
-                    [
-                        "track_ref": "trk_first", "mixer_strip_ref": "mix_fresh_output",
-                        "source": "held_exclusive_selection_focus",
-                    ],
-                    [
-                        "track_ref": "trk_second", "mixer_strip_ref": "mix_fresh_output",
-                        "source": "held_exclusive_selection_focus",
-                    ],
-                ]
-            ),
-            inspection(
-                stripRefs: ["mix_first", "mix_second"],
-                associationRows: [
-                    [
-                        "track_ref": "trk_fresh_output", "mixer_strip_ref": "mix_first",
-                        "source": "held_exclusive_selection_focus",
-                    ],
-                    [
-                        "track_ref": "trk_fresh_output", "mixer_strip_ref": "mix_second",
-                        "source": "held_exclusive_selection_focus",
-                    ],
-                ]
-            ),
-            inspection(restoration: "not_restored"),
-            inspection(changed: ["mixer_visibility"]),
-            inspection(reason: "association_population_moved"),
-            inspection(
-                navigationPerformed: false,
-                restoration: "not_applicable",
-                attempted: ["track_selection"],
-                changed: []
-            ),
+            inspection(stripRef: "track_1"),
+            inspection(navigationPerformed: true),
+            inspection(restoration: "restored"),
+            inspection(attempted: ["track_selection"]),
+            inspection(changed: ["track_selection"]),
+            inspection(reason: "unexpected_ui_effect"),
         ]
 
         for envelope in unsafe {

@@ -1888,11 +1888,9 @@ struct QualificationTransport: Sendable {
                             do {
                                 let inspection = try sessionInspectionSeedPayload(
                                     session, startingAt: mixerInspectionID, purpose: .mixerRead)
-                                let current = Self.preparedMixerReadProbeParams(
-                                    from: inspection.responseData,
-                                    requested: requestedMixerReads,
-                                    previouslyPrepared: preparedReadParams
-                                )
+                                let current = Self.mixerReadProbeParams(
+                                    from: inspection.responseData
+                                ).filter { requestedMixerReads.contains($0.key) }
                                 for requestedID in requestedMixerReads {
                                     preparedReadParams.removeValue(forKey: requestedID)
                                 }
@@ -5512,7 +5510,7 @@ struct QualificationTransport: Sendable {
             }
         }
     }
-    static let mixerInspectionSeedDomains = ["tracks", "hierarchy", "strips", "associations"]
+    static let mixerInspectionSeedDomains = ["strips"]
 
     static func sessionInspectionSeedRequestParams(
         for purpose: SessionInspectionSeedPurpose
@@ -5524,7 +5522,7 @@ struct QualificationTransport: Sendable {
             return [
                 "scope": "whole_project",
                 "domains": mixerInspectionSeedDomains,
-                "allow_ui_navigation": true,
+                "allow_ui_navigation": false,
             ]
         }
     }
@@ -5544,81 +5542,32 @@ struct QualificationTransport: Sendable {
     static func mixerReadProbeParams(from resourceData: Data) -> [OperationID: [String: Any]] {
         guard let envelope = try? JSONSerialization.jsonObject(with: resourceData) as? [String: Any]
         else { return [:] }
-        let strips: [[String: Any]]
-        let requestOwnedAssociationRefs: Set<String>
-        if let snapshotID = envelope["snapshot_id"] as? String, !snapshotID.isEmpty,
-                  envelope["schema"] as? String == "logic_pro_mcp_session_population.v1",
-                  let readOnly = envelope["read_only"], JSONInspector.isBoolean(readOnly),
-                  readOnly as? Bool == true,
-                  envelope["scope"] as? String == "whole_project",
-                  envelope["requested_domains"] as? [String] == mixerInspectionSeedDomains,
-                  let sources = envelope["sources"] as? [String: Any],
-                  sources["tracks"] as? String == "ax_request_read",
-                  sources["strips"] as? String == "ax_request_read",
-                  let tracks = envelope["tracks"] as? [String: Any],
-                  let trackCoverage = tracks["coverage"] as? String,
-                  ["complete", "partial"].contains(trackCoverage),
-                  let trackRows = tracks["rows"] as? [[String: Any]],
-                  let section = envelope["strips"] as? [String: Any],
-                  let stripCoverage = section["coverage"] as? String,
-                  ["complete", "partial"].contains(stripCoverage),
-                  let freshRows = section["rows"] as? [[String: Any]],
-                  let associations = envelope["associations"] as? [String: Any],
-                  let associationCoverage = associations["coverage"] as? String,
-                  ["complete", "partial"].contains(associationCoverage),
-                  let associationRows = associations["rows"] as? [[String: Any]],
-                  let effects = envelope["ui_effects"] as? [String: Any],
-                  let navigationPerformed = effects["navigation_performed"],
-                  JSONInspector.isBoolean(navigationPerformed),
-                  let navigated = navigationPerformed as? Bool,
-                  let restoration = effects["restoration"] as? String,
-                  let attempted = effects["attempted"] as? [String],
-                  let changed = effects["changed"] as? [String],
-                  effects["reason"] == nil || effects["reason"] is NSNull,
-                  !attempted.contains("mixer_visibility"),
-                  !changed.contains("mixer_visibility"),
-                  navigated
-                    ? restoration == "restored"
-                    : restoration == "not_applicable" && attempted.isEmpty && changed.isEmpty {
-            let trackRefs = trackRows.compactMap { row -> String? in
-                guard let reference = row["track_ref"] as? String,
-                      reference.hasPrefix("trk_"), reference.count > 4 else { return nil }
-                return reference
-            }
-            guard trackRefs.count == trackRows.count else { return [:] }
-            let associationRefs = associationRows.compactMap { row -> (String, String)? in
-                guard let trackRef = row["track_ref"] as? String,
-                      trackRef.hasPrefix("trk_"), trackRef.count > 4,
-                      let mixerRef = row["mixer_strip_ref"] as? String,
-                      mixerRef.hasPrefix("mix_"), mixerRef.count > 4,
-                      ["held_exclusive_selection_focus",
-                       "held_exclusive_selection_selected_child"].contains(
-                        row["source"] as? String ?? "") else { return nil }
-                return (trackRef, mixerRef)
-            }
-            guard associationRefs.count == associationRows.count else { return [:] }
-            let uniquelyAssociated = Set(associationRefs.compactMap { pair in
-                associationRefs.filter { $0.1 == pair.1 }.count == 1
-                    && associationRefs.filter { $0.0 == pair.0 }.count == 1 ? pair.1 : nil
-            })
-            let uniquelyObservedTrackRefs = Set(trackRefs.filter { reference in
-                trackRefs.filter { $0 == reference }.count == 1
-            })
-            let censusBoundAssociationRefs = Set(associationRefs.compactMap { pair in
-                uniquelyObservedTrackRefs.contains(pair.0)
-                    && uniquelyAssociated.contains(pair.1) ? pair.1 : nil
-            })
-            guard !censusBoundAssociationRefs.isEmpty else { return [:] }
-            strips = freshRows
-            requestOwnedAssociationRefs = censusBoundAssociationRefs
-        } else {
+        guard let snapshotID = envelope["snapshot_id"] as? String, !snapshotID.isEmpty,
+              envelope["schema"] as? String == "logic_pro_mcp_session_population.v1",
+              let readOnly = envelope["read_only"], JSONInspector.isBoolean(readOnly),
+              readOnly as? Bool == true,
+              envelope["scope"] as? String == "whole_project",
+              envelope["requested_domains"] as? [String] == mixerInspectionSeedDomains,
+              let sources = envelope["sources"] as? [String: Any],
+              sources["strips"] as? String == "ax_request_read",
+              let section = envelope["strips"] as? [String: Any],
+              let stripCoverage = section["coverage"] as? String,
+              ["complete", "partial"].contains(stripCoverage),
+              let strips = section["rows"] as? [[String: Any]],
+              let effects = envelope["ui_effects"] as? [String: Any],
+              let navigationPerformed = effects["navigation_performed"],
+              JSONInspector.isBoolean(navigationPerformed),
+              navigationPerformed as? Bool == false,
+              effects["restoration"] as? String == "not_applicable",
+              effects["attempted"] as? [String] == [],
+              effects["changed"] as? [String] == [],
+              effects["reason"] == nil || effects["reason"] is NSNull else {
             return [:]
         }
         var params: [OperationID: [String: Any]] = [:]
         for strip in strips {
             guard let reference = strip["mixer_strip_ref"] as? String,
-                  reference.hasPrefix("mix_"), reference.count > 4,
-                  requestOwnedAssociationRefs.contains(reference) else { continue }
+                  reference.hasPrefix("mix_"), reference.count > 4 else { continue }
 
             if params[.mixerGetOutputVerified] == nil,
                let observation = strip["output_observation"] as? [String: Any],
@@ -5654,56 +5603,6 @@ struct QualificationTransport: Sendable {
             }
         }
         return params
-    }
-
-    /// Keep only exact `mix_` parameters that this qualification process already received from a
-    /// valid request-owned inspection. Logic can report one measured transient after a preceding
-    /// read probe fails to restore selection: every population domain is `live_population_moved`
-    /// and the owned selection roundtrip is explicitly `association_restoration_unverified`.
-    /// Repeating that inspection would repeat UI effects, while dropping the already-issued
-    /// session-stable reference makes the runner send empty params. Retain the earlier reference
-    /// only for that exact transcript shape; the product resolver and operation custody checks
-    /// still revalidate it. Any malformed, unrelated, or stably changed inspection clears it.
-    static func preparedMixerReadProbeParams(
-        from resourceData: Data,
-        requested: Set<OperationID>,
-        previouslyPrepared: [OperationID: [String: Any]]
-    ) -> [OperationID: [String: Any]] {
-        let fresh = mixerReadProbeParams(from: resourceData)
-        if !fresh.isEmpty {
-            return fresh.filter { requested.contains($0.key) }
-        }
-
-        guard mixerInspectionAllowsSameSessionTargetRetention(resourceData) else { return [:] }
-        return previouslyPrepared.filter { requested.contains($0.key) }
-    }
-
-    private static func mixerInspectionAllowsSameSessionTargetRetention(_ resourceData: Data) -> Bool {
-        guard let envelope = try? JSONSerialization.jsonObject(with: resourceData) as? [String: Any],
-              envelope["schema"] as? String == "logic_pro_mcp_session_population.v1",
-              let readOnly = envelope["read_only"], JSONInspector.isBoolean(readOnly),
-              readOnly as? Bool == true,
-              let snapshotID = envelope["snapshot_id"] as? String, !snapshotID.isEmpty,
-              envelope["scope"] as? String == "whole_project",
-              envelope["requested_domains"] as? [String] == mixerInspectionSeedDomains,
-              let sources = envelope["sources"] as? [String: Any],
-              sources["tracks"] as? String == "ax_request_read",
-              sources["strips"] as? String == "ax_request_read",
-              let effects = envelope["ui_effects"] as? [String: Any],
-              let navigationPerformed = effects["navigation_performed"],
-              JSONInspector.isBoolean(navigationPerformed),
-              navigationPerformed as? Bool == true,
-              effects["restoration"] as? String == "not_restored",
-              effects["reason"] as? String == "association_restoration_unverified",
-              effects["attempted"] as? [String] == ["track_selection"],
-              effects["changed"] as? [String] == ["track_selection"] else { return false }
-
-        for domain in mixerInspectionSeedDomains {
-            guard let section = envelope[domain] as? [String: Any],
-                  section["coverage"] as? String == "unstable",
-                  section["reasons"] as? [String] == ["live_population_moved"] else { return false }
-        }
-        return true
     }
 
     /// Build live plug-in read probes only from complete inventory responses that issued current
