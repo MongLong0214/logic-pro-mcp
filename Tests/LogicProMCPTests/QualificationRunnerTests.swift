@@ -1291,6 +1291,36 @@ struct QualificationRunnerTests {
             == "mix_fresh_output")
     }
 
+    @Test func mixerReadProbeValidationDistinguishesAnEmptyFixtureFromUnsafeEvidence() throws {
+        let validButEmpty: [String: Any] = [
+            "schema": "logic_pro_mcp_session_population.v1",
+            "read_only": true,
+            "snapshot_id": "snap_empty",
+            "scope": "whole_project",
+            "requested_domains": ["strips"],
+            "sources": ["strips": "ax_request_read"],
+            "strips": ["coverage": "partial", "rows": []],
+            "ui_effects": [
+                "navigation_performed": false,
+                "restoration": "not_applicable",
+                "attempted": [],
+                "changed": [],
+            ],
+        ]
+        var unsafe = validButEmpty
+        unsafe["read_only"] = false
+
+        let empty = QualificationTransport.validatedMixerReadProbeParams(
+            from: try JSONSerialization.data(withJSONObject: validButEmpty)
+        )
+        let rejected = QualificationTransport.validatedMixerReadProbeParams(
+            from: try JSONSerialization.data(withJSONObject: unsafe)
+        )
+
+        #expect(empty?.isEmpty == true)
+        #expect(rejected == nil)
+    }
+
     @Test func mixerReadProbeParamsRejectUnsafeOrUnboundInspectionRows() throws {
         func inspection(
             schema: String = "logic_pro_mcp_session_population.v1",
@@ -2918,7 +2948,7 @@ struct QualificationRunnerTests {
 
 
 
-    @Test func signedDeclarativePolicyReplaysWithoutVerifierRegistryMembership() throws {
+    @Test func declarativePolicyRoundTripsWithoutRuntimeRegistryMembership() throws {
         let policy = QualificationSemanticPolicy(
             kind: .declarative,
             strength: .shapeAndDomain,
@@ -2943,7 +2973,7 @@ struct QualificationRunnerTests {
         ))
     }
 
-    @Test func signedMutationRestorePolicyReplaysWithoutVerifierRegistryMembership() throws {
+    @Test func mutationRestorePolicyRoundTripsWithoutRuntimeRegistryMembership() throws {
         let local = Self.recipeShapedRecord()
         let record = QualificationMutationRestoreRecord(
             operationID: "future.operation",
@@ -3710,6 +3740,108 @@ struct QualificationRunnerTests {
         ] && summary.failed == 0
 
         #expect(classifiesClosedPanelAsEnvironmental)
+    }
+
+    @Test func liveGateClassifiesOnlyExactMissingMixerAndPluginFixturesAsEnvironmental() {
+        func refusal(
+            _ operationID: OperationID,
+            tool: String,
+            command: String,
+            hint: String
+        ) -> QualificationOperationResult {
+            QualificationOperationResult(
+                operationID: operationID.rawValue,
+                tool: tool,
+                command: command,
+                mutability: .readOnly,
+                requestID: "fixture-request",
+                responseData: Data(#"{"state":"C","error":"invalid_params","write_attempted":false}"#.utf8),
+                isError: true,
+                state: "C",
+                error: "invalid_params",
+                hint: hint,
+                writeAttempted: false,
+                readbackSource: tool == "logic_mixer" ? "logic://mixer" : "logic://plugins/inventory",
+                readbackRequestID: "fixture-readback",
+                readbackData: Data(#"{}"#.utf8),
+                failureReason: nil
+            )
+        }
+
+        let cases: [(OperationID, String, String, String, String)] = [
+            (
+                .mixerGetOutputVerified,
+                "logic_mixer",
+                "get_output_verified",
+                "get_output_verified requires a current physical Mixer target_ref; no track/index selectors or write inputs are accepted",
+                "requires a current physical Mixer target from the fresh read-only strip census"
+            ),
+            (
+                .mixerGetInputBusVerified,
+                "logic_mixer",
+                "get_input_bus_verified",
+                "get_input_bus_verified requires a current physical Mixer target_ref; no track/index selectors or write inputs are accepted",
+                "requires a current physical Mixer target from the fresh read-only strip census"
+            ),
+            (
+                .mixerGetSendDestinationVerified,
+                "logic_mixer",
+                "get_send_destination_verified",
+                "get_send_destination_verified requires a current physical Mixer target_ref; no track/index selectors or write inputs are accepted",
+                "requires an occupied Send in the fresh read-only strip census"
+            ),
+            (
+                .mixerGetSendBypassVerified,
+                "logic_mixer",
+                "get_send_bypass_verified",
+                "An exact physical Mixer target_ref and occupied source-census ordinal are required",
+                "requires an occupied Send in the fresh read-only strip census"
+            ),
+            (
+                .pluginsGetHostParameterManifest,
+                "logic_plugins",
+                "get_host_parameter_manifest",
+                "get_host_parameter_manifest requires an occupied insert target_ref and non-empty expected_build_fingerprint; it accepts no write inputs",
+                "requires an occupied supported plug-in insert in the current Logic project"
+            ),
+            (
+                .pluginsGetParamVerified,
+                "logic_plugins",
+                "get_param_verified",
+                "get_param_verified requires an occupied insert target_ref; scalar reads also require a named param. No value, mode or confirmation is accepted",
+                "requires an occupied supported plug-in insert in the current Logic project"
+            ),
+            (
+                .pluginsGetChannelEQStateVerified,
+                "logic_plugins",
+                "get_channel_eq_state_verified",
+                "get_channel_eq_state_verified requires an occupied insert target_ref; scalar reads also require a named param. No value, mode or confirmation is accepted",
+                "requires an occupied supported plug-in insert in the current Logic project"
+            ),
+            (
+                .pluginsPlanParameterChanges,
+                "logic_plugins",
+                "plan_parameter_changes",
+                "plan_parameter_changes requires an occupied insert target_ref; scalar reads also require a named param. No value, mode or confirmation is accepted",
+                "requires an occupied supported plug-in insert in the current Logic project"
+            ),
+        ]
+
+        for (operationID, tool, command, hint, reason) in cases {
+            let exact = QualificationLiveGateSummary(operationResults: [
+                refusal(operationID, tool: tool, command: command, hint: hint),
+            ])
+            #expect(exact.environmentalPreconditions == [
+                .init(operationID: operationID.rawValue, reason: reason),
+            ])
+            #expect(exact.failed == 0)
+
+            let changed = QualificationLiveGateSummary(operationResults: [
+                refusal(operationID, tool: tool, command: command, hint: hint + " changed"),
+            ])
+            #expect(changed.environmentalPreconditions.isEmpty)
+            #expect(changed.failed == 1)
+        }
     }
 
     @Test func liveGateClassifiesOnlyTheExactZeroWriteSelectedRegionScopeRefusalAsAPrecondition() {

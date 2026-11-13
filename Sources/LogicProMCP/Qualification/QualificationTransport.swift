@@ -791,6 +791,38 @@ struct QualificationOperationResult: Equatable, Sendable {
             return "requires an exact open Library panel with readable inventory"
         }
         switch OperationID(rawValue: operationID) {
+        case .mixerGetOutputVerified
+            where error == "invalid_params"
+                && hint == "get_output_verified requires a current physical Mixer target_ref; no track/index selectors or write inputs are accepted":
+            return "requires a current physical Mixer target from the fresh read-only strip census"
+        case .mixerGetInputBusVerified
+            where error == "invalid_params"
+                && hint == "get_input_bus_verified requires a current physical Mixer target_ref; no track/index selectors or write inputs are accepted":
+            return "requires a current physical Mixer target from the fresh read-only strip census"
+        case .mixerGetSendDestinationVerified
+            where error == "invalid_params"
+                && hint == "get_send_destination_verified requires a current physical Mixer target_ref; no track/index selectors or write inputs are accepted":
+            return "requires an occupied Send in the fresh read-only strip census"
+        case .mixerGetSendBypassVerified
+            where error == "invalid_params"
+                && hint == "An exact physical Mixer target_ref and occupied source-census ordinal are required":
+            return "requires an occupied Send in the fresh read-only strip census"
+        case .pluginsGetHostParameterManifest
+            where error == "invalid_params"
+                && hint == "get_host_parameter_manifest requires an occupied insert target_ref and non-empty expected_build_fingerprint; it accepts no write inputs":
+            return "requires an occupied supported plug-in insert in the current Logic project"
+        case .pluginsGetParamVerified
+            where error == "invalid_params"
+                && hint == "get_param_verified requires an occupied insert target_ref; scalar reads also require a named param. No value, mode or confirmation is accepted":
+            return "requires an occupied supported plug-in insert in the current Logic project"
+        case .pluginsGetChannelEQStateVerified
+            where error == "invalid_params"
+                && hint == "get_channel_eq_state_verified requires an occupied insert target_ref; scalar reads also require a named param. No value, mode or confirmation is accepted":
+            return "requires an occupied supported plug-in insert in the current Logic project"
+        case .pluginsPlanParameterChanges
+            where error == "invalid_params"
+                && hint == "plan_parameter_changes requires an occupied insert target_ref; scalar reads also require a named param. No value, mode or confirmation is accepted":
+            return "requires an occupied supported plug-in insert in the current Logic project"
         case .tracksScanPluginPresets
             where error == HonestContract.FailureError.pluginWindowUnavailable.rawValue
                 && hint == AccessibilityChannel.pluginWindowUnavailableHint:
@@ -1901,18 +1933,20 @@ struct QualificationTransport: Sendable {
                             do {
                                 let inspection = try sessionInspectionSeedPayload(
                                     session, startingAt: mixerInspectionID, purpose: .mixerRead)
-                                let current = Self.mixerReadProbeParams(
+                                guard let admissible = Self.validatedMixerReadProbeParams(
                                     from: inspection.responseData
-                                ).filter { requestedMixerReads.contains($0.key) }
+                                ) else {
+                                    throw QualificationTransportError.protocolViolation(
+                                        "mixer_read_probe_inspection: response was not a current request-owned read-only strip census"
+                                    )
+                                }
+                                let current = admissible.filter {
+                                    requestedMixerReads.contains($0.key)
+                                }
                                 for requestedID in requestedMixerReads {
                                     preparedReadParams.removeValue(forKey: requestedID)
                                 }
                                 preparedReadParams.merge(current) { _, fresh in fresh }
-                                guard preparedReadParams[spec.id] != nil else {
-                                    throw QualificationTransportError.protocolViolation(
-                                        "mixer_read_probe_inspection: no current params for \(spec.id.rawValue)"
-                                    )
-                                }
                             } catch {
                                 preparedReadParams.removeValue(forKey: spec.id)
                                 responseFailure = Self.observedFailureReason(
@@ -5552,9 +5586,16 @@ struct QualificationTransport: Sendable {
     /// have no safe Arrange ordinal, and duplicate names are ordinary. The resource's typed slot
     /// observations decide which operation can be attempted; untyped display bytes never grant a
     /// send or input capability.
-    static func mixerReadProbeParams(from resourceData: Data) -> [OperationID: [String: Any]] {
+    /// `nil` means the inspection itself was not admissible. An empty dictionary is different:
+    /// the inspection was current, request-owned and read-only, but this project did not expose a
+    /// physical source suitable for the requested probe. The live gate must keep that distinction
+    /// so unsafe evidence remains a failure while an honest fixture gap remains visible as an
+    /// environmental precondition.
+    static func validatedMixerReadProbeParams(
+        from resourceData: Data
+    ) -> [OperationID: [String: Any]]? {
         guard let envelope = try? JSONSerialization.jsonObject(with: resourceData) as? [String: Any]
-        else { return [:] }
+        else { return nil }
         guard let snapshotID = envelope["snapshot_id"] as? String, !snapshotID.isEmpty,
               envelope["schema"] as? String == "logic_pro_mcp_session_population.v1",
               let readOnly = envelope["read_only"], JSONInspector.isBoolean(readOnly),
@@ -5575,7 +5616,7 @@ struct QualificationTransport: Sendable {
               effects["attempted"] as? [String] == [],
               effects["changed"] as? [String] == [],
               effects["reason"] == nil || effects["reason"] is NSNull else {
-            return [:]
+            return nil
         }
         var params: [OperationID: [String: Any]] = [:]
         for strip in strips {
@@ -5616,6 +5657,10 @@ struct QualificationTransport: Sendable {
             }
         }
         return params
+    }
+
+    static func mixerReadProbeParams(from resourceData: Data) -> [OperationID: [String: Any]] {
+        validatedMixerReadProbeParams(from: resourceData) ?? [:]
     }
 
     /// Build live plug-in read probes only from complete inventory responses that issued current
