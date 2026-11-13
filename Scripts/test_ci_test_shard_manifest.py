@@ -92,13 +92,89 @@ class XUnitTests(ManifestFixture):
 
         self.assertEqual(actual.read_text(encoding="utf-8"), expected.read_text(encoding="utf-8"))
 
+    def test_top_level_dot_shape_is_resolved(self):
+        expected = self.write(
+            "expected.txt",
+            "LogicProMCPTests.Issue497AmbiguousTargetReferenceTerminatesWithoutHumanRoute()\n")
+        self.xunit(
+            '<testcase classname="LogicProMCPTests" '
+            'name="Issue497AmbiguousTargetReferenceTerminatesWithoutHumanRoute()" />')
+        actual = self.root / "actual.txt"
+
+        manifest.verify_xunit(expected, self.root / "xunit", actual)
+
+        self.assertEqual(actual.read_text(encoding="utf-8"), expected.read_text(encoding="utf-8"))
+
+    def test_nested_suite_mixed_dot_and_slash_shape_is_resolved(self):
+        expected = self.write(
+            "expected.txt",
+            "LogicProMCPTests.OperationTraceTests/FeatureFlagEnvironmentTests/"
+            "operationTraceDefaultsToOn()\n")
+        self.xunit(
+            '<testcase '
+            'classname="LogicProMCPTests.OperationTraceTests.FeatureFlagEnvironmentTests" '
+            'name="operationTraceDefaultsToOn()" />')
+        actual = self.root / "actual.txt"
+
+        manifest.verify_xunit(expected, self.root / "xunit", actual)
+
+        self.assertEqual(actual.read_text(encoding="utf-8"), expected.read_text(encoding="utf-8"))
+
+    def test_unexpected_testcase_is_refused(self):
+        expected = self.write("expected.txt", "LogicProMCPTests.Suite/expected()\n")
+        self.xunit('<testcase classname="LogicProMCPTests.Suite" name="unexpected()" />')
+
+        with self.assertRaisesRegex(manifest.ManifestError, "unexpected xUnit testcase"):
+            manifest.verify_xunit(expected, self.root / "xunit", self.root / "actual.txt")
+
+    def test_expected_entries_with_same_canonical_xunit_key_are_refused(self):
+        expected = self.write(
+            "expected.txt",
+            "LogicProMCPTests.Suite/test()\n"
+            "LogicProMCPTests/Suite/test()\n")
+        self.xunit('<testcase classname="LogicProMCPTests.Suite" name="test()" />')
+
+        with self.assertRaisesRegex(manifest.ManifestError, "canonical xUnit key collision"):
+            manifest.verify_xunit(expected, self.root / "xunit", self.root / "actual.txt")
+
     def test_duplicate_testcase_is_refused(self):
         expected = self.write("expected.txt", "LogicProMCPTests.Suite/a()\n")
         self.xunit(
             '<testcase classname="LogicProMCPTests.Suite" name="a()" />'
             '<testcase classname="LogicProMCPTests.Suite" name="a()" />')
-        with self.assertRaisesRegex(manifest.ManifestError, "duplicate"):
+        with self.assertRaisesRegex(manifest.ManifestError, "duplicate xUnit testcase key"):
             manifest.verify_xunit(expected, self.root / "xunit", self.root / "actual.txt")
+
+    def test_missing_expected_testcase_is_refused(self):
+        expected = self.write(
+            "expected.txt",
+            "LogicProMCPTests.Suite/a()\n"
+            "LogicProMCPTests.Suite/b()\n")
+        self.xunit('<testcase classname="LogicProMCPTests.Suite" name="a()" />')
+
+        with self.assertRaisesRegex(manifest.ManifestError, "missing=.*Suite/b"):
+            manifest.verify_xunit(expected, self.root / "xunit", self.root / "actual.txt")
+
+    def test_expected_manifest_must_be_sorted_and_unique(self):
+        cases = (
+            ("unsorted", "LogicProMCPTests.Suite/b()\nLogicProMCPTests.Suite/a()\n",
+             "not byte-sorted"),
+            ("duplicate", "LogicProMCPTests.Suite/a()\nLogicProMCPTests.Suite/a()\n",
+             "duplicate entry"),
+        )
+        for suffix, contents, message in cases:
+            with self.subTest(suffix=suffix):
+                expected = self.write(f"expected-{suffix}.txt", contents)
+                with self.assertRaisesRegex(manifest.ManifestError, message):
+                    manifest.verify_xunit(
+                        expected, self.root / "unused-xunit", self.root / f"actual-{suffix}.txt")
+
+    def test_malformed_expected_manifest_entry_is_refused(self):
+        expected = self.write("expected.txt", "MalformedEntry()\n")
+
+        with self.assertRaisesRegex(manifest.ManifestError, "malformed expected manifest entry"):
+            manifest.verify_xunit(
+                expected, self.root / "unused-xunit", self.root / "actual.txt")
 
     def test_missing_extra_failure_and_error_are_refused(self):
         expected = self.write("expected.txt", "LogicProMCPTests.Suite/a()\n")
@@ -126,6 +202,13 @@ class XUnitTests(ManifestFixture):
         self.write("xunit/results-swift-testing.xml", "<testsuites />")
         with self.assertRaisesRegex(manifest.ManifestError, "exactly one"):
             manifest.verify_xunit(expected, self.root / "xunit", self.root / "actual-2.txt")
+
+    def test_xunit_with_no_testcases_is_refused(self):
+        expected = self.write("expected.txt", "LogicProMCPTests.Suite/a()\n")
+        self.xunit("")
+
+        with self.assertRaisesRegex(manifest.ManifestError, "xUnit contains no testcases"):
+            manifest.verify_xunit(expected, self.root / "xunit", self.root / "actual.txt")
 
 
 if __name__ == "__main__":
