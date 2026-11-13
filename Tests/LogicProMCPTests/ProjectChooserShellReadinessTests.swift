@@ -137,7 +137,9 @@ struct ProjectChooserShellReadinessTests {
           arguments: ["wrong_owner", "wrong_layer", "zero_bounds", "nan_bounds", "missing_bounds",
                       "wrong_name", "missing_name", "second_named", "second_unnamed", "missing_layer",
                       "missing_number", "boolean_layer", "fractional_layer", "nan_layer",
-                      "boolean_number", "fractional_number", "nan_number", "fractional_owner"])
+                      "boolean_number", "fractional_number", "nan_number", "fractional_owner",
+                      "negative_number", "zero_number", "number_above_uint32", "decimal_owner",
+                      "floating_integral_owner", "zero_owner_competes", "layer_above_int32_competes"])
     func invalidCGShapeIsNotPositive(shape: String) {
         var windows = [cgWindow()]
         switch shape {
@@ -159,6 +161,22 @@ struct ProjectChooserShellReadinessTests {
         case "fractional_number": windows[0][kCGWindowNumber as String] = NSNumber(value: 0.5)
         case "nan_number": windows[0][kCGWindowNumber as String] = NSNumber(value: Double.nan)
         case "fractional_owner": windows[0][kCGWindowOwnerPID as String] = NSNumber(value: 4_242.5)
+        case "negative_number": windows[0][kCGWindowNumber as String] = NSNumber(value: -1)
+        case "zero_number": windows[0][kCGWindowNumber as String] = NSNumber(value: 0)
+        case "number_above_uint32":
+            windows[0][kCGWindowNumber as String] = NSNumber(value: UInt64(UInt32.max) + 1)
+        case "decimal_owner":
+            windows[0][kCGWindowOwnerPID as String] = NSDecimalNumber(string: "4242.0000000000000001")
+        case "floating_integral_owner":
+            windows[0][kCGWindowOwnerPID as String] = NSNumber(value: 4_242.0)
+        case "zero_owner_competes":
+            var malformed = cgWindow(number: 2)
+            malformed[kCGWindowOwnerPID as String] = NSNumber(value: 0)
+            windows.append(malformed)
+        case "layer_above_int32_competes":
+            var malformed = cgWindow(number: 2)
+            malformed[kCGWindowLayer as String] = NSNumber(value: Int64(Int32.max) + 1)
+            windows.append(malformed)
         default: windows[0].removeValue(forKey: kCGWindowNumber as String)
         }
         let f = fixture(axWindows: false, windowList: windows)

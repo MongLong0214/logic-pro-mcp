@@ -198,19 +198,21 @@ extension AccessibilityChannel {
             guard let ownerValue = projectChooserExactIntegral(
                     row[kCGWindowOwnerPID as String]
                   ),
+                  ownerValue > 0,
                   let owner = pid_t(exactly: ownerValue) else {
                 return false
             }
             guard owner == logicPID else { continue }
             guard let layerValue = projectChooserExactIntegral(row[kCGWindowLayer as String]),
-                  let layer = Int(exactly: layerValue) else { return false }
-            if layer == LogicOnScreenWindows.popupMenuLevel {
+                  let layer = Int32(exactly: layerValue) else { return false }
+            if Int(layer) == LogicOnScreenWindows.popupMenuLevel {
                 continue
             }
             guard layer == 0 else { continue }
 
             guard let numberValue = projectChooserExactIntegral(row[kCGWindowNumber as String]),
-                  Int(exactly: numberValue) != nil,
+                  let windowNumber = UInt32(exactly: numberValue),
+                  windowNumber > kCGNullWindowID,
                   let boundsDictionary = row[kCGWindowBounds as String] as? [String: Any],
                   let bounds = CGRect(
                     dictionaryRepresentation: boundsDictionary as CFDictionary
@@ -233,14 +235,16 @@ extension AccessibilityChannel {
     }
 
     private static func projectChooserExactIntegral(_ value: Any?) -> Int64? {
-        guard let number = value as? NSNumber,
-              CFGetTypeID(number) != CFBooleanGetTypeID() else {
+        guard let numberObject = value as? NSNumber,
+              CFGetTypeID(numberObject) == CFNumberGetTypeID(),
+              CFGetTypeID(numberObject) != CFBooleanGetTypeID() else {
             return nil
         }
-        let scalar = number.doubleValue
-        guard scalar.isFinite,
-              let integral = Int64(exactly: scalar),
-              NSNumber(value: integral).compare(number) == .orderedSame else {
+        let number = unsafeBitCast(numberObject, to: CFNumber.self)
+        guard !CFNumberIsFloatType(number) else { return nil }
+        var integral: Int64 = 0
+        guard CFNumberGetValue(number, .sInt64Type, &integral),
+              NSNumber(value: integral).compare(numberObject) == .orderedSame else {
             return nil
         }
         return integral
