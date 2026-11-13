@@ -171,7 +171,9 @@ jobs:
         run: |
           set -euo pipefail
           artifact="$RUNNER_TEMP/test-runtime"
-          mkdir -p "$artifact"
+          PROFRAW_DIR="$RUNNER_TEMP/logicpromcp-build-profraw"
+          mkdir -p "$artifact" "$PROFRAW_DIR"
+          export LLVM_PROFILE_FILE="$PROFRAW_DIR/%m-%p.profraw"
           swift build --build-tests --enable-code-coverage -Xswiftc -suppress-warnings
           git diff --exit-code Package.resolved
           swift test list --skip-build > "$artifact/inventory-raw.txt"
@@ -259,9 +261,9 @@ jobs:
           runtime="$RUNNER_TEMP/test-runtime"
           out="$RUNNER_TEMP/test-shard-$SHARD"
           xunit_dir="$out/xunit"
-          profile_dir="$RUNNER_TEMP/logicpromcp-profraw-$SHARD"
-          coverage_log="$out/test.log"
-          mkdir -p "$out" "$xunit_dir" "$profile_dir"
+          PROFRAW_DIR="$RUNNER_TEMP/logicpromcp-profraw-$SHARD"
+          COVERAGE_LOG="$out/test.log"
+          mkdir -p "$out" "$xunit_dir" "$PROFRAW_DIR"
           test "$(cat "$runtime/candidate-sha.txt")" = "$GITHUB_SHA"
           test "$(cat "$RUNNER_TEMP/release-runtime/candidate-sha.txt")" = "$GITHUB_SHA"
           tar -xzf "$runtime/runtime.tar.gz" -C "$GITHUB_WORKSPACE"
@@ -276,15 +278,15 @@ jobs:
           LC_ALL=C sort "$RUNNER_TEMP/inventory-$SHARD-raw.txt" > "$RUNNER_TEMP/inventory-$SHARD.txt"
           cmp "$runtime/inventory.txt" "$RUNNER_TEMP/inventory-$SHARD.txt"
 
-          export LLVM_PROFILE_FILE="$profile_dir/%m-%p.profraw"
+          export LLVM_PROFILE_FILE="$PROFRAW_DIR/%m-%p.profraw"
           if [ "$SHARD_MODE" = filter ]; then
             swift test --skip-build --enable-code-coverage --no-parallel \
               --xunit-output "$xunit_dir/results.xml" --filter "$TEST_SHARD_SELECTOR" \
-              2>&1 | tee "$coverage_log"
+              2>&1 | tee "$COVERAGE_LOG"
           else
             swift test --skip-build --enable-code-coverage --no-parallel \
               --xunit-output "$xunit_dir/results.xml" --skip "$TEST_SHARD_SELECTOR" \
-              2>&1 | tee "$coverage_log"
+              2>&1 | tee "$COVERAGE_LOG"
           fi
           python3 Scripts/ci-test-shard-manifest.py verify-xunit \
             --expected "$runtime/$SHARD.txt" \

@@ -70,12 +70,21 @@ import Testing
     let workflow = try scriptContents(".github/workflows/ci.yml")
 
     #expect(workflow.contains("git diff --exit-code Package.resolved"))
-    let build = try #require(workflow.range(of: "swift build -c release"))
-    let lockfileGate = try #require(workflow.range(of: "git diff --exit-code Package.resolved"))
-    let coverage = try #require(workflow.range(of: "swift test --enable-code-coverage"))
+    let releaseBuild = try #require(workflow.range(of: "swift build -c release"))
+    let releaseLockfileGate = try #require(workflow.range(
+        of: "git diff --exit-code Package.resolved",
+        range: releaseBuild.upperBound..<workflow.endIndex
+    ))
+    let testBuild = try #require(workflow.range(of: "swift build --build-tests --enable-code-coverage"))
+    let testLockfileGate = try #require(workflow.range(
+        of: "git diff --exit-code Package.resolved",
+        range: testBuild.upperBound..<workflow.endIndex
+    ))
+    let coverage = try #require(workflow.range(of: "swift test --skip-build --enable-code-coverage"))
     let coverageGate = try #require(workflow.range(of: "bash Scripts/ci-coverage-gate.sh"))
-    #expect(build.lowerBound < lockfileGate.lowerBound)
-    #expect(lockfileGate.lowerBound < coverage.lowerBound)
+    #expect(releaseBuild.lowerBound < releaseLockfileGate.lowerBound)
+    #expect(testBuild.lowerBound < testLockfileGate.lowerBound)
+    #expect(testLockfileGate.lowerBound < coverage.lowerBound)
     #expect(coverage.lowerBound < coverageGate.lowerBound,
             "the tests must run before the gate reads the profile they produced")
 }
