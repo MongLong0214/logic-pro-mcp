@@ -72,12 +72,6 @@ extension SetupDoctor {
             )
         case .installShareDir:
             return installShareDirCheck(runtime: context.runtime, installSource: context.installSource)
-        case .releaseSignature:
-            return releaseSignatureCheck(
-                executablePath: context.executablePath,
-                runtime: context.runtime,
-                checks: checks
-            )
         case .releaseQuarantine:
             return releaseQuarantineCheck(
                 executablePath: context.executablePath,

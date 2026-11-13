@@ -106,58 +106,6 @@ extension SetupDoctor {
     }
 
 
-    static func releaseSignatureCheck(
-        executablePath: String?,
-        runtime: Runtime,
-        checks: [Check] = []
-    ) -> Check {
-        if let cause = observedBinaryPathBlock(for: "release.signature", checks: checks) {
-            return check(
-                id: "release.signature",
-                domain: "release",
-                status: .skipped,
-                summary: "Signature verification skipped because the binary path is missing.",
-                evidence: [:],
-                remediationType: .none,
-                blockedBy: cause,
-                skipReason: .binaryPathMissing
-            )
-        }
-        guard let executablePath = requireBinary(executablePath, runtime: runtime) else {
-            return check(
-                id: "release.signature",
-                domain: "release",
-                status: .fail,
-                summary: "Binary path became unavailable before signature verification.",
-                evidence: terminalBinaryEvidence(["path_state": "unavailable_at_check"]),
-                remediationType: .none,
-                skipReason: nil
-            )
-        }
-        let result = runtime.runCommand("/usr/bin/codesign", ["--verify", "--strict", "--verbose=2", executablePath])
-        guard let output = result.output else {
-            return check(
-                id: "release.signature",
-                domain: "release",
-                status: .fail,
-                summary: commandFailureSummary(command: "codesign", result: result),
-                evidence: terminalBinaryEvidence(commandFailureEvidence(path: executablePath, result: result)),
-                remediationType: .none
-            )
-        }
-        return check(
-            id: "release.signature",
-            domain: "release",
-            status: output.exitCode == 0 ? .pass : .fail,
-            summary: output.exitCode == 0 ? "Binary signature verifies." : "Binary signature did not verify.",
-            evidence: output.exitCode == 0
-                ? commandEvidence(path: executablePath, output: output)
-                : terminalBinaryEvidence(commandEvidence(path: executablePath, output: output)),
-            remediationType: .none
-        )
-    }
-
-
     static func releaseQuarantineCheck(
         executablePath: String?,
         runtime: Runtime,

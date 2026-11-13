@@ -7,7 +7,7 @@ Minimal install and Logic Pro integration guide for Logic Pro MCP v3.19.0.
 - macOS 14+
 - Logic Pro — **latest release prioritized (currently 12.3)**; works down to the 12.0.1 floor on a best-effort basis. Supported Mac variant: desktop **Logic Pro** (`com.apple.logic10`, `/Applications/Logic Pro.app`). Apple Creator Studio **Logic Pro Creator Studio** (`com.apple.mobilelogic`, `/Applications/Logic Pro Creator Studio.app`) is recognised, not supported; the two use different process names for System Events automation. Desktop **Logic Pro** is the only variant the release qualification matrix covers (`shipVariants = [.desktop]`), and the only one this release supports. Without `LOGIC_PRO_BUNDLE_ID` the server can still select Creator Studio: it targets the frontmost Logic; failing that a running one, then an installed one, desktop first in both. So a Creator Studio that is frontmost, or is the only Logic running, becomes the target, with no qualification evidence behind it. Set `LOGIC_PRO_BUNDLE_ID=com.apple.logic10` to keep the server on desktop Logic Pro.
 - Claude Code, Claude Desktop, Cursor, or another MCP client
-- Homebrew, or Xcode/Swift if building from source
+- Homebrew, or Command Line Tools with Swift if building from source
 
 ## Install
 
@@ -31,8 +31,8 @@ Pinned shell installer:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.19.0/Scripts/install.sh -o install.sh
-# inspect install.sh, then copy pins from the v3.19.0 release:
-LOGIC_PRO_MCP_SHA256=<sha256 for LogicProMCP-macOS-universal.tar.gz entry> LOGIC_PRO_MCP_TEAM_ID=<team_id> bash install.sh
+# inspect install.sh, then copy the archive pin from the v3.19.0 release:
+LOGIC_PRO_MCP_SHA256=<sha256 for LogicProMCP-macOS-universal.tar.gz entry> bash install.sh
 ```
 
 The installer trust model is in [SECURITY.md](../SECURITY.md#installer-trust-model).
@@ -247,10 +247,6 @@ Reinstall or upgrade when a canonical installed binary has a stale static versio
 <a id="doctor-installshare-dir"></a>
 ### `install.share_dir`
 When helper assets are missing, Homebrew installs use `brew reinstall logic-pro-mcp`; source builds restore the checkout and rebuild; release installs replace the pinned package. Unknown/custom installs should follow this section rather than a package-manager command.
-
-<a id="doctor-releasesignature"></a>
-### `release.signature`
-Reports whether the resolved LogicProMCP binary's signature verifies. A failed or unavailable verification is a terminal unavailable state for this read-only inspection; doctor emits no mutation or retry request.
 
 <a id="doctor-releasequarantine"></a>
 ### `release.quarantine`

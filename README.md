@@ -139,7 +139,8 @@ A `derived` label has not been read from a running Logic in that locale; it is A
 
 > **Logic Pro version policy.** Logic Pro MCP tracks the **latest Logic Pro release as its first-class target** and validates against it. When Apple ships a new Logic Pro version, supporting it is the top priority — the Accessibility/UI tree shifts between releases, so the newest version is where fixes land first. Older versions above the 12.0.1 floor remain best-effort and may lose parity as those UI surfaces change.
 
-The package manifest uses Swift tools 6.0 for compatibility. Current source verification uses Xcode 16.4 / Swift 6.2 in CI.
+The package manifest uses Swift tools 6.0 for compatibility. Current source verification uses
+Command Line Tools with Swift 6.2 in CI.
 
 The current stable line is `v3.19.0` (cut 2026-11-11 UTC). Its per-release detail — everything added, changed, and fixed since `v3.18.0`, along with every stated limit — is in [CHANGELOG.md](CHANGELOG.md); this README does not restate release history.
 
@@ -161,7 +162,7 @@ cd logic-pro-mcp
 swift build -c release
 ```
 
-To upgrade an existing install: Homebrew installs use `brew update && brew upgrade logic-pro-mcp`; source builds use `git pull && swift build -c release`; pinned shell-installer installs re-run the installer with the new release's pins (below). Because release binaries are ad-hoc signed (no Apple Developer ID; see [SECURITY.md](SECURITY.md#release-signing)), macOS treats each new build as a different signed identity — **Accessibility and Automation grants do not carry over to a freshly built or reinstalled binary**, and TCC re-approval for the launcher app is expected after every upgrade, not just after long gaps ([docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) covers removing stale TCC entries and re-granting them).
+To upgrade an existing install: Homebrew installs use `brew update && brew upgrade logic-pro-mcp`; source builds use `git pull && swift build -c release`; pinned shell-installer installs re-run the installer with the new release's pins (below). Published binaries are unsigned (no Apple Developer ID; see [SECURITY.md](SECURITY.md#deployment-security)), so treat a freshly built or reinstalled binary as a new executable identity — **Accessibility and Automation grants may need to be granted again after an upgrade** ([docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md) covers removing stale TCC entries and re-granting them).
 
 ### 2. Register with an MCP client
 
@@ -210,17 +211,19 @@ operations remain `unattended_unavailable` rather than becoming ready from an op
 
 ### Pinned shell installer
 
-The installer is **fail-closed**: it refuses to run without explicit `LOGIC_PRO_MCP_SHA256` + `LOGIC_PRO_MCP_TEAM_ID` env pins. It verifies the downloaded `LogicProMCP-macOS-universal.tar.gz` archive, so copy the SHA from that archive entry in the release's `SHA256SUMS.txt`:
+The installer is **fail-closed**: it refuses to run without an explicit
+`LOGIC_PRO_MCP_SHA256` archive pin. Copy it from the
+`LogicProMCP-macOS-universal.tar.gz` entry in the release's `SHA256SUMS.txt`.
+It verifies the downloaded `LogicProMCP-macOS-universal.tar.gz` archive before extraction:
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.19.0/Scripts/install.sh -o install.sh
 # inspect install.sh, then:
 LOGIC_PRO_MCP_SHA256=<paste LogicProMCP-macOS-universal.tar.gz SHA256SUMS entry> \
-LOGIC_PRO_MCP_TEAM_ID=<paste team_id from RELEASE-METADATA.json> \
 bash install.sh
 ```
 
-If you knowingly accept same-origin provenance (hash + Team ID fetched from the same release as the binary), opt in explicitly:
+If you knowingly accept fetching the checksum from the same release as the archive, opt in explicitly:
 
 ```bash
 LOGIC_PRO_MCP_ALLOW_SAME_ORIGIN=1 \
@@ -245,7 +248,7 @@ LogicProMCP --check-permissions
 LogicProMCP doctor
 ```
 
-Because release binaries are ad-hoc signed, every new build or reinstall is a new signed identity to macOS: expect to re-grant Accessibility/Automation after upgrading, not only on first install. If permissions look wrong after reinstalling, remove the stale TCC entries in System Settings and grant them again to the actual launcher app ([docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)).
+Because published release binaries are unsigned, every new build or reinstall is a new executable identity to macOS: expect to re-grant Accessibility/Automation after upgrading, not only on first install. If permissions look wrong after reinstalling, remove the stale TCC entries in System Settings and grant them again to the actual launcher app ([docs/TROUBLESHOOTING.md](docs/TROUBLESHOOTING.md)).
 
 ### Forcing a Logic Pro variant
 
@@ -372,7 +375,9 @@ Live E2E defaults to the release binary. Protocol/security assertions run on any
 
 ## Release & Distribution
 
-Stable production tags use the GitHub Actions release workflow. `RELEASE-METADATA.json` records the exact signing mode, Team ID, and architectures for each artifact. When Developer ID credentials are absent, releases publish ADHOC artifacts with SHA256 metadata and install validation rather than pretending to be notarized.
+Stable production tags use the GitHub Actions release workflow. It builds with Command Line Tools,
+publishes unsigned archives with SHA256 metadata, and validates the exact archive through the
+installer on the supported macOS runners before publication.
 
 Per-release detail lives in [CHANGELOG.md](CHANGELOG.md). Security and installer trust tiers are documented in [SECURITY.md](SECURITY.md).
 
@@ -392,7 +397,7 @@ The repository ships `server.json` for the official MCP Registry metadata path. 
 
 ## Development
 
-Source builds require Xcode 16.4+ / Swift 6.2 for the current verified toolchain.
+Source builds use Command Line Tools with Swift 6.2.
 
 ```bash
 swift test --no-parallel

@@ -315,7 +315,7 @@ private func doctorV3Check(_ report: SetupDoctor.Report, _ id: String) throws ->
 @Test func testDoctorV3EvidenceSanitizesStderrAndHomePath() {
     let home = FileManager.default.homeDirectoryForCurrentUser.path
     let check = SetupDoctor.check(
-        id: "release.signature",
+        id: "diagnostic.synthetic",
         domain: "release",
         status: .warn,
         summary: "x",

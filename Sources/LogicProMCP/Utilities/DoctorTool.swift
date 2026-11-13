@@ -1,5 +1,4 @@
 enum DoctorTool: String, CaseIterable, Sendable {
-    case codesign
     case xattr
     case lipo
     case strings
@@ -13,7 +12,6 @@ enum DoctorTool: String, CaseIterable, Sendable {
 
     static func resolve(_ executable: String) -> DoctorTool? {
         switch executable {
-        case "/usr/bin/codesign": return .codesign
         case "/usr/bin/xattr": return .xattr
         case "/usr/bin/lipo": return .lipo
         case "/usr/bin/strings": return .strings

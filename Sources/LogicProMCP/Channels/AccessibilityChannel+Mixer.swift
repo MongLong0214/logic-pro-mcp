@@ -336,6 +336,7 @@ extension AccessibilityChannel {
         // the nearest detent and read back every step. #973: an AXValue write does
         // not jump to the written value (`set 0.5` on a 0.76 fader looked unmoved),
         // but on Logic 12.3.1 it moved one raw unit toward it, which the fine phase uses.
+        var headerReadForDiagnostics: AXLogicProElements.TrackHeaderRead = .unavailable
         let slider: AXUIElement?
         if let physical {
             switch target {
@@ -343,10 +344,44 @@ extension AccessibilityChannel {
             case .pan: slider = AXLogicProElements.findPanControl(in: physical.strip, runtime: runtime.ax, requireUnique: true)
             }
         } else {
-            switch target {
-            case .volume: slider = AXLogicProElements.findTrackHeaderVolumeFader(at: index, runtime: runtime)
-            case .pan: slider = AXLogicProElements.findTrackHeaderPanControl(at: index, runtime: runtime)
+            func control(in header: AXUIElement) -> AXUIElement? {
+                switch target {
+                case .volume:
+                    return AXLogicProElements.findVolumeFader(in: header, runtime: runtime.ax)
+                case .pan:
+                    return AXLogicProElements.findPanControlInHeader(header, runtime: runtime.ax)
+                }
             }
+
+            var resolved: AXUIElement?
+            if let arrangeWindow = AXLogicProElements.mainWindow(runtime: runtime) {
+                headerReadForDiagnostics = AXLogicProElements.allTrackHeadersRead(
+                    in: arrangeWindow, runtime: runtime
+                )
+                if case .read(let headers) = headerReadForDiagnostics,
+                   index >= 0, index < headers.count {
+                    resolved = control(in: headers[index])
+                    if resolved == nil,
+                       AXHelpers.performAction(
+                        arrangeWindow, kAXRaiseAction as String, runtime: runtime.ax
+                       ) {
+                        // Logic 13 can keep a complete background header population while omitting
+                        // its pan/volume descendants until the Arrange window is foreground. Raise
+                        // only the exact window already resolved above, settle once, then bind the
+                        // control from one fresh read of that same window. No global key command or
+                        // arbitrary front-window action is used.
+                        usleep(100_000)
+                        headerReadForDiagnostics = AXLogicProElements.allTrackHeadersRead(
+                            in: arrangeWindow, runtime: runtime
+                        )
+                        if case .read(let refreshedHeaders) = headerReadForDiagnostics,
+                           index < refreshedHeaders.count {
+                            resolved = control(in: refreshedHeaders[index])
+                        }
+                    }
+                }
+            }
+            slider = resolved
         }
         guard let slider else {
             if physical != nil {
@@ -367,10 +402,7 @@ extension AccessibilityChannel {
             // name which of them happened — reporting "list not found, header_count 0" for
             // a rail that WAS found but could not be traversed sends the reader hunting for
             // a missing Tracks area that is on screen. Zero is evidence only in `.read([])`.
-            let headersRead: AXLogicProElements.TrackHeaderRead = AXLogicProElements
-                .mainWindow(runtime: runtime)
-                .map { AXLogicProElements.allTrackHeadersRead(in: $0, runtime: runtime) }
-                ?? .unavailable
+            let headersRead = headerReadForDiagnostics
 
             // nil = the header at `index` WAS resolved; the slider search decides the step.
             var stepBeforeHeader: String?
