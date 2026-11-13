@@ -1,6 +1,16 @@
 name: Release
 
 on:
+  workflow_dispatch:
+    inputs:
+      release_version:
+        description: Strict vMAJOR.MINOR.PATCH[-prerelease] version for the candidate.
+        required: true
+        type: string
+      candidate_sha:
+        description: Exact main commit to build once.
+        required: true
+        type: string
   push:
     tags:
       - 'v[0-9]*.[0-9]*.[0-9]*'
@@ -10,7 +20,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: release-${{ github.ref }}
+  group: release-${{ github.event_name }}-${{ github.ref }}
   cancel-in-progress: false
 
 defaults:
@@ -18,23 +28,35 @@ defaults:
     shell: bash
 
 jobs:
-  package:
-    name: package
+  candidate-package:
+    if: github.event_name == 'workflow_dispatch'
+    name: candidate-package
     runs-on: macos-15-intel
     timeout-minutes: 45
     outputs:
       artifact-name: ${{ steps.artifact-name.outputs.name }}
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
-
-      - name: Validate tag
+        with:
+          ref: ${{ inputs.candidate_sha }}
+      - name: Bind dispatch to exact main candidate
+        env:
+          CANDIDATE_SHA: ${{ inputs.candidate_sha }}
+          RELEASE_VERSION: ${{ inputs.release_version }}
         run: |
           set -euo pipefail
-          if ! [[ "$GITHUB_REF_NAME" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?$ ]]; then
-            echo "::error::tag '$GITHUB_REF_NAME' is not strict SemVer"
+          test "$GITHUB_EVENT_NAME" = workflow_dispatch
+          test "$GITHUB_REF" = refs/heads/main
+          test "$CANDIDATE_SHA" = "$GITHUB_SHA"
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          if ! [[ "$GITHUB_SHA" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::candidate SHA is malformed"
             exit 1
           fi
-
+          if ! [[ "$RELEASE_VERSION" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-((0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*)(\.(0|[1-9][0-9]*|[0-9A-Za-z-]*[A-Za-z-][0-9A-Za-z-]*))*))?$ ]]; then
+            echo "::error::release version is not strict SemVer"
+            exit 1
+          fi
       - name: Use Command Line Tools
         run: |
           set -euo pipefail
@@ -44,54 +66,61 @@ jobs:
           DEVELOPER_DIR=/Library/Developer/CommandLineTools xcrun --find swift
           uname -m
           sw_vers
-
-      - name: Build release binary
+      - name: Build release binary once
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
         run: |
           set -euo pipefail
           bash Scripts/release-build-universal.sh
           git diff --exit-code Package.resolved
-          test "$(./LogicProMCP --version)" = "${GITHUB_REF_NAME#v}"
+          test "$(./LogicProMCP --version)" = "${RELEASE_VERSION#v}"
           ./LogicProMCP --help >/dev/null
-
-      - name: Package release
+      - name: Package release candidate
         env:
           LOGIC_PRO_MCP_PACKAGE_BINARY: LogicProMCP
+          LOGIC_PRO_MCP_RELEASE_VERSION: ${{ inputs.release_version }}
+          LOGIC_PRO_MCP_RELEASE_SOURCE_SHA: ${{ inputs.candidate_sha }}
         run: bash Scripts/release-package.sh
-
-      - name: Validate archive layout
-        run: bash Scripts/release-verify-formula-install-paths.sh
-
-      - name: Create outer artifact manifest
+      - name: Verify package and fixed outer inventory
+        env:
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          SOURCE_SHA: ${{ inputs.candidate_sha }}
         run: |
           set -euo pipefail
+          bash Scripts/release-verify-formula-install-paths.sh
           shasum -a 256 \
             LogicProMCP \
             LogicProMCP-macOS-universal.tar.gz \
             LogicProMCP-macOS-arm64.tar.gz \
             RELEASE-METADATA.json \
             SHA256SUMS.txt > release-artifacts.sha256
-
-      - name: Name artifact
+          mkdir candidate-package
+          cp LogicProMCP LogicProMCP-macOS-universal.tar.gz \
+            LogicProMCP-macOS-arm64.tar.gz RELEASE-METADATA.json \
+            SHA256SUMS.txt release-artifacts.sha256 candidate-package/
+          python3 Scripts/release-verify-candidate.py package \
+            --directory candidate-package --version "$RELEASE_VERSION" --source-sha "$SOURCE_SHA"
+      - name: Name immutable artifact
         id: artifact-name
-        run: echo "name=release-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
-
-      - name: Upload package
+        run: echo "name=release-candidate-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" >> "$GITHUB_OUTPUT"
+      - name: Upload immutable candidate
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: ${{ steps.artifact-name.outputs.name }}
           if-no-files-found: error
           retention-days: 7
           path: |
-            LogicProMCP
-            LogicProMCP-macOS-universal.tar.gz
-            LogicProMCP-macOS-arm64.tar.gz
-            RELEASE-METADATA.json
-            SHA256SUMS.txt
-            release-artifacts.sha256
+            candidate-package/LogicProMCP
+            candidate-package/LogicProMCP-macOS-universal.tar.gz
+            candidate-package/LogicProMCP-macOS-arm64.tar.gz
+            candidate-package/RELEASE-METADATA.json
+            candidate-package/SHA256SUMS.txt
+            candidate-package/release-artifacts.sha256
 
-  validate-install:
-    name: install-${{ matrix.os }}
-    needs: package
+  candidate-install:
+    if: github.event_name == 'workflow_dispatch'
+    name: candidate-install-${{ matrix.os }}
+    needs: candidate-package
     strategy:
       fail-fast: false
       matrix:
@@ -100,13 +129,18 @@ jobs:
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ inputs.candidate_sha }}
       - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: ${{ needs.package.outputs.artifact-name }}
-      - name: Verify and install exact archive
+          name: ${{ needs.candidate-package.outputs.artifact-name }}
+          path: candidate
+      - name: Verify and install exact candidate
         env:
-          LOGIC_PRO_MCP_VERSION: ${{ github.ref_name }}
-          LOGIC_PRO_MCP_LOCAL_ARCHIVE: ${{ github.workspace }}/LogicProMCP-macOS-universal.tar.gz
+          RELEASE_VERSION: ${{ inputs.release_version }}
+          SOURCE_SHA: ${{ inputs.candidate_sha }}
+          LOGIC_PRO_MCP_VERSION: ${{ inputs.release_version }}
+          LOGIC_PRO_MCP_LOCAL_ARCHIVE: ${{ github.workspace }}/candidate/LogicProMCP-macOS-universal.tar.gz
           LOGIC_PRO_MCP_INSTALL_DIR: ${{ runner.temp }}/logic-pro-mcp/bin
           LOGIC_PRO_MCP_SHARE_DIR: ${{ runner.temp }}/logic-pro-mcp/share/logic-pro-mcp
           LOGIC_PRO_MCP_SKIP_SUDO: '1'
@@ -114,80 +148,279 @@ jobs:
           LOGIC_PRO_MCP_INSTALL_KEYCMDS: '0'
         run: |
           set -euo pipefail
-          shasum -a 256 -c release-artifacts.sha256
+          chmod 0755 candidate/LogicProMCP
+          python3 Scripts/release-verify-candidate.py package \
+            --directory candidate --version "$RELEASE_VERSION" --source-sha "$SOURCE_SHA"
           export LOGIC_PRO_MCP_SHA256
-          LOGIC_PRO_MCP_SHA256=$(awk '$2 == "LogicProMCP-macOS-universal.tar.gz" {print $1}' SHA256SUMS.txt)
+          LOGIC_PRO_MCP_SHA256="$(awk '$2 == "LogicProMCP-macOS-universal.tar.gz" {print $1}' candidate/SHA256SUMS.txt)"
           test -n "$LOGIC_PRO_MCP_SHA256"
           bash Scripts/install.sh
-          test "$("$LOGIC_PRO_MCP_INSTALL_DIR/LogicProMCP" --version)" = "${GITHUB_REF_NAME#v}"
+          test "$("$LOGIC_PRO_MCP_INSTALL_DIR/LogicProMCP" --version)" = "${RELEASE_VERSION#v}"
           "$LOGIC_PRO_MCP_INSTALL_DIR/LogicProMCP" --help >/dev/null
           test -f "$LOGIC_PRO_MCP_SHARE_DIR/logic_ui_jxa.py"
 
-  publish:
-    name: publish
-    needs: [package, validate-install]
+  resolve-candidate:
+    if: github.event_name == 'push'
+    name: resolve-candidate
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 15
     permissions:
-      contents: write
-    steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
-        with:
-          name: ${{ needs.package.outputs.artifact-name }}
-      - name: Reverify package
-        run: shasum -a 256 -c release-artifacts.sha256
-      - name: Publish GitHub release
-        uses: softprops/action-gh-release@c062e08bd532815e2082a85e87e3ef29c3e6d191 # v2.2.1
-        with:
-          generate_release_notes: true
-          prerelease: ${{ contains(github.ref_name, '-') }}
-          fail_on_unmatched_files: true
-          files: |
-            LogicProMCP
-            LogicProMCP-macOS-universal.tar.gz
-            LogicProMCP-macOS-arm64.tar.gz
-            RELEASE-METADATA.json
-            SHA256SUMS.txt
-
-  verify-published:
-    name: verify-published
-    needs: [package, publish]
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    permissions:
+      actions: read
       contents: read
+    outputs:
+      artifact-name: ${{ steps.binding.outputs.artifact-name }}
+      artifact-id: ${{ steps.binding.outputs.artifact-id }}
+      artifact-digest: ${{ steps.binding.outputs.artifact-digest }}
+      candidate-run-attempt: ${{ steps.binding.outputs.run-attempt }}
+      manifest-sha256: ${{ steps.binding.outputs.manifest-sha256 }}
+      run-id: ${{ steps.binding.outputs.run-id }}
+      source-sha: ${{ steps.binding.outputs.source-sha }}
+      version: ${{ steps.binding.outputs.version }}
     steps:
-      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
-          name: ${{ needs.package.outputs.artifact-name }}
-          path: verified
-      - name: Published assets match the validated artifact
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+      - name: Parse unique annotated candidate binding
+        id: binding
         env:
           TAG: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          mkdir published
-          assets=(
-            LogicProMCP
-            LogicProMCP-macOS-universal.tar.gz
-            LogicProMCP-macOS-arm64.tar.gz
-            RELEASE-METADATA.json
-            SHA256SUMS.txt
-          )
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          test "$(git cat-file -t "refs/tags/$TAG")" = tag
+          test "$(git rev-parse "refs/tags/$TAG^{}")" = "$GITHUB_SHA"
+          git for-each-ref --format='%(contents)' "refs/tags/$TAG" > tag-message.txt
+          python3 Scripts/release-verify-candidate.py tag \
+            --message-file tag-message.txt --version "$TAG" \
+            --object-type "$(git cat-file -t "refs/tags/$TAG")" \
+            --peeled-sha "$(git rev-parse "refs/tags/$TAG^{}")" > binding.json
+          python3 - "$GITHUB_OUTPUT" binding.json <<'PY'
+          import json, sys
+          binding = json.load(open(sys.argv[2], encoding="utf-8"))
+          mapping = {
+              "artifact-name": f"release-candidate-{binding['run_id']}-{binding['run_attempt']}",
+              "artifact-id": binding["artifact_id"],
+              "artifact-digest": binding["artifact_digest"],
+              "run-attempt": binding["run_attempt"],
+              "manifest-sha256": binding["manifest_sha256"],
+              "run-id": binding["run_id"],
+              "source-sha": binding["source_sha"],
+              "version": binding["version"],
+          }
+          with open(sys.argv[1], "a", encoding="utf-8") as output:
+              for key, value in mapping.items():
+                  print(f"{key}={value}", file=output)
+          PY
+      - name: Recheck exact candidate run, attempt, jobs and artifact
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_DIGEST: ${{ steps.binding.outputs.artifact-digest }}
+          ARTIFACT_ID: ${{ steps.binding.outputs.artifact-id }}
+          RUN_ATTEMPT: ${{ steps.binding.outputs.run-attempt }}
+          RUN_ID: ${{ steps.binding.outputs.run-id }}
+          SOURCE_SHA: ${{ steps.binding.outputs.source-sha }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/workflows/release.yml" > workflow.json
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" > run.json
+          gh api --paginate --slurp \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts?per_page=100" > artifacts.json
+          gh api --paginate --slurp \
+            "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/attempts/$RUN_ATTEMPT/jobs?per_page=100" > jobs.json
+          python3 Scripts/release-verify-candidate.py run \
+            --workflow-json workflow.json --run-json run.json \
+            --artifacts-json artifacts.json --jobs-json jobs.json \
+            --repository "$GITHUB_REPOSITORY" --source-sha "$SOURCE_SHA" \
+            --run-id "$RUN_ID" --expected-attempt "$RUN_ATTEMPT" > run-binding.json
+          python3 - run-binding.json "$ARTIFACT_ID" "$ARTIFACT_DIGEST" <<'PY'
+          import json, sys
+          binding = json.load(open(sys.argv[1], encoding="utf-8"))
+          if binding["artifact_id"] != int(sys.argv[2]) or binding["artifact_digest"] != sys.argv[3]:
+              raise SystemExit("tag artifact binding differs from the verified candidate run")
+          PY
+      - name: Download bound prior-run artifact
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ steps.binding.outputs.artifact-name }}
+          path: candidate-action
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ steps.binding.outputs.run-id }}
+      - name: Verify REST digest and exact package bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ARTIFACT_DIGEST: ${{ steps.binding.outputs.artifact-digest }}
+          ARTIFACT_ID: ${{ steps.binding.outputs.artifact-id }}
+          MANIFEST_SHA: ${{ steps.binding.outputs.manifest-sha256 }}
+          SOURCE_SHA: ${{ steps.binding.outputs.source-sha }}
+          VERSION: ${{ steps.binding.outputs.version }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$ARTIFACT_ID/zip" > candidate.zip
+          python3 Scripts/release-verify-candidate.py extract \
+            --zip candidate.zip --directory candidate-api --expected-digest "$ARTIFACT_DIGEST"
+          chmod 0755 candidate-action/LogicProMCP candidate-api/LogicProMCP
+          python3 Scripts/release-verify-candidate.py package \
+            --directory candidate-action --version "$VERSION" --source-sha "$SOURCE_SHA" \
+            --expected-manifest-sha "$MANIFEST_SHA"
+          python3 Scripts/release-verify-candidate.py package \
+            --directory candidate-api --version "$VERSION" --source-sha "$SOURCE_SHA" \
+            --expected-manifest-sha "$MANIFEST_SHA"
+          for asset in candidate-api/*; do
+            cmp "$asset" "candidate-action/$(basename "$asset")"
+          done
+
+  validate-install:
+    if: github.event_name == 'push'
+    name: install-${{ matrix.os }}
+    needs: resolve-candidate
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15-intel, macos-26]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.resolve-candidate.outputs.source-sha }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ needs.resolve-candidate.outputs.artifact-name }}
+          path: candidate
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ needs.resolve-candidate.outputs.run-id }}
+      - name: Verify and install exact archive
+        env:
+          MANIFEST_SHA: ${{ needs.resolve-candidate.outputs.manifest-sha256 }}
+          SOURCE_SHA: ${{ needs.resolve-candidate.outputs.source-sha }}
+          VERSION: ${{ needs.resolve-candidate.outputs.version }}
+          LOGIC_PRO_MCP_VERSION: ${{ needs.resolve-candidate.outputs.version }}
+          LOGIC_PRO_MCP_LOCAL_ARCHIVE: ${{ github.workspace }}/candidate/LogicProMCP-macOS-universal.tar.gz
+          LOGIC_PRO_MCP_INSTALL_DIR: ${{ runner.temp }}/logic-pro-mcp/bin
+          LOGIC_PRO_MCP_SHARE_DIR: ${{ runner.temp }}/logic-pro-mcp/share/logic-pro-mcp
+          LOGIC_PRO_MCP_SKIP_SUDO: '1'
+          LOGIC_PRO_MCP_REGISTER_CLAUDE: '0'
+          LOGIC_PRO_MCP_INSTALL_KEYCMDS: '0'
+        run: |
+          set -euo pipefail
+          chmod 0755 candidate/LogicProMCP
+          python3 Scripts/release-verify-candidate.py package \
+            --directory candidate --version "$VERSION" --source-sha "$SOURCE_SHA" \
+            --expected-manifest-sha "$MANIFEST_SHA"
+          export LOGIC_PRO_MCP_SHA256
+          LOGIC_PRO_MCP_SHA256="$(awk '$2 == "LogicProMCP-macOS-universal.tar.gz" {print $1}' candidate/SHA256SUMS.txt)"
+          test -n "$LOGIC_PRO_MCP_SHA256"
+          bash Scripts/install.sh
+          test "$("$LOGIC_PRO_MCP_INSTALL_DIR/LogicProMCP" --version)" = "${VERSION#v}"
+          "$LOGIC_PRO_MCP_INSTALL_DIR/LogicProMCP" --help >/dev/null
+          test -f "$LOGIC_PRO_MCP_SHARE_DIR/logic_ui_jxa.py"
+
+  publish:
+    if: github.event_name == 'push'
+    name: publish
+    needs: [resolve-candidate, validate-install]
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      actions: read
+      contents: write
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.resolve-candidate.outputs.source-sha }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ needs.resolve-candidate.outputs.artifact-name }}
+          path: candidate
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ needs.resolve-candidate.outputs.run-id }}
+      - name: Preserve matching assets and publish only missing bytes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          MANIFEST_SHA: ${{ needs.resolve-candidate.outputs.manifest-sha256 }}
+          SOURCE_SHA: ${{ needs.resolve-candidate.outputs.source-sha }}
+          TAG: ${{ needs.resolve-candidate.outputs.version }}
+        run: |
+          set -euo pipefail
+          chmod 0755 candidate/LogicProMCP
+          python3 Scripts/release-verify-candidate.py package \
+            --directory candidate --version "$TAG" --source-sha "$SOURCE_SHA" \
+            --expected-manifest-sha "$MANIFEST_SHA"
+          mkdir expected existing
+          assets=(LogicProMCP LogicProMCP-macOS-universal.tar.gz LogicProMCP-macOS-arm64.tar.gz RELEASE-METADATA.json SHA256SUMS.txt)
+          for asset in "${assets[@]}"; do cp "candidate/$asset" "expected/$asset"; done
+          # GraphQL variables must reach gh literally.
+          # shellcheck disable=SC2016
+          gh api graphql -f query='query($owner:String!,$name:String!,$tag:String!){repository(owner:$owner,name:$name){release(tagName:$tag){tagName}}}' \
+            -F owner=MongLong0214 -F name=logic-pro-mcp -F tag="$TAG" > release-query.json
+          exists="$(python3 -c 'import json; print("yes" if json.load(open("release-query.json"))["data"]["repository"]["release"] else "no")')"
+          if [ "$exists" = no ]; then
+            create_args=(--repo "$GITHUB_REPOSITORY" --verify-tag --generate-notes)
+            if [[ "$TAG" == *-* ]]; then create_args+=(--prerelease); fi
+            gh release create "$TAG" "${create_args[@]}"
+          fi
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets > release-assets.json
+          asset_count="$(python3 -c 'import json; print(len(json.load(open("release-assets.json"))["assets"]))')"
+          if [ "$asset_count" -gt 0 ]; then
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir existing
+          fi
+          if ! python3 Scripts/release-verify-candidate.py assets \
+              --expected-directory expected --actual-directory existing --allow-missing-actual; then
+            echo "::error::unexpected release asset or existing release asset differs"
+            exit 1
+          fi
           for asset in "${assets[@]}"; do
+            if [ ! -e "existing/$asset" ]; then
+              gh release upload "$TAG" "expected/$asset" --repo "$GITHUB_REPOSITORY"
+            fi
+          done
+          mkdir published
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir published
+          python3 Scripts/release-verify-candidate.py assets \
+            --expected-directory expected --actual-directory published
+
+  verify-published:
+    if: github.event_name == 'push'
+    name: verify-published
+    needs: [resolve-candidate, publish]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ needs.resolve-candidate.outputs.source-sha }}
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: ${{ needs.resolve-candidate.outputs.artifact-name }}
+          path: candidate
+          github-token: ${{ github.token }}
+          repository: ${{ github.repository }}
+          run-id: ${{ needs.resolve-candidate.outputs.run-id }}
+      - name: Public assets match the validated candidate
+        env:
+          TAG: ${{ needs.resolve-candidate.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir verified published
+          assets=(LogicProMCP LogicProMCP-macOS-universal.tar.gz LogicProMCP-macOS-arm64.tar.gz RELEASE-METADATA.json SHA256SUMS.txt)
+          for asset in "${assets[@]}"; do
+            cp "candidate/$asset" "verified/$asset"
             curl -fsSL --retry 5 --retry-delay 5 --retry-all-errors \
               -o "published/$asset" \
               "https://github.com/${GITHUB_REPOSITORY}/releases/download/$TAG/$asset"
-            verified_hash=$(shasum -a 256 "verified/$asset" | awk '{print $1}')
-            published_hash=$(shasum -a 256 "published/$asset" | awk '{print $1}')
+            verified_hash="$(shasum -a 256 "verified/$asset" | awk '{print $1}')"
+            published_hash="$(shasum -a 256 "published/$asset" | awk '{print $1}')"
             test "$verified_hash" = "$published_hash"
           done
-
-  publish-registry:
-    needs: verify-published
-    permissions:
-      contents: read
-      id-token: write
-    uses: ./.github/workflows/publish-mcp.yml
-    with:
-      version: ${{ github.ref_name }}
+          python3 Scripts/release-verify-candidate.py assets \
+            --expected-directory verified --actual-directory published
