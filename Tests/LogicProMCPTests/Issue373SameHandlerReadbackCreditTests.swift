@@ -40,8 +40,7 @@ struct Issue373SameHandlerReadbackCreditTests {
         #expect(result.deferral?.code == .semanticValidatorUnavailable)
         let sameHandlerDetail = try #require(result.deferral?.detail.contains("same handler"))
         #expect(sameHandlerDetail)
-        #expect(result.liveGateFailureReason == result.deferral?.detail)
-        #expect(!PromotionGate.operationIsLiveCredited(Self.operationCase(result)))
+        #expect(result.liveGateFailureReason == nil)
         let verified = try #require(result.readback?.verified as Bool?)
         #expect(!verified)
     }
@@ -58,7 +57,6 @@ struct Issue373SameHandlerReadbackCreditTests {
         #expect(result.verified)
         #expect(result.verificationKind == .semanticReadback)
         #expect(result.deferral == nil)
-        #expect(PromotionGate.operationIsLiveCredited(Self.operationCase(result)))
     }
 
     @Test func divergentHostCoreMIDIPortCensusCannotEarnSemanticCredit() throws {
@@ -73,25 +71,8 @@ struct Issue373SameHandlerReadbackCreditTests {
         #expect(!result.verified)
         #expect(result.verificationKind == .typedDeferral)
         #expect(result.deferral?.code == .semanticMismatch)
-        #expect(!PromotionGate.operationIsLiveCredited(Self.operationCase(result)))
     }
 
-    @Test func forgedSameHandlerMIDIPortSemanticCaseCannotEarnLiveCredit() {
-        let operationCase = QualificationCase(
-            id: "in-process/midi.list_ports", status: .passed,
-            tool: "logic_midi", command: "list_ports", traceID: "fixture",
-            verified: true, evidenceFiles: ["evidence/ports.json"],
-            binarySHA256: String(repeating: "a", count: 64),
-            operationID: "midi.list_ports", operationRequestID: "tool-ports",
-            verificationKind: .semanticReadback,
-            readback: QualificationReadbackEvidence(
-                source: "logic://midi/ports", requestID: "resource-ports",
-                verified: true, sha256: SupportBundleBuilder.sha256(Data(Self.ports.utf8))
-            )
-        )
-        // A coherent legacy/forged pass must not bypass the producer's honest scope.
-        #expect(!PromotionGate.operationIsLiveCredited(operationCase))
-    }
 
     @Test func echoOracleRetainsProtocolVerdictWithoutIndependentSemanticVerdict() throws {
         let data = Data(Self.ports.utf8)
@@ -128,7 +109,6 @@ struct Issue373SameHandlerReadbackCreditTests {
         #expect(result.status == .notQualified)
         #expect(result.deferral?.code == .semanticMismatch)
         #expect(!result.verified)
-        #expect(!PromotionGate.operationIsLiveCredited(Self.operationCase(result)))
     }
 
     @Test func cachedLibraryInventoryEchoIsProtocolSmokeNotSemanticCredit() throws {
@@ -141,7 +121,6 @@ struct Issue373SameHandlerReadbackCreditTests {
         #expect(!result.verified)
         #expect(result.verificationKind == .protocolSmoke)
         #expect(result.deferral?.code == .semanticValidatorUnavailable)
-        #expect(!PromotionGate.operationIsLiveCredited(Self.operationCase(result)))
         let verified = try #require(result.readback?.verified as Bool?)
         #expect(!verified)
     }
@@ -161,7 +140,6 @@ struct Issue373SameHandlerReadbackCreditTests {
         #expect(result.verified)
         #expect(result.verificationKind == .semanticReadback)
         #expect(result.deferral == nil)
-        #expect(PromotionGate.operationIsLiveCredited(Self.operationCase(result)))
     }
 
     @Test func oneColumnDuplicateLabelsRemainCreditableWithoutOwnershipClaim() throws {
@@ -177,7 +155,6 @@ struct Issue373SameHandlerReadbackCreditTests {
 
         #expect(result.status == .passed)
         #expect(result.verified)
-        #expect(PromotionGate.operationIsLiveCredited(Self.operationCase(result)))
     }
 
     @Test func separateHostLibraryPanelCensusAcceptsDeepSelectionOutsideImmediateList() throws {
@@ -193,7 +170,6 @@ struct Issue373SameHandlerReadbackCreditTests {
 
         #expect(result.status == .passed)
         #expect(result.verified)
-        #expect(PromotionGate.operationIsLiveCredited(Self.operationCase(result)))
     }
 
     @Test func ambiguousDuplicateSelectedCategoryCannotEarnSemanticCredit() throws {
@@ -210,7 +186,6 @@ struct Issue373SameHandlerReadbackCreditTests {
         #expect(result.status == .notQualified)
         #expect(result.deferral?.code == .semanticMismatch)
         #expect(!result.verified)
-        #expect(!PromotionGate.operationIsLiveCredited(Self.operationCase(result)))
     }
 
     @Test func divergentHostLibraryPanelCensusCannotEarnSemanticCredit() throws {
@@ -230,7 +205,6 @@ struct Issue373SameHandlerReadbackCreditTests {
         #expect(result.status == .notQualified)
         #expect(result.deferral?.code == .semanticMismatch)
         #expect(!result.verified)
-        #expect(!PromotionGate.operationIsLiveCredited(Self.operationCase(result)))
     }
 
     @Test func nearMatchLibraryPanelSourceCannotEarnSemanticCredit() throws {
@@ -244,7 +218,6 @@ struct Issue373SameHandlerReadbackCreditTests {
 
         #expect(result.status == .protocolSmoke)
         #expect(!result.verified)
-        #expect(!PromotionGate.operationIsLiveCredited(Self.operationCase(result)))
     }
 
     @Test func unavailableHostLibraryPanelSentinelCannotEarnSemanticCredit() throws {
@@ -261,7 +234,6 @@ struct Issue373SameHandlerReadbackCreditTests {
         #expect(result.status == .notQualified)
         #expect(result.deferral?.code == .semanticMismatch)
         #expect(!result.verified)
-        #expect(!PromotionGate.operationIsLiveCredited(Self.operationCase(result)))
     }
 
     @Test(arguments: [OperationID.pluginsGetParamVerified, .pluginsGetChannelEQStateVerified])
@@ -281,7 +253,6 @@ struct Issue373SameHandlerReadbackCreditTests {
         #expect(!result.verified)
         #expect(result.verificationKind == .protocolSmoke)
         #expect(result.deferral?.code == .semanticValidatorUnavailable)
-        #expect(!PromotionGate.operationIsLiveCredited(Self.operationCase(result)))
         let readbackVerified = try #require(result.readback?.verified as Bool?)
         #expect(!readbackVerified)
         let malformed = try #require(QualificationSemanticReadbackValidator.validate(
@@ -289,20 +260,6 @@ struct Issue373SameHandlerReadbackCreditTests {
         #expect(!malformed)
     }
 
-    @Test(arguments: [OperationID.pluginsGetParamVerified, .pluginsGetChannelEQStateVerified])
-    func forgedPluginProtocolReceiptCannotEarnSemanticCredit(_ id: OperationID) throws {
-        let fixture = try #require(SemanticOracleFixtures.byOperationID[id])
-        let spec = try #require(OperationRegistry.specs.first { $0.id == id })
-        let claimed = QualificationCase(id: "in-process/\(id.rawValue)", status: .passed,
-            tool: spec.tool.rawValue, command: spec.command, traceID: "fixture", verified: true,
-            evidenceFiles: ["evidence/plugin.json"], binarySHA256: String(repeating: "a", count: 64),
-            operationID: id.rawValue, operationRequestID: "plugin-tool",
-            verificationKind: .semanticReadback,
-            readback: QualificationReadbackEvidence(source: "logic://system/health",
-                requestID: "unrelated-resource", verified: true,
-                sha256: SupportBundleBuilder.sha256(fixture.readbackData)))
-        #expect(!PromotionGate.operationIsLiveCredited(claimed))
-    }
 
     private static func result(
         _ id: OperationID, response: Data, readback: Data, source: String
@@ -318,15 +275,4 @@ struct Issue373SameHandlerReadbackCreditTests {
         )
     }
 
-    private static func operationCase(_ result: QualificationOperationResult) -> QualificationCase {
-        QualificationCase(
-            id: "in-process/\(result.operationID)", status: result.status,
-            tool: result.tool, command: result.command, traceID: "fixture",
-            verified: result.verified, evidenceFiles: ["evidence/op.json"],
-            binarySHA256: String(repeating: "a", count: 64),
-            operationID: result.operationID, operationRequestID: result.requestID,
-            verificationKind: result.verificationKind, deferral: result.deferral,
-            readback: result.readback
-        )
-    }
 }

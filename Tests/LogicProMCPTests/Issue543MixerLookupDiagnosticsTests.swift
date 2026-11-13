@@ -18,6 +18,12 @@ private func decodeIssue543JSON(_ s: String) -> [String: Any] {
     (try? JSONSerialization.jsonObject(with: Data(s.utf8))) as? [String: Any] ?? [:]
 }
 
+private final class Issue543ForegroundEffects: @unchecked Sendable {
+    var raisedElementIDs: [Int] = []
+    var otherActions = 0
+    var attributeWrites = 0
+}
+
 /// A bare app+window with no track-header rail anywhere in the tree: the
 /// container lookup (`getTrackHeaders`) fails outright.
 private func makeNoTrackHeaderRailRuntime() -> AXLogicProElements.Runtime {
@@ -310,4 +316,116 @@ private func attachOneSliderlessTrackHeader(
     #expect(try #require(lookup["failed_step"] as? String) == "track_header_list_empty")
     // Here the read succeeded, so the count is an observation and may be stated.
     #expect(try #require(lookup["header_count"] as? Int) == 0)
+}
+
+@Test(
+    "background Arrange controls are reacquired only after raising the owned window",
+    arguments: ["volume", "pan"]
+)
+func testIssue543BackgroundArrangeControlsMaterializeOnlyAfterOwnedRaise(targetName: String) throws {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(543_800)
+    let markerList = builder.element(543_801)
+    let arrange = builder.element(543_802)
+    let rail = builder.element(543_803)
+    let header = builder.element(543_804)
+    let volume = builder.element(543_805)
+    let pan = builder.element(543_806)
+    let effects = Issue543ForegroundEffects()
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, markerList)
+    builder.setAttribute(app, kAXWindowsAttribute as String, [markerList, arrange])
+    builder.setAttribute(rail, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(rail, kAXDescriptionAttribute as String, "Track Headers")
+    builder.setAttribute(header, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setChildren(rail, [header])
+    builder.setChildren(arrange, [rail])
+    builder.setChildren(markerList, [])
+
+    builder.setAttribute(volume, kAXRoleAttribute as String, kAXSliderRole as String)
+    builder.setAttribute(volume, kAXDescriptionAttribute as String, "Volume")
+    builder.setAttribute(volume, kAXValueAttribute as String, 84.12017167381974)
+    builder.setAttribute(volume, kAXMinValueAttribute as String, 0.0)
+    builder.setAttribute(volume, kAXMaxValueAttribute as String, 200.0)
+    builder.setAttribute(pan, kAXRoleAttribute as String, kAXSliderRole as String)
+    builder.setAttribute(pan, kAXDescriptionAttribute as String, "")
+    builder.setAttribute(pan, kAXValueAttribute as String, 63.5)
+    builder.setAttribute(pan, kAXMinValueAttribute as String, 0.0)
+    builder.setAttribute(pan, kAXMaxValueAttribute as String, 127.0)
+
+    let arrangeID = builder.elementID(arrange)
+    let markerID = builder.elementID(markerList)
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        setAttributeHandler: { _, _, _ in effects.attributeWrites += 1; return false },
+        performActionHandler: { element, action in
+            guard action == (kAXRaiseAction as String), CFEqual(element, arrange) else {
+                effects.otherActions += 1
+                return false
+            }
+            effects.raisedElementIDs.append(builder.elementID(element))
+            builder.setChildren(header, [volume, pan])
+            return true
+        }
+    )
+    let target: AccessibilityChannel.MixerTarget = targetName == "volume" ? .volume : .pan
+    let value = targetName == "volume" ? "0.5" : "0"
+
+    let result = AccessibilityChannel.defaultSetMixerValue(
+        params: ["index": "0", "value": value], target: target, runtime: runtime
+    )
+
+    let body = decodeIssue543JSON(result.message)
+    #expect(result.isSuccess)
+    #expect(body["control_lookup"] == nil)
+    #expect(effects.raisedElementIDs == [arrangeID])
+    #expect(!effects.raisedElementIDs.contains(markerID))
+    #expect(effects.otherActions == 0)
+    #expect(effects.attributeWrites == 0)
+}
+
+@Test func testIssue543RaisedArrangeWithoutMaterializedControlRefusesBeforeSliderWrite() throws {
+    let builder = FakeAXRuntimeBuilder()
+    let app = builder.element(543_900)
+    let markerList = builder.element(543_901)
+    let arrange = builder.element(543_902)
+    let rail = builder.element(543_903)
+    let header = builder.element(543_904)
+    let effects = Issue543ForegroundEffects()
+
+    builder.setAttribute(app, kAXMainWindowAttribute as String, markerList)
+    builder.setAttribute(app, kAXWindowsAttribute as String, [markerList, arrange])
+    builder.setAttribute(rail, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setAttribute(rail, kAXDescriptionAttribute as String, "Track Headers")
+    builder.setAttribute(header, kAXRoleAttribute as String, kAXGroupRole as String)
+    builder.setChildren(rail, [header])
+    builder.setChildren(arrange, [rail])
+    builder.setChildren(markerList, [])
+
+    let arrangeID = builder.elementID(arrange)
+    let runtime = builder.makeLogicRuntime(
+        appElement: app,
+        setAttributeHandler: { _, _, _ in effects.attributeWrites += 1; return false },
+        performActionHandler: { element, action in
+            guard action == (kAXRaiseAction as String), CFEqual(element, arrange) else {
+                effects.otherActions += 1
+                return false
+            }
+            effects.raisedElementIDs.append(builder.elementID(element))
+            return true
+        }
+    )
+
+    let result = AccessibilityChannel.defaultSetMixerValue(
+        params: ["index": "0", "value": "0.5"], target: .volume, runtime: runtime
+    )
+
+    #expect(!result.isSuccess)
+    let body = decodeIssue543JSON(result.message)
+    #expect(try #require(body["error"] as? String) == "element_not_found")
+    let lookup = try #require(body["control_lookup"] as? [String: Any])
+    #expect(try #require(lookup["failed_step"] as? String) == "header_has_no_slider_within_depth_4")
+    #expect(effects.raisedElementIDs == [arrangeID])
+    #expect(effects.otherActions == 0)
+    #expect(effects.attributeWrites == 0)
 }

@@ -800,15 +800,20 @@ struct QualificationOperationResult: Equatable, Sendable {
         }
     }
 
-    /// The outcome used by the live qualification gate. A non-passing
-    /// read-only observation is a gate failure unless the operation named an
-    /// exact missing operation or environmental prerequisite. Neither kind is
-    /// counted as a pass, and every other shortfall remains a failure.
+    /// The outcome used by the live qualification gate. A response-only oracle is reported as
+    /// protocol smoke rather than promoted or mislabeled as a product failure. Other non-passing
+    /// read-only observations fail unless the operation names an exact missing operation or
+    /// environmental prerequisite; neither prerequisite kind is counted as a pass.
     var liveGateDisposition: QualificationLiveGateDisposition {
         if status == .failed { return .failed }
         switch liveGateScope {
         case .inScope:
             if status == .passed { return .passed }
+            // A response-only oracle deliberately withholds independent semantic credit. Its
+            // shape/domain validation still ran, so this is neither a pass nor a product failure;
+            // keep it visible as the status it actually earned. Refusals, mismatches and missing
+            // responses do not reach `.protocolSmoke` and continue through the failure paths.
+            if status == .protocolSmoke { return .protocolSmoke }
             if liveGateUnmetOperationPrecondition != nil {
                 return .notExercisableWithoutPreconditions
             }
@@ -1041,6 +1046,7 @@ enum QualificationLiveGateScope: String, Sendable {
 
 enum QualificationLiveGateDisposition: String, Sendable {
     case passed
+    case protocolSmoke = "protocol_smoke"
     case outOfScope = "out_of_scope"
     case notExercisableWithoutPreconditions = "not_exercisable_without_preconditions"
     case environmentalPrecondition = "environmental_precondition"
@@ -1051,8 +1057,9 @@ enum QualificationLiveGateDisposition: String, Sendable {
 ///
 /// It deliberately does not alter `QualificationStatus`, which is also used by
 /// the release-attestation and waiver machinery. The direct live gate needs a
-/// stricter interpretation: semantic shortfalls in read-only operations fail,
-/// while mutating success paths are explicitly excluded.
+/// direct interpretation: product failures and semantic mismatches fail, a successful
+/// response-only check remains explicitly `protocol_smoke`, and mutating success paths are
+/// excluded unless they carry their separate write-and-restore evidence.
 struct QualificationLiveGateSummary: Equatable, Sendable {
     struct Failure: Equatable, Sendable {
         let operationID: String
@@ -1066,6 +1073,7 @@ struct QualificationLiveGateSummary: Equatable, Sendable {
 
     let total: Int
     let inScopePassed: Int
+    let protocolSmoke: Int
     let outOfScope: Int
     let mutatingOperationCount: Int
     let notExercisableWithoutPreconditions: [Prerequisite]
@@ -1079,6 +1087,9 @@ struct QualificationLiveGateSummary: Equatable, Sendable {
         }.count
         inScopePassed = operationResults.filter {
             $0.liveGateDisposition == .passed
+        }.count
+        protocolSmoke = operationResults.filter {
+            $0.liveGateDisposition == .protocolSmoke
         }.count
         outOfScope = operationResults.filter {
             $0.liveGateDisposition == .outOfScope
@@ -1119,6 +1130,7 @@ struct QualificationLiveGateSummary: Equatable, Sendable {
 
     var accounted: Int {
         inScopePassed
+            + protocolSmoke
             + outOfScope
             + notExercisableWithoutPreconditions.count
             + environmentalPreconditions.count
@@ -1127,6 +1139,7 @@ struct QualificationLiveGateSummary: Equatable, Sendable {
 
     var classificationLine: String {
         "qualification live gate: in_scope_passed=\(inScopePassed), "
+            + "protocol_smoke=\(protocolSmoke), "
             + "out_of_scope=\(outOfScope), "
             + "not_exercisable_without_preconditions=\(notExercisableWithoutPreconditions.count), "
             + "environmental_preconditions=\(environmentalPreconditions.count), "
