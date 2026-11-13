@@ -397,7 +397,7 @@ struct SystemDispatcher: OperationTraceDispatching {
             productionLogicHealthObservation()
         },
         projectChooserVisible: @Sendable () -> Bool = {
-            AccessibilityChannel.exactEmptyProjectChooserIsVisible()
+            AccessibilityChannel.projectChooserShellIsPositivelyObserved()
         },
         // ADR-002 F5 — live AX track-header reader forwarded to the saga
         // executor so target_ref track/mixer steps fail closed on out-of-band
@@ -536,12 +536,15 @@ struct SystemDispatcher: OperationTraceDispatching {
             // into the running-state bit made the two truths drift.
             let logicObservation = logicHealthObservation()
             let logicProHasWindow = ProcessUtils.hasVisibleWindow()
-            let logicProHasDocument = await cache.getHasDocument()
+            let logicProProjectChooserVisible = projectChooserVisible()
+            let logicProHasDocument = logicProProjectChooserVisible
+                ? false
+                : await cache.getHasDocument()
             let health = HealthResponse(
                 logicProRunning: logicObservation.running,
                 logicProHasWindow: logicProHasWindow,
                 logicProHasDocument: logicProHasDocument,
-                logicProProjectChooserVisible: projectChooserVisible(),
+                logicProProjectChooserVisible: logicProProjectChooserVisible,
                 logicProVersion: logicObservation.version,
                 logicProBundleID: logicObservation.bundleID,
                 logicProVariant: logicObservation.variant.rawValue,

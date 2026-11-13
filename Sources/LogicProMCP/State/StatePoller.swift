@@ -40,6 +40,11 @@ actor StatePoller {
 
     struct Runtime: Sendable {
         let hasVisibleWindow: @Sendable () -> Bool
+        /// Positive-only, read-only observation of Logic's project-chooser
+        /// shell. `false` is unknown/not observed, never proof that the
+        /// chooser is absent. Test runtimes default to false so no live AX
+        /// surface is reached by omission.
+        let projectChooserVisible: @Sendable () -> Bool
         /// v3.1.4 (#4) — true when Logic currently has a modal dialog/sheet
         /// over the arrange (Bounce, file-open panel, tempo alert, save sheet)
         /// or when AX focus has been pulled away from the arrange window
@@ -96,6 +101,7 @@ actor StatePoller {
         /// the production poller should ask Logic for a live document path.
         init(
             hasVisibleWindow: @Sendable @escaping () -> Bool,
+            projectChooserVisible: @Sendable @escaping () -> Bool = { false },
             dialogPresent: @Sendable @escaping () -> Bool = { false },
             sleep: @Sendable @escaping (UInt64) async throws -> Void = { ns in
                 try await Task.sleep(nanoseconds: ns)
@@ -105,6 +111,7 @@ actor StatePoller {
             keyboardFocus: @Sendable @escaping () -> AccessibilityChannel.LogicKeyboardFocus = { .notTextEditing }
         ) {
             self.hasVisibleWindow = hasVisibleWindow
+            self.projectChooserVisible = projectChooserVisible
             self.dialogPresent = dialogPresent
             self.sleep = sleep
             self.blockingDialogInfo = blockingDialogInfo
@@ -120,6 +127,9 @@ actor StatePoller {
 
         static let production = Runtime(
             hasVisibleWindow: { ProcessUtils.hasVisibleWindow() },
+            projectChooserVisible: {
+                AccessibilityChannel.projectChooserShellIsPositivelyObserved()
+            },
             dialogPresent: { AXLogicProElements.dialogPresent() },
             blockingDialogInfo: { AXLogicProElements.blockingDialogInfo() },
             projectFileReader: .production,
@@ -678,6 +688,17 @@ actor StatePoller {
         axChannel: AccessibilityChannel, cache: StateCache, yieldingToTextEditing: Bool
     ) async -> RefreshReceipt {
         var cacheKeys: [ResourceCacheKey] = []
+        if runtime.projectChooserVisible() {
+            consecutiveWindowMisses = 0
+            consecutivePollMisses = 0
+            if await cache.applyObservedProjectChooser() {
+                cacheKeys.append(.document)
+            }
+            // Keep finishPoll: a document transition still needs its normal
+            // publication path, whose resource reads are independent of the
+            // project/track AX reads skipped by this poll cycle.
+            return await finishPoll(cacheKeys, yieldingToTextEditing: yieldingToTextEditing)
+        }
         guard runtime.hasVisibleWindow() else {
             // Be conservative: a single missed window check is often a transient
             // AX query glitch (Logic mid-paint, plugin window briefly grabbing

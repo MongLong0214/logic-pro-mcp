@@ -155,3 +155,34 @@ import Testing
     await cache.updateBlockingDialogButtons(nil)
     #expect(await cache.getBlockingDialogButtons() == nil)
 }
+
+@Test func testObservedProjectChooserAtomicallyClearsDocumentFlagsWithoutRepeatedRevisionChurn() async {
+    let cache = StateCache()
+    await cache.updateProject(ProjectInfo(
+        name: "Stale Project",
+        filePath: "/tmp/Stale Project.logicx"
+    ))
+    await cache.updateDocumentState(true)
+    await cache.updateAXOccluded(true)
+    await cache.updateBlockingDialogButtons(["Cancel"])
+
+    let watched: [CacheSectionID] = [.project, .tracks]
+    let before = await cache.captureBoundary(watching: watched)
+
+    let changed = await cache.applyObservedProjectChooser()
+    let afterFirst = await cache.captureBoundary(watching: watched)
+    let hasDocument = await cache.getHasDocument()
+    let axOccluded = await cache.getAXOccluded()
+
+    #expect(changed)
+    #expect(!hasDocument)
+    #expect(!axOccluded)
+    #expect(await cache.getBlockingDialogButtons() == nil)
+    #expect(afterFirst != before)
+
+    let repeated = await cache.applyObservedProjectChooser()
+    let afterRepeated = await cache.captureBoundary(watching: watched)
+
+    #expect(!repeated)
+    #expect(afterRepeated == afterFirst)
+}
