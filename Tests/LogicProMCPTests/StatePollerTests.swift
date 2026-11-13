@@ -27,6 +27,58 @@ private final class BlockingTracksProbe: @unchecked Sendable {
     }
 }
 
+private final class ProjectChooserPollProbe: @unchecked Sendable {
+    private let lock = NSLock()
+    private var chooser = false
+    private var window = false
+    private var windowReads = 0
+    private var projectReads = 0
+    private var trackReads = 0
+
+    func setChooserVisible(_ visible: Bool) {
+        lock.lock()
+        chooser = visible
+        lock.unlock()
+    }
+
+    func setWindowVisible(_ visible: Bool) {
+        lock.lock()
+        window = visible
+        lock.unlock()
+    }
+
+    func observeChooser() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return chooser
+    }
+
+    func observeWindow() -> Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        windowReads += 1
+        return window
+    }
+
+    func recordProjectRead() {
+        lock.lock()
+        projectReads += 1
+        lock.unlock()
+    }
+
+    func recordTrackRead() {
+        lock.lock()
+        trackReads += 1
+        lock.unlock()
+    }
+
+    var counts: (window: Int, project: Int, tracks: Int) {
+        lock.lock()
+        defer { lock.unlock() }
+        return (windowReads, projectReads, trackReads)
+    }
+}
+
 private actor CompletionProbe {
     private var completed = false
 
@@ -60,7 +112,10 @@ private func makeStatePollerAccessibilityRuntime(
     tracksResult: ChannelResult = .success("[]"),
     trackStates: [TrackState]? = nil,
     mixerResult: ChannelResult = .success("[]"),
-    markersResult: ChannelResult = .success("[]")
+    markersResult: ChannelResult = .success("[]"),
+    onProjectInfoRead: @escaping @Sendable () -> Void = {},
+    onTracksRead: @escaping @Sendable () -> Void = {},
+    onTrackStatesRead: @escaping @Sendable () -> Void = {}
 ) -> AccessibilityChannel.Runtime {
     .init(
         isTrusted: { true },
@@ -70,8 +125,14 @@ private func makeStatePollerAccessibilityRuntime(
         toggleTransportButton: { _ in .success("{}") },
         setTempo: { _ in .success("{}") },
         setCycleRange: { _ in .success("{}") },
-        tracks: { tracksResult },
-        trackStates: { trackStates },
+        tracks: {
+            onTracksRead()
+            return tracksResult
+        },
+        trackStates: {
+            onTrackStatesRead()
+            return trackStates
+        },
         selectedTrack: { .success("{}") },
         selectTrack: { _ in .success("{}") },
         setTrackToggle: { _, _ in .success("{}") },
@@ -79,9 +140,127 @@ private func makeStatePollerAccessibilityRuntime(
         mixerState: { mixerResult },
         channelStrip: { _ in .success("{}") },
         setMixerValue: { _, _ in .success("{}") },
-        projectInfo: { projectInfoResult },
+        projectInfo: {
+            onProjectInfoRead()
+            return projectInfoResult
+        },
         markers: { markersResult }
     )
+}
+
+@Test func testStatePollerPositiveChooserImmediatelyClearsDocumentWithoutProjectOrTrackReads() async {
+    let cache = StateCache()
+    await cache.updateProject(ProjectInfo(
+        name: "Stale Project",
+        filePath: "/tmp/Stale Project.logicx"
+    ))
+    await cache.updateDocumentState(true)
+    await cache.updateAXOccluded(true)
+    await cache.updateBlockingDialogButtons(["Stale"])
+
+    let probe = ProjectChooserPollProbe()
+    probe.setChooserVisible(true)
+    probe.setWindowVisible(false)
+    let channel = AccessibilityChannel(runtime: makeStatePollerAccessibilityRuntime(
+        projectInfoResult: .error("unexpected project read"),
+        tracksResult: .error("unexpected track read"),
+        onProjectInfoRead: { probe.recordProjectRead() },
+        onTracksRead: { probe.recordTrackRead() },
+        onTrackStatesRead: { probe.recordTrackRead() }
+    ))
+    let poller = StatePoller(
+        axChannel: channel,
+        cache: cache,
+        runtime: .init(
+            hasVisibleWindow: { probe.observeWindow() },
+            projectChooserVisible: { probe.observeChooser() }
+        )
+    )
+
+    let first = await poller.refreshNowReceipt()
+    let afterFirst = await cache.captureBoundary(watching: [.project, .tracks])
+    let second = await poller.refreshNowReceipt()
+    let afterSecond = await cache.captureBoundary(watching: [.project, .tracks])
+
+    #expect(first.changedSections == [ResourceCacheKey.document])
+    #expect(second == .unchanged)
+    #expect(await cache.getHasDocument() == false)
+    #expect(await cache.getAXOccluded() == false)
+    #expect(await cache.getBlockingDialogButtons() == nil)
+    #expect(afterSecond == afterFirst)
+    #expect(probe.counts.window == 0)
+    #expect(probe.counts.project == 0)
+    #expect(probe.counts.tracks == 0)
+}
+
+@Test func testStatePollerPositiveChooserResetsWindowMissCounter() async {
+    let cache = StateCache()
+    let probe = ProjectChooserPollProbe()
+    probe.setChooserVisible(false)
+    probe.setWindowVisible(false)
+    let channel = AccessibilityChannel(runtime: makeStatePollerAccessibilityRuntime(
+        projectInfoResult: .error("unavailable")
+    ))
+    let poller = StatePoller(
+        axChannel: channel,
+        cache: cache,
+        runtime: .init(
+            hasVisibleWindow: { probe.observeWindow() },
+            projectChooserVisible: { probe.observeChooser() }
+        )
+    )
+
+    _ = await poller.refreshNowReceipt()
+    _ = await poller.refreshNowReceipt()
+    #expect(await cache.getHasDocument())
+
+    probe.setChooserVisible(true)
+    _ = await poller.refreshNowReceipt()
+    await cache.updateDocumentState(true)
+    probe.setChooserVisible(false)
+
+    _ = await poller.refreshNowReceipt()
+    _ = await poller.refreshNowReceipt()
+    #expect(await cache.getHasDocument())
+    _ = await poller.refreshNowReceipt()
+    #expect(await cache.getHasDocument() == false)
+}
+
+@Test func testStatePollerPositiveChooserResetsProjectAndTrackMissCounter() async {
+    let cache = StateCache()
+    let probe = ProjectChooserPollProbe()
+    probe.setChooserVisible(false)
+    probe.setWindowVisible(true)
+    let channel = AccessibilityChannel(runtime: makeStatePollerAccessibilityRuntime(
+        projectInfoResult: .error("unavailable"),
+        tracksResult: .error("unavailable"),
+        onProjectInfoRead: { probe.recordProjectRead() },
+        onTracksRead: { probe.recordTrackRead() },
+        onTrackStatesRead: { probe.recordTrackRead() }
+    ))
+    let poller = StatePoller(
+        axChannel: channel,
+        cache: cache,
+        runtime: .init(
+            hasVisibleWindow: { probe.observeWindow() },
+            projectChooserVisible: { probe.observeChooser() }
+        )
+    )
+
+    _ = await poller.refreshNowReceipt()
+    _ = await poller.refreshNowReceipt()
+    #expect(await cache.getHasDocument())
+
+    probe.setChooserVisible(true)
+    _ = await poller.refreshNowReceipt()
+    await cache.updateDocumentState(true)
+    probe.setChooserVisible(false)
+
+    _ = await poller.refreshNowReceipt()
+    _ = await poller.refreshNowReceipt()
+    #expect(await cache.getHasDocument())
+    _ = await poller.refreshNowReceipt()
+    #expect(await cache.getHasDocument() == false)
 }
 
 @Test func testStatePollerPreservesAXTrackIdentityProvenance() async {

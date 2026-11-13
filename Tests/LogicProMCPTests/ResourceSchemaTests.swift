@@ -55,6 +55,24 @@ private func qualificationHealthObservation() -> SystemDispatcher.LogicHealthObs
     )
 }
 
+private final class ProjectChooserHealthSampleCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var samples = 0
+
+    func observe() -> Bool {
+        lock.lock()
+        samples += 1
+        lock.unlock()
+        return true
+    }
+
+    var count: Int {
+        lock.lock()
+        defer { lock.unlock() }
+        return samples
+    }
+}
+
 private actor LiveTransportStateChannel: Channel {
     nonisolated let id: ChannelID = .accessibility
     private let json: String
@@ -413,6 +431,8 @@ func testHealthResponseProcessFields() async {
 func testHealthResponseIncludesExactProjectChooserObservation() async throws {
     let cache = StateCache()
     let router = ChannelRouter()
+    let samples = ProjectChooserHealthSampleCounter()
+    await cache.updateDocumentState(true)
 
     let result = await SystemDispatcher.handle(
         command: "health",
@@ -420,11 +440,13 @@ func testHealthResponseIncludesExactProjectChooserObservation() async throws {
         router: router,
         cache: cache,
         logicHealthObservation: { qualificationHealthObservation() },
-        projectChooserVisible: { true }
+        projectChooserVisible: { samples.observe() }
     )
     let json = try! sharedParseJSON(toolText(result)) as! [String: Any]
     let chooserVisible = try #require(json["logic_pro_project_chooser_visible"] as? Bool)
     #expect(chooserVisible)
+    #expect(json["logic_pro_has_document"] as? Bool == false)
+    #expect(samples.count == 1)
 }
 
 @Test(processInspectionUnavailableInSandbox)
