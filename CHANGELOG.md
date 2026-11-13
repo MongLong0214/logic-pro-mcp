@@ -8,6 +8,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
+- `logic_tracks resolve_path` now reads an atomically published in-memory Library scan snapshot
+  without entering the Accessibility actor (#1550). It no longer waits behind unrelated synchronous
+  AX reads, while panel, disk, disk-only, folder, miss, malformed-path, and cold-cache responses keep
+  their existing fields and meanings.
+
 ---
 
 ## [3.19.0] — 2026-11-11

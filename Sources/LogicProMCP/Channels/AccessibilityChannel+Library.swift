@@ -377,6 +377,44 @@ extension AccessibilityChannel {
         return (p.y, p.y + s.height)
     }
 
+    /// The scan trees `library.resolve_path` and the `track.set_instrument`
+    /// pre-resolver read. Lock-protected rather than actor-isolated so the
+    /// cache-only resolver never waits for synchronous AX work on the channel.
+    final class LibraryScanCache: @unchecked Sendable {
+        struct Snapshot: Sendable {
+            var lastScan: LibraryRoot?
+            var lastPanelScan: LibraryRoot?
+            var lastDiskScan: LibraryRoot?
+            var lastScanSource: String?
+        }
+
+        private let lock = NSLock()
+        private var state = Snapshot()
+
+        var snapshot: Snapshot { lock.withLock { state } }
+
+        func record(_ root: LibraryRoot, source: String) {
+            lock.withLock {
+                state.lastScan = root
+                state.lastScanSource = source
+                switch source {
+                case "panel":
+                    state.lastPanelScan = root
+                case "disk":
+                    state.lastDiskScan = root
+                default:
+                    break
+                }
+            }
+        }
+
+        /// `mode:both` seeds the Panel cache from its inline AX scan without
+        /// replacing `lastScan`, which holds the disk tree.
+        func recordPanel(_ root: LibraryRoot) {
+            lock.withLock { state.lastPanelScan = root }
+        }
+    }
+
     private struct ResolvePathResponse: Encodable {
         let exists: Bool
         let kind: String?
