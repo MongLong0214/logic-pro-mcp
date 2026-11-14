@@ -601,6 +601,45 @@ extension AccessibilityChannel {
             }
         }
         let mixerChildCleanupDiagnostic = MixerChildCleanupDiagnostic()
+        final class ExactPopupScopeDiagnostic: @unchecked Sendable {
+            enum Predicate: String, CaseIterable {
+                case operationPreconditions = "operation_preconditions"
+                case taskNotCancelled = "task_not_cancelled"
+                case logicPIDMatched = "logic_pid_matched"
+                case focusedApplicationPIDMatched = "focused_application_pid_matched"
+                case capturedAppPresent = "captured_app_present"
+                case appRootMatched = "app_root_matched"
+                case frontmost
+                case mainWindowMatched = "main_window_matched"
+                case uniqueBoundWindow = "unique_bound_window"
+                case documentMatched = "document_matched"
+                case ownedAcquisition = "owned_acquisition"
+                case traceCancellationClear = "trace_cancellation_clear"
+                case traceDeadlineCurrent = "trace_deadline_current"
+                case traceGateOwned = "trace_gate_owned"
+                case traceOwnedAcquisition = "trace_owned_acquisition"
+            }
+            private(set) var checkpoint = "not_sampled"
+            private var values = Dictionary(uniqueKeysWithValues:
+                Predicate.allCases.map { ($0, false) })
+
+            @discardableResult
+            func record(_ predicate: Predicate, _ value: Bool) -> Bool {
+                checkpoint = predicate.rawValue
+                values[predicate] = value
+                return value
+            }
+
+            func accepted() { checkpoint = "accepted" }
+
+            func snapshot() -> [String: Any] {
+                var result = values.reduce(into: [String: Any]()) {
+                    $0[$1.key.rawValue] = $1.value
+                }
+                result["checkpoint"] = checkpoint
+                return result
+            }
+        }
         final class MixerChildAcquisitionDiagnostic: @unchecked Sendable {
             var checkpoint = "not_attempted"
             var pressBoundaryEligible = false
@@ -618,9 +657,10 @@ extension AccessibilityChannel {
             var pendingRecheckCount = 0
             var pendingRecheckSame = false
             var tokenAcquired = false
+            var scope: [String: Any]?
 
             func snapshot() -> [String: Any] {
-                ["checkpoint": checkpoint,
+                var result: [String: Any] = ["checkpoint": checkpoint,
                  "press_boundary_eligible": pressBoundaryEligible,
                  "scope_current": scopeCurrent,
                  "top_level_read": topLevelRead, "top_level_count": topLevelCount,
@@ -632,6 +672,8 @@ extension AccessibilityChannel {
                  "pending_recheck_count": pendingRecheckCount,
                  "pending_recheck_same": pendingRecheckSame,
                  "token_acquired": tokenAcquired]
+                if let scope { result["scope"] = scope }
+                return result
             }
         }
         let mixerChildAcquisitionDiagnostic = MixerChildAcquisitionDiagnostic()
@@ -992,30 +1034,83 @@ extension AccessibilityChannel {
                   (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
             return true
         }
-        @Sendable func exactCapturedMixerPopupScope() -> Bool {
-            guard sendOrdinal == nil, !inputBusOnly, sendReplacement == nil,
-                  !Task.isCancelled, runtime.logicProPID() == pid,
-                  runtime.focusedApplicationPID() == pid, let app,
-                  let currentApp = AXLogicProElements.appRoot(runtime: runtime), CFEqual(currentApp, app),
-                  AXHelpers.getAttribute(app, kAXFrontmostAttribute as String,
-                    runtime: runtime.ax) as Bool? == true,
-                  let main: AXUIElement = AXHelpers.getAttribute(app,
-                    kAXMainWindowAttribute as String, runtime: runtime.ax),
-                  CFEqual(main, physical.window),
-                  case .success(.elements(let appWindows)) = AXHelpers.getAXUIElementArrayRead(
-                    app, kAXWindowsAttribute as String, runtime: runtime.ax),
-                  appWindows.filter({ CFEqual($0, physical.window) }).count == 1,
-                  case .success(.some(let document)) = AXLogicProElements.projectPickerDocumentRead(
-                    physical.window, runtime: runtime),
-                  document.utf8.elementsEqual(physical.document.utf8),
-                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
-                  OperationTraceContext.current.map({ context in
-                    !context.cancellationRequested()
-                        && (context.deadline.map { ContinuousClock.now < $0 } ?? true)
-                        && (!context.mutationGateAcquired || context.ownsGate())
-                        && (!context.mutationGateAcquired
-                            || (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil)
-                  }) ?? true else { return false }
+        @Sendable func exactCapturedMixerPopupScope(
+            recording diagnostic: ExactPopupScopeDiagnostic? = nil
+        ) -> Bool {
+            let operationPreconditions = sendOrdinal == nil && !inputBusOnly && sendReplacement == nil
+            guard diagnostic?.record(.operationPreconditions, operationPreconditions)
+                ?? operationPreconditions else { return false }
+            let taskNotCancelled = !Task.isCancelled
+            guard diagnostic?.record(.taskNotCancelled, taskNotCancelled)
+                ?? taskNotCancelled else { return false }
+            let logicPIDMatched = runtime.logicProPID() == pid
+            guard diagnostic?.record(.logicPIDMatched, logicPIDMatched)
+                ?? logicPIDMatched else { return false }
+            let focusedApplicationPIDMatched = runtime.focusedApplicationPID() == pid
+            guard diagnostic?.record(.focusedApplicationPIDMatched,
+                focusedApplicationPIDMatched) ?? focusedApplicationPIDMatched else { return false }
+            guard let app else {
+                diagnostic?.record(.capturedAppPresent, false)
+                return false
+            }
+            diagnostic?.record(.capturedAppPresent, true)
+            let currentApp = AXLogicProElements.appRoot(runtime: runtime)
+            let appRootMatched = currentApp.map { CFEqual($0, app) } == true
+            guard diagnostic?.record(.appRootMatched, appRootMatched)
+                ?? appRootMatched else { return false }
+            let frontmost: Bool? = AXHelpers.getAttribute(
+                app, kAXFrontmostAttribute as String, runtime: runtime.ax)
+            let frontmostMatches = frontmost == true
+            guard diagnostic?.record(.frontmost, frontmostMatches)
+                ?? frontmostMatches else { return false }
+            let main: AXUIElement? = AXHelpers.getAttribute(
+                app, kAXMainWindowAttribute as String, runtime: runtime.ax)
+            let mainWindowMatched = main.map { CFEqual($0, physical.window) } == true
+            guard diagnostic?.record(.mainWindowMatched, mainWindowMatched)
+                ?? mainWindowMatched else { return false }
+            let appWindowsRead = AXHelpers.getAXUIElementArrayRead(
+                app, kAXWindowsAttribute as String, runtime: runtime.ax)
+            guard case .success(.elements(let appWindows)) = appWindowsRead else {
+                diagnostic?.record(.uniqueBoundWindow, false)
+                return false
+            }
+            let uniqueBoundWindow = appWindows.filter { CFEqual($0, physical.window) }.count == 1
+            guard diagnostic?.record(.uniqueBoundWindow, uniqueBoundWindow)
+                ?? uniqueBoundWindow else { return false }
+            let documentRead = AXLogicProElements.projectPickerDocumentRead(
+                physical.window, runtime: runtime)
+            guard case .success(.some(let document)) = documentRead else {
+                diagnostic?.record(.documentMatched, false)
+                return false
+            }
+            let documentMatched = document.utf8.elementsEqual(physical.document.utf8)
+            guard diagnostic?.record(.documentMatched, documentMatched)
+                ?? documentMatched else { return false }
+            let ownedAcquisition = (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil
+            guard diagnostic?.record(.ownedAcquisition, ownedAcquisition)
+                ?? ownedAcquisition else { return false }
+            guard let context = OperationTraceContext.current else {
+                diagnostic?.record(.traceCancellationClear, true)
+                diagnostic?.record(.traceDeadlineCurrent, true)
+                diagnostic?.record(.traceGateOwned, true)
+                diagnostic?.record(.traceOwnedAcquisition, true)
+                diagnostic?.accepted()
+                return true
+            }
+            let traceCancellationClear = !context.cancellationRequested()
+            guard diagnostic?.record(.traceCancellationClear, traceCancellationClear)
+                ?? traceCancellationClear else { return false }
+            let traceDeadlineCurrent = context.deadline.map { ContinuousClock.now < $0 } ?? true
+            guard diagnostic?.record(.traceDeadlineCurrent, traceDeadlineCurrent)
+                ?? traceDeadlineCurrent else { return false }
+            let traceGateOwned = !context.mutationGateAcquired || context.ownsGate()
+            guard diagnostic?.record(.traceGateOwned, traceGateOwned)
+                ?? traceGateOwned else { return false }
+            let traceOwnedAcquisition = !context.mutationGateAcquired
+                || (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil
+            guard diagnostic?.record(.traceOwnedAcquisition, traceOwnedAcquisition)
+                ?? traceOwnedAcquisition else { return false }
+            diagnostic?.accepted()
             return true
         }
         @Sendable func capturedPopupActionScopeCurrent() -> Bool {
@@ -1160,7 +1255,9 @@ extension AccessibilityChannel {
             mixerChildAcquisitionDiagnostic.pressBoundaryEligible = capturedPopupEligibleAtPressBoundary
             guard capturedPopupEligibleAtPressBoundary else { return (nil, false) }
             mixerChildAcquisitionDiagnostic.checkpoint = "scope"
-            let scopeCurrent = exactCapturedMixerPopupScope()
+            let scopeDiagnostic = ExactPopupScopeDiagnostic()
+            let scopeCurrent = exactCapturedMixerPopupScope(recording: scopeDiagnostic)
+            mixerChildAcquisitionDiagnostic.scope = scopeDiagnostic.snapshot()
             mixerChildAcquisitionDiagnostic.scopeCurrent = scopeCurrent
             guard scopeCurrent, let app else { return (nil, false) }
             mixerChildAcquisitionDiagnostic.checkpoint = "top_level_read"

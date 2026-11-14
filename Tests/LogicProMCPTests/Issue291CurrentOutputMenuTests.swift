@@ -673,6 +673,47 @@ struct Issue291OwnedCurrentOutputTests {
         #expect(!f.mutations.contains { CFEqual($0.0, f.pair) && $0.1 == kAXPressAction as String })
     }
 
+    @Test("Post-press Mixer-child scope refusal identifies focused-application drift")
+    func mixerChildAcquisitionDiagnosesPostPressFocusedApplicationDrift() async throws {
+        final class Probe: @unchecked Sendable { var postPressFocusReads = 0 }
+        let f = try Issue291PhysicalStripReferenceTests.Fixture(), probe = Probe()
+        defer { try? FileManager.default.removeItem(at: f.bundle) }
+        prepare(f)
+        f.b.setAttribute(f.app, kAXFrontmostAttribute as String, true)
+        f.b.setAttribute(f.root, kAXParentAttribute as String, f.mixer)
+        f.popupFrame = CGRect(x: 20, y: 100, width: 230, height: 175)
+        let base = f.logic
+        let runtime = AXLogicProElements.Runtime(logicProPID: base.logicProPID, ax: base.ax,
+            onScreenWindowList: base.onScreenWindowList,
+            focusedApplicationPID: {
+                guard f.mutations.contains(where: {
+                    CFEqual($0.0, f.outputs[0]) && $0.1 == kAXPressAction as String
+                }) else { return f.pid }
+                probe.postPressFocusReads += 1
+                return f.pid + 1
+            })
+        let binding = AXMixerStripBinding.Binding(window: f.window, mixer: f.mixer,
+            strip: f.strips[0], document: f.bundle.absoluteString)
+        let result = await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true)) {
+            await AXMixerStripBinding.$current.withValue(binding) {
+                await AccessibilityChannel.getOutputVerified(params: [:], runtime: runtime, timing: .immediate)
+            }
+        }
+        let body = try #require(sharedJSONObject(result.message))
+        let acquisition = try #require(body["output_popup_acquisition"] as? [String: Any])
+        let scope = try #require(acquisition["scope"] as? [String: Any])
+        #expect(probe.postPressFocusReads > 0)
+        #expect(body["state"] as? String == "A", "\(body)")
+        #expect((body["current_output"] as? [String: Any])?["kind"] as? String == "stereo_output")
+        #expect(body["popup_menu_state"] as? String == "closed")
+        #expect(scope["checkpoint"] as? String == "focused_application_pid_matched", "\(scope)")
+        #expect(scope["operation_preconditions"] as? Bool == true)
+        #expect(scope["task_not_cancelled"] as? Bool == true)
+        #expect(scope["logic_pid_matched"] as? Bool == true)
+        #expect(scope["focused_application_pid_matched"] as? Bool == false)
+        #expect(f.mutations.map(\.1) == [kAXPressAction as String, kAXCancelAction as String])
+    }
+
     @Test("Mixer-child output acquisition waits for the exact CG row that follows its AX root")
     func mixerChildOutputWaitsForDelayedCGIdentity() async throws {
         final class Probe: @unchecked Sendable { var postPressCGReads = 0 }
