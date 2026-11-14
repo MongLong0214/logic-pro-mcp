@@ -119,6 +119,95 @@ import Testing
     #expect(!(try scriptContents("Formula/logic-pro-mcp.rb")).contains("depends_on \"\(removedTool)\""))
 }
 
+@Test func testReleaseWorkflowBoundsHostedInstallerPermissionFailure() throws {
+    let workflow = try scriptContents(".github/workflows/release.yml")
+    let lines = workflow.components(separatedBy: .newlines)
+    let terminal = "  Error: Installation unsuccessful: required Logic Pro capabilities are unavailable."
+    var installBlocks: [String] = []
+
+    for (index, line) in lines.enumerated()
+    where line.trimmingCharacters(in: .whitespaces) == "run: |" {
+        let indentation = line.prefix { $0 == " " }.count
+        var end = index + 1
+        while end < lines.count {
+            let candidate = lines[end]
+            let trimmed = candidate.trimmingCharacters(in: .whitespaces)
+            let candidateIndentation = candidate.prefix { $0 == " " }.count
+            if !trimmed.isEmpty, candidateIndentation <= indentation {
+                break
+            }
+            end += 1
+        }
+        let block = lines[(index + 1)..<end].joined(separator: "\n")
+        if block.contains("bash Scripts/install.sh") { installBlocks.append(block) }
+    }
+
+    #expect(installBlocks.count == 2)
+    for block in installBlocks {
+        #expect(block.contains("set +e"))
+        #expect(block.contains("bash Scripts/install.sh >\"$installer_log\" 2>&1"))
+        #expect(block.contains("installer_status=$?"))
+        #expect(block.contains("cat \"$installer_log\""))
+        #expect(block.contains("expected_permission_failure='\(terminal)'"))
+        #expect(block.contains("[ \"$installer_status\" -eq 0 ]"))
+        #expect(block.contains("[ \"$installer_status\" -eq 1 ]"))
+        #expect(block.contains("[ \"$(tail -n 1 \"$installer_log\")\" = \"$expected_permission_failure\" ]"))
+        #expect(block.contains("exit \"$installer_status\""))
+        #expect(!block.contains("|| true"))
+        #expect(!block.contains("continue-on-error"))
+        #expect(block.contains("LogicProMCP\" --version"))
+        #expect(block.contains("LogicProMCP\" --help >/dev/null"))
+        #expect(block.contains("test -f \"$LOGIC_PRO_MCP_SHARE_DIR/logic_ui_jxa.py\""))
+    }
+}
+
+@Test func testHostedInstallerPermissionClassifierShellBoundary() throws {
+    let workflow = try scriptContents(".github/workflows/release.yml")
+    let assignmentPrefix = "expected_permission_failure='"
+    let configuredMessages = workflow.components(separatedBy: .newlines).compactMap { line -> String? in
+        let trimmed = line.trimmingCharacters(in: .whitespaces)
+        guard trimmed.hasPrefix(assignmentPrefix), trimmed.hasSuffix("'") else { return nil }
+        return String(trimmed.dropFirst(assignmentPrefix.count).dropLast())
+    }
+    #expect(configuredMessages.count == 2)
+    #expect(Set(configuredMessages).count == 1)
+    let configuredMessage = try #require(configuredMessages.first)
+    let actualTerminal = "  Error: Installation unsuccessful: required Logic Pro capabilities are unavailable."
+    let sandbox = try makeInstallScriptTempDir("hosted-installer-classifier-\(UUID().uuidString)")
+    defer { try? FileManager.default.removeItem(at: sandbox) }
+    let log = sandbox.appendingPathComponent("installer.log")
+    let classifier = #"""
+        set -u
+        installer_status="$1"
+        installer_log="$2"
+        expected_permission_failure="$EXPECTED_PERMISSION_FAILURE"
+        if [ "$installer_status" -eq 0 ]; then
+          :
+        elif [ "$installer_status" -eq 1 ] \
+          && [ "$(tail -n 1 "$installer_log")" = "$expected_permission_failure" ]; then
+          :
+        else
+          exit "$installer_status"
+        fi
+        """#
+
+    func classify(status: Int32, finalLine: String) throws -> Int32 {
+        try "\(finalLine)\n".write(to: log, atomically: true, encoding: .utf8)
+        return try runProcess(
+            executable: "/bin/bash",
+            arguments: ["-c", classifier, "classifier", String(status), log.path],
+            currentDirectoryURL: sandbox,
+            environment: ["EXPECTED_PERMISSION_FAILURE": configuredMessage]
+        ).exitCode
+    }
+
+    #expect(try classify(status: 0, finalLine: "unrelated output") == 0)
+    #expect(try classify(status: 1, finalLine: actualTerminal) == 0)
+    #expect(try classify(status: 1, finalLine: String(actualTerminal.dropFirst(2))) == 1)
+    #expect(try classify(status: 1, finalLine: "  Error: unrelated failure") == 1)
+    #expect(try classify(status: 2, finalLine: actualTerminal) == 2)
+}
+
 @Test func testReleaseWorkflowMarksHyphenTagsAsPrereleases() throws {
     let workflow = try scriptContents(".github/workflows/release.yml")
 
