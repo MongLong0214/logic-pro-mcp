@@ -2235,7 +2235,15 @@ extension AccessibilityChannel {
             }
             let sourcePresent = !refreshingOriginalSourceAfterCleanup && originalSourcePresent()
             inputTransportReceipt["source_present"] = sourcePresent
-            guard sourcePresent else { return fail("source_present") }
+            guard sourcePresent else {
+                // Logic can briefly omit the same retained physical strip from
+                // its first post-Cancel census. Only the already captured CF
+                // source may recover on the next complete census; the retry
+                // still repeats every control, owner, transport and popup
+                // bookend below and never adopts a name or ordinal replacement.
+                freshTransportFallbackRetryable = true
+                return fail("source_present")
+            }
             inputTransportReceipt["focus_current"] = originalInputFocusCurrent
             guard originalInputFocusCurrent else { return fail("focus_current") }
             let sourceControlCurrent = sourceFactsCurrent(requiringStoppedTransport: false)
@@ -2289,12 +2297,18 @@ extension AccessibilityChannel {
                 guard freshTransportFallbackRetryable,
                       timing.readbackTimeoutMs > 0, Date() < deadline,
                       !interrupted(),
+                      (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                      popupAbsenceObserved() else { return false }
+                guard Date() < deadline, !interrupted(),
                       (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
                 if timing.pollIntervalMs > 0 {
                     try? await Task.sleep(for: .milliseconds(timing.pollIntervalMs))
                 } else {
                     await Task.yield()
                 }
+                guard Date() < deadline, !interrupted(),
+                      (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                      popupAbsenceObserved() else { return false }
                 guard Date() < deadline, !interrupted(),
                       (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
                 freshTransportFallbackAccepted = nil
