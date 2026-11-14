@@ -911,9 +911,23 @@ struct Issue291OwnedCurrentOutputTests {
             }
         }
         let body = try #require(sharedJSONObject(result.message))
+        let acquisition = try #require(body["output_popup_acquisition"] as? [String: Any])
         #expect(probe.installedPending && probe.replacementInstalled)
         #expect(body["state"] as? String == "C", "\(body)")
         #expect(body["current_output"] == nil)
+        #expect(acquisition["checkpoint"] as? String == "pending_root_changed", "\(acquisition)")
+        #expect(acquisition["press_boundary_eligible"] as? Bool == true)
+        #expect(acquisition["scope_current"] as? Bool == true)
+        #expect(acquisition["direct_root_read"] as? Bool == true)
+        #expect(acquisition["direct_root_count"] as? Int == 1)
+        #expect(acquisition["parent_matched"] as? Bool == true)
+        #expect(acquisition["cg_read"] as? Bool == true)
+        #expect(acquisition["cg_total_count"] as? Int == 0)
+        #expect(acquisition["waiting_for_cg"] as? Bool == true)
+        #expect(acquisition["pending_recheck_read"] as? Bool == true)
+        #expect(acquisition["pending_recheck_count"] as? Int == (replacement == "mixer_child" ? 1 : 0))
+        #expect(acquisition["pending_recheck_same"] as? Bool == false)
+        #expect(acquisition["token_acquired"] as? Bool == false)
         #expect(f.mutations.map(\.1) == [kAXPressAction as String])
     }
 

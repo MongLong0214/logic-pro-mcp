@@ -601,6 +601,40 @@ extension AccessibilityChannel {
             }
         }
         let mixerChildCleanupDiagnostic = MixerChildCleanupDiagnostic()
+        final class MixerChildAcquisitionDiagnostic: @unchecked Sendable {
+            var checkpoint = "not_attempted"
+            var pressBoundaryEligible = false
+            var scopeCurrent = false
+            var topLevelRead = false
+            var topLevelCount = 0
+            var directRootRead = false
+            var directRootCount = 0
+            var directRootSame = false
+            var parentMatched = false
+            var cgRead = false
+            var cgTotalCount = 0
+            var waitingForCG = false
+            var pendingRecheckRead = false
+            var pendingRecheckCount = 0
+            var pendingRecheckSame = false
+            var tokenAcquired = false
+
+            func snapshot() -> [String: Any] {
+                ["checkpoint": checkpoint,
+                 "press_boundary_eligible": pressBoundaryEligible,
+                 "scope_current": scopeCurrent,
+                 "top_level_read": topLevelRead, "top_level_count": topLevelCount,
+                 "direct_root_read": directRootRead, "direct_root_count": directRootCount,
+                 "direct_root_same": directRootSame, "parent_matched": parentMatched,
+                 "cg_read": cgRead, "cg_total_count": cgTotalCount,
+                 "waiting_for_cg": waitingForCG,
+                 "pending_recheck_read": pendingRecheckRead,
+                 "pending_recheck_count": pendingRecheckCount,
+                 "pending_recheck_same": pendingRecheckSame,
+                 "token_acquired": tokenAcquired]
+            }
+        }
+        let mixerChildAcquisitionDiagnostic = MixerChildAcquisitionDiagnostic()
         var renewalEffects: SessionPopulationObservation.UIEffects?
         func refuse(_ error: HonestContract.FailureError, _ hint: String) -> CheckedOutputReading {
             .init(result: .error(HonestContract.encodeStateC(error: error, hint: hint, extras: extras)),
@@ -1122,28 +1156,71 @@ extension AccessibilityChannel {
         @Sendable func mixerChildPopupAcquisition(
             _ root: AXUIElement
         ) -> (held: HeldMixerChildOutputPopup?, waitingForCG: Bool) {
-            guard capturedPopupEligibleAtPressBoundary, exactCapturedMixerPopupScope(), let app,
-                  Self.checkedTopLevelOutputPopupMenus(in: app, runtime: runtime.ax)?.isEmpty == true,
-                  let menus = checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax),
-                  menus.count == 1, CFEqual(menus[0], root),
-                  mixerChildParentMatches(root),
-                  let windows = runtime.onScreenWindowList(),
-                  let popups = Self.checkedLogicOutputPopupWindows(windows, logicPID: pid) else {
-                return (nil, false)
-            }
+            mixerChildAcquisitionDiagnostic.checkpoint = "press_boundary"
+            mixerChildAcquisitionDiagnostic.pressBoundaryEligible = capturedPopupEligibleAtPressBoundary
+            guard capturedPopupEligibleAtPressBoundary else { return (nil, false) }
+            mixerChildAcquisitionDiagnostic.checkpoint = "scope"
+            let scopeCurrent = exactCapturedMixerPopupScope()
+            mixerChildAcquisitionDiagnostic.scopeCurrent = scopeCurrent
+            guard scopeCurrent, let app else { return (nil, false) }
+            mixerChildAcquisitionDiagnostic.checkpoint = "top_level_read"
+            guard let topLevel = Self.checkedTopLevelOutputPopupMenus(
+                in: app, runtime: runtime.ax) else { return (nil, false) }
+            mixerChildAcquisitionDiagnostic.topLevelRead = true
+            mixerChildAcquisitionDiagnostic.topLevelCount = topLevel.count
+            mixerChildAcquisitionDiagnostic.checkpoint = "top_level_empty"
+            guard topLevel.isEmpty else { return (nil, false) }
+            mixerChildAcquisitionDiagnostic.checkpoint = "direct_root_read"
+            guard let menus = checkedOutputPopupMenus(
+                in: physical.mixer, runtime: runtime.ax) else { return (nil, false) }
+            mixerChildAcquisitionDiagnostic.directRootRead = true
+            mixerChildAcquisitionDiagnostic.directRootCount = menus.count
+            mixerChildAcquisitionDiagnostic.checkpoint = "direct_root_unique"
+            guard menus.count == 1 else { return (nil, false) }
+            mixerChildAcquisitionDiagnostic.directRootSame = CFEqual(menus[0], root)
+            mixerChildAcquisitionDiagnostic.checkpoint = "direct_root_same"
+            guard mixerChildAcquisitionDiagnostic.directRootSame else { return (nil, false) }
+            mixerChildAcquisitionDiagnostic.parentMatched = mixerChildParentMatches(root)
+            mixerChildAcquisitionDiagnostic.checkpoint = "parent_match"
+            guard mixerChildAcquisitionDiagnostic.parentMatched else { return (nil, false) }
+            mixerChildAcquisitionDiagnostic.checkpoint = "cg_read"
+            guard let windows = runtime.onScreenWindowList(),
+                  let popups = Self.checkedLogicOutputPopupWindows(
+                    windows, logicPID: pid) else { return (nil, false) }
+            mixerChildAcquisitionDiagnostic.cgRead = true
+            mixerChildAcquisitionDiagnostic.cgTotalCount = popups.count
             if popups.isEmpty {
-                guard exactCapturedMixerPopupScope(),
-                      Self.checkedTopLevelOutputPopupMenus(in: app, runtime: runtime.ax)?.isEmpty == true,
-                      let finalMenus = checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax),
-                      finalMenus.count == 1, CFEqual(finalMenus[0], root),
-                      mixerChildParentMatches(root) else { return (nil, false) }
+                mixerChildAcquisitionDiagnostic.checkpoint = "cg_wait_scope"
+                guard exactCapturedMixerPopupScope() else { return (nil, false) }
+                mixerChildAcquisitionDiagnostic.checkpoint = "cg_wait_top_level_read"
+                guard Self.checkedTopLevelOutputPopupMenus(
+                    in: app, runtime: runtime.ax)?.isEmpty == true else { return (nil, false) }
+                mixerChildAcquisitionDiagnostic.checkpoint = "cg_wait_direct_root_read"
+                guard let finalMenus = checkedOutputPopupMenus(
+                    in: physical.mixer, runtime: runtime.ax) else { return (nil, false) }
+                mixerChildAcquisitionDiagnostic.directRootRead = true
+                mixerChildAcquisitionDiagnostic.directRootCount = finalMenus.count
+                mixerChildAcquisitionDiagnostic.checkpoint = "cg_wait_direct_root_unique"
+                guard finalMenus.count == 1 else { return (nil, false) }
+                mixerChildAcquisitionDiagnostic.directRootSame = CFEqual(finalMenus[0], root)
+                mixerChildAcquisitionDiagnostic.checkpoint = "cg_wait_direct_root_same"
+                guard mixerChildAcquisitionDiagnostic.directRootSame else { return (nil, false) }
+                mixerChildAcquisitionDiagnostic.parentMatched = mixerChildParentMatches(root)
+                mixerChildAcquisitionDiagnostic.checkpoint = "cg_wait_parent_match"
+                guard mixerChildAcquisitionDiagnostic.parentMatched else { return (nil, false) }
+                mixerChildAcquisitionDiagnostic.waitingForCG = true
+                mixerChildAcquisitionDiagnostic.checkpoint = "waiting_for_cg"
                 return (nil, true)
             }
+            mixerChildAcquisitionDiagnostic.checkpoint = "cg_unique"
             guard popups.count == 1 else { return (nil, false) }
             let held = HeldMixerChildOutputPopup(root: root, window: popups[0])
+            mixerChildAcquisitionDiagnostic.checkpoint = "token_state"
             guard capturedMixerChildPopupState(held).map({
                 $0.count == 1 && CFEqual($0[0], root)
             }) == true else { return (nil, false) }
+            mixerChildAcquisitionDiagnostic.tokenAcquired = true
+            mixerChildAcquisitionDiagnostic.checkpoint = "token_acquired"
             return (held, false)
         }
         @Sendable func capturedTopLevelPopupState(
@@ -1195,11 +1272,17 @@ extension AccessibilityChannel {
         repeat {
             opened = checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax)
             if let pendingMixerChildRoot {
+                mixerChildAcquisitionDiagnostic.pendingRecheckRead = opened != nil
+                mixerChildAcquisitionDiagnostic.pendingRecheckCount = opened?.count ?? 0
+                mixerChildAcquisitionDiagnostic.pendingRecheckSame = opened.map {
+                    $0.count == 1 && CFEqual($0[0], pendingMixerChildRoot)
+                } == true
                 guard let opened, opened.count == 1,
                       CFEqual(opened[0], pendingMixerChildRoot) else {
                     // Once AX R0 was the sole root awaiting its CG identity,
                     // disappearance or replacement cannot be reclassified as
                     // a fresh ordinary/top-level popup from this same press.
+                    mixerChildAcquisitionDiagnostic.checkpoint = "pending_root_changed"
                     opened = nil
                     break
                 }
@@ -1228,6 +1311,9 @@ extension AccessibilityChannel {
             if opened == nil || !(opened?.isEmpty ?? true) || !sourceOwned() { break }
             if timing.pollIntervalMs > 0 { try? await Task.sleep(for: .milliseconds(timing.pollIntervalMs)) }
         } while !Task.isCancelled && Date() < deadline
+        if mixerChildAcquisitionDiagnostic.checkpoint != "not_attempted" {
+            extras["output_popup_acquisition"] = mixerChildAcquisitionDiagnostic.snapshot()
+        }
         let topLevelPopup = acquiredTopLevelPopup
         let mixerChildPopup = acquiredMixerChildPopup
         func publishMixerChildCleanupDiagnostic() {
