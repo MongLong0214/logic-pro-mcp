@@ -738,7 +738,10 @@ extension AccessibilityChannel {
                   document.utf8.elementsEqual(physical.document.utf8) else { return false }
             return true
         }
-        @Sendable func sourceFactsCurrent(preservingOriginalLabel: Bool = true) -> Bool {
+        @Sendable func sourceFactsCurrent(
+            preservingOriginalLabel: Bool = true,
+            requiringStoppedTransport: Bool = true
+        ) -> Bool {
             guard !Task.isCancelled, runtime.logicProPID() == pid else { return false }
             guard let current = selectedControl(), CFEqual(current, slot) else {
                 if sendReplacement != nil { Log.info("Routing source facts refused: original control", subsystem: "ax") }
@@ -749,7 +752,7 @@ extension AccessibilityChannel {
                 if sendReplacement != nil { Log.info("Routing source facts refused: original label", subsystem: "ax") }
                 return false
             }
-            guard transportStillStopped() else {
+            guard !requiringStoppedTransport || transportStillStopped() else {
                 if sendReplacement != nil { Log.info("Routing source facts refused: stopped transport", subsystem: "ax") }
                 return false
             }
@@ -834,6 +837,9 @@ extension AccessibilityChannel {
         }
         guard sourceOwned() else {
             return refuse(.readbackUnavailable, "Focus or source custody changed before the routing-popup press; nothing was pressed. Checkpoint: original source custody.")
+        }
+        guard sourceFactsCurrent() else {
+            return refuse(.readbackUnavailable, "Focus or source custody changed before the routing-popup press; nothing was pressed. Checkpoint: final source facts.")
         }
         // The deciding AX reads can outlive the request. Renew its existing
         // cancellation, deadline and acquired gate at the actual press boundary;
@@ -1012,6 +1018,66 @@ extension AccessibilityChannel {
                   current.count == 1, CFEqual(current[0], root) else { return false }
             return cleanupSourceOwned()
         }
+        @Sendable func exactOrdinaryOutputOwner() -> Bool {
+            guard sendOrdinal == nil, !inputBusOnly, sendReplacement == nil,
+                  !Task.isCancelled, runtime.logicProPID() == pid,
+                  runtime.focusedApplicationPID() == pid, let app,
+                  AXHelpers.getAttribute(app, kAXFrontmostAttribute as String,
+                    runtime: runtime.ax) as Bool? == true,
+                  let main: AXUIElement = AXHelpers.getAttribute(app,
+                    kAXMainWindowAttribute as String, runtime: runtime.ax),
+                  CFEqual(main, physical.window),
+                  case .success(.elements(let windows)) = AXHelpers.getAXUIElementArrayRead(app,
+                    kAXWindowsAttribute as String, runtime: runtime.ax),
+                  windows.filter({ CFEqual($0, physical.window) }).count == 1,
+                  routingFocusedWindowMatches(AXHelpers.getAttributeResult(app,
+                    kAXFocusedWindowAttribute as String, runtime: runtime.ax),
+                    window: physical.window, ownedPopup: root, mixer: physical.mixer,
+                    runtime: runtime.ax),
+                  case .success(.some(let document)) = AXLogicProElements.projectPickerDocumentRead(
+                    physical.window, runtime: runtime),
+                  document.utf8.elementsEqual(physical.document.utf8),
+                  case .found(let mixer) = AXLogicProElements.mixerAreaLookup(
+                    in: physical.window, runtime: runtime), CFEqual(mixer, physical.mixer),
+                  let strips = AXLogicProElements.mixerChannelStripsIfCompletelyRead(
+                    in: physical.mixer, runtime: runtime.ax),
+                  strips.strips.filter({ CFEqual($0, physical.strip) }).count == 1,
+                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+            return true
+        }
+        @Sendable func exactOrdinaryOutputMenu() -> Bool {
+            guard exactOrdinaryOutputOwner(), let menus = currentPopupMenus(),
+                  menus.count == 1, CFEqual(menus[0], root) else { return false }
+            return exactOrdinaryOutputOwner()
+        }
+        @Sendable func exactOrdinaryOutputReadCustody() -> Bool {
+            guard exactOrdinaryOutputMenu(),
+                  case .success(let children) = AXHelpers.childrenResult(
+                    physical.strip, runtime: runtime.ax),
+                  children.filter({ CFEqual($0, slot) }).count == 1,
+                  AXHelpers.getRole(slot, runtime: runtime.ax) == kAXButtonRole as String,
+                  case .success(.some(let label)) = AXHelpers.getAttributeResult(slot,
+                    kAXDescriptionAttribute as String,
+                    runtime: runtime.ax) as Result<String?, AXHelpers.AXStatusError>,
+                  label.utf8.elementsEqual(originalLabel.utf8), transportStillStopped(),
+                  !AXLogicProElements.dialogPresenceReason(runtime: runtime).isBlocked else { return false }
+            return exactOrdinaryOutputMenu()
+        }
+        func cleanupExactOrdinaryOutputRoot() -> (accepted: Bool, closed: Bool) {
+            guard exactOrdinaryOutputMenu(),
+                  runtime.ax.actionNames(root).contains(kAXCancelAction as String),
+                  exactOrdinaryOutputMenu() else { return (false, false) }
+            let accepted: Bool
+            if case .success = AXHelpers.performActionResult(
+                root, kAXCancelAction as String, runtime: runtime.ax) { accepted = true }
+            else { accepted = false }
+            guard accepted, exactOrdinaryOutputOwner(),
+                  checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax)?.isEmpty == true,
+                  runtime.onScreenWindowList().map({
+                    LogicOnScreenWindows.popupMenuCount($0, logicPID: pid) == 0
+                  }) == true else { return (accepted, false) }
+            return (accepted, exactOrdinaryOutputOwner())
+        }
         func cancelledReading(priorCancelSucceeded: Bool = false) async -> CheckedOutputReading {
             let cleanup = await Task { @Sendable in
                 Self.$interruptedOutputPopupInverse.withValue(true) {
@@ -1042,15 +1108,19 @@ extension AccessibilityChannel {
             return refuse(.cancelled, "The output reading was cancelled; no assignment is published and only its still-owned popup may be reversed.")
         }
         if interrupted() { return await cancelledReading() }
-        guard sourceOwned(ownedPopup: root) else {
+        guard sourceOwned(ownedPopup: root) || exactOrdinaryOutputReadCustody() else {
             if interrupted() { return await cancelledReading() }
-            extras["popup_menu_state"] = "not_restored"
-            return refuse(.readbackUnavailable, "The acquired popup lost original source custody; no unowned cleanup was attempted.")
+            let cleanup = cleanupExactOrdinaryOutputRoot()
+            extras["popup_cancel_succeeded"] = cleanup.accepted
+            extras["popup_menu_state"] = cleanup.closed ? "closed" : "not_restored"
+            return refuse(.readbackUnavailable,
+                "The acquired popup lost source read custody; only its exact cleanup-owned root was eligible for cancellation.")
         }
         @Sendable func menuOwned(preservingOriginalLabel: Bool = true) -> Bool {
             // Renew source facts and root membership before the one deciding
             // complete physical/window/document boundary. Neither grants action
             // authority on its own, and no earlier census is reused as permission.
+            if preservingOriginalLabel, exactOrdinaryOutputReadCustody() { return true }
             guard sourceFactsCurrent(preservingOriginalLabel: preservingOriginalLabel),
                   let current = currentPopupMenus() else { return false }
             return current.count == 1 && CFEqual(current[0], root) && ownerBoundaryStillCurrent(ownedPopup: root)
@@ -1649,6 +1719,12 @@ extension AccessibilityChannel {
         if dataOwned, runtime.ax.actionNames(root).contains(kAXCancelAction as String), menuOwned(), !interrupted() {
             if case .success = AXHelpers.performActionResult(root, kAXCancelAction as String, runtime: runtime.ax) { cancelSucceeded = true }
         }
+        var cleanupOnlyClosed = false
+        if !cancelSucceeded, !interrupted() {
+            let cleanup = cleanupExactOrdinaryOutputRoot()
+            cancelSucceeded = cleanup.accepted
+            cleanupOnlyClosed = cleanup.closed
+        }
         if interrupted() { return await cancelledReading(priorCancelSucceeded: cancelSucceeded) }
         if cancelSucceeded, timing.popupCloseTimeoutMs > 0 {
             // Cancel can acknowledge before the native menu and its CG window disappear.
@@ -1716,12 +1792,17 @@ extension AccessibilityChannel {
             && runtime.onScreenWindowList().map { LogicOnScreenWindows.popupMenuCount($0, logicPID: pid) == 0 } == true
         extras["popup_cancel_succeeded"] = cancelSucceeded
         extras["focus_restoration"] = restoredFocusReceipt ? "restored" : "not_restored"
+        let exactInputSourceCurrentBeforeTransportBookend = inputBusOnly
+            && !refreshingOriginalSourceAfterCleanup
+            && originalSourcePresent() && originalInputFocusCurrent
+            && sourceFactsCurrent(requiringStoppedTransport: false)
+            && ownerBoundaryStillCurrent()
         var sourceAfter = !refreshingOriginalSourceAfterCleanup
             && originalSourcePresent() && originalInputFocusCurrent && sourceOwned()
         // The window-server census above may be the last read that observes
         // a project change. Reuse the existing subsequent source proof before
         // reporting closure in the original scope; no additional read is needed.
-        let closed = popupClosed && sourceAfter
+        var closed = (popupClosed && sourceAfter) || cleanupOnlyClosed
         extras["popup_menu_state"] = closed ? "closed" : "not_restored"
         var inputRenewal: OriginalHeaderSourceRenewal?
         var inputSlot: AXMixerInputSlotBinding?
@@ -1813,13 +1894,35 @@ extension AccessibilityChannel {
                 }
             }
         }
+        func exactInputSourceWithFreshStoppedTransport() -> Bool {
+            guard inputBusOnly, inputRenewal == nil,
+                  exactInputSourceCurrentBeforeTransportBookend,
+                  let activity = try? AXLogicProElements.observedTransportActivity(
+                    in: physical.window, runtime: runtime,
+                    checking: { try SessionPopulationObservation.requireOwnedAcquisition() }),
+                  !activity.isPlaying, !activity.isRecording,
+                  sourceFactsCurrent(requiringStoppedTransport: false),
+                  ownerBoundaryStillCurrent(), popupAbsenceObserved(),
+                  sourceFactsCurrent(requiringStoppedTransport: false),
+                  ownerBoundaryStillCurrent() else { return false }
+            return true
+        }
         if let routingTransport {
             // The temporary menu can make the unrelated whole-window batch
             // census fail. Its original live controls were read above, never
             // defaulted to stopped. After cleanup, ordinary unique discovery
             // must agree again before either direct routing reader retains a fact.
-            sourceAfter = sourceAfter && routingTransport.matchesClosedWindow(runtime: runtime)
-                && (inputRenewal.map { $0.permits(runtime: runtime) } ?? sourceOwned())
+            let heldTransportStillMatches = routingTransport.matchesClosedWindow(runtime: runtime)
+            let retainedSourceStillCurrent = inputRenewal.map { $0.permits(runtime: runtime) } ?? sourceOwned()
+            if heldTransportStillMatches {
+                sourceAfter = sourceAfter && retainedSourceStillCurrent
+            } else if exactInputSourceWithFreshStoppedTransport() {
+                sourceAfter = true
+                closed = true
+                extras["popup_menu_state"] = "closed"
+            } else {
+                sourceAfter = false
+            }
         }
         extras["source_custody_after_cleanup"] = sourceAfter
         extras["menu_custody_at_read"] = dataOwned
@@ -1841,7 +1944,8 @@ extension AccessibilityChannel {
             if inputSlot == nil {
                 let current = AXLogicProElements.inputSlotRead(in: physical.strip, runtime: runtime.ax)
                 if case .source(let label) = current.reading, let control = current.control,
-                   CFEqual(control, slot), label.utf8.elementsEqual(originalLabel.utf8), sourceOwned(), closed {
+                   CFEqual(control, slot), label.utf8.elementsEqual(originalLabel.utf8),
+                   sourceOwned() || exactInputSourceWithFreshStoppedTransport(), closed {
                     inputSlot = .init(owner: physical, control: control, source: label)
                 }
             }
@@ -1858,7 +1962,9 @@ extension AccessibilityChannel {
         // Logic can report a failed AXPress after actually opening this popup. The
         // acknowledgement is a receipt, not read authority: require the newly
         // observed, unchanged source/menu and two agreeing checked choices instead.
-        guard dataOwned, sourceAfter, let first, second == first else {
+        guard dataOwned, sourceAfter,
+              (sendOrdinal != nil || extras["popup_menu_state"] as? String == "closed"),
+              let first, second == first else {
             return refuse(.readbackUnavailable, "The checked output was unreadable, contradictory, or lost its original source/menu custody; no destination was selected.")
         }
         guard !observingSendMode || !requiringSendMode || modeEvidence != nil else {
@@ -1871,7 +1977,7 @@ extension AccessibilityChannel {
             let current = AXLogicProElements.inputSlotRead(in: physical.strip, runtime: runtime.ax)
             guard case .source(let label) = current.reading, let control = current.control,
                   CFEqual(control, slot), label.utf8.elementsEqual(originalLabel.utf8),
-                  sourceOwned(), closed else {
+                  sourceOwned() || exactInputSourceWithFreshStoppedTransport(), closed else {
                 return refuse(.readbackUnavailable, "The checked input's original control did not survive cleanup.")
             }
             inputSlot = .init(owner: physical, control: control, source: label)

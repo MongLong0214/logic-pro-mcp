@@ -533,6 +533,104 @@ struct Issue291OwnedCurrentOutputTests {
         #expect(f.mutations[1].1 == kAXCancelAction as String)
     }
 
+    @Test("Ordinary output read custody and cleanup-only custody stay distinct",
+          arguments: ["transient_current_index", "unread_source", "wrong_root", "preexisting_popup",
+                      "changed_pid", "changed_window", "changed_document", "changed_strip",
+                      "menu_multiplicity", "label_before_press", "missing_cancel", "cancel_not_closing"])
+    func ordinaryOutputPopupRetirementUsesOnlyBoundedCustody(_ fault: String) async throws {
+        final class Probe: @unchecked Sendable {
+            var mixerReadsBeforePress = 0
+            var mixerReadsAfterPress = 0
+            var changed = false
+        }
+        let f = try Issue291PhysicalStripReferenceTests.Fixture()
+        defer { try? FileManager.default.removeItem(at: f.bundle) }
+        prepare(f)
+        f.b.setAttribute(f.app, kAXFrontmostAttribute as String, true)
+        let probe = Probe()
+        let foreignRoot = f.b.element(291_880), foreignWindow = f.b.element(291_881)
+        f.b.setRole(foreignRoot, kAXMenuRole as String)
+        f.b.setChildren(foreignRoot, [])
+        f.b.setActionNames(foreignRoot, [kAXCancelAction as String])
+        f.b.setRole(foreignWindow, kAXWindowRole as String)
+        f.b.setChildren(foreignWindow, [])
+        if fault == "preexisting_popup" { f.b.setChildren(f.mixer, f.strips + [f.root]) }
+        if fault == "missing_cancel" { f.b.setActionNames(f.root, []) }
+        f.onChildrenResultRead = { node in
+            guard CFEqual(node, f.mixer) else { return }
+            if f.mutations.isEmpty {
+                probe.mixerReadsBeforePress += 1
+                if fault == "label_before_press", probe.mixerReadsBeforePress == 7 {
+                    f.b.setAttribute(f.outputs[0], kAXDescriptionAttribute as String, "Output 3-4")
+                }
+                return
+            }
+            probe.mixerReadsAfterPress += 1
+            guard probe.mixerReadsAfterPress >= 2, !probe.changed else { return }
+            probe.changed = true
+            switch fault {
+            case "wrong_root": f.b.setChildren(f.mixer, f.strips + [foreignRoot])
+            case "menu_multiplicity": f.b.setChildren(f.mixer, f.strips + [f.root, foreignRoot])
+            case "changed_window":
+                f.b.setAttribute(f.app, kAXMainWindowAttribute as String, foreignWindow)
+                f.b.setAttribute(f.app, kAXWindowsAttribute as String, [foreignWindow])
+            case "changed_document":
+                f.b.setAttribute(f.window, kAXDocumentAttribute as String, "file:///foreign.logicx")
+            case "changed_strip": f.reorder([1])
+            default: break
+            }
+        }
+        f.childrenReadResult = { node in
+            guard CFEqual(node, f.mixer), !f.mutations.isEmpty else { return nil }
+            if fault == "transient_current_index", probe.mixerReadsAfterPress == 2 {
+                return .failure(.init(raw: AXError.cannotComplete.rawValue))
+            }
+            if fault == "cancel_not_closing",
+               f.mutations.contains(where: { CFEqual($0.0, f.root) && $0.1 == kAXCancelAction as String }) {
+                return .success(f.strips + [f.root])
+            }
+            return nil
+        }
+        if fault == "unread_source" {
+            f.attributeReadResult = { node, attribute in
+                guard !f.mutations.isEmpty, CFEqual(node, f.outputs[0]),
+                      attribute == kAXDescriptionAttribute as String else { return nil }
+                return .failure(.init(raw: AXError.cannotComplete.rawValue))
+            }
+        }
+        let base = f.logic
+        let runtime: AXLogicProElements.Runtime
+        if fault == "changed_pid" {
+            runtime = .init(logicProPID: { f.mutations.isEmpty ? f.pid : f.pid + 1 }, ax: base.ax,
+                onScreenWindowList: base.onScreenWindowList,
+                focusedApplicationPID: base.focusedApplicationPID)
+        } else { runtime = base }
+        let binding = AXMixerStripBinding.Binding(window: f.window, mixer: f.mixer,
+            strip: f.strips[0], document: f.bundle.absoluteString)
+        let result = await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true)) {
+            await AXMixerStripBinding.$current.withValue(binding) {
+                await AccessibilityChannel.getOutputVerified(params: [:], runtime: runtime, timing: .immediate)
+            }
+        }
+        let body = try #require(sharedJSONObject(result.message))
+        let readable = fault == "transient_current_index"
+        #expect(body["state"] as? String == (readable ? "A" : "C"), "\(body)")
+        #expect((body["current_output"] as? [String: Any])?["kind"] as? String == (readable ? "stereo_output" : nil))
+        let cancelExpected = ["transient_current_index", "unread_source", "cancel_not_closing"].contains(fault)
+        let cancels = f.mutations.filter { $0.1 == kAXCancelAction as String }
+        #expect(cancels.count == (cancelExpected ? 1 : 0))
+        #expect(cancels.allSatisfy { CFEqual($0.0, f.root) })
+        if fault == "unread_source" {
+            #expect(body["popup_menu_state"] as? String == "closed")
+            #expect(AccessibilityChannel.checkedOutputPopupMenus(in: f.mixer, runtime: f.logic.ax)?.isEmpty == true)
+        }
+        if fault == "label_before_press" || fault == "preexisting_popup" {
+            #expect(f.mutations.isEmpty)
+        }
+        if fault == "cancel_not_closing" { #expect(body["popup_menu_state"] as? String == "not_restored") }
+        #expect(!f.mutations.contains { CFEqual($0.0, f.pair) && $0.1 == kAXPressAction as String })
+    }
+
     @Test("No physical target or a wrong document refuses before any popup action")
     func ownedCurrentOutputRefusesWrongTarget() async throws {
         let f = try Issue291PhysicalStripReferenceTests.Fixture()

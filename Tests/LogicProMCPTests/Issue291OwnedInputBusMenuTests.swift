@@ -362,6 +362,72 @@ struct Issue291OwnedInputBusMenuTests {
         #expect(f.mutations.last?.1 == kAXCancelAction as String)
     }
 
+    @Test("Input cleanup can renew a redrawn stopped transport only in the exact source window",
+          arguments: ["stopped", "duplicate", "foreign", "unreadable", "playing", "recording"])
+    func inputCleanupReobservesRedrawnStoppedTransport(_ state: String) async throws {
+        final class Probe: @unchecked Sendable { var redrawn = false }
+        let p = try prepare(1), f = p.f, probe = Probe()
+        defer { try? FileManager.default.removeItem(at: f.bundle) }
+        let oldBar = f.b.element(2_910_300)
+        let newBar = f.b.element(291_975), newPlay = f.b.element(291_976)
+        let newRecord = f.b.element(291_977), duplicatePlay = f.b.element(291_978)
+        f.b.setRole(newBar, kAXGroupRole as String)
+        f.b.setAttribute(newBar, kAXDescriptionAttribute as String, "Control Bar")
+        for (control, label) in [(newPlay, "Play"), (newRecord, "Record"), (duplicatePlay, "Play")] {
+            f.b.setRole(control, kAXCheckBoxRole as String)
+            f.b.setAttribute(control, kAXDescriptionAttribute as String, label)
+            f.b.setAttribute(control, kAXValueAttribute as String,
+                (state == "playing" && CFEqual(control, newPlay))
+                    || (state == "recording" && CFEqual(control, newRecord)) ? 1 : 0)
+            f.b.setChildren(control, [])
+        }
+        f.b.setChildren(newBar, state == "duplicate"
+            ? [newPlay, duplicatePlay, newRecord] : [newPlay, newRecord])
+        f.attributeReadResult = { node, attribute in
+            state == "unreadable" && CFEqual(node, newPlay)
+                && attribute == kAXValueAttribute as String
+                ? .failure(.init(raw: AXError.cannotComplete.rawValue)) : nil
+        }
+        f.onChildrenResultRead = { node in
+            guard !probe.redrawn, CFEqual(node, f.mixer),
+                  f.mutations.contains(where: { $0.1 == kAXCancelAction as String }) else { return }
+            probe.redrawn = true
+            let retained = f.logic.ax.children(f.window).filter { !CFEqual($0, oldBar) }
+            f.b.setChildren(f.window, state == "foreign" ? retained : retained + [newBar])
+        }
+        let base = f.logic
+        let ax = AXHelpers.Runtime(axApp: base.ax.axApp, attributeValue: base.ax.attributeValue,
+            attributeIsSettable: base.ax.attributeIsSettable, setAttributeValue: base.ax.setAttributeValue,
+            children: base.ax.children, performAction: base.ax.performAction, childCount: base.ax.childCount,
+            actionNames: base.ax.actionNames, actionNamesResult: base.ax.actionNamesResult,
+            childrenResult: base.ax.childrenResult, attributeValueResult: base.ax.attributeValueResult,
+            performActionResult: base.ax.performActionResult, elementAtPosition: base.ax.elementAtPosition,
+            attributeValuesResult: { node, attributes in
+                .success(attributes.map { attribute in
+                    if attribute == kAXChildrenAttribute as String { return base.ax.children(node) as NSArray }
+                    return base.ax.attributeValue(node, attribute) ?? NSNull()
+                })
+            })
+        let runtime = AXLogicProElements.Runtime(logicProPID: base.logicProPID, ax: ax,
+            onScreenWindowList: base.onScreenWindowList, focusedApplicationPID: base.focusedApplicationPID)
+        let binding = AXMixerStripBinding.Binding(window: f.window, mixer: f.mixer,
+            strip: f.strips[0], document: f.bundle.absoluteString)
+        let result = await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true)) {
+            await AXMixerStripBinding.$current.withValue(binding) {
+                await AccessibilityChannel.getInputBusVerified(runtime: runtime, timing: .immediate)
+            }
+        }
+        let body = try #require(sharedJSONObject(result.message))
+        #expect(probe.redrawn)
+        #expect(body["state"] as? String == (state == "stopped" ? "A" : "C"), "\(body)")
+        #expect((body["current_input"] as? [String: Any])?["number"] as? Int ==
+            (state == "stopped" ? 1 : nil))
+        #expect(body["popup_menu_state"] as? String == "closed")
+        #expect(f.mutations.count == 2)
+        #expect(f.mutations.first?.1 == kAXPressAction as String)
+        #expect(f.mutations.last?.1 == kAXCancelAction as String)
+    }
+
     @Test("A checked non-Bus menu cannot retain input facts after original source, document or label custody is lost",
           arguments: ["source", "document", "label"])
     func nonBusInputFactsRequireFinalSourceCustody(fault: String) async throws {
