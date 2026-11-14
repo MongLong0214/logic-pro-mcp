@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+@testable import LogicProMCP
 
 @Test func testInstallScriptRequiresPinnedReleaseVerificationByDefault() throws {
     let script = try scriptContents("Scripts/install.sh")
@@ -16,9 +17,15 @@ import Testing
     let readme = try scriptContents("README.md")
     let setup = try scriptContents("docs/SETUP.md")
     let installer = try scriptContents("Scripts/install.sh")
+    let registryData = Data(try scriptContents("server.json").utf8)
+    let registry = try #require(
+        try JSONSerialization.jsonObject(with: registryData) as? [String: Any]
+    )
+    let publishedVersion = try #require(registry["version"] as? String)
+    let installerURLPrefix = "https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp"
 
-    #expect(readme.contains("v3.19.0/Scripts/install.sh"))
-    #expect(setup.contains("v3.19.0/Scripts/install.sh"))
+    #expect(readme.contains("\(installerURLPrefix)/v\(publishedVersion)/Scripts/install.sh"))
+    #expect(setup.contains("\(installerURLPrefix)/v\(ServerConfig.serverVersion)/Scripts/install.sh"))
     #expect(installer.contains("awk -v artifact=\"$ARCHIVE\" '$2 == artifact {print $1}'"))
     #expect(readme.contains("verifies the downloaded `LogicProMCP-macOS-universal.tar.gz` archive"))
     #expect(readme.contains("LogicProMCP-macOS-universal.tar.gz SHA256SUMS entry"))
