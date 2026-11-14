@@ -737,6 +737,8 @@ struct Issue965HeldSelectionAssociationTests {
         var routingNameWrites: [String] = []
         var routingNameConfirms = 0
         var routingDocumentReads = 0
+        var routingDocumentReadsAtNameEditorOpen: Int?
+        var routingForeignFocusAtDocumentRead: Int?
         var routingDocumentReadsAtFirstNameWrite: Int?
         var routingDocumentReadsAtFirstNameConfirm: Int?
         var routingDestinationPresses = 0
@@ -2717,13 +2719,20 @@ struct Issue965HeldSelectionAssociationTests {
     @Test func lateOwnedEditorFocusAtFinalDocumentRefusesTheFirstSetter() async throws {
         let calibration = try Fixture()
         try await assertCanonicalPhysicalOutput(mode: "coupled_editor", fixture: calibration)
-        let lastDocumentRead = try #require(calibration.routingDocumentReadsAtFirstNameWrite)
-        #expect(lastDocumentRead > 0, "Calibrate from the actual first writer, not an earlier refusal")
-        let lastConfirmDocumentRead = try #require(calibration.routingDocumentReadsAtFirstNameConfirm)
-        #expect(lastConfirmDocumentRead > lastDocumentRead)
-        for (mode, read) in [("coupled_late_editor", lastDocumentRead), ("coupled_late_confirm", lastConfirmDocumentRead)] {
+        let editorOpenRead = try #require(calibration.routingDocumentReadsAtNameEditorOpen)
+        let firstWriteRead = try #require(calibration.routingDocumentReadsAtFirstNameWrite)
+        let firstConfirmRead = try #require(calibration.routingDocumentReadsAtFirstNameConfirm)
+        let firstWriteOffset = firstWriteRead - editorOpenRead
+        let firstConfirmOffset = firstConfirmRead - editorOpenRead
+        #expect(firstWriteOffset > 0, "Calibrate from the actual first writer after this fixture opens its editor")
+        #expect(firstConfirmOffset > firstWriteOffset)
+        for (mode, offset) in [("coupled_late_editor", firstWriteOffset),
+                               ("coupled_late_confirm", firstConfirmOffset)] {
             let fault = try Fixture()
-            try await assertCanonicalPhysicalOutput(mode: mode, fixture: fault, foreignFocusAtDocumentRead: read)
+            try await assertCanonicalPhysicalOutput(mode: mode, fixture: fault,
+                foreignFocusAfterNameEditorOpen: offset)
+            let faultEditorOpenRead = try #require(fault.routingDocumentReadsAtNameEditorOpen)
+            #expect(fault.routingForeignFocusAtDocumentRead == faultEditorOpenRead + offset)
             #expect(fault.routingLateScopeInjected)
             #expect(fault.routingNameWrites == (mode == "coupled_late_editor" ? [] : ["Selected Canonical"]))
             #expect(fault.routingNameConfirms == 0 && fault.routingDestinationPresses == 0)
@@ -2860,7 +2869,7 @@ struct Issue965HeldSelectionAssociationTests {
     }
 
     private func assertCanonicalPhysicalOutput(mode requestedMode: String, fixture: Fixture? = nil,
-                                               foreignFocusAtDocumentRead: Int? = nil,
+                                               foreignFocusAfterNameEditorOpen: Int? = nil,
                                                refusingSampledTrackOwnership: Bool = false,
                                                lateCheckedReceiverInputChange: Bool = false,
                                                lateCheckedOutputChange: Bool = false,
@@ -2868,7 +2877,7 @@ struct Issue965HeldSelectionAssociationTests {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
             try await FeatureFlags.withAdr004MutationSagaForTests(true) {
                 try await runCanonicalPhysicalOutput(mode: requestedMode, fixture: fixture,
-                    foreignFocusAtDocumentRead: foreignFocusAtDocumentRead,
+                    foreignFocusAfterNameEditorOpen: foreignFocusAfterNameEditorOpen,
                     refusingSampledTrackOwnership: refusingSampledTrackOwnership,
                     lateCheckedReceiverInputChange: lateCheckedReceiverInputChange,
                     lateCheckedOutputChange: lateCheckedOutputChange,
@@ -2878,7 +2887,7 @@ struct Issue965HeldSelectionAssociationTests {
     }
 
     private func runCanonicalPhysicalOutput(mode requestedMode: String, fixture: Fixture?,
-                                            foreignFocusAtDocumentRead: Int?,
+                                            foreignFocusAfterNameEditorOpen: Int?,
                                             refusingSampledTrackOwnership: Bool,
                                             lateCheckedReceiverInputChange: Bool,
                                             lateCheckedOutputChange: Bool,
@@ -3368,7 +3377,7 @@ struct Issue965HeldSelectionAssociationTests {
                     }
                     if composed, CFEqual(element, f.window), attribute == kAXDocumentAttribute as String {
                         f.routingDocumentReads += 1
-                        if f.routingDocumentReads == foreignFocusAtDocumentRead {
+                        if f.routingDocumentReads == f.routingForeignFocusAtDocumentRead {
                             let foreign = f.builder.element(1_971_401)
                             f.builder.setRole(foreign, kAXTextFieldRole as String)
                             f.builder.setAttribute(foreign, kAXValueAttribute as String, "Duplicate")
@@ -3625,6 +3634,14 @@ struct Issue965HeldSelectionAssociationTests {
                                 f.builder.attributeValue(nameField, kAXDescriptionAttribute as String))
                             f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String,
                                 action == kAXConfirmAction as String ? f.routingReplacement ?? f.strips[1] : nameField)
+                            if action == kAXPressAction as String,
+                               f.routingDocumentReadsAtNameEditorOpen == nil {
+                                let editorOpenRead = f.routingDocumentReads
+                                f.routingDocumentReadsAtNameEditorOpen = editorOpenRead
+                                if let offset = foreignFocusAfterNameEditorOpen {
+                                    f.routingForeignFocusAtDocumentRead = editorOpenRead + offset
+                                }
+                            }
                         }
                         if mode == "coupled_foreign_editor", action == kAXPressAction as String {
                             let foreign = f.builder.element(1_971_401)
@@ -10996,13 +11013,16 @@ struct Issue965HeldSelectionAssociationTests {
             runtime: f.builder.makeAXRuntime()))
         #expect(!current.strips.contains { CFEqual($0, f.strips[1]) }, "The original source is genuinely absent, not renamed in place")
         let succeeded = condition == "paired" || condition == "unselected_pair" || condition == "selected_child"
+            || condition == "missing_pair"
             || condition == "public_input_unrequested_peer"
         #expect(body["state"] as? String == (succeeded ? "A" : "C"), "Input renewal response: \(sharedToolText(result))")
         let attempted = try #require(body["write_attempted"] as? Bool)
         #expect(!attempted)
         if succeeded {
             #expect(f.inputMenuHadOwnedClaim, "The real read-only deadline path must hold the existing observation claim")
-            #expect(f.selections == (condition == "unselected_pair" ? [1, 0, 0, 1] : [1, 0, 1, 0]))
+            let expectedSelections = condition == "missing_pair" ? [1, 0, 1, 0, 1, 0]
+                : condition == "unselected_pair" ? [1, 0, 0, 1] : [1, 0, 1, 0]
+            #expect(f.selections == expectedSelections)
             let input = try #require(body["current_input"] as? [String: Any])
             #expect(input["kind"] as? String == "bus" && input["number"] as? Int == number,
                 "Bus 256 display text cannot assign the checked Bus 1 value")
@@ -12619,7 +12639,11 @@ struct Issue965HeldSelectionAssociationTests {
         try await assertInputBusRenewal(number: 1, condition: "unselected_pair")
     }
 
-    @Test(arguments: ["missing_pair", "replaced_header", "foreign_project", "foreign_focus", "partial_restore", "deciding_read", "deciding_control_replaced", "popup_still_open"])
+    @Test func inputBusRenewalReacquiresExpiredRetainedPairThroughPublicGate() async throws {
+        try await assertInputBusRenewal(number: 1, condition: "missing_pair")
+    }
+
+    @Test(arguments: ["replaced_header", "foreign_project", "foreign_focus", "partial_restore", "deciding_read", "deciding_control_replaced", "popup_still_open"])
     func inputBusRenewalRefusesLostOriginalAuthority(condition: String) async throws {
         try await assertInputBusRenewal(number: 1, condition: condition)
     }
@@ -13832,6 +13856,14 @@ struct Issue965HeldSelectionAssociationTests {
                 #expect(actual.pair.track.matches(source.track) && actual.pair.strip.matches(source.strip))
                 #expect(actual.observedPairs.count == 3 && actual.observation.strips.count == 4)
                 #expect(renewed.effects.restoration == "restored")
+            } else if ["foreign_document", "foreign_window", "foreign_mixer",
+                       "same_label_foreign_strip"].contains(fault) {
+                #expect(!f.routingLateScopeInjected,
+                    "An invalid binding must be rejected before reaching the retirement injector")
+                #expect(Array(f.selections.dropFirst(count)).isEmpty,
+                    "An invalid binding must not cause a new selection")
+                #expect(renewed.source == nil)
+                #expect(renewed.effects.reason == "association_selection_unverified")
             } else {
                 #expect(f.routingLateScopeInjected, "Reach the actual native retirement instead of trusting invalid candidates")
                 #expect(renewed.source == nil)
