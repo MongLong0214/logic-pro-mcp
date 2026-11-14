@@ -20,13 +20,17 @@ set -euo pipefail
 export DEVELOPER_DIR=/Library/Developer/CommandLineTools
 test -d "$DEVELOPER_DIR"
 
-cd "$(dirname "$0")/.."
+TRUSTED_ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
+QUALIFICATION_ROOT="${2:-$TRUSTED_ROOT}"
 
 CANDIDATE="${1:-}"
-if [ "$#" -ne 1 ] || [ ! -f "$CANDIDATE" ] || [ ! -x "$CANDIDATE" ]; then
-    echo "Usage: $0 /path/to/executable/LogicProMCP" >&2
+if { [ "$#" -ne 1 ] && [ "$#" -ne 2 ]; } || [ ! -d "$QUALIFICATION_ROOT" ] \
+    || [ ! -f "$CANDIDATE" ] || [ ! -x "$CANDIDATE" ]; then
+    echo "Usage: $0 /path/to/executable/LogicProMCP [/path/to/candidate-worktree]" >&2
     exit 1
 fi
+QUALIFICATION_ROOT="$(cd "$QUALIFICATION_ROOT" && pwd -P)"
+cd "$QUALIFICATION_ROOT"
 CANDIDATE="$(cd "$(dirname "$CANDIDATE")" && pwd -P)/$(basename "$CANDIDATE")"
 candidate_hash="$(shasum -a 256 "$CANDIDATE" | awk '{print $1}')"
 test -n "$candidate_hash"
