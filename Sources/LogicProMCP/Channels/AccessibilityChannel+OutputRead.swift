@@ -73,8 +73,140 @@ extension AccessibilityChannel {
         runtime: AXLogicProElements.Runtime = .production,
         timing: OutputAssignmentTiming = .live
     ) async -> ChannelResult {
-        (await getCheckedRoutingDestination(params: [:], sendOrdinal: nil, inputBusOnly: true,
-            runtime: runtime, timing: timing, observingPeerHeaders: [])).result
+        func refusal(_ hint: String,
+                     effects: SessionPopulationObservation.UIEffects? = nil) -> ChannelResult {
+            var extras: [String: Any] = [
+                "operation": "mixer.get_input_bus_verified", "write_attempted": false,
+                "navigation_attempted": effects?.navigationPerformed ?? false,
+                "popup_menu_state": "not_opened",
+            ]
+            if let effects {
+                extras["ui_effects"] = [
+                    "navigation_performed": effects.navigationPerformed,
+                    "attempted": effects.attempted, "changed": effects.changed,
+                    "restoration": effects.restoration,
+                    "reason": effects.reason as Any? ?? NSNull(),
+                ]
+            }
+            return .error(HonestContract.encodeStateC(
+                error: .readbackUnavailable, hint: hint, extras: extras))
+        }
+        guard let original = AXMixerStripBinding.current else {
+            return refusal("A current physical Mixer target_ref is required; no popup was opened.")
+        }
+        guard original.currentIndex(runtime: runtime) != nil else {
+            return .error(HonestContract.encodeStateC(error: .staleTargetReference,
+                hint: "The original physical source is no longer in its bound project/window.",
+                extras: ["operation": "mixer.get_input_bus_verified", "write_attempted": false,
+                    "navigation_attempted": false, "popup_menu_state": "not_opened"]))
+        }
+        @Sendable func ownedRequestIsCurrent() -> Bool {
+            guard !Task.isCancelled,
+                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                  let context = OperationTraceContext.current,
+                  context.mutationGateAcquired, !context.cancellationRequested(),
+                  context.deadline.map({ ContinuousClock.now < $0 }) ?? true,
+                  context.ownsGate() else { return false }
+            return true
+        }
+        @Sendable func exactPopupFreeScope() -> Bool {
+            guard ownedRequestIsCurrent(), let pid = runtime.logicProPID(),
+                  runtime.focusedApplicationPID() == pid,
+                  let app = AXLogicProElements.appRoot(runtime: runtime),
+                  AXHelpers.getAttribute(app, kAXFrontmostAttribute as String,
+                    runtime: runtime.ax) as Bool? == true,
+                  let main: AXUIElement = AXHelpers.getAttribute(
+                    app, kAXMainWindowAttribute as String, runtime: runtime.ax),
+                  CFEqual(main, original.window),
+                  case .success(.elements(let windows)) = AXHelpers.getAXUIElementArrayRead(
+                    app, kAXWindowsAttribute as String, runtime: runtime.ax),
+                  windows.filter({ CFEqual($0, original.window) }).count == 1,
+                  case .success(.some(let document)) = AXLogicProElements.projectPickerDocumentRead(
+                    original.window, runtime: runtime),
+                  document.utf8.elementsEqual(original.document.utf8),
+                  original.currentIndex(runtime: runtime) != nil,
+                  Self.checkedTopLevelOutputPopupMenus(in: app, runtime: runtime.ax)?.isEmpty == true,
+                  checkedOutputPopupMenus(in: original.mixer, runtime: runtime.ax)?.isEmpty == true,
+                  let onScreen = runtime.onScreenWindowList(),
+                  Self.checkedLogicOutputPopupWindows(onScreen, logicPID: pid)?.isEmpty == true,
+                  ownedRequestIsCurrent() else { return false }
+            return true
+        }
+        guard exactPopupFreeScope() else {
+            return refusal("The exact popup-free physical source scope could not be acquired; no popup was opened.")
+        }
+        guard let observation = HeldSelectionAssociation(
+                window: original.window, logic: runtime, expectedProject: nil,
+                requiresProjectReference: false, allowsSelectedChildRailEntry: true,
+                retainedMixerSource: original),
+              CFEqual(observation.mixer, original.mixer),
+              observation.document.utf8.elementsEqual(original.document.utf8),
+              observation.permitsRead() else {
+            return refusal("The physical source has no exact held selection scope; no popup was opened.")
+        }
+        let pair: HeldSelectionAssociation.Pair
+        if let retained = AXMixerStripBinding.outputAssociation {
+            guard retained.strip.matches(original), retained.track.currentIndex(in: observation) != nil,
+                  retained.strip.currentIndex(in: observation) != nil,
+                  CFEqual(retained.track.window, original.window),
+                  retained.track.document.utf8.elementsEqual(original.document.utf8),
+                  exactPopupFreeScope(), observation.permitsRead() else {
+                return refusal("The retained original-header association is no longer exact; no popup was opened.")
+            }
+            pair = retained
+        } else {
+            let pairs = await observation.observe(referenceIsCurrent: {
+                exactPopupFreeScope()
+            }, stoppingWhen: {
+                !ownedRequestIsCurrent()
+            }, allHeldHeaders: true, observingPeerStrips: [original])
+            let matches = pairs.filter { $0.strip.matches(original) }
+            guard matches.count == 1, let observed = matches.first,
+                  pairs.filter({ $0.track.matches(observed.track) }).count == 1,
+                  observation.effects.reason == nil,
+                  observation.effects.restoration == "restored",
+                  observed.track.currentIndex(in: observation) != nil,
+                  observed.strip.currentIndex(in: observation) != nil,
+                  exactPopupFreeScope(), observation.permitsRead() else {
+                return refusal("The exact physical source association or its inverse could not be verified; no popup was opened.",
+                    effects: observation.effects)
+            }
+            pair = observed
+        }
+        let result = await AXMixerStripBinding.$current.withValue(pair.strip) {
+            await AXMixerStripBinding.$outputAssociation.withValue(pair) {
+                (await getCheckedRoutingDestination(params: [:], sendOrdinal: nil,
+                    inputBusOnly: true, runtime: runtime, timing: timing,
+                    observingPeerHeaders: [], readingOriginalScope: observation)).result
+            }
+        }
+        guard observation.effects.navigationPerformed
+                || !observation.effects.attempted.isEmpty
+                || !observation.effects.changed.isEmpty else { return result }
+        guard let data = result.message.data(using: .utf8),
+              var envelope = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            return result
+        }
+        envelope["navigation_attempted"] = (envelope["navigation_attempted"] as? Bool ?? false)
+            || observation.effects.navigationPerformed
+        var effects = envelope["ui_effects"] as? [String: Any] ?? [:]
+        effects["navigation_performed"] = (effects["navigation_performed"] as? Bool ?? false)
+            || observation.effects.navigationPerformed
+        let attempted = effects["attempted"] as? [String] ?? []
+        effects["attempted"] = attempted + observation.effects.attempted.filter { !attempted.contains($0) }
+        let changed = effects["changed"] as? [String] ?? []
+        effects["changed"] = changed + observation.effects.changed.filter { !changed.contains($0) }
+        if envelope["ui_effects"] == nil {
+            effects["restoration"] = observation.effects.restoration
+            effects["reason"] = observation.effects.reason as Any? ?? NSNull()
+        }
+        envelope["ui_effects"] = effects
+        guard let encoded = try? JSONSerialization.data(withJSONObject: envelope, options: [.sortedKeys]),
+              let message = String(data: encoded, encoding: .utf8) else { return result }
+        switch result {
+        case .success: return .success(message)
+        case .error: return .error(message)
+        }
     }
     /// A checked assigned-send choice, not a routing-graph completeness claim.
     static func getAssignedSendVerified(
