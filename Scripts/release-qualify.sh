@@ -20,16 +20,31 @@ set -euo pipefail
 export DEVELOPER_DIR=/Library/Developer/CommandLineTools
 test -d "$DEVELOPER_DIR"
 
-cd "$(dirname "$0")/.."
+TRUSTED_ROOT="$(cd "$(dirname "$0")/.." && pwd -P)"
+QUALIFICATION_ROOT="${2:-$TRUSTED_ROOT}"
 
 CANDIDATE="${1:-}"
-if [ "$#" -ne 1 ] || [ ! -f "$CANDIDATE" ] || [ ! -x "$CANDIDATE" ]; then
-    echo "Usage: $0 /path/to/executable/LogicProMCP" >&2
+if { [ "$#" -ne 1 ] && [ "$#" -ne 2 ]; } || [ ! -d "$QUALIFICATION_ROOT" ] \
+    || [ ! -f "$CANDIDATE" ] || [ ! -x "$CANDIDATE" ]; then
+    echo "Usage: $0 /path/to/executable/LogicProMCP [/path/to/candidate-worktree]" >&2
     exit 1
 fi
+QUALIFICATION_ROOT="$(cd "$QUALIFICATION_ROOT" && pwd -P)"
+cd "$QUALIFICATION_ROOT"
 CANDIDATE="$(cd "$(dirname "$CANDIDATE")" && pwd -P)/$(basename "$CANDIDATE")"
 candidate_hash="$(shasum -a 256 "$CANDIDATE" | awk '{print $1}')"
 test -n "$candidate_hash"
+
+# The live gate and the Apple corpus must describe the same installed Logic. These are not
+# headless substitutes for the runtime below: they stop stale/tampered extraction, broken
+# citations and incomplete locale maps before any UI write is attempted, while `status` compares
+# the committed pin with this host's actual Logic build.
+python3 Scripts/logic_canon.py status
+python3 Scripts/check-canon-drift.py
+python3 Scripts/check-canon-citations.py
+python3 Scripts/check-policy-literals-against-canon.py
+python3 Scripts/check-labelsets-are-derived.py
+python3 Scripts/locale_labels.py --check
 
 release_live_tests=(
     "realReleaseBinaryExecutesEveryOperationWithIndependentReadback"

@@ -66,6 +66,8 @@ import Testing
     let gate = try scriptContents("Scripts/release-qualify.sh")
 
     #expect(gate.contains("CANDIDATE=\"${1:-}\""))
+    #expect(gate.contains("QUALIFICATION_ROOT=\"${2:-$TRUSTED_ROOT}\""))
+    #expect(gate.contains("cd \"$QUALIFICATION_ROOT\""))
     #expect(!gate.contains("swift build -c release"))
     let inventory = try #require(gate.range(of: "test_inventory=\"$(swift test list)\""))
     let stage = try #require(gate.range(of: "cp \"$CANDIDATE\" .build/release/LogicProMCP"))
@@ -95,6 +97,29 @@ import Testing
     #expect(gate.contains("trap 'exit 130' INT"))
     #expect(gate.contains("trap 'exit 143' TERM"))
     #expect(gate.contains("chmod 0755 .build/release/LogicProMCP"))
+}
+
+@Test func native_ci_qualification_separates_trusted_controlFromCandidateBytes() throws {
+    let wrapper = try scriptContents("Scripts/ci-native-qualify.sh")
+
+    #expect(wrapper.contains("rev-parse origin/main"))
+    #expect(wrapper.contains("CANDIDATE_ROOT=\"${3:-}\""))
+    #expect(wrapper.contains("require_release_origin \"$TRUSTED_ROOT\""))
+    #expect(wrapper.contains("require_release_origin \"$CANDIDATE_ROOT\""))
+    #expect(wrapper.contains("git@github.com:MongLong0214/logic-pro-mcp.git"))
+    #expect(wrapper.contains("[\"git\", \"-C\", sys.argv[6], \"show\""))
+    #expect(wrapper.contains("fork pull requests cannot execute on the trusted Logic host"))
+    #expect(wrapper.contains("unset LOGIC_NATIVE_STATUS_TOKEN GH_TOKEN GITHUB_TOKEN"))
+    #expect(wrapper.contains("bash \"$TRUSTED_ROOT/Scripts/release-qualify.sh\""))
+    #expect(wrapper.contains("parents != [base_sha, head_sha]"))
+    #expect(wrapper.contains("run_attempt"))
+    #expect(wrapper.contains("artifact_id"))
+    #expect(wrapper.contains("artifact_digest"))
+    #expect(wrapper.contains("actions/artifacts/$artifact_id/zip"))
+    #expect(wrapper.contains("shasum -a 256 \"$work/runtime.zip\""))
+    #expect(wrapper.contains("post_status success \"$receipt\""))
+    #expect(!wrapper.contains("gh run download"))
+    #expect(!wrapper.contains("run.get(\"head_sha\") != expected_sha"))
 }
 
 @Test func candidate_package_metadata_binds_explicit_version_and_source() throws {
