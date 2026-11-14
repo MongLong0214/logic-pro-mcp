@@ -139,7 +139,7 @@ jobs:
       - name: Publish release executable for fault-exclusion tests
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: release-runtime-${{ github.run_id }}
+          name: release-runtime-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/release-runtime
           retention-days: 1
           if-no-files-found: error
@@ -292,7 +292,7 @@ jobs:
       - name: Download release executable
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: release-runtime-${{ github.run_id }}
+          name: release-runtime-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/release-runtime
 
       - name: Run this exact serial shard
@@ -488,18 +488,28 @@ jobs:
           set -euo pipefail
           test "$RELEASE_BUILD" = success
           test "$PRODUCT_VALIDATION" = success
-          gh api --paginate "repos/$GITHUB_REPOSITORY/commits/$EXPECTED_SHA/statuses?per_page=100" \
-            > "$RUNNER_TEMP/statuses.json"
+          gh api "repos/$GITHUB_REPOSITORY/commits/$EXPECTED_SHA/status?per_page=100" \
+            > "$RUNNER_TEMP/combined-status.json"
+          gh api --paginate --slurp \
+            "repos/$GITHUB_REPOSITORY/commits/$EXPECTED_SHA/statuses?per_page=100" \
+            > "$RUNNER_TEMP/status-pages.json"
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts?per_page=100" \
             > "$RUNNER_TEMP/artifacts.json"
-          python3 - "$RUNNER_TEMP/statuses.json" "$RUNNER_TEMP/artifacts.json" \
+          python3 - "$RUNNER_TEMP/combined-status.json" "$RUNNER_TEMP/status-pages.json" \
+            "$RUNNER_TEMP/artifacts.json" \
             "$EXPECTED_SHA" "$EXPECTED_TARGET" "$EXPECTED_ATTEMPT" "$RUN_ID" <<'PY'
           import json, re, sys
-          rows = json.load(open(sys.argv[1], encoding="utf-8"))
-          artifacts = json.load(open(sys.argv[2], encoding="utf-8")).get("artifacts", [])
-          expected_sha, expected_target = sys.argv[3], sys.argv[4]
-          expected_attempt, run_id = sys.argv[5], sys.argv[6]
-          name = f"release-runtime-{run_id}"
+          status_response = json.load(open(sys.argv[1], encoding="utf-8"))
+          status_pages = json.load(open(sys.argv[2], encoding="utf-8"))
+          artifacts = json.load(open(sys.argv[3], encoding="utf-8")).get("artifacts", [])
+          expected_sha, expected_target = sys.argv[4], sys.argv[5]
+          expected_attempt, run_id = sys.argv[6], sys.argv[7]
+          if status_response.get("sha") != expected_sha:
+              raise SystemExit("combined native status response SHA mismatch")
+          if not isinstance(status_pages, list) or not all(isinstance(page, list) for page in status_pages):
+              raise SystemExit("full commit status pages have an unexpected shape")
+          rows = [row for page in status_pages for row in page]
+          name = f"release-runtime-{run_id}-{expected_attempt}"
           matches = [row for row in artifacts if row.get("name") == name]
           if len(matches) != 1:
               raise SystemExit(f"expected one current {name!r} artifact, found {len(matches)}")
@@ -520,8 +530,6 @@ jobs:
                   "missing exact native status; run Scripts/ci-native-qualify.sh "
                   f"for candidate {expected_sha} and run {run_id} on the trusted Logic host")
           latest = exact[0]
-          if latest.get("sha") != expected_sha:
-              raise SystemExit("native status SHA mismatch")
           if latest.get("target_url") != expected_target:
               raise SystemExit("native status belongs to another CI run attempt")
           if latest.get("state") != "success":

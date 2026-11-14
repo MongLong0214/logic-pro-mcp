@@ -2,6 +2,10 @@
 """The restored canon, locale and native gates are unconditional inputs to required `build`."""
 import os
 import re
+import json
+import subprocess
+import tempfile
+import textwrap
 import unittest
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -21,12 +25,25 @@ def job_body(workflow, name):
     return tail[:next_job.start()] if next_job else tail
 
 
+def native_consumer_script(workflow):
+    native = job_body(workflow, "native-logic-e2e") or ""
+    match = re.search(
+        r'python3 - "\$RUNNER_TEMP/combined-status\.json".*?<<\'PY\'\n(.*?)\n          PY',
+        native,
+        re.S,
+    )
+    if not match:
+        raise AssertionError("native status consumer heredoc not found")
+    return textwrap.dedent(match.group(1))
+
+
 def workflow_problems(workflow):
     problems = []
     canon = job_body(workflow, "canon-locales") or ""
     native = job_body(workflow, "native-logic-e2e") or ""
     build = job_body(workflow, "build") or ""
     release = job_body(workflow, "release-build") or ""
+    shards = job_body(workflow, "test-shards") or ""
     build_needs = re.search(r"^    needs:\s*(.*)$", build, re.M)
     build_dependencies = build_needs.group(1) if build_needs else ""
     if not canon:
@@ -49,7 +66,11 @@ def workflow_problems(workflow):
         problems.append("missing native-logic-e2e job")
     if "logic-native-e2e" not in native or "Native PASS a=" not in native:
         problems.append("native job does not consume the exact live status")
-    for binding in ("EXPECTED_ATTEMPT", "release-runtime-{run_id}",
+    for binding in ("EXPECTED_ATTEMPT", "release-runtime-{run_id}-{expected_attempt}",
+                    'commits/$EXPECTED_SHA/status?per_page=100',
+                    'commits/$EXPECTED_SHA/statuses?per_page=100',
+                    'gh api --paginate --slurp',
+                    'status_response.get("sha")',
                     'artifact.get("digest")', 'artifact.get("id")'):
         if binding not in native:
             problems.append(f"native job does not bind {binding}")
@@ -57,6 +78,11 @@ def workflow_problems(workflow):
         problems.append("native gate is path-conditional")
     if re.search(r"^    if:.*full-validation", release, re.M):
         problems.append("release artifact is skipped for documentation changes")
+    attempt_artifact = "release-runtime-${{ github.run_id }}-${{ github.run_attempt }}"
+    if attempt_artifact not in release:
+        problems.append("release artifact is not bound to the run attempt")
+    if attempt_artifact not in shards:
+        problems.append("test shards do not download the run-attempt artifact")
     for dependency in ("canon-locales", "native-logic-e2e"):
         if dependency not in build_dependencies:
             problems.append(f"required build does not depend on {dependency}")
@@ -105,8 +131,11 @@ class RequiredVerificationWorkflow(unittest.TestCase):
         self.assertIn('["git", "-C", sys.argv[6], "show"', wrapper)
         self.assertIn('rev-parse origin/main', wrapper)
         self.assertIn('"$TRUSTED_ROOT/Scripts/release-qualify.sh"', wrapper)
-        self.assertIn('unset LOGIC_NATIVE_STATUS_TOKEN GH_TOKEN GITHUB_TOKEN', wrapper)
-        self.assertIn('env -u GH_TOKEN -u GITHUB_TOKEN -u LOGIC_NATIVE_STATUS_TOKEN', wrapper)
+        self.assertIn('${LOGIC_NATIVE_STATUS_TOKEN+x}', wrapper)
+        self.assertIn('if ! IFS= read -r status_token || [ -z "$status_token" ]; then', wrapper)
+        self.assertNotIn('GH_TOKEN="$status_token"', wrapper)
+        self.assertIn('env -u GH_TOKEN -u GITHUB_TOKEN -u LOGIC_NATIVE_STATUS_TOKEN -u status_token', wrapper)
+        self.assertIn('"$work/runtime/LogicProMCP" "$CANDIDATE_ROOT" < /dev/null', wrapper)
 
     def test_required_job_accepts_only_the_trusted_status_publisher(self):
         workflow = read(".github/workflows/ci.yml")
@@ -122,14 +151,99 @@ class RequiredVerificationWorkflow(unittest.TestCase):
         for required in ("run_attempt", "artifact_id", "artifact_digest", "runtime.zip"):
             self.assertIn(required, wrapper)
         for required in ("EXPECTED_ATTEMPT", 'artifact.get("id")',
-                         'artifact.get("digest")', "Native PASS a="):
+                         'artifact.get("digest")', "Native PASS a=",
+                         "release-runtime-{run_id}-{expected_attempt}"):
             self.assertIn(required, native)
+
+    def test_run_attempt_artifact_binding_cannot_be_removed_silently(self):
+        workflow = read(".github/workflows/ci.yml").replace(
+            "release-runtime-${{ github.run_id }}-${{ github.run_attempt }}",
+            "release-runtime-${{ github.run_id }}")
+        problems = workflow_problems(workflow)
+        self.assertIn("release artifact is not bound to the run attempt", problems)
+        self.assertIn("test shards do not download the run-attempt artifact", problems)
 
     def test_replaced_artifact_binding_cannot_be_removed_silently(self):
         workflow = read(".github/workflows/ci.yml").replace(
             'artifact.get("digest")', 'None', 1)
         self.assertIn('native job does not bind artifact.get("digest")',
                       workflow_problems(workflow))
+
+    def test_combined_status_sha_binding_cannot_be_removed_silently(self):
+        workflow = read(".github/workflows/ci.yml").replace(
+            'status_response.get("sha")', 'None', 1)
+        self.assertIn('native job does not bind status_response.get("sha")',
+                      workflow_problems(workflow))
+
+    def test_combined_status_accepts_a_realistic_row_without_sha(self):
+        sha = "a" * 40
+        run_id = "123"
+        attempt = "2"
+        digest = "b" * 64
+        target = f"https://github.com/MongLong0214/logic-pro-mcp/actions/runs/{run_id}/attempts/{attempt}"
+        receipt = f"Native PASS a={attempt} id=42 d={digest}"
+        status = {
+            "sha": sha,
+        }
+        status_pages = [[{
+                "context": "logic-native-e2e",
+                "target_url": target,
+                "state": "success",
+                "description": receipt,
+                "creator": {"login": "MongLong0214", "id": 97578200},
+        }]]
+        artifacts = {"artifacts": [{
+            "name": f"release-runtime-{run_id}-{attempt}",
+            "expired": False,
+            "id": 42,
+            "digest": f"sha256:{digest}",
+        }]}
+        with tempfile.TemporaryDirectory() as directory:
+            status_path = os.path.join(directory, "status.json")
+            status_pages_path = os.path.join(directory, "status-pages.json")
+            artifacts_path = os.path.join(directory, "artifacts.json")
+            with open(status_path, "w", encoding="utf-8") as handle:
+                json.dump(status, handle)
+            with open(status_pages_path, "w", encoding="utf-8") as handle:
+                json.dump(status_pages, handle)
+            with open(artifacts_path, "w", encoding="utf-8") as handle:
+                json.dump(artifacts, handle)
+            result = subprocess.run(
+                ["python3", "-", status_path, status_pages_path, artifacts_path,
+                 sha, target, attempt, run_id],
+                input=native_consumer_script(read(".github/workflows/ci.yml")),
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("Current run-attempt artifact passed native Logic qualification", result.stdout)
+
+    def test_combined_status_rejects_a_wrong_top_level_sha(self):
+        workflow = read(".github/workflows/ci.yml")
+        script = native_consumer_script(workflow)
+        self.assertIn('status_response.get("sha") != expected_sha', script)
+        self.assertNotIn('latest.get("sha")', script)
+        with tempfile.TemporaryDirectory() as directory:
+            status_path = os.path.join(directory, "status.json")
+            status_pages_path = os.path.join(directory, "status-pages.json")
+            artifacts_path = os.path.join(directory, "artifacts.json")
+            with open(status_path, "w", encoding="utf-8") as handle:
+                json.dump({"sha": "b" * 40}, handle)
+            with open(status_pages_path, "w", encoding="utf-8") as handle:
+                json.dump([[]], handle)
+            with open(artifacts_path, "w", encoding="utf-8") as handle:
+                json.dump({"artifacts": []}, handle)
+            result = subprocess.run(
+                ["python3", "-", status_path, status_pages_path, artifacts_path, "a" * 40,
+                 "https://example.invalid/attempt", "1", "123"],
+                input=script,
+                text=True,
+                capture_output=True,
+                check=False,
+            )
+        self.assertNotEqual(result.returncode, 0)
+        self.assertIn("combined native status response SHA mismatch", result.stderr)
 
     def test_release_gate_uses_real_logic_and_exact_bytes(self):
         gate = read("Scripts/release-qualify.sh")
