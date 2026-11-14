@@ -971,7 +971,8 @@ actor LogicProServer {
         let mutatingCommand = isMutatingCommand(tool: tool, command: command)
         let ownedObservationRead = freshPopulationRead
             || selectedRegionEventRead
-            || (tool == "logic_mixer" && (command == "get_input_bus_verified" || command == "get_send_bypass_verified"))
+            || (tool == "logic_mixer" && ["get_output_verified", "get_input_bus_verified",
+                "get_send_destination_verified", "get_send_bypass_verified"].contains(command))
         if ownedObservationRead && Task.isCancelled {
             return toolStateCResult(.cancelled,
                 extras: ["write_attempted": false, "navigation_performed": false])
