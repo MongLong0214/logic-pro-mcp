@@ -290,6 +290,76 @@ struct Issue291PhysicalStripReferenceTests {
         }
     }
 
+    @Test("Physical Mixer binding canonicalizes only local AXDocument file URLs")
+    func physicalMixerBindingUsesCanonicalLocalProjectPath() async throws {
+        let sandbox = URL(fileURLWithPath: "/tmp", isDirectory: true)
+            .appendingPathComponent("lpm291-project-path-\(UUID().uuidString)", isDirectory: true)
+        let project = sandbox.appendingPathComponent("qualification.logicx", isDirectory: true)
+        let otherProject = sandbox.appendingPathComponent("other.logicx", isDirectory: true)
+        let projectAlias = sandbox.appendingPathComponent("qualification-alias.logicx", isDirectory: true)
+        try FileManager.default.createDirectory(at: project, withIntermediateDirectories: true)
+        try FileManager.default.createDirectory(at: otherProject, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: projectAlias, withDestinationURL: project)
+        defer { try? FileManager.default.removeItem(at: sandbox) }
+
+        let expectedPath = project.standardizedFileURL.path
+        let privatePath = "/private\(project.path)"
+        let otherPrivatePath = "/private\(otherProject.path)"
+        let builder = FakeAXRuntimeBuilder()
+        let window = builder.element(2_919_700)
+        let mixer = builder.element(2_919_701)
+        let strip = builder.element(2_919_702)
+
+        func binding(document: String) -> AXMixerStripBinding.Binding {
+            AXMixerStripBinding.Binding(window: window, mixer: mixer, strip: strip, document: document)
+        }
+        func bind(document: String) async -> TargetReference? {
+            let registry = TargetRegistry()
+            let snapshot = await registry.currentSnapshot
+            let projectDescriptor = TargetDescriptor.project(
+                name: "Qualification", filePath: expectedPath, epoch: snapshot.projectEpoch
+            )
+            _ = await registry.bind(
+                kind: .project, descriptor: projectDescriptor, fingerprint: projectDescriptor.fingerprint
+            )
+            let stripDescriptor = TargetDescriptor(trackIndex: 0, trackName: "Stereo Output")
+            return await registry.bind(
+                kind: .mixerStrip,
+                descriptor: stripDescriptor,
+                fingerprint: stripDescriptor.fingerprint,
+                snapshot: snapshot,
+                physicalMixerStrip: binding(document: document)
+            )
+        }
+
+        let localDocuments = [
+            URL(fileURLWithPath: privatePath, isDirectory: true).absoluteString,
+            "file://localhost\(privatePath)/",
+            projectAlias.absoluteString,
+        ]
+        for document in localDocuments {
+            #expect(binding(document: document).projectPath == expectedPath)
+            #expect(await bind(document: document) != nil)
+        }
+
+        let wrongPath = URL(fileURLWithPath: otherPrivatePath, isDirectory: true).absoluteString
+        #expect(binding(document: wrongPath).projectPath != expectedPath)
+        #expect(await bind(document: wrongPath) == nil)
+
+        for document in [
+            "https://localhost\(expectedPath)",
+            "file://foreign.invalid\(expectedPath)",
+            "file://user@localhost\(expectedPath)",
+            "file://user:secret@localhost\(expectedPath)",
+            "file://localhost:99\(expectedPath)",
+            "file://localhost\(expectedPath)?scope=other",
+            "file://localhost\(expectedPath)#other",
+        ] {
+            #expect(binding(document: document).projectPath == nil)
+            #expect(await bind(document: document) == nil)
+        }
+    }
+
     @Test("A held No Output source recovers only through its owned checked popup and current source",
           arguments: ["owned", "legacy", "missing_expected", "other_destination", "missing_press",
                       "label_changed_at_capability", "contradictory_check", "late_source_label",
