@@ -456,8 +456,8 @@ and `MANIFEST.json` to agree, instead of one text edit.
 
 **Three is the cost of adding a row, not the cost of every forgery, and this paragraph used to say
 three flatly.** Review 2026-09-19 replaced the CONTENTS of `absence/strings.es.u32` — keeping only
-the prefixes the cited `es` rows need, randomising the rest, and keeping the entry count at the
-47926 the manifest records — then refreshed the manifest's `artifacts` digest. TWO files, every
+the prefixes the cited `es` rows need, randomising the rest, and keeping the entry count the old
+manifest recorded — then refreshed the manifest's `artifacts` digest. TWO files, every
 guard green, and `is_absent("strings", "es", "Editar")` flipped from False to True for a string
 Logic ships. The count ratchet compares a number and the digest compares the bytes that same edit
 rewrote, so nothing looked at the contents. Nothing offline can: an entry nobody has cited has no

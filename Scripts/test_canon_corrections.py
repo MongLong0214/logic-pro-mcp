@@ -66,7 +66,8 @@ class FakeLogic:
         os.makedirs(os.path.join(self.app, "Contents", "Resources"), exist_ok=True)
         with open(os.path.join(self.app, "Contents", "Info.plist"), "wb") as handle:
             plistlib.dump({"CFBundleName": "Logic Pro", "CFBundleShortVersionString": version,
-                           "CFBundleVersion": build}, handle)
+                           "CFBundleVersion": build,
+                           "CFBundleDevelopmentRegion": "English"}, handle)
         for rel, data in files.items():
             path = os.path.join(self.app, rel)
             os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -153,6 +154,34 @@ def _qh_bundle():
 
 
 class D1AnEnglishFileIsNotItalian(unittest.TestCase):
+    def test_a_missing_localized_resource_uses_only_the_declared_development_locale(self):
+        with tempfile.TemporaryDirectory() as tmp, pointed_at(tmp, aliases={}):
+            files = _qh_bundle()
+            del files["Contents/Resources/it.lproj/QuickHelp.plist"]
+            files["Contents/Resources/it.lproj/Marker.txt"] = b"declared locale"
+            fake = FakeLogic(tmp, files)
+            it_ref = _ref("quickhelp", "QuickHelp", "it", "K1", "Title")
+            fake.cite(it_ref)
+            manifest = _build(fake, ["quickhelp"])
+            self.assertEqual(manifest["sources"]["quickhelp"]["resource_fallbacks"],
+                             {"it": {"QuickHelp": "en"}})
+            self.assertEqual(canon.resolve_offline(canon.CanonRef.parse(it_ref)),
+                             canon.NOT_LOCALIZED)
+
+    def test_a_missing_resource_never_guesses_an_undeclared_development_locale(self):
+        with tempfile.TemporaryDirectory() as tmp, pointed_at(tmp, aliases={}):
+            files = _qh_bundle()
+            del files["Contents/Resources/it.lproj/QuickHelp.plist"]
+            files["Contents/Resources/it.lproj/Marker.txt"] = b"declared locale"
+            fake = FakeLogic(tmp, files)
+            info = os.path.join(fake.app, "Contents", "Info.plist")
+            with open(info, "wb") as handle:
+                plistlib.dump({"CFBundleName": "Logic Pro", "CFBundleShortVersionString": "12.3",
+                               "CFBundleVersion": "6674",
+                               "CFBundleDevelopmentRegion": "GuessMe"}, handle)
+            with self.assertRaisesRegex(canon.CanonError, "cannot be assigned a fallback"):
+                _build(fake, ["quickhelp"])
+
     def test_a_byte_identical_file_resolves_to_not_localized(self):
         with tempfile.TemporaryDirectory() as tmp, pointed_at(tmp):
             fake = FakeLogic(tmp, _qh_bundle())
@@ -428,11 +457,59 @@ class StringsDict(unittest.TestCase):
     def test_a_shape_it_cannot_read_stops_naming_the_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             bad = plistlib.dumps({"t": {"NSStringLocalizedFormatKey": "%#@n@",
-                                        "n": {"NSStringFormatSpecTypeKey": "NSStringDeviceSpecificRuleType"}}})
+                                        "n": {"NSStringFormatSpecTypeKey": "UnknownRuleType"}}})
             fake = FakeLogic(tmp, {"Contents/Resources/en.lproj/Bad.stringsdict": bad})
             with self.assertRaises(canon.CanonError) as caught:
                 list(canon.extract_stringsdict(fake.app))
             self.assertIn("Bad.stringsdict", str(caught.exception))
+
+    def test_device_specific_forms_are_extracted_per_locale(self):
+        entry = {
+            "NSStringDeviceSpecificRuleType": {
+                "iphone": "phone text",
+                "mac": "Mac text",
+                "other": "fallback text",
+            }
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = FakeLogic(tmp, {
+                "Contents/Resources/en.lproj/Device.stringsdict":
+                    plistlib.dumps({"network_error": entry}),
+            })
+            rows = sorted(r[2:] for r in canon.extract_stringsdict(fake.app))
+        self.assertEqual(rows, [
+            ("network_error/NSStringDeviceSpecificRuleType", "iphone", "phone text"),
+            ("network_error/NSStringDeviceSpecificRuleType", "mac", "Mac text"),
+            ("network_error/NSStringDeviceSpecificRuleType", "other", "fallback text"),
+        ])
+
+    def test_device_specific_rule_without_mac_is_refused(self):
+        entry = {"NSStringDeviceSpecificRuleType": {"other": "fallback text"}}
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = FakeLogic(tmp, {
+                "Contents/Resources/en.lproj/Device.stringsdict":
+                    plistlib.dumps({"network_error": entry}),
+            })
+            with self.assertRaises(canon.CanonDecodeError) as caught:
+                list(canon.extract_stringsdict(fake.app))
+        self.assertIn("missing required device form(s): mac", str(caught.exception))
+
+    def test_device_specific_rule_with_unknown_or_non_string_form_is_refused(self):
+        for forms, needle in [
+            ({"mac": "Mac text", "other": "fallback", "visionpro": "future"},
+             "unknown device form"),
+            ({"mac": 1, "other": "fallback"}, "must hold a string"),
+        ]:
+            with self.subTest(forms=forms):
+                entry = {"NSStringDeviceSpecificRuleType": forms}
+                with tempfile.TemporaryDirectory() as tmp:
+                    fake = FakeLogic(tmp, {
+                        "Contents/Resources/en.lproj/Device.stringsdict":
+                            plistlib.dumps({"network_error": entry}),
+                    })
+                    with self.assertRaises(canon.CanonDecodeError) as caught:
+                        list(canon.extract_stringsdict(fake.app))
+                self.assertIn(needle, str(caught.exception))
 
 
 class AStringsDictEntryIsCompleteOrItFails(unittest.TestCase):
