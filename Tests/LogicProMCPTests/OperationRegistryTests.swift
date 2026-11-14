@@ -234,10 +234,12 @@ struct OperationRegistryTests {
         let result = await LogicProServer.runWithDeadline(
             tool: "logic_mixer", command: command, mutationGate: gate
         ) {
-            let context = OperationTraceContext.current
-            #expect(context != nil)
-            #expect(context?.mutationGateAcquired == true)
-            #expect(context?.ownsGate() == true)
+            guard let context = OperationTraceContext.current else {
+                Issue.record("Verified popup read must receive an operation trace context")
+                return toolTextResult(.error("missing operation trace context"))
+            }
+            #expect(context.mutationGateAcquired)
+            #expect(context.ownsGate())
             do { try SessionPopulationObservation.requireOwnedAcquisition() }
             catch { Issue.record("Verified popup read must own its existing acquisition gate: \(error)") }
             let competing = gate.tryAcquire(operation: "test.competing_mutation")
