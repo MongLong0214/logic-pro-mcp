@@ -673,6 +673,212 @@ struct Issue291OwnedCurrentOutputTests {
         #expect(!f.mutations.contains { CFEqual($0.0, f.pair) && $0.1 == kAXPressAction as String })
     }
 
+    @Test("Mixer-child output acquisition waits for the exact CG row that follows its AX root")
+    func mixerChildOutputWaitsForDelayedCGIdentity() async throws {
+        final class Probe: @unchecked Sendable { var postPressCGReads = 0 }
+        let f = try Issue291PhysicalStripReferenceTests.Fixture(), probe = Probe()
+        defer { try? FileManager.default.removeItem(at: f.bundle) }
+        prepare(f)
+        f.b.setAttribute(f.app, kAXFrontmostAttribute as String, true)
+        f.b.setAttribute(f.root, kAXParentAttribute as String, f.mixer)
+        let frame = CGRect(x: 20, y: 100, width: 230, height: 175)
+        f.b.setFrame(f.root, x: frame.origin.x, y: frame.origin.y,
+                     width: frame.width, height: frame.height)
+        f.popupFrame = frame
+        f.attributeReadResult = { node, attribute in
+            let pressed = f.mutations.contains { CFEqual($0.0, f.outputs[0]) && $0.1 == kAXPressAction as String }
+            let cancelled = f.mutations.contains { CFEqual($0.0, f.root) && $0.1 == kAXCancelAction as String }
+            guard pressed, !cancelled, CFEqual(node, f.mixer),
+                  attribute == kAXDescriptionAttribute as String else { return nil }
+            return .failure(.init(raw: AXError.cannotComplete.rawValue))
+        }
+        let base = f.logic
+        let runtime = AXLogicProElements.Runtime(logicProPID: base.logicProPID, ax: base.ax,
+            onScreenWindowList: {
+                guard let windows = base.onScreenWindowList() else { return nil }
+                guard f.mutations.contains(where: {
+                    CFEqual($0.0, f.outputs[0]) && $0.1 == kAXPressAction as String
+                }), !f.mutations.contains(where: {
+                    CFEqual($0.0, f.root) && $0.1 == kAXCancelAction as String
+                }) else { return windows }
+                probe.postPressCGReads += 1
+                guard probe.postPressCGReads == 1 else { return windows }
+                return windows.filter {
+                    ($0[kCGWindowLayer as String] as? NSNumber)?.intValue
+                        != LogicOnScreenWindows.popupMenuLevel
+                }
+            }, focusedApplicationPID: base.focusedApplicationPID)
+        let binding = AXMixerStripBinding.Binding(window: f.window, mixer: f.mixer,
+            strip: f.strips[0], document: f.bundle.absoluteString)
+        let timing = AccessibilityChannel.OutputAssignmentTiming(
+            popupOpenTimeoutMs: 100, popupCloseTimeoutMs: 0,
+            readbackTimeoutMs: 0, pollIntervalMs: 0)
+        let result = await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true)) {
+            await AXMixerStripBinding.$current.withValue(binding) {
+                await AccessibilityChannel.getOutputVerified(params: [:], runtime: runtime, timing: timing)
+            }
+        }
+        let body = try #require(sharedJSONObject(result.message))
+        #expect(probe.postPressCGReads >= 2)
+        #expect(body["state"] as? String == "A", "\(body)")
+        #expect((body["current_output"] as? [String: Any])?["kind"] as? String == "stereo_output")
+        #expect(body["popup_menu_state"] as? String == "closed")
+        #expect(f.mutations.map(\.1) == [kAXPressAction as String, kAXCancelAction as String])
+    }
+
+    @Test("Mixer-child output binds the stable CG window number while bounds and name settle")
+    func mixerChildOutputAcceptsStableCGIdentityAcrossGeometrySettling() async throws {
+        final class Probe: @unchecked Sendable { var postPressCGReads = 0 }
+        let f = try Issue291PhysicalStripReferenceTests.Fixture(), probe = Probe()
+        defer { try? FileManager.default.removeItem(at: f.bundle) }
+        prepare(f)
+        f.b.setAttribute(f.app, kAXFrontmostAttribute as String, true)
+        f.b.setAttribute(f.root, kAXParentAttribute as String, f.mixer)
+        let axFrame = CGRect(x: 25, y: 105, width: 220, height: 165)
+        let initialCGFrame = CGRect(x: 20, y: 100, width: 230, height: 175)
+        let settledCGFrame = CGRect(x: 18, y: 98, width: 234, height: 179)
+        f.b.setFrame(f.root, x: axFrame.origin.x, y: axFrame.origin.y,
+                     width: axFrame.width, height: axFrame.height)
+        f.popupFrame = initialCGFrame
+        f.attributeReadResult = { node, attribute in
+            let pressed = f.mutations.contains { CFEqual($0.0, f.outputs[0]) && $0.1 == kAXPressAction as String }
+            let cancelled = f.mutations.contains { CFEqual($0.0, f.root) && $0.1 == kAXCancelAction as String }
+            guard pressed, !cancelled, CFEqual(node, f.mixer),
+                  attribute == kAXDescriptionAttribute as String else { return nil }
+            return .failure(.init(raw: AXError.cannotComplete.rawValue))
+        }
+        let base = f.logic
+        let runtime = AXLogicProElements.Runtime(logicProPID: base.logicProPID, ax: base.ax,
+            onScreenWindowList: {
+                guard var windows = base.onScreenWindowList() else { return nil }
+                guard f.mutations.contains(where: {
+                    CFEqual($0.0, f.outputs[0]) && $0.1 == kAXPressAction as String
+                }), !f.mutations.contains(where: {
+                    CFEqual($0.0, f.root) && $0.1 == kAXCancelAction as String
+                }) else { return windows }
+                probe.postPressCGReads += 1
+                for index in windows.indices where
+                    (windows[index][kCGWindowLayer as String] as? NSNumber)?.intValue
+                        == LogicOnScreenWindows.popupMenuLevel {
+                    windows[index][kCGWindowBounds as String] =
+                        (probe.postPressCGReads == 1 ? initialCGFrame : settledCGFrame).dictionaryRepresentation
+                    windows[index][kCGWindowName as String] =
+                        probe.postPressCGReads == 1 ? "Menu" : "Menu Shadow"
+                }
+                return windows
+            }, focusedApplicationPID: base.focusedApplicationPID)
+        let binding = AXMixerStripBinding.Binding(window: f.window, mixer: f.mixer,
+            strip: f.strips[0], document: f.bundle.absoluteString)
+        let result = await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true)) {
+            await AXMixerStripBinding.$current.withValue(binding) {
+                await AccessibilityChannel.getOutputVerified(params: [:], runtime: runtime, timing: .immediate)
+            }
+        }
+        let body = try #require(sharedJSONObject(result.message))
+        #expect(probe.postPressCGReads >= 2)
+        #expect(body["state"] as? String == "A", "\(body)")
+        #expect((body["current_output"] as? [String: Any])?["kind"] as? String == "stereo_output")
+        #expect(body["popup_menu_state"] as? String == "closed")
+        #expect(f.mutations.map(\.1) == [kAXPressAction as String, kAXCancelAction as String])
+    }
+
+    @Test("A pending Mixer-child root cannot be replaced by another eligible popup root",
+          arguments: ["mixer_child", "top_level"])
+    func pendingMixerChildRootReplacementFailsClosed(_ replacement: String) async throws {
+        final class Probe: @unchecked Sendable {
+            var installedPending = false
+            var cgReadsAfterPress = 0
+            var mixerReadsAfterMissingCG = 0
+            var replacementInstalled = false
+        }
+        let f = try Issue291PhysicalStripReferenceTests.Fixture(), probe = Probe()
+        defer { try? FileManager.default.removeItem(at: f.bundle) }
+        prepare(f)
+        f.b.setAttribute(f.app, kAXFrontmostAttribute as String, true)
+        let pendingRoot = f.b.element(291_990)
+        f.b.setRole(pendingRoot, kAXMenuRole as String)
+        f.b.setAttribute(pendingRoot, kAXParentAttribute as String, f.mixer)
+        f.b.setChildren(pendingRoot, f.logic.ax.children(f.root))
+        let frame = CGRect(x: 20, y: 100, width: 230, height: 175)
+        f.b.setFrame(pendingRoot, x: frame.origin.x, y: frame.origin.y,
+                     width: frame.width, height: frame.height)
+        f.b.setFrame(f.root, x: frame.origin.x, y: frame.origin.y,
+                     width: frame.width, height: frame.height)
+        f.popupFrame = frame
+        f.onChildrenResultRead = { node in
+            guard CFEqual(node, f.mixer),
+                  f.mutations.contains(where: {
+                      CFEqual($0.0, f.outputs[0]) && $0.1 == kAXPressAction as String
+                  }) else { return }
+            if !probe.installedPending {
+                probe.installedPending = true
+                f.b.setChildren(f.mixer, f.strips + [pendingRoot])
+                return
+            }
+            guard probe.cgReadsAfterPress >= 1, !probe.replacementInstalled else { return }
+            probe.mixerReadsAfterMissingCG += 1
+            guard probe.mixerReadsAfterMissingCG == 2 else { return }
+            probe.replacementInstalled = true
+            if replacement == "mixer_child" {
+                f.b.setAttribute(f.root, kAXParentAttribute as String, f.mixer)
+                f.b.setChildren(f.mixer, f.strips + [f.root])
+            } else {
+                f.b.setAttribute(f.root, kAXParentAttribute as String, f.app)
+                f.b.setChildren(f.mixer, f.strips)
+                f.b.setChildren(f.app, [f.window, f.root])
+            }
+        }
+        let base = f.logic
+        let runtime = AXLogicProElements.Runtime(logicProPID: base.logicProPID, ax: base.ax,
+            onScreenWindowList: {
+                guard let windows = base.onScreenWindowList() else { return nil }
+                guard f.mutations.contains(where: {
+                    CFEqual($0.0, f.outputs[0]) && $0.1 == kAXPressAction as String
+                }), !f.mutations.contains(where: {
+                    CFEqual($0.0, f.root) && $0.1 == kAXCancelAction as String
+                }) else { return windows }
+                probe.cgReadsAfterPress += 1
+                guard probe.cgReadsAfterPress == 1 else { return windows }
+                return windows.filter {
+                    ($0[kCGWindowLayer as String] as? NSNumber)?.intValue
+                        != LogicOnScreenWindows.popupMenuLevel
+                }
+            }, focusedApplicationPID: base.focusedApplicationPID)
+        let binding = AXMixerStripBinding.Binding(window: f.window, mixer: f.mixer,
+            strip: f.strips[0], document: f.bundle.absoluteString)
+        let timing = AccessibilityChannel.OutputAssignmentTiming(
+            popupOpenTimeoutMs: 100, popupCloseTimeoutMs: 0,
+            readbackTimeoutMs: 0, pollIntervalMs: 0)
+        let result = await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true)) {
+            await AXMixerStripBinding.$current.withValue(binding) {
+                await AccessibilityChannel.getOutputVerified(params: [:], runtime: runtime, timing: timing)
+            }
+        }
+        let body = try #require(sharedJSONObject(result.message))
+        #expect(probe.installedPending && probe.replacementInstalled)
+        #expect(body["state"] as? String == "C", "\(body)")
+        #expect(body["current_output"] == nil)
+        #expect(f.mutations.map(\.1) == [kAXPressAction as String])
+    }
+
+    @Test("Logic popup CG bounds require finite origins",
+          arguments: ["nan_x", "nan_y", "negative_infinity_x", "negative_infinity_y"])
+    func mixerChildPopupRejectsNonfiniteCGOrigin(_ fault: String) {
+        var x = 20.0, y = 100.0
+        if fault == "nan_x" { x = .nan }
+        if fault == "nan_y" { y = .nan }
+        if fault == "negative_infinity_x" { x = -.infinity }
+        if fault == "negative_infinity_y" { y = -.infinity }
+        let row: [String: Any] = [
+            kCGWindowOwnerPID as String: NSNumber(value: Int32(2_910_900)),
+            kCGWindowNumber as String: NSNumber(value: Int64(291_901)),
+            kCGWindowLayer as String: NSNumber(value: Int32(LogicOnScreenWindows.popupMenuLevel)),
+            kCGWindowBounds as String: ["X": x, "Y": y, "Width": 230.0, "Height": 175.0],
+        ]
+        #expect(AccessibilityChannel.checkedLogicOutputPopupWindows(
+            [row], logicPID: 2_910_900) == nil)
+    }
+
     @Test("Captured Mixer-child publication accepts only its later exact bounded closure")
     func mixerChildPopupRecordsDelayedExactClosure() async throws {
         final class Probe: @unchecked Sendable { var postCancelMixerReads = 0 }

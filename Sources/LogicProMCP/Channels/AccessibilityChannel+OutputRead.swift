@@ -972,39 +972,47 @@ extension AccessibilityChannel {
                     && Self.checkedTopLevelOutputPopupMenus(in: app, runtime: runtime.ax)?.isEmpty == true ? [] : nil
             }
             guard menus.count == 1, CFEqual(menus[0], held.root),
-                  popups.count == 1, popups[0] == held.window,
+                  popups.count == 1,
+                  popups[0].number == held.window.number,
+                  popups[0].layer == held.window.layer,
                   mixerChildParentMatches(held.root),
-                  let frame = held.window.bounds, !frame.isNull, !frame.isInfinite,
-                  frame.width > 0, frame.height > 0,
-                  AXHelpers.getPosition(held.root, runtime: runtime.ax) == frame.origin,
-                  AXHelpers.getSize(held.root, runtime: runtime.ax) == frame.size,
                   exactCapturedMixerPopupScope(),
                   Self.checkedTopLevelOutputPopupMenus(in: app, runtime: runtime.ax)?.isEmpty == true,
                   let finalMenus = checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax),
                   finalMenus.count == 1, CFEqual(finalMenus[0], held.root),
                   let finalWindows = runtime.onScreenWindowList(),
-                  Self.checkedLogicOutputPopupWindows(finalWindows, logicPID: pid) == popups else { return nil }
+                  let finalPopups = Self.checkedLogicOutputPopupWindows(finalWindows, logicPID: pid),
+                  finalPopups.count == 1,
+                  finalPopups[0].number == held.window.number,
+                  finalPopups[0].layer == held.window.layer else { return nil }
             return [held.root]
         }
-        @Sendable func newlyAcquiredMixerChildPopup(
+        @Sendable func mixerChildPopupAcquisition(
             _ root: AXUIElement
-        ) -> HeldMixerChildOutputPopup? {
+        ) -> (held: HeldMixerChildOutputPopup?, waitingForCG: Bool) {
             guard capturedPopupEligibleAtPressBoundary, exactCapturedMixerPopupScope(), let app,
                   Self.checkedTopLevelOutputPopupMenus(in: app, runtime: runtime.ax)?.isEmpty == true,
                   let menus = checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax),
                   menus.count == 1, CFEqual(menus[0], root),
                   mixerChildParentMatches(root),
                   let windows = runtime.onScreenWindowList(),
-                  let popups = Self.checkedLogicOutputPopupWindows(windows, logicPID: pid),
-                  popups.count == 1, let frame = popups[0].bounds,
-                  !frame.isNull, !frame.isInfinite, frame.width > 0, frame.height > 0,
-                  AXHelpers.getPosition(root, runtime: runtime.ax) == frame.origin,
-                  AXHelpers.getSize(root, runtime: runtime.ax) == frame.size else { return nil }
+                  let popups = Self.checkedLogicOutputPopupWindows(windows, logicPID: pid) else {
+                return (nil, false)
+            }
+            if popups.isEmpty {
+                guard exactCapturedMixerPopupScope(),
+                      Self.checkedTopLevelOutputPopupMenus(in: app, runtime: runtime.ax)?.isEmpty == true,
+                      let finalMenus = checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax),
+                      finalMenus.count == 1, CFEqual(finalMenus[0], root),
+                      mixerChildParentMatches(root) else { return (nil, false) }
+                return (nil, true)
+            }
+            guard popups.count == 1 else { return (nil, false) }
             let held = HeldMixerChildOutputPopup(root: root, window: popups[0])
             guard capturedMixerChildPopupState(held).map({
                 $0.count == 1 && CFEqual($0[0], root)
-            }) == true else { return nil }
-            return held
+            }) == true else { return (nil, false) }
+            return (held, false)
         }
         @Sendable func capturedTopLevelPopupState(
             _ held: HeldOrdinaryOutputPopup
@@ -1051,17 +1059,39 @@ extension AccessibilityChannel {
         var opened: [AXUIElement]?
         var acquiredTopLevelPopup: HeldOrdinaryOutputPopup?
         var acquiredMixerChildPopup: HeldMixerChildOutputPopup?
+        var pendingMixerChildRoot: AXUIElement?
         repeat {
             opened = checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax)
-            if opened?.isEmpty == true, let held = newlyAcquiredTopLevelPopup() {
+            if let pendingMixerChildRoot {
+                guard let opened, opened.count == 1,
+                      CFEqual(opened[0], pendingMixerChildRoot) else {
+                    // Once AX R0 was the sole root awaiting its CG identity,
+                    // disappearance or replacement cannot be reclassified as
+                    // a fresh ordinary/top-level popup from this same press.
+                    opened = nil
+                    break
+                }
+            }
+            if pendingMixerChildRoot == nil, opened?.isEmpty == true,
+               let held = newlyAcquiredTopLevelPopup() {
                 acquiredTopLevelPopup = held
                 opened = [held.root]
                 break
             }
-            if let opened, opened.count == 1,
-               let held = newlyAcquiredMixerChildPopup(opened[0]) {
-                acquiredMixerChildPopup = held
-                break
+            if let opened, opened.count == 1 {
+                let root = opened[0]
+                let acquisition = mixerChildPopupAcquisition(root)
+                if let held = acquisition.held {
+                    acquiredMixerChildPopup = held
+                    break
+                }
+                if acquisition.waitingForCG {
+                    pendingMixerChildRoot = root
+                    if timing.pollIntervalMs > 0 {
+                        try? await Task.sleep(for: .milliseconds(timing.pollIntervalMs))
+                    }
+                    continue
+                }
             }
             if opened == nil || !(opened?.isEmpty ?? true) || !sourceOwned() { break }
             if timing.pollIntervalMs > 0 { try? await Task.sleep(for: .milliseconds(timing.pollIntervalMs)) }
@@ -2162,8 +2192,10 @@ extension AccessibilityChannel {
             "first_failed_checkpoint": "none",
         ]
         var freshTransportFallbackAccepted: Bool?
+        var freshTransportFallbackRetryable = false
         func exactInputSourceWithFreshStoppedTransport() -> Bool {
             if let freshTransportFallbackAccepted { return freshTransportFallbackAccepted }
+            freshTransportFallbackRetryable = false
             inputTransportReceipt["fallback_attempted"] = true
             func fail(_ checkpoint: String) -> Bool {
                 if inputTransportReceipt["first_failed_checkpoint"] as? String == "none" {
@@ -2190,6 +2222,11 @@ extension AccessibilityChannel {
                 in: physical.window, runtime: runtime,
                 checking: { try SessionPopulationObservation.requireOwnedAcquisition() }) else {
                 inputTransportReceipt["fresh_transport"] = "unreadable"
+                // This API deliberately collapses a transient native AX status
+                // to nil. It is the only retryable checkpoint: every source,
+                // owner, popup, gate and semantic transport result below stays
+                // terminal for this acquisition attempt.
+                freshTransportFallbackRetryable = true
                 return fail("fresh_transport")
             }
             if activity.isPlaying {
@@ -2219,6 +2256,24 @@ extension AccessibilityChannel {
             freshTransportFallbackAccepted = true
             return true
         }
+        func exactInputSourceWithSettledFreshStoppedTransport() async -> Bool {
+            let deadline = Date().addingTimeInterval(Double(timing.readbackTimeoutMs) / 1_000)
+            while true {
+                if exactInputSourceWithFreshStoppedTransport() { return true }
+                guard freshTransportFallbackRetryable,
+                      timing.readbackTimeoutMs > 0, Date() < deadline,
+                      !interrupted(),
+                      (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+                if timing.pollIntervalMs > 0 {
+                    try? await Task.sleep(for: .milliseconds(timing.pollIntervalMs))
+                } else {
+                    await Task.yield()
+                }
+                guard Date() < deadline, !interrupted(),
+                      (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+                freshTransportFallbackAccepted = nil
+            }
+        }
         func freshTransportFallbackPublicationCurrent() -> Bool {
             guard freshTransportFallbackAccepted == true,
                   sourceFactsCurrent(requiringStoppedTransport: false),
@@ -2238,14 +2293,14 @@ extension AccessibilityChannel {
                 ?? sourceOwned()
             sourceAfter = sourceAfter && retainedSourceStillCurrent
             if !sourceAfter {
-                if exactInputSourceWithFreshStoppedTransport() {
+                if await exactInputSourceWithSettledFreshStoppedTransport() {
                     sourceAfter = true
                     closed = true
                     extras["popup_menu_state"] = "closed"
                 }
             }
         } else if routingTransport != nil || !sourceAfter {
-            if exactInputSourceWithFreshStoppedTransport() {
+            if await exactInputSourceWithSettledFreshStoppedTransport() {
                 sourceAfter = true
                 closed = true
                 extras["popup_menu_state"] = "closed"
@@ -2423,6 +2478,8 @@ extension AccessibilityChannel {
             guard let dictionary = row[kCGWindowBounds as String] as? [String: Any],
                   let bounds = CGRect(dictionaryRepresentation: dictionary as CFDictionary),
                   !bounds.isNull, !bounds.isInfinite,
+                  bounds.origin.x.isFinite, bounds.origin.y.isFinite,
+                  bounds.width.isFinite, bounds.height.isFinite,
                   bounds.width > 0, bounds.height > 0 else { return nil }
             popups.append(.init(number: Int(number), layer: Int(layer), bounds: bounds,
                 name: row[kCGWindowName as String] as? String))
