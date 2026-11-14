@@ -332,7 +332,8 @@ struct Issue291OwnedCurrentOutputTests {
                 focusedApplicationPID: { fault == "foreign_application_focus" ? f.pid + 1 : nil })
         } else { runtime = base }
         let reading = await AXMixerStripBinding.$current.withValue(binding) {
-            if input { return await AccessibilityChannel.getInputBusVerified(runtime: runtime, timing: .immediate) }
+            if input { return (await AccessibilityChannel.getInputBusObservation(
+                runtime: runtime, timing: .immediate)).result }
             return await AccessibilityChannel.getOutputVerified(params: [:], runtime: runtime, timing: .immediate)
         }
         let body = try #require(sharedJSONObject(reading.message))
@@ -623,7 +624,7 @@ struct Issue291OwnedCurrentOutputTests {
         if fault == "unread_source" {
             #expect(body["popup_menu_state"] as? String == "closed")
             let popupMenusAreEmpty = try #require(
-                AccessibilityChannel.checkedOutputPopupMenus(in: f.mixer, runtime: f.logic.ax)?.isEmpty)
+                AccessibilityChannel.checkedOutputPopupMenus(in: f.mixer, runtime: f.logic.ax)?.isEmpty as Bool?)
             #expect(popupMenusAreEmpty)
         }
         if fault == "label_before_press" || fault == "preexisting_popup" {
