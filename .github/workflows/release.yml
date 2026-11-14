@@ -154,7 +154,21 @@ jobs:
           export LOGIC_PRO_MCP_SHA256
           LOGIC_PRO_MCP_SHA256="$(awk '$2 == "LogicProMCP-macOS-universal.tar.gz" {print $1}' candidate/SHA256SUMS.txt)"
           test -n "$LOGIC_PRO_MCP_SHA256"
-          bash Scripts/install.sh
+          installer_log="$RUNNER_TEMP/logic-pro-mcp-installer.log"
+          expected_permission_failure='  Error: Installation unsuccessful: required Logic Pro capabilities are unavailable.'
+          set +e
+          bash Scripts/install.sh >"$installer_log" 2>&1
+          installer_status=$?
+          set -e
+          cat "$installer_log"
+          if [ "$installer_status" -eq 0 ]; then
+            :
+          elif [ "$installer_status" -eq 1 ] \
+            && [ "$(tail -n 1 "$installer_log")" = "$expected_permission_failure" ]; then
+            echo "Hosted install staged successfully; Logic capability check is unavailable on this runner."
+          else
+            exit "$installer_status"
+          fi
           test "$("$LOGIC_PRO_MCP_INSTALL_DIR/LogicProMCP" --version)" = "${RELEASE_VERSION#v}"
           "$LOGIC_PRO_MCP_INSTALL_DIR/LogicProMCP" --help >/dev/null
           test -f "$LOGIC_PRO_MCP_SHARE_DIR/logic_ui_jxa.py"
@@ -316,7 +330,21 @@ jobs:
           export LOGIC_PRO_MCP_SHA256
           LOGIC_PRO_MCP_SHA256="$(awk '$2 == "LogicProMCP-macOS-universal.tar.gz" {print $1}' candidate/SHA256SUMS.txt)"
           test -n "$LOGIC_PRO_MCP_SHA256"
-          bash Scripts/install.sh
+          installer_log="$RUNNER_TEMP/logic-pro-mcp-installer.log"
+          expected_permission_failure='  Error: Installation unsuccessful: required Logic Pro capabilities are unavailable.'
+          set +e
+          bash Scripts/install.sh >"$installer_log" 2>&1
+          installer_status=$?
+          set -e
+          cat "$installer_log"
+          if [ "$installer_status" -eq 0 ]; then
+            :
+          elif [ "$installer_status" -eq 1 ] \
+            && [ "$(tail -n 1 "$installer_log")" = "$expected_permission_failure" ]; then
+            echo "Hosted install staged successfully; Logic capability check is unavailable on this runner."
+          else
+            exit "$installer_status"
+          fi
           test "$("$LOGIC_PRO_MCP_INSTALL_DIR/LogicProMCP" --version)" = "${VERSION#v}"
           "$LOGIC_PRO_MCP_INSTALL_DIR/LogicProMCP" --help >/dev/null
           test -f "$LOGIC_PRO_MCP_SHARE_DIR/logic_ui_jxa.py"
