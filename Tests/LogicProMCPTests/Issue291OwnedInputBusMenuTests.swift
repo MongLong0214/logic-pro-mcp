@@ -470,6 +470,57 @@ struct Issue291OwnedInputBusMenuTests {
         #expect(f.mutations.last?.1 == kAXCancelAction as String)
     }
 
+    @Test("A transient post-close source miss cannot let a matching held transport suppress fresh recovery")
+    func matchingHeldTransportStillRunsFreshFallbackAfterTransientSourceMiss() async throws {
+        final class Probe: @unchecked Sendable { var sourceRetired = false; var sourceRestored = false }
+        let p = try prepare(1), f = p.f, probe = Probe()
+        defer { try? FileManager.default.removeItem(at: f.bundle) }
+        f.onChildrenResultRead = { node in
+            guard !probe.sourceRetired, CFEqual(node, f.mixer),
+                  f.mutations.contains(where: { $0.1 == kAXCancelAction as String }) else { return }
+            probe.sourceRetired = true
+            f.b.setChildren(f.mixer, [f.strips[1]])
+        }
+        let base = f.logic
+        let ax = AXHelpers.Runtime(axApp: base.ax.axApp, attributeValue: base.ax.attributeValue,
+            attributeIsSettable: base.ax.attributeIsSettable, setAttributeValue: base.ax.setAttributeValue,
+            children: base.ax.children, performAction: base.ax.performAction, childCount: base.ax.childCount,
+            actionNames: base.ax.actionNames, actionNamesResult: base.ax.actionNamesResult,
+            childrenResult: base.ax.childrenResult, attributeValueResult: base.ax.attributeValueResult,
+            performActionResult: base.ax.performActionResult, elementAtPosition: base.ax.elementAtPosition,
+            attributeValuesResult: { node, attributes in
+                if probe.sourceRetired, !probe.sourceRestored,
+                   f.mutations.contains(where: { $0.1 == kAXCancelAction as String }) {
+                    probe.sourceRestored = true
+                    f.b.setChildren(f.mixer, f.strips)
+                }
+                return .success(attributes.map { attribute in
+                    if attribute == kAXChildrenAttribute as String { return base.ax.children(node) as NSArray }
+                    return base.ax.attributeValue(node, attribute) ?? NSNull()
+                })
+            })
+        let runtime = AXLogicProElements.Runtime(logicProPID: base.logicProPID, ax: ax,
+            onScreenWindowList: base.onScreenWindowList, focusedApplicationPID: base.focusedApplicationPID)
+        let binding = AXMixerStripBinding.Binding(window: f.window, mixer: f.mixer,
+            strip: f.strips[0], document: f.bundle.absoluteString)
+        let result = await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true)) {
+            await AXMixerStripBinding.$current.withValue(binding) {
+                await AccessibilityChannel.getInputBusVerified(runtime: runtime, timing: .immediate)
+            }
+        }
+        let body = try #require(sharedJSONObject(result.message))
+        let receipt = try #require(body["input_transport_fallback"] as? [String: Any])
+        #expect(probe.sourceRetired && probe.sourceRestored)
+        #expect(receipt["held_transport_captured"] as? Bool == true)
+        #expect(receipt["held_transport_matched"] as? Bool == true)
+        #expect(receipt["fallback_attempted"] as? Bool == true, "\(body)")
+        #expect(receipt["fresh_transport"] as? String == "stopped")
+        #expect(receipt["first_failed_checkpoint"] as? String == "none")
+        #expect(body["state"] as? String == "A", "\(body)")
+        #expect((body["current_input"] as? [String: Any])?["number"] as? Int == 1)
+        #expect(f.mutations.map(\.1) == [kAXPressAction as String, kAXCancelAction as String])
+    }
+
     @Test("A checked non-Bus menu cannot retain input facts after original source, document or label custody is lost",
           arguments: ["source", "document", "label"])
     func nonBusInputFactsRequireFinalSourceCustody(fault: String) async throws {

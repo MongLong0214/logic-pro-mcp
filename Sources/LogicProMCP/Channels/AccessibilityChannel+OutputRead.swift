@@ -851,10 +851,11 @@ extension AccessibilityChannel {
         }) ?? true else {
             return refuse(.readbackUnavailable, "The routing read request stopped before popup acquisition; nothing was pressed.")
         }
-        let topLevelPopupEligibleAtPressBoundary: Bool
+        let capturedPopupEligibleAtPressBoundary: Bool
         if sendOrdinal == nil, !inputBusOnly, sendReplacement == nil {
             guard sourceOwned(), let app,
                   Self.checkedTopLevelOutputPopupMenus(in: app, runtime: runtime.ax)?.isEmpty == true,
+                  checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax)?.isEmpty == true,
                   let finalWindows = runtime.onScreenWindowList(),
                   Self.checkedLogicOutputPopupWindows(finalWindows, logicPID: pid)?.isEmpty == true,
                   sourceOwned() else {
@@ -871,9 +872,9 @@ extension AccessibilityChannel {
                 return refuse(.readbackUnavailable,
                     "The routing read request lost cancellation, deadline or gate custody at the final press boundary; nothing was pressed.")
             }
-            topLevelPopupEligibleAtPressBoundary = true
+            capturedPopupEligibleAtPressBoundary = true
         } else {
-            topLevelPopupEligibleAtPressBoundary = false
+            capturedPopupEligibleAtPressBoundary = false
         }
         extras["navigation_attempted"] = true
         let press = AXHelpers.performActionResult(slot, kAXPressAction as String, runtime: runtime.ax)
@@ -915,6 +916,96 @@ extension AccessibilityChannel {
                   (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
             return true
         }
+        @Sendable func exactCapturedMixerPopupScope() -> Bool {
+            guard sendOrdinal == nil, !inputBusOnly, sendReplacement == nil,
+                  !Task.isCancelled, runtime.logicProPID() == pid,
+                  runtime.focusedApplicationPID() == pid, let app,
+                  let currentApp = AXLogicProElements.appRoot(runtime: runtime), CFEqual(currentApp, app),
+                  AXHelpers.getAttribute(app, kAXFrontmostAttribute as String,
+                    runtime: runtime.ax) as Bool? == true,
+                  let main: AXUIElement = AXHelpers.getAttribute(app,
+                    kAXMainWindowAttribute as String, runtime: runtime.ax),
+                  CFEqual(main, physical.window),
+                  case .success(.elements(let appWindows)) = AXHelpers.getAXUIElementArrayRead(
+                    app, kAXWindowsAttribute as String, runtime: runtime.ax),
+                  appWindows.filter({ CFEqual($0, physical.window) }).count == 1,
+                  case .success(.some(let document)) = AXLogicProElements.projectPickerDocumentRead(
+                    physical.window, runtime: runtime),
+                  document.utf8.elementsEqual(physical.document.utf8),
+                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                  OperationTraceContext.current.map({ context in
+                    !context.cancellationRequested()
+                        && (context.deadline.map { ContinuousClock.now < $0 } ?? true)
+                        && (!context.mutationGateAcquired || context.ownsGate())
+                        && (!context.mutationGateAcquired
+                            || (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil)
+                  }) ?? true else { return false }
+            return true
+        }
+        @Sendable func capturedPopupActionScopeCurrent() -> Bool {
+            guard !Task.isCancelled,
+                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                  OperationTraceContext.current.map({ context in
+                    !context.cancellationRequested()
+                        && (context.deadline.map { ContinuousClock.now < $0 } ?? true)
+                        && (!context.mutationGateAcquired || context.ownsGate())
+                  }) ?? true else { return false }
+            return true
+        }
+        @Sendable func mixerChildParentMatches(_ root: AXUIElement) -> Bool {
+            let parent: Result<AnyObject?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+                root, kAXParentAttribute as String, runtime: runtime.ax)
+            guard case .success(.some(let rawParent)) = parent,
+                  CFGetTypeID(rawParent) == AXUIElementGetTypeID() else { return false }
+            return CFEqual(unsafeDowncast(rawParent, to: AXUIElement.self), physical.mixer)
+        }
+        @Sendable func capturedMixerChildPopupState(
+            _ held: HeldMixerChildOutputPopup
+        ) -> [AXUIElement]? {
+            guard exactCapturedMixerPopupScope(), let app,
+                  Self.checkedTopLevelOutputPopupMenus(in: app, runtime: runtime.ax)?.isEmpty == true,
+                  let menus = checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax),
+                  let windows = runtime.onScreenWindowList(),
+                  let popups = Self.checkedLogicOutputPopupWindows(windows, logicPID: pid) else { return nil }
+            if menus.isEmpty && popups.isEmpty {
+                return exactCapturedMixerPopupScope()
+                    && Self.checkedTopLevelOutputPopupMenus(in: app, runtime: runtime.ax)?.isEmpty == true ? [] : nil
+            }
+            guard menus.count == 1, CFEqual(menus[0], held.root),
+                  popups.count == 1, popups[0] == held.window,
+                  mixerChildParentMatches(held.root),
+                  let frame = held.window.bounds, !frame.isNull, !frame.isInfinite,
+                  frame.width > 0, frame.height > 0,
+                  AXHelpers.getPosition(held.root, runtime: runtime.ax) == frame.origin,
+                  AXHelpers.getSize(held.root, runtime: runtime.ax) == frame.size,
+                  exactCapturedMixerPopupScope(),
+                  Self.checkedTopLevelOutputPopupMenus(in: app, runtime: runtime.ax)?.isEmpty == true,
+                  let finalMenus = checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax),
+                  finalMenus.count == 1, CFEqual(finalMenus[0], held.root),
+                  let finalWindows = runtime.onScreenWindowList(),
+                  Self.checkedLogicOutputPopupWindows(finalWindows, logicPID: pid) == popups else { return nil }
+            return [held.root]
+        }
+        @Sendable func newlyAcquiredMixerChildPopup(
+            _ root: AXUIElement
+        ) -> HeldMixerChildOutputPopup? {
+            guard capturedPopupEligibleAtPressBoundary, exactCapturedMixerPopupScope(), let app,
+                  Self.checkedTopLevelOutputPopupMenus(in: app, runtime: runtime.ax)?.isEmpty == true,
+                  let menus = checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax),
+                  menus.count == 1, CFEqual(menus[0], root),
+                  mixerChildParentMatches(root),
+                  let windows = runtime.onScreenWindowList(),
+                  let popups = Self.checkedLogicOutputPopupWindows(windows, logicPID: pid),
+                  popups.count == 1, let frame = popups[0].bounds,
+                  !frame.isNull, !frame.isInfinite, frame.width > 0, frame.height > 0,
+                  AXHelpers.getPosition(root, runtime: runtime.ax) == frame.origin,
+                  AXHelpers.getSize(root, runtime: runtime.ax) == frame.size else { return nil }
+            let held = HeldMixerChildOutputPopup(root: root, window: popups[0])
+            guard capturedMixerChildPopupState(held).map({
+                $0.count == 1 && CFEqual($0[0], root)
+            }) == true else { return nil }
+            return held
+        }
         @Sendable func capturedTopLevelPopupState(
             _ held: HeldOrdinaryOutputPopup
         ) -> [AXUIElement]? {
@@ -941,7 +1032,7 @@ extension AccessibilityChannel {
             return [held.root]
         }
         @Sendable func newlyAcquiredTopLevelPopup() -> HeldOrdinaryOutputPopup? {
-            guard topLevelPopupEligibleAtPressBoundary,
+            guard capturedPopupEligibleAtPressBoundary,
                   exactTopLevelWindowScope(), let app,
                   let menus = Self.checkedTopLevelOutputPopupMenus(in: app, runtime: runtime.ax),
                   menus.count == 1, let root = menus.first,
@@ -959,6 +1050,7 @@ extension AccessibilityChannel {
         }
         var opened: [AXUIElement]?
         var acquiredTopLevelPopup: HeldOrdinaryOutputPopup?
+        var acquiredMixerChildPopup: HeldMixerChildOutputPopup?
         repeat {
             opened = checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax)
             if opened?.isEmpty == true, let held = newlyAcquiredTopLevelPopup() {
@@ -966,10 +1058,16 @@ extension AccessibilityChannel {
                 opened = [held.root]
                 break
             }
+            if let opened, opened.count == 1,
+               let held = newlyAcquiredMixerChildPopup(opened[0]) {
+                acquiredMixerChildPopup = held
+                break
+            }
             if opened == nil || !(opened?.isEmpty ?? true) || !sourceOwned() { break }
             if timing.pollIntervalMs > 0 { try? await Task.sleep(for: .milliseconds(timing.pollIntervalMs)) }
         } while !Task.isCancelled && Date() < deadline
         let topLevelPopup = acquiredTopLevelPopup
+        let mixerChildPopup = acquiredMixerChildPopup
         // Native input and neutral-output menus may be absent from Mixer AXChildren. This
         // read-only alternate discovery is scoped to our own just-issued press,
         // absent pre-existing AX/CG popups and the unchanged original source.
@@ -1005,6 +1103,7 @@ extension AccessibilityChannel {
         } else { nativePopup = nil }
         @Sendable func currentPopupMenus() -> [AXUIElement]? {
             if let topLevelPopup { return capturedTopLevelPopupState(topLevelPopup) }
+            if let mixerChildPopup { return capturedMixerChildPopupState(mixerChildPopup) }
             guard let ordinary = checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax) else { return nil }
             guard let nativePopup else { return ordinary }
             guard ordinary.isEmpty, let app, let windows = runtime.onScreenWindowList() else { return nil }
@@ -1149,6 +1248,11 @@ extension AccessibilityChannel {
                     $0.count == 1 && CFEqual($0[0], root)
                 } == true
             }
+            if let mixerChildPopup {
+                return capturedMixerChildPopupState(mixerChildPopup).map {
+                    $0.count == 1 && CFEqual($0[0], root)
+                } == true
+            }
             guard exactOrdinaryOutputMenu(),
                   case .success(let children) = AXHelpers.childrenResult(
                     physical.strip, runtime: runtime.ax),
@@ -1162,9 +1266,15 @@ extension AccessibilityChannel {
             return exactOrdinaryOutputMenu()
         }
         func cleanupExactOrdinaryOutputRoot() -> (accepted: Bool, closed: Bool) {
-            if let topLevelPopup {
+            if topLevelPopup != nil || mixerChildPopup != nil {
                 func currentRoot() -> Bool {
-                    capturedTopLevelPopupState(topLevelPopup).map {
+                    if let topLevelPopup {
+                        return capturedTopLevelPopupState(topLevelPopup).map {
+                            $0.count == 1 && CFEqual($0[0], root)
+                        } == true
+                    }
+                    guard let mixerChildPopup else { return false }
+                    return capturedMixerChildPopupState(mixerChildPopup).map {
                         $0.count == 1 && CFEqual($0[0], root)
                     } == true
                 }
@@ -1176,13 +1286,15 @@ extension AccessibilityChannel {
                       case .success(let secondActions) = AXHelpers.getActionNamesResult(
                         root, runtime: runtime.ax),
                       secondActions.contains(kAXCancelAction as String),
-                      currentRoot() else { return (false, false) }
+                      currentRoot(), capturedPopupActionScopeCurrent() else { return (false, false) }
                 let accepted: Bool
                 if case .success = AXHelpers.performActionResult(
                     root, kAXCancelAction as String, runtime: runtime.ax) { accepted = true }
                 else { accepted = false }
-                guard accepted,
-                      capturedTopLevelPopupState(topLevelPopup)?.isEmpty == true else {
+                let closed = topLevelPopup.map { capturedTopLevelPopupState($0)?.isEmpty == true }
+                    ?? mixerChildPopup.map { capturedMixerChildPopupState($0)?.isEmpty == true }
+                    ?? false
+                guard accepted, closed else {
                     return (accepted, false)
                 }
                 return (true, true)
@@ -1245,6 +1357,11 @@ extension AccessibilityChannel {
                     $0.count == 1 && CFEqual($0[0], root)
                 } == true
             }
+            if let mixerChildPopup {
+                return capturedMixerChildPopupState(mixerChildPopup).map {
+                    $0.count == 1 && CFEqual($0[0], root)
+                } == true
+            }
             // Renew source facts and root membership before the one deciding
             // complete physical/window/document boundary. Neither grants action
             // authority on its own, and no earlier census is reused as permission.
@@ -1255,6 +1372,10 @@ extension AccessibilityChannel {
         }
         // Two agreeing reads bracketed by the same source/menu, not an atomic graph snapshot.
         func checkedChoice(observingBusNumbers: (([Int]) -> Void)? = nil) -> OutputAssignment? {
+            if let mixerChildPopup,
+               capturedMixerChildPopupState(mixerChildPopup).map({
+                   $0.count == 1 && CFEqual($0[0], root)
+               }) != true { return nil }
             if inputBusOnly { return currentInputMenuBusAssignment(in: root, runtime: runtime.ax).map(OutputAssignment.bus) }
             return currentOutputMenuAssignment(in: root, runtime: runtime.ax,
                 observingBusNumbers: sendOrdinal == nil ? observingBusNumbers : nil)
@@ -1844,7 +1965,7 @@ extension AccessibilityChannel {
                 sendNonRoutingChecks: after.sendNonRoutingChecks)
         }
         var cancelSucceeded = false
-        if topLevelPopup == nil, dataOwned,
+        if topLevelPopup == nil, mixerChildPopup == nil, dataOwned,
            runtime.ax.actionNames(root).contains(kAXCancelAction as String), menuOwned(), !interrupted() {
             if case .success = AXHelpers.performActionResult(root, kAXCancelAction as String, runtime: runtime.ax) { cancelSucceeded = true }
         }
@@ -1867,7 +1988,13 @@ extension AccessibilityChannel {
                       let windows = runtime.onScreenWindowList() else { break }
                 if OperationTraceContext.current != nil,
                    (try? SessionPopulationObservation.requireOwnedAcquisition()) == nil { break }
-                if menus.isEmpty && LogicOnScreenWindows.popupMenuCount(windows, logicPID: pid) == 0 { break }
+                if menus.isEmpty && LogicOnScreenWindows.popupMenuCount(windows, logicPID: pid) == 0 {
+                    if (topLevelPopup != nil || mixerChildPopup != nil),
+                       capturedPopupActionScopeCurrent() {
+                        cleanupOnlyClosed = true
+                    }
+                    break
+                }
                 if Date() >= closeDeadline { break }
                 if timing.pollIntervalMs > 0 { try? await Task.sleep(for: .milliseconds(timing.pollIntervalMs)) }
             } while Date() < closeDeadline
@@ -1903,7 +2030,7 @@ extension AccessibilityChannel {
                         if interrupted() { throw SessionPopulationObservation.AcquisitionError.cancelled }
                     }),
                   case .found(let mixer) = lookup.lookup, CFEqual(mixer, physical.mixer),
-                  (topLevelPopup != nil
+                  (topLevelPopup != nil || mixerChildPopup != nil
                     ? currentPopupMenus()?.isEmpty == true
                     : checkedOutputPopupMenus(in: mixer, runtime: runtime.ax)?.isEmpty == true),
                   runtime.onScreenWindowList().map({ LogicOnScreenWindows.popupMenuCount($0, logicPID: pid) == 0 }) == true,
@@ -1929,7 +2056,7 @@ extension AccessibilityChannel {
         // a project change. Reuse the existing subsequent source proof before
         // reporting closure in the original scope; no additional read is needed.
         var closed = (popupClosed && sourceAfter) || cleanupOnlyClosed
-        if topLevelPopup != nil, !(cancelSucceeded && cleanupOnlyClosed) {
+        if (topLevelPopup != nil || mixerChildPopup != nil), !(cancelSucceeded && cleanupOnlyClosed) {
             // Checkmarks from the captured root remain observations, but a
             // vanished root or failed Cancel acknowledgement is not a verified
             // inverse. Top-level publication requires both acceptance and the
@@ -2110,6 +2237,13 @@ extension AccessibilityChannel {
             let retainedSourceStillCurrent = inputRenewal.map { $0.permits(runtime: runtime) }
                 ?? sourceOwned()
             sourceAfter = sourceAfter && retainedSourceStillCurrent
+            if !sourceAfter {
+                if exactInputSourceWithFreshStoppedTransport() {
+                    sourceAfter = true
+                    closed = true
+                    extras["popup_menu_state"] = "closed"
+                }
+            }
         } else if routingTransport != nil || !sourceAfter {
             if exactInputSourceWithFreshStoppedTransport() {
                 sourceAfter = true
@@ -2297,6 +2431,11 @@ extension AccessibilityChannel {
     }
 
     struct HeldOrdinaryOutputPopup: @unchecked Sendable {
+        let root: AXUIElement
+        let window: LogicOnScreenWindows.Entry
+    }
+
+    struct HeldMixerChildOutputPopup: @unchecked Sendable {
         let root: AXUIElement
         let window: LogicOnScreenWindows.Entry
     }
