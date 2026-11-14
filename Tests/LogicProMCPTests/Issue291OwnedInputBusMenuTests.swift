@@ -671,11 +671,14 @@ struct Issue291OwnedInputBusMenuTests {
             }
         }
         let body = try #require(sharedJSONObject(result.message))
+        let receipt = try #require(body["input_transport_fallback"] as? [String: Any])
         #expect(probe.sourceRetired && probe.sourceRestored && probe.injectedFailure)
         #expect(probe.delayedPostWaitBookend)
         #expect(probe.postRestorePlayValueReads == 1, "a proof began after the deadline")
         #expect(body["state"] as? String == "C", "\(body)")
         #expect(body["current_input"] == nil)
+        #expect(receipt["exit_reason"] as? String == "deadline", "\(receipt)")
+        #expect(receipt["attempt_count"] as? Int == 1)
         #expect(f.mutations.map(\.1) == [kAXPressAction as String, kAXCancelAction as String])
     }
 
@@ -742,6 +745,8 @@ struct Issue291OwnedInputBusMenuTests {
         #expect(receipt["first_failed_checkpoint"] as? String == "source_present", "\(receipt)")
         #expect(receipt["source_present"] as? Bool == true)
         #expect(receipt["fresh_transport"] as? String == "stopped")
+        #expect(receipt["exit_reason"] as? String == "accepted")
+        #expect(receipt["attempt_count"] as? Int == 2)
         #expect(body["state"] as? String == "A", "\(body)")
         #expect((body["current_input"] as? [String: Any])?["number"] as? Int == 1)
         #expect(f.mutations.map(\.1) == [kAXPressAction as String, kAXCancelAction as String])

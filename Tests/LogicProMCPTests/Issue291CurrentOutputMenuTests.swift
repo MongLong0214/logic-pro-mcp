@@ -984,15 +984,19 @@ struct Issue291OwnedCurrentOutputTests {
             }
         }
         let body = try #require(sharedJSONObject(result.message))
+        let cleanup = try #require(body["output_popup_cleanup"] as? [String: Any])
         #expect(probe.postCancelMixerReads >= 3)
         #expect(body["state"] as? String == "A", "\(body)")
         #expect((body["current_output"] as? [String: Any])?["kind"] as? String == "stereo_output")
         #expect(body["popup_menu_state"] as? String == "closed")
+        #expect(cleanup["perform_action"] as? String == "accepted")
+        #expect(cleanup["closure"] as? String == "closed_after_poll")
         #expect(f.mutations.map(\.1) == [kAXPressAction as String, kAXCancelAction as String])
     }
 
     @Test("Captured Mixer-child cleanup refuses changed identity, capability, gate and non-closure",
-          arguments: ["parent_drift", "cg_drift", "duplicate_cg", "missing_cancel", "gate", "final_gate", "ack_not_closed"])
+          arguments: ["parent_drift", "cg_drift", "duplicate_cg", "missing_cancel", "gate", "final_gate",
+                      "action_failure", "ack_not_closed"])
     func mixerChildPopupTokenFailsClosed(_ fault: String) async throws {
         final class Probe: @unchecked Sendable {
             var capabilityReads = 0
@@ -1064,6 +1068,24 @@ struct Issue291OwnedCurrentOutputTests {
                     }
                     return windows
                 }, focusedApplicationPID: base.focusedApplicationPID)
+        } else if fault == "action_failure" {
+            let ax = AXHelpers.Runtime(axApp: base.ax.axApp, attributeValue: base.ax.attributeValue,
+                attributeIsSettable: base.ax.attributeIsSettable,
+                setAttributeValue: base.ax.setAttributeValue, children: base.ax.children,
+                performAction: base.ax.performAction, childCount: base.ax.childCount,
+                actionNames: base.ax.actionNames, actionNamesResult: base.ax.actionNamesResult,
+                childrenResult: base.ax.childrenResult, attributeValueResult: base.ax.attributeValueResult,
+                performActionResult: { node, action in
+                    if CFEqual(node, f.root), action == kAXCancelAction as String {
+                        return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                    }
+                    return base.ax.performActionResult?(node, action)
+                        ?? .failure(.init(raw: AXError.failure.rawValue))
+                }, elementAtPosition: base.ax.elementAtPosition,
+                attributeValuesResult: base.ax.attributeValuesResult)
+            runtime = .init(logicProPID: base.logicProPID, ax: ax,
+                onScreenWindowList: base.onScreenWindowList,
+                focusedApplicationPID: base.focusedApplicationPID)
         } else { runtime = base }
         let context = OperationTraceContext(mutationGateAcquired: true,
             ownsGate: { !probe.gateRevoked })
@@ -1073,6 +1095,7 @@ struct Issue291OwnedCurrentOutputTests {
             }
         }
         let body = try #require(sharedJSONObject(result.message))
+        let cleanup = try #require(body["output_popup_cleanup"] as? [String: Any])
         #expect(body["state"] as? String == "C", "\(body)")
         #expect(body["current_output"] == nil)
         #expect(body["popup_menu_state"] as? String == "not_restored")
@@ -1080,6 +1103,22 @@ struct Issue291OwnedCurrentOutputTests {
         if fault == "final_gate" { #expect(probe.gateRevoked && probe.finalWindowReads >= 2) }
         #expect(cancels.count == (fault == "ack_not_closed" ? 1 : 0))
         #expect(cancels.allSatisfy { CFEqual($0.0, f.root) })
+        if fault == "cg_drift" {
+            #expect(cleanup["checkpoint"] as? String == "held_cg_count", "\(cleanup)")
+            #expect(cleanup["cg_read"] as? Bool == true)
+            #expect(cleanup["cg_total_count"] as? Int == 1)
+            #expect(cleanup["held_cg_count"] as? Int == 0)
+            #expect(cleanup["perform_action"] as? String == "not_attempted")
+        }
+        if fault == "action_failure" {
+            #expect(cleanup["checkpoint"] as? String == "perform_action", "\(cleanup)")
+            #expect(cleanup["perform_action"] as? String == "failed")
+            #expect(cleanup["closure"] as? String == "not_closed")
+        }
+        if fault == "ack_not_closed" {
+            #expect(cleanup["perform_action"] as? String == "accepted")
+            #expect(cleanup["closure"] as? String == "not_closed")
+        }
         #expect(!f.mutations.contains { CFEqual($0.0, f.pair) && $0.1 == kAXPressAction as String })
     }
 

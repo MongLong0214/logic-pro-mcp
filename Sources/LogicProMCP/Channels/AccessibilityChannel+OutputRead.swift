@@ -568,6 +568,39 @@ extension AccessibilityChannel {
             (inputBusOnly ? "mixer.get_input_bus_verified" : (sendOrdinal == nil ? "mixer.get_output_verified" : "mixer.get_send_destination_verified"))
         var extras: [String: Any] = ["operation": operation, "write_attempted": false,
                                    "navigation_attempted": false, "popup_menu_state": "not_opened"]
+        final class MixerChildCleanupDiagnostic: @unchecked Sendable {
+            var checkpoint = "not_attempted"
+            var initialScope = false
+            var scopeReads = 0
+            var scopeMatches = 0
+            var topLevelRead = false
+            var topLevelEmpty = false
+            var directRootRead = false
+            var directRootCount = 0
+            var directRootSame = false
+            var parentMatched = false
+            var cgRead = false
+            var cgTotalCount = 0
+            var heldCGCount = 0
+            var actionNamesReads = 0
+            var cancelPresentReads = 0
+            var actionScope = false
+            var performAction = "not_attempted"
+            var closure = "not_checked"
+
+            func snapshot() -> [String: Any] {
+                ["checkpoint": checkpoint, "initial_scope": initialScope,
+                 "scope_reads": scopeReads, "scope_matches": scopeMatches,
+                 "top_level_read": topLevelRead, "top_level_empty": topLevelEmpty,
+                 "direct_root_read": directRootRead, "direct_root_count": directRootCount,
+                 "direct_root_same": directRootSame, "parent_matched": parentMatched,
+                 "cg_read": cgRead, "cg_total_count": cgTotalCount,
+                 "held_cg_count": heldCGCount, "action_names_reads": actionNamesReads,
+                 "cancel_present_reads": cancelPresentReads, "action_scope": actionScope,
+                 "perform_action": performAction, "closure": closure]
+            }
+        }
+        let mixerChildCleanupDiagnostic = MixerChildCleanupDiagnostic()
         var renewalEffects: SessionPopulationObservation.UIEffects?
         func refuse(_ error: HonestContract.FailureError, _ hint: String) -> CheckedOutputReading {
             .init(result: .error(HonestContract.encodeStateC(error: error, hint: hint, extras: extras)),
@@ -608,10 +641,19 @@ extension AccessibilityChannel {
             return (physical.currentIndex(runtime: runtime), false)
         }
         if refreshingOriginalSourceAfterCleanup {
-            guard inputBusOnly, let pair = AXMixerStripBinding.outputAssociation,
-                  pair.strip.matches(physical), pair.track.currentIndex() != nil,
+            let association = AXMixerStripBinding.outputAssociation
+            let associationPresent = association != nil
+            let associationMatches = association?.strip.matches(physical) == true
+            guard inputBusOnly, let pair = association,
+                  associationMatches, pair.track.currentIndex() != nil,
                   CFEqual(pair.track.window, physical.window),
                   pair.track.document.utf8.elementsEqual(physical.document.utf8) else {
+                extras["input_source_renewal"] = [
+                    "source_needs_renewal": false, "data_owned": false,
+                    "checked_evidence_agrees": false,
+                    "original_association_present": associationPresent,
+                    "original_association_matches": associationMatches,
+                ]
                 return refuse(.staleTargetReference,
                     "Fresh post-cleanup input acquisition requires its original held header and physical source; no menu was opened.")
             }
@@ -997,22 +1039,84 @@ extension AccessibilityChannel {
                     $0.number == held.window.number && $0.layer == held.window.layer
                 }.count == 1
             }
-            guard exactCapturedMixerPopupScope(), let app,
-                  Self.checkedTopLevelOutputPopupMenus(in: app, runtime: runtime.ax)?.isEmpty == true,
-                  let menus = checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax),
-                  menus.count == 1, CFEqual(menus[0], held.root),
-                  mixerChildParentMatches(held.root),
-                  let windows = runtime.onScreenWindowList(),
-                  let popups = Self.checkedLogicOutputPopupWindows(windows, logicPID: pid),
-                  heldCGIdentityOccursOnce(popups),
-                  exactCapturedMixerPopupScope(),
-                  Self.checkedTopLevelOutputPopupMenus(in: app, runtime: runtime.ax)?.isEmpty == true,
-                  let finalMenus = checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax),
-                  finalMenus.count == 1, CFEqual(finalMenus[0], held.root),
-                  mixerChildParentMatches(held.root),
-                  let finalWindows = runtime.onScreenWindowList(),
-                  let finalPopups = Self.checkedLogicOutputPopupWindows(finalWindows, logicPID: pid),
-                  heldCGIdentityOccursOnce(finalPopups) else { return false }
+            mixerChildCleanupDiagnostic.checkpoint = "initial_scope"
+            let initialScope = exactCapturedMixerPopupScope()
+            mixerChildCleanupDiagnostic.scopeReads += 1
+            if initialScope { mixerChildCleanupDiagnostic.scopeMatches += 1 }
+            if mixerChildCleanupDiagnostic.scopeReads == 1 {
+                mixerChildCleanupDiagnostic.initialScope = initialScope
+            }
+            guard initialScope, let app else { return false }
+            mixerChildCleanupDiagnostic.checkpoint = "top_level_read"
+            guard let topLevel = Self.checkedTopLevelOutputPopupMenus(in: app, runtime: runtime.ax) else {
+                return false
+            }
+            mixerChildCleanupDiagnostic.topLevelRead = true
+            mixerChildCleanupDiagnostic.topLevelEmpty = topLevel.isEmpty
+            mixerChildCleanupDiagnostic.checkpoint = "top_level_empty"
+            guard topLevel.isEmpty else { return false }
+            mixerChildCleanupDiagnostic.checkpoint = "direct_root_read"
+            guard let menus = checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax) else {
+                return false
+            }
+            mixerChildCleanupDiagnostic.directRootRead = true
+            mixerChildCleanupDiagnostic.directRootCount = menus.count
+            mixerChildCleanupDiagnostic.checkpoint = "direct_root_unique"
+            guard menus.count == 1 else { return false }
+            mixerChildCleanupDiagnostic.directRootSame = CFEqual(menus[0], held.root)
+            mixerChildCleanupDiagnostic.checkpoint = "direct_root_same"
+            guard mixerChildCleanupDiagnostic.directRootSame else { return false }
+            mixerChildCleanupDiagnostic.parentMatched = mixerChildParentMatches(held.root)
+            mixerChildCleanupDiagnostic.checkpoint = "parent_match"
+            guard mixerChildCleanupDiagnostic.parentMatched else { return false }
+            mixerChildCleanupDiagnostic.checkpoint = "cg_read"
+            guard let windows = runtime.onScreenWindowList(),
+                  let popups = Self.checkedLogicOutputPopupWindows(windows, logicPID: pid) else { return false }
+            mixerChildCleanupDiagnostic.cgRead = true
+            mixerChildCleanupDiagnostic.cgTotalCount = popups.count
+            mixerChildCleanupDiagnostic.heldCGCount = popups.filter {
+                $0.number == held.window.number && $0.layer == held.window.layer
+            }.count
+            mixerChildCleanupDiagnostic.checkpoint = "held_cg_count"
+            guard heldCGIdentityOccursOnce(popups) else { return false }
+            let finalScope = exactCapturedMixerPopupScope()
+            mixerChildCleanupDiagnostic.scopeReads += 1
+            if finalScope { mixerChildCleanupDiagnostic.scopeMatches += 1 }
+            mixerChildCleanupDiagnostic.checkpoint = "scope_bookend"
+            guard finalScope else { return false }
+            mixerChildCleanupDiagnostic.checkpoint = "top_level_read"
+            guard let finalTopLevel = Self.checkedTopLevelOutputPopupMenus(
+                in: app, runtime: runtime.ax) else { return false }
+            mixerChildCleanupDiagnostic.topLevelRead = true
+            mixerChildCleanupDiagnostic.topLevelEmpty = finalTopLevel.isEmpty
+            mixerChildCleanupDiagnostic.checkpoint = "top_level_empty"
+            guard finalTopLevel.isEmpty else { return false }
+            mixerChildCleanupDiagnostic.checkpoint = "direct_root_read"
+            guard let finalMenus = checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax) else {
+                return false
+            }
+            mixerChildCleanupDiagnostic.directRootRead = true
+            mixerChildCleanupDiagnostic.directRootCount = finalMenus.count
+            mixerChildCleanupDiagnostic.checkpoint = "direct_root_unique"
+            guard finalMenus.count == 1 else { return false }
+            mixerChildCleanupDiagnostic.directRootSame = CFEqual(finalMenus[0], held.root)
+            mixerChildCleanupDiagnostic.checkpoint = "direct_root_same"
+            guard mixerChildCleanupDiagnostic.directRootSame else { return false }
+            mixerChildCleanupDiagnostic.parentMatched = mixerChildParentMatches(held.root)
+            mixerChildCleanupDiagnostic.checkpoint = "parent_match"
+            guard mixerChildCleanupDiagnostic.parentMatched else { return false }
+            mixerChildCleanupDiagnostic.checkpoint = "cg_read"
+            guard let finalWindows = runtime.onScreenWindowList(),
+                  let finalPopups = Self.checkedLogicOutputPopupWindows(
+                    finalWindows, logicPID: pid) else { return false }
+            mixerChildCleanupDiagnostic.cgRead = true
+            mixerChildCleanupDiagnostic.cgTotalCount = finalPopups.count
+            mixerChildCleanupDiagnostic.heldCGCount = finalPopups.filter {
+                $0.number == held.window.number && $0.layer == held.window.layer
+            }.count
+            mixerChildCleanupDiagnostic.checkpoint = "held_cg_count"
+            guard heldCGIdentityOccursOnce(finalPopups) else { return false }
+            mixerChildCleanupDiagnostic.checkpoint = "root_current"
             return true
         }
         @Sendable func mixerChildPopupAcquisition(
@@ -1126,6 +1230,11 @@ extension AccessibilityChannel {
         } while !Task.isCancelled && Date() < deadline
         let topLevelPopup = acquiredTopLevelPopup
         let mixerChildPopup = acquiredMixerChildPopup
+        func publishMixerChildCleanupDiagnostic() {
+            if mixerChildPopup != nil {
+                extras["output_popup_cleanup"] = mixerChildCleanupDiagnostic.snapshot()
+            }
+        }
         // Native input and neutral-output menus may be absent from Mixer AXChildren. This
         // read-only alternate discovery is scoped to our own just-issued press,
         // absent pre-existing AX/CG popups and the unchanged original source.
@@ -1325,6 +1434,7 @@ extension AccessibilityChannel {
         }
         func cleanupExactOrdinaryOutputRoot() -> (accepted: Bool, closed: Bool) {
             if topLevelPopup != nil || mixerChildPopup != nil {
+                defer { publishMixerChildCleanupDiagnostic() }
                 func currentRoot() -> Bool {
                     if let topLevelPopup {
                         return capturedTopLevelPopupState(topLevelPopup).map {
@@ -1334,25 +1444,50 @@ extension AccessibilityChannel {
                     guard let mixerChildPopup else { return false }
                     return capturedMixerChildPopupCleanupOwned(mixerChildPopup)
                 }
-                guard currentRoot(),
-                      case .success(let firstActions) = AXHelpers.getActionNamesResult(
-                        root, runtime: runtime.ax),
-                      firstActions.contains(kAXCancelAction as String),
-                      currentRoot(),
-                      case .success(let secondActions) = AXHelpers.getActionNamesResult(
-                        root, runtime: runtime.ax),
-                      secondActions.contains(kAXCancelAction as String),
-                      currentRoot(), capturedPopupActionScopeCurrent() else { return (false, false) }
+                guard currentRoot() else { return (false, false) }
+                mixerChildCleanupDiagnostic.checkpoint = "action_names_first_read"
+                guard case .success(let firstActions) = AXHelpers.getActionNamesResult(
+                    root, runtime: runtime.ax) else { return (false, false) }
+                mixerChildCleanupDiagnostic.actionNamesReads += 1
+                guard firstActions.contains(kAXCancelAction as String) else {
+                    mixerChildCleanupDiagnostic.checkpoint = "cancel_first_present"
+                    return (false, false)
+                }
+                mixerChildCleanupDiagnostic.cancelPresentReads += 1
+                guard currentRoot() else { return (false, false) }
+                mixerChildCleanupDiagnostic.checkpoint = "action_names_second_read"
+                guard case .success(let secondActions) = AXHelpers.getActionNamesResult(
+                    root, runtime: runtime.ax) else { return (false, false) }
+                mixerChildCleanupDiagnostic.actionNamesReads += 1
+                guard secondActions.contains(kAXCancelAction as String) else {
+                    mixerChildCleanupDiagnostic.checkpoint = "cancel_second_present"
+                    return (false, false)
+                }
+                mixerChildCleanupDiagnostic.cancelPresentReads += 1
+                guard currentRoot() else { return (false, false) }
+                let actionScope = capturedPopupActionScopeCurrent()
+                mixerChildCleanupDiagnostic.actionScope = actionScope
+                mixerChildCleanupDiagnostic.checkpoint = "action_scope"
+                guard actionScope else { return (false, false) }
                 let accepted: Bool
                 if case .success = AXHelpers.performActionResult(
                     root, kAXCancelAction as String, runtime: runtime.ax) { accepted = true }
                 else { accepted = false }
+                mixerChildCleanupDiagnostic.performAction = accepted ? "accepted" : "failed"
+                mixerChildCleanupDiagnostic.checkpoint = "perform_action"
                 let closed = topLevelPopup.map { capturedTopLevelPopupState($0)?.isEmpty == true }
                     ?? mixerChildPopup.map { capturedMixerChildPopupState($0)?.isEmpty == true }
                     ?? false
+                if accepted {
+                    mixerChildCleanupDiagnostic.closure = closed ? "immediate" : "pending"
+                    mixerChildCleanupDiagnostic.checkpoint = "closure"
+                } else {
+                    mixerChildCleanupDiagnostic.closure = closed ? "closed_without_acceptance" : "not_closed"
+                }
                 guard accepted, closed else {
                     return (accepted, false)
                 }
+                mixerChildCleanupDiagnostic.checkpoint = "closed"
                 return (true, true)
             }
             guard exactOrdinaryOutputMenu(),
@@ -2048,12 +2183,23 @@ extension AccessibilityChannel {
                     if (topLevelPopup != nil || mixerChildPopup != nil),
                        capturedPopupActionScopeCurrent() {
                         cleanupOnlyClosed = true
+                        if mixerChildPopup != nil {
+                            mixerChildCleanupDiagnostic.closure = "closed_after_poll"
+                            mixerChildCleanupDiagnostic.checkpoint = "closed"
+                            publishMixerChildCleanupDiagnostic()
+                        }
                     }
                     break
                 }
                 if Date() >= closeDeadline { break }
                 if timing.pollIntervalMs > 0 { try? await Task.sleep(for: .milliseconds(timing.pollIntervalMs)) }
             } while Date() < closeDeadline
+        }
+        if mixerChildPopup != nil {
+            if mixerChildCleanupDiagnostic.closure == "pending" && !cleanupOnlyClosed {
+                mixerChildCleanupDiagnostic.closure = "not_closed"
+            }
+            publishMixerChildCleanupDiagnostic()
         }
         if interrupted() { return await cancelledReading(priorCancelSucceeded: cancelSucceeded) }
         // Absence in the held Mixer's complete non-Help census prevents reading
@@ -2122,26 +2268,88 @@ extension AccessibilityChannel {
         extras["popup_menu_state"] = closed ? "closed" : "not_restored"
         var inputRenewal: OriginalHeaderSourceRenewal?
         var inputSlot: AXMixerInputSlotBinding?
-        if inputBusOnly, !sourceAfter, dataOwned,
-           (first != nil && second == first) || inputFactsAgree,
-           let originalPair = AXMixerStripBinding.outputAssociation, originalPair.strip.matches(physical) {
+        var inputRenewalReceipt: [String: Any] = [
+            "source_needs_renewal": false, "data_owned": false,
+            "checked_evidence_agrees": false,
+            "original_association_present": false,
+            "original_association_matches": false,
+            "eligibility": "not_eligible", "popup_absence": "not_checked",
+            "census": "not_checked", "old_source_absent": false,
+            "pid_match": false, "focus_match": false,
+            "window_read": "not_checked", "window_match": false,
+            "document_read": "not_checked", "document_match": false,
+            "acquisition": "not_checked", "attempted": false,
+            "source_observed": false, "replacement_source": false,
+            "restoration": "not_attempted", "reason": "none",
+            "permitted": false, "renewed_control_stage": "not_attempted",
+        ]
+        let sourceNeedsRenewal = !sourceAfter
+        let checkedEvidenceAgrees = (first != nil && second == first) || inputFactsAgree
+        let originalAssociation = AXMixerStripBinding.outputAssociation
+        let originalAssociationPresent = originalAssociation != nil
+        let originalAssociationMatches = originalAssociation?.strip.matches(physical) == true
+        inputRenewalReceipt["source_needs_renewal"] = sourceNeedsRenewal
+        inputRenewalReceipt["data_owned"] = dataOwned
+        inputRenewalReceipt["checked_evidence_agrees"] = checkedEvidenceAgrees
+        inputRenewalReceipt["original_association_present"] = originalAssociationPresent
+        inputRenewalReceipt["original_association_matches"] = originalAssociationMatches
+        if inputBusOnly, sourceNeedsRenewal, dataOwned, checkedEvidenceAgrees,
+           let originalPair = originalAssociation, originalAssociationMatches {
+            inputRenewalReceipt["eligibility"] = "eligible"
             func popupAbsent() -> Bool {
                 !interrupted()
                     && currentPopupMenus()?.isEmpty == true
                     && runtime.onScreenWindowList().map { LogicOnScreenWindows.popupMenuCount($0, logicPID: pid) == 0 } == true
             }
+            func renewalPreconditionsCurrent() -> Bool {
+                let popupIsAbsent = popupAbsent()
+                inputRenewalReceipt["popup_absence"] = popupIsAbsent ? "observed" : "failed"
+                guard popupIsAbsent else { return false }
+                guard let census = AXLogicProElements.mixerChannelStripsIfCompletelyRead(
+                    in: physical.mixer, runtime: runtime.ax) else {
+                    inputRenewalReceipt["census"] = "unreadable"
+                    return false
+                }
+                inputRenewalReceipt["census"] = "read"
+                let oldSourceAbsent = !census.strips.contains { CFEqual($0, physical.strip) }
+                inputRenewalReceipt["old_source_absent"] = oldSourceAbsent
+                guard refreshingOriginalSourceAfterCleanup || oldSourceAbsent else { return false }
+                let pidMatches = runtime.logicProPID() == pid
+                inputRenewalReceipt["pid_match"] = pidMatches
+                guard pidMatches else { return false }
+                let focusMatches = runtime.focusedApplicationPID() == pid
+                inputRenewalReceipt["focus_match"] = focusMatches
+                guard focusMatches else { return false }
+                guard case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime) else {
+                    inputRenewalReceipt["window_read"] = "not_found"
+                    return false
+                }
+                inputRenewalReceipt["window_read"] = "found"
+                let windowMatches = CFEqual(window, physical.window)
+                inputRenewalReceipt["window_match"] = windowMatches
+                guard windowMatches else { return false }
+                guard case .success(.some(let document)) = AXLogicProElements.projectPickerDocumentRead(
+                    physical.window, runtime: runtime) else {
+                    inputRenewalReceipt["document_read"] = "unreadable"
+                    return false
+                }
+                inputRenewalReceipt["document_read"] = "read"
+                let documentMatches = document.utf8.elementsEqual(physical.document.utf8)
+                inputRenewalReceipt["document_match"] = documentMatches
+                guard documentMatches else { return false }
+                do {
+                    try SessionPopulationObservation.requireOwnedAcquisition()
+                    inputRenewalReceipt["acquisition"] = "current"
+                    return true
+                } catch {
+                    inputRenewalReceipt["acquisition"] = "not_current"
+                    return false
+                }
+            }
             // Cancel may retire the physical source. Only the previously captured
             // original-header pair can renew it, after observed popup absence;
             // display text is a stability fact, never the checked bus authority.
-            if popupAbsent(),
-               let census = AXLogicProElements.mixerChannelStripsIfCompletelyRead(in: physical.mixer, runtime: runtime.ax),
-               refreshingOriginalSourceAfterCleanup || !census.strips.contains(where: { CFEqual($0, physical.strip) }),
-               runtime.logicProPID() == pid, runtime.focusedApplicationPID() == pid,
-               case .found(let window) = AXLogicProElements.arrangeWindowRead(runtime: runtime),
-               CFEqual(window, physical.window),
-               case .success(.some(let document)) = AXLogicProElements.projectPickerDocumentRead(physical.window, runtime: runtime),
-               document.utf8.elementsEqual(physical.document.utf8),
-               (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil {
+            if renewalPreconditionsCurrent() {
                 // This reader need not select its target before opening the popup.
                 // Only an actually re-observed original-header pair can renew it;
                 // the helper still inverses the selection it found on entry.
@@ -2154,6 +2362,7 @@ extension AccessibilityChannel {
                 } else {
                     retiredFocusBaseline = nil
                 }
+                inputRenewalReceipt["attempted"] = true
                 let observed = await renewSourceThroughOriginalHeader(originalPair, original: physical,
                     runtime: runtime, selectedHeaderRequired: false,
                     sourceDisposition: refreshingOriginalSourceAfterCleanup ? .readObservation : .retiredOriginal,
@@ -2164,7 +2373,25 @@ extension AccessibilityChannel {
                 extras["ui_effects"] = ["navigation_performed": observed.effects.navigationPerformed,
                     "attempted": observed.effects.attempted, "changed": observed.effects.changed,
                     "restoration": observed.effects.restoration, "reason": observed.effects.reason as Any? ?? NSNull()]
-                if let source = observed.source, source.permits(runtime: runtime) {
+                inputRenewalReceipt["source_observed"] = observed.source != nil
+                inputRenewalReceipt["restoration"] = ["restored", "not_restored"].contains(
+                    observed.effects.restoration) ? observed.effects.restoration : "other"
+                let diagnosticReasons: Set<String> = [
+                    "association_selection_unverified", "association_restoration_unverified",
+                    "association_mixer_viewport_restoration_unverified",
+                    "mixer_focus_reacquisition_unverified", "mixer_focus_acquisition_unverified",
+                    "navigation_ownership_lost",
+                ]
+                inputRenewalReceipt["reason"] = observed.effects.reason.map {
+                    diagnosticReasons.contains($0) ? $0 : "other"
+                } ?? "none"
+                let permittedSource = observed.source.flatMap { source -> OriginalHeaderSourceRenewal? in
+                    let permitted = source.permits(runtime: runtime)
+                    inputRenewalReceipt["permitted"] = permitted
+                    inputRenewalReceipt["replacement_source"] = !source.pair.strip.matches(physical)
+                    return permitted ? source : nil
+                }
+                if let source = permittedSource {
                     // Hand off only the newly proved passive focus witness before
                     // guarded Help reads. This is not assignment/publication authority.
                     observingRenewedFocus(source.observation)
@@ -2178,6 +2405,7 @@ extension AccessibilityChannel {
                     let renewedControl: AXUIElement? = {
                         var stage = "input_slot", accepted = false
                         defer {
+                            inputRenewalReceipt["renewed_control_stage"] = accepted ? "accepted" : stage
                             if !accepted {
                                 Log.info("Renewed checked input refused at \(stage): \(input.reading), help_stopped=\(AXHelpers.HelpReadGuard.current?.stopped == true)", subsystem: "ax")
                             }
@@ -2210,12 +2438,15 @@ extension AccessibilityChannel {
                 }
             }
         }
+        if inputBusOnly { extras["input_source_renewal"] = inputRenewalReceipt }
         var inputTransportReceipt: [String: Any] = [
             "held_transport_captured": routingTransport != nil,
             "held_transport_matched": false,
             "fallback_attempted": false,
             "renewal_present": inputRenewal != nil,
             "first_failed_checkpoint": "none",
+            "attempt_count": 0,
+            "exit_reason": "not_attempted",
         ]
         var freshTransportFallbackAccepted: Bool?
         var freshTransportFallbackRetryable = false
@@ -2223,6 +2454,7 @@ extension AccessibilityChannel {
             if let freshTransportFallbackAccepted { return freshTransportFallbackAccepted }
             freshTransportFallbackRetryable = false
             inputTransportReceipt["fallback_attempted"] = true
+            inputTransportReceipt["attempt_count"] = (inputTransportReceipt["attempt_count"] as? Int ?? 0) + 1
             func fail(_ checkpoint: String) -> Bool {
                 if inputTransportReceipt["first_failed_checkpoint"] as? String == "none" {
                     inputTransportReceipt["first_failed_checkpoint"] = checkpoint
@@ -2292,25 +2524,43 @@ extension AccessibilityChannel {
         }
         func exactInputSourceWithSettledFreshStoppedTransport() async -> Bool {
             let deadline = Date().addingTimeInterval(Double(timing.readbackTimeoutMs) / 1_000)
+            func stopped(_ reason: String) -> Bool {
+                inputTransportReceipt["exit_reason"] = reason
+                return false
+            }
             while true {
-                if exactInputSourceWithFreshStoppedTransport() { return true }
-                guard freshTransportFallbackRetryable,
-                      timing.readbackTimeoutMs > 0, Date() < deadline,
-                      !interrupted(),
-                      (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
-                      popupAbsenceObserved() else { return false }
-                guard Date() < deadline, !interrupted(),
-                      (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+                if exactInputSourceWithFreshStoppedTransport() {
+                    inputTransportReceipt["exit_reason"] = "accepted"
+                    return true
+                }
+                guard freshTransportFallbackRetryable else { return stopped("nonretryable") }
+                guard timing.readbackTimeoutMs > 0, Date() < deadline else { return stopped("deadline") }
+                guard !interrupted() else { return stopped("interrupted") }
+                guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else {
+                    return stopped("acquisition")
+                }
+                guard popupAbsenceObserved() else { return stopped("popup_absence") }
+                guard Date() < deadline else { return stopped("deadline") }
+                guard !interrupted() else { return stopped("interrupted") }
+                guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else {
+                    return stopped("acquisition")
+                }
                 if timing.pollIntervalMs > 0 {
                     try? await Task.sleep(for: .milliseconds(timing.pollIntervalMs))
                 } else {
                     await Task.yield()
                 }
-                guard Date() < deadline, !interrupted(),
-                      (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
-                      popupAbsenceObserved() else { return false }
-                guard Date() < deadline, !interrupted(),
-                      (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+                guard Date() < deadline else { return stopped("deadline") }
+                guard !interrupted() else { return stopped("interrupted") }
+                guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else {
+                    return stopped("acquisition")
+                }
+                guard popupAbsenceObserved() else { return stopped("popup_absence") }
+                guard Date() < deadline else { return stopped("deadline") }
+                guard !interrupted() else { return stopped("interrupted") }
+                guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else {
+                    return stopped("acquisition")
+                }
                 freshTransportFallbackAccepted = nil
             }
         }
