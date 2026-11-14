@@ -887,6 +887,7 @@ struct Issue965HeldSelectionAssociationTests {
         var footprintDocumentRestored = false
         var routingRead: (@Sendable (AXUIElement, String) -> Void)?
         var routingReadResult: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>?)?
+        var routingSettableRead: (@Sendable (AXUIElement, String) -> Void)?
         var routingWindowListRead: (@Sendable () -> Void)?
         var routingNativePopupFrame: CGRect?
         var routingNativeApplicationFocusWrites = 0
@@ -899,6 +900,10 @@ struct Issue965HeldSelectionAssociationTests {
         var thirdRetainsPreviousFocus = false
         var selectionKeepsPassiveRailFocus = false
         var selectionKeepsPassiveWindowFocus = false
+        var mixerSelectionWrites: [AXUIElement] = []
+        var mixerSelection: (@Sendable (AXUIElement) -> Bool)?
+        var selectionCapabilityMutated = false
+        var postCapabilityReferenceReads = 0
         var selectedChildrenReads = 0
         var selectedChildrenReadsAtWrite = 0
         var associationStopReads = 0
@@ -1392,6 +1397,11 @@ struct Issue965HeldSelectionAssociationTests {
                         builder.setAttribute(scroll, attribute, number)
                         return true
                     }
+                    if CFEqual(element, mixer), attribute == kAXSelectedChildrenAttribute as String,
+                       let chosen = value as? [AXUIElement], chosen.count == 1 {
+                        mixerSelectionWrites.append(chosen[0])
+                        return mixerSelection?(chosen[0]) ?? false
+                    }
                     guard CFEqual(element, rail), attribute == kAXSelectedChildrenAttribute as String,
                           let chosen = value as? [AXUIElement], chosen.count == 1,
                           let index = headers.firstIndex(where: { CFEqual($0, chosen[0]) }) else {
@@ -1471,13 +1481,13 @@ struct Issue965HeldSelectionAssociationTests {
                     Issue.record("no action fallback"); return false
                 },
                 executeAppleScript: { _ in Issue.record("no scripts"); return .error("forbidden") })
-            let ax: AXHelpers.Runtime
+            let configuredAX: AXHelpers.Runtime
             if useBulkReads {
                 let levelHit: (@Sendable (AXUIElement, CGPoint) -> Result<AXUIElement?, AXHelpers.AXStatusError>)?
                 if routingLevelMouse != nil {
                     levelHit = { [self] _, _ in routingLevelHitEffect?(); return .success(routingLevelHit) }
                 } else { levelHit = routingFocusHit ?? base.ax.elementAtPosition }
-                ax = AXHelpers.Runtime(axApp: base.ax.axApp, attributeValue: base.ax.attributeValue,
+                configuredAX = AXHelpers.Runtime(axApp: base.ax.axApp, attributeValue: base.ax.attributeValue,
                     attributeIsSettable: base.ax.attributeIsSettable, setAttributeValue: base.ax.setAttributeValue,
                     children: base.ax.children, performAction: base.ax.performAction, childCount: base.ax.childCount,
                     actionNames: base.ax.actionNames, actionNamesResult: { [self] element in
@@ -1570,13 +1580,30 @@ struct Issue965HeldSelectionAssociationTests {
                         return .success(values)
                     })
             } else if let routingFocusHit {
-                ax = AXHelpers.Runtime(axApp: base.ax.axApp, attributeValue: base.ax.attributeValue,
+                configuredAX = AXHelpers.Runtime(axApp: base.ax.axApp, attributeValue: base.ax.attributeValue,
                     attributeIsSettable: base.ax.attributeIsSettable, setAttributeValue: base.ax.setAttributeValue,
                     children: base.ax.children, performAction: base.ax.performAction, childCount: base.ax.childCount,
                     actionNames: base.ax.actionNames, actionNamesResult: base.ax.actionNamesResult,
                     childrenResult: base.ax.childrenResult, attributeValueResult: base.ax.attributeValueResult,
                     performActionResult: base.ax.performActionResult, elementAtPosition: routingFocusHit)
-            } else { ax = base.ax }
+            } else { configuredAX = base.ax }
+            let ax: AXHelpers.Runtime
+            if routingSettableRead != nil {
+                ax = AXHelpers.Runtime(axApp: configuredAX.axApp, attributeValue: configuredAX.attributeValue,
+                    attributeIsSettable: { [self] element, attribute in
+                        routingSettableRead?(element, attribute)
+                        return configuredAX.attributeIsSettable(element, attribute)
+                    }, setAttributeValue: configuredAX.setAttributeValue,
+                    children: configuredAX.children, performAction: configuredAX.performAction,
+                    childCount: configuredAX.childCount, actionNames: configuredAX.actionNames,
+                    actionNamesResult: configuredAX.actionNamesResult,
+                    childrenResult: configuredAX.childrenResult,
+                    attributeValueResult: configuredAX.attributeValueResult,
+                    performActionResult: configuredAX.performActionResult,
+                    elementAtPosition: configuredAX.elementAtPosition,
+                    attributeValuesResult: configuredAX.attributeValuesResult,
+                    helpReadsAreGuarded: configuredAX.helpReadsAreGuarded)
+            } else { ax = configuredAX }
             let logic = AXLogicProElements.Runtime(logicProPID: { 4242 }, ax: ax,
                 executeAppleScript: { _ in Issue.record("no scripts"); return .error("forbidden") },
                 onScreenWindowList: { [self] in
@@ -13265,6 +13292,340 @@ struct Issue965HeldSelectionAssociationTests {
             #expect(f.selections == [1, 2, 3, 0])
             #expect(pairs.count == 4,
                 "The exact reciprocal selected child is the association witness; unchanged owned rail focus is already settled")
+            #expect(association.effects.restoration == "restored")
+        }
+    }
+
+    @Test("Logic 13 falls back from a verified rail no-op to the exact held Mixer child and inverse")
+    func mixerSelectedChildrenChallengesAfterRailAcknowledgesWithoutChangingSelection() async throws {
+        let f = try Fixture(withViewport: true)
+        f.fault = "no_op"
+        f.builder.setAttributeSettable(f.mixer, kAXSelectedChildrenAttribute as String, true)
+        f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[1]])
+        f.mixerSelection = { candidate in
+            guard let stripIndex = f.strips.firstIndex(where: { CFEqual($0, candidate) }) else { return false }
+            let headerIndex = stripIndex == 0 ? 1 : 0
+            for (index, header) in f.headers.enumerated() {
+                f.builder.setAttribute(header, kAXSelectedAttribute as String, index == headerIndex)
+            }
+            f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [candidate])
+            f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, candidate)
+            return true
+        }
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        let context = OperationTraceContext(mutationGateAcquired: true, ownsGate: { gate.stillOwns(claim) })
+        try await OperationTraceContext.$current.withValue(context) {
+            let association = try #require(AccessibilityChannel.HeldSelectionAssociation(window: f.window,
+                logic: f.logic(), expectedProject: nil, requiresProjectReference: false))
+            let pairs = await association.observe(referenceIsCurrent: { true }, stoppingWhen: { false },
+                allHeldHeaders: true)
+            #expect(f.selections == [1], "A verified rail no-op is not retried for the exact inverse")
+            #expect(f.mixerSelectionWrites.count == 2)
+            if f.mixerSelectionWrites.count == 2 {
+                #expect(CFEqual(f.mixerSelectionWrites[0], f.strips[0]))
+                #expect(CFEqual(f.mixerSelectionWrites[1], f.strips[1]))
+            }
+            #expect(pairs.count == 2)
+            #expect(association.effects.restoration == "restored")
+        }
+    }
+
+    @Test("An explicitly requested held Mixer strip is challenged before unrelated held strips")
+    func mixerSelectedChildrenPrioritizesTheRequestedPeer() async throws {
+        let f = try Fixture(withViewport: true, fourTracks: true)
+        f.fault = "no_op"
+        f.builder.setAttributeSettable(f.mixer, kAXSelectedChildrenAttribute as String, true)
+        f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[1]])
+        f.mixerSelection = { candidate in
+            let headerIndex: Int
+            if CFEqual(candidate, f.strips[3]) { headerIndex = 1 }
+            else if CFEqual(candidate, f.strips[1]) { headerIndex = 0 }
+            else { return false }
+            for (index, header) in f.headers.enumerated() {
+                f.builder.setAttribute(header, kAXSelectedAttribute as String, index == headerIndex)
+            }
+            f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [candidate])
+            f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, candidate)
+            return true
+        }
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        try await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true,
+            ownsGate: { gate.stillOwns(claim) })) {
+            let association = try #require(AccessibilityChannel.HeldSelectionAssociation(window: f.window,
+                logic: f.logic(), expectedProject: nil, requiresProjectReference: false))
+            let requested = AXMixerStripBinding.Binding(window: f.window, mixer: f.mixer,
+                strip: f.strips[3], document: association.document)
+            let pairs = await association.observe(referenceIsCurrent: { true }, stoppingWhen: { false },
+                allHeldHeaders: true, observingPeerStrips: [requested])
+            #expect(f.mixerSelectionWrites.count == 2)
+            if f.mixerSelectionWrites.count == 2 {
+                #expect(CFEqual(f.mixerSelectionWrites[0], f.strips[3]))
+                #expect(CFEqual(f.mixerSelectionWrites[1], f.strips[1]))
+            }
+            #expect(pairs.contains { CFEqual($0.track.header, f.headers[1]) && CFEqual($0.strip.strip, f.strips[3]) })
+            #expect(association.effects.restoration == "restored")
+        }
+    }
+
+    @Test("A false Mixer setter acknowledgement with an exact effect is inverted without publishing a pair")
+    func mixerSelectedChildrenFalseAcknowledgementStillRestoresItsExactEffect() async throws {
+        let f = try Fixture(withViewport: true)
+        f.fault = "no_op"
+        f.builder.setAttributeSettable(f.mixer, kAXSelectedChildrenAttribute as String, true)
+        f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[1]])
+        f.mixerSelection = { candidate in
+            let forward = f.mixerSelectionWrites.count == 1
+            let headerIndex = forward ? 1 : 0
+            for (index, header) in f.headers.enumerated() {
+                f.builder.setAttribute(header, kAXSelectedAttribute as String, index == headerIndex)
+            }
+            f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [candidate])
+            f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, candidate)
+            return !forward
+        }
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        try await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true,
+            ownsGate: { gate.stillOwns(claim) })) {
+            let association = try #require(AccessibilityChannel.HeldSelectionAssociation(window: f.window,
+                logic: f.logic(), expectedProject: nil, requiresProjectReference: false))
+            let pairs = await association.observe(referenceIsCurrent: { true }, stoppingWhen: { false },
+                allHeldHeaders: true)
+            #expect(pairs.isEmpty, "A false acknowledgement never publishes the observed target pair")
+            #expect(f.mixerSelectionWrites.count == 2)
+            #expect(AXValueExtractors.extractSelectedState(f.headers[0], runtime: f.logic().ax) == true)
+            let restored = try #require(AXHelpers.getAttribute(f.mixer,
+                kAXSelectedChildrenAttribute as String, runtime: f.logic().ax) as [AXUIElement]?)
+            #expect(restored.count == 1 && CFEqual(restored[0], f.strips[1]))
+            #expect(association.effects.restoration == "restored")
+        }
+    }
+
+    @Test("A Mixer challenge landing on a different exact held header is cleanup custody only")
+    func mixerSelectedChildrenWrongTargetEffectIsExactlyInverted() async throws {
+        let f = try Fixture(withViewport: true, fourTracks: true)
+        f.fault = "no_op"
+        f.builder.setAttributeSettable(f.mixer, kAXSelectedChildrenAttribute as String, true)
+        f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[1]])
+        f.mixerSelection = { candidate in
+            let headerIndex = f.mixerSelectionWrites.count == 1 ? 2 : 0
+            for (index, header) in f.headers.enumerated() {
+                f.builder.setAttribute(header, kAXSelectedAttribute as String, index == headerIndex)
+            }
+            f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [candidate])
+            f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, candidate)
+            return true
+        }
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        try await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true,
+            ownsGate: { gate.stillOwns(claim) })) {
+            let association = try #require(AccessibilityChannel.HeldSelectionAssociation(window: f.window,
+                logic: f.logic(), expectedProject: nil, requiresProjectReference: false))
+            let requested = AXMixerStripBinding.Binding(window: f.window, mixer: f.mixer,
+                strip: f.strips[3], document: association.document)
+            let pairs = await association.observe(referenceIsCurrent: { true }, stoppingWhen: { false },
+                allHeldHeaders: true, observingPeerStrips: [requested])
+            #expect(pairs.isEmpty, "The different exact header is never adopted as the requested association")
+            #expect(f.mixerSelectionWrites.count == 2)
+            #expect(AXValueExtractors.extractSelectedState(f.headers[0], runtime: f.logic().ax) == true)
+            let restored = try #require(AXHelpers.getAttribute(f.mixer,
+                kAXSelectedChildrenAttribute as String, runtime: f.logic().ax) as [AXUIElement]?)
+            #expect(restored.count == 1 && CFEqual(restored[0], f.strips[1]))
+            #expect(association.effects.restoration == "restored")
+        }
+    }
+
+    @Test("Mixer selected-child fallback refuses unowned, ambiguous, ineffective, or unrestorable transitions",
+          arguments: ["missing_peer", "duplicate_peer", "foreign_peer", "setter_false", "success_no_effect",
+                      "duplicate_child", "nonreciprocal", "inverse_failure", "census_drift"])
+    func mixerSelectedChildrenFallbackRetainsFailClosedBoundaries(mode: String) async throws {
+        let f = try Fixture(withViewport: true)
+        f.fault = "no_op"
+        f.builder.setAttributeSettable(f.mixer, kAXSelectedChildrenAttribute as String, true)
+        f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[1]])
+        f.mixerSelection = { candidate in
+            let write = f.mixerSelectionWrites.count
+            if mode == "setter_false" || (mode == "inverse_failure" && write == 2) { return false }
+            if mode == "success_no_effect" { return true }
+            let target = write == 1 ? 1 : 0
+            if mode != "nonreciprocal" {
+                for (index, header) in f.headers.enumerated() {
+                    f.builder.setAttribute(header, kAXSelectedAttribute as String, index == target)
+                }
+            }
+            f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String,
+                mode == "duplicate_child" ? [candidate, candidate] : [candidate])
+            f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, candidate)
+            if mode == "census_drift", write == 1 { f.builder.setChildren(f.mixer, [candidate]) }
+            return true
+        }
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        try await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true,
+            ownsGate: { gate.stillOwns(claim) })) {
+            let association = try #require(AccessibilityChannel.HeldSelectionAssociation(window: f.window,
+                logic: f.logic(), expectedProject: nil, requiresProjectReference: false))
+            let peer: AXMixerStripBinding.Binding
+            if mode == "missing_peer" {
+                peer = .init(window: f.window, mixer: f.mixer, strip: f.builder.element(1_965_799),
+                    document: association.document)
+            } else if mode == "foreign_peer" {
+                peer = .init(window: f.window, mixer: f.builder.element(1_965_798), strip: f.strips[0],
+                    document: association.document)
+            } else {
+                peer = .init(window: f.window, mixer: f.mixer, strip: f.strips[0],
+                    document: association.document)
+            }
+            let peers = mode == "duplicate_peer" ? [peer, peer] : [peer]
+            let pairs = await association.observe(referenceIsCurrent: { true }, stoppingWhen: { false },
+                allHeldHeaders: true, observingPeerStrips: peers)
+            #expect(pairs.isEmpty)
+            if ["missing_peer", "duplicate_peer", "foreign_peer"].contains(mode) {
+                #expect(f.selections.isEmpty && f.mixerSelectionWrites.isEmpty)
+            }
+            if mode == "nonreciprocal" || mode == "inverse_failure" || mode == "census_drift" {
+                #expect(association.effects.restoration != "restored")
+            }
+        }
+    }
+
+    @Test("A verified rail selection path never writes Mixer selected children")
+    func existingRailSelectionPathDoesNotUseTheLogic13Fallback() async throws {
+        let f = try Fixture(withViewport: true)
+        f.builder.setAttributeSettable(f.mixer, kAXSelectedChildrenAttribute as String, true)
+        f.mixerSelection = { _ in
+            Issue.record("The Logic 12 rail path must not write Mixer selected children")
+            return false
+        }
+        let body = try await inspect(f)
+        let rows = try #require((body["associations"] as? [String: Any])?["rows"] as? [[String: Any]])
+        #expect(rows.count == 2 && f.selections == [1, 0])
+        #expect(f.mixerSelectionWrites.isEmpty)
+    }
+
+    @Test("Selection capability and late reference callbacks cannot cross the final held action proof",
+          arguments: ["rail_document", "rail_focus", "mixer_track_viewport", "mixer_geometry",
+                      "mixer_late_reference_focus"])
+    func selectionCapabilityEffectsAreBookendedBeforeEitherSetter(mode: String) async throws {
+        let f = try Fixture(withViewport: true)
+        let mixerMode = mode.hasPrefix("mixer_")
+        if mixerMode {
+            f.fault = "no_op"
+            f.builder.setAttributeSettable(f.mixer, kAXSelectedChildrenAttribute as String, true)
+            f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[1]])
+            f.mixerSelection = { candidate in
+                let headerIndex = CFEqual(candidate, f.strips[0]) ? 1 : 0
+                for (index, header) in f.headers.enumerated() {
+                    f.builder.setAttribute(header, kAXSelectedAttribute as String, index == headerIndex)
+                }
+                f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [candidate])
+                f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, candidate)
+                return true
+            }
+        }
+        if mode == "mixer_geometry" {
+            f.configureDelayedReceiverMixerGeometry()
+            let owner = try #require(f.routingDelayedMixerOwner)
+            f.builder.setRole(owner, kAXGroupRole as String)
+            f.builder.setAttribute(owner, kAXDescriptionAttribute as String, "Mixer")
+            f.builder.setChildren(owner, [f.mixer])
+            f.builder.setChildren(f.window, [f.rail, owner, f.builder.element(1_965_720), f.scroll])
+        }
+        f.routingSettableRead = { _, _ in }
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "logic_project.inspect_session"))
+        defer { gate.release(claim) }
+        try await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true,
+            ownsGate: { gate.stillOwns(claim) })) {
+            let association = try #require(AccessibilityChannel.HeldSelectionAssociation(window: f.window,
+                logic: f.logic(), expectedProject: nil, requiresProjectReference: false))
+            f.routingSettableRead = { element, attribute in
+                guard attribute == kAXSelectedChildrenAttribute as String,
+                      !f.selectionCapabilityMutated else { return }
+                if !mixerMode, CFEqual(element, f.rail) {
+                    f.selectionCapabilityMutated = true
+                    if mode == "rail_document" {
+                        f.builder.setAttribute(f.window, kAXDocumentAttribute as String,
+                            "file:///tmp/Foreign.logicx")
+                    } else {
+                        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String,
+                            f.builder.element(1_965_799))
+                    }
+                }
+                if mixerMode, CFEqual(element, f.mixer) {
+                    f.selectionCapabilityMutated = true
+                    if mode == "mixer_track_viewport" {
+                        f.builder.setAttribute(f.scroll, kAXValueAttribute as String, NSNumber(value: 0.4))
+                    } else if mode == "mixer_geometry" {
+                        f.builder.setAttribute(f.routingDelayedMixerHorizontal!, kAXValueAttribute as String,
+                            NSNumber(value: 0.75))
+                    }
+                }
+            }
+            let pairs = await association.observe(referenceIsCurrent: {
+                if mode == "mixer_late_reference_focus", f.selectionCapabilityMutated {
+                    f.postCapabilityReferenceReads += 1
+                    if f.postCapabilityReferenceReads == 2 {
+                        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String,
+                            f.builder.element(1_965_797))
+                    }
+                }
+                return true
+            }, stoppingWhen: { false }, allHeldHeaders: true)
+            #expect(pairs.isEmpty)
+            #expect(f.mixerSelectionWrites.isEmpty)
+            #expect(f.selections == (mixerMode ? [1] : []))
+        }
+        if mode == "mixer_track_viewport" {
+            #expect((f.builder.attributeValue(f.scroll, kAXValueAttribute as String) as? NSNumber)?.doubleValue == 0.4)
+        }
+        if mode == "mixer_geometry" {
+            #expect((f.builder.attributeValue(f.routingDelayedMixerHorizontal!,
+                kAXValueAttribute as String) as? NSNumber)?.doubleValue == 0.75)
+        }
+    }
+
+    @Test("The already selected requested Mixer peer is skipped for a distinct exact challenge and inverse")
+    func requestedOriginalMixerPeerDoesNotConsumeTheForwardChallenge() async throws {
+        let f = try Fixture(withViewport: true)
+        f.fault = "no_op"
+        f.builder.setAttributeSettable(f.mixer, kAXSelectedChildrenAttribute as String, true)
+        f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [f.strips[1]])
+        f.mixerSelection = { candidate in
+            let headerIndex = CFEqual(candidate, f.strips[0]) ? 1 : 0
+            for (index, header) in f.headers.enumerated() {
+                f.builder.setAttribute(header, kAXSelectedAttribute as String, index == headerIndex)
+            }
+            f.builder.setAttribute(f.mixer, kAXSelectedChildrenAttribute as String, [candidate])
+            f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, candidate)
+            return true
+        }
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "mixer.get_input_bus_verified"))
+        defer { gate.release(claim) }
+        try await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true,
+            ownsGate: { gate.stillOwns(claim) })) {
+            let association = try #require(AccessibilityChannel.HeldSelectionAssociation(window: f.window,
+                logic: f.logic(), expectedProject: nil, requiresProjectReference: false))
+            let original = AXMixerStripBinding.Binding(window: f.window, mixer: f.mixer,
+                strip: f.strips[1], document: association.document)
+            let pairs = await association.observe(referenceIsCurrent: { true }, stoppingWhen: { false },
+                allHeldHeaders: true, observingPeerStrips: [original])
+            #expect(f.mixerSelectionWrites.count == 2)
+            if f.mixerSelectionWrites.count == 2 {
+                #expect(CFEqual(f.mixerSelectionWrites[0], f.strips[0]))
+                #expect(CFEqual(f.mixerSelectionWrites[1], f.strips[1]))
+            }
+            #expect(pairs.contains { CFEqual($0.track.header, f.headers[0])
+                && CFEqual($0.strip.strip, f.strips[1]) })
             #expect(association.effects.restoration == "restored")
         }
     }
