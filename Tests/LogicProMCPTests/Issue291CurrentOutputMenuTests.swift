@@ -782,6 +782,62 @@ struct Issue291OwnedCurrentOutputTests {
         #expect(f.mutations.map(\.1) == [kAXPressAction as String, kAXCancelAction as String])
     }
 
+    @Test("Captured Mixer-child cleanup accepts its exact CG identity once among descendant popup windows")
+    func mixerChildOutputCleanupMatchesCapturedCGMemberWithoutPublishing() async throws {
+        final class Probe: @unchecked Sendable {
+            var postPressCGReads = 0
+            var competingCGReads = 0
+        }
+        let f = try Issue291PhysicalStripReferenceTests.Fixture(), probe = Probe()
+        defer { try? FileManager.default.removeItem(at: f.bundle) }
+        prepare(f)
+        f.b.setAttribute(f.app, kAXFrontmostAttribute as String, true)
+        f.b.setAttribute(f.root, kAXParentAttribute as String, f.mixer)
+        let frame = CGRect(x: 20, y: 100, width: 230, height: 175)
+        f.b.setFrame(f.root, x: frame.origin.x, y: frame.origin.y,
+                     width: frame.width, height: frame.height)
+        f.popupFrame = frame
+        let base = f.logic
+        let runtime = AXLogicProElements.Runtime(logicProPID: base.logicProPID, ax: base.ax,
+            onScreenWindowList: {
+                guard var windows = base.onScreenWindowList() else { return nil }
+                guard f.mutations.contains(where: {
+                    CFEqual($0.0, f.outputs[0]) && $0.1 == kAXPressAction as String
+                }), !f.mutations.contains(where: {
+                    CFEqual($0.0, f.root) && $0.1 == kAXCancelAction as String
+                }) else { return windows }
+                probe.postPressCGReads += 1
+                if probe.postPressCGReads >= 4 {
+                    probe.competingCGReads += 1
+                    windows.append([
+                        kCGWindowOwnerPID as String: f.pid,
+                        kCGWindowNumber as String: 291_902,
+                        kCGWindowLayer as String: LogicOnScreenWindows.popupMenuLevel,
+                        kCGWindowBounds as String: CGRect(
+                            x: 30, y: 110, width: 180, height: 130).dictionaryRepresentation,
+                    ])
+                }
+                return windows
+            }, focusedApplicationPID: base.focusedApplicationPID)
+        let binding = AXMixerStripBinding.Binding(window: f.window, mixer: f.mixer,
+            strip: f.strips[0], document: f.bundle.absoluteString)
+        let timing = AccessibilityChannel.OutputAssignmentTiming(
+            popupOpenTimeoutMs: 0, popupCloseTimeoutMs: 0,
+            readbackTimeoutMs: 100, pollIntervalMs: 0)
+        let result = await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true)) {
+            await AXMixerStripBinding.$current.withValue(binding) {
+                await AccessibilityChannel.getOutputVerified(params: [:], runtime: runtime, timing: timing)
+            }
+        }
+        let body = try #require(sharedJSONObject(result.message))
+        #expect(probe.competingCGReads > 0)
+        #expect(body["state"] as? String == "C", "\(body)")
+        #expect(body["current_output"] == nil)
+        #expect(body["popup_menu_state"] as? String == "closed")
+        #expect(body["popup_cancel_succeeded"] as? Bool == true)
+        #expect(f.mutations.map(\.1) == [kAXPressAction as String, kAXCancelAction as String])
+    }
+
     @Test("A pending Mixer-child root cannot be replaced by another eligible popup root",
           arguments: ["mixer_child", "top_level"])
     func pendingMixerChildRootReplacementFailsClosed(_ replacement: String) async throws {
@@ -936,7 +992,7 @@ struct Issue291OwnedCurrentOutputTests {
     }
 
     @Test("Captured Mixer-child cleanup refuses changed identity, capability, gate and non-closure",
-          arguments: ["parent_drift", "cg_drift", "missing_cancel", "gate", "final_gate", "ack_not_closed"])
+          arguments: ["parent_drift", "cg_drift", "duplicate_cg", "missing_cancel", "gate", "final_gate", "ack_not_closed"])
     func mixerChildPopupTokenFailsClosed(_ fault: String) async throws {
         final class Probe: @unchecked Sendable {
             var capabilityReads = 0
@@ -970,6 +1026,19 @@ struct Issue291OwnedCurrentOutputTests {
                     kCGWindowNumber as String: 291_902,
                     kCGWindowLayer as String: LogicOnScreenWindows.popupMenuLevel,
                     kCGWindowBounds as String: CGRect(x: 20, y: 100, width: 230, height: 175).dictionaryRepresentation]]
+            case "duplicate_cg":
+                f.popupWindowsOverride = [
+                    [kCGWindowOwnerPID as String: f.pid,
+                     kCGWindowNumber as String: 291_901,
+                     kCGWindowLayer as String: LogicOnScreenWindows.popupMenuLevel,
+                     kCGWindowBounds as String: CGRect(
+                        x: 20, y: 100, width: 230, height: 175).dictionaryRepresentation],
+                    [kCGWindowOwnerPID as String: f.pid,
+                     kCGWindowNumber as String: 291_901,
+                     kCGWindowLayer as String: LogicOnScreenWindows.popupMenuLevel,
+                     kCGWindowBounds as String: CGRect(
+                        x: 30, y: 110, width: 180, height: 130).dictionaryRepresentation],
+                ]
             case "gate": probe.gateRevoked = true
             default: break
             }

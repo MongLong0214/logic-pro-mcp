@@ -987,6 +987,34 @@ extension AccessibilityChannel {
                   finalPopups[0].layer == held.window.layer else { return nil }
             return [held.root]
         }
+        @Sendable func capturedMixerChildPopupCleanupOwned(
+            _ held: HeldMixerChildOutputPopup
+        ) -> Bool {
+            @Sendable func heldCGIdentityOccursOnce(
+                _ popups: [LogicOnScreenWindows.Entry]
+            ) -> Bool {
+                popups.filter {
+                    $0.number == held.window.number && $0.layer == held.window.layer
+                }.count == 1
+            }
+            guard exactCapturedMixerPopupScope(), let app,
+                  Self.checkedTopLevelOutputPopupMenus(in: app, runtime: runtime.ax)?.isEmpty == true,
+                  let menus = checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax),
+                  menus.count == 1, CFEqual(menus[0], held.root),
+                  mixerChildParentMatches(held.root),
+                  let windows = runtime.onScreenWindowList(),
+                  let popups = Self.checkedLogicOutputPopupWindows(windows, logicPID: pid),
+                  heldCGIdentityOccursOnce(popups),
+                  exactCapturedMixerPopupScope(),
+                  Self.checkedTopLevelOutputPopupMenus(in: app, runtime: runtime.ax)?.isEmpty == true,
+                  let finalMenus = checkedOutputPopupMenus(in: physical.mixer, runtime: runtime.ax),
+                  finalMenus.count == 1, CFEqual(finalMenus[0], held.root),
+                  mixerChildParentMatches(held.root),
+                  let finalWindows = runtime.onScreenWindowList(),
+                  let finalPopups = Self.checkedLogicOutputPopupWindows(finalWindows, logicPID: pid),
+                  heldCGIdentityOccursOnce(finalPopups) else { return false }
+            return true
+        }
         @Sendable func mixerChildPopupAcquisition(
             _ root: AXUIElement
         ) -> (held: HeldMixerChildOutputPopup?, waitingForCG: Bool) {
@@ -1304,9 +1332,7 @@ extension AccessibilityChannel {
                         } == true
                     }
                     guard let mixerChildPopup else { return false }
-                    return capturedMixerChildPopupState(mixerChildPopup).map {
-                        $0.count == 1 && CFEqual($0[0], root)
-                    } == true
+                    return capturedMixerChildPopupCleanupOwned(mixerChildPopup)
                 }
                 guard currentRoot(),
                       case .success(let firstActions) = AXHelpers.getActionNamesResult(
