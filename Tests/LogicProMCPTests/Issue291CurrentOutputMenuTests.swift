@@ -631,6 +631,237 @@ struct Issue291OwnedCurrentOutputTests {
         #expect(!f.mutations.contains { CFEqual($0.0, f.pair) && $0.1 == kAXPressAction as String })
     }
 
+    @Test("A newly acquired top-level Logic 13 output menu is read and cleaned only through its captured root",
+          arguments: ["survives", "source_replaced", "strip_replaced"])
+    func topLevelOutputMenuUsesSeparateReadCleanupAndPublicationProofs(_ state: String) async throws {
+        final class Probe: @unchecked Sendable {
+            var promoted = false
+            var closed = false
+            var cancelCapabilityReads = 0
+        }
+        let f = try Issue291PhysicalStripReferenceTests.Fixture()
+        defer { try? FileManager.default.removeItem(at: f.bundle) }
+        prepare(f)
+        f.b.setAttribute(f.app, kAXFrontmostAttribute as String, true)
+        f.b.setChildren(f.app, [f.window])
+        f.b.setAttribute(f.root, kAXParentAttribute as String, f.app)
+        let frame = CGRect(x: 20, y: 100, width: 230, height: 175)
+        f.b.setFrame(f.root, x: frame.origin.x, y: frame.origin.y,
+                     width: frame.width, height: frame.height)
+        f.popupFrame = frame
+        let probe = Probe()
+        f.onChildrenResultRead = { node in
+            if CFEqual(node, f.mixer), !f.mutations.isEmpty, !probe.promoted {
+                probe.promoted = true
+                f.b.setChildren(f.mixer, f.strips)
+                f.b.setChildren(f.app, [f.window, f.root])
+            }
+            if CFEqual(node, f.app),
+               f.mutations.contains(where: { CFEqual($0.0, f.root) && $0.1 == kAXCancelAction as String }),
+               !probe.closed {
+                probe.closed = true
+                f.b.setChildren(f.app, [f.window])
+                if state == "source_replaced" {
+                    f.b.setChildren(f.strips[0], f.logic.ax.children(f.strips[0]).filter {
+                        !CFEqual($0, f.outputs[0])
+                    })
+                }
+                if state == "strip_replaced" { f.reorder([1]) }
+            }
+        }
+        f.attributeReadResult = { node, attribute in
+            guard probe.promoted, !probe.closed, CFEqual(node, f.outputs[0]),
+                  attribute == kAXDescriptionAttribute as String else { return nil }
+            return .failure(.init(raw: AXError.cannotComplete.rawValue))
+        }
+        f.onActionNamesRead = { node in
+            if CFEqual(node, f.root) { probe.cancelCapabilityReads += 1 }
+        }
+        let binding = AXMixerStripBinding.Binding(window: f.window, mixer: f.mixer,
+            strip: f.strips[0], document: f.bundle.absoluteString)
+        let result = await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true)) {
+            await AXMixerStripBinding.$current.withValue(binding) {
+                await AccessibilityChannel.getOutputVerified(params: [:], runtime: f.logic, timing: .immediate)
+            }
+        }
+        let body = try #require(sharedJSONObject(result.message))
+        #expect(probe.promoted)
+        #expect(body["state"] as? String == (state == "survives" ? "A" : "C"), "\(body)")
+        #expect((body["current_output"] as? [String: Any])?["kind"] as? String ==
+            (state == "survives" ? "stereo_output" : nil))
+        #expect(body["popup_menu_state"] as? String == "closed")
+        #expect(probe.cancelCapabilityReads == 2)
+        #expect(f.mutations.count == 2)
+        if f.mutations.count == 2 {
+            #expect(CFEqual(f.mutations[0].0, f.outputs[0]))
+            #expect(CFEqual(f.mutations[1].0, f.root))
+            #expect(f.mutations[1].1 == kAXCancelAction as String)
+        }
+        #expect(!f.mutations.contains { CFEqual($0.0, f.pair) && $0.1 == kAXPressAction as String })
+    }
+
+    @Test("Captured top-level output cleanup refuses drift, missing capability and acknowledged non-closure",
+          arguments: ["root_drift", "cg_drift", "missing_cancel", "ack_not_closed",
+                      "competing_mixer", "lingering_mixer", "action_failure_closure",
+                      "disappears_before_cleanup"])
+    func topLevelOutputCleanupFailsClosed(_ fault: String) async throws {
+        final class Probe: @unchecked Sendable { var promoted = false; var capabilityReads = 0 }
+        let f = try Issue291PhysicalStripReferenceTests.Fixture()
+        defer { try? FileManager.default.removeItem(at: f.bundle) }
+        prepare(f)
+        f.b.setAttribute(f.app, kAXFrontmostAttribute as String, true)
+        f.b.setChildren(f.app, [f.window])
+        f.b.setAttribute(f.root, kAXParentAttribute as String, f.app)
+        f.b.setFrame(f.root, x: 20, y: 100, width: 230, height: 175)
+        f.popupFrame = CGRect(x: 20, y: 100, width: 230, height: 175)
+        if fault == "missing_cancel" { f.b.setActionNames(f.root, []) }
+        let foreignRoot = f.b.element(291_887)
+        let foreignMixerMenu = f.b.element(291_888)
+        f.b.setRole(foreignRoot, kAXMenuRole as String)
+        f.b.setAttribute(foreignRoot, kAXParentAttribute as String, f.app)
+        f.b.setChildren(foreignRoot, [])
+        f.b.setRole(foreignMixerMenu, kAXMenuRole as String)
+        f.b.setChildren(foreignMixerMenu, [])
+        let probe = Probe()
+        f.onChildrenResultRead = { node in
+            if CFEqual(node, f.mixer), !f.mutations.isEmpty, !probe.promoted {
+                probe.promoted = true
+                f.b.setChildren(f.mixer, fault == "competing_mixer"
+                    ? f.strips + [foreignMixerMenu] : f.strips)
+                f.b.setChildren(f.app, [f.window, f.root])
+            }
+            if fault != "ack_not_closed", CFEqual(node, f.app),
+               f.mutations.contains(where: { CFEqual($0.0, f.root) && $0.1 == kAXCancelAction as String }) {
+                f.b.setChildren(f.app, [f.window])
+                if fault == "lingering_mixer" {
+                    f.b.setChildren(f.mixer, f.strips + [foreignMixerMenu])
+                }
+            }
+        }
+        f.onActionNamesRead = { node in
+            guard CFEqual(node, f.root) else { return }
+            probe.capabilityReads += 1
+            guard probe.capabilityReads == 1 else { return }
+            if fault == "root_drift" { f.b.setChildren(f.app, [f.window, foreignRoot]) }
+            if fault == "cg_drift" {
+                f.popupWindowsOverride = [[kCGWindowOwnerPID as String: f.pid,
+                    kCGWindowNumber as String: 291_902,
+                    kCGWindowLayer as String: LogicOnScreenWindows.popupMenuLevel,
+                    kCGWindowBounds as String: CGRect(x: 20, y: 100, width: 230, height: 175).dictionaryRepresentation]]
+            }
+            if fault == "disappears_before_cleanup" {
+                f.b.setChildren(f.app, [f.window])
+                f.popupWindowsOverride = []
+            }
+        }
+        let base = f.logic
+        let runtime: AXLogicProElements.Runtime
+        if fault == "action_failure_closure" {
+            let ax = AXHelpers.Runtime(axApp: base.ax.axApp, attributeValue: base.ax.attributeValue,
+                attributeIsSettable: base.ax.attributeIsSettable,
+                setAttributeValue: base.ax.setAttributeValue, children: base.ax.children,
+                performAction: base.ax.performAction, childCount: base.ax.childCount,
+                actionNames: base.ax.actionNames, actionNamesResult: base.ax.actionNamesResult,
+                childrenResult: base.ax.childrenResult, attributeValueResult: base.ax.attributeValueResult,
+                performActionResult: { node, action in
+                    if CFEqual(node, f.root), action == kAXCancelAction as String {
+                        _ = base.ax.performActionResult?(node, action)
+                        return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                    }
+                    return base.ax.performActionResult?(node, action)
+                        ?? .failure(.init(raw: AXError.failure.rawValue))
+                }, elementAtPosition: base.ax.elementAtPosition,
+                attributeValuesResult: base.ax.attributeValuesResult)
+            runtime = .init(logicProPID: base.logicProPID, ax: ax,
+                onScreenWindowList: base.onScreenWindowList,
+                focusedApplicationPID: base.focusedApplicationPID)
+        } else {
+            runtime = base
+        }
+        let binding = AXMixerStripBinding.Binding(window: f.window, mixer: f.mixer,
+            strip: f.strips[0], document: f.bundle.absoluteString)
+        let result = await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true)) {
+            await AXMixerStripBinding.$current.withValue(binding) {
+                await AccessibilityChannel.getOutputVerified(params: [:], runtime: runtime, timing: .immediate)
+            }
+        }
+        let body = try #require(sharedJSONObject(result.message))
+        #expect(body["state"] as? String == "C", "\(body)")
+        #expect(body["current_output"] == nil)
+        #expect(body["popup_menu_state"] as? String == "not_restored")
+        #expect(f.mutations.count == (["ack_not_closed", "lingering_mixer", "action_failure_closure"].contains(fault) ? 2 : 1))
+        #expect(!f.mutations.contains { CFEqual($0.0, f.pair) && $0.1 == kAXPressAction as String })
+    }
+
+    @Test("Fresh top-level absence is bracketed by the exact source immediately before press",
+          arguments: ["foreign_popup", "source_during_absence", "document_during_absence",
+                      "gate_after_bookend", "cancel_after_bookend"])
+    func topLevelOutputRequiresFreshAbsenceAtPressBoundary(_ fault: String) async throws {
+        final class Probe: @unchecked Sendable {
+            var windowReads = 0
+            var injected = false
+            var armRevocation = false
+            var revocationLatched = false
+        }
+        let f = try Issue291PhysicalStripReferenceTests.Fixture()
+        defer { try? FileManager.default.removeItem(at: f.bundle) }
+        prepare(f)
+        f.b.setAttribute(f.app, kAXFrontmostAttribute as String, true)
+        f.b.setChildren(f.app, [f.window])
+        f.b.setAttribute(f.root, kAXParentAttribute as String, f.app)
+        f.b.setFrame(f.root, x: 20, y: 100, width: 230, height: 175)
+        f.outputPressOpensMenu = false
+        let probe = Probe()
+        let base = f.logic
+        let runtime = AXLogicProElements.Runtime(logicProPID: base.logicProPID, ax: base.ax,
+            onScreenWindowList: {
+                probe.windowReads += 1
+                guard let windows = base.onScreenWindowList() else { return nil }
+                guard probe.windowReads == 2 else { return windows }
+                probe.injected = true
+                switch fault {
+                case "foreign_popup":
+                    f.b.setChildren(f.app, [f.window, f.root])
+                    return windows + [[kCGWindowOwnerPID as String: f.pid,
+                        kCGWindowNumber as String: 291_908,
+                        kCGWindowLayer as String: LogicOnScreenWindows.popupMenuLevel,
+                        kCGWindowBounds as String: CGRect(x: 20, y: 100, width: 230, height: 175).dictionaryRepresentation]]
+                case "source_during_absence":
+                    f.b.setAttribute(f.outputs[0], kAXDescriptionAttribute as String, "Output 3-4")
+                case "document_during_absence":
+                    f.b.setAttribute(f.window, kAXDocumentAttribute as String, "file:///foreign.logicx")
+                case "gate_after_bookend", "cancel_after_bookend":
+                    probe.armRevocation = true
+                default: break
+                }
+                return windows
+            }, focusedApplicationPID: base.focusedApplicationPID)
+        let binding = AXMixerStripBinding.Binding(window: f.window, mixer: f.mixer,
+            strip: f.strips[0], document: f.bundle.absoluteString)
+        let context = OperationTraceContext(mutationGateAcquired: true,
+            ownsGate: {
+                guard fault == "gate_after_bookend", probe.armRevocation else { return true }
+                if !probe.revocationLatched { probe.revocationLatched = true; return true }
+                return false
+            }, deadline: ContinuousClock.now.advanced(by: .seconds(30)),
+            cancellationRequested: {
+                guard fault == "cancel_after_bookend", probe.armRevocation else { return false }
+                if !probe.revocationLatched { probe.revocationLatched = true; return false }
+                return true
+            })
+        let result = await OperationTraceContext.$current.withValue(context) {
+            await AXMixerStripBinding.$current.withValue(binding) {
+                await AccessibilityChannel.getOutputVerified(params: [:], runtime: runtime, timing: .immediate)
+            }
+        }
+        let body = try #require(sharedJSONObject(result.message))
+        #expect(probe.windowReads == 2 && probe.injected)
+        if fault.hasSuffix("after_bookend") { #expect(probe.revocationLatched) }
+        #expect(body["state"] as? String == "C", "\(body)")
+        #expect(body["current_output"] == nil)
+        #expect(f.mutations.isEmpty, "A foreign popup at the final boundary must prevent even the slot press")
+    }
+
     @Test("No physical target or a wrong document refuses before any popup action")
     func ownedCurrentOutputRefusesWrongTarget() async throws {
         let f = try Issue291PhysicalStripReferenceTests.Fixture()

@@ -363,9 +363,15 @@ struct Issue291OwnedInputBusMenuTests {
     }
 
     @Test("Input cleanup can renew a redrawn stopped transport only in the exact source window",
-          arguments: ["stopped", "duplicate", "foreign", "unreadable", "playing", "recording"])
+          arguments: ["stopped", "stopped_no_held", "stopped_no_held_transient_scalar",
+                      "final_document", "duplicate", "foreign", "unreadable", "playing", "recording"])
     func inputCleanupReobservesRedrawnStoppedTransport(_ state: String) async throws {
-        final class Probe: @unchecked Sendable { var redrawn = false }
+        final class Probe: @unchecked Sendable {
+            var redrawn = false
+            var freshPlayReads = 0
+            var postFreshStripReads = 0
+            var finalDriftInjected = false
+        }
         let p = try prepare(1), f = p.f, probe = Probe()
         defer { try? FileManager.default.removeItem(at: f.bundle) }
         let oldBar = f.b.element(2_910_300)
@@ -384,11 +390,27 @@ struct Issue291OwnedInputBusMenuTests {
         f.b.setChildren(newBar, state == "duplicate"
             ? [newPlay, duplicatePlay, newRecord] : [newPlay, newRecord])
         f.attributeReadResult = { node, attribute in
-            state == "unreadable" && CFEqual(node, newPlay)
-                && attribute == kAXValueAttribute as String
-                ? .failure(.init(raw: AXError.cannotComplete.rawValue)) : nil
+            if ["stopped_no_held_transient_scalar", "final_document"].contains(state), probe.redrawn,
+               CFEqual(node, newPlay), attribute == kAXValueAttribute as String {
+                probe.freshPlayReads += 1
+                if probe.freshPlayReads <= 4 {
+                    return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                }
+            }
+            if state == "unreadable", CFEqual(node, newPlay),
+               attribute == kAXValueAttribute as String {
+                return .failure(.init(raw: AXError.cannotComplete.rawValue))
+            }
+            return nil
         }
         f.onChildrenResultRead = { node in
+            if state == "final_document", probe.freshPlayReads >= 5, CFEqual(node, f.strips[0]) {
+                probe.postFreshStripReads += 1
+                if probe.postFreshStripReads == 8 {
+                    probe.finalDriftInjected = true
+                    f.b.setAttribute(f.window, kAXDocumentAttribute as String, "file:///foreign.logicx")
+                }
+            }
             guard !probe.redrawn, CFEqual(node, f.mixer),
                   f.mutations.contains(where: { $0.1 == kAXCancelAction as String }) else { return }
             probe.redrawn = true
@@ -408,8 +430,9 @@ struct Issue291OwnedInputBusMenuTests {
                     return base.ax.attributeValue(node, attribute) ?? NSNull()
                 })
             })
-        let runtime = AXLogicProElements.Runtime(logicProPID: base.logicProPID, ax: ax,
-            onScreenWindowList: base.onScreenWindowList, focusedApplicationPID: base.focusedApplicationPID)
+        let runtime = state.hasPrefix("stopped_no_held") || state == "final_document" ? base : AXLogicProElements.Runtime(
+            logicProPID: base.logicProPID, ax: ax, onScreenWindowList: base.onScreenWindowList,
+            focusedApplicationPID: base.focusedApplicationPID)
         let binding = AXMixerStripBinding.Binding(window: f.window, mixer: f.mixer,
             strip: f.strips[0], document: f.bundle.absoluteString)
         let result = await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true)) {
@@ -419,10 +442,29 @@ struct Issue291OwnedInputBusMenuTests {
         }
         let body = try #require(sharedJSONObject(result.message))
         #expect(probe.redrawn)
-        #expect(body["state"] as? String == (state == "stopped" ? "A" : "C"), "\(body)")
+        if state == "final_document" { #expect(probe.finalDriftInjected) }
+        let succeeds = state.hasPrefix("stopped")
+        #expect(body["state"] as? String == (succeeds ? "A" : "C"), "\(body)")
         #expect((body["current_input"] as? [String: Any])?["number"] as? Int ==
-            (state == "stopped" ? 1 : nil))
+            (succeeds ? 1 : nil))
         #expect(body["popup_menu_state"] as? String == "closed")
+        let receipt = try #require(body["input_transport_fallback"] as? [String: Any])
+        #expect(receipt["held_transport_captured"] as? Bool ==
+            !(state.hasPrefix("stopped_no_held") || state == "final_document"))
+        if state == "stopped_no_held" {
+            #expect(receipt["fallback_attempted"] as? Bool == false)
+        } else {
+            #expect(receipt["fallback_attempted"] as? Bool == true)
+            #expect(receipt["held_transport_matched"] as? Bool == false)
+        }
+        if (state.hasPrefix("stopped") && state != "stopped_no_held") || state == "final_document" {
+            #expect(receipt["fresh_transport"] as? String == "stopped")
+            #expect(receipt["first_failed_checkpoint"] as? String == "none")
+        }
+        if state == "playing" || state == "recording" {
+            #expect(receipt["fresh_transport"] as? String == state)
+            #expect(receipt["first_failed_checkpoint"] as? String == "fresh_transport")
+        }
         #expect(f.mutations.count == 2)
         #expect(f.mutations.first?.1 == kAXPressAction as String)
         #expect(f.mutations.last?.1 == kAXCancelAction as String)
