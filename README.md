@@ -20,7 +20,8 @@ A local Model Context Protocol (MCP) server that lets Claude Code, Claude Deskto
   <a href="https://modelcontextprotocol.io"><img src="https://img.shields.io/badge/MCP-0.10-blue.svg?style=flat-square" /></a>
   <a href="https://github.com/MongLong0214/logic-pro-mcp/actions/workflows/ci.yml"><img src="https://github.com/MongLong0214/logic-pro-mcp/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-MIT-yellow.svg?style=flat-square" /></a>
-  <img src="https://img.shields.io/badge/stable-v3.19.0-blue.svg?style=flat-square" />
+  <img src="https://img.shields.io/badge/source_candidate-v3.19.0-orange.svg?style=flat-square" />
+  <img src="https://img.shields.io/badge/published_stable-v3.18.0-blue.svg?style=flat-square" />
 </p>
 
 <p align="center">
@@ -65,8 +66,8 @@ Counts below are read from the current source tree with the command shown; re-ru
 | Resource templates | 12 templates — operation catalog, track, region, mixer-strip, stock plugin detail/search, stock instrument detail/search, Session Player detail, session-plan dry run, workflow detail/search | `awk '/private static let baseTemplates/,/^\]/' Sources/LogicProMCP/Resources/ResourceProvider.swift \| grep -c 'uriTemplate:'` |
 | Control channels | **7** — CoreMIDI, Accessibility, CGEvent, AppleScript, MCU, MIDIKeyCommands, Scripter | `grep -n 'case .* = "' Sources/LogicProMCP/Channels/Channel.swift` |
 | Locales Logic ships | **10** — de-DE en-US es-ES fr-FR it-IT ja-JP ko-KR pt-BR zh-CN zh-TW | `python3 -c "import json; print(json.load(open('docs/locale/ui-labels.json'))['supported_locales'])"` |
-| Supported Logic Pro | **Latest Logic Pro first** — desktop **Logic Pro** (`com.apple.logic10`, `/Applications/Logic Pro.app`). Apple Creator Studio **Logic Pro Creator Studio** (`com.apple.mobilelogic`, `/Applications/Logic Pro Creator Studio.app`) is recognised, not supported. Desktop **Logic Pro** is the only variant the release qualification matrix covers (`shipVariants = [.desktop]`), and the only one this release supports. Without `LOGIC_PRO_BUNDLE_ID` the server can still select Creator Studio: it targets the frontmost Logic; failing that a running one, then an installed one, desktop first in both. So a Creator Studio that is frontmost, or is the only Logic running, becomes the target, with no qualification evidence behind it. Set `LOGIC_PRO_BUNDLE_ID=com.apple.logic10` to keep the server on desktop Logic Pro. Logic Pro 12.3 is the actively-validated target (macOS 15.6+); older versions down to the 12.0.1 floor are best-effort |
-| Release state | **Current stable**: `v3.19.0` — [v3.19.0](https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v3.19.0) |
+| Supported Logic Pro | **Latest Logic Pro first** — desktop **Logic Pro** (`com.apple.logic10`, `/Applications/Logic Pro.app`). Apple Creator Studio **Logic Pro Creator Studio** (`com.apple.mobilelogic`, `/Applications/Logic Pro Creator Studio.app`) is recognised, not supported. Desktop **Logic Pro** is the only variant the release qualification matrix covers (`shipVariants = [.desktop]`), and the only one this release supports. Without `LOGIC_PRO_BUNDLE_ID` the server can still select Creator Studio: it targets the frontmost Logic; failing that a running one, then an installed one, desktop first in both. So a Creator Studio that is frontmost, or is the only Logic running, becomes the target, with no qualification evidence behind it. Set `LOGIC_PRO_BUNDLE_ID=com.apple.logic10` to keep the server on desktop Logic Pro. Logic Pro 13.0 is the current first-class target; v3.19.0 carries bounded ko-KR read-only evidence on build 7801, not whole-release or cross-locale qualification. The broader live evidence remains on Logic 12.3 build 6674; older versions down to the 12.0.1 floor are best-effort |
+| Release state | **Source candidate**: `v3.19.0`, targeting 2026-11-14 UTC. **Current published stable**: [`v3.18.0`](https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v3.18.0) |
 
 If this project helps you make music with Claude, Cursor, Codex, or any MCP client, star the repo. It helps the project reach more Logic Pro users and maintainers.
 
@@ -110,7 +111,7 @@ Logic Pro MCP uses a different model. It routes each operation to the strongest 
 - **Confirmation levels**: destructive/project and plugin insertion flows require explicit confirmation metadata before execution.
 - **Provenance labels**: read surfaces expose source, freshness, and evidence labels instead of forcing clients to guess.
 - **Installer hardening**: Homebrew pins SHA256; the shell installer refuses to run without explicit hash/team pins unless same-origin provenance is explicitly allowed.
-- **Release honesty**: `v3.19.0` is the current stable line, and README claims stay tied to shipped artifacts, release-tree tests, or explicitly linked live evidence.
+- **Release honesty**: `v3.19.0` is the source candidate targeting 2026-11-14 UTC; `v3.18.0` remains the current published stable until the candidate's tag, assets and public-byte readback exist. README claims stay tied to shipped artifacts, candidate-tree tests, or explicitly linked live evidence.
 
 ## Locales
 
@@ -135,14 +136,14 @@ A `derived` label has not been read from a running Logic in that locale; it is A
 
 ## Quick Start
 
-**Prerequisites**: macOS 14+ for the MCP server, Logic Pro (latest release prioritized — currently **12.3**, which Apple lists as requiring macOS 15.6+; older Logic versions down to the 12.0.1 floor are best-effort), and an MCP client that can launch a stdio server. Published GitHub Actions/Homebrew assets are universal (`arm64` + `x86_64`) and do not require Xcode. Bounce/export uses the bundled native CGEvent helper with no third-party click binary.
+**Prerequisites**: macOS 14+ for the MCP server, desktop Logic Pro (the current first-class target is **13.0**; v3.19.0 has bounded build-7801 ko-KR read-only evidence rather than whole-release or cross-locale qualification, while the broader live corpus remains on 12.3 build 6674), and an MCP client that can launch a stdio server. Older Logic versions down to the 12.0.1 floor are best-effort. Published GitHub Actions/Homebrew assets are universal (`arm64` + `x86_64`) and do not require Xcode. Bounce/export uses the bundled native CGEvent helper with no third-party click binary.
 
-> **Logic Pro version policy.** Logic Pro MCP tracks the **latest Logic Pro release as its first-class target** and validates against it. When Apple ships a new Logic Pro version, supporting it is the top priority — the Accessibility/UI tree shifts between releases, so the newest version is where fixes land first. Older versions above the 12.0.1 floor remain best-effort and may lose parity as those UI surfaces change.
+> **Logic Pro version policy.** Logic Pro MCP tracks the **latest Logic Pro release as its first-class target** and prioritizes validation against it; the current release's exact evidence boundary is stated above. When Apple ships a new Logic Pro version, supporting it is the top priority — the Accessibility/UI tree shifts between releases, so the newest version is where fixes land first. Older versions above the 12.0.1 floor remain best-effort and may lose parity as those UI surfaces change.
 
 The package manifest uses Swift tools 6.0 for compatibility. Current source verification uses
 Command Line Tools with Swift 6.2 in CI.
 
-The current stable line is `v3.19.0` (cut 2026-11-11 UTC). Its per-release detail — everything added, changed, and fixed since `v3.18.0`, along with every stated limit — is in [CHANGELOG.md](CHANGELOG.md); this README does not restate release history.
+The source candidate is `v3.19.0`, with a targeted release date of 2026-11-14 UTC; the current published stable remains `v3.18.0`. The candidate's per-release detail — everything added, changed, and fixed since `v3.18.0`, along with every stated limit — is in [CHANGELOG.md](CHANGELOG.md); this README does not claim publication before the tag, assets and public-byte readback exist.
 
 ### 1. Install
 
@@ -217,7 +218,7 @@ The installer is **fail-closed**: it refuses to run without an explicit
 It verifies the downloaded `LogicProMCP-macOS-universal.tar.gz` archive before extraction:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.19.0/Scripts/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.18.0/Scripts/install.sh -o install.sh
 # inspect install.sh, then:
 LOGIC_PRO_MCP_SHA256=<paste LogicProMCP-macOS-universal.tar.gz SHA256SUMS entry> \
 bash install.sh
@@ -227,7 +228,7 @@ If you knowingly accept fetching the checksum from the same release as the archi
 
 ```bash
 LOGIC_PRO_MCP_ALLOW_SAME_ORIGIN=1 \
-bash <(curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.19.0/Scripts/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.18.0/Scripts/install.sh)
 ```
 
 See [SECURITY.md §Installer trust model](SECURITY.md#installer-trust-model) for the trust tiers and threat model.
@@ -375,9 +376,11 @@ Live E2E defaults to the release binary. Protocol/security assertions run on any
 
 ## Release & Distribution
 
-Stable production tags use the GitHub Actions release workflow. It builds with Command Line Tools,
-publishes unsigned archives with SHA256 metadata, and validates the exact archive through the
-installer on the supported macOS runners before publication.
+Stable production releases use one immutable candidate artifact. The dispatch workflow builds it
+once with Command Line Tools and validates its installer path on Intel and Apple Silicon runners;
+local native qualification then stages and checks those exact bytes. The annotated-tag workflow
+downloads that previously qualified artifact, never rebuilds or repackages it, publishes the five
+unsigned assets with SHA256 metadata, and verifies the public bytes before registry work begins.
 
 Per-release detail lives in [CHANGELOG.md](CHANGELOG.md). Security and installer trust tiers are documented in [SECURITY.md](SECURITY.md).
 

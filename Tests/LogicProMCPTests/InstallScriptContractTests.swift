@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+@testable import LogicProMCP
 
 @Test func testInstallScriptRequiresPinnedReleaseVerificationByDefault() throws {
     let script = try scriptContents("Scripts/install.sh")
@@ -16,9 +17,15 @@ import Testing
     let readme = try scriptContents("README.md")
     let setup = try scriptContents("docs/SETUP.md")
     let installer = try scriptContents("Scripts/install.sh")
+    let registryData = Data(try scriptContents("server.json").utf8)
+    let registry = try #require(
+        try JSONSerialization.jsonObject(with: registryData) as? [String: Any]
+    )
+    let publishedVersion = try #require(registry["version"] as? String)
+    let installerURLPrefix = "https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp"
 
-    #expect(readme.contains("v3.19.0/Scripts/install.sh"))
-    #expect(setup.contains("v3.19.0/Scripts/install.sh"))
+    #expect(readme.contains("\(installerURLPrefix)/v\(publishedVersion)/Scripts/install.sh"))
+    #expect(setup.contains("\(installerURLPrefix)/v\(ServerConfig.serverVersion)/Scripts/install.sh"))
     #expect(installer.contains("awk -v artifact=\"$ARCHIVE\" '$2 == artifact {print $1}'"))
     #expect(readme.contains("verifies the downloaded `LogicProMCP-macOS-universal.tar.gz` archive"))
     #expect(readme.contains("LogicProMCP-macOS-universal.tar.gz SHA256SUMS entry"))
@@ -115,7 +122,13 @@ import Testing
 @Test func testReleaseWorkflowMarksHyphenTagsAsPrereleases() throws {
     let workflow = try scriptContents(".github/workflows/release.yml")
 
-    #expect(workflow.contains("prerelease: ${{ contains(github.ref_name, '-') }}"))
+    let hyphenCheck = try #require(workflow.range(of: "if [[ \"$TAG\" == *-* ]]; then"))
+    let prereleaseFlag = try #require(workflow.range(of: "create_args+=(--prerelease)",
+                                                     range: hyphenCheck.upperBound..<workflow.endIndex))
+    let create = try #require(workflow.range(of: "gh release create \"$TAG\"",
+                                             range: prereleaseFlag.upperBound..<workflow.endIndex))
+    #expect(hyphenCheck.lowerBound < prereleaseFlag.lowerBound)
+    #expect(prereleaseFlag.lowerBound < create.lowerBound)
 }
 
 @Test func testReleaseWorkflowShareDirSatisfiesInstallerValidator() throws {
@@ -264,8 +277,16 @@ import Testing
     #expect(script.contains("bash Scripts/release-qualify.sh"))
     #expect(script.contains("git diff --exit-code Package.resolved"))
     #expect(script.contains("set -euo pipefail"))
-    #expect(script.contains("git ls-remote --exit-code --tags origin"))
+    #expect(script.contains("RUN_ID=\"${2:-}\""))
+    #expect(script.contains("git ls-remote --tags origin"))
+    #expect(script.contains("remote tag lookup failed; absence was not established"))
+    #expect(script.contains("Scripts/release-verify-candidate.py run"))
     #expect(script.contains("Native-qualified: $QUALIFIED"))
+    #expect(script.contains("Candidate-run-id: $RUN_ID"))
+    #expect(script.contains("Candidate-run-attempt: $RUN_ATTEMPT"))
+    #expect(script.contains("Candidate-artifact-id: $ARTIFACT_ID"))
+    #expect(script.contains("Candidate-artifact-digest: $ARTIFACT_DIGEST"))
+    #expect(script.contains("Candidate-manifest-sha256: $MANIFEST_SHA"))
     #expect(!script.contains("gh release create"))
     #expect(!script.contains("ADHOC"))
     #expect(!script.contains("codesign"))
@@ -275,11 +296,13 @@ import Testing
     let script = try scriptContents("Scripts/release-stable.sh")
 
     #expect(script.contains("release.sh"))
-    #expect(script.contains("Usage: $0 vMAJOR.MINOR.PATCH"))
-    #expect(script.contains("gh release view \"$1\""))
-    let availability = try #require(script.range(of: "gh release view \"$1\""))
+    #expect(script.contains("[ \"$#\" != 2 ]"))
+    #expect(script.contains("[[ \"$2\" =~ ^[1-9][0-9]*$ ]]"))
+    #expect(script.contains("Usage: $0 vMAJOR.MINOR.PATCH CANDIDATE_RUN_ID"))
+    #expect(!script.contains("gh release view"))
+    let validation = try #require(script.range(of: "[ \"$#\" != 2 ]"))
     let delegate = try #require(script.range(of: "exec bash \"$(dirname \"$0\")/release.sh\" \"$@\""))
-    #expect(availability.lowerBound < delegate.lowerBound)
+    #expect(validation.lowerBound < delegate.lowerBound)
 }
 
 @Test func testFormulaClaudeRegistrationCaveatIncludesShareDirEnv() throws {

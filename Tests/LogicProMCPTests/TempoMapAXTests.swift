@@ -950,6 +950,27 @@ struct TempoMapAXTests {
         #expect(fixture.currentTempo == 119)
     }
 
+    @Test("the convergence deadline override also owns each per-write settle bound")
+    func convergenceDeadlineOverrideExtendsPerWriteSettle() {
+        let fixture = TempoListFixture(
+            tempo: 118,
+            postWriteAXRowsReadDelayAt: 2,
+            postWriteAXRowsReadDelay: 0.55
+        )
+
+        let outcome = TempoMapAX.setExistingTempo(
+            at: 0,
+            to: 119,
+            in: fixture.window,
+            localeIdentifier: "ko-KR",
+            convergenceDeadlineOverride: 10,
+            runtime: fixture.runtime()
+        )
+
+        #expect(outcome == .converged(initial: 118, observed: 119, writes: 1))
+        #expect(fixture.currentTempo == 119)
+    }
+
     @Test("an invalid element during post-write rebuild is re-read before judging")
     func rebuildingInvalidElementIsReread() {
         let fixture = TempoListFixture(

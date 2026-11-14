@@ -8,20 +8,84 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/) 
 
 ## [Unreleased]
 
-- `logic_tracks resolve_path` now reads an atomically published in-memory Library scan snapshot
-  without entering the Accessibility actor (#1550). It no longer waits behind unrelated synchronous
-  AX reads, while panel, disk, disk-only, folder, miss, malformed-path, and cold-cache responses keep
-  their existing fields and meanings.
+- No caller-facing changes have landed after the v3.19.0 source candidate.
 
 ---
 
-## [3.19.0] — 2026-11-11
+## [3.19.0] — 2026-11-14
 
 Caller-facing changes since v3.18.0. Guard scripts, CI, qualification infrastructure, live
 harnesses, roadmap work, and issue bookkeeping are excluded unless they changed a shipped
 contract. Every stated limit remains part of the corresponding change.
 
 ### Added
+- **The command schema can opt into registry-derived per-command parameters (#1093, #1104).**
+  Parameter kinds, required groups, allowed values and target alternatives are projected from the
+  same operation registry the dispatchers use. The agreement census drives dispatcher mocks; it
+  does not qualify state-dependent Logic refusals or a successful live plug-in write.
+- **`logic://tempo/map` reads an already-open current-project Tempo List (#1308).** It preserves
+  raw position, BPM, SMPTE and observed-count evidence without opening the list or substituting a
+  cached/default tempo. Coverage may remain partial; this is not tempo-map automation or complete
+  Smart Tempo support.
+- **`logic://transport/state.keySignature` exposes the control bar's current key signature read-only
+  (#1117, #1120).** The value is Logic's raw localized popup display, not a parsed musical key, and
+  the popup is never opened. An absent, repeated, unreadable or partially traversed candidate leaves
+  the field absent rather than inventing a default. The archived live locator evidence covers en-US
+  and de-DE; the other locale labels are derived from Apple's strings, not claimed as live readings.
+- **The verified Mixer routing surface now includes bounded output, input-bus and Send operations
+  (#1208, #1219, #1259, #1264, #1297, #1307, #1309, #1311).** New commands read checked output,
+  input-bus and Send-destination/bypass state (`logic_mixer get_output_verified`,
+  `get_input_bus_verified`, `get_send_destination_verified`, `get_send_bypass_verified`) and can
+  set a bus input, occupied Send destination, bypass, level or mode (`set_input_bus_verified`,
+  `set_send_output_verified`, `set_send_bypass_verified`, `set_send_level_verified`,
+  `set_send_mode_verified`) through an exact physical reference. The output reader requires two
+  agreeing host checkmarks and does not itself restore UI. Input replacement is limited to an
+  explicitly confirmed checked Bus-to-Bus change on a stopped physical/stereo-output sink whose
+  sends were all observed empty. Send mutations retain exact-source and ordinal custody; uncertain
+  control replacement never grants State A or an invented inverse. Native Send-level evidence is
+  bounded to the measured English -6 dB, -95 dB and negative-infinity cycles, and the fresh English
+  bypass restoration is not an owned automatic inverse. These increments do not establish Korean,
+  all-mode, general-range, Saga or whole-#291 acceptance.
+- **Navigation gains explicit marker capture and explicit view/zoom intent (#1140, #1142, #1390).**
+  `logic_navigate capture_markers` is an opt-in mutating capture with readback; its native leaf
+  actuation/restoration remains unqualified and its AX observations are non-atomic. Existing
+  `set_zoom` accepts an `axis`, and Mixer `toggle_view` accepts the requested `visible` state rather
+  than exposing only a blind toggle; no other view gains that `visible` setter.
+- **Audio comparison gains content-bound absolute and shape summaries (#1070, #1171, #1479), plus
+  explicit target curves (#1166).** `logic_audio compare_spectra` requires absolute before/after
+  paths; optional `comparison_mode` defaults to `absolute`, and optional `output_root`, when present,
+  must be an absolute allowlist root. Opt-in modes report a shared-band shape offset, spectral-tilt
+  slope, centroid delta or independent dominant-peak delta. They are not perceived loudness,
+  brightness, pitch/fundamental, cross-artifact peak tracking, time alignment, normalization or an
+  applied gain/EQ judgment. `analyze_spectrum` target curves are absolute band-energy targets, not
+  EQ transfer functions, and unavailable/floor-censored bands remain explicitly incomplete.
+- **Plug-in discovery and planning gain three read-only, target-bound operations (#1176, #1286,
+  #1444).** `logic_plugins get_host_parameter_manifest` exposes the observed Controls-view manifest
+  without treating a caller build fingerprint as Logic-verified or granting write authority;
+  `get_channel_eq_state_verified` reads the bound eight-band Channel EQ state without adding a
+  setter; and `plan_parameter_changes` produces a supported-subset plan from identity-checked reads.
+  `get_inventory` also accepts an explicit `reveal_mixer` opt-in (#1265); passive remains the
+  default, and reveal requires a positively observed non-modal original window.
+  Repeated bookends are not a stored approval or application authority, and none of these increments
+  claims whole-issue or three-vendor native acceptance.
+- **Session inspection can acquire request-owned population, retain immutable snapshots and
+  plan/apply bounded repairs (#1072, #1073, #1143).** A fresh `inspect_session` reads the currently
+  exposed Arrange rail and Mixer instead of borrowing older failed domains. With
+  `allow_ui_navigation:true` it can use owned Mixer reveal and temporary held stack disclosures,
+  report their effects/restoration separately and derive only custody-proved partial associations;
+  names and ordinals never establish a pair, and hidden/stacked/virtualized whole population remains
+  incomplete. A retained `snapshot_id` returns the original report, not a current observation or
+  mutation authority. `logic_project plan_session_repair` binds a plan and digest to retained
+  evidence, and the L1-confirmed `apply_session_repair` executes only supported tasks with readback
+  and compensation.
+  Native restoration/complete-population qualification and the first retained-plan Mixer path remain
+  unmeasured; missing exact-target, coupled-preservation or inverse evidence still refuses.
+- **Reference-bound native MIDI inspection is public (#1349, #1480).**
+  `logic_midi export_track_midi` writes a requested target's SMF to an owned path,
+  `read_track_notes` parses that bounded export, and `read_selected_region_events` exposes a partial
+  read of the already-selected Arrange region and Event List. The selected-region read does not prove
+  Event List ownership, canonical note identity, timing or complete traversal, and it does not
+  combine observations without ownership evidence.
 - **`logic_system setup_midi_key_commands` exposes the consent-first read-only binding check
   (#1516).** The public command currently accepts only `consent: "true"` and `mode: "check"`, invokes
   the repository's existing inspection driver under its ownership and cleanup rules, and reports bound,
@@ -61,6 +125,9 @@ contract. Every stated limit remains part of the corresponding change.
   Their already-selected Controls popup values are sampled twice and returned as verbatim strings
   without opening either menu. The measured duplicate/unnamed menu choices remain unaddressable by
   name, so no write method or ordinal-selection authority is granted.
+- **Compressor `rms_mode` exposes the current Peak/RMS selection read-only (#299, #1471).** The
+  named one-hot radio pair is read without pressing either control. The measured Logic 12.3 ko-KR
+  selection grants no Peak/RMS write method, actuation behavior or inference from mere readability.
 - **The fixed verifier can carry an opaque session-issued string from a setup call into the row's
   operation (#1028).** The exact `$observation` parameter form is admitted only for the operation,
   resolves through the stored raw reply with the judge's strict JSON/path rules, and refuses before
@@ -103,10 +170,66 @@ contract. Every stated limit remains part of the corresponding change.
   "strip_created"`, left as it is. Logic adds a strip for an output pair no strip used before and
   removes it once the pair is unused, so a move onto or off such a pair is State C
   (`strip_created` / `strip_removed`) although the output changed. The reply carries the observed
-  `before` for the inverse call. `set_output` stays not-exposed. Registry
-  censuses grow to 117 operations; the op joins the `legacy_index_allowed` census.
+  `before` for the inverse call. `set_output` stays not-exposed. The op joins the
+  `legacy_index_allowed` census; after the later additions above, v3.19 exposes 138 operations.
+
+### Changed
+- **CoreMIDI, MIDI Key Commands and Scripter defer endpoint ownership until routed demand (#1574).**
+  Passive startup publishes none of that MIDI group; the first eligible route starts the group once,
+  and shutdown drains an in-flight owned start. Health reports the channels unavailable while
+  deferred and preserves a concrete deferred-start failure afterward. Doctor adds the optional,
+  skipped `channels.runtime_endpoint_ownership` check because only a running MCP server can verify
+  ownership; it does not turn that absence into a fix plan. Excluded or invalid debug restrictions
+  cannot claim endpoints. The merge did not itself establish the post-fix two-instance native harness
+  or whole-#1568 acceptance.
+- **`logic_edit quantize` applies the requested grid through an operation-owned retained Inspector
+  target (#1111).** The Accessibility route requires retained selection, a readable region census,
+  owned popup cleanup and independent value readback; the old grid-less MIDI route is removed.
+  Real-host `AXSelectedChildren` support and execution across all ten locales remain unmeasured.
+- **`record_sequence` can copy an imported take onto an exact existing Software Instrument track
+  (#1441).** Supplying `target_track` together with `target_expected_name` opts into relocation.
+  Before any Logic write it requires a complete physical Arrange inventory, an index/name match,
+  one unique byte-exact name and a positively observed Software Instrument target. It copies rather
+  than cuts, verifies exactly one same-timing region addition, and leaves the original GM Device lane
+  in place with an explicit cleanup hint so a failed paste cannot lose the take.
+- **Selected Saga workflows bind execution to their exact preflight plan.** `system.saga_execute`
+  accepts `confirmed_plan_hash` and requires it for the bounded plug-in, input-bus and Send workflows
+  that need explicit plan confirmation. The hash must equal the exact `plan_hash` returned by
+  `saga_preflight`; it is rejected on workflows to which that authority does not belong. The
+  two-parameter Compressor adapter reuses the existing journal, gate and compensation machinery;
+  normal and fault native qualification remain separate.
 
 ### Fixed
+- **`transport.rewind` and `transport.fast_forward` now step exactly one bar through CGEvent alone
+  (#1092, #1095).** The MCU and MMC rungs started a continuing shuttle after the reply, so they are
+  no longer fallback routes. Missing keyboard-event permission refuses before bringing Logic forward
+  or posting an event instead of reporting an undelivered key as success.
+- **Doctor treats unavailable setup facts as terminal read-only diagnostics, not human fix plans
+  (#1485).** Stopped/windowless/blocking-dialog Logic, invalid or unreadable MCP registration and
+  target paths, non-executable/quarantined or unresolved binaries, failed signature/release probes,
+  confirmed unsupported platform state, unverified MCU wiring and a denied click path terminate
+  without a remediation command, retry request or host-provided recovery action. Successful or
+  genuinely indeterminate read-only probes keep their existing pass/warning distinctions.
+- **Logic's project chooser is a positive non-document state instead of stale project readiness
+  (#1579).** The read-only chooser-shell observer rejects ambiguous windows and invalid numeric
+  geometry/level evidence. Only a positive exact observation clears cached document, occlusion and
+  blocker state; absent or unreadable evidence remains unknown and grants no project mutation.
+- **Logic 13 background refresh no longer forces an explicit refresh to wait behind hidden-Mixer
+  work (#1566).** StatePoller-owned read-only cycles yield before that work and a waiting caller
+  receives its own non-yielding cycle. The bounded negative Mixer lookup applies only to the
+  observed Logic 13 default non-reveal inventory; explicit reveal, unknown builds and older versions
+  retain the complete lookup. The historical approximately-74-visible-row recurrence is unverified,
+  so this does not close #668.
+- **A timed-out mutating request cannot start a later channel or direct effect after ownership is
+  lost (#1572).** Every armed channel execution, including fallbacks, atomically claims the shared
+  deadline/effect race before execution. A timeout after a first write reports the effect as unknown
+  and unsafe to retry, while later routes are blocked. This does not solve #1565's wider first-AX/read
+  latency problem.
+- **`logic_tracks resolve_path` reads an atomically published in-memory Library scan snapshot
+  outside the Accessibility actor (#1550, #1560).** It no longer waits behind unrelated synchronous
+  AX reads, while panel, disk, disk-only, folder, miss, malformed-path and cold-cache responses keep
+  their existing fields and meanings. Only this cache-only decision moved: every AX read and
+  mutation remains actor-isolated, and the original Logic 12.4 long-wait recurrence was not rerun.
 - **Logic 13 transport-container discovery follows the measured toolbar role without selecting a
   same-described view-toggle group.** The selector and approval transport observation now admit the
   measured group/toolbar roles and require exact transport-control capability rather than tree
@@ -239,6 +362,9 @@ contract. Every stated limit remains part of the corresponding change.
   Play checkbox off.
 
 ### Removed
+- **Standalone `logic_project bounce` now terminates unsupported without opening Logic UI
+  (#1487).** The guarded, confirmation-bound `export_run` path remains the automated artifact
+  workflow; this removal grants no replacement standalone bounce authority.
 - **`logic://transport` no longer declares `isPaused` (#1041).** Nothing that reads Logic ever
   wrote it, so it was always `false`. A paused transport reads `isPlaying: true`.
 

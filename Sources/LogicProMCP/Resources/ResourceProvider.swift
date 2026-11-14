@@ -32,10 +32,11 @@ struct ResourceProvider {
         )
     }
 
-    /// Stable release timestamp stamped into every resource's `lastModified`.
-    /// Match the latest CHANGELOG release date, never a planned or observation date.
+    /// Candidate release timestamp stamped into every resource's `lastModified`.
+    /// This exact candidate intends to publish on that UTC date. If publication slips,
+    /// respin the candidate and timestamp before tagging it.
     /// Lets caching clients invalidate their local mirror on server upgrade.
-    private static let versionReleaseTimestamp: String = "2026-11-11T00:00:00Z"
+    private static let versionReleaseTimestamp: String = "2026-11-14T00:00:00Z"
 
     private static let baseResources: [Resource] = [
         Resource(
