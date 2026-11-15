@@ -3866,6 +3866,8 @@ extension AccessibilityChannel {
             // cleanup custody to a replacement editor. A later observed-view
             // refresh is not an ownership event.
             var originalAtPick: AXUIElement?
+            var firstReplacementObservedDuringConfirmation: AXUIElement?
+            var confirmationWindowIdentityChanged = false
             var replacementObservedAtPick: AXUIElement?
             let restoration = viewSession.restore(
                 allowingChanges: viewChangesAllowed,
@@ -3873,6 +3875,8 @@ extension AccessibilityChannel {
                     switch boundary {
                     case .willPick:
                         originalAtPick = nil
+                        firstReplacementObservedDuringConfirmation = nil
+                        confirmationWindowIdentityChanged = false
                         replacementObservedAtPick = nil
                         guard access.isRead,
                               constructedWindowsNeedingCleanup.count == 1,
@@ -3882,9 +3886,24 @@ extension AccessibilityChannel {
                         }
                         originalAtPick = original
                     case .didPick:
+                        break
+                    case let .didObserveDuringConfirmation(observedWindow):
+                        guard let original = originalAtPick else { return }
+                        if let firstReplacementObservedDuringConfirmation {
+                            if !CFEqual(firstReplacementObservedDuringConfirmation, observedWindow.element) {
+                                confirmationWindowIdentityChanged = true
+                            }
+                        } else if !CFEqual(original, observedWindow.element) {
+                            firstReplacementObservedDuringConfirmation = observedWindow.element
+                        }
+                    case let .didConfirm(confirmedWindow):
                         guard let original = originalAtPick,
+                              !confirmationWindowIdentityChanged,
+                              let firstReplacementObservedDuringConfirmation,
+                              CFEqual(firstReplacementObservedDuringConfirmation, confirmedWindow.element),
                               let after = currentAppWindows(),
                               !after.contains(where: { CFEqual($0, original) }),
+                              after.contains(where: { CFEqual($0, confirmedWindow.element) }),
                               acquisitionAllowed(),
                               case .success(let editors) = AXLogicProElements.matchingPluginEditorWindows(
                                   forTrackName: trackName,
@@ -3895,6 +3914,7 @@ extension AccessibilityChannel {
                               ),
                               editors.count == 1,
                               let replacement = editors.first,
+                              CFEqual(replacement, confirmedWindow.element),
                               !CFEqual(replacement, original),
                               after.contains(where: { CFEqual($0, replacement) }) else {
                             return

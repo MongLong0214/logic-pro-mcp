@@ -5856,6 +5856,147 @@ func testIssue1396GainEditorDescriptionFailureStillReadsAndRestoresOwnedView(_ a
     #expect(remainingWindows.count == 1)
 }
 
+@Test func testOwnedReadCleanupReacquiresExactEditorThatSettlesAfterRestorePick() async throws {
+    let fixture = gainReadFixture(
+        windowPresent: false,
+        openOnPress: true
+    )
+    let b = fixture.builder
+    let arrange = b.element(1001)
+    let replacement = b.element(100_916)
+    let postRestoreWindowReads = MutableBox(0)
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        guard fixture.editorViewMenuPressCount.value > 0,
+              CFEqual(element, fixture.app),
+              attribute == kAXWindowsAttribute as String else {
+            return nil
+        }
+        postRestoreWindowReads.value += 1
+        if postRestoreWindowReads.value == 1 {
+            b.setAttribute(fixture.app, kAXWindowsAttribute as String, [arrange, replacement])
+        }
+        return nil
+    })
+
+    let result = await AccessibilityChannel.defaultGetParamVerified(
+        params: gainReadParams(),
+        runtime: runtime
+    )
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(postRestoreWindowReads.value >= 2)
+    #expect(object["state"] as? String == "A", "\(object)")
+    #expect(try #require(object["plugin_view_restore_observed"] as? Bool))
+    #expect(try #require(object["editor_close_attempted"] as? Bool))
+    #expect(try #require(object["editor_close_observed"] as? Bool))
+    #expect(object["editor_cleanup_unobserved"] == nil)
+    #expect(fixture.pluginCloseControlPressCount.value == 1)
+    let remainingWindows = try #require(
+        b.attributeValue(fixture.app, kAXWindowsAttribute as String) as? [AXUIElement]
+    )
+    #expect(remainingWindows.count == 1)
+}
+
+@Test func testOwnedReadCleanupNeverAdoptsAReplacementThatAppearsAfterViewConfirmation() async throws {
+    let fixture = gainReadFixture(
+        windowPresent: false,
+        openOnPress: true
+    )
+    let b = fixture.builder
+    let arrange = b.element(1001)
+    let replacement = b.element(100_916)
+    let postRestoreWindowReads = MutableBox(0)
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        guard fixture.editorViewMenuPressCount.value > 0,
+              CFEqual(element, fixture.app),
+              attribute == kAXWindowsAttribute as String else {
+            return nil
+        }
+        postRestoreWindowReads.value += 1
+        if postRestoreWindowReads.value == 2 {
+            b.setAttribute(fixture.app, kAXWindowsAttribute as String, [arrange, replacement])
+        }
+        return nil
+    })
+
+    let result = await AccessibilityChannel.defaultGetParamVerified(
+        params: gainReadParams(),
+        runtime: runtime
+    )
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(postRestoreWindowReads.value >= 2)
+    #expect(object["state"] as? String == "C", "\(object)")
+    #expect(fixture.pluginCloseControlPressCount.value == 0,
+        "a same-target editor first observed after confirmation is caller-owned")
+    let remainingWindows = try #require(
+        b.attributeValue(fixture.app, kAXWindowsAttribute as String) as? [AXUIElement]
+    )
+    #expect(remainingWindows.contains { CFEqual($0, replacement) })
+}
+
+@Test func testOwnedReadCleanupNeverFollowsASecondReplacementDuringViewConfirmation() async throws {
+    let fixture = gainReadFixture(
+        windowPresent: false,
+        openOnPress: true
+    )
+    let b = fixture.builder
+    let arrange = b.element(1001)
+    let firstReplacement = b.element(100_916)
+    let secondReplacement = b.element(100_930)
+    let secondPluginName = b.element(100_931)
+    let secondTrackName = b.element(100_932)
+    let postRestoreWindowReads = MutableBox(0)
+    // The first exact replacement is still in Controls view. Before the next
+    // confirmation poll, a caller swaps it for another same-header editor.
+    b.setChildren(firstReplacement, [
+        b.element(1007), b.element(1008), b.element(100_919), b.element(100_920),
+        b.element(1009), b.element(100_903),
+    ])
+    b.setAttribute(secondReplacement, kAXRoleAttribute as String, kAXWindowRole as String)
+    b.setAttribute(secondReplacement, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    b.setAttribute(secondReplacement, kAXCloseButtonAttribute as String, b.element(100_917))
+    b.setAttribute(secondReplacement, kAXMainAttribute as String, true)
+    b.setAttribute(secondReplacement, kAXFocusedAttribute as String, true)
+    b.setAttribute(secondReplacement, kAXTitleAttribute as String, trackName)
+    for text in [secondPluginName, secondTrackName] {
+        b.setAttribute(text, kAXRoleAttribute as String, kAXStaticTextRole as String)
+    }
+    b.setAttribute(secondPluginName, kAXValueAttribute as String, "Gain")
+    b.setAttribute(secondTrackName, kAXValueAttribute as String, trackName)
+    b.setChildren(secondReplacement, [
+        b.element(1007), b.element(1008), b.element(1005), secondPluginName,
+        secondTrackName, b.element(1009),
+    ])
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        guard fixture.editorViewMenuPressCount.value > 0,
+              CFEqual(element, fixture.app),
+              attribute == kAXWindowsAttribute as String else {
+            return nil
+        }
+        postRestoreWindowReads.value += 1
+        if postRestoreWindowReads.value == 1 {
+            b.setAttribute(fixture.app, kAXWindowsAttribute as String, [arrange, firstReplacement])
+        } else if postRestoreWindowReads.value == 2 {
+            b.setAttribute(fixture.app, kAXWindowsAttribute as String, [arrange, secondReplacement])
+        }
+        return nil
+    })
+
+    let result = await AccessibilityChannel.defaultGetParamVerified(
+        params: gainReadParams(),
+        runtime: runtime
+    )
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(postRestoreWindowReads.value >= 3)
+    #expect(try #require(object["plugin_view_restore_observed"] as? Bool), "\(object)")
+    #expect(object["state"] as? String == "C", "\(object)")
+    #expect(fixture.pluginCloseControlPressCount.value == 0,
+        "cleanup custody cannot follow a second same-header replacement during confirmation")
+    let remainingWindows = try #require(
+        b.attributeValue(fixture.app, kAXWindowsAttribute as String) as? [AXUIElement]
+    )
+    #expect(remainingWindows.contains { CFEqual($0, secondReplacement) })
+}
+
 @Test func testOwnedReadCleanupNeverAdoptsUserReplacementWithoutViewRestoreReceipt() async throws {
     let fixture = LiveFixture(
         pluginWindowPresent: false,

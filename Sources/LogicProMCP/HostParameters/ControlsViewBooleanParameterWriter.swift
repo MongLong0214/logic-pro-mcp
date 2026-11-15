@@ -323,6 +323,8 @@ enum ControlsViewBooleanParameterWriter {
     enum ViewPickBoundary: Sendable {
         case willPick
         case didPick
+        case didObserveDuringConfirmation(AXUIElementSendable)
+        case didConfirm(AXUIElementSendable)
     }
 
     /// Owns one confirmed temporary view selection. Its caller restores this
@@ -434,7 +436,7 @@ enum ControlsViewBooleanParameterWriter {
     }
 
     private enum ViewWaitResult {
-        case confirmed
+        case confirmed(AXUIElementSendable)
         case deadlineExpired(ViewStructureObservation)
         case readFailed(ViewEvidenceReadFailure)
     }
@@ -602,12 +604,14 @@ enum ControlsViewBooleanParameterWriter {
         in window: AXUIElement,
         windowRefresher: @escaping () -> AXUIElement?,
         headerBoundUndescribedView: ((PluginWindowView) -> Bool)? = nil,
+        observingWindow: ((AXUIElement) -> Void)? = nil,
         runtime: AXHelpers.Runtime
     ) -> Result<PluginWindowView?, ViewEvidenceReadFailure> {
         var attempts = 0
         while true {
             attempts += 1
             let currentWindow = refreshedWindow(window, windowRefresher: windowRefresher)
+            observingWindow?(currentWindow)
             let observation = observedViewOnce(in: currentWindow, headerBoundUndescribedView: headerBoundUndescribedView, runtime: runtime)
             switch observation {
             case .success:
@@ -946,9 +950,13 @@ enum ControlsViewBooleanParameterWriter {
             windowRefresher: windowRefresher,
             timeout: confirmationTimeout,
             headerBoundUndescribedView: headerBoundUndescribedView,
+            observingWindow: {
+                observingPickBoundary?(.didObserveDuringConfirmation(AXUIElementSendable($0)))
+            },
             runtime: runtime
         ) {
-        case .confirmed:
+        case let .confirmed(confirmedWindow):
+            observingPickBoundary?(.didConfirm(confirmedWindow))
             break
         case let .deadlineExpired(observed):
             return .refused(
@@ -1078,19 +1086,27 @@ enum ControlsViewBooleanParameterWriter {
         windowRefresher: @escaping () -> AXUIElement?,
         timeout: TimeInterval,
         headerBoundUndescribedView: ((PluginWindowView) -> Bool)? = nil,
+        observingWindow: ((AXUIElement) -> Void)? = nil,
         runtime: AXHelpers.Runtime
     ) -> ViewWaitResult {
         let started = Date()
         let deadline = started.addingTimeInterval(max(0, timeout))
         repeat {
+            var observedWindow: AXUIElement?
             switch observedView(
                 in: window,
                 windowRefresher: windowRefresher,
                 headerBoundUndescribedView: headerBoundUndescribedView,
+                observingWindow: {
+                    observedWindow = $0
+                    observingWindow?($0)
+                },
                 runtime: runtime
             ) {
             case let .success(.some(observed)) where observed == expected:
-                return .confirmed
+                if let observedWindow {
+                    return .confirmed(AXUIElementSendable(observedWindow))
+                }
             case let .failure(error):
                 return .readFailed(error)
             case .success:
