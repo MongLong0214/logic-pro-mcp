@@ -74,6 +74,8 @@ jobs:
           python3 Scripts/check-canon-prose-numbers.py
           python3 Scripts/check-policy-literals-against-canon.py
           python3 Scripts/check-labelsets-are-derived.py
+          python3 Scripts/check-new-labelsets-name-a-row.py
+          python3 Scripts/check-labelset-census-only-shrinks.py
           python3 Scripts/check-locale-detection-is-derived.py
           python3 Scripts/check-locale-policy-coverage.py
           python3 Scripts/locale_labels.py --check
@@ -93,6 +95,7 @@ jobs:
             Scripts/test_canon_presence.py
             Scripts/test_canon_prose_numbers.py
             Scripts/test_labelsets_are_derived.py
+            Scripts/test_new_labelsets_name_a_row.py
             Scripts/test_locale_detection_is_derived.py
             Scripts/test_locale_labels_json.py
             Scripts/test_policy_literals_against_canon.py

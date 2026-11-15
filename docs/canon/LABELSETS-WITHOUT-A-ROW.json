@@ -82,6 +82,7 @@
         "noun": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Tracks#value",
         "why_this_noun": "Two rows hold the noun, and their values agree in all ten locales: the plain `Tracks` row and `StrTabBtnLabel|||Tracks`, so the choice changes no composed member. The plain row is named because the tab-button namespace labels another control. PrefsDisplay.strings `480.label` is English only, and the QuickHelp title `CSS_019_ChannelStriipViewTracks` has no Italian, Portuguese or Traditional Chinese value, a trailing no-break space in French and a colon in Simplified Chinese, so neither composes the members this set carried.",
         "template_values": {
+          "en": "%@ contents",
           "ko": "%@ 콘텐츠",
           "ja": "%@コンテンツ",
           "de": "%@ enthält",
@@ -93,6 +94,7 @@
           "zh_TW": "%@ 內容"
         },
         "noun_values": {
+          "en": "Tracks",
           "ko": "트랙",
           "ja": "トラック",
           "de": "Spuren",
@@ -109,7 +111,7 @@
           "tracks content",
           "tracks contents"
         ],
-        "why_extra": "English spellings the normalized match has carried since before this entry: singular and plural of each word, lowercased. English is left out of both value maps on purpose. Its composition, `Tracks contents`, differs from the member `tracks contents` only by case, and check-probe-product-drift.py refuses two members that case-folded matching would merge, so the lowercase spelling this set has always carried stands for it. The other three no row or composition produces. All four are kept because removing a member narrows a match already in the product, and listed here so that `members - composed` is never silently non-empty."
+        "why_extra": "English spellings the normalized match has carried since before this entry: singular and plural of each word, lowercased. English factors are explicit so every locale is checked. The composition, `Tracks contents`, matches the existing `tracks contents` member after lowercasing; adding a duplicate member is unnecessary. The other three no row or composition produces. All four are kept because removing a member narrows a match already in the product, and listed here so that `members - composed` is never silently non-empty."
       }
     },
     "trackHeadersDescription": {
@@ -121,6 +123,7 @@
         "noun": "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Tracks#value",
         "why_this_noun": "Two rows hold the noun, and their values agree in all ten locales: the plain `Tracks` row and `StrTabBtnLabel|||Tracks`, so the choice changes no composed member. The plain row is named because the tab-button namespace labels another control. PrefsDisplay.strings `480.label` is English only, and the QuickHelp title `CSS_019_ChannelStriipViewTracks` has no Italian, Portuguese or Traditional Chinese value, a trailing no-break space in French and a colon in Simplified Chinese, so neither composes the members this set carried.",
         "template_values": {
+          "en": "%@ header",
           "ko": "%@ 헤더",
           "ja": "%@ヘッダ",
           "de": "%@ Titel",
@@ -132,6 +135,7 @@
           "zh_TW": "%@ 標題"
         },
         "noun_values": {
+          "en": "Tracks",
           "ko": "트랙",
           "ja": "トラック",
           "de": "Spuren",
@@ -148,7 +152,7 @@
           "tracks header",
           "tracks headers"
         ],
-        "why_extra": "English spellings the normalized match has carried since before this entry: singular and plural of each word, lowercased. English is left out of both value maps on purpose. Its composition, `Tracks header`, differs from the member `tracks header` only by case, and check-probe-product-drift.py refuses two members that case-folded matching would merge, so the lowercase spelling this set has always carried stands for it. The other three no row or composition produces. All four are kept because removing a member narrows a match already in the product, and listed here so that `members - composed` is never silently non-empty."
+        "why_extra": "English spellings the normalized match has carried since before this entry: singular and plural of each word, lowercased. English factors are explicit so every locale is checked. The composition, `Tracks header`, matches the existing `tracks header` member after lowercasing; adding a duplicate member is unnecessary. The other three no row or composition produces. All four are kept because removing a member narrows a match already in the product, and listed here so that `members - composed` is never silently non-empty."
       }
     },
     "transportRecordArmExclusion": {

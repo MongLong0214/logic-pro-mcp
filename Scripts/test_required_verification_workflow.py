@@ -70,6 +70,8 @@ def workflow_problems(workflow):
         "Scripts/check-canon-citations.py",
         "Scripts/check-policy-literals-against-canon.py",
         "Scripts/check-labelsets-are-derived.py",
+        "Scripts/check-new-labelsets-name-a-row.py",
+        "Scripts/check-labelset-census-only-shrinks.py",
         "Scripts/check-locale-labels-json.py",
         "Scripts/check-locale-detection-is-derived.py",
         "Scripts/check-locale-policy-coverage.py",
@@ -78,6 +80,7 @@ def workflow_problems(workflow):
         "Scripts/locale_labels.py --check",
         "Scripts/test_canon_citations_guard.py",
         "Scripts/test_labelsets_are_derived.py",
+        "Scripts/test_new_labelsets_name_a_row.py",
         "Scripts/test_locale_detection_is_derived.py",
     ):
         if command not in canon:
@@ -215,6 +218,81 @@ class RequiredVerificationWorkflow(unittest.TestCase):
                 with self.subTest(field=field, state=state):
                     result = subprocess.run(["bash", "-c", script], env=dict(healthy, **{field: state}))
                     self.assertNotEqual(result.returncode, 0)
+
+    def test_real_labelset_proofs_reach_required_build_even_for_docs_only(self):
+        workflow = read(".github/workflows/ci.yml")
+        canon = step_script(workflow, "canon-locales",
+                            "Verify pinned Apple corpus, citations and every declared locale")
+        fan_in = step_script(workflow, "build", "Product validation must pass")
+        row_guard = "Scripts/check-new-labelsets-name-a-row.py"
+        census_guard = "Scripts/check-labelset-census-only-shrinks.py"
+        waiver_path = "docs/canon/LABELSETS-WITHOUT-A-ROW.json"
+        census_path = "docs/canon/LABELSETS-WITHOUT-A-ROW-LEGACY.json"
+        policy_path = os.path.join(REPO, "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift")
+        cases = (("valid_composition", row_guard, None),
+                 ("valid_census", census_guard, None),
+                 ("wrong_composition_factor", row_guard, "template_values[de]"),
+                 ("missing_composition_locale", row_guard, "missing locales ['es']"),
+                 ("omitted_waiver", census_guard, "transportRecordArmExclusion"),
+                 ("omitted_legacy", census_guard, "automationModeTrim"))
+        for case, guard, diagnostic in cases:
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
+                root = pathlib.Path(directory)
+                waivers = json.loads(read(waiver_path))
+                census = json.loads(read(census_path))
+                if case == "wrong_composition_factor":
+                    waivers["labelsets"]["showLibraryMenuItem"]["composed_from"]["template_values"]["de"] = "Wrong %@"
+                elif case == "missing_composition_locale":
+                    composition = waivers["labelsets"]["showLibraryMenuItem"]["composed_from"]
+                    del composition["template_values"]["es"]
+                    del composition["noun_values"]["es"]
+                elif case == "omitted_waiver":
+                    del waivers["labelsets"]["transportRecordArmExclusion"]
+                elif case == "omitted_legacy":
+                    del census["undeclared"]["automationModeTrim"]
+                (root / "waivers.json").write_text(json.dumps(waivers))
+                (root / "census.json").write_text(json.dumps(census))
+                invoked = root / "invoked"
+                # Isolate the producer under test; other commands are healthy. Both guards
+                # execute their real main(), using the committed source/corpus and disposable
+                # inputs. The row guard has no waiver-path environment seam, so only that
+                # input path is redirected after loading it; no predicate/canon is replaced.
+                runner = root / "python3"
+                runner.write_text(f"#!{sys.executable}\nimport importlib.util,os,sys\n"
+                    f"with open({str(invoked)!r}, 'a') as out: out.write(sys.argv[1] + '\\n')\n"
+                    f"if sys.argv[1] == {row_guard!r}:\n"
+                    f"    spec = importlib.util.spec_from_file_location('row_guard', {os.path.join(REPO, row_guard)!r})\n"
+                    "    module = importlib.util.module_from_spec(spec)\n"
+                    "    spec.loader.exec_module(module)\n"
+                    "    module.WAIVERS = os.environ['LPM_LABELSET_WAIVERS']\n"
+                    "    sys.exit(module.main())\n"
+                    f"if sys.argv[1] == {census_guard!r}:\n"
+                    f"    os.execv(sys.executable, [sys.executable, {os.path.join(REPO, census_guard)!r}])\n")
+                runner.chmod(0o755)
+                env = dict(os.environ, CI="true", PATH=directory + os.pathsep + os.environ["PATH"],
+                           LPM_LABELSET_WAIVERS=str(root / "waivers.json"),
+                           LPM_LABELSET_CENSUS=str(root / "census.json"),
+                           LPM_LABELSET_BASE_JSON=os.path.join(REPO, census_path),
+                           LPM_LABELSET_BASE_POLICY=policy_path)
+                direct = subprocess.run([str(runner), guard], cwd=REPO, env=env,
+                                        text=True, capture_output=True)
+                expected = 1 if diagnostic else 0
+                self.assertEqual(direct.returncode, expected, direct.stdout + direct.stderr)
+                if diagnostic:
+                    self.assertIn(diagnostic, direct.stderr)
+                invoked.unlink()
+                result = subprocess.run(["bash", "-c", canon], cwd=REPO, env=env,
+                                        text=True, capture_output=True)
+                self.assertEqual(result.returncode, expected, result.stdout + result.stderr)
+                self.assertIn(guard, invoked.read_text().splitlines())
+                if diagnostic:
+                    self.assertIn(diagnostic, result.stderr)
+                gate = subprocess.run(["bash", "-c", fan_in], text=True, capture_output=True,
+                    env=dict(os.environ, MODE="docs-only", SCOPE="success",
+                             CANON_LOCALES="failure" if result.returncode else "success",
+                             NATIVE_LOGIC="success", VALIDATION="success", PRODUCT="skipped",
+                             DOCS_ONLY="success"))
+                self.assertEqual(gate.returncode, expected, gate.stdout + gate.stderr)
 
     def test_real_policy_coverage_guard_refuses_an_omitted_label_set(self):
         source = read("Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift")
