@@ -99,6 +99,30 @@ import Testing
     #expect(gate.contains("chmod 0755 .build/release/LogicProMCP"))
 }
 
+@Test func release_qualification_validates_pinned_canon_before_native_preparation() throws {
+    let gate = try scriptContents("Scripts/release-qualify.sh")
+    let qualificationRoot = try #require(gate.range(of: "cd \"$QUALIFICATION_ROOT\""))
+    let commands = [
+        "python3 Scripts/logic_canon.py status",
+        "python3 Scripts/check-canon-drift.py",
+        "python3 Scripts/check-canon-citations.py",
+        "python3 Scripts/check-policy-literals-against-canon.py",
+        "python3 Scripts/check-labelsets-are-derived.py",
+        "python3 Scripts/locale_labels.py --check",
+    ]
+    var boundary = qualificationRoot.upperBound
+    for command in commands {
+        #expect(gate.components(separatedBy: command).count == 2,
+                "The protected release qualifier must run each canon preflight exactly once")
+        let commandRange = try #require(gate.range(of: command, range: boundary..<gate.endIndex))
+        boundary = commandRange.upperBound
+    }
+    let inventory = try #require(gate.range(of: "test_inventory=\"$(swift test list)\""))
+    let stage = try #require(gate.range(of: "cp \"$CANDIDATE\" .build/release/LogicProMCP"))
+    #expect(boundary < inventory.lowerBound)
+    #expect(boundary < stage.lowerBound)
+}
+
 @Test func native_ci_qualification_separates_trusted_controlFromCandidateBytes() throws {
     let wrapper = try scriptContents("Scripts/ci-native-qualify.sh")
 
