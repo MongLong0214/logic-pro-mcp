@@ -3,7 +3,10 @@
 import os
 import re
 import json
+import pathlib
+import shutil
 import subprocess
+import sys
 import tempfile
 import textwrap
 import unittest
@@ -37,6 +40,18 @@ def native_consumer_script(workflow):
     return textwrap.dedent(match.group(1))
 
 
+def step_script(workflow, job, step):
+    body = job_body(workflow, job) or ""
+    match = re.search(rf"^      - name: {re.escape(step)}\n(.*?)(?=^      - |\Z)",
+                      body, re.M | re.S)
+    if not match:
+        raise AssertionError(f"{job}/{step} not found")
+    script = re.search(r"^        run: \|\n(.*)", match.group(1), re.M | re.S)
+    if not script:
+        raise AssertionError(f"{job}/{step} has no shell script")
+    return textwrap.dedent(script.group(1))
+
+
 def workflow_problems(workflow):
     problems = []
     canon = job_body(workflow, "canon-locales") or ""
@@ -55,6 +70,11 @@ def workflow_problems(workflow):
         "Scripts/check-canon-citations.py",
         "Scripts/check-policy-literals-against-canon.py",
         "Scripts/check-labelsets-are-derived.py",
+        "Scripts/check-locale-labels-json.py",
+        "Scripts/check-locale-detection-is-derived.py",
+        "Scripts/check-locale-policy-coverage.py",
+        "Scripts/check-observation-records.py",
+        "Scripts/test_logic_canon.py",
         "Scripts/locale_labels.py --check",
         "Scripts/test_canon_citations_guard.py",
         "Scripts/test_labelsets_are_derived.py",
@@ -95,6 +115,128 @@ def workflow_problems(workflow):
 class RequiredVerificationWorkflow(unittest.TestCase):
     def test_real_workflow_is_fail_closed(self):
         self.assertEqual(workflow_problems(read(".github/workflows/ci.yml")), [])
+
+    def test_only_a_regular_roadmap_edit_can_use_the_documentation_shortcut(self):
+        script = step_script(read(".github/workflows/ci.yml"), "change-scope",
+                             "Classify changed paths")
+        mutations = {
+            "roadmap": lambda root: (root / "docs/roadmap/README.md").write_text("updated\n"),
+            "consumed_readme": lambda root: (root / "README.md").write_text("updated\n"),
+            "canon": lambda root: (root / "docs/canon/MANIFEST.json").write_text("{}\n"),
+            "locale": lambda root: (root / "docs/locale/ui-labels.json").write_text("{}\n"),
+            "source_to_docs": lambda root: (root / "source.swift").rename(root / "docs/source.md"),
+            "deleted": lambda root: (root / "docs/roadmap/README.md").unlink(),
+            "added_roadmap": lambda root: (root / "docs/roadmap/README.md").write_text("new\n"),
+            "executable": lambda root: (root / "docs/roadmap/README.md").chmod(0o755),
+            "symlink": lambda root: ((root / "docs/roadmap/README.md").unlink(),
+                                     (root / "docs/roadmap/README.md").symlink_to("../../README.md")),
+            "mixed": lambda root: ((root / "docs/roadmap/README.md").write_text("updated\n"),
+                                   (root / "README.md").write_text("updated\n")),
+            "empty": lambda root: None,
+            "diff_failure": lambda root: None,
+        }
+        for case, mutate in mutations.items():
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
+                root = pathlib.Path(directory)
+                env = dict(os.environ, GIT_CONFIG_GLOBAL=os.devnull,
+                           GIT_AUTHOR_NAME="Test", GIT_COMMITTER_NAME="Test",
+                           GIT_AUTHOR_EMAIL="test@example.invalid",
+                           GIT_COMMITTER_EMAIL="test@example.invalid")
+                def git(*args):
+                    return subprocess.check_output(["git", *args], cwd=root, env=env, text=True)
+                git("init", "-q")
+                for path in ("docs/roadmap/README.md", "README.md", "source.swift",
+                             "docs/canon/MANIFEST.json", "docs/locale/ui-labels.json"):
+                    file = root / path
+                    file.parent.mkdir(parents=True, exist_ok=True)
+                    if case != "added_roadmap" or path != "docs/roadmap/README.md":
+                        file.write_text("baseline\n")
+                git("add", ".")
+                git("commit", "-qm", "baseline")
+                base = git("rev-parse", "HEAD").strip()
+                mutate(root)
+                git("add", "-A")
+                git("commit", "-qm", "candidate", "--allow-empty")
+                output = root / "output"
+                result = subprocess.run(["bash", "-c", script], cwd=root, text=True,
+                    capture_output=True, env=dict(env, BASE_SHA="missing" if case == "diff_failure" else base,
+                        GITHUB_SHA=git("rev-parse", "HEAD").strip(),
+                        GITHUB_OUTPUT=str(output), RUNNER_TEMP=str(root)))
+                if case == "diff_failure":
+                    self.assertNotEqual(result.returncode, 0, result.stderr)
+                    self.assertFalse(output.exists(), "a failed diff must not publish a scope")
+                else:
+                    self.assertEqual(result.returncode, 0, result.stderr)
+                    expected = "docs-only" if case == "roadmap" else "full"
+                    self.assertIn(f"mode={expected}\n", output.read_text())
+
+    def test_real_locale_refusals_reach_the_required_gate_even_for_docs_only(self):
+        workflow = read(".github/workflows/ci.yml")
+        canon = step_script(workflow, "canon-locales",
+                            "Verify pinned Apple corpus, citations and every declared locale")
+        fan_in = step_script(workflow, "build", "Product validation must pass")
+        source = read("Sources/LogicProMCP/Accessibility/AXLogicProElements+Menu.swift")
+        mutations = {
+            "wrong_translation": ('"Ablage", "Bearbeiten", "Spur"',
+                                  '"Datei", "Bearbeiten", "Spur"'),
+            "missing_locale": ('("zh-TW", ["檔案", "編輯", "音軌"]),', ""),
+        }
+        for case, (old, new) in mutations.items():
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as directory:
+                self.assertIn(old, source)
+                root = pathlib.Path(directory)
+                policy = root / "Menu.swift"
+                policy.write_text(source.replace(old, new, 1))
+                # Other validators are healthy producers in this isolated propagation test.
+                # The failing producer executes the real guard against the mutated Swift file.
+                runner = root / "python3"
+                runner.write_text(f"#!{sys.executable}\nimport os,sys\n"
+                    "if sys.argv[1] == 'Scripts/check-locale-detection-is-derived.py':\n"
+                    f"    os.execv(sys.executable, [sys.executable, {os.path.join(REPO, 'Scripts/check-locale-detection-is-derived.py')!r}])\n")
+                runner.chmod(0o755)
+                result = subprocess.run(["bash", "-c", canon], cwd=REPO, text=True,
+                    capture_output=True, env=dict(os.environ, PATH=directory + os.pathsep + os.environ["PATH"],
+                                                 LPM_POLICY_SWIFT=str(policy)))
+                self.assertNotEqual(result.returncode, 0, f"{case}: {result.stdout} {result.stderr}")
+                self.assertIn("problem(s) with locale detection", result.stderr)
+                result = subprocess.run(["bash", "-c", fan_in], text=True, capture_output=True,
+                    env=dict(os.environ, MODE="docs-only", SCOPE="success", CANON_LOCALES="failure",
+                             NATIVE_LOGIC="success", VALIDATION="success", PRODUCT="skipped",
+                             DOCS_ONLY="success"))
+                self.assertNotEqual(result.returncode, 0, "a failed locale gate reached required success")
+
+    def test_required_fan_in_rejects_every_non_success_verification_result(self):
+        script = step_script(read(".github/workflows/ci.yml"), "build", "Product validation must pass")
+        healthy = dict(os.environ, MODE="docs-only", SCOPE="success", CANON_LOCALES="success",
+                       NATIVE_LOGIC="success", VALIDATION="success", PRODUCT="skipped", DOCS_ONLY="success")
+        self.assertEqual(subprocess.run(["bash", "-c", script], env=healthy).returncode, 0)
+        for field in ("CANON_LOCALES", "NATIVE_LOGIC"):
+            for state in ("failure", "cancelled", "skipped", ""):
+                with self.subTest(field=field, state=state):
+                    result = subprocess.run(["bash", "-c", script], env=dict(healthy, **{field: state}))
+                    self.assertNotEqual(result.returncode, 0)
+
+    def test_real_policy_coverage_guard_refuses_an_omitted_label_set(self):
+        source = read("Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift")
+        block = re.search(r"static let allLabelSets: \[LabelSet\] = \[(.*?)\n    \]", source, re.S)
+        self.assertIsNotNone(block)
+        entry = re.search(r"^        [A-Za-z0-9_]+,\n", block.group(1), re.M).group()
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            script = root / "Scripts/check-locale-policy-coverage.py"
+            script.parent.mkdir()
+            shutil.copy2(os.path.join(REPO, "Scripts/check-locale-policy-coverage.py"), script)
+            policy = root / "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+            policy.parent.mkdir(parents=True)
+            policy.write_text(source)
+            control = subprocess.run([sys.executable, str(script)], text=True, capture_output=True)
+            self.assertEqual(control.returncode, 0, control.stdout + control.stderr)
+            policy.write_text(source[:block.start(1)] + block.group(1).replace(entry, "", 1)
+                              + source[block.end(1):])
+            result = subprocess.run([sys.executable, str(script)], text=True, capture_output=True)
+            self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+            self.assertIn("is missing 1", result.stdout)
+            self.assertIn(entry.strip().rstrip(","), result.stdout)
 
     def test_docs_only_condition_is_detected(self):
         workflow = read(".github/workflows/ci.yml").replace(
