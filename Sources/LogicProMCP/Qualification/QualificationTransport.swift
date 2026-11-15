@@ -1,6 +1,7 @@
 import Foundation
 import Darwin
 import CoreMIDI
+import MCP
 
 struct QualificationDriveRequest: Sendable {
     let executableURL: URL
@@ -1452,6 +1453,16 @@ enum QualificationTransportError: Error, Equatable, CustomStringConvertible, Sen
     }
 }
 
+struct QualificationPluginReadRefreshReceipt: Equatable, Sendable {
+    let source: String
+    let refreshed: Bool
+    let changedSections: Set<String>
+
+    var provesFreshTracks: Bool {
+        source == "ax_fallback_poller" && refreshed && changedSections.contains("tracks")
+    }
+}
+
 struct QualificationTransport: Sendable {
     let handshakeTimeout: TimeInterval
     let requestTimeout: TimeInterval
@@ -1636,6 +1647,35 @@ struct QualificationTransport: Sendable {
             let requestedIDs = Set(request.operations.map(\.id))
             let requestedMixerReads = Self.mixerReadProbeOperationIDs.intersection(requestedIDs)
             let requestedPluginReads = Self.pluginReadProbeOperationIDs.intersection(requestedIDs)
+            let pluginReadRefresh: () throws
+                -> (receipt: QualificationPluginReadRefreshReceipt?, isError: Bool) = {
+                let refreshID = nextID
+                nextID += 1
+                return try pluginReadBoundaryRefresh(
+                    session,
+                    id: refreshID,
+                    timeout: try Self.readProbeRefreshTimeout()
+                )
+            }
+            let pluginReadPreparation: () throws -> [OperationID: [String: Any]] = {
+                try Self.preparePluginReadProbeParams(
+                    tracksRead: {
+                        let tracksReadID = nextID
+                        nextID += 1
+                        return try resourceReadback(
+                            session, id: tracksReadID, uri: "logic://tracks",
+                            phase: "plugin_read_probe_tracks")
+                    },
+                    inventoryRead: { track in
+                        let inventoryID = nextID
+                        nextID += 1
+                        return try pluginInventory(
+                            session, id: inventoryID, track: track,
+                            phase: "plugin_read_probe_inventory.\(track)"
+                        )
+                    }
+                )
+            }
             let readPreparation = Self.prepareRequestedReadProbeParams(
                 requestedMixerReads: requestedMixerReads,
                 requestedPluginReads: requestedPluginReads,
@@ -1646,25 +1686,7 @@ struct QualificationTransport: Sendable {
                         session, id: refreshID, tool: "logic_system", command: "refresh_cache",
                         params: [:], phase: "read_probe_refresh", timeout: timeout)
                 },
-                pluginPreparation: {
-                    try Self.preparePluginReadProbeParams(
-                        tracksRead: {
-                            let tracksReadID = nextID
-                            nextID += 1
-                            return try resourceReadback(
-                                session, id: tracksReadID, uri: "logic://tracks",
-                                phase: "plugin_read_probe_tracks")
-                        },
-                        inventoryRead: { track in
-                            let inventoryID = nextID
-                            nextID += 1
-                            return try pluginInventory(
-                                session, id: inventoryID, track: track,
-                                phase: "plugin_read_probe_inventory.\(track)"
-                            )
-                        }
-                    )
-                }
+                pluginPreparation: pluginReadPreparation
             )
             preparedReadParams.merge(readPreparation.params) { current, _ in current }
             readProbePreparationFailures.merge(readPreparation.failures) { current, _ in current }
@@ -1673,17 +1695,6 @@ struct QualificationTransport: Sendable {
                 var responseRequestID: String?
                 var responseFailure: String? = readProbePreparationFailures[spec.id]
                 var liveFixturePrecondition: QualificationLiveFixturePrecondition?
-                if responseFailure == nil,
-                   requestedPluginReads.contains(spec.id),
-                   preparedReadParams[spec.id] == nil {
-                    liveFixturePrecondition = switch spec.id {
-                    case .pluginsGetHostParameterManifest: .pluginHostManifestTarget
-                    case .pluginsGetParamVerified: .pluginReadableParameter
-                    case .pluginsGetChannelEQStateVerified: .pluginChannelEQ
-                    case .pluginsPlanParameterChanges: .pluginPlannableParameter
-                    default: nil
-                    }
-                }
                 var phaseBRecord: QualificationMutationRestoreRecord?
                 var phaseBRefusal: String?
                 // `tracks.rename` reuses the negative probe's response below and never reaches the
@@ -2017,6 +2028,23 @@ struct QualificationTransport: Sendable {
                                     from: error, during: "fresh mixer read-probe inspection")
                             }
                         }
+                        if responseFailure == nil, requestedPluginReads.contains(spec.id) {
+                            responseFailure = Self.refreshPluginReadProbeParams(
+                                for: spec.id,
+                                preparedReadParams: &preparedReadParams,
+                                refresh: pluginReadRefresh,
+                                pluginPreparation: pluginReadPreparation
+                            )
+                            if responseFailure == nil, preparedReadParams[spec.id] == nil {
+                                liveFixturePrecondition = switch spec.id {
+                                case .pluginsGetHostParameterManifest: .pluginHostManifestTarget
+                                case .pluginsGetParamVerified: .pluginReadableParameter
+                                case .pluginsGetChannelEQStateVerified: .pluginChannelEQ
+                                case .pluginsPlanParameterChanges: .pluginPlannableParameter
+                                default: nil
+                                }
+                            }
+                        }
                         let responseID = nextID
                         nextID += 1
                         responseRequestID = String(responseID)
@@ -2040,6 +2068,13 @@ struct QualificationTransport: Sendable {
                     responseFailure = responseFailure ?? Self.observedFailureReason(
                         from: error,
                         during: "operation request"
+                    )
+                }
+                if responseFailure == nil,
+                   requestedPluginReads.contains(spec.id),
+                   let response {
+                    responseFailure = Self.pluginReadProbeCleanupFailure(
+                        responseData: Data(response.text.utf8)
                     )
                 }
                 var readbackSource = Self.readbackSource(for: spec)
@@ -2398,6 +2433,24 @@ struct QualificationTransport: Sendable {
             try result.text(phase: "operation_probe.\(spec.id.rawValue)"),
             result.isError == true
         )
+    }
+
+    private func pluginReadBoundaryRefresh(
+        _ session: QualificationSubprocessSession,
+        id: Int,
+        timeout: TimeInterval
+    ) throws -> (receipt: QualificationPluginReadRefreshReceipt?, isError: Bool) {
+        let result: ToolCallResult = try session.request(
+            id: id,
+            method: "tools/call",
+            params: [
+                "name": "logic_system",
+                "arguments": ["command": "refresh_cache", "params": [:]],
+            ],
+            phase: "plugin_read_probe_refresh",
+            timeout: timeout
+        )
+        return (result.pluginReadRefreshReceipt, result.isError == true)
     }
 
     private func pluginInventory(
@@ -5929,6 +5982,86 @@ struct QualificationTransport: Sendable {
         }
     }
 
+    /// Plug-in references are request-scoped observations. A prior probe can navigate or open an
+    /// editor, so the sweep must not reuse an `ins_` reference captured before that operation.
+    /// Remove every earlier plug-in authority before asking for the next complete live census;
+    /// malformed discovery therefore cannot fall back to a stale target.
+    static func refreshPluginReadProbeParams(
+        for operation: OperationID,
+        preparedReadParams: inout [OperationID: [String: Any]],
+        refresh: () throws -> (receipt: QualificationPluginReadRefreshReceipt?, isError: Bool),
+        pluginPreparation: () throws -> [OperationID: [String: Any]]
+    ) -> String? {
+        guard pluginReadProbeOperationIDs.contains(operation) else { return nil }
+        for operationID in pluginReadProbeOperationIDs {
+            preparedReadParams.removeValue(forKey: operationID)
+        }
+        do {
+            let result = try refresh()
+            guard !result.isError else {
+                throw QualificationTransportError.protocolViolation(
+                    "plugin_read_probe_refresh: tool returned isError"
+                )
+            }
+            guard result.receipt?.provesFreshTracks == true else {
+                throw QualificationTransportError.protocolViolation(
+                    "plugin_read_probe_refresh: receipt did not prove a poller-applied tracks advance"
+                )
+            }
+        } catch {
+            return observedFailureReason(
+                from: error,
+                during: "fresh plug-in read-probe refresh"
+            )
+        }
+        do {
+            let current = try pluginPreparation()
+            for (operationID, params) in current where pluginReadProbeOperationIDs.contains(operationID) {
+                preparedReadParams[operationID] = params
+            }
+            return nil
+        } catch {
+            return observedFailureReason(
+                from: error,
+                during: "fresh plug-in read-probe preparation"
+            )
+        }
+    }
+
+    /// A read that opened an editor owns its cleanup. Do not let a semantically valid value count
+    /// as qualification evidence while that exact operation reports the editor still present or
+    /// its absence unobserved. Reused caller-owned editors have no cleanup authority and are not
+    /// reclassified here; the product's strict wrong-header refusal remains the deciding guard.
+    static func pluginReadProbeCleanupFailure(responseData: Data) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any],
+              object["state"] as? String == "A" else { return nil }
+        func ownedCleanupFailed(_ response: [String: Any]) -> Bool {
+            guard response["state"] as? String == "A",
+                  response["opener_action_attempted"] as? Bool == true else { return false }
+            return response["editor_close_observed"] as? Bool != true
+                || response["editor_cleanup_unobserved"] as? Bool == true
+                || response["editor_still_open"] as? Bool == true
+        }
+        if ownedCleanupFailed(object) {
+            return "plug-in read-probe response did not prove exact editor cleanup"
+        }
+        guard object["operation"] as? String == "logic_plugins.plan_parameter_changes",
+              let entries = object["entries"] as? [[String: Any]] else { return nil }
+        for entry in entries {
+            guard let observations = entry["read_observations"] as? [[String: Any]] else {
+                continue
+            }
+            for observation in observations {
+                guard let bookend = observation["bookend"] as? String,
+                      (bookend == "initial" || bookend == "final"),
+                      let response = observation["response"] as? [String: Any],
+                      ownedCleanupFailed(response) else { continue }
+                return "plug-in read-probe nested \(bookend) response did not prove exact editor cleanup"
+            }
+        }
+        return nil
+    }
+
     /// Mixer read operations can spend longer navigating than the resource freshness window.
     /// Refresh immediately before their independent resource read, while leaving every freshness
     /// and semantic validator unchanged. A refused refresh cannot be followed by a read whose old
@@ -6511,6 +6644,20 @@ private struct ToolCallResult: Decodable {
 
     let content: [Content]
     let isError: Bool?
+    let structuredContent: Value?
+
+    var pluginReadRefreshReceipt: QualificationPluginReadRefreshReceipt? {
+        guard let object = structuredContent?.objectValue,
+              let source = object["source"]?.stringValue,
+              let refreshed = object["refreshed"]?.boolValue,
+              let changed = object["changed_sections"]?.arrayValue,
+              changed.allSatisfy({ $0.stringValue != nil }) else { return nil }
+        return QualificationPluginReadRefreshReceipt(
+            source: source,
+            refreshed: refreshed,
+            changedSections: Set(changed.compactMap { $0.stringValue })
+        )
+    }
 
     func text(phase: String) throws -> String {
         guard let content = content.first(where: { $0.type == "text" }),

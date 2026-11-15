@@ -1690,6 +1690,275 @@ struct QualificationRunnerTests {
             == "ins_3")
     }
 
+    @Test func sequentialPluginReadPreparationReplacesStaleReferencesAndFailsClosed() throws {
+        var prepared: [OperationID: [String: Any]] = [
+            .pluginsGetHostParameterManifest: ["target_ref": "ins_old_manifest"],
+            .pluginsGetParamVerified: ["target_ref": "ins_old_scalar", "param": "gain"],
+        ]
+        var preparationCount = 0
+
+        let refreshedFailure = QualificationTransport.refreshPluginReadProbeParams(
+            for: .pluginsGetParamVerified,
+            preparedReadParams: &prepared,
+            refresh: {
+                (
+                    QualificationPluginReadRefreshReceipt(
+                        source: "ax_fallback_poller",
+                        refreshed: true,
+                        changedSections: ["tracks"]
+                    ),
+                    false
+                )
+            },
+            pluginPreparation: {
+                preparationCount += 1
+                return [
+                    .pluginsGetParamVerified: ["target_ref": "ins_fresh_scalar", "param": "gain"]
+                ]
+            }
+        )
+
+        #expect(refreshedFailure == nil)
+        #expect(preparationCount == 1)
+        #expect(prepared[.pluginsGetParamVerified]?["target_ref"] as? String
+            == "ins_fresh_scalar")
+        #expect(prepared[.pluginsGetHostParameterManifest] == nil)
+
+        let malformedFailure = QualificationTransport.refreshPluginReadProbeParams(
+            for: .pluginsGetParamVerified,
+            preparedReadParams: &prepared,
+            refresh: {
+                (
+                    QualificationPluginReadRefreshReceipt(
+                        source: "ax_fallback_poller",
+                        refreshed: true,
+                        changedSections: ["tracks"]
+                    ),
+                    false
+                )
+            },
+            pluginPreparation: {
+                preparationCount += 1
+                throw QualificationTransportError.protocolViolation("fresh inventory malformed")
+            }
+        )
+
+        #expect(preparationCount == 2)
+        let observedMalformedFailure = try #require(malformedFailure)
+        #expect(observedMalformedFailure.contains("fresh plug-in read-probe preparation failed"))
+        #expect(QualificationTransport.pluginReadProbeOperationIDs.allSatisfy {
+            prepared[$0] == nil
+        })
+    }
+
+    @Test func everyPluginReadBoundaryRefreshesBeforeDiscoveryAndRefreshFailureClearsAuthority() throws {
+        var prepared: [OperationID: [String: Any]] = [
+            .pluginsGetParamVerified: ["target_ref": "ins_stale", "param": "gain"]
+        ]
+        var events: [String] = []
+        var generation = 0
+
+        for operation in [OperationID.pluginsGetHostParameterManifest, .pluginsGetParamVerified] {
+            let failure = QualificationTransport.refreshPluginReadProbeParams(
+                for: operation,
+                preparedReadParams: &prepared,
+                refresh: {
+                    events.append("refresh")
+                    generation += 1
+                    return (
+                        QualificationPluginReadRefreshReceipt(
+                            source: "ax_fallback_poller",
+                            refreshed: true,
+                            changedSections: ["tracks"]
+                        ),
+                        false
+                    )
+                },
+                pluginPreparation: {
+                    events.append("tracks")
+                    events.append("inventory")
+                    return [operation: ["target_ref": "ins_fresh_\(generation)"]]
+                }
+            )
+            #expect(failure == nil)
+            #expect(prepared[operation]?["target_ref"] as? String == "ins_fresh_\(generation)")
+        }
+        #expect(events == [
+            "refresh", "tracks", "inventory",
+            "refresh", "tracks", "inventory",
+        ])
+
+        prepared[.pluginsGetParamVerified] = ["target_ref": "ins_stale_again"]
+        let refused = QualificationTransport.refreshPluginReadProbeParams(
+            for: .pluginsGetParamVerified,
+            preparedReadParams: &prepared,
+            refresh: {
+                events.append("refresh_refused")
+                    return (
+                        QualificationPluginReadRefreshReceipt(
+                            source: "ax_fallback_poller",
+                            refreshed: true,
+                            changedSections: ["tracks"]
+                        ),
+                        true
+                    )
+            },
+            pluginPreparation: {
+                events.append("unexpected_discovery")
+                return [.pluginsGetParamVerified: ["target_ref": "ins_forbidden"]]
+            }
+        )
+        let refusedFailure = try #require(refused)
+        #expect(refusedFailure.contains("fresh plug-in read-probe refresh failed"))
+        #expect(!events.contains("unexpected_discovery"))
+        #expect(QualificationTransport.pluginReadProbeOperationIDs.allSatisfy {
+            prepared[$0] == nil
+        })
+
+        let invalidReceipts: [QualificationPluginReadRefreshReceipt?] = [
+            nil,
+            QualificationPluginReadRefreshReceipt(
+                source: "ax_fallback_poller", refreshed: false, changedSections: ["tracks"]),
+            QualificationPluginReadRefreshReceipt(
+                source: "ax_fallback_poller", refreshed: true, changedSections: ["transport"]),
+            QualificationPluginReadRefreshReceipt(
+                source: "none", refreshed: true, changedSections: ["tracks"]),
+        ]
+        for (index, receipt) in invalidReceipts.enumerated() {
+            prepared[.pluginsGetParamVerified] = ["target_ref": "ins_stale_\(index)"]
+            var discoveryCalled = false
+            let invalid = QualificationTransport.refreshPluginReadProbeParams(
+                for: .pluginsGetParamVerified,
+                preparedReadParams: &prepared,
+                refresh: { (receipt, false) },
+                pluginPreparation: {
+                    discoveryCalled = true
+                    return [.pluginsGetParamVerified: ["target_ref": "ins_forbidden"]]
+                }
+            )
+            #expect(invalid != nil)
+            #expect(!discoveryCalled)
+            #expect(QualificationTransport.pluginReadProbeOperationIDs.allSatisfy {
+                prepared[$0] == nil
+            })
+        }
+
+        prepared[.pluginsGetParamVerified] = ["target_ref": "ins_stale_thrown"]
+        let thrown = QualificationTransport.refreshPluginReadProbeParams(
+            for: .pluginsGetParamVerified,
+            preparedReadParams: &prepared,
+            refresh: {
+                events.append("refresh_thrown")
+                throw QualificationTransportError.closedPipe(phase: "plugin boundary refresh")
+            },
+            pluginPreparation: {
+                events.append("unexpected_discovery_after_throw")
+                return [.pluginsGetParamVerified: ["target_ref": "ins_forbidden"]]
+            }
+        )
+        let thrownFailure = try #require(thrown)
+        #expect(thrownFailure.contains("fresh plug-in read-probe refresh failed"))
+        #expect(!events.contains("unexpected_discovery_after_throw"))
+        #expect(QualificationTransport.pluginReadProbeOperationIDs.allSatisfy {
+            prepared[$0] == nil
+        })
+    }
+
+    @Test func pluginReadQualificationRequiresCleanupOnlyForAnEditorItOpened() throws {
+        func response(
+            state: String = "A",
+            openerAttempted: Bool,
+            closeObserved: Bool? = nil,
+            cleanupUnobserved: Bool? = nil
+        ) throws -> Data {
+            var object: [String: Any] = [
+                "state": state,
+                "opener_action_attempted": openerAttempted,
+            ]
+            if let closeObserved { object["editor_close_observed"] = closeObserved }
+            if let cleanupUnobserved { object["editor_cleanup_unobserved"] = cleanupUnobserved }
+            return try JSONSerialization.data(withJSONObject: object)
+        }
+
+        let verifiedOwnedClose = try response(openerAttempted: true, closeObserved: true)
+        #expect(QualificationTransport.pluginReadProbeCleanupFailure(
+            responseData: verifiedOwnedClose
+        ) == nil)
+
+        let unclosedOwnedEditor = try response(
+            openerAttempted: true,
+            closeObserved: false,
+            cleanupUnobserved: true
+        )
+        let cleanupFailure = try #require(QualificationTransport.pluginReadProbeCleanupFailure(
+            responseData: unclosedOwnedEditor
+        ))
+        #expect(cleanupFailure.contains("did not prove exact editor cleanup"))
+
+        let reusedCallerEditor = try response(openerAttempted: false)
+        #expect(QualificationTransport.pluginReadProbeCleanupFailure(
+            responseData: reusedCallerEditor
+        ) == nil)
+
+        let refusal = try response(state: "C", openerAttempted: true, closeObserved: false)
+        #expect(QualificationTransport.pluginReadProbeCleanupFailure(
+            responseData: refusal
+        ) == nil)
+    }
+
+    @Test func parameterPlanNestedOwnedEditorCleanupFailureCannotPromote() throws {
+        func observation(
+            openerAttempted: Bool,
+            closeObserved: Bool? = nil,
+            cleanupUnobserved: Bool? = nil,
+            stillOpen: Bool? = nil
+        ) -> [String: Any] {
+            var response: [String: Any] = [
+                "state": "A",
+                "opener_action_attempted": openerAttempted,
+            ]
+            if let closeObserved { response["editor_close_observed"] = closeObserved }
+            if let cleanupUnobserved { response["editor_cleanup_unobserved"] = cleanupUnobserved }
+            if let stillOpen { response["editor_still_open"] = stillOpen }
+            return response
+        }
+        func plan(initial: [String: Any], final: [String: Any]) throws -> Data {
+            try JSONSerialization.data(withJSONObject: [
+                "state": "A",
+                "operation": "logic_plugins.plan_parameter_changes",
+                "entries": [[
+                    "read_observations": [
+                        ["bookend": "initial", "response": initial],
+                        ["bookend": "final", "response": final],
+                    ]
+                ]],
+            ])
+        }
+
+        let callerOwned = observation(openerAttempted: false)
+        #expect(QualificationTransport.pluginReadProbeCleanupFailure(
+            responseData: try plan(initial: callerOwned, final: callerOwned)
+        ) == nil)
+
+        let cleanOwned = observation(openerAttempted: true, closeObserved: true)
+        let failures: [[String: Any]] = [
+            observation(openerAttempted: true, closeObserved: false),
+            observation(openerAttempted: true, closeObserved: true, cleanupUnobserved: true),
+            observation(openerAttempted: true, closeObserved: true, stillOpen: true),
+        ]
+        for failed in failures {
+            let initialFailure = try #require(QualificationTransport.pluginReadProbeCleanupFailure(
+                responseData: try plan(initial: failed, final: cleanOwned)
+            ))
+            #expect(initialFailure.contains("nested initial"))
+
+            let finalFailure = try #require(QualificationTransport.pluginReadProbeCleanupFailure(
+                responseData: try plan(initial: cleanOwned, final: failed)
+            ))
+            #expect(finalFailure.contains("nested final"))
+        }
+    }
+
     @Test func mixerOnlyReadProbePreparationRefreshesWithoutPluginPreparation() {
         var refreshCount = 0
         var pluginPreparationCount = 0
