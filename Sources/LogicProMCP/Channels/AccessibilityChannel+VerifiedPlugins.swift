@@ -3302,19 +3302,15 @@ extension AccessibilityChannel {
             }
             guard !constructedWindowsNeedingCleanup.isEmpty else { return }
             let windows = constructedWindowsNeedingCleanup
-            var closeAttempted = false
             let closeOutcomes = closePluginEditorsOpenedByThisOperation(
                 windows,
                 trackName: trackName,
                 pluginID: pluginID,
                 runtime: runtime,
                 validatingObservedAbsence: { _ in acquisitionAllowed() },
-                allowingChanges: { window in
-                    guard editorCloseAllowed(window) else { return false }
-                    closeAttempted = true
-                    return true
-                }
+                allowingChanges: editorCloseAllowed
             )
+            let closeAttempted = closeOutcomes.contains { $0.attemptCount > 0 }
             let closeObserved = closeOutcomes.allSatisfy(\.observed)
             // This explicit attempt owns cleanup on success and refusal alike.
             constructedWindowsNeedingCleanup.removeAll()
@@ -5777,6 +5773,8 @@ extension AccessibilityChannel {
         var subroleReadError: String?
         var closeButtonReadStatus = "not_read"
         var closeButtonReadError: String?
+        var closeButtonWindowStatus = "not_read"
+        var closeButtonWindowReadError: String?
         var windowMembership = "unreadable"
         var windowMembershipReadError: String?
 
@@ -5785,11 +5783,15 @@ extension AccessibilityChannel {
                 "subrole": subrole ?? NSNull(),
                 "subrole_read_status": subroleReadStatus,
                 "close_button_read_status": closeButtonReadStatus,
+                "close_button_window_status": closeButtonWindowStatus,
                 "attempt_count": attemptCount,
                 "window_membership": windowMembership,
             ]
             if let subroleReadError { result["subrole_read_error"] = subroleReadError }
             if let closeButtonReadError { result["close_button_read_error"] = closeButtonReadError }
+            if let closeButtonWindowReadError {
+                result["close_button_window_read_error"] = closeButtonWindowReadError
+            }
             if let windowMembershipReadError {
                 result["window_membership_read_error"] = windowMembershipReadError
             }
@@ -5879,7 +5881,34 @@ extension AccessibilityChannel {
                 retainWindowMembership()
                 return outcome
             }
-            guard allowingChanges(window) else {
+            switch AXHelpers.getAttributeResult(
+                closeButton, kAXWindowAttribute as String, runtime: runtime.ax
+            ) as Result<AXUIElement?, AXHelpers.AXStatusError> {
+            case let .success(.some(owner)):
+                guard CFEqual(owner, window) else {
+                    outcome.closeButtonWindowStatus = "mismatch"
+                    retainWindowMembership()
+                    return outcome
+                }
+                outcome.closeButtonWindowStatus = "matches"
+                outcome.closeButtonWindowReadError = nil
+            case .success(nil):
+                outcome.closeButtonWindowStatus = "absent"
+                outcome.closeButtonWindowReadError = nil
+                retainWindowMembership()
+                return outcome
+            case let .failure(error) where error.isDefinitiveAbsence:
+                outcome.closeButtonWindowStatus = "absent"
+                outcome.closeButtonWindowReadError = error.diagnosticLabel
+                retainWindowMembership()
+                return outcome
+            case let .failure(error):
+                outcome.closeButtonWindowStatus = "unreadable"
+                outcome.closeButtonWindowReadError = error.diagnosticLabel
+                retainWindowMembership()
+                return outcome
+            }
+            guard allowingChanges(window), pluginRollbackOperationIsCurrent() else {
                 retainWindowMembership()
                 return outcome
             }
