@@ -296,6 +296,19 @@ struct QualificationMutationRestoreRecord: Codable, Equatable, Sendable {
     }
 
     func verifiedCycleShape(using policy: QualificationMutationRestorePolicy) -> Bool {
+        if case .transportMotion = policy {
+            switch (stagingMutation, stagingReadback) {
+            case (nil, nil):
+                break
+            case let (mutation?, readback?):
+                guard Self.writeResponse(mutation),
+                      QualificationTransport.recordedTransportMotion(readback) == .moving else {
+                    return false
+                }
+            default:
+                return false
+            }
+        }
         guard policy.isValid,
               readingThatDidNotHappen == nil,
               mutationMovedRecipeValue(using: policy),
@@ -1645,6 +1658,26 @@ struct QualificationTransport: Sendable {
             var preparedReadParams: [OperationID: [String: Any]] = [:]
             var readProbePreparationFailures: [OperationID: String] = [:]
             let requestedIDs = Set(request.operations.map(\.id))
+            let requestedTransportOperations = Set(Self.transportExpectedPlaying.keys)
+                .intersection(requestedIDs)
+            let wholeRunTransportSpec = request.operations.first {
+                requestedTransportOperations.contains($0.id)
+            }
+            var wholeRunTransportBaseline: (motion: TransportMotion, raw: String)?
+            var wholeRunTransportFailure: String?
+            if !requestedTransportOperations.isEmpty {
+                do {
+                    wholeRunTransportBaseline = try observedTransportMotion(
+                        session,
+                        nextID: &nextID,
+                        phase: "transport_run.pre_state"
+                    )
+                } catch {
+                    wholeRunTransportFailure = "whole-run transport baseline unreadable: "
+                        + Self.observedFailureReason(from: error, during: "transport_run.pre_state")
+                        + "; residual unverified"
+                }
+            }
             let requestedMixerReads = Self.mixerReadProbeOperationIDs.intersection(requestedIDs)
             let requestedPluginReads = Self.pluginReadProbeOperationIDs.intersection(requestedIDs)
             let pluginReadRefresh: () throws
@@ -2146,6 +2179,9 @@ struct QualificationTransport: Sendable {
                         phase: "operation_probe.\(spec.id.rawValue)"
                     ) as OperationProbeResult
                 }
+                let transportRecipeFailure = Self.transportExpectedPlaying[spec.id] == nil
+                    ? nil
+                    : phaseBRefusal
                 operationResults[spec.id.rawValue] = QualificationOperationResult(
                     operationID: spec.id.rawValue,
                     tool: spec.tool.rawValue,
@@ -2166,11 +2202,55 @@ struct QualificationTransport: Sendable {
                     readbackData: readbackData,
                     verification: spec.verification,
                     deadline: spec.deadline,
-                    failureReason: responseFailure ?? readbackFailure,
+                    failureReason: responseFailure ?? readbackFailure ?? transportRecipeFailure,
                     liveFixturePrecondition: liveFixturePrecondition,
                     mutationRestore: phaseBRecord,
                     mutationRestoreRefusal: phaseBRefusal
                 )
+            }
+            if !requestedTransportOperations.isEmpty,
+               wholeRunTransportFailure == nil,
+               let baseline = wholeRunTransportBaseline,
+               let transportSpec = wholeRunTransportSpec {
+                do {
+                    let final = try observedTransportMotion(
+                        session,
+                        nextID: &nextID,
+                        phase: "transport_run.final_state"
+                    )
+                    if final.motion != baseline.motion {
+                        let compensation = compensateTransportMotion(
+                            session,
+                            spec: transportSpec,
+                            target: baseline.motion,
+                            nextID: &nextID,
+                            phase: "transport_run.cleanup"
+                        )
+                        wholeRunTransportFailure = "whole-run transport baseline changed from "
+                            + "\(baseline.motion) to \(final.motion); compensating restore: "
+                            + compensation.summary
+                    }
+                } catch {
+                    let compensation = compensateTransportMotion(
+                        session,
+                        spec: transportSpec,
+                        target: baseline.motion,
+                        nextID: &nextID,
+                        phase: "transport_run.cleanup"
+                    )
+                    wholeRunTransportFailure = "whole-run transport final state unreadable: "
+                        + Self.observedFailureReason(from: error, during: "transport_run.final_state")
+                        + "; compensating restore: " + compensation.summary
+                }
+            }
+            if let wholeRunTransportFailure {
+                for operation in requestedTransportOperations {
+                    guard let existing = operationResults[operation.rawValue] else { continue }
+                    operationResults[operation.rawValue] = Self.appendingFailure(
+                        wholeRunTransportFailure,
+                        to: existing
+                    )
+                }
             }
             let healthAfter = try health(session, id: nextID, phase: "health_after")
             nextID += 1
@@ -2229,6 +2309,40 @@ struct QualificationTransport: Sendable {
             }
             throw error
         }
+    }
+
+    private static func appendingFailure(
+        _ additionalFailure: String,
+        to result: QualificationOperationResult
+    ) -> QualificationOperationResult {
+        let combined = [result.failureReason, additionalFailure]
+            .compactMap { $0 }
+            .joined(separator: " | ")
+        return QualificationOperationResult(
+            operationID: result.operationID,
+            tool: result.tool,
+            command: result.command,
+            mutability: result.mutability,
+            requestID: result.requestID,
+            responseData: result.responseData,
+            isError: result.isError,
+            state: result.state,
+            error: result.error,
+            hint: result.hint,
+            reason: result.reason,
+            writeAttempted: result.writeAttempted,
+            rowSelectionWriteAttempted: result.rowSelectionWriteAttempted,
+            rowSelectionRestored: result.rowSelectionRestored,
+            readbackSource: result.readbackSource,
+            readbackRequestID: result.readbackRequestID,
+            readbackData: result.readbackData,
+            verification: result.verification,
+            deadline: result.deadline,
+            failureReason: combined,
+            liveFixturePrecondition: result.liveFixturePrecondition,
+            mutationRestore: result.mutationRestore,
+            mutationRestoreRefusal: result.mutationRestoreRefusal
+        )
     }
 
     private func initialize(_ session: QualificationSubprocessSession) throws -> QualificationHandshake {
@@ -3036,8 +3150,9 @@ struct QualificationTransport: Sendable {
         nextID: inout Int,
         phase: String
     ) throws -> (motion: TransportMotion, raw: String) {
-        let first = try observedPlaying(session, id: nextID, phase: phase)
+        let firstID = nextID
         nextID += 2
+        let first = try observedPlaying(session, id: firstID, phase: phase)
         if !first.playing { return (.stopped, first.raw) }
         guard let data = first.raw.data(using: .utf8),
               let envelope = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -3046,8 +3161,10 @@ struct QualificationTransport: Sendable {
             throw QualificationTransportError.protocolViolation("\(phase): transport motion tempo unavailable")
         }
         Thread.sleep(forTimeInterval: Double(gap) / 1_000_000_000)
-        let second = try observedPlaying(session, id: nextID, phase: "\(phase).motion_confirming")
+        let secondID = nextID
         nextID += 2
+        let second = try observedPlaying(
+            session, id: secondID, phase: "\(phase).motion_confirming")
         guard second.playing,
               let secondData = second.raw.data(using: .utf8),
               var secondEnvelope = try JSONSerialization.jsonObject(with: secondData) as? [String: Any] else {
@@ -3061,6 +3178,90 @@ struct QualificationTransport: Sendable {
             throw QualificationTransportError.protocolViolation("\(phase): transport position motion unavailable")
         }
         return (motion, raw)
+    }
+
+    private func compensateTransportMotion(
+        _ session: QualificationSubprocessSession,
+        spec: OperationSpec,
+        target: TransportMotion,
+        nextID: inout Int,
+        phase: String
+    ) -> (verified: Bool, summary: String) {
+        do {
+            var observed = try observedTransportMotion(
+                session,
+                nextID: &nextID,
+                phase: "\(phase).pre_state"
+            )
+            if observed.motion == target {
+                return (true, "verified exact \(target) without a restore write")
+            }
+
+            var refusedReplies: [String] = []
+            func writeAndObserve(
+                _ command: String,
+                expected: TransportMotion,
+                stage: String
+            ) throws -> (motion: TransportMotion, raw: String) {
+                let requestID = nextID
+                nextID += 1
+                let reply = try invoke(
+                    session,
+                    id: requestID,
+                    tool: spec.tool.rawValue,
+                    command: command,
+                    params: [:],
+                    phase: stage,
+                    timeout: spec.deadline.seconds + 5
+                )
+                if Self.mutationSaysItFailed(reply.text) {
+                    refusedReplies.append(command)
+                }
+                let readback = try observedTransportMotion(
+                    session,
+                    nextID: &nextID,
+                    phase: "\(stage)_readback"
+                )
+                guard readback.motion == expected else {
+                    throw QualificationTransportError.protocolViolation(
+                        "\(stage): residual \(readback.motion), expected \(expected)"
+                    )
+                }
+                return readback
+            }
+
+            if target == .paused, observed.motion == .stopped {
+                observed = try writeAndObserve(
+                    "play", expected: .moving, stage: "\(phase).stage_moving")
+            }
+            if observed.motion != target {
+                observed = try writeAndObserve(
+                    target.restoreCommand, expected: target, stage: phase)
+            }
+            guard observed.motion == target else {
+                return (
+                    false,
+                    "residual \(observed.motion), expected \(target)"
+                )
+            }
+            if !refusedReplies.isEmpty {
+                return (
+                    false,
+                    "restore reply refused for \(refusedReplies.joined(separator: ", ")); "
+                        + "exact target \(target) observed"
+                )
+            }
+            return (
+                true,
+                "verified exact \(target)"
+            )
+        } catch {
+            return (
+                false,
+                "residual unverified: "
+                    + Self.observedFailureReason(from: error, during: phase)
+            )
+        }
     }
 
     /// #373 Phase B for transport. Same five steps, with one extra obligation the others do not
@@ -3084,64 +3285,103 @@ struct QualificationTransport: Sendable {
         let inverse = expected == .moving ? "stop" : "play"
 
         let pre = try observedTransportMotion(session, nextID: &nextID, phase: "phase_b.pre_state")
-        var needsRestore = false
-        defer {
-            if needsRestore {
-                // A staged precondition is acquired work too. A later refused mutation/readback
-                // must not leave it behind; failure still carries no verified cycle record.
-                _ = try? invoke(session, id: nextID + 900, tool: spec.tool.rawValue,
-                    command: pre.motion.restoreCommand, params: [:],
-                    phase: "phase_b.cleanup", timeout: spec.deadline.seconds + 5)
+        var workMayHaveLanded = false
+        do {
+            if pre.motion == expected || (expected == .paused && pre.motion != .moving) {
+                workMayHaveLanded = true
+                let precondition = try invoke(
+                    session, id: step(), tool: spec.tool.rawValue, command: inverse,
+                    params: [:], phase: "phase_b.precondition")
+                guard !Self.mutationSaysItFailed(precondition.text) else {
+                    throw QualificationTransportError.protocolViolation(
+                        "phase_b.precondition: \(spec.id.rawValue) refused the staging request: "
+                            + precondition.text.prefix(220))
+                }
+                let staged = try observedTransportMotion(
+                    session, nextID: &nextID, phase: "phase_b.precondition_readback")
+                guard staged.motion == (expected == .moving ? .stopped : .moving) else {
+                    throw QualificationTransportError.protocolViolation(
+                        "phase_b.precondition: could not stage independent transport motion")
+                }
             }
-        }
-        if pre.motion == expected || (expected == .paused && pre.motion != .moving) {
-            needsRestore = true
-            _ = try invoke(
-                session, id: step(), tool: spec.tool.rawValue, command: inverse,
-                params: [:], phase: "phase_b.precondition")
-            let staged = try observedTransportMotion(
-                session, nextID: &nextID, phase: "phase_b.precondition_readback")
-            guard staged.motion == (expected == .moving ? .stopped : .moving) else {
+            workMayHaveLanded = true
+            let mutation = try invoke(
+                session, id: step(), tool: spec.tool.rawValue, command: spec.command,
+                params: [:], phase: "phase_b.mutation",
+                timeout: spec.deadline.seconds + 5)
+            guard !Self.mutationSaysItFailed(mutation.text) else {
                 throw QualificationTransportError.protocolViolation(
-                    "phase_b.precondition: could not stage independent transport motion")
+                    "phase_b.mutation: \(spec.id.rawValue) refused the real request: "
+                        + mutation.text.prefix(220))
             }
-        }
-        needsRestore = true
-        let mutation = try invoke(
-            session, id: step(), tool: spec.tool.rawValue, command: spec.command,
-            params: [:], phase: "phase_b.mutation",
-            timeout: spec.deadline.seconds + 5)
-        guard !Self.mutationSaysItFailed(mutation.text) else {
-            throw QualificationTransportError.protocolViolation(
-                "phase_b.mutation: \(spec.id.rawValue) refused the real request: "
-                    + mutation.text.prefix(220))
-        }
-        let after = try observedTransportMotion(session, nextID: &nextID, phase: "phase_b.readback")
-        guard after.motion == expected else {
-            throw QualificationTransportError.protocolViolation(
-                "phase_b.readback: independent transport motion differs from requested mode")
-        }
-        let restore = try invoke(
-            session, id: step(), tool: spec.tool.rawValue,
-            command: pre.motion.restoreCommand, params: [:], phase: "phase_b.restore")
-        let restored = try observedTransportMotion(
-            session, nextID: &nextID, phase: "phase_b.restore_readback")
-        guard restored.motion == pre.motion else {
-            throw QualificationTransportError.protocolViolation(
-                "phase_b.restore_readback: independent transport motion was not restored")
-        }
-        needsRestore = false
-        return (
-            QualificationMutationRestoreRecord(
+            let after = try observedTransportMotion(session, nextID: &nextID, phase: "phase_b.readback")
+            guard after.motion == expected else {
+                throw QualificationTransportError.protocolViolation(
+                    "phase_b.readback: independent transport motion differs from requested mode")
+            }
+            var restoreStagingMutation: String?
+            var restoreStagingReadback: String?
+            if pre.motion == .paused, after.motion == .stopped {
+                let stage = try invoke(
+                    session, id: step(), tool: spec.tool.rawValue,
+                    command: "play", params: [:], phase: "phase_b.restore_precondition")
+                guard !Self.mutationSaysItFailed(stage.text) else {
+                    throw QualificationTransportError.protocolViolation(
+                        "phase_b.restore_precondition: \(spec.id.rawValue) refused the moving stage: "
+                            + stage.text.prefix(220))
+                }
+                let staged = try observedTransportMotion(
+                    session, nextID: &nextID, phase: "phase_b.restore_precondition_readback")
+                guard staged.motion == .moving else {
+                    throw QualificationTransportError.protocolViolation(
+                        "phase_b.restore_precondition_readback: transport did not reach moving")
+                }
+                restoreStagingMutation = stage.text
+                restoreStagingReadback = staged.raw
+            }
+            let restore = try invoke(
+                session, id: step(), tool: spec.tool.rawValue,
+                command: pre.motion.restoreCommand, params: [:], phase: "phase_b.restore")
+            guard !Self.mutationSaysItFailed(restore.text) else {
+                throw QualificationTransportError.protocolViolation(
+                    "phase_b.restore: \(spec.id.rawValue) refused the restore: "
+                        + restore.text.prefix(220))
+            }
+            let restored = try observedTransportMotion(
+                session, nextID: &nextID, phase: "phase_b.restore_readback")
+            guard restored.motion == pre.motion else {
+                throw QualificationTransportError.protocolViolation(
+                    "phase_b.restore_readback: independent transport motion was not restored")
+            }
+            let record = QualificationMutationRestoreRecord(
                 operationID: spec.id.rawValue,
                 preState: pre.raw,
                 mutation: mutation.text,
                 readback: after.raw,
                 restore: restore.text,
-                restoreReadback: restored.raw
-            ),
-            nextID
-        )
+                restoreReadback: restored.raw,
+                stagingMutation: restoreStagingMutation,
+                stagingReadback: restoreStagingReadback
+            )
+            guard record.verifiedCycleShape else {
+                throw QualificationTransportError.protocolViolation(
+                    "phase_b.restore_readback: recorded transport cycle did not verify")
+            }
+            workMayHaveLanded = false
+            return (record, nextID)
+        } catch {
+            guard workMayHaveLanded else { throw error }
+            let compensation = compensateTransportMotion(
+                session,
+                spec: spec,
+                target: pre.motion,
+                nextID: &nextID,
+                phase: "phase_b.cleanup"
+            )
+            throw QualificationTransportError.protocolViolation(
+                "\(error) | compensating restore: \(compensation.summary)"
+            )
+        }
     }
 
     /// #373 Phase B for `tracks.select`. The moved thing is WHICH row carries `isSelected`, so the

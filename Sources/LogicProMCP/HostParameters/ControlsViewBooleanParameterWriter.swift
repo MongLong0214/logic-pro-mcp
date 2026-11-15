@@ -320,6 +320,11 @@ enum ControlsViewBooleanParameterWriter {
         }
     }
 
+    enum ViewPickBoundary: Sendable {
+        case willPick
+        case didPick
+    }
+
     /// Owns one confirmed temporary view selection. Its caller restores this
     /// exact entry view on every exit path, including a locator refusal.
     final class ViewSession: @unchecked Sendable {
@@ -354,7 +359,10 @@ enum ControlsViewBooleanParameterWriter {
         /// caller before it returns either a successful write or a State C; the
         /// already-observed parameter-write verdict is never recast as though it
         /// had not run.
-        func restore(allowingChanges: () -> Bool = { true }) -> ViewRestoration {
+        func restore(
+            allowingChanges: () -> Bool = { true },
+            observingPickBoundary: ((ViewPickBoundary) -> Void)? = nil
+        ) -> ViewRestoration {
             guard !restorationFinished else {
                 return ViewRestoration(
                     attempted: false,
@@ -384,6 +392,7 @@ enum ControlsViewBooleanParameterWriter {
                 confirmationTimeout: viewConfirmationTimeout,
                 allowingChanges: allowingChanges,
                 headerBoundUndescribedView: headerBoundUndescribedView,
+                observingPickBoundary: observingPickBoundary,
                 runtime: runtime
             ) {
             case let .confirmed(switched):
@@ -827,6 +836,7 @@ enum ControlsViewBooleanParameterWriter {
         forceSelection: Bool = false,
         allowingChanges: () -> Bool = { true },
         headerBoundUndescribedView: ((PluginWindowView) -> Bool)? = nil,
+        observingPickBoundary: ((ViewPickBoundary) -> Void)? = nil,
         runtime: AXHelpers.Runtime
     ) -> ViewChangeResult {
         if !forceSelection {
@@ -926,7 +936,10 @@ enum ControlsViewBooleanParameterWriter {
             return .refused(.viewEvidenceReadFailed(.menuItemEnabled(error)), targetSelectionAttempted: false)
         }
         guard allowingChanges() else { return .refused(.contextOwnershipEnded, targetSelectionAttempted: false) }
+        observingPickBoundary?(.willPick)
+        guard allowingChanges() else { return .refused(.contextOwnershipEnded, targetSelectionAttempted: false) }
         _ = AXHelpers.performAction(target, kAXPickAction as String, runtime: runtime)
+        observingPickBoundary?(.didPick)
         switch waitForView(
             targetView,
             in: window,

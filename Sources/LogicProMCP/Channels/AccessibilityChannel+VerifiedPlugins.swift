@@ -3244,6 +3244,17 @@ extension AccessibilityChannel {
             }
             return true
         }
+        func currentAppWindows() -> [AXUIElement]? {
+            guard let app = AXLogicProElements.appRoot(runtime: runtime) else { return nil }
+            switch AXHelpers.getAttributeResult(
+                app, kAXWindowsAttribute as String, runtime: runtime.ax
+            ) as Result<[AXUIElement]?, AXHelpers.AXStatusError> {
+            case let .success(.some(observed)):
+                return observed
+            case .success(nil), .failure:
+                return nil
+            }
+        }
         defer {
             if !constructedWindowsNeedingCleanup.isEmpty {
                 _ = closePluginEditorsOpenedByThisOperation(
@@ -3850,7 +3861,53 @@ extension AccessibilityChannel {
         case let .ready(session):
             viewSession = session
         }
-        restorePluginViewOnExit = { viewSession.restore(allowingChanges: viewChangesAllowed) }
+        restorePluginViewOnExit = {
+            // Only the exact AXPick issued by this ViewSession can transfer
+            // cleanup custody to a replacement editor. A later observed-view
+            // refresh is not an ownership event.
+            var originalAtPick: AXUIElement?
+            var replacementObservedAtPick: AXUIElement?
+            let restoration = viewSession.restore(
+                allowingChanges: viewChangesAllowed,
+                observingPickBoundary: { boundary in
+                    switch boundary {
+                    case .willPick:
+                        originalAtPick = nil
+                        replacementObservedAtPick = nil
+                        guard access.isRead,
+                              constructedWindowsNeedingCleanup.count == 1,
+                              let original = constructedWindowsNeedingCleanup.first,
+                              currentAppWindows()?.contains(where: { CFEqual($0, original) }) == true else {
+                            return
+                        }
+                        originalAtPick = original
+                    case .didPick:
+                        guard let original = originalAtPick,
+                              let after = currentAppWindows(),
+                              !after.contains(where: { CFEqual($0, original) }),
+                              acquisitionAllowed(),
+                              case .success(let editors) = AXLogicProElements.matchingPluginEditorWindows(
+                                  forTrackName: trackName,
+                                  matchingPluginID: pluginID,
+                                  matchingObservedPluginName:
+                                      matchesTargetBoundObservedPluginName ? pluginID : nil,
+                                  runtime: runtime
+                              ),
+                              editors.count == 1,
+                              let replacement = editors.first,
+                              !CFEqual(replacement, original),
+                              after.contains(where: { CFEqual($0, replacement) }) else {
+                            return
+                        }
+                        replacementObservedAtPick = replacement
+                    }
+                }
+            )
+            if let replacementObservedAtPick {
+                constructedWindowsNeedingCleanup = [replacementObservedAtPick]
+            }
+            return restoration
+        }
         let resultAfterViewPreparation: ChannelResult = {
         if case let .readManifest(buildFingerprint, contextIsCurrent, _) = access {
             func currentInstance() -> Bool {

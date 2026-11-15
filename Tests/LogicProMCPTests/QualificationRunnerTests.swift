@@ -2347,14 +2347,169 @@ struct QualificationRunnerTests {
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [pause]))
         let observed = try #require(result.operationResults[pause.id.rawValue])
-        #expect(observed.status != .passed, "a refused mutation never acquires write-cycle credit")
+        #expect(observed.status == .failed, "a refused transport recipe is a merge-blocking failure")
+        #expect(observed.liveGateDisposition == .failed)
         #expect(observed.mutationRestore == nil)
+        let refusal = try #require(observed.failureReason)
+        #expect(refusal.contains("phase_b.mutation"))
+        #expect(refusal.contains("compensating restore"))
+        #expect(refusal.contains("verified exact stopped"))
         #expect(try String(contentsOf: fixture.directory.appendingPathComponent("playing"), encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines) == "false")
+        #expect(try String(contentsOf: fixture.directory.appendingPathComponent("moving"), encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines) == "false")
         let requests = try String(contentsOf: fixture.directory.appendingPathComponent("requests"), encoding: .utf8)
         #expect(requests.contains("\"command\":\"play\""), "the real recipe must stage playback")
         #expect(requests.contains("\"command\":\"pause\""), "the refused mutation must actually run")
         #expect(requests.contains("\"command\":\"stop\""), "the acquired precondition must be compensated")
+        #expect(result.wireFrames.contains {
+            $0.direction == .response && $0.operationID == "phase_b.cleanup_readback"
+        })
+    }
+
+    @Test(arguments: [
+        "cleanup_state_c",
+        "cleanup_no_effect",
+        "cleanup_malformed_readback",
+        "restore_state_c_baseline_coincident",
+    ])
+    func transportRestoreRefusalsAndUnverifiedCleanupAreFatal(fault: String) throws {
+        let normalMutation = fault == "restore_state_c_baseline_coincident"
+        let fixture = try SlowHandshakeFixture(
+            transportRefusal: !normalMutation,
+            transportNativePause: normalMutation,
+            transportFault: fault
+        )
+        defer { fixture.remove() }
+        let pause = try #require(OperationRegistry.specs.first { $0.id == .transportPause })
+        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [pause]))
+        let observed = try #require(result.operationResults[pause.id.rawValue])
+        #expect(observed.status == .failed)
+        #expect(observed.liveGateDisposition == .failed)
+        #expect(observed.mutationRestore == nil, "a refused or unverified restore earns no cycle credit")
+        let refusal = try #require(observed.failureReason)
+        #expect(refusal.contains("phase_b"))
+        #expect(refusal.contains("compensating restore"))
+        if fault == "cleanup_malformed_readback" {
+            #expect(refusal.contains("unverified") || refusal.contains("malformed"))
+        } else if fault == "restore_state_c_baseline_coincident" {
+            #expect(refusal.contains("phase_b.restore"))
+        } else {
+            #expect(refusal.contains("residual") || refusal.contains("not restored"))
+        }
+    }
+
+    @Test func wholeRunTransportBookendRepairsButFailsCrossOperationLeak() throws {
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true,
+            transportFault: "cross_operation_leak"
+        )
+        defer { fixture.remove() }
+        let pause = try #require(OperationRegistry.specs.first { $0.id == .transportPause })
+        let health = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
+        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0,
+                operations: [pause, health]))
+        let observed = try #require(result.operationResults[pause.id.rawValue])
+        #expect(observed.status == .failed)
+        #expect(observed.liveGateDisposition == .failed)
+        let failure = try #require(observed.failureReason)
+        #expect(failure.contains("whole-run transport baseline"))
+        #expect(failure.contains("verified exact stopped"))
+        #expect(try String(contentsOf: fixture.directory.appendingPathComponent("playing"), encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines) == "false")
+        #expect(try String(contentsOf: fixture.directory.appendingPathComponent("moving"), encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines) == "false")
+    }
+
+    @Test(arguments: ["baseline_malformed", "final_malformed"])
+    func transportMotionReadFailuresNeverReuseRequestIDs(fault: String) throws {
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true,
+            transportFault: fault
+        )
+        defer { fixture.remove() }
+        let pause = try #require(OperationRegistry.specs.first { $0.id == .transportPause })
+        _ = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [pause]))
+        let requests = try String(
+            contentsOf: fixture.directory.appendingPathComponent("requests"),
+            encoding: .utf8
+        )
+        let ids = requests.split(separator: "\n").compactMap { line -> Int? in
+            guard let data = String(line).data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return nil
+            }
+            return object["id"] as? Int
+        }
+        #expect(!ids.isEmpty)
+        #expect(Set(ids).count == ids.count, "\(fault): \(ids)")
+        #expect(zip(ids, ids.dropFirst()).allSatisfy(<), "\(fault): \(ids)")
+    }
+
+    @Test func wholeRunPausedBaselineCompensationStagesMovingBeforePause() throws {
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true,
+            transportFault: "cross_operation_stop",
+            initialTransportMotion: "paused"
+        )
+        defer { fixture.remove() }
+        let pause = try #require(OperationRegistry.specs.first { $0.id == .transportPause })
+        let health = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
+        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0,
+                operations: [pause, health]))
+        let observed = try #require(result.operationResults[pause.id.rawValue])
+        #expect(observed.status == .failed)
+        let failure = try #require(observed.failureReason)
+        #expect(failure.contains("whole-run transport baseline"))
+        #expect(failure.contains("verified exact paused"))
+        #expect(try String(contentsOf: fixture.directory.appendingPathComponent("playing"), encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines) == "true")
+        #expect(try String(contentsOf: fixture.directory.appendingPathComponent("moving"), encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines) == "false")
+    }
+
+    @Test(arguments: ["missing_mutation", "missing_readback", "refused", "not_moving"])
+    func transportRestoreStagingEvidenceMustBeCompleteAndVerified(shape: String) throws {
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true,
+            initialTransportMotion: "paused"
+        )
+        defer { fixture.remove() }
+        let stop = try #require(OperationRegistry.specs.first { $0.id == .transportStop })
+        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [stop]))
+        let original = try #require(result.mutationRestoreRecords.first)
+        #expect(original.verifiedCycleShape)
+        var stagingMutation = original.stagingMutation
+        var stagingReadback = original.stagingReadback
+        switch shape {
+        case "missing_mutation": stagingMutation = nil
+        case "missing_readback": stagingReadback = nil
+        case "refused":
+            stagingMutation = #"{"state":"C","error":"restore_refused","write_attempted":false}"#
+        case "not_moving": stagingReadback = original.preState
+        default: break
+        }
+        let corrupted = QualificationMutationRestoreRecord(
+            operationID: original.operationID,
+            preState: original.preState,
+            mutation: original.mutation,
+            readback: original.readback,
+            restore: original.restore,
+            restoreReadback: original.restoreReadback,
+            stagingMutation: stagingMutation,
+            stagingReadback: stagingReadback
+        )
+        #expect(!corrupted.verifiedCycleShape, "\(shape) must not earn restore-cycle credit")
     }
 
     @Test("Only intentionally withheld mutations get a non-crediting not-run receipt",
@@ -6257,6 +6412,7 @@ struct QualificationRunnerTests {
         let executableURL: URL
 
         init(transportRefusal: Bool = false, transportNativePause: Bool = false,
+             transportFault: String = "none",
              libraryReadback: Bool = false,
              initialTransportMotion: String = "stopped", cachedTransport: Bool = false,
              nameRecipe: OperationID? = nil, nameIdentityFault: String = "none",
@@ -6302,7 +6458,8 @@ struct QualificationRunnerTests {
             IFS= read -r request_line || exit 0
             IFS= read -r request_line || exit 0
             """#
-            if transportRefusal || transportNativePause || libraryReadback || nameRecipe != nil || countInCycle != nil
+            if transportRefusal || transportNativePause || transportFault != "none"
+                || libraryReadback || nameRecipe != nil || countInCycle != nil
                 || autopunchCycle != nil || playheadStep != nil || valueCycle != nil || supportBundleCycle {
                 script = try #require(script.components(separatedBy: "# AFTER SEED").first) + #"""
                 cd "$(dirname "$0")" || exit 1
@@ -6310,6 +6467,9 @@ struct QualificationRunnerTests {
                 initial_moving=false
                 playing=$initial_playing
                 native_pause=false
+                transport_fault=none
+                transport_writes=0
+                transport_reads=0
                 resource_source=ax_live
                 resource_unverified=false
                 moving=$initial_moving
@@ -6410,6 +6570,15 @@ struct QualificationRunnerTests {
                         fi
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://tracks","text":"{\\"source\\":\\"ax_live\\",\\"cache_age_sec\\":0,\\"readable\\":true,\\"ax_occluded\\":false,\\"data\\":[{\\"name\\":\\"%s\\",\\"track_ref\\":\\"%s\\"},{\\"name\\":\\"%s\\",\\"track_ref\\":\\"%s\\"}]}"}]}}\n' "$id" "$first_name" "$first_ref" "$second_name" "$second_ref" ;;
                       *'"uri":"logic://transport/state"'*)
+                        transport_reads=$((transport_reads + 1))
+                        if [ "$transport_fault" = baseline_malformed ] && [ "$transport_reads" = 1 ]; then
+                            printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"not-json"}]}}\n' "$id"
+                            continue
+                        fi
+                        if [ "$transport_fault" = final_malformed ] && [ "$transport_reads" = 9 ]; then
+                            printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"not-json"}]}}\n' "$id"
+                            continue
+                        fi
                         if [ "$playhead_step" != none ]; then
                             step_reads=$((step_reads + 1))
                             step_value=$step_position
@@ -6457,6 +6626,11 @@ struct QualificationRunnerTests {
                             printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"{\\"source\\":\\"%s\\",\\"unverified\\":%s,\\"cache_age_sec\\":%s,\\"data\\":{\\"state\\":{\\"isCountInEnabled\\":%s}}}"}]}}\n' "$id" "$count_in_source" "$count_in_unverified" "$count_in_age" "$count_in_value"
                             continue
                         fi
+                        if [ "$transport_fault" = cleanup_malformed_readback ] && [ -f transport-cleanup-command ] && [ ! -f transport-cleanup-read-fault-consumed ]; then
+                            touch transport-cleanup-read-fault-consumed
+                            printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"not-json"}]}}\n' "$id"
+                            continue
+                        fi
                         if [ "$moving" = true ]; then position=$((position + 1)); fi
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"{\\"source\\":\\"%s\\",\\"unverified\\":%s,\\"cache_age_sec\\":0,\\"observed_tempo\\":120,\\"data\\":{\\"state\\":{\\"isPlaying\\":%s,\\"isRecording\\":false,\\"isCycleEnabled\\":false,\\"observedCycleEnabled\\":false,\\"tempo\\":120,\\"position\\":\\"%s.1\\",\\"positionReadback\\":{\\"value\\":\\"%s.1\\",\\"observedComponents\\":[\\"bar\\",\\"beat\\"]}}}}"}]}}\n' "$id" "$resource_source" "$resource_unverified" "$playing" "$position" "$position" ;;
                       *'"uri":"logic://system/operations"'*)
@@ -6464,6 +6638,18 @@ struct QualificationRunnerTests {
                       *'"uri":"logic://system/health"'*)
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://system/health","text":"{\\"logic_pro_running\\":true,\\"logic_pro_version\\":\\"11.2\\",\\"logic_pro_bundle_id\\":\\"com.apple.logic10\\",\\"logic_pro_variant\\":\\"desktop\\",\\"logic_pro_ui_locale\\":\\"en-US\\",\\"process_metadata_resolved\\":true}"}]}}\n' "$id" ;;
                       *'"command":"health"'*)
+                        if [ "$transport_fault" = cross_operation_leak ] && [ -f transport-cycle-complete ]; then
+                            playing=true; moving=true
+                            printf '%s\n' "$playing" > playing
+                            printf '%s\n' "$moving" > moving
+                            rm -f transport-cycle-complete
+                        fi
+                        if [ "$transport_fault" = cross_operation_stop ] && [ -f transport-cycle-complete ]; then
+                            playing=false; moving=false
+                            printf '%s\n' "$playing" > playing
+                            printf '%s\n' "$moving" > moving
+                            rm -f transport-cycle-complete
+                        fi
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"logic_pro_running\\":true,\\"logic_pro_version\\":\\"11.2\\",\\"logic_pro_bundle_id\\":\\"com.apple.logic10\\",\\"logic_pro_variant\\":\\"desktop\\",\\"logic_pro_ui_locale\\":\\"en-US\\",\\"process_metadata_resolved\\":true,\\"logic_pro_variants\\":[{\\"variant\\":\\"desktop\\",\\"bundle_id\\":\\"com.apple.logic10\\",\\"installed\\":true,\\"running\\":true},{\\"variant\\":\\"creator_studio\\",\\"bundle_id\\":\\"com.apple.mobilelogic\\",\\"installed\\":false,\\"running\\":false}]}"}]}}\n' "$id" ;;
                       *'__adr001b_no_write_probe'*)
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"invalid_params\\",\\"write_attempted\\":false}"}]}}\n' "$id" ;;
@@ -6730,19 +6916,44 @@ struct QualificationRunnerTests {
                         printf '%s\n' "$track_name" > track-name
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true}"}]}}\n' "$id" ;;
                       *'"command":"pause"'*)
+                        transport_writes=$((transport_writes + 1))
                         if [ "$native_pause" = true ]; then
-                            playing=true
-                            moving=false
+                            if [ "$playing" = true ]; then moving=false; fi
                             printf '%s\n' "$playing" > playing
                             printf '%s\n' "$moving" > moving
+                            [ "$transport_writes" = 3 ] && touch transport-cycle-complete
                             printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true}"}]}}\n' "$id"
                         else
                             printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"readback_unavailable\\",\\"write_attempted\\":false}"}]}}\n' "$id"
                         fi ;;
                       *)
                         case "$request" in
-                          *'"command":"play"'*) playing=true; moving=true ;;
-                          *'"command":"stop"'*) playing=false; moving=false ;;
+                          *'"command":"play"'*)
+                            transport_writes=$((transport_writes + 1))
+                            playing=true; moving=true ;;
+                          *'"command":"stop"'*)
+                            transport_writes=$((transport_writes + 1))
+                            if [ "$transport_writes" = 3 ]; then
+                                case "$transport_fault" in
+                                  cleanup_state_c)
+                                    touch transport-cleanup-command
+                                    printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"cleanup_refused\\",\\"write_attempted\\":false}"}]}}\n' "$id"
+                                    continue ;;
+                                  cleanup_no_effect)
+                                    touch transport-cleanup-command
+                                    printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true,\\"write_attempted\\":true}"}]}}\n' "$id"
+                                    continue ;;
+                                  restore_state_c_baseline_coincident)
+                                    playing=false; moving=false
+                                    printf '%s\n' "$playing" > playing
+                                    printf '%s\n' "$moving" > moving
+                                    printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"restore_refused\\",\\"write_attempted\\":true}"}]}}\n' "$id"
+                                    continue ;;
+                                  cleanup_malformed_readback) touch transport-cleanup-command ;;
+                                esac
+                            fi
+                            playing=false; moving=false
+                            [ "$transport_writes" = 3 ] && touch transport-cycle-complete ;;
                         esac
                         printf '%s\n' "$playing" > playing
                         printf '%s\n' "$moving" > moving
@@ -6751,6 +6962,10 @@ struct QualificationRunnerTests {
                 done
                 """#
                 if transportNativePause { script = script.replacingOccurrences(of: "native_pause=false", with: "native_pause=true") }
+                if transportFault != "none" {
+                    script = script.replacingOccurrences(
+                        of: "transport_fault=none", with: "transport_fault=\(transportFault)")
+                }
                 if let countInCycle = countInCycle ?? autopunchCycle {
                     script = script.replacingOccurrences(of: "count_in_cycle=none", with: "count_in_cycle=\(countInCycle)")
                 }
