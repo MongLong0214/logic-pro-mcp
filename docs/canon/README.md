@@ -522,3 +522,19 @@ citation/integrity checks verify the committed artifacts and `check-canon-drift.
 extractor/source pin. On the Logic host, `status` also compares the installed version, build and
 source digests and fails on drift. A changed or unresolved citation, stale generated mapping,
 damaged artifact or lost coverage remains a failure until its actual input is corrected.
+
+`test_logic_canon.py` also preserves a historical AXHelp measurement. On a machine with Logic
+installed, supply its archived Apple source explicitly when running the complete driver:
+
+```bash
+LPM_HISTORICAL_LOGIC_APP="/path/to/archived/Logic Pro.app" python3 Scripts/test_logic_canon.py
+```
+
+Only that historical assertion uses the supplied archive. It checks the source version/build
+and original QuickHelp digest against the committed measurement, plus the archived bytes of the
+resolver's string-table fallbacks; missing or different inputs fail. An explicitly supplied value,
+including an empty one, is validated before optional installed-bundle eligibility, also when the
+driver is loaded through unittest. The other installed-bundle
+tests still read the current application. These are static corpus checks, not native AX readback
+or release qualification. Hosted machines without Logic retain the existing installed-bundle
+skips; the offline extraction and input-validation cases still execute.
