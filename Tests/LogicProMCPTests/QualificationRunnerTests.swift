@@ -1591,6 +1591,41 @@ struct QualificationRunnerTests {
         #expect(params[.pluginsGetHostParameterManifest]?["target_ref"] as? String == "ins_3")
     }
 
+    @Test func anAmbiguousNamedTrackDoesNotInvalidateThePluginReadProbePreparation() throws {
+        let tracks = try JSONSerialization.data(withJSONObject: [
+            "source": "ax_live", "readable": true,
+            "data": [["id": 0, "track_ref": "trk_a"], ["id": 1, "track_ref": "trk_b"]],
+        ])
+        func refusal(reason: String = "arrange_name_ambiguous", withPlugins: Bool = false) throws -> Data {
+            var body: [String: Any] = [
+                "state": "B", "success": true, "verified": false,
+                "reason": "readback_unavailable", "binding_refusal_reason": reason,
+            ]
+            if withPlugins { body["plugins"] = [] }
+            return try JSONSerialization.data(withJSONObject: body)
+        }
+        let good = try JSONSerialization.data(withJSONObject: [
+            "state": "A", "complete": true,
+            "plugins": [[
+                "read_status": "ok", "occupied": true,
+                "plugin_id": "logic.stock.effect.compressor", "plugin_insert_ref": "ins_0",
+            ]],
+        ])
+        let params = try QualificationTransport.preparePluginReadProbeParams(
+            tracksRead: { tracks },
+            inventoryRead: { try $0 == 0 ? good : refusal() })
+        #expect(params[.pluginsGetHostParameterManifest]?["target_ref"] as? String == "ins_0")
+
+        // Any other refusal, or a refusal that also carries inserts, still fails the preparation.
+        for other in [try refusal(reason: "something_else"), try refusal(withPlugins: true)] {
+            #expect(throws: QualificationTransportError.self) {
+                _ = try QualificationTransport.preparePluginReadProbeParams(
+                    tracksRead: { tracks },
+                    inventoryRead: { $0 == 0 ? good : other })
+            }
+        }
+    }
+
     @Test func pluginReadProbePreparationPropagatesMalformedDiscoveryAsFailure() throws {
         let malformedTracks = try JSONSerialization.data(withJSONObject: [
             "source": "project_file", "readable": false, "data": [],

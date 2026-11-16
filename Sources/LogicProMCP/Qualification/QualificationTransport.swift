@@ -6193,6 +6193,17 @@ struct QualificationTransport: Sendable {
 
     /// Prepare plug-in probes from their own two authorities only. Session inspection is a Mixer
     /// source and must not suppress a valid plug-in inventory when that unrelated read refuses.
+    static func isTypedBindingRefusal(_ data: Data) -> Bool {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              object["state"] as? String == "B",
+              let success = object["success"], JSONInspector.isBoolean(success), success as? Bool == true,
+              let verified = object["verified"], JSONInspector.isBoolean(verified), verified as? Bool == false,
+              object["reason"] as? String == "readback_unavailable",
+              object["binding_refusal_reason"] as? String == "arrange_name_ambiguous",
+              object["plugins"] == nil else { return false }
+        return true
+    }
+
     static func preparePluginReadProbeParams(
         tracksRead: () throws -> Data,
         inventoryRead: (Int) throws -> Data
@@ -6203,7 +6214,11 @@ struct QualificationTransport: Sendable {
                 "plugin_read_probe_tracks: response was not a complete live referenced Arrange inventory"
             )
         }
-        let inventories = try trackIndices.map(inventoryRead)
+        // A track the product itself refuses to name (two Arrange tracks carry its name) answers
+        // with this exact typed binding refusal. It reports no inserts, so it can neither supply
+        // nor contradict a probe target and is not part of the census. Every other answer, an
+        // incomplete or malformed one included, still invalidates the whole preparation.
+        let inventories = try trackIndices.map(inventoryRead).filter { !isTypedBindingRefusal($0) }
         guard let params = validatedPluginReadProbeParams(from: inventories) else {
             throw QualificationTransportError.protocolViolation(
                 "plugin_read_probe_inventory: response was malformed, incomplete, or not current"
