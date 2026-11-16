@@ -6650,6 +6650,11 @@ struct QualificationTransport: Sendable {
         case .logicMixer, .logicPlugins:
             return "logic://mixer"
         case .logicNavigate:
+            // `goto_bar` moves the playhead and its recipe restores it, both read from the
+            // transport resource. The marker list is not what it changes, and a passive read of
+            // it refuses (`marker_list_not_open`) whenever no Marker List is open, which left
+            // the cycle's verified restore unable to be credited (measured on Logic 13).
+            if spec.id == .navigateGotoBar { return "logic://transport/state" }
             return "logic://markers"
         case .logicEdit:
             return "logic://tracks"
