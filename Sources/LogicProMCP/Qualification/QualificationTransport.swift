@@ -221,16 +221,18 @@ struct QualificationMutationRestoreRecord: Codable, Equatable, Sendable {
                   let observedValue = observed[field] as? Double else { return nil }
             return oldValue == observedValue
         case .trackBoolean(let field):
-            guard let old = Self.track(before, index: 0),
-                  let observed = Self.track(after, index: 0),
+            guard let row = Self.selectedRowIndex(before),
+                  let old = Self.track(before, index: row),
+                  let observed = Self.track(after, index: row),
                   let oldRef = old["track_ref"] as? String, !oldRef.isEmpty,
                   let observedRef = observed["track_ref"] as? String, oldRef == observedRef,
                   let oldValue = old[field] as? Bool,
                   let observedValue = observed[field] as? Bool else { return nil }
             return oldValue == observedValue
         case .trackName:
-            guard let old = Self.track(before, index: 0),
-                  let observed = Self.track(after, index: 0),
+            guard let row = Self.selectedRowIndex(before),
+                  let old = Self.track(before, index: row),
+                  let observed = Self.track(after, index: row),
                   let oldRef = old["track_ref"] as? String, !oldRef.isEmpty,
                   let observedRef = observed["track_ref"] as? String, oldRef == observedRef,
                   let oldValue = old["name"] as? String,
@@ -332,6 +334,15 @@ struct QualificationMutationRestoreRecord: Codable, Equatable, Sendable {
             return nil
         }
         return rows[index]
+    }
+
+    /// The row of the single selected track in `envelope`, nil when none or several are selected.
+    /// The boolean and name recipes write the selected track, so the recipe's own record is read at
+    /// that row; the identity check against the same row of the later reading stays.
+    private static func selectedRowIndex(_ envelope: [String: Any]) -> Int? {
+        guard let rows = envelope["data"] as? [[String: Any]] else { return nil }
+        let selected = rows.indices.filter { (rows[$0]["isSelected"] as? Bool) == true }
+        return selected.count == 1 ? selected[0] : nil
     }
 
     private static func selectedTrackRefs(_ rows: [[String: Any]]) -> [String]? {

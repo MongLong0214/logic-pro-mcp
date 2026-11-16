@@ -53,13 +53,13 @@ struct QualificationLiveGateVerdictTests {
     }
 
     static func renameRecord(
-        restoreReadback: String = #"{"source":"ax_live","data":[{"track_ref":"track-1","name":"before"}]}"#
+        restoreReadback: String = #"{"source":"ax_live","data":[{"track_ref":"track-1","isSelected":true,"name":"before"}]}"#
     ) -> QualificationMutationRestoreRecord {
         QualificationMutationRestoreRecord(
             operationID: OperationID.tracksRename.rawValue,
-            preState: #"{"source":"ax_live","data":[{"track_ref":"track-1","name":"before"}]}"#,
+            preState: #"{"source":"ax_live","data":[{"track_ref":"track-1","isSelected":true,"name":"before"}]}"#,
             mutation: #"{"state":"A","success":true}"#,
-            readback: #"{"source":"ax_live","data":[{"track_ref":"track-1","name":"after"}]}"#,
+            readback: #"{"source":"ax_live","data":[{"track_ref":"track-1","isSelected":true,"name":"after"}]}"#,
             restore: #"{"state":"A","success":true}"#,
             restoreReadback: restoreReadback)
     }
@@ -148,7 +148,7 @@ struct QualificationLiveGateVerdictTests {
         let result = Self.probeOnly(
             .tracksRename,
             record: Self.renameRecord(
-                restoreReadback: #"{"source":"ax_live","data":[{"track_ref":"track-1","name":"after"}]}"#))
+                restoreReadback: #"{"source":"ax_live","data":[{"track_ref":"track-1","isSelected":true,"name":"after"}]}"#))
         let evaluation = QualificationLiveGateVerdict.evaluate(
             spec: Self.spec(.tracksRename), result: result, fixture: nil)
         #expect(evaluation.verdict == .notQualified(.restoreNotVerified))
@@ -525,7 +525,7 @@ struct QualificationLiveGateVerdictTests {
         _ id: OperationID, field: String, readbackRef: String = "track-1", restored: Bool = false
     ) -> QualificationMutationRestoreRecord {
         func row(_ ref: String, _ value: Bool) -> String {
-            #"{"source":"ax_live","data":[{"track_ref":"\#(ref)","\#(field)":\#(value)}]}"#
+            #"{"source":"ax_live","data":[{"track_ref":"\#(ref)","isSelected":true,"\#(field)":\#(value)}]}"#
         }
         return QualificationMutationRestoreRecord(
             operationID: id.rawValue,

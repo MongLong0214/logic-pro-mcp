@@ -20,13 +20,13 @@ struct Issue984VerifiedWriteCycleCreditTests {
     /// The three readings are whole resource envelopes, because `readingThatDidNotHappen` parses
     /// each one; `mutation` and `restore` are the values written.
     private static func record(
-        restoreReadback: String = #"{"source":"ax_live","data":[{"track_ref":"track-1","name":"before"}]}"#
+        restoreReadback: String = #"{"source":"ax_live","data":[{"track_ref":"track-1","isSelected":true,"name":"before"}]}"#
     ) -> QualificationMutationRestoreRecord {
         QualificationMutationRestoreRecord(
             operationID: OperationID.tracksRename.rawValue,
-            preState: #"{"source":"ax_live","data":[{"track_ref":"track-1","name":"before"}]}"#,
+            preState: #"{"source":"ax_live","data":[{"track_ref":"track-1","isSelected":true,"name":"before"}]}"#,
             mutation: #"{"state":"A","success":true}"#,
-            readback: #"{"source":"ax_live","data":[{"track_ref":"track-1","name":"after"}]}"#,
+            readback: #"{"source":"ax_live","data":[{"track_ref":"track-1","isSelected":true,"name":"after"}]}"#,
             restore: #"{"state":"A","success":true}"#,
             restoreReadback: restoreReadback
         )
@@ -119,7 +119,7 @@ struct Issue984VerifiedWriteCycleCreditTests {
 
     @Test func readableWrongRestoreCannotPass() throws {
         let cycle = try Self.result(record: Self.record(
-            restoreReadback: #"{"source":"ax_live","data":[{"track_ref":"track-1","name":"after"}]}"#))
+            restoreReadback: #"{"source":"ax_live","data":[{"track_ref":"track-1","isSelected":true,"name":"after"}]}"#))
         let restore = try #require(cycle.restore)
         #expect(!restore.verified)
         #expect(cycle.status == .notQualified)
@@ -149,7 +149,7 @@ struct Issue984VerifiedWriteCycleCreditTests {
         changedRef: String = "track-1", restoredRef: String = "track-2"
     ) -> QualificationMutationRestoreRecord {
         func reading(_ ref: String, _ value: String) -> String {
-            #"{"source":"ax_live","data":[{"track_ref":"\#(ref)","\#(field)":\#(value)}]}"#
+            #"{"source":"ax_live","data":[{"track_ref":"\#(ref)","isSelected":true,"\#(field)":\#(value)}]}"#
         }
         return QualificationMutationRestoreRecord(
             operationID: operation.rawValue,
@@ -180,6 +180,47 @@ struct Issue984VerifiedWriteCycleCreditTests {
         #expect(!Self.trackRecord(
             operation: .tracksMute, field: "isMuted", before: "false", changed: "true"
         ).verifiedCycleShape)
+    }
+
+    /// The boolean and name recipes write the SELECTED track (the third row of four on the measured
+    /// fixture), so the record is read at that row and not at row 0.
+    private static func selectedRowRecord(
+        selected: [Bool], changedRow: Int
+    ) -> QualificationMutationRestoreRecord {
+        func reading(muted: [Bool]) -> String {
+            let rows = selected.indices.map { index in
+                #"{"track_ref":"track-\#(index)","isSelected":\#(selected[index]),"isMuted":\#(muted[index])}"#
+            }.joined(separator: ",")
+            return #"{"source":"ax_live","data":[\#(rows)]}"#
+        }
+        let none = selected.map { _ in false }
+        var moved = none
+        moved[changedRow] = true
+        return QualificationMutationRestoreRecord(
+            operationID: OperationID.tracksMute.rawValue,
+            preState: reading(muted: none),
+            mutation: #"{"state":"A","success":true}"#,
+            readback: reading(muted: moved),
+            restore: #"{"state":"A","success":true}"#,
+            restoreReadback: reading(muted: none)
+        )
+    }
+
+    @Test func aFlagCycleOnTheSelectedRowVerifiesEvenWhenRowZeroIsNotIt() {
+        #expect(Self.selectedRowRecord(
+            selected: [false, false, true, false], changedRow: 2).verifiedCycleShape)
+    }
+
+    @Test func aFlagCycleThatMovedAnotherRowThanTheSelectedOneDoesNotVerify() {
+        #expect(!Self.selectedRowRecord(
+            selected: [false, false, true, false], changedRow: 0).verifiedCycleShape)
+    }
+
+    @Test func aFlagCycleWithNoSingleSelectedRowDoesNotVerify() {
+        #expect(!Self.selectedRowRecord(
+            selected: [false, false, false, false], changedRow: 2).verifiedCycleShape)
+        #expect(!Self.selectedRowRecord(
+            selected: [false, true, true, false], changedRow: 2).verifiedCycleShape)
     }
 
     @Test func historyRestoreMustReadBackTheSameTrack() {

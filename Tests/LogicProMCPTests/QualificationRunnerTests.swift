@@ -6047,13 +6047,13 @@ struct QualificationRunnerTests {
 
     private static func recipeShapedRecord(
         mutation: String = #"{"state":"A","success":true}"#,
-        restoreReadback: String = #"{"source":"ax_live","data":[{"track_ref":"track-1","name":"Before"}]}"#
+        restoreReadback: String = #"{"source":"ax_live","data":[{"track_ref":"track-1","isSelected":true,"name":"Before"}]}"#
     ) -> QualificationMutationRestoreRecord {
         QualificationMutationRestoreRecord(
             operationID: OperationID.tracksRename.rawValue,
-            preState: #"{"source":"ax_live","data":[{"track_ref":"track-1","name":"Before"}]}"#,
+            preState: #"{"source":"ax_live","data":[{"track_ref":"track-1","isSelected":true,"name":"Before"}]}"#,
             mutation: mutation,
-            readback: #"{"source":"ax_live","data":[{"track_ref":"track-1","name":"After"}]}"#,
+            readback: #"{"source":"ax_live","data":[{"track_ref":"track-1","isSelected":true,"name":"After"}]}"#,
             restore: #"{"state":"A","success":true}"#,
             restoreReadback: restoreReadback
         )
