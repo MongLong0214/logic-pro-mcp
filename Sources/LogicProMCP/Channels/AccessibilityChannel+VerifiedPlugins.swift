@@ -5931,6 +5931,94 @@ extension AccessibilityChannel {
     /// one element; the count-mismatch path can have the target plus a hidden
     /// sibling restored by the same press. Each result preserves whether its
     /// exact element was observed to leave AXWindows.
+    /// The application's windows and main window read immediately before an insert actuates its slot.
+    struct InsertEditorWindowBaseline {
+        let windows: [AXUIElement]
+        let main: AXUIElement
+        /// The keyboard-focused element before the slot actuation; nil when it did not read.
+        let focus: AXUIElement?
+    }
+
+    static func insertEditorWindowBaseline(runtime: AXLogicProElements.Runtime) -> InsertEditorWindowBaseline? {
+        guard let app = AXLogicProElements.appRoot(runtime: runtime),
+              case .success(.some(let windows)) = AXHelpers.getAttributeResult(
+                app, kAXWindowsAttribute as String, runtime: runtime.ax) as Result<[AXUIElement]?, AXHelpers.AXStatusError>,
+              let main: AXUIElement = AXHelpers.getAttribute(app, kAXMainWindowAttribute as String, runtime: runtime.ax)
+        else { return nil }
+        let focus: AXUIElement? = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: runtime.ax)
+        return InsertEditorWindowBaseline(windows: windows, main: main, focus: focus)
+    }
+
+    /// Logic 13 opens the new plug-in's editor and gives it the key window when an insert lands
+    /// (measured 2026-11-16: AXFocusedWindow = the "오디오 2" editor, AXFocusedUIElement -25212).
+    /// Every later keyboard op then refuses on unreadable focus. Close each window that was not
+    /// present before the slot actuation, then read back both its absence and that the focused
+    /// window is the original main window again. Nothing here is reported as restored unless read.
+    static func closeEditorsOpenedByInsert(
+        since baseline: InsertEditorWindowBaseline?, pluginID: String, runtime: AXLogicProElements.Runtime
+    ) -> [String: Any] {
+        guard let baseline else {
+            return ["post_insert_editor_cleanup_observed": false, "post_insert_editor_cleanup_reason": "baseline_unreadable"]
+        }
+        guard let app = AXLogicProElements.appRoot(runtime: runtime),
+              case .success(.some(let windows)) = AXHelpers.getAttributeResult(
+                app, kAXWindowsAttribute as String, runtime: runtime.ax) as Result<[AXUIElement]?, AXHelpers.AXStatusError>
+        else {
+            return ["post_insert_editor_cleanup_observed": false, "post_insert_editor_cleanup_reason": "windows_unreadable"]
+        }
+        let opened = windows.filter { window in
+            !CFEqual(window, baseline.main) && !baseline.windows.contains { CFEqual($0, window) }
+        }
+        let outcomes = closePluginEditorsOpenedByThisOperation(
+            opened, trackName: "", pluginID: pluginID, runtime: runtime)
+        // Read the absence back from a fresh AXWindows list, not from the close outcomes.
+        let closed: Bool
+        if case .success(.some(let after)) = AXHelpers.getAttributeResult(
+            app, kAXWindowsAttribute as String, runtime: runtime.ax) as Result<[AXUIElement]?, AXHelpers.AXStatusError> {
+            closed = !opened.contains { window in after.contains { CFEqual($0, window) } }
+        } else { closed = false }
+        var focusRestored = false
+        if closed {
+            for attempt in 0..<10 {
+                if let focused: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedWindowAttribute as String, runtime: runtime.ax),
+                   CFEqual(focused, baseline.main) { focusRestored = true; break }
+                if attempt < 9 { Thread.sleep(forTimeInterval: 0.05) }
+            }
+        }
+        // Closing the editor hands Logic's key view back to whatever it chooses (measured: a Mixer
+        // channel-strip group, which reads as a text surface and stops every later keyboard op).
+        // Put the pre-insert focus back and read it back; report it restored only when read.
+        func focusIsBaseline() -> Bool {
+            guard let original = baseline.focus,
+                  let current: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: runtime.ax)
+            else { return false }
+            return CFEqual(current, original)
+        }
+        var elementRestoreAttempted = false
+        var elementFocusRestored = focusRestored && focusIsBaseline()
+        if focusRestored, !elementFocusRestored, let original = baseline.focus,
+           AXHelpers.isAttributeSettable(original, kAXFocusedAttribute as String, runtime: runtime.ax) == true {
+            elementRestoreAttempted = true
+            _ = AXHelpers.setAttribute(original, kAXFocusedAttribute as String, kCFBooleanTrue as CFTypeRef, runtime: runtime.ax)
+            for attempt in 0..<10 {
+                if focusIsBaseline() { elementFocusRestored = true; break }
+                if attempt < 9 { Thread.sleep(forTimeInterval: 0.05) }
+            }
+        }
+        var result: [String: Any] = [
+            "post_insert_focus_baseline_read": baseline.focus != nil,
+            "post_insert_focus_restore_attempted": elementRestoreAttempted,
+            "post_insert_focus_restored": elementFocusRestored,
+            "post_insert_editor_windows_opened": opened.count,
+            "post_insert_editor_close_attempts": outcomes.reduce(0) { $0 + $1.attemptCount },
+            "post_insert_editor_windows_closed": closed,
+            "post_insert_main_window_focused": focusRestored,
+            "post_insert_editor_cleanup_observed": closed && focusRestored && elementFocusRestored,
+        ]
+        if !closed { result["post_insert_editor_cleanup_diagnostics"] = outcomes.map(\.diagnostics) }
+        return result
+    }
+
     private static func closePluginEditorsOpenedByThisOperation(
         _ windows: [AXUIElement],
         trackName: String,
@@ -6590,6 +6678,7 @@ extension AccessibilityChannel {
         guard let targetSlot = liveInsertSlot(track: track, insert: insert, runtime: runtime) else {
             return (.transientSetupFailure(stage: "target_slot_not_found"), trace)
         }
+        let preInsertWindows = insertEditorWindowBaseline(runtime: runtime)
         // The initial write gate and the just-read snapshot may already be stale.
         // Re-resolve and require the physical target is still the empty slot the
         // attempt was authorized to use before any popup-opening actuation.
@@ -6781,6 +6870,7 @@ extension AccessibilityChannel {
         if let detected = newlyMountedSlot(pluginID: pluginID, pre: preInventory, post: postInventory) {
             trace["observed_slot"] = detected.slot
             trace["observed_name"] = detected.name ?? NSNull()
+            trace.merge(closeEditorsOpenedByInsert(since: preInsertWindows, pluginID: pluginID, runtime: runtime)) { $1 }
             return (.mounted(slot: detected.slot, pluginID: pluginID, observedName: detected.name), trace)
         }
 
