@@ -749,7 +749,7 @@ struct Issue966PlannerProbeWitnessTests {
           .timeLimit(.minutes(2)))
     func theSweepSeedsTheRealServersPlannerWithItsOwnInspection() throws {
         let spec = try planner()
-        let result = try QualificationTransport(requestTimeout: 30, shutdownGrace: 1).drive(.init(
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, requestTimeout: 30, shutdownGrace: 1).drive(.init(
             executableURL: Self.debugExecutableURL, environment: ProcessInfo.processInfo.environment,
             expectedOperationCount: OperationRegistry.specs.count, operations: [spec]))
         let operation = try #require(result.operationResults[spec.id.rawValue])

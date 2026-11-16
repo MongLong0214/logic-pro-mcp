@@ -1489,12 +1489,14 @@ struct QualificationTransport: Sendable {
     ) throws -> QualificationSubprocessSession.ShutdownOutcome
     let supportBundleRemover: @Sendable (URL, SecureFD.Identity) throws -> String
     /// Reads Logic's UI (window server + AX, read-only) once before and once after every
-    /// operation. Nil leaves the invariants unchecked, which is what the unit-test fakes want and
-    /// what the live gate must never do: the live test passes `QualificationUIInvariants.observeLogic`.
-    let uiObserver: (@Sendable () -> QualificationUIObservation?)?
+    /// operation. Required: a transport cannot be built without one, so no driven operation skips
+    /// the UI invariants. Live drives pass `QualificationUIInvariants.observeLogic`. An observer
+    /// that answers nil fails the operation, so an unavailable observation is never a clean one.
+    let uiObserver: @Sendable () -> QualificationUIObservation?
     let uiSettleSleep: @Sendable (TimeInterval) -> Void
 
     init(
+        uiObserver: @escaping @Sendable () -> QualificationUIObservation?,
         handshakeTimeout: TimeInterval = 45,
         requestTimeout: TimeInterval = 10,
         shutdownGrace: TimeInterval = 1,
@@ -1518,7 +1520,6 @@ struct QualificationTransport: Sendable {
         supportBundleRemover: @escaping @Sendable (URL, SecureFD.Identity) throws -> String = {
             try QualificationTransport.removeOwnedSupportBundle(at: $0, expectedIdentity: $1)
         },
-        uiObserver: (@Sendable () -> QualificationUIObservation?)? = nil,
         uiSettleSleep: @escaping @Sendable (TimeInterval) -> Void = {
             Thread.sleep(forTimeInterval: $0)
         }
@@ -1736,7 +1737,7 @@ struct QualificationTransport: Sendable {
             readProbePreparationFailures.merge(readPreparation.failures) { current, _ in current }
             for spec in request.operations {
                 // The UI as this operation found it. Read before anything is sent.
-                let uiBefore = uiObserver?()
+                let uiBefore = uiObserver()
                 var response: (text: String, isError: Bool)?
                 var responseRequestID: String?
                 var responseFailure: String? = readProbePreparationFailures[spec.id]
@@ -2198,16 +2199,16 @@ struct QualificationTransport: Sendable {
                 // Every operation, after its readback. The reason is JOINED with the
                 // existing one rather than replacing it, so a UI violation cannot hide behind an
                 // earlier reason and an earlier reason cannot hide it.
-                let uiViolation: String? = uiObserver.flatMap { observe in
+                let uiViolation: String? = {
                     guard let uiBefore else {
                         return "ui_invariant: \(spec.id.rawValue): baseline observation unavailable"
                     }
                     let found = QualificationUIInvariants.settledViolations(
-                        before: uiBefore, observe: observe, sleep: uiSettleSleep)
+                        before: uiBefore, observe: uiObserver, sleep: uiSettleSleep)
                     return found.isEmpty
                         ? nil
                         : "\(spec.id.rawValue): " + found.joined(separator: "; ")
-                }
+                }()
                 let combinedFailure = [
                     responseFailure ?? readbackFailure ?? transportRecipeFailure, uiViolation,
                 ].compactMap { $0 }.joined(separator: " | ")

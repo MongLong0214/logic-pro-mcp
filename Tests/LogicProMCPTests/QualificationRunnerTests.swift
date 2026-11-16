@@ -12,7 +12,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(playheadStep: operation)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         #expect(result.operationResults[operation.rawValue]?.status == .passed)
@@ -46,7 +46,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(playheadStep: .transportFastForward, playheadFault: "stage_lost_step_reply")
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == .transportFastForward })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         #expect(FileManager.default.fileExists(atPath: fixture.directory.appendingPathComponent("step-fault-consumed").path))
@@ -66,7 +66,7 @@ struct QualificationRunnerTests {
         )
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == .transportFastForward })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         #expect(FileManager.default.fileExists(
@@ -88,7 +88,7 @@ struct QualificationRunnerTests {
         )
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         #expect(FileManager.default.fileExists(
@@ -109,7 +109,7 @@ struct QualificationRunnerTests {
         )
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == .transportFastForward })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         #expect(result.operationResults[spec.id.rawValue]?.status == .passed)
@@ -129,7 +129,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(playheadStep: operation, playheadOrigin: origin)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         #expect(result.operationResults[operation.rawValue]?.status == .notQualified)
@@ -151,7 +151,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(playheadStep: operation, playheadFault: shape)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         #expect(FileManager.default.fileExists(atPath: fixture.directory.appendingPathComponent("step-fault-consumed").path))
@@ -303,6 +303,7 @@ struct QualificationRunnerTests {
             $0.id == .systemExportSupportBundle
         })
         let result = try QualificationTransport(
+            uiObserver: unchangedUIForTests,
             handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2,
             supportBundleRoot: { root }
         ).drive(.init(
@@ -343,6 +344,7 @@ struct QualificationRunnerTests {
             $0.id == .systemExportSupportBundle
         })
         let result = try QualificationTransport(
+            uiObserver: unchangedUIForTests,
             handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2,
             supportBundleRoot: { root }
         ).drive(.init(
@@ -378,6 +380,7 @@ struct QualificationRunnerTests {
         })
         do {
             _ = try QualificationTransport(
+                uiObserver: unchangedUIForTests,
                 handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2,
                 supportBundleRoot: { root }
             ).drive(.init(
@@ -413,6 +416,7 @@ struct QualificationRunnerTests {
         })
         do {
             _ = try QualificationTransport(
+                uiObserver: unchangedUIForTests,
                 handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2,
                 supportBundleRoot: { root }
             ).drive(.init(
@@ -448,6 +452,7 @@ struct QualificationRunnerTests {
         })
         do {
             _ = try QualificationTransport(
+                uiObserver: unchangedUIForTests,
                 handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2,
                 supportBundleRoot: { root },
                 supportBundleQuiescer: { _ in
@@ -495,6 +500,7 @@ struct QualificationRunnerTests {
             $0.id == .systemExportSupportBundle
         })
         let result = try QualificationTransport(
+            uiObserver: unchangedUIForTests,
             handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2,
             supportBundleRoot: { root },
             supportBundleRemover: { _, _ in
@@ -630,7 +636,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(playheadStep: operation, playheadAtBoundary: true)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         #expect(result.operationResults[operation.rawValue]?.status == .passed)
@@ -669,7 +675,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(playheadStep: operation, playheadFault: shape, playheadAtBoundary: true)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         #expect(FileManager.default.fileExists(atPath: fixture.directory.appendingPathComponent("step-fault-consumed").path))
@@ -694,7 +700,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(autopunchCycle: "healthy")
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == .transportToggleAutopunch })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         let observed = try #require(result.operationResults[spec.id.rawValue])
@@ -723,7 +729,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(autopunchCycle: shape)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == .transportToggleAutopunch })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         #expect(FileManager.default.fileExists(atPath: fixture.directory.appendingPathComponent("autopunch-fault-consumed").path))
@@ -743,7 +749,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(countInCycle: "healthy")
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == .transportToggleCountIn })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         let observed = try #require(result.operationResults[spec.id.rawValue])
@@ -772,7 +778,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(countInCycle: shape)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == .transportToggleCountIn })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         #expect(FileManager.default.fileExists(atPath: fixture.directory.appendingPathComponent("count-in-fault-consumed").path))
@@ -793,7 +799,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(nameRecipe: operation, nameIdentityFault: shape)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         #expect(FileManager.default.fileExists(atPath: fixture.directory.appendingPathComponent("identity-fault-consumed").path),
@@ -809,7 +815,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(nameRecipe: operation)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         let observed = try #require(result.operationResults[operation.rawValue])
@@ -844,6 +850,7 @@ struct QualificationRunnerTests {
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
 
         let result = try QualificationTransport(
+            uiObserver: unchangedUIForTests,
             handshakeTimeout: 2,
             requestTimeout: 1,
             shutdownGrace: 2
@@ -868,7 +875,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(nameRecipe: operation, nameIdentityFault: shape)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         let observed = try #require(result.operationResults[operation.rawValue])
@@ -911,6 +918,7 @@ struct QualificationRunnerTests {
         let marker = fixture.directory.appendingPathComponent("gate-reclaimed")
 
         let result = try QualificationTransport(
+            uiObserver: unchangedUIForTests,
             handshakeTimeout: 2,
             requestTimeout: 1,
             shutdownGrace: 2,
@@ -957,6 +965,7 @@ struct QualificationRunnerTests {
         let marker = fixture.directory.appendingPathComponent("gate-reclaimed")
 
         let result = try QualificationTransport(
+            uiObserver: unchangedUIForTests,
             handshakeTimeout: 2,
             requestTimeout: 2,
             shutdownGrace: 2,
@@ -1004,6 +1013,7 @@ struct QualificationRunnerTests {
         let probe = CleanupSleepProbe()
 
         _ = try QualificationTransport(
+            uiObserver: unchangedUIForTests,
             handshakeTimeout: 2,
             requestTimeout: 2,
             shutdownGrace: 2,
@@ -1035,7 +1045,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(valueCycle: operation)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
 
@@ -1059,7 +1069,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(valueCycle: operation, valueFault: fault)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 0.2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 0.2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
 
@@ -1085,7 +1095,7 @@ struct QualificationRunnerTests {
             valueCycle: .mixerSetVolume, valueFault: "lost_mutation_reply")
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == .mixerSetVolume })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 0.2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 0.2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
 
@@ -1104,7 +1114,7 @@ struct QualificationRunnerTests {
             valueCycle: operation, valueFault: "malformed_after_compensation_noop")
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
 
@@ -1121,7 +1131,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(valueCycle: operation, valueFault: "refused_forward")
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
 
@@ -2248,7 +2258,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(transportNativePause: true, cachedTransport: cached)
         defer { fixture.remove() }
         let pause = try #require(OperationRegistry.specs.first { $0.id == .transportPause })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [pause]))
         let effects = result.wireFrames.filter { $0.direction == .request &&
@@ -2302,7 +2312,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(transportNativePause: true, initialTransportMotion: original)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.tool == .logicTransport && $0.command == command })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         let observed = try #require(result.operationResults[spec.id.rawValue])
@@ -2322,7 +2332,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(transportNativePause: true)
         defer { fixture.remove() }
         let pause = try #require(OperationRegistry.specs.first { $0.id == .transportPause })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [pause]))
         let observed = try #require(result.operationResults[pause.id.rawValue])
@@ -2343,7 +2353,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(transportRefusal: true)
         defer { fixture.remove() }
         let pause = try #require(OperationRegistry.specs.first { $0.id == .transportPause })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [pause]))
         let observed = try #require(result.operationResults[pause.id.rawValue])
@@ -2382,7 +2392,7 @@ struct QualificationRunnerTests {
         )
         defer { fixture.remove() }
         let pause = try #require(OperationRegistry.specs.first { $0.id == .transportPause })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [pause]))
         let observed = try #require(result.operationResults[pause.id.rawValue])
@@ -2409,7 +2419,7 @@ struct QualificationRunnerTests {
         defer { fixture.remove() }
         let pause = try #require(OperationRegistry.specs.first { $0.id == .transportPause })
         let health = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0,
                 operations: [pause, health]))
@@ -2433,7 +2443,7 @@ struct QualificationRunnerTests {
         )
         defer { fixture.remove() }
         let pause = try #require(OperationRegistry.specs.first { $0.id == .transportPause })
-        _ = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        _ = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [pause]))
         let requests = try String(
@@ -2461,7 +2471,7 @@ struct QualificationRunnerTests {
         defer { fixture.remove() }
         let pause = try #require(OperationRegistry.specs.first { $0.id == .transportPause })
         let health = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0,
                 operations: [pause, health]))
@@ -2484,7 +2494,7 @@ struct QualificationRunnerTests {
         )
         defer { fixture.remove() }
         let stop = try #require(OperationRegistry.specs.first { $0.id == .transportStop })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [stop]))
         let original = try #require(result.mutationRestoreRecords.first)
@@ -2630,6 +2640,7 @@ struct QualificationRunnerTests {
         let probe = LibraryReadbackProbe()
 
         let drive = try QualificationTransport(
+            uiObserver: unchangedUIForTests,
             handshakeTimeout: 2,
             requestTimeout: 2,
             shutdownGrace: 2,
@@ -2665,6 +2676,7 @@ struct QualificationRunnerTests {
         let probe = LibraryReadbackProbe()
 
         let drive = try QualificationTransport(
+            uiObserver: unchangedUIForTests,
             handshakeTimeout: 2,
             requestTimeout: 2,
             shutdownGrace: 2,
@@ -4040,12 +4052,13 @@ struct QualificationRunnerTests {
         defer { fixture.remove() }
         var environment = ProcessInfo.processInfo.environment
         environment["HANDSHAKE_DELAY"] = "0.2"
-        let productionTransport = QualificationTransport()
+        let productionTransport = QualificationTransport(uiObserver: unchangedUIForTests)
         #expect(productionTransport.handshakeTimeout >= 30)
         #expect(productionTransport.requestTimeout == 10)
 
         do {
             let result = try QualificationTransport(
+                uiObserver: unchangedUIForTests,
                 handshakeTimeout: 5,
                 requestTimeout: 0.1,
                 shutdownGrace: 1
@@ -4829,6 +4842,7 @@ struct QualificationRunnerTests {
             ],
             drive: { request in
                 let observed = try QualificationTransport(
+                    uiObserver: unchangedUIForTests,
                     requestTimeout: 30,
                     shutdownGrace: 1
                 ).drive(request)
@@ -4925,6 +4939,7 @@ struct QualificationRunnerTests {
             ],
             drive: { request in
                 let observed = try QualificationTransport(
+                    uiObserver: unchangedUIForTests,
                     requestTimeout: 30,
                     shutdownGrace: 1
                 ).drive(request)
@@ -4986,6 +5001,7 @@ struct QualificationRunnerTests {
 
         do {
             _ = try QualificationTransport(
+                uiObserver: unchangedUIForTests,
                 handshakeTimeout: 0.1,
                 requestTimeout: 0.05,
                 shutdownGrace: 1
@@ -5020,6 +5036,7 @@ struct QualificationRunnerTests {
         environment["PID_FILE"] = pidURL.path
         do {
             _ = try QualificationTransport(
+                uiObserver: unchangedUIForTests,
                 handshakeTimeout: 0.5,
                 requestTimeout: 0.5,
                 shutdownGrace: 2
@@ -7198,6 +7215,15 @@ struct QualificationRunnerTests {
     }
 }
 
+/// A UI that reads the same before and after every operation: no menu, modal or window, focus
+/// unchanged. For transports driving a scripted server and no Logic, so the UI invariants are
+/// checked and find nothing.
+let unchangedUIForTests: @Sendable () -> QualificationUIObservation? = {
+    QualificationUIObservation(focus: QualificationFocusIdentity(
+        element: AXUIElementCreateApplication(50_000), window: nil, role: "AXGroup", subrole: nil,
+        description: "트랙", windowTitle: "Untitled"))
+}
+
 /// The wiring: the live driver brackets EVERY operation, and a violation fails that operation
 /// and names it.
 extension QualificationRunnerTests {
@@ -7214,24 +7240,27 @@ extension QualificationRunnerTests {
     }
 
     private func driveFastForward(
-        observer: (@Sendable () -> QualificationUIObservation?)?
+        observer: @escaping @Sendable () -> QualificationUIObservation?
     ) throws -> QualificationOperationResult {
         let fixture = try SlowHandshakeFixture(playheadStep: .transportFastForward)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == .transportFastForward })
         let result = try QualificationTransport(
+            uiObserver: observer,
             handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2,
-            uiObserver: observer, uiSettleSleep: { _ in }
+            uiSettleSleep: { _ in }
         ).drive(.init(
             executableURL: fixture.executableURL, environment: ["HANDSHAKE_DELAY": "0"],
             expectedOperationCount: 0, operations: [spec]))
         return try #require(result.operationResults[spec.id.rawValue])
     }
 
+    private static let mixerFocus = QualificationUIObservation(focus: QualificationFocusIdentity(
+        element: AXUIElementCreateApplication(50_001), window: nil, role: "AXGroup", subrole: nil,
+        description: "믹서", windowTitle: "Untitled"))
+
     @Test func theDriverBracketsEveryOperationWithUIObservationsAndPassesWhenClean() throws {
-        let clean = QualificationUIObservation(focus: QualificationFocusIdentity(
-            element: AXUIElementCreateApplication(50_001), window: nil, role: "AXGroup", subrole: nil, description: "믹서", windowTitle: "Untitled"))
-        let script = UIScript([clean])
+        let script = UIScript([Self.mixerFocus])
         let operation = try driveFastForward(observer: { script.next() })
         #expect(operation.status == .passed)
         #expect(operation.failureReason == nil)
@@ -7239,8 +7268,7 @@ extension QualificationRunnerTests {
     }
 
     @Test func aLeakedMenuAfterAnOperationFailsThatOperationAndNamesIt() throws {
-        let before = QualificationUIObservation(focus: QualificationFocusIdentity(
-            element: AXUIElementCreateApplication(50_001), window: nil, role: "AXGroup", subrole: nil, description: "믹서", windowTitle: "Untitled"))
+        let before = Self.mixerFocus
         let leak = QualificationUIObservation(
             menuLayerWindows: [93: QualificationWindowFacts(
                 layer: 101, title: nil, bounds: CGRect(x: 1077, y: 98, width: 234, height: 355))],
@@ -7262,8 +7290,91 @@ extension QualificationRunnerTests {
         #expect(reason.contains("baseline observation unavailable"))
     }
 
-    @Test func withoutAnObserverTheInvariantsAreNotChecked() throws {
-        let operation = try driveFastForward(observer: nil)
-        #expect(operation.status == .passed)
+    // MARK: the shipped `--qualify` path
+
+    /// Runs `--qualify` through `QualificationRunner.Runtime.transportDrive`, the drive
+    /// `Runtime.production` uses, against a scripted server answering `transport.fast_forward`,
+    /// with `observer` standing in for Logic's UI. Returns that operation's case and its evidence.
+    private func qualifyFastForwardThroughTheShippedDrive(
+        observer: @escaping @Sendable () -> QualificationUIObservation?
+    ) async throws -> (qualificationCase: QualificationCase, evidence: CaseEvidence) {
+        let server = try SlowHandshakeFixture(playheadStep: .transportFastForward)
+        defer { server.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .transportFastForward })
+        let fixture = try Fixture(
+            specs: [spec],
+            executableData: try Data(contentsOf: server.executableURL),
+            environmentAdditions: ["HANDSHAKE_DELAY": "0"],
+            drive: QualificationRunner.Runtime.transportDrive(uiObserver: observer))
+        defer { fixture.remove() }
+        let attestation = try await fixture.qualify()
+        let qualificationCase = try #require(attestation.cases.first { $0.operationID == spec.id.rawValue })
+        let evidenceURL = fixture.directory.appendingPathComponent(
+            try #require(qualificationCase.evidenceFiles.first))
+        let evidence = try JSONDecoder().decode(CaseEvidence.self, from: Data(contentsOf: evidenceURL))
+        return (qualificationCase, evidence)
+    }
+
+    @Test func theShippedQualifyPathVerifiesAnOperationWhoseUIStayedClean() async throws {
+        let script = UIScript([Self.mixerFocus])
+        let (qualificationCase, evidence) = try await qualifyFastForwardThroughTheShippedDrive(
+            observer: { script.next() })
+        #expect(qualificationCase.status == .passed)
+        #expect(qualificationCase.verified)
+        #expect(evidence.verified)
+        #expect(evidence.failureReason == nil)
+        #expect(script.reads >= 2, "the shipped drive observed the UI before and after the operation")
+    }
+
+    @Test func theShippedQualifyPathDoesNotVerifyAnOperationThatLeftAMenuOpen() async throws {
+        let leak = QualificationUIObservation(
+            menuLayerWindows: [93: QualificationWindowFacts(
+                layer: 101, title: nil, bounds: CGRect(x: 1077, y: 98, width: 234, height: 355))],
+            focus: Self.mixerFocus.focus)
+        let script = UIScript([Self.mixerFocus, leak])
+        let (qualificationCase, evidence) = try await qualifyFastForwardThroughTheShippedDrive(
+            observer: { script.next() })
+        #expect(qualificationCase.status == .failed)
+        #expect(!qualificationCase.verified)
+        #expect(!evidence.verified)
+        let reason = try #require(evidence.failureReason)
+        #expect(reason.contains("transport.fast_forward: ui_invariant: logic_menu_layer_101_open"))
+    }
+
+    @Test func theShippedQualifyPathDoesNotVerifyAnOperationThatMovedTheFocus() async throws {
+        // Identical descriptive fields, a different element: the focus moved.
+        let moved = QualificationUIObservation(focus: QualificationFocusIdentity(
+            element: AXUIElementCreateApplication(50_002), window: nil, role: "AXGroup", subrole: nil,
+            description: "믹서", windowTitle: "Untitled"))
+        let script = UIScript([Self.mixerFocus, moved])
+        let (qualificationCase, evidence) = try await qualifyFastForwardThroughTheShippedDrive(
+            observer: { script.next() })
+        #expect(qualificationCase.status == .failed)
+        #expect(!qualificationCase.verified)
+        #expect(!evidence.verified)
+        let reason = try #require(evidence.failureReason)
+        #expect(reason.contains("transport.fast_forward: ui_invariant: focus_moved("))
+    }
+
+    @Test func theShippedQualifyPathDoesNotVerifyAnOperationWhoseUICannotBeObserved() async throws {
+        let script = UIScript([nil])
+        let (qualificationCase, evidence) = try await qualifyFastForwardThroughTheShippedDrive(
+            observer: { script.next() })
+        #expect(qualificationCase.status == .failed)
+        #expect(!qualificationCase.verified)
+        #expect(!evidence.verified)
+        let reason = try #require(evidence.failureReason)
+        #expect(reason.contains("ui_invariant: transport.fast_forward: baseline observation unavailable"))
+    }
+
+    @Test func theShippedQualifyPathDoesNotVerifyAnOperationWhoseAfterStateCannotBeObserved() async throws {
+        let script = UIScript([Self.mixerFocus, nil])
+        let (qualificationCase, evidence) = try await qualifyFastForwardThroughTheShippedDrive(
+            observer: { script.next() })
+        #expect(qualificationCase.status == .failed)
+        #expect(!qualificationCase.verified)
+        #expect(!evidence.verified)
+        let reason = try #require(evidence.failureReason)
+        #expect(reason.contains("transport.fast_forward: ui_invariant: observation_unavailable"))
     }
 }
