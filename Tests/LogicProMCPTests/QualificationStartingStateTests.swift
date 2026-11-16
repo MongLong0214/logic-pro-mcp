@@ -54,10 +54,20 @@ struct QualificationStartingStateTests {
         ]
     }
 
+    private static func region(kind: String = "midi") -> SelectedRegionEventListReader.RegionIdentity {
+        .init(name: "MIDI 리전", trackIndex: 2, startBar: 1, endBar: 2, kind: kind)
+    }
+
+    private static let oneMidiRegion = SelectedRegionEventListReader.SelectionObservation(
+        scopeComplete: true, selected: [region()])
+
     private static func facts(
-        owns: Bool? = true, main: AXUIElement? = project, unreadable: [String] = []
+        owns: Bool? = true, main: AXUIElement? = project,
+        regions: SelectedRegionEventListReader.SelectionObservation? = oneMidiRegion,
+        unreadable: [String] = []
     ) -> QualificationStartingWindowFacts {
-        QualificationStartingWindowFacts(logicOwnsKeyboard: owns, mainWindow: main, unreadable: unreadable)
+        QualificationStartingWindowFacts(
+            logicOwnsKeyboard: owns, mainWindow: main, selectedRegions: regions, unreadable: unreadable)
     }
 
     private static func readings(
@@ -110,6 +120,39 @@ struct QualificationStartingStateTests {
     }
 
     // MARK: one test per unmet condition
+
+    @Test func noSelectedRegionIsUnmet() {
+        let none = SelectedRegionEventListReader.SelectionObservation(scopeComplete: true, selected: [])
+        let found = Self.unmet(Self.readings(facts: Self.facts(regions: none)))
+        #expect(Self.named(found, "selected_region_count"), "\(found)")
+    }
+
+    @Test func twoSelectedRegionsAreUnmet() {
+        let two = SelectedRegionEventListReader.SelectionObservation(
+            scopeComplete: true, selected: [Self.region(), Self.region()])
+        let found = Self.unmet(Self.readings(facts: Self.facts(regions: two)))
+        #expect(Self.named(found, "selected_region_count"), "\(found)")
+    }
+
+    @Test func aSelectedRegionThatIsNotMidiIsUnmet() {
+        let audio = SelectedRegionEventListReader.SelectionObservation(
+            scopeComplete: true, selected: [Self.region(kind: "audio")])
+        let found = Self.unmet(Self.readings(facts: Self.facts(regions: audio)))
+        #expect(Self.named(found, "selected_region_not_midi"), "\(found)")
+    }
+
+    @Test func anIncompleteRegionScopeIsUnmetEvenWithOneSelected() {
+        let partial = SelectedRegionEventListReader.SelectionObservation(
+            scopeComplete: false, selected: [Self.region()])
+        let found = Self.unmet(Self.readings(facts: Self.facts(regions: partial)))
+        #expect(Self.named(found, "selected_region_scope_incomplete"), "\(found)")
+    }
+
+    @Test func anUnreadRegionSelectionIsUnmetNotEmpty() {
+        let found = Self.unmet(Self.readings(facts: Self.facts(regions: nil)))
+        #expect(Self.named(found, "selected_region_unreadable"), "\(found)")
+        #expect(!Self.named(found, "selected_region_count"), "\(found)")
+    }
 
     @Test func aLayer101MenuIsUnmet() {
         let found = Self.unmet(Self.readings(ui: Self.ui(cg: [Self.cg(number: 93, layer: 101, width: 234, height: 355)])))

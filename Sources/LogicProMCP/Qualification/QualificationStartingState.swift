@@ -24,12 +24,20 @@ struct QualificationStartingWindowFacts: @unchecked Sendable {
     let logicOwnsKeyboard: Bool?
     /// Logic's `AXMainWindow`. nil when it did not read.
     let mainWindow: AXUIElement?
+    /// The Arrange regions as the product's own read-only enumeration sees them. nil when that
+    /// enumeration did not read; an unread selection is never "nothing selected".
+    let selectedRegions: SelectedRegionEventListReader.SelectionObservation?
     /// Every read this snapshot needed and did not get.
     let unreadable: [String]
 
-    init(logicOwnsKeyboard: Bool?, mainWindow: AXUIElement?, unreadable: [String] = []) {
+    init(
+        logicOwnsKeyboard: Bool?, mainWindow: AXUIElement?,
+        selectedRegions: SelectedRegionEventListReader.SelectionObservation?,
+        unreadable: [String] = []
+    ) {
         self.logicOwnsKeyboard = logicOwnsKeyboard
         self.mainWindow = mainWindow
+        self.selectedRegions = selectedRegions
         self.unreadable = unreadable
     }
 }
@@ -107,6 +115,18 @@ enum QualificationStartingState {
                 } else if facts.mainWindow == nil, facts.unreadable.isEmpty {
                     add("main_window_not_frontmost(Logic has no main window)")
                 }
+                // The MIDI-region read ops act on the selected region: exactly one, a MIDI one.
+                if let regions = facts.selectedRegions {
+                    if !regions.scopeComplete {
+                        add("selected_region_scope_incomplete(the Arrange regions were not read in full)")
+                    } else if regions.selected.count != 1 {
+                        add("selected_region_count(\(regions.selected.count) regions are selected, exactly one MIDI region is required)")
+                    } else if let region = regions.selected.first, region.kind != "midi" {
+                        add("selected_region_not_midi(the selected region \"\(region.name)\" is \(region.kind))")
+                    }
+                } else {
+                    add("selected_region_unreadable(the Arrange region selection did not read)")
+                }
             } else {
                 add("ui_unreadable(the window facts did not read)")
             }
@@ -154,11 +174,14 @@ enum QualificationStartingState {
     static func observeLogicWindows(
         runningPID: () -> pid_t?,
         keyboardOwnership: () -> ProcessUtils.KeyboardOwnershipObservation,
+        selectedRegions: () -> SelectedRegionEventListReader.SelectionObservation? = {
+            AccessibilityChannel.selectedRegionObservation()
+        },
         runtime: AXHelpers.Runtime
     ) -> QualificationStartingWindowFacts {
         guard let pid = runningPID() else {
             return QualificationStartingWindowFacts(
-                logicOwnsKeyboard: nil, mainWindow: nil,
+                logicOwnsKeyboard: nil, mainWindow: nil, selectedRegions: nil,
                 unreadable: ["Logic application not found by the running-application lookup"])
         }
         var unreadable: [String] = []
@@ -178,7 +201,8 @@ enum QualificationStartingState {
         case .failure(let error): unreadable.append("AXMainWindow AXError \(error.raw)")
         }
         return QualificationStartingWindowFacts(
-            logicOwnsKeyboard: owns, mainWindow: main, unreadable: unreadable)
+            logicOwnsKeyboard: owns, mainWindow: main,
+            selectedRegions: selectedRegions(), unreadable: unreadable)
     }
 
     // MARK: product reads
