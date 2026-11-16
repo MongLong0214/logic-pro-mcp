@@ -17,9 +17,9 @@ defaults:
     shell: bash
 
 env:
-  # These suites carry most of the measured runtime. SwiftPM applies the expression to an
-  # implementation-qualified name while `swift test list` includes the module prefix.
-  TEST_SHARD_SELECTOR: '\.(QualificationRunnerTests|Issue965FreshPopulationAcquisitionTests|Issue538TrackCreationObservationTests|Issue968ExactTrackNameAdapterTests|QualificationFaultInjectionTests|MIDIReadbackCallSiteLintTests|Issue538ModalWitnessTests)/'
+  # The whole inventory is split into this many serial shards, balanced by
+  # Scripts/ci-test-shard-weights.tsv. It must equal the length of the test-shards matrix.
+  TEST_SHARD_COUNT: 4
 
 jobs:
   change-scope:
@@ -181,9 +181,9 @@ jobs:
           rm "$artifact/inventory-raw.txt"
           python3 Scripts/ci-test-shard-manifest.py partition \
             --inventory "$artifact/inventory.txt" \
-            --selector "$TEST_SHARD_SELECTOR" \
-            --selected "$artifact/selected.txt" \
-            --complement "$artifact/complement.txt"
+            --weights Scripts/ci-test-shard-weights.tsv \
+            --count "$TEST_SHARD_COUNT" \
+            --output-directory "$artifact/shards"
 
           triple_debug=$(readlink .build/debug)
           test_bundle=".build/$triple_debug/LogicProMCPPackageTests.xctest"
@@ -211,13 +211,11 @@ jobs:
     timeout-minutes: 120
     strategy:
       fail-fast: false
-      max-parallel: 2
+      # GitHub-hosted macOS concurrency is five jobs per account; release-build has finished by
+      # the time the shards start, so four shards leave one slot for any other macOS job.
+      max-parallel: 4
       matrix:
-        include:
-          - shard: selected
-            mode: filter
-          - shard: complement
-            mode: skip
+        shard: [1, 2, 3, 4]
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
@@ -255,7 +253,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           SHARD: ${{ matrix.shard }}
-          SHARD_MODE: ${{ matrix.mode }}
         run: |
           set -euo pipefail
           runtime="$RUNNER_TEMP/test-runtime"
@@ -278,24 +275,22 @@ jobs:
           LC_ALL=C sort "$RUNNER_TEMP/inventory-$SHARD-raw.txt" > "$RUNNER_TEMP/inventory-$SHARD.txt"
           cmp "$runtime/inventory.txt" "$RUNNER_TEMP/inventory-$SHARD.txt"
 
+          manifest="$runtime/shards/shard-$SHARD.txt"
+          python3 Scripts/ci-test-shard-manifest.py filter-pattern --manifest "$manifest" \
+            > "$RUNNER_TEMP/filter-$SHARD.txt"
+
           export LLVM_PROFILE_FILE="$PROFRAW_DIR/%m-%p.profraw"
-          if [ "$SHARD_MODE" = filter ]; then
-            swift test --skip-build --enable-code-coverage --no-parallel \
-              --xunit-output "$xunit_dir/results.xml" --filter "$TEST_SHARD_SELECTOR" \
-              2>&1 | tee "$COVERAGE_LOG"
-          else
-            swift test --skip-build --enable-code-coverage --no-parallel \
-              --xunit-output "$xunit_dir/results.xml" --skip "$TEST_SHARD_SELECTOR" \
-              2>&1 | tee "$COVERAGE_LOG"
-          fi
+          swift test --skip-build --enable-code-coverage --no-parallel \
+            --xunit-output "$xunit_dir/results.xml" --filter "$(cat "$RUNNER_TEMP/filter-$SHARD.txt")" \
+            2>&1 | tee "$COVERAGE_LOG"
           python3 Scripts/ci-test-shard-manifest.py verify-xunit \
-            --expected "$runtime/$SHARD.txt" \
+            --expected "$manifest" \
             --xunit-directory "$xunit_dir" \
-            --actual "$out/actual-$SHARD.txt"
+            --actual "$out/actual-shard-$SHARD.txt"
           find .build -type f -path '*/debug/codecov/default.profdata' \
             > "$RUNNER_TEMP/profiles-$SHARD.txt"
           test "$(grep -c . "$RUNNER_TEMP/profiles-$SHARD.txt")" = 1
-          cp "$(cat "$RUNNER_TEMP/profiles-$SHARD.txt")" "$out/$SHARD.profdata"
+          cp "$(cat "$RUNNER_TEMP/profiles-$SHARD.txt")" "$out/shard-$SHARD.profdata"
 
       - name: Keep this shard's evidence
         if: always()
@@ -369,7 +364,7 @@ jobs:
           name: test-runtime-${{ github.run_id }}
           path: ${{ runner.temp }}/test-runtime
 
-      - name: Download both shard results
+      - name: Download every shard result
         if: ${{ needs.change-scope.outputs.full-validation == 'true' && needs.release-build.result == 'success' && needs.test-build.result == 'success' && needs.test-shards.result == 'success' }}
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
@@ -385,23 +380,30 @@ jobs:
           shards="$RUNNER_TEMP/test-shards"
           test "$(cat "$runtime/candidate-sha.txt")" = "$GITHUB_SHA"
           tar -xzf "$runtime/runtime.tar.gz" -C "$GITHUB_WORKSPACE"
-          find "$shards" -type f -name actual-selected.txt > "$RUNNER_TEMP/selected-paths.txt"
-          find "$shards" -type f -name actual-complement.txt > "$RUNNER_TEMP/complement-paths.txt"
-          test "$(grep -c . "$RUNNER_TEMP/selected-paths.txt")" = 1
-          test "$(grep -c . "$RUNNER_TEMP/complement-paths.txt")" = 1
-          selected_dir=$(dirname "$(cat "$RUNNER_TEMP/selected-paths.txt")")
-          complement_dir=$(dirname "$(cat "$RUNNER_TEMP/complement-paths.txt")")
+          find "$shards" -type f -name 'actual-shard-*.txt' > "$RUNNER_TEMP/actual-paths.txt"
+          find "$shards" -type f -name 'shard-*.profdata' > "$RUNNER_TEMP/profile-paths.txt"
+          test "$(grep -c . "$RUNNER_TEMP/actual-paths.txt")" = "$TEST_SHARD_COUNT"
+          test "$(grep -c . "$RUNNER_TEMP/profile-paths.txt")" = "$TEST_SHARD_COUNT"
+          manifests=()
+          profiles=()
+          for index in $(seq 1 "$TEST_SHARD_COUNT"); do
+            grep -E "/actual-shard-$index[.]txt\$" "$RUNNER_TEMP/actual-paths.txt" \
+              > "$RUNNER_TEMP/actual-$index.txt"
+            test "$(grep -c . "$RUNNER_TEMP/actual-$index.txt")" = 1
+            shard_dir=$(dirname "$(cat "$RUNNER_TEMP/actual-$index.txt")")
+            test -f "$shard_dir/shard-$index.profdata"
+            manifests+=("$shard_dir/actual-shard-$index.txt")
+            profiles+=("$shard_dir/shard-$index.profdata")
+          done
           python3 Scripts/ci-test-shard-manifest.py verify-union \
             --inventory "$runtime/inventory.txt" \
-            --selected "$selected_dir/actual-selected.txt" \
-            --complement "$complement_dir/actual-complement.txt"
+            --count "$TEST_SHARD_COUNT" \
+            "${manifests[@]}"
 
           triple_debug=$(readlink .build/debug)
           find .build -type d -name codecov -prune -exec rm -rf {} + 2>/dev/null || true
           mkdir -p ".build/$triple_debug/codecov"
-          xcrun llvm-profdata merge -sparse \
-            "$selected_dir/selected.profdata" \
-            "$complement_dir/complement.profdata" \
+          xcrun llvm-profdata merge -sparse "${profiles[@]}" \
             -o ".build/$triple_debug/codecov/default.profdata"
           bash Scripts/ci-coverage-gate.sh
 

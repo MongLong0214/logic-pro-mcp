@@ -3,6 +3,7 @@
 
 import importlib.util
 from pathlib import Path
+import re
 import tempfile
 import unittest
 
@@ -28,43 +29,172 @@ class ManifestFixture(unittest.TestCase):
 
 
 class PartitionTests(ManifestFixture):
-    def test_partition_is_nonempty_disjoint_and_complete(self):
-        inventory = self.write("inventory.txt", "Suite.Slow/b()\nSuite.Fast/a()\nSuite.Slow/a()\n")
-        selected = self.root / "selected.txt"
-        complement = self.root / "complement.txt"
+    INVENTORY = (
+        "LogicProMCPTests.Fast/a()\n"
+        "LogicProMCPTests.Fast/b()\n"
+        "LogicProMCPTests.Outer/Inner/c()\n"
+        "LogicProMCPTests.Slow/heavy(mode:)\n"
+        "LogicProMCPTests.Slow/heavier()\n"
+        "LogicProMCPTests.TopLevel()\n"
+    )
 
-        manifest.partition_manifest(inventory, r"^Suite\.Slow/", selected, complement)
+    def partition(self, count: int, weights: str = "", inventory: str = INVENTORY,
+                  directory: str = "shards") -> list[Path]:
+        inventory_path = self.write("inventory.txt", inventory)
+        weights_path = self.write("weights.tsv", weights)
+        output = self.root / directory
+        manifest.partition_manifest(inventory_path, weights_path, count, output)
+        return [manifest.shard_path(output, index) for index in range(1, count + 1)]
 
-        self.assertEqual(selected.read_text(encoding="utf-8"),
-                         "Suite.Slow/a()\nSuite.Slow/b()\n")
-        self.assertEqual(complement.read_text(encoding="utf-8"), "Suite.Fast/a()\n")
-        manifest.verify_union(inventory, selected, complement)
+    def lines(self, path: Path) -> list[str]:
+        return path.read_text(encoding="utf-8").splitlines()
 
-    def test_selector_typo_that_matches_nothing_is_refused(self):
-        inventory = self.write("inventory.txt", "Suite.Fast/a()\nSuite.Slow/a()\n")
-        with self.assertRaisesRegex(manifest.ManifestError, "selected shard is empty"):
-            manifest.partition_manifest(
-                inventory, r"^Suite\.Slwo/", self.root / "selected.txt",
-                self.root / "complement.txt")
+    def test_every_test_lands_in_exactly_one_nonempty_sorted_shard(self):
+        for count in (1, 2, 3, 6):
+            with self.subTest(count=count):
+                shards = self.partition(count, directory=f"shards-{count}")
+                entries = [entry for shard in shards for entry in self.lines(shard)]
+                self.assertEqual(sorted(entries), sorted(self.INVENTORY.splitlines()))
+                self.assertEqual(len(entries), len(set(entries)))
+                for shard in shards:
+                    self.assertTrue(self.lines(shard))
+                    self.assertEqual(self.lines(shard), sorted(self.lines(shard)))
+
+    def test_partition_depends_on_contents_not_on_inventory_order(self):
+        weights = "30\tLogicProMCPTests.Slow/heavy(mode:)\n"
+        first = [self.lines(path) for path in self.partition(3, weights, directory="a")]
+        reversed_inventory = "\n".join(reversed(self.INVENTORY.splitlines())) + "\n"
+        second = [self.lines(path) for path in
+                  self.partition(3, weights, reversed_inventory, directory="b")]
+        self.assertEqual(first, second)
+
+    def test_the_slowest_tests_are_spread_across_shards(self):
+        weights = ("# measured\n"
+                   "50\tLogicProMCPTests.Slow/heavy(mode:)\n"
+                   "40\tLogicProMCPTests.Slow/heavier()\n"
+                   "9\tLogicProMCPTests.Retired/gone()\n")
+        shards = [self.lines(path) for path in self.partition(2, weights)]
+        self.assertIn("LogicProMCPTests.Slow/heavy(mode:)", shards[0])
+        self.assertIn("LogicProMCPTests.Slow/heavier()", shards[1])
+        self.assertNotIn("LogicProMCPTests.Retired/gone()", shards[0] + shards[1])
+
+    def test_more_shards_than_tests_is_refused(self):
+        with self.assertRaisesRegex(manifest.ManifestError, "shard 7 of 7 is empty"):
+            self.partition(7)
+
+    def test_malformed_or_duplicate_weights_are_refused(self):
+        for suffix, weights, message in (
+            ("no-tab", "30 LogicProMCPTests.Fast/a()\n", "malformed shard weight"),
+            ("not-a-number", "slow\tLogicProMCPTests.Fast/a()\n", "malformed shard weight"),
+            ("negative", "-1\tLogicProMCPTests.Fast/a()\n", "non-negative"),
+            ("nan", "nan\tLogicProMCPTests.Fast/a()\n", "non-negative"),
+            ("duplicate", "1\tLogicProMCPTests.Fast/a()\n2\tLogicProMCPTests.Fast/a()\n",
+             "duplicate shard weight"),
+        ):
+            with self.subTest(suffix=suffix):
+                with self.assertRaisesRegex(manifest.ManifestError, message):
+                    self.partition(2, weights, directory=suffix)
 
     def test_duplicate_inventory_entry_is_refused(self):
-        inventory = self.write("inventory.txt", "Suite.Fast/a()\nSuite.Fast/a()\n")
         with self.assertRaisesRegex(manifest.ManifestError, "duplicate"):
-            manifest.partition_manifest(
-                inventory, r"Fast", self.root / "selected.txt",
-                self.root / "complement.txt")
+            self.partition(2, inventory="Suite.Fast/a()\nSuite.Fast/a()\n")
 
-    def test_union_refuses_overlap_and_gap(self):
-        inventory = self.write("inventory.txt", "Suite/a()\nSuite/b()\nSuite/c()\n")
-        selected = self.write("selected.txt", "Suite/a()\nSuite/b()\n")
-        overlap = self.write("overlap.txt", "Suite/b()\nSuite/c()\n")
-        with self.assertRaisesRegex(manifest.ManifestError, "overlap"):
-            manifest.verify_union(inventory, selected, overlap)
+    def test_existing_manifest_is_never_replaced(self):
+        self.partition(2)
+        with self.assertRaisesRegex(manifest.ManifestError, "refusing to replace"):
+            self.partition(2)
 
-        gap = self.write("gap.txt", "Suite/c()\n")
-        selected.write_text("Suite/a()\n", encoding="utf-8")
-        with self.assertRaisesRegex(manifest.ManifestError, "union"):
-            manifest.verify_union(inventory, selected, gap)
+
+class UnionTests(ManifestFixture):
+    def setUp(self):
+        super().setUp()
+        self.inventory = self.write("inventory.txt", "Suite/a()\nSuite/b()\nSuite/c()\nSuite/d()\n")
+
+    def shards(self, *contents: str) -> list[Path]:
+        return [self.write(f"actual-shard-{index}.txt", text)
+                for index, text in enumerate(contents, 1)]
+
+    def test_exact_union_of_n_shards_is_accepted(self):
+        manifest.verify_union(
+            self.inventory, self.shards("Suite/a()\n", "Suite/b()\nSuite/d()\n", "Suite/c()\n"), 3)
+
+    def test_a_dropped_test_is_refused(self):
+        shards = self.shards("Suite/a()\n", "Suite/b()\nSuite/d()\n", "Suite/c()\n")
+        shards[1].write_text("Suite/b()\n", encoding="utf-8")
+        with self.assertRaisesRegex(manifest.ManifestError, r"missing=\['Suite/d\(\)'\]"):
+            manifest.verify_union(self.inventory, shards, 3)
+
+    def test_a_test_run_by_two_shards_is_refused(self):
+        shards = self.shards("Suite/a()\nSuite/c()\n", "Suite/b()\nSuite/d()\n", "Suite/c()\n")
+        with self.assertRaisesRegex(manifest.ManifestError, r"overlap: Suite/c\(\)"):
+            manifest.verify_union(self.inventory, shards, 3)
+
+    def test_a_test_outside_the_inventory_is_refused(self):
+        shards = self.shards("Suite/a()\nSuite/b()\n", "Suite/c()\nSuite/d()\nSuite/e()\n")
+        with self.assertRaisesRegex(manifest.ManifestError, r"extra=\['Suite/e\(\)'\]"):
+            manifest.verify_union(self.inventory, shards, 2)
+
+    def test_a_missing_or_repeated_shard_is_refused(self):
+        shards = self.shards("Suite/a()\nSuite/b()\n", "Suite/c()\nSuite/d()\n")
+        with self.assertRaisesRegex(manifest.ManifestError, "expected 3 shard manifests, got 2"):
+            manifest.verify_union(self.inventory, shards, 3)
+        with self.assertRaisesRegex(manifest.ManifestError, "given twice"):
+            manifest.verify_union(self.inventory, [shards[0], shards[0]], 2)
+
+    def test_an_empty_or_unsorted_shard_is_refused(self):
+        for suffix, text, message in (
+            ("empty", "", "is empty"),
+            ("unsorted", "Suite/d()\nSuite/c()\n", "not byte-sorted"),
+        ):
+            with self.subTest(suffix=suffix):
+                first = self.write(f"first-{suffix}.txt", "Suite/a()\nSuite/b()\n")
+                second = self.write(f"second-{suffix}.txt", text)
+                with self.assertRaisesRegex(manifest.ManifestError, message):
+                    manifest.verify_union(self.inventory, [first, second], 2)
+
+
+class FilterPatternTests(ManifestFixture):
+    IDS = {
+        # Swift Testing matches the expression against a test's ID, which is the listed name
+        # plus `/<file>:<line>:<column>`, and also against every suite's ID.
+        "LogicProMCPTests.Suite/a()": "LogicProMCPTests.Suite/a()/SuiteTests.swift:4:3",
+        "LogicProMCPTests.Suite/ab()": "LogicProMCPTests.Suite/ab()/SuiteTests.swift:8:3",
+        "LogicProMCPTests.Suite/p(mode:)": "LogicProMCPTests.Suite/p(mode:)/SuiteTests.swift:9:3",
+        "LogicProMCPTests.Outer/Inner/c()": "LogicProMCPTests.Outer/Inner/c()/OuterTests.swift:2:5",
+        "LogicProMCPTests.TopLevel()": "LogicProMCPTests.TopLevel()/TopLevelTests.swift:1:1",
+        "LogicProMCPTests.SuiteTwo/a()": "LogicProMCPTests.SuiteTwo/a()/SuiteTwoTests.swift:3:3",
+        # Overloads share a name, so `swift test list` prints each with its source location.
+        "LogicProMCPTests.Over/f()/OverTests.swift:1:2": "LogicProMCPTests.Over/f()/OverTests.swift:1:2",
+        "LogicProMCPTests.Over/f()/OverTests.swift:1:20": "LogicProMCPTests.Over/f()/OverTests.swift:1:20",
+        # Another module whose name ends in this one's.
+        "AppLogicProMCPTests.Suite/a()": "AppLogicProMCPTests.Suite/a()/SuiteTests.swift:4:3",
+    }
+    SUITES = ("LogicProMCPTests.Suite", "LogicProMCPTests.Outer", "LogicProMCPTests.Outer/Inner",
+              "LogicProMCPTests.SuiteTwo", "LogicProMCPTests.Over")
+
+    def selected(self, listed: list[str]) -> set[str]:
+        path = self.write("shard.txt", "".join(f"{entry}\n" for entry in sorted(listed)))
+        expression = re.compile(manifest.filter_pattern(path))
+        for suite in self.SUITES:
+            self.assertIsNone(expression.search(suite), f"{suite} would select its whole suite")
+        return {name for name, test_id in self.IDS.items() if expression.search(test_id)}
+
+    def test_selects_exactly_the_listed_tests(self):
+        for listed in (
+            ["LogicProMCPTests.Suite/a()"],
+            ["LogicProMCPTests.Suite/p(mode:)", "LogicProMCPTests.Outer/Inner/c()"],
+            ["LogicProMCPTests.TopLevel()", "LogicProMCPTests.SuiteTwo/a()"],
+            ["LogicProMCPTests.Over/f()/OverTests.swift:1:2"],
+            list(self.IDS),
+        ):
+            with self.subTest(listed=listed):
+                self.assertEqual(self.selected(listed), set(listed))
+
+    def test_regex_metacharacters_in_names_are_literal(self):
+        path = self.write("shard.txt", "LogicProMCPTests.S/x(a:b:)\n")
+        expression = re.compile(manifest.filter_pattern(path))
+        self.assertIsNotNone(expression.search("LogicProMCPTests.S/x(a:b:)/S.swift:1:1"))
+        self.assertIsNone(expression.search("LogicProMCPTestsXS/x(a:b:)/S.swift:1:1"))
 
 
 class XUnitTests(ManifestFixture):
