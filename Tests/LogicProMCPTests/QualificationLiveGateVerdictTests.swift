@@ -198,6 +198,24 @@ struct QualificationLiveGateVerdictTests {
         #expect(evaluation.verdict == .notQualified(.refused))
     }
 
+    @Test func anEnvironmentalPreconditionRefusalIsNotQualifiedAsSuch() throws {
+        let id = OperationID.tracksScanPluginPresets
+        let base = Self.read(id, response: Data("{}".utf8), readback: Data("{}".utf8), isError: true)
+        let refused = QualificationOperationResult(
+            operationID: base.operationID, tool: base.tool, command: base.command,
+            mutability: base.mutability, requestID: base.requestID, responseData: base.responseData,
+            isError: true, state: "C",
+            error: HonestContract.FailureError.pluginWindowUnavailable.rawValue,
+            hint: AccessibilityChannel.pluginWindowUnavailableHint, writeAttempted: false,
+            readbackSource: base.readbackSource, readbackRequestID: base.readbackRequestID,
+            readbackData: base.readbackData, verification: base.verification,
+            deadline: base.deadline, failureReason: nil)
+        #expect(refused.liveGateUnmetEnvironmentalPrecondition != nil)
+        let evaluation = QualificationLiveGateVerdict.evaluate(
+            spec: Self.spec(id), result: refused, fixture: nil)
+        #expect(evaluation.verdict == .notQualified(.envPrecondition))
+    }
+
     @Test func aReadWhoseOracleNeverLooksAtItsReadbackIsNotExercised() throws {
         let ignoring = try #require(
             OperationRegistry.specs.filter { $0.mutability == .readOnly }.map(\.id).first { id in
