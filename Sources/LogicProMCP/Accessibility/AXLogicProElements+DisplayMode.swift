@@ -434,7 +434,36 @@ enum ControlBarDisplayMode {
             guard case .success(.some(let value)) = role else { return nil }
             if value == kAXMenuRole as String { menus.append(child) }
         }
-        return menus
+        guard menus.isEmpty, runtime.elementAtPosition != nil else { return menus }
+        return unlistedMenu(under: popup, runtime: runtime)
+    }
+
+    /// Logic 13 (7801) opens this popup's menu with the popup as its AXParent but never lists it
+    /// in the popup's AXChildren (measured 2026-11-16, impl-logic13/B14-menuparent.stdout: popup
+    /// 1076,56 16x48, menu 1077,98 234x355, AXChildren empty while CG layer 101 was on screen).
+    /// An empty child list is therefore not absence. Hit-test just below the popup and accept only
+    /// an AXMenu whose parent is this exact popup. A closed menu's element keeps answering role
+    /// AXMenu, so presence is decided by the hit-test, never by re-reading a held element.
+    /// nil means the hit-test itself could not read, which callers treat as unknown.
+    private static func unlistedMenu(under popup: AXUIElement, runtime: AXHelpers.Runtime) -> [AXUIElement]? {
+        guard let hitTest = runtime.elementAtPosition,
+              let position: CGPoint = AXHelpers.getPosition(popup, runtime: runtime),
+              let size: CGSize = AXHelpers.getSize(popup, runtime: runtime) else { return nil }
+        var pid: pid_t = 0
+        guard AXUIElementGetPid(popup, &pid) == .success else { return nil }
+        let point = CGPoint(x: position.x + 20, y: position.y + size.height + 20)
+        guard case .success(let hit) = hitTest(runtime.axApp(pid), point) else { return nil }
+        var current = hit
+        for _ in 0..<4 {
+            guard let element = current else { return [] }
+            if AXHelpers.getRole(element, runtime: runtime) == kAXMenuRole as String {
+                guard let parent: AXUIElement = AXHelpers.getAttribute(element, kAXParentAttribute as String, runtime: runtime),
+                      CFEqual(parent, popup) else { return [] }
+                return [element]
+            }
+            current = AXHelpers.getAttribute(element, kAXParentAttribute as String, runtime: runtime)
+        }
+        return []
     }
 
     private static func menuIsClosed(under popup: AXUIElement, runtime: AXHelpers.Runtime) -> Bool {
