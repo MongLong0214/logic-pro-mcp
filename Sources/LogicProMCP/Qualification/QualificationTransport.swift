@@ -1488,6 +1488,11 @@ struct QualificationTransport: Sendable {
         QualificationSubprocessSession
     ) throws -> QualificationSubprocessSession.ShutdownOutcome
     let supportBundleRemover: @Sendable (URL, SecureFD.Identity) throws -> String
+    /// DESIGN §2. Reads Logic's UI (window server + AX, read-only) once before and once after every
+    /// operation. Nil leaves the invariants unchecked, which is what the unit-test fakes want and
+    /// what the live gate must never do: the live test passes `QualificationUIInvariants.observeLogic`.
+    let uiObserver: (@Sendable () -> QualificationUIObservation?)?
+    let uiSettleSleep: @Sendable (TimeInterval) -> Void
 
     init(
         handshakeTimeout: TimeInterval = 45,
@@ -1512,6 +1517,10 @@ struct QualificationTransport: Sendable {
         },
         supportBundleRemover: @escaping @Sendable (URL, SecureFD.Identity) throws -> String = {
             try QualificationTransport.removeOwnedSupportBundle(at: $0, expectedIdentity: $1)
+        },
+        uiObserver: (@Sendable () -> QualificationUIObservation?)? = nil,
+        uiSettleSleep: @escaping @Sendable (TimeInterval) -> Void = {
+            Thread.sleep(forTimeInterval: $0)
         }
     ) {
         self.handshakeTimeout = handshakeTimeout
@@ -1523,6 +1532,8 @@ struct QualificationTransport: Sendable {
         self.supportBundleRoot = supportBundleRoot
         self.supportBundleQuiescer = supportBundleQuiescer
         self.supportBundleRemover = supportBundleRemover
+        self.uiObserver = uiObserver
+        self.uiSettleSleep = uiSettleSleep
     }
 
     /// Environment the same-artifact qualification drives the server with.
@@ -1724,6 +1735,8 @@ struct QualificationTransport: Sendable {
             preparedReadParams.merge(readPreparation.params) { current, _ in current }
             readProbePreparationFailures.merge(readPreparation.failures) { current, _ in current }
             for spec in request.operations {
+                // DESIGN §2: the UI as this operation found it. Read before anything is sent.
+                let uiBefore = uiObserver?()
                 var response: (text: String, isError: Bool)?
                 var responseRequestID: String?
                 var responseFailure: String? = readProbePreparationFailures[spec.id]
@@ -2182,6 +2195,22 @@ struct QualificationTransport: Sendable {
                 let transportRecipeFailure = Self.transportExpectedPlaying[spec.id] == nil
                     ? nil
                     : phaseBRefusal
+                // DESIGN §2: every operation, after its readback. The reason is JOINED with the
+                // existing one rather than replacing it, so a UI violation cannot hide behind an
+                // earlier reason and an earlier reason cannot hide it.
+                let uiViolation: String? = uiObserver.flatMap { observe in
+                    guard let uiBefore else {
+                        return "ui_invariant: \(spec.id.rawValue): baseline observation unavailable"
+                    }
+                    let found = QualificationUIInvariants.settledViolations(
+                        before: uiBefore, observe: observe, sleep: uiSettleSleep)
+                    return found.isEmpty
+                        ? nil
+                        : "\(spec.id.rawValue): " + found.joined(separator: "; ")
+                }
+                let combinedFailure = [
+                    responseFailure ?? readbackFailure ?? transportRecipeFailure, uiViolation,
+                ].compactMap { $0 }.joined(separator: " | ")
                 operationResults[spec.id.rawValue] = QualificationOperationResult(
                     operationID: spec.id.rawValue,
                     tool: spec.tool.rawValue,
@@ -2202,7 +2231,7 @@ struct QualificationTransport: Sendable {
                     readbackData: readbackData,
                     verification: spec.verification,
                     deadline: spec.deadline,
-                    failureReason: responseFailure ?? readbackFailure ?? transportRecipeFailure,
+                    failureReason: combinedFailure.isEmpty ? nil : combinedFailure,
                     liveFixturePrecondition: liveFixturePrecondition,
                     mutationRestore: phaseBRecord,
                     mutationRestoreRefusal: phaseBRefusal
