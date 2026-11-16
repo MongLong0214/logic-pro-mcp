@@ -224,11 +224,33 @@ enum QualificationUIInvariants {
     /// The live reader. It lists the window server BEFORE the first AX focus read: a fresh
     /// process's first AX focus read answers -25204 otherwise (measured). Read-only throughout.
     static func observeLogic() -> QualificationUIObservation? {
-        guard let app = LogicProTarget.runningApplication() else { return nil }
-        let pid = app.processIdentifier
-        guard let cg = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID)
-            as? [[String: Any]] else { return nil }
-        return observeLogic(pid: pid, cgWindows: cg, runtime: .production)
+        observeLogic(
+            runningPID: { LogicProTarget.runningApplication()?.processIdentifier },
+            windowList: {
+                CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID) as? [[String: Any]]
+            },
+            runtime: .production)
+    }
+
+    /// A reading that cannot be taken is returned as an observation that names the missing read
+    /// (`unreadable`), so the operation still fails closed and the failure says WHICH read was
+    /// missing instead of a generic "cannot be read".
+    static func observeLogic(
+        runningPID: () -> pid_t?,
+        windowList: () -> [[String: Any]]?,
+        runtime: AXHelpers.Runtime
+    ) -> QualificationUIObservation {
+        guard let pid = runningPID() else {
+            return QualificationUIObservation(
+                axWindowsRead: false, focusStatus: Int32(AXError.cannotComplete.rawValue),
+                unreadable: ["Logic application not found by the running-application lookup"])
+        }
+        guard let cg = windowList() else {
+            return QualificationUIObservation(
+                axWindowsRead: false, focusStatus: Int32(AXError.cannotComplete.rawValue),
+                unreadable: ["CGWindowListCopyWindowInfo returned no list"])
+        }
+        return observeLogic(pid: pid, cgWindows: cg, runtime: runtime)
     }
 
     static func observeLogic(

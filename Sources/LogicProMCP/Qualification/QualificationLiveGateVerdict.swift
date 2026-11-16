@@ -253,6 +253,10 @@ enum QualificationLiveGateVerdict {
         let verdict: QualificationOperationVerdict
         /// Gate violations specific to this operation (failed status, failed value check).
         let violations: [String]
+        /// What the run observed when the operation did not reach EXERCISED: the recipe's refusal,
+        /// the response's error and hint. Carried so a red gate names the cause and not only the
+        /// verdict.
+        var observed: String? = nil
     }
 
     // MARK: static classification
@@ -337,10 +341,34 @@ enum QualificationLiveGateVerdict {
         }
         switch spec.mutability {
         case .mutating:
-            return Evaluation(operationID: id, verdict: mutatingVerdict(result), violations: [])
+            let verdict = mutatingVerdict(result)
+            return Evaluation(
+                operationID: id, verdict: verdict, violations: [],
+                observed: verdict.isExercised ? nil : observedDetail(result))
         case .readOnly:
-            return readOnlyEvaluation(spec: spec, result: result, fixture: fixture)
+            var evaluation = readOnlyEvaluation(spec: spec, result: result, fixture: fixture)
+            if !evaluation.verdict.isExercised { evaluation.observed = observedDetail(result) }
+            return evaluation
         }
+    }
+
+    /// The recipe refusal, the typed error and the hint the operation answered with, bounded so a
+    /// gate line stays readable.
+    static func observedDetail(_ result: QualificationOperationResult) -> String? {
+        var parts: [String] = []
+        if let refusal = result.mutationRestoreRefusal { parts.append("recipe refusal: \(refusal)") }
+        if result.mutationRestore != nil {
+            parts.append(
+                "record status \(result.status.rawValue), cycle shape verified "
+                    + "\(result.mutationRestore?.verifiedCycleShape ?? false), "
+                    + "zero-write refusal observed \(result.expectedZeroWriteRefusalObserved)")
+        }
+        if let error = result.error { parts.append("error: \(error)") }
+        if let reason = result.reason { parts.append("reason: \(reason)") }
+        if let hint = result.hint { parts.append("hint: \(hint)") }
+        guard !parts.isEmpty else { return nil }
+        let joined = parts.joined(separator: "; ")
+        return joined.count > 600 ? String(joined.prefix(600)) + "..." : joined
     }
 
     private static func mutatingVerdict(_ result: QualificationOperationResult) -> QualificationOperationVerdict {
@@ -443,6 +471,7 @@ enum QualificationLiveGateVerdict {
         for evaluation in evaluations {
             let id = evaluation.operationID
             let entry = listed[id]
+            let observed = evaluation.observed.map { " [observed: \($0)]" } ?? ""
             switch evaluation.verdict {
             case .exercised:
                 if let entry {
@@ -450,12 +479,13 @@ enum QualificationLiveGateVerdict {
                 }
             case .notQualified(let reason) where reason.isListable:
                 guard let entry else {
-                    found.append("\(id): NOT_QUALIFIED (\(reason.rawValue)) and not on the list: a new silent gap")
+                    found.append(
+                        "\(id): NOT_QUALIFIED (\(reason.rawValue)) and not on the list: a new silent gap\(observed)")
                     continue
                 }
                 if entry.reason != reason.rawValue {
                     found.append(
-                        "\(id): NOT_QUALIFIED as \(reason.rawValue) but the list says \(entry.reason)")
+                        "\(id): NOT_QUALIFIED as \(reason.rawValue) but the list says \(entry.reason)\(observed)")
                 }
             case .notQualified:
                 break // failed / missing / value-check failures were reported above
@@ -463,13 +493,16 @@ enum QualificationLiveGateVerdict {
         }
         let verdictByID = Dictionary(
             evaluations.map { ($0.operationID, $0.verdict) }, uniquingKeysWith: { first, _ in first })
+        let verdictObserved = Dictionary(
+            evaluations.map { ($0.operationID, $0.observed) }, uniquingKeysWith: { first, _ in first })
         for promise in list.promised {
             switch verdictByID[promise.operation] {
             case .exercised?:
                 break
             case .notQualified(let reason)?:
                 found.append(
-                    "\(promise.operation): promised by \(promise.commit) but NOT_QUALIFIED (\(reason.rawValue)) this run")
+                    "\(promise.operation): promised by \(promise.commit) but NOT_QUALIFIED (\(reason.rawValue)) this run"
+                        + (verdictObserved[promise.operation].flatMap { $0 }.map { " [observed: \($0)]" } ?? ""))
             case nil:
                 found.append("\(promise.operation): promised by \(promise.commit) but not requested in this run")
             }

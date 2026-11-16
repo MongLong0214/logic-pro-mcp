@@ -90,6 +90,25 @@ struct QualificationUIObserverTests {
         found.contains { $0.contains("ui_invariant_unreadable") }
     }
 
+    // MARK: a missing lookup names itself
+
+    @Test func aMissingLogicProcessIsAnUnreadableObservationThatNamesTheLookup() {
+        let f = Fixture()
+        let missing = QualificationUIInvariants.observeLogic(
+            runningPID: { nil }, windowList: { [] }, runtime: f.runtime)
+        let found = QualificationUIInvariants.violations(before: f.observe(), after: missing)
+        #expect(found.contains { $0.contains("running-application lookup") }, "\(found)")
+        #expect(Self.unreadable(found), "\(found)")
+    }
+
+    @Test func aMissingWindowListIsAnUnreadableObservationThatNamesTheList() {
+        let f = Fixture()
+        let missing = QualificationUIInvariants.observeLogic(
+            runningPID: { QualificationUIObserverTests.pid }, windowList: { nil }, runtime: f.runtime)
+        let found = QualificationUIInvariants.violations(before: f.observe(), after: missing)
+        #expect(found.contains { $0.contains("CGWindowListCopyWindowInfo") }, "\(found)")
+    }
+
     // MARK: controls: the fixture itself reads clean
 
     @Test func aReadableUnchangedScreenHasNoViolation() {
