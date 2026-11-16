@@ -77,6 +77,50 @@ extension AccessibilityChannel {
             focusedElement: AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: runtime.ax))
     }
 
+    /// Puts the focus back on the window and element it was on, and answers whether a fresh read
+    /// agrees. A write that AX accepted is not evidence: only the re-read counts.
+    static func restoreFocus(_ origin: MarkerListOrigin, runtime: AXLogicProElements.Runtime) -> Bool {
+        func current(_ attribute: String) -> AXUIElement? {
+            AXHelpers.getAttribute(origin.app, attribute, runtime: runtime.ax)
+        }
+        func same(_ left: AXUIElement?, _ right: AXUIElement?) -> Bool {
+            switch (left, right) {
+            case (nil, nil): return true
+            case let (l?, r?): return CFEqual(l, r)
+            default: return false
+            }
+        }
+        func focusMatches() -> Bool {
+            same(current(kAXFocusedWindowAttribute as String), origin.focusedWindow)
+                && same(current(kAXFocusedUIElementAttribute as String), origin.focusedElement)
+        }
+        if !focusMatches() {
+            if let main = origin.main {
+                _ = AXHelpers.setAttribute(main, kAXMainAttribute as String, kCFBooleanTrue, runtime: runtime.ax)
+            }
+            if let window = origin.focusedWindow {
+                _ = AXHelpers.setAttribute(window, kAXFocusedAttribute as String, kCFBooleanTrue, runtime: runtime.ax)
+            }
+            if let element = origin.focusedElement {
+                _ = AXHelpers.setAttribute(element, kAXFocusedAttribute as String, kCFBooleanTrue, runtime: runtime.ax)
+            }
+            Thread.sleep(forTimeInterval: 0.1)
+        }
+        return focusMatches()
+    }
+
+    /// Runs a synchronous operation that moves the key view (a typed entry into a control-bar
+    /// field) and puts it back. The response says whether the re-read agrees.
+    static func withFocusRestored(
+        runtime: AXLogicProElements.Runtime,
+        _ operation: () -> ChannelResult
+    ) -> ChannelResult {
+        guard let origin = markerListOrigin(runtime: runtime, listWasOpen: true) else { return operation() }
+        let result = operation()
+        let restored = restoreFocus(origin, runtime: runtime)
+        return annotate(result, with: ["focus_restored": restored])
+    }
+
     static func restoreMarkerListOrigin(
         _ origin: MarkerListOrigin,
         runtime: AXLogicProElements.Runtime
@@ -102,33 +146,7 @@ extension AccessibilityChannel {
                 closed = true // the operation never left a list open
             }
         }
-        func current(_ attribute: String) -> AXUIElement? {
-            AXHelpers.getAttribute(origin.app, attribute, runtime: runtime.ax)
-        }
-        func same(_ left: AXUIElement?, _ right: AXUIElement?) -> Bool {
-            switch (left, right) {
-            case (nil, nil): return true
-            case let (l?, r?): return CFEqual(l, r)
-            default: return false
-            }
-        }
-        func focusMatches() -> Bool {
-            same(current(kAXFocusedWindowAttribute as String), origin.focusedWindow)
-                && same(current(kAXFocusedUIElementAttribute as String), origin.focusedElement)
-        }
-        if !focusMatches() {
-            if let main = origin.main {
-                _ = AXHelpers.setAttribute(main, kAXMainAttribute as String, kCFBooleanTrue, runtime: runtime.ax)
-            }
-            if let window = origin.focusedWindow {
-                _ = AXHelpers.setAttribute(window, kAXFocusedAttribute as String, kCFBooleanTrue, runtime: runtime.ax)
-            }
-            if let element = origin.focusedElement {
-                _ = AXHelpers.setAttribute(element, kAXFocusedAttribute as String, kCFBooleanTrue, runtime: runtime.ax)
-            }
-            try? await Task.sleep(for: .milliseconds(100))
-        }
-        let focusRestored = focusMatches()
+        let focusRestored = restoreFocus(origin, runtime: runtime)
         if !focusRestored, reason == nil { reason = "focus did not return to the element it was on" }
         return MarkerListRestoration(closed: closed, focusRestored: focusRestored, reason: reason)
     }

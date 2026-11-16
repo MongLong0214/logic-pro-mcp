@@ -241,13 +241,15 @@ actor AccessibilityChannel: Channel {
                 toggleStepInputKeyboard: {
                     AccessibilityChannel.defaultToggleStepInputKeyboard(runtime: logicRuntime)
                 },
-                setTempo: {
-                    AccessibilityChannel.defaultSetTempo(
-                        params: $0,
-                        runtime: logicRuntime,
-                        mouseRuntime: controlBarMouseRuntime,
-                        runFallback: runTempoFallback
-                    )
+                setTempo: { params in
+                    AccessibilityChannel.withFocusRestored(runtime: logicRuntime) {
+                        AccessibilityChannel.defaultSetTempo(
+                            params: params,
+                            runtime: logicRuntime,
+                            mouseRuntime: controlBarMouseRuntime,
+                            runFallback: runTempoFallback
+                        )
+                    }
                 },
                 setCycleRange: { AccessibilityChannel.defaultSetCycleRange(params: $0, runtime: logicRuntime) },
                 tracks: { AccessibilityChannel.defaultGetTracks(runtime: logicRuntime) },

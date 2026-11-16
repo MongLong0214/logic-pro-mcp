@@ -6,7 +6,7 @@ import Testing
 /// A marker operation that opens Logic's Marker List closes it again and puts the focus back.
 /// Measured on Logic 13: after create_marker the Marker List window stayed open and the key view
 /// was an AXTable inside it, so the next operation read focus_moved.
-@Suite struct MarkerListRestorationTests {
+@Suite(.serialized) struct MarkerListRestorationTests {
     private final class Screen: @unchecked Sendable {
         let builder = FakeAXRuntimeBuilder()
         let app: AXUIElement
@@ -42,9 +42,9 @@ import Testing
         }
 
         /// What the operation does to the screen: open the list and move the key view into it.
-        func openList(_ ledgerRuntime: AXLogicProElements.Runtime) {
+        func openList(_ ledgerRuntime: AXLogicProElements.Runtime, record: Bool = true) {
             // The opener records the screen it found, exactly as `defaultOpenMarkerList` does.
-            if let origin = AccessibilityChannel.markerListOrigin(runtime: ledgerRuntime, listWasOpen: false) {
+            if record, let origin = AccessibilityChannel.markerListOrigin(runtime: ledgerRuntime, listWasOpen: false) {
                 AccessibilityChannel.recordOpenedMarkerList(origin)
             }
             builder.setAttribute(app, kAXWindowsAttribute as String, [arrange, list])
@@ -152,5 +152,30 @@ import Testing
         }
         #expect(!result.isSuccess)
         #expect(screen.windowCount == 1)
+    }
+
+    @Test func anEntryThatMovedFocusIsFollowedByARestoreAndTheReReadDecides() {
+        let screen = Screen(listOpen: false)
+        let runtime = screen.runtime
+        let result = AccessibilityChannel.withFocusRestored(runtime: runtime) {
+            screen.openList(runtime, record: false)
+            return .success(#"{"success":true}"#)
+        }
+        let restored = Self.body(result)["focus_restored"] as? Bool ?? false
+        #expect(restored, "\(Self.body(result))")
+        let focusBack = screen.focusedElement.map { CFEqual($0, screen.strip) } ?? false
+        #expect(focusBack)
+    }
+
+    @Test func anEntryWhoseFocusCannotBeRestoredSaysSo() {
+        let screen = Screen(listOpen: false)
+        screen.focusWritable = false
+        let runtime = screen.runtime
+        let result = AccessibilityChannel.withFocusRestored(runtime: runtime) {
+            screen.openList(runtime, record: false)
+            return .success(#"{"success":true}"#)
+        }
+        let restored = Self.body(result)["focus_restored"] as? Bool ?? true
+        #expect(!restored, "\(Self.body(result))")
     }
 }
