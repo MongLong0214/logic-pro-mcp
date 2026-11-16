@@ -88,6 +88,11 @@
       "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; opens the Step Input window, so it needs the leftover-window invariant and a closed-window precondition (recipe, DESIGN 6a)"
     },
     {
+      "operation": "edit.undo",
+      "reason": "recipe_refused",
+      "detail": "Logic 13 re-mints the track_ref of a track whose rename is undone (measured: row 0 trk_2B6A... before, trk_EF72... after undo, the name reads the original again), so the cycle cannot prove it undid its own edit on the same track and withholds the inverse (phase_b.readback: track identity changed)"
+    },
+    {
       "operation": "midi.create_virtual_port",
       "reason": "unknown_param_probe_only",
       "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; an independent CoreMIDI census exists in the test process but no recipe uses it (DESIGN 6a)"
@@ -251,6 +256,26 @@
       "operation": "navigate.capture_markers",
       "reason": "unknown_param_probe_only",
       "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; opens and must close a Marker List window, which disarms later Track-menu operations (needs product P9)"
+    },
+    {
+      "operation": "navigate.create_marker",
+      "reason": "recipe_refused",
+      "detail": "the recipe reads logic://markers, which refuses with marker_list_not_open once the operation has closed the Marker List it opened, and nav.capture_markers cannot stand in on Logic 13 (measured: AXTitle read -25212, then scroll_inventory -25200), so there is no independent marker readback that does not leave the list open"
+    },
+    {
+      "operation": "navigate.delete_marker",
+      "reason": "recipe_refused",
+      "detail": "the recipe reads logic://markers, which refuses with marker_list_not_open once the operation has closed the Marker List it opened, and nav.capture_markers cannot stand in on Logic 13 (measured: AXTitle read -25212, then scroll_inventory -25200), so there is no independent marker readback that does not leave the list open"
+    },
+    {
+      "operation": "navigate.goto_marker",
+      "reason": "recipe_refused",
+      "detail": "the recipe reads logic://markers, which refuses with marker_list_not_open once the operation has closed the Marker List it opened, and nav.capture_markers cannot stand in on Logic 13 (measured: AXTitle read -25212, then scroll_inventory -25200), so there is no independent marker readback that does not leave the list open"
+    },
+    {
+      "operation": "navigate.rename_marker",
+      "reason": "recipe_refused",
+      "detail": "the recipe reads logic://markers, which refuses with marker_list_not_open once the operation has closed the Marker List it opened, and nav.capture_markers cannot stand in on Logic 13 (measured: AXTitle read -25212, then scroll_inventory -25200), so there is no independent marker readback that does not leave the list open"
     },
     {
       "operation": "navigate.set_zoom",
@@ -473,11 +498,6 @@
       "detail": "consent-first zero-write probe only (consent_required / invalid_params); the handler changes persistent Logic preferences, so qualifying it needs an owner decision (DESIGN 9)"
     },
     {
-      "operation": "tracks.arm",
-      "reason": "recipe_refused",
-      "detail": "measured State B: the arm toggle answers verified:false and logic://tracks shows isArmed unmoved, so the boolean cycle refuses"
-    },
-    {
       "operation": "tracks.arm_only",
       "reason": "unknown_param_probe_only",
       "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs fixture tracks and logic://tracks plus host headers as the readback (DESIGN 6a)"
@@ -558,9 +578,9 @@
       "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs fixture tracks in a known order and logic://tracks plus host headers as the readback (DESIGN 6a)"
     },
     {
-      "operation": "transport.goto_position",
+      "operation": "transport.fast_forward",
       "reason": "recipe_refused",
-      "detail": "State B because Logic 13 shows only bar/beat: a known limitation, not a defect (brief)"
+      "detail": "the recipe needs a fresh full stopped position; Logic 13 shows only bar and beat in the control bar, so the pre-state read is unavailable (phase_b.pre_state: fresh stopped full position unavailable)"
     },
     {
       "operation": "transport.record",
@@ -568,9 +588,19 @@
       "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; records into the project; deliberately not run on the operator project (DESIGN 6a)"
     },
     {
+      "operation": "transport.rewind",
+      "reason": "recipe_refused",
+      "detail": "the recipe needs a fresh full stopped position; Logic 13 shows only bar and beat in the control bar, so the pre-state read is unavailable (phase_b.pre_state: fresh stopped full position unavailable)"
+    },
+    {
       "operation": "transport.set_cycle_range",
       "reason": "unsupported_by_contract",
       "detail": "registry availability .unsupported: the production contract answers a typed unsupported refusal; probing it with valid params is a later milestone (DESIGN 6a)"
+    },
+    {
+      "operation": "transport.toggle_autopunch",
+      "reason": "recipe_refused",
+      "detail": "logic://transport/state does not report isAutopunchEnabled on Logic 13 (no unique observed direct mode checkbox), so the recipe has no independent pre-state to compare"
     }
   ],
   "promised": [

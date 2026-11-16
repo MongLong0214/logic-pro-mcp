@@ -7,7 +7,7 @@ An operation is listed here when the live gate does not EXERCISE it: the real ha
 an independent readback was compared, and (for a write) the restore was read back.
 Nothing listed here is reported as qualified.
 
-Listed operations: 114
+Listed operations: 120
 
 ## By reason
 
@@ -19,7 +19,7 @@ Listed operations: 114
 | `readback_not_compared` | 21 |
 | `readback_not_independent` | 1 |
 | `recipe_disabled` | 3 |
-| `recipe_refused` | 3 |
+| `recipe_refused` | 9 |
 | `semantic_validator_unavailable` | 8 |
 | `unknown_param_probe_only` | 69 |
 | `unsupported_by_contract` | 2 |
@@ -60,9 +60,15 @@ Listed operations: 114
 | `tracks.create_audio` | `recipe_disabled` | recipe exists but the Phase C kill switch (phaseCTrackCyclesEnabled=false) keeps it off until a leaking run is explained AND a clean one is reproducible (CTO decision) |
 | `tracks.create_instrument` | `recipe_disabled` | recipe exists but the Phase C kill switch (phaseCTrackCyclesEnabled=false) keeps it off until a leaking run is explained AND a clean one is reproducible (CTO decision) |
 | `tracks.delete` | `recipe_disabled` | recipe exists but the Phase C kill switch (phaseCTrackCyclesEnabled=false) keeps it off until a leaking run is explained AND a clean one is reproducible (CTO decision); its track-selection step is the select ladder (selectTrackViaAX, analysis-select/REPORT.md sibling table), which cannot move the selection on Logic 13 (R5/M4-railwrite-S1), so it is blocked with tracks.select |
-| `tracks.arm` | `recipe_refused` | measured State B: the arm toggle answers verified:false and logic://tracks shows isArmed unmoved, so the boolean cycle refuses |
+| `edit.undo` | `recipe_refused` | Logic 13 re-mints the track_ref of a track whose rename is undone (measured: row 0 trk_2B6A... before, trk_EF72... after undo, the name reads the original again), so the cycle cannot prove it undid its own edit on the same track and withholds the inverse (phase_b.readback: track identity changed) |
+| `navigate.create_marker` | `recipe_refused` | the recipe reads logic://markers, which refuses with marker_list_not_open once the operation has closed the Marker List it opened, and nav.capture_markers cannot stand in on Logic 13 (measured: AXTitle read -25212, then scroll_inventory -25200), so there is no independent marker readback that does not leave the list open |
+| `navigate.delete_marker` | `recipe_refused` | the recipe reads logic://markers, which refuses with marker_list_not_open once the operation has closed the Marker List it opened, and nav.capture_markers cannot stand in on Logic 13 (measured: AXTitle read -25212, then scroll_inventory -25200), so there is no independent marker readback that does not leave the list open |
+| `navigate.goto_marker` | `recipe_refused` | the recipe reads logic://markers, which refuses with marker_list_not_open once the operation has closed the Marker List it opened, and nav.capture_markers cannot stand in on Logic 13 (measured: AXTitle read -25212, then scroll_inventory -25200), so there is no independent marker readback that does not leave the list open |
+| `navigate.rename_marker` | `recipe_refused` | the recipe reads logic://markers, which refuses with marker_list_not_open once the operation has closed the Marker List it opened, and nav.capture_markers cannot stand in on Logic 13 (measured: AXTitle read -25212, then scroll_inventory -25200), so there is no independent marker readback that does not leave the list open |
 | `tracks.select` | `recipe_refused` | select index 0 answers readback_mismatch with observed 7, 3 of 3 (B9): on Logic 13 the rail AXSelectedChildren write is accepted with no effect (R5/M4-railwrite-S1, Limit r-c02e982e990c); the main Mixer AXSelectedChildren write does move the track selection, exclusively within 0.1 s and restored, 3 of 3 (R5/M4-write-S1-1..3), but no header-to-strip identity witness exists: neither element lists a cross-link attribute (R5/M4-attrs) and names and ordinals are not identity, so a Mixer-route select needs a new accepted witness shape (next milestone) |
-| `transport.goto_position` | `recipe_refused` | State B because Logic 13 shows only bar/beat: a known limitation, not a defect (brief) |
+| `transport.fast_forward` | `recipe_refused` | the recipe needs a fresh full stopped position; Logic 13 shows only bar and beat in the control bar, so the pre-state read is unavailable (phase_b.pre_state: fresh stopped full position unavailable) |
+| `transport.rewind` | `recipe_refused` | the recipe needs a fresh full stopped position; Logic 13 shows only bar and beat in the control bar, so the pre-state read is unavailable (phase_b.pre_state: fresh stopped full position unavailable) |
+| `transport.toggle_autopunch` | `recipe_refused` | logic://transport/state does not report isAutopunchEnabled on Logic 13 (no unique observed direct mode checkbox), so the recipe has no independent pre-state to compare |
 | `mixer.get_input_bus_verified` | `semantic_validator_unavailable` | the oracle declares an independent-readback deferral (best status is protocolSmoke); needs a fixture Aux; logic13_strip_parent_unreadable: under strip focus the passive Mixer witness cannot be built because the focused strip's AXParent reads -25212 (R4/L32-strip-pm); no new witness shape in v3.19.0 (CTO decision); with track-group focus it refuses 'no exact held selection scope', whose failing checkpoint is not yet named (D1 not built), although the Mixer route it needs does move the selection (R5/M4-write-S1-1..3) |
 | `mixer.get_output_verified` | `semantic_validator_unavailable` | the oracle declares an independent-readback deferral (best status is protocolSmoke); needs a strip with a classified output; the last native run failed its inspect-census probe (mixer_read_probe_inspection) |
 | `mixer.get_send_bypass_verified` | `semantic_validator_unavailable` | the oracle declares an independent-readback deferral (best status is protocolSmoke); needs an occupied send; readback_unavailable 3/3 on Logic 13 (P10); logic13_strip_parent_unreadable: under strip focus the passive Mixer witness cannot be built because the focused strip's AXParent reads -25212 (R4/L32-strip-pm); no new witness shape in v3.19.0 (CTO decision) |
