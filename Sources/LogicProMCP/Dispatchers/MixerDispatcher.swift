@@ -101,7 +101,7 @@ struct MixerDispatcher: OperationTraceDispatching {
             guard params.keys.allSatisfy({ allowed.contains($0) }),
                   params["target_ref"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false,
                   let ordinal = intParamOrNil(params, "ordinal"), ordinal >= 0 else {
-                return toolInvalidParamsResult("An exact physical Mixer target_ref and occupied source-census ordinal are required")
+                return toolInvalidParamsResult("An exact physical Mixer target_ref and occupied source-census ordinal are required", extras: ["write_attempted": false])
             }
             var channelParams = ["ordinal": String(ordinal)]
             if writing {
@@ -362,7 +362,7 @@ struct MixerDispatcher: OperationTraceDispatching {
             let allowed = isSend ? ["target_ref", "project_ref", "ordinal"] : ["target_ref", "project_ref"]
             guard params.keys.allSatisfy({ allowed.contains($0) }),
                   params["target_ref"]?.stringValue?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false else {
-                return toolInvalidParamsResult("\(command) requires a current physical Mixer target_ref; no track/index selectors or write inputs are accepted")
+                return toolInvalidParamsResult("\(command) requires a current physical Mixer target_ref; no track/index selectors or write inputs are accepted", extras: ["write_attempted": false])
             }
             let ordinal = isSend ? intParamOrNil(params,"ordinal") : nil
             guard !isSend || ordinal.map({ $0 >= 0 }) == true else {
