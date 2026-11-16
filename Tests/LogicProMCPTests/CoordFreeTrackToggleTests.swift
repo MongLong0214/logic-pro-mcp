@@ -1891,4 +1891,174 @@ struct CoordFreeTrackToggleTests {
         #expect(obj["action"] as? String == "press")
         #expect(try #require(boolValue(f, solo)))
     }
+
+    // MARK: - A focus that does not read refuses the toggle before anything else
+
+    /// Where the focus reading fails, and whether the checkbox already shows the requested value
+    /// (the no-op State A branch) or not (the press/key branch).
+    enum UnreadableFocusCase: CaseIterable, CustomStringConvertible {
+        case appRootAlreadyMatching, appRootChanging
+        case focusedElementAlreadyMatching, focusedElementChanging
+        case roleAlreadyMatching, roleChanging
+
+        var checkboxAlreadyMatches: Bool {
+            switch self {
+            case .appRootAlreadyMatching, .focusedElementAlreadyMatching, .roleAlreadyMatching: return true
+            case .appRootChanging, .focusedElementChanging, .roleChanging: return false
+            }
+        }
+
+        var expectedGuard: String {
+            switch self {
+            case .appRootAlreadyMatching, .appRootChanging: return "app_root_unreadable"
+            case .focusedElementAlreadyMatching, .focusedElementChanging: return "focus_unreadable"
+            case .roleAlreadyMatching, .roleChanging: return "role_unreadable"
+            }
+        }
+
+        var description: String { "\(expectedGuard), already matching: \(checkboxAlreadyMatches)" }
+    }
+
+    /// Records every AX attribute read, and fails the focus reading at one stage. Only the FIRST
+    /// focus reading fails: a later one reads normally, so code that goes on to look up the header
+    /// finds it and can press it, which is what the old code did.
+    private final class FirstFocusReadFails: @unchecked Sendable {
+        let app: AXUIElement
+        let unreadableCase: UnreadableFocusCase
+        private let lock = NSLock()
+        private var pidCalls = 0
+        private var focusReads = 0
+        private(set) var reads: [(element: AXUIElement, attribute: String)] = []
+
+        init(app: AXUIElement, unreadableCase: UnreadableFocusCase) {
+            self.app = app
+            self.unreadableCase = unreadableCase
+        }
+
+        func pid() -> pid_t? {
+            lock.lock(); defer { lock.unlock() }
+            pidCalls += 1
+            switch unreadableCase {
+            case .appRootAlreadyMatching, .appRootChanging: return pidCalls == 1 ? nil : 4242
+            default: return 4242
+            }
+        }
+
+        func attributeValue(_ element: AXUIElement, _ attribute: String) -> AnyObject?? {
+            lock.lock(); defer { lock.unlock() }
+            reads.append((element, attribute))
+            guard element == app, attribute == kAXFocusedUIElementAttribute as String else { return nil }
+            focusReads += 1
+            switch unreadableCase {
+            case .focusedElementAlreadyMatching, .focusedElementChanging:
+                return focusReads == 1 ? .some(nil) : nil
+            default:
+                return nil
+            }
+        }
+    }
+
+    @Test("a focus that does not read refuses mute, solo and arm before any header lookup, press or key",
+          arguments: ["track.set_mute", "track.set_solo", "track.set_arm"], UnreadableFocusCase.allCases)
+    func toggleRefusesBeforeAnyLookupWhenTheFocusDoesNotRead(
+        operation: String, unreadableCase: UnreadableFocusCase
+    ) async throws {
+        let f = makeToggleFixture()
+        let checkbox = switch operation {
+        case "track.set_mute": f.mute[0]
+        case "track.set_solo": f.solo[0]
+        default: f.arm[0]
+        }
+        if unreadableCase.checkboxAlreadyMatches {
+            f.builder.setAttribute(checkbox, kAXValueAttribute as String, 1)
+        }
+        // A focused element whose role is not published: the role read fails.
+        let roleless = f.builder.element(9800)
+        if unreadableCase == .roleAlreadyMatching || unreadableCase == .roleChanging {
+            f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, roleless)
+        }
+        let probe = FirstFocusReadFails(app: f.app, unreadableCase: unreadableCase)
+        let presses = PressRecorder()
+        let key = KeyMouseRecorder()
+        key.onKeyEvent = { _ in
+            f.builder.setAttribute(f.mute[0], kAXValueAttribute as String, 1)
+            f.builder.setAttribute(f.solo[0], kAXValueAttribute as String, 1)
+        }
+        key.onFlaggedKey = { _, _ in f.builder.setAttribute(f.arm[0], kAXValueAttribute as String, 1) }
+        let channel = makeChannel(
+            f, keyRuntime: key.runtime(),
+            performAction: { element, action in
+                presses.record(element, action)
+                if action == kAXPressAction as String {
+                    f.builder.setAttribute(element, kAXValueAttribute as String, 1)
+                }
+                return true
+            },
+            logicProPID: { probe.pid() },
+            attributeValueHandler: { probe.attributeValue($0, $1) }
+        )
+
+        let result = await channel.execute(operation: operation, params: ["index": "0", "enabled": "true"])
+
+        #expect(!result.isSuccess)
+        let obj = try #require(object(result.message))
+        #expect(obj["state"] as? String == "C")
+        #expect(obj["error"] as? String == "unsafe_focus_for_synthetic_key")
+        #expect(obj["focus_guard"] as? String == unreadableCase.expectedGuard)
+        #expect(obj["focus_guard_stage"] as? String == "before_actuation")
+        #expect(HonestContract.isFallbackUnsafeStateC(result.message))
+        // Zero header lookups: nothing but the application's focused element and the focused
+        // element itself was read. The header rail, its rows and their checkboxes were never read.
+        let headerSide = [f.headers[0], f.mute[0], f.solo[0], f.arm[0]]
+        let foreign = probe.reads.filter { read in
+            !(CFEqual(read.element, f.app) && read.attribute == kAXFocusedUIElementAttribute as String)
+                && !CFEqual(read.element, roleless)
+        }
+        #expect(foreign.isEmpty, "reads beyond the focus: \(foreign.map { "\(f.builder.elementID($0.element)).\($0.attribute)" })")
+        #expect(!probe.reads.contains { read in headerSide.contains { CFEqual($0, read.element) } })
+        // Zero AX actions of any kind, and zero keys.
+        #expect(presses.count == 0)
+        #expect(key.keyEvents.isEmpty)
+        #expect(key.flaggedKeyEvents.isEmpty)
+        let after = try #require(boolValue(f, checkbox))
+        if unreadableCase.checkboxAlreadyMatches { #expect(after) } else { #expect(!after) }
+    }
+
+    private final class PressRecorder: @unchecked Sendable {
+        private let lock = NSLock()
+        private var calls: [String] = []
+        func record(_ element: AXUIElement, _ action: String) {
+            lock.lock(); defer { lock.unlock() }
+            calls.append(action)
+        }
+        var count: Int { lock.lock(); defer { lock.unlock() }; return calls.count }
+    }
+
+    @Test("a readable track-group focus still lets mute, solo and arm act after the focus read",
+          arguments: ["track.set_mute", "track.set_solo", "track.set_arm"])
+    func readableFocusStillActs(operation: String) async throws {
+        let f = makeToggleFixture()
+        let checkbox = switch operation {
+        case "track.set_mute": f.mute[0]
+        case "track.set_solo": f.solo[0]
+        default: f.arm[0]
+        }
+        let key = KeyMouseRecorder()
+        key.onKeyEvent = { _ in
+            f.builder.setAttribute(f.mute[0], kAXValueAttribute as String, 1)
+            f.builder.setAttribute(f.solo[0], kAXValueAttribute as String, 1)
+        }
+        key.onFlaggedKey = { _, _ in f.builder.setAttribute(f.arm[0], kAXValueAttribute as String, 1) }
+        let channel = makeChannel(f, keyRuntime: key.runtime(), performAction: { element, action in
+            if action == kAXPressAction as String, CFEqual(element, checkbox) {
+                f.builder.setAttribute(element, kAXValueAttribute as String, 1)
+            }
+            return true
+        })
+
+        let result = await channel.execute(operation: operation, params: ["index": "0", "enabled": "true"])
+
+        #expect(result.isSuccess, "\(result.message)")
+        #expect(try #require(boolValue(f, checkbox)))
+    }
 }

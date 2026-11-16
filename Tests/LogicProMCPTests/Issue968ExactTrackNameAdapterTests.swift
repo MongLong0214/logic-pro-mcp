@@ -3164,6 +3164,10 @@ struct Issue968ExactTrackNameAdapterTests {
             f.builder.setAttribute(mute, kAXValueAttribute as String, 0)
             f.builder.setChildren(mute, [])
             f.builder.setChildren(f.header, [f.field, mute])
+            // A readable focus that is no text editor: the mute toggle reads it before any lookup.
+            let trackGroup = f.builder.element(968_151)
+            f.builder.setAttribute(trackGroup, kAXRoleAttribute as String, kAXGroupRole as String)
+            f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, trackGroup)
             let (_, target) = try await f.prepare(typedProducer: true)
             if shape == "reordered" { f.builder.setChildren(f.rail, [other, f.header]) }
             let runtime = f.runtime
@@ -3330,6 +3334,10 @@ struct Issue968ExactTrackNameAdapterTests {
             f.builder.setAttribute(mute, kAXValueAttribute as String, 0)
             f.builder.setChildren(mute, [])
             f.builder.setChildren(f.header, [f.field, mute])
+            // A readable focus that is no text editor: the mute toggle reads it before any lookup.
+            let trackGroup = f.builder.element(968_152)
+            f.builder.setAttribute(trackGroup, kAXRoleAttribute as String, kAXGroupRole as String)
+            f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, trackGroup)
             let (_, oldRef) = try await f.prepare(typedProducer: true)
             f.builder.setChildren(f.rail, [other, f.header])
             await f.cache.updateTracks(try #require(AccessibilityChannel.defaultGetTrackStates(runtime: f.runtime)))

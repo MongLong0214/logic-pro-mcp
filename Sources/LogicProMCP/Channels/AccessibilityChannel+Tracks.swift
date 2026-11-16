@@ -3229,21 +3229,40 @@ extension AccessibilityChannel {
         )
     }
 
-    /// A focused text editor refuses a track toggle before any lookup, press or key. Only a read
-    /// `.textEditing` refuses here; the unread and non-editing cases keep their existing gates, so
-    /// the Logic 13 strip group (`.passiveInsertionPoint`) still reaches the press rung. No other
+    /// A track toggle acts only on a focus that READ as no text editor. Anything else refuses before
+    /// any lookup, press or key: a focused text editor, and a focus that did not read, because a
+    /// reading that failed cannot show that no editor is open, and the header lookup alone ended a
+    /// rename edit and committed its text on Logic 13. The Logic 13 strip group
+    /// (`.passiveInsertionPoint`) reads as no editor and still reaches the press rung. No other
     /// channel may act either: MCU or a CGEvent key would hit the same open editor.
     static func textEditorFocusedRefusal(runtime: AXLogicProElements.Runtime) -> RungRefusal? {
-        guard case .textEditing(let role, let byInsertionPoint) = readLogicKeyboardFocus(runtime: runtime) else {
+        let focus = readLogicKeyboardFocus(runtime: runtime)
+        let guardName: String
+        let cause: String
+        switch focus {
+        case .notTextEditing, .passiveInsertionPoint:
             return nil
+        case .textEditing(let role, let byInsertionPoint):
+            guardName = role
+            cause = byInsertionPoint
+                ? "a text-editing surface with an insertion point is focused"
+                : "an editable text field (role \(role)) is focused"
+        case .unreadable(.appRoot):
+            guardName = "app_root_unreadable"
+            cause = "the Logic application root did not read, so no open text editor can be ruled out"
+        case .unreadable(.focusedElement):
+            guardName = "focus_unreadable"
+            cause = "Logic's focused element did not read, so no open text editor can be ruled out"
+        case .unreadable(.role):
+            guardName = "role_unreadable"
+            cause = "the focused element's role did not read, so no open text editor can be ruled out"
         }
-        let surface = byInsertionPoint ? "a text-editing surface with an insertion point" : "an editable text field (role \(role))"
         return RungRefusal(
             error: .unsafeFocusForSyntheticKey,
-            hint: "refused the track toggle: \(surface) is focused. Nothing in the track header was read, pressed or "
-                + "posted, so the editor and its pending text were left as they were.",
+            hint: "refused the track toggle: \(cause). Nothing in the track header was read, pressed or "
+                + "posted, so any editor and its pending text were left as they were.",
             extras: terminalNoHumanExtras([
-                "focus_guard": role,
+                "focus_guard": guardName,
                 "focus_guard_stage": "before_actuation",
                 "fallback_unsafe": true,
             ])
