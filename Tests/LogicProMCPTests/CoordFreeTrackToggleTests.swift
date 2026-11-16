@@ -1279,16 +1279,21 @@ struct CoordFreeTrackToggleTests {
     private final class LateTrackValuePublication: @unchecked Sendable {
         let app: AXUIElement
         let button: AXUIElement
+        let pressed: () -> Bool
         var value = false
 
-        init(app: AXUIElement, button: AXUIElement) {
+        /// Publishes the press's effect on the first focus read AFTER the press (a gate read).
+        /// The toggle also reads focus before it touches anything (R5 item 2), and that read
+        /// precedes the press, so it must not publish.
+        init(app: AXUIElement, button: AXUIElement, pressed: @escaping () -> Bool) {
             self.app = app
             self.button = button
+            self.pressed = pressed
         }
 
         func attributeValue(_ element: AXUIElement, _ attribute: String) -> AnyObject?? {
             if element == app, attribute == kAXFocusedUIElementAttribute as String {
-                value = true
+                if pressed() { value = true }
                 return nil
             }
             if element == button, attribute == kAXValueAttribute as String {
@@ -1301,7 +1306,11 @@ struct CoordFreeTrackToggleTests {
     @Test("halt barrier: mute value publishes during gates ⇒ no reverse key post, prior press lands")
     func mutePrePostBarrierStopsReverseToggle() async throws {
         let f = makeToggleFixture()
-        let late = LateTrackValuePublication(app: f.app, button: f.mute[0])
+        let late = LateTrackValuePublication(app: f.app, button: f.mute[0], pressed: {
+            f.builder.actionCalls.contains {
+                $0.elementID == f.builder.elementID(f.mute[0]) && $0.action == kAXPressAction as String
+            }
+        })
         let key = KeyMouseRecorder()
         key.onKeyEvent = { _ in late.value.toggle() }
         let channel = makeChannel(
@@ -1326,7 +1335,11 @@ struct CoordFreeTrackToggleTests {
     @Test("halt barrier: arm value publishes during gates ⇒ no reverse chord post, prior press lands")
     func armPrePostBarrierStopsReverseToggle() async throws {
         let f = makeToggleFixture()
-        let late = LateTrackValuePublication(app: f.app, button: f.arm[0])
+        let late = LateTrackValuePublication(app: f.app, button: f.arm[0], pressed: {
+            f.builder.actionCalls.contains {
+                $0.elementID == f.builder.elementID(f.arm[0]) && $0.action == kAXPressAction as String
+            }
+        })
         let key = KeyMouseRecorder()
         key.onFlaggedKey = { _, _ in late.value.toggle() }
         let channel = makeChannel(
@@ -1780,5 +1793,102 @@ struct CoordFreeTrackToggleTests {
         #expect(!boolValue(f, f.recordCheckbox)!)
         #expect(key.keyEvents.count == 0)
         #expect(key.flaggedKeyEvents.count == 1)
+    }
+
+    // MARK: - Round 5 item 2: a focused text editor refuses the whole toggle, press rung included
+
+    /// Measured on Logic 13 (7801, ko), impl-logic13/R4/L34-rename, L34-mixername and L20-new-rename:
+    /// with the track rename field or the Mixer strip name field focused (AXTextField, AXValue
+    /// settable), `mute` returned State A `keyboard-mute` and the field was gone afterwards. The focus
+    /// guard sat only in front of the key rung. This fixture models an actuation that ends the editor
+    /// the way Logic did (focus moves to the strip's Input Monitoring checkbox).
+    private func focusTextEditorThatAnActuationCloses(
+        _ f: ToggleFixture, role: String = kAXTextFieldRole as String
+    ) -> (field: AXUIElement, closedTo: AXUIElement) {
+        let field = f.builder.element(9600)
+        f.builder.setAttribute(field, kAXRoleAttribute as String, role)
+        f.builder.setAttribute(field, kAXValueAttribute as String, "오디오 19")
+        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, field)
+        let inputMonitoring = f.builder.element(9601)
+        f.builder.setAttribute(inputMonitoring, kAXRoleAttribute as String, kAXCheckBoxRole as String)
+        return (field, inputMonitoring)
+    }
+
+    @Test("R5 item 2: a focused rename field refuses the toggle before any rung actuates and leaves the editor open",
+          arguments: ["track.set_mute", "track.set_solo", "track.set_arm"])
+    func toggleRefusesBeforeActuatingWhileATextEditorIsFocused(operation: String) async throws {
+        let f = makeToggleFixture()
+        let (field, closedTo) = focusTextEditorThatAnActuationCloses(f)
+        let key = KeyMouseRecorder()
+        key.onKeyEvent = { _ in
+            f.builder.setAttribute(f.mute[0], kAXValueAttribute as String, 1)
+            f.builder.setAttribute(f.solo[0], kAXValueAttribute as String, 1)
+        }
+        key.onFlaggedKey = { _, _ in f.builder.setAttribute(f.arm[0], kAXValueAttribute as String, 1) }
+        let channel = makeChannel(f, keyRuntime: key.runtime(), performAction: { _, action in
+            if action == kAXPressAction as String {
+                f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, closedTo)
+            }
+            return true
+        })
+
+        let result = await channel.execute(operation: operation, params: ["index": "0", "enabled": "true"])
+
+        #expect(!result.isSuccess)
+        let obj = try #require(object(result.message))
+        #expect(obj["state"] as? String == "C")
+        #expect(obj["error"] as? String == "unsafe_focus_for_synthetic_key")
+        #expect(obj["focus_guard"] as? String == kAXTextFieldRole as String)
+        #expect(obj["focus_guard_stage"] as? String == "before_actuation")
+        // The router must not hand the open editor to MCU or a CGEvent key either.
+        #expect(HonestContract.isFallbackUnsafeStateC(result.message))
+        #expect(f.builder.actionCalls.isEmpty)
+        #expect(key.keyEvents.isEmpty)
+        #expect(key.flaggedKeyEvents.isEmpty)
+        let focused = try #require(f.builder.attributeValue(f.app, kAXFocusedUIElementAttribute as String))
+        #expect(CFEqual(focused as CFTypeRef, field))
+        #expect(!(try #require(boolValue(f, f.mute[0]))))
+        #expect(!(try #require(boolValue(f, f.solo[0]))))
+        #expect(!(try #require(boolValue(f, f.arm[0]))))
+    }
+
+    @Test("R5 item 2: a non-text-role element with a settable insertion point is a text editor before actuation too")
+    func toggleRefusesAnInsertionPointEditorBeforeActuating() async throws {
+        let f = makeToggleFixture()
+        let (field, _) = focusTextEditorThatAnActuationCloses(f, role: kAXLayoutItemRole as String)
+        f.builder.setAttribute(field, kAXInsertionPointLineNumberAttribute as String, 0)
+        f.builder.setAttributeSettable(field, kAXValueAttribute as String, true)
+        let channel = makeChannel(f, keyRuntime: KeyMouseRecorder().runtime())
+
+        let result = await channel.execute(operation: "track.set_solo", params: ["index": "0", "enabled": "true"])
+
+        #expect(!result.isSuccess)
+        let obj = try #require(object(result.message))
+        #expect(obj["error"] as? String == "unsafe_focus_for_synthetic_key")
+        #expect(obj["focus_guard_stage"] as? String == "before_actuation")
+        #expect(f.builder.actionCalls.isEmpty)
+    }
+
+    @Test("R5 item 2: the Logic 13 strip group (insertion point, nothing settable) still lets the press rung run")
+    func pressRungStillRunsUnderThePassiveStripGroup() async throws {
+        let f = makeToggleFixture()
+        let strip = f.builder.element(9700)
+        f.builder.setAttribute(strip, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+        f.builder.setAttribute(strip, kAXInsertionPointLineNumberAttribute as String, 0)
+        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, strip)
+        let solo = f.solo[0]
+        let channel = makeChannel(f, keyRuntime: KeyMouseRecorder().runtime(), performAction: { element, action in
+            if action == kAXPressAction as String, CFEqual(element, solo) {
+                f.builder.setAttribute(solo, kAXValueAttribute as String, 1)
+            }
+            return true
+        })
+
+        let result = await channel.execute(operation: "track.set_solo", params: ["index": "0", "enabled": "true"])
+
+        #expect(result.isSuccess)
+        let obj = try #require(object(result.message))
+        #expect(obj["action"] as? String == "press")
+        #expect(try #require(boolValue(f, solo)))
     }
 }

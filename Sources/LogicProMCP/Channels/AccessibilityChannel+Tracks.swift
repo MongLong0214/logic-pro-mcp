@@ -2153,6 +2153,21 @@ extension AccessibilityChannel {
         guard let indexStr = params["index"], let index = Int(indexStr) else {
             return .error("Missing or invalid 'index' parameter")
         }
+        // Read the focus before anything else touches Logic. Measured on Logic 13 (7801, R5/D2-*, D3-*):
+        // with the track rename field focused, the field was already gone when the press rung
+        // started. Looking up the header's toggle ended the edit and COMMITTED its pending text,
+        // and the key rung's focus guard then saw a checkbox and let the key through.
+        if let refusal = textEditorFocusedRefusal(runtime: runtime) {
+            return .error(HonestContract.encodeStateC(
+                error: refusal.error,
+                hint: refusal.hint,
+                extras: [
+                    "track": index,
+                    "button": buttonName,
+                    "requested": (params["enabled"] ?? "true") == "true",
+                ].merging(refusal.extras) { _, new in new }
+            ))
+        }
         let finder: (Int) -> AXUIElement? = switch buttonName {
         case "Mute": { AXLogicProElements.findTrackMuteButton(trackIndex: $0, runtime: runtime) }
         case "Solo": { AXLogicProElements.findTrackSoloButton(trackIndex: $0, runtime: runtime) }
@@ -3211,6 +3226,27 @@ extension AccessibilityChannel {
             hint: "refused to post the track key command: \(reason). The key was not posted and the "
                 + "invocation terminated with the observed unsafe focus preserved.",
             extras: terminalNoHumanExtras(["focus_guard": focus])
+        )
+    }
+
+    /// A focused text editor refuses a track toggle before any lookup, press or key. Only a read
+    /// `.textEditing` refuses here; the unread and non-editing cases keep their existing gates, so
+    /// the Logic 13 strip group (`.passiveInsertionPoint`) still reaches the press rung. No other
+    /// channel may act either: MCU or a CGEvent key would hit the same open editor.
+    static func textEditorFocusedRefusal(runtime: AXLogicProElements.Runtime) -> RungRefusal? {
+        guard case .textEditing(let role, let byInsertionPoint) = readLogicKeyboardFocus(runtime: runtime) else {
+            return nil
+        }
+        let surface = byInsertionPoint ? "a text-editing surface with an insertion point" : "an editable text field (role \(role))"
+        return RungRefusal(
+            error: .unsafeFocusForSyntheticKey,
+            hint: "refused the track toggle: \(surface) is focused. Nothing in the track header was read, pressed or "
+                + "posted, so the editor and its pending text were left as they were.",
+            extras: terminalNoHumanExtras([
+                "focus_guard": role,
+                "focus_guard_stage": "before_actuation",
+                "fallback_unsafe": true,
+            ])
         )
     }
 
