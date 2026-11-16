@@ -4604,7 +4604,22 @@ struct QualificationRunnerTests {
         ])
         #expect(exact.failed == 0)
 
+        let noSelection = QualificationLiveGateSummary(operationResults: [
+            result(reason: "no_region_selected"),
+        ])
+        #expect(noSelection.notExercisableWithoutPreconditions == [
+            .init(
+                operationID: OperationID.midiReadSelectedRegionEvents.rawValue,
+                reason: "requires exactly one selected MIDI region"
+            ),
+        ])
+        #expect(noSelection.failed == 0)
+
         let changed = [
+            result(reason: "selected_region_count_not_one"),
+            result(reason: "selection_unreadable"),
+            result(reason: "no_region_selected", writeAttempted: true),
+            result(reason: "no_region_selected", rowSelectionRestored: true),
             result(state: "B"),
             result(error: "different_error"),
             result(reason: "different_scope_failure"),

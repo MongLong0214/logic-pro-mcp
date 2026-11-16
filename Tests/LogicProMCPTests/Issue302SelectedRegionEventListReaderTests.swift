@@ -226,6 +226,59 @@ import Testing
         #expect(!collected)
     }
 
+    private static func reason(of error: Error) throws -> String {
+        let body = try #require(sharedJSONObject(SelectedRegionEventListReader.refusalJSON(error)))
+        return try #require(body["reason"] as? String)
+    }
+
+    /// A complete, readable scope with zero selected regions is the one case that names the
+    /// "no region selected" precondition, in both read paths, and collection never starts.
+    @Test func completeScopeWithNoSelectedRegionNamesThatPreconditionBeforeCollection() throws {
+        var collected = false
+        let noneSelected: () throws -> SelectedRegionEventListReader.SelectionObservation = {
+            .init(scopeComplete: true, selected: [])
+        }
+        #expect(throws: SelectedRegionEventListReader.Refusal.noRegionSelected) {
+            _ = try SelectedRegionEventListReader.read(
+                selection: noneSelected,
+                collect: {
+                    collected = true
+                    throw SelectedRegionEventListReader.Refusal.eventListObservationUnavailable
+                })
+        }
+        #expect(throws: SelectedRegionEventListReader.Refusal.noRegionSelected) {
+            _ = try SelectedRegionEventListReader.read(
+                selection: noneSelected,
+                collectAttempt: {
+                    collected = true
+                    return EventListReadbackCollector.PartialProbeAttempt(
+                        result: .failure(SelectedRegionEventListReader.Refusal.eventListObservationUnavailable),
+                        rowSelectionWriteAttempted: false, rowSelectionRestored: true)
+                })
+        }
+        #expect(!collected)
+        #expect(try Self.reason(of: SelectedRegionEventListReader.Refusal.noRegionSelected)
+            == "no_region_selected")
+    }
+
+    /// A failed or partial read is not "no selection", and two selected regions is not either.
+    @Test func onlyAnObservedEmptySelectionClaimsNoRegionSelected() throws {
+        #expect(try Self.reason(of: SelectedRegionEventListReader.Refusal.selectionUnreadable)
+            == "selection_unreadable")
+        #expect(try Self.reason(of: SelectedRegionEventListReader.Refusal.selectionScopeIncomplete)
+            == "selection_scope_incomplete")
+        #expect(try Self.reason(of: SelectedRegionEventListReader.Refusal.selectedRegionCount(2))
+            == "selected_region_count_not_one")
+        #expect(try Self.reason(of: SelectedRegionEventListReader.Refusal.eventListObservationUnavailable)
+            == "event_list_observation_unavailable")
+        // An incomplete scope with nothing selected is a scope failure, never "none selected".
+        #expect(throws: SelectedRegionEventListReader.Refusal.selectionScopeIncomplete) {
+            _ = try SelectedRegionEventListReader.read(
+                selection: { .init(scopeComplete: false, selected: []) },
+                collect: { throw SelectedRegionEventListReader.Refusal.eventListObservationUnavailable })
+        }
+    }
+
     @Test func selectionDriftDuringCollectionRefuses() {
         var reads = 0
         let changed = SelectedRegionEventListReader.RegionIdentity(

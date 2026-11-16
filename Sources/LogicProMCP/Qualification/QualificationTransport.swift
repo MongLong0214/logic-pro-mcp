@@ -823,11 +823,14 @@ struct QualificationOperationResult: Equatable, Sendable {
         case .midiReadSelectedRegionEvents:
             guard state == "C",
                   error == "selected_region_event_read_unavailable",
-                  reason == "selection_scope_incomplete",
                   writeAttempted == false,
                   rowSelectionWriteAttempted == false,
                   rowSelectionRestored == false else { return nil }
-            return "requires a complete selected Arrange-region scope"
+            switch reason {
+            case "selection_scope_incomplete": return "requires a complete selected Arrange-region scope"
+            case "no_region_selected": return "requires exactly one selected MIDI region"
+            default: return nil
+            }
         default:
             return nil
         }
