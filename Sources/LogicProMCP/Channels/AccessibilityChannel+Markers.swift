@@ -601,6 +601,10 @@ extension AccessibilityChannel {
                 hint: "The arrange window could not be focused before creating a marker."
             ))
         }
+        // Logic's Create Marker selects the new marker and clears the region selection. Read it
+        // here, immediately before the press; it is written back below. See
+        // AccessibilityChannel+RegionSelectionRestore.swift.
+        let regionSelectionBefore = regionSelectionReading(runtime: runtime)
         let menuResult = await pressMarkerMenuItem(.create)
         guard menuResult.isSuccess else {
             return .error(HonestContract.encodeStateC(
@@ -641,6 +645,17 @@ extension AccessibilityChannel {
             }
         }
 
+        // After the name: the name write acts on the selected marker, so the region selection is
+        // put back only once nothing here needs the new marker selected.
+        let regionSelection = restoreRegionSelection(
+            before: regionSelectionBefore,
+            read: { regionSelectionReading(runtime: runtime) },
+            select: { item in
+                AXHelpers.setAttribute(item, kAXSelectedAttribute, kCFBooleanTrue, runtime: runtime.ax)
+            },
+            settle: { usleep(350_000) }
+        )
+
         var extras: [String: Any] = [
             "operation": "nav.create_marker",
             "method": "accessibility_menu",
@@ -648,6 +663,7 @@ extension AccessibilityChannel {
             "sent": true,
             "marker_count_before_channel": before.count,
             "marker_count_after_channel": after.count,
+            "region_selection": regionSelection.rawValue,
         ]
         if let requestedName, !requestedName.isEmpty {
             extras["requested_name"] = requestedName

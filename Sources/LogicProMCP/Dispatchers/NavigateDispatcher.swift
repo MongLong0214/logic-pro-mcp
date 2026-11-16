@@ -493,6 +493,17 @@ struct NavigateDispatcher: OperationTraceDispatching {
             )
         }
 
+        // Logic's Create Marker clears the region selection and the channel writes it back. A
+        // selection that did not read back as it was is a side effect this request left behind,
+        // so the create is not reported as a clean success.
+        if extras["region_selection"] as? String
+            == AccessibilityChannel.RegionSelectionRestoreOutcome.notRestored.rawValue {
+            return toolTextResult(
+                HonestContract.encodeStateB(reason: .readbackMismatch, extras: extras),
+                isError: true
+            )
+        }
+
         return toolTextResult(HonestContract.encodeStateA(extras: extras))
     }
 
