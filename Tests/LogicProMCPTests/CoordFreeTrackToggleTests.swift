@@ -171,13 +171,15 @@ struct CoordFreeTrackToggleTests {
         logicProPID: @escaping @Sendable () -> pid_t? = { 4242 },
         activateLogicPro: @escaping @Sendable () -> Bool = { true },
         logicIsFrontmost: @escaping @Sendable () -> Bool = { true },
-        attributeValueHandler: (@Sendable (AXUIElement, String) -> AnyObject??)? = nil
+        attributeValueHandler: (@Sendable (AXUIElement, String) -> AnyObject??)? = nil,
+        attributeValueResultHandler: (@Sendable (AXUIElement, String) -> Result<AnyObject?, AXHelpers.AXStatusError>?)? = nil
     ) -> AccessibilityChannel {
         let logic = AXLogicProElements.Runtime(
             logicProPID: logicProPID,
             ax: fixture.builder.makeAXRuntime(
                 appElement: fixture.app,
                 attributeValueHandler: attributeValueHandler,
+                attributeValueResultHandler: attributeValueResultHandler,
                 setAttributeHandler: setAttribute,
                 performActionHandler: performAction
             )
@@ -1900,11 +1902,14 @@ struct CoordFreeTrackToggleTests {
         case appRootAlreadyMatching, appRootChanging
         case focusedElementAlreadyMatching, focusedElementChanging
         case roleAlreadyMatching, roleChanging
+        case insertionPointAlreadyMatching, insertionPointChanging
 
         var checkboxAlreadyMatches: Bool {
             switch self {
-            case .appRootAlreadyMatching, .focusedElementAlreadyMatching, .roleAlreadyMatching: return true
-            case .appRootChanging, .focusedElementChanging, .roleChanging: return false
+            case .appRootAlreadyMatching, .focusedElementAlreadyMatching, .roleAlreadyMatching,
+                 .insertionPointAlreadyMatching: return true
+            case .appRootChanging, .focusedElementChanging, .roleChanging,
+                 .insertionPointChanging: return false
             }
         }
 
@@ -1913,6 +1918,7 @@ struct CoordFreeTrackToggleTests {
             case .appRootAlreadyMatching, .appRootChanging: return "app_root_unreadable"
             case .focusedElementAlreadyMatching, .focusedElementChanging: return "focus_unreadable"
             case .roleAlreadyMatching, .roleChanging: return "role_unreadable"
+            case .insertionPointAlreadyMatching, .insertionPointChanging: return "insertion_point_unreadable"
             }
         }
 
@@ -1977,6 +1983,13 @@ struct CoordFreeTrackToggleTests {
         if unreadableCase == .roleAlreadyMatching || unreadableCase == .roleChanging {
             f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, roleless)
         }
+        // A focused element of a non-text role whose insertion point read fails with cannotComplete.
+        let insertionFails = unreadableCase == .insertionPointAlreadyMatching
+            || unreadableCase == .insertionPointChanging
+        if insertionFails {
+            f.builder.setAttribute(roleless, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+            f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, roleless)
+        }
         let probe = FirstFocusReadFails(app: f.app, unreadableCase: unreadableCase)
         let presses = PressRecorder()
         let key = KeyMouseRecorder()
@@ -1995,7 +2008,12 @@ struct CoordFreeTrackToggleTests {
                 return true
             },
             logicProPID: { probe.pid() },
-            attributeValueHandler: { probe.attributeValue($0, $1) }
+            attributeValueHandler: { probe.attributeValue($0, $1) },
+            attributeValueResultHandler: { element, attribute in
+                guard insertionFails, CFEqual(element, roleless),
+                      attribute == kAXInsertionPointLineNumberAttribute as String else { return nil }
+                return .failure(.init(raw: AXError.cannotComplete.rawValue))
+            }
         )
 
         let result = await channel.execute(operation: operation, params: ["index": "0", "enabled": "true"])
@@ -2055,6 +2073,46 @@ struct CoordFreeTrackToggleTests {
             }
             return true
         })
+
+        let result = await channel.execute(operation: operation, params: ["index": "0", "enabled": "true"])
+
+        #expect(result.isSuccess, "\(result.message)")
+        #expect(try #require(boolValue(f, checkbox)))
+    }
+
+    @Test("an insertion point that reads as unsupported or valueless is an answer of absence, so the toggle still acts",
+          arguments: ["track.set_mute", "track.set_solo", "track.set_arm"],
+          [AXError.attributeUnsupported, AXError.noValue])
+    func absentInsertionPointStillActs(operation: String, status: AXError) async throws {
+        let f = makeToggleFixture()
+        let checkbox = switch operation {
+        case "track.set_mute": f.mute[0]
+        case "track.set_solo": f.solo[0]
+        default: f.arm[0]
+        }
+        let focused = f.builder.element(9810)
+        f.builder.setAttribute(focused, kAXRoleAttribute as String, kAXLayoutItemRole as String)
+        f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, focused)
+        let key = KeyMouseRecorder()
+        key.onKeyEvent = { _ in
+            f.builder.setAttribute(f.mute[0], kAXValueAttribute as String, 1)
+            f.builder.setAttribute(f.solo[0], kAXValueAttribute as String, 1)
+        }
+        key.onFlaggedKey = { _, _ in f.builder.setAttribute(f.arm[0], kAXValueAttribute as String, 1) }
+        let channel = makeChannel(
+            f, keyRuntime: key.runtime(),
+            performAction: { element, action in
+                if action == kAXPressAction as String, CFEqual(element, checkbox) {
+                    f.builder.setAttribute(element, kAXValueAttribute as String, 1)
+                }
+                return true
+            },
+            attributeValueResultHandler: { element, attribute in
+                guard CFEqual(element, focused),
+                      attribute == kAXInsertionPointLineNumberAttribute as String else { return nil }
+                return .failure(.init(raw: status.rawValue))
+            }
+        )
 
         let result = await channel.execute(operation: operation, params: ["index": "0", "enabled": "true"])
 

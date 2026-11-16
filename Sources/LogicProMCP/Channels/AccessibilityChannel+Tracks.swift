@@ -2988,6 +2988,8 @@ extension AccessibilityChannel {
             case appRoot
             case focusedElement
             case role
+            /// The insertion-point read failed with a status that is not an answer of absence.
+            case insertionPoint
         }
 
         /// The focused element edits text. `byInsertionPoint` is false when its role is an
@@ -3045,10 +3047,17 @@ extension AccessibilityChannel {
         if editableRoles.contains(role) {
             return .textEditing(role: role, byInsertionPoint: false)
         }
-        guard let _: NSNumber = AXHelpers.getAttribute(
+        // Only "this element has no insertion point" (attributeUnsupported, noValue) or a value
+        // that is not a number means no insertion point. Any other status (cannotComplete,
+        // failure, illegalArgument, ...) is a read that did not happen and proves nothing.
+        let insertionPoint: Result<NSNumber?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
             focused, kAXInsertionPointLineNumberAttribute, runtime: runtime.ax
-        ) else {
-            return .notTextEditing
+        )
+        switch insertionPoint {
+        case .failure(let error):
+            return error.isDefinitiveAbsence ? .notTextEditing : .unreadable(.insertionPoint)
+        case .success(let value):
+            if value == nil { return .notTextEditing }
         }
         // An insertion point alone does not prove an editable surface. Measured on Logic 13
         // (2026-11-16): a focused mixer channel-strip group (AXLayoutItem) answers
@@ -3095,6 +3104,11 @@ extension AccessibilityChannel {
             return unsafeFocusRefusal(
                 reason: "the focused element's role is unreadable — focus safety cannot be proven",
                 focus: "role_unreadable"
+            )
+        case .unreadable(.insertionPoint):
+            return unsafeFocusRefusal(
+                reason: "the focused element's insertion point is unreadable — focus safety cannot be proven",
+                focus: "insertion_point_unreadable"
             )
         case .textEditing(let role, byInsertionPoint: false):
             return unsafeFocusRefusal(
@@ -3256,6 +3270,9 @@ extension AccessibilityChannel {
         case .unreadable(.role):
             guardName = "role_unreadable"
             cause = "the focused element's role did not read, so no open text editor can be ruled out"
+        case .unreadable(.insertionPoint):
+            guardName = "insertion_point_unreadable"
+            cause = "the focused element's insertion point did not read, so no open text editor can be ruled out"
         }
         return RungRefusal(
             error: .unsafeFocusForSyntheticKey,
