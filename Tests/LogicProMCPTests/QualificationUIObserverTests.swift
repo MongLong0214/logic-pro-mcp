@@ -78,8 +78,8 @@ struct QualificationUIObserverTests {
                 setAttributeHandler: nil, performActionHandler: nil)
         }
 
-        func observe() -> QualificationUIObservation {
-            QualificationUIInvariants.observeLogic(pid: QualificationUIObserverTests.pid, cgWindows: [], runtime: runtime)
+        func observe(cg: [[String: Any]] = []) -> QualificationUIObservation {
+            QualificationUIInvariants.observeLogic(pid: QualificationUIObserverTests.pid, cgWindows: cg, runtime: runtime)
         }
     }
 
@@ -175,12 +175,103 @@ struct QualificationUIObserverTests {
         #expect(Self.unreadable(found), "\(found)")
     }
 
-    @Test func aTooltipThatAppearsDuringTheOperationIsStillAWindowLeftOpen() {
+    /// The measured tooltip on Logic 13: the window server lists an unnamed layer-103 window 32x19 at
+    /// 1004,109 (number 645) and AXWindows lists an AXHelpTag with exactly that AXPosition/AXSize.
+    private static func tooltipCG(
+        number: Int = 645, x: Double = 1004, y: Double = 109, width: Double = 32, height: Double = 19
+    ) -> [String: Any] {
+        [
+            kCGWindowOwnerPID as String: Int(pid),
+            kCGWindowNumber as String: number,
+            kCGWindowLayer as String: 103,
+            kCGWindowBounds as String: ["X": x, "Y": y, "Width": width, "Height": height],
+        ]
+    }
+
+    private static var mainCG: [String: Any] { [
+        kCGWindowOwnerPID as String: Int(pid),
+        kCGWindowNumber as String: 474,
+        kCGWindowLayer as String: 0,
+        kCGWindowName as String: mainTitle,
+        kCGWindowBounds as String: ["X": 25.0, "Y": 51.0, "Width": 1920.0, "Height": 1050.0],
+    ] }
+
+    private static func placeTooltip(_ f: Fixture, _ tag: AXUIElement, x: CGFloat = 1004, y: CGFloat = 109) {
+        f.b.setFrame(tag, x: x, y: y, width: 32, height: 19)
+    }
+
+    /// Pointer hover, not the operation, raises and drops a tooltip: the appearing or disappearing
+    /// help tag is not a window delta, in the window-server list or in AXWindows.
+    @Test func aTooltipThatAppearsDuringTheOperationIsNotAWindowDelta() {
         let f = Fixture()
-        let before = f.observe()
-        _ = Self.addHelpTag(f)
-        let found = QualificationUIInvariants.violations(before: before, after: f.observe())
+        let before = f.observe(cg: [Self.mainCG])
+        let tag = Self.addHelpTag(f)
+        Self.placeTooltip(f, tag)
+        let found = QualificationUIInvariants.violations(
+            before: before, after: f.observe(cg: [Self.mainCG, Self.tooltipCG()]))
+        #expect(found.isEmpty, "\(found)")
+    }
+
+    @Test func aTooltipThatDisappearsDuringTheOperationIsNotAWindowDelta() {
+        let f = Fixture()
+        let tag = Self.addHelpTag(f)
+        Self.placeTooltip(f, tag)
+        let before = f.observe(cg: [Self.mainCG, Self.tooltipCG()])
+        f.b.setAttribute(f.app, kAXWindowsAttribute as String, [f.main])
+        let found = QualificationUIInvariants.violations(before: before, after: f.observe(cg: [Self.mainCG]))
+        #expect(found.isEmpty, "\(found)")
+    }
+
+    /// The exception is the READ role and nothing else: a tooltip-sized window whose role did not
+    /// read stays a window delta, in both lists, and its unreadable modal flag still fails.
+    @Test func aTooltipSizedWindowWhoseRoleCannotBeReadIsStillAViolation() {
+        let f = Fixture()
+        let before = f.observe(cg: [Self.mainCG])
+        let tag = Self.addHelpTag(f, roleStatus: Self.cannotComplete)
+        Self.placeTooltip(f, tag)
+        let found = QualificationUIInvariants.violations(
+            before: before, after: f.observe(cg: [Self.mainCG, Self.tooltipCG()]))
+        #expect(found.contains { $0.contains("window_left_open(window 645") }, "\(found)")
         #expect(found.contains { $0.contains("window_left_open(AX") }, "\(found)")
+        #expect(Self.unreadable(found), "\(found)")
+    }
+
+    @Test func anAXWindowOfTooltipSizeIsStillAViolation() {
+        let f = Fixture()
+        let before = f.observe(cg: [Self.mainCG])
+        let imposter = f.b.element(7)
+        f.b.setRole(imposter, kAXWindowRole as String)
+        f.b.setAttribute(imposter, kAXSubroleAttribute as String, kAXStandardWindowSubrole as String)
+        f.b.setAttribute(imposter, kAXTitleAttribute as String, "")
+        f.b.setAttribute(imposter, "AXModal", false)
+        Self.placeTooltip(f, imposter)
+        f.b.setAttribute(f.app, kAXWindowsAttribute as String, [imposter, f.main])
+        let found = QualificationUIInvariants.violations(
+            before: before, after: f.observe(cg: [Self.mainCG, Self.tooltipCG()]))
+        #expect(found.contains { $0.contains("window_left_open(window 645") }, "\(found)")
+        #expect(found.contains { $0.contains("window_left_open(AX") }, "\(found)")
+    }
+
+    /// A window-server window that no read AXHelpTag accounts for (another frame, or none listed in
+    /// AX at all) is not excused by the existence of some tooltip.
+    @Test func aWindowServerWindowThatNoHelpTagFrameMatchesIsStillAViolation() {
+        let f = Fixture()
+        let before = f.observe(cg: [Self.mainCG])
+        let tag = Self.addHelpTag(f)
+        Self.placeTooltip(f, tag)
+        let elsewhere = Self.tooltipCG(number: 700, x: 300, y: 300)
+        let found = QualificationUIInvariants.violations(
+            before: before, after: f.observe(cg: [Self.mainCG, Self.tooltipCG(), elsewhere]))
+        #expect(found.contains { $0.contains("window_left_open(window 700") }, "\(found)")
+        #expect(!found.contains { $0.contains("window_left_open(window 645") }, "\(found)")
+    }
+
+    @Test func aTooltipSizedWindowServerWindowWithNoAXHelpTagIsStillAViolation() {
+        let f = Fixture()
+        let before = f.observe(cg: [Self.mainCG])
+        let found = QualificationUIInvariants.violations(
+            before: before, after: f.observe(cg: [Self.mainCG, Self.tooltipCG()]))
+        #expect(found.contains { $0.contains("window_left_open(window 645") }, "\(found)")
     }
 
     @Test func aModalFlagThatFailsOnlyAfterTheOperationIsNamedUnreadable() {

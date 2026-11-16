@@ -33,10 +33,27 @@ struct QualificationAXWindowFacts: Equatable, @unchecked Sendable {
     let title: String?
     let subrole: String?
     let modal: Bool?
+    /// True only when the window's AXRole READ and named AXHelpTag (a tooltip). A role that could not
+    /// be read, or reads anything else, is false: such a window is never excused.
+    let helpTag: Bool
+    /// The window's AXPosition and AXSize as read, nil when either did not read.
+    let frame: CGRect?
+
+    init(
+        element: AXUIElement, title: String?, subrole: String?, modal: Bool?,
+        helpTag: Bool = false, frame: CGRect? = nil
+    ) {
+        self.element = element
+        self.title = title
+        self.subrole = subrole
+        self.modal = modal
+        self.helpTag = helpTag
+        self.frame = frame
+    }
 
     static func == (lhs: Self, rhs: Self) -> Bool {
         CFEqual(lhs.element, rhs.element) && lhs.title == rhs.title && lhs.subrole == rhs.subrole
-            && lhs.modal == rhs.modal
+            && lhs.modal == rhs.modal && lhs.helpTag == rhs.helpTag && lhs.frame == rhs.frame
     }
 }
 
@@ -103,6 +120,13 @@ struct QualificationUIObservation: Equatable, Sendable {
         self.focusStatus = focusStatus
         self.unreadable = unreadable
     }
+
+    /// Whether `facts` is the window-server twin of a tooltip in THIS observation: unnamed, and with
+    /// exactly the frame of an AX window whose role read as AXHelpTag.
+    func isReadHelpTagTwin(_ facts: QualificationWindowFacts) -> Bool {
+        guard facts.title?.isEmpty ?? true, let bounds = facts.bounds else { return false }
+        return axWindows.contains { $0.helpTag && $0.frame == bounds }
+    }
 }
 
 enum QualificationUIInvariants {
@@ -161,20 +185,27 @@ enum QualificationUIInvariants {
         for window in after.axWindows where window.modal == true {
             found.append("ui_invariant: modal_present(AXModal window \"\(window.title ?? "")\")")
         }
+        // A tooltip appears and disappears with the pointer, not with the operation (measured on
+        // Logic 13: layer 103, AXRole AXHelpTag, 32x19). It is excused ONLY when its AX role READ as
+        // AXHelpTag; its window-server twin is the unnamed window with exactly that AX frame.
         for number in Set(after.windows.keys).subtracting(before.windows.keys).sorted() {
+            if after.windows[number].map(after.isReadHelpTagTwin) == true { continue }
             let summary = after.windows[number]?.summary ?? "?"
             found.append("ui_invariant: window_left_open(window \(number), \(summary))")
         }
         for number in Set(before.windows.keys).subtracting(after.windows.keys).sorted() {
+            if before.windows[number].map(before.isReadHelpTagTwin) == true { continue }
             let summary = before.windows[number]?.summary ?? "?"
             found.append("ui_invariant: window_closed(window \(number), \(summary))")
         }
         if before.axWindowsRead, after.axWindowsRead {
-            for window in after.axWindows where !before.axWindows.contains(where: { CFEqual($0.element, window.element) }) {
+            for window in after.axWindows
+            where !window.helpTag && !before.axWindows.contains(where: { CFEqual($0.element, window.element) }) {
                 found.append(
                     "ui_invariant: window_left_open(AX \"\(window.title ?? "")\" subrole \(window.subrole ?? "-"))")
             }
-            for window in before.axWindows where !after.axWindows.contains(where: { CFEqual($0.element, window.element) }) {
+            for window in before.axWindows
+            where !window.helpTag && !after.axWindows.contains(where: { CFEqual($0.element, window.element) }) {
                 found.append(
                     "ui_invariant: window_closed(AX \"\(window.title ?? "")\" subrole \(window.subrole ?? "-"))")
             }
@@ -279,6 +310,12 @@ enum QualificationUIInvariants {
             axWindows = windows.map { window in
                 let title = text(window, kAXTitleAttribute as String, "window")
                 let subrole = text(window, kAXSubroleAttribute as String, "window \"\(title ?? "")\"")
+                let helpTag = AccessibilityChannel.windowRoleReadsAsHelpTag(window, runtime: runtime)
+                var frame: CGRect?
+                if let origin = AXHelpers.getPosition(window, runtime: runtime),
+                   let size = AXHelpers.getSize(window, runtime: runtime) {
+                    frame = CGRect(origin: origin, size: size)
+                }
                 // AXModal is the modal invariant itself: only a Bool is a reading. 0c4ada89 recorded a
                 // real blocker passing when an entry's absent AXModal was taken as "not modal". The one
                 // exception is the recorded #1063 rule: an entry whose role READS as AXHelpTag is a
@@ -290,15 +327,16 @@ enum QualificationUIInvariants {
                     as Result<Bool?, AXHelpers.AXStatusError> {
                 case .success(let value?): modal = value
                 case .success(nil):
-                    if !AccessibilityChannel.windowRoleReadsAsHelpTag(window, runtime: runtime) {
+                    if !helpTag {
                         unreadable.append("window \"\(title ?? "")\" AXModal absent")
                     }
                 case .failure(let error):
-                    if !AccessibilityChannel.windowRoleReadsAsHelpTag(window, runtime: runtime) {
+                    if !helpTag {
                         unreadable.append("window \"\(title ?? "")\" AXModal AXError \(error.raw)")
                     }
                 }
-                return QualificationAXWindowFacts(element: window, title: title, subrole: subrole, modal: modal)
+                return QualificationAXWindowFacts(
+                    element: window, title: title, subrole: subrole, modal: modal, helpTag: helpTag, frame: frame)
             }
         case .success(nil):
             unreadable.append("AXWindows absent")
