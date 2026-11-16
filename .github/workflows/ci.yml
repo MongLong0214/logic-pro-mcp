@@ -101,6 +101,7 @@ jobs:
             Scripts/test_policy_literals_against_canon.py
             Scripts/test_observation_records.py
             Scripts/test_observation_ratchets.py
+            Scripts/test_release_verify_candidate.py
             Scripts/test_required_verification_workflow.py
           )
           for test_file in "${tests[@]}"; do

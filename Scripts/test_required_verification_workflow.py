@@ -65,6 +65,15 @@ def workflow_problems(workflow):
         problems.append("missing canon-locales job")
     if re.search(r"^    if:.*(docs|full-validation|change-scope)", canon, re.M):
         problems.append("canon-locales is path-conditional")
+    mutation = re.search(
+        r"^      - name: Mutation drives prove tampering, stale canon and wrong locale maps fail\n"
+        r"(.*?)(?=^      - |\Z)", canon, re.M | re.S)
+    if mutation and re.search(r"^        if:", mutation.group(1), re.M):
+        problems.append("required mutation step is conditional")
+    for indent, body in ((4, canon), (8, mutation.group(1) if mutation else "")):
+        tolerated = re.search(rf"^{' ' * indent}continue-on-error:\s*([^\n]+)", body, re.M)
+        if tolerated and tolerated.group(1).split("#", 1)[0].strip() != "false":
+            problems.append("canon-locales tolerates a required verification failure")
     for command in (
         "Scripts/check-canon-drift.py",
         "Scripts/check-canon-citations.py",
@@ -81,6 +90,7 @@ def workflow_problems(workflow):
         "Scripts/test_canon_citations_guard.py",
         "Scripts/test_labelsets_are_derived.py",
         "Scripts/test_new_labelsets_name_a_row.py",
+        "Scripts/test_release_verify_candidate.py",
         "Scripts/test_locale_detection_is_derived.py",
     ):
         if command not in canon:
@@ -218,6 +228,58 @@ class RequiredVerificationWorkflow(unittest.TestCase):
                 with self.subTest(field=field, state=state):
                     result = subprocess.run(["bash", "-c", script], env=dict(healthy, **{field: state}))
                     self.assertNotEqual(result.returncode, 0)
+
+    def _assert_release_candidate_suite_blocks(self, workflow):
+        self.assertEqual(workflow_problems(workflow), [])
+        script = step_script(workflow, "canon-locales",
+                             "Mutation drives prove tampering, stale canon and wrong locale maps fail")
+        fan_in = step_script(workflow, "build", "Product validation must pass")
+        target = "Scripts/test_release_verify_candidate.py"
+        with tempfile.TemporaryDirectory() as directory:
+            root = pathlib.Path(directory)
+            runner = root / "python3"
+            # The unchanged producer suite drives the real verifier CLI. This probe isolates
+            # wiring: only that producer's controlled nonzero may fail the actual shell step.
+            runner.write_text(f"#!{sys.executable}\nimport os,sys\n"
+                "with open(os.environ['TRACE'], 'a') as out: out.write(sys.argv[1] + '\\n')\n"
+                f"if sys.argv[1] == {target!r}: sys.exit(int(os.environ['TARGET_EXIT']))\n")
+            runner.chmod(0o755)
+            for status in (0, 23):
+                trace = root / str(status)
+                result = subprocess.run(["bash", "-c", script], text=True, capture_output=True,
+                    env=dict(os.environ, PATH=directory + os.pathsep + os.environ["PATH"],
+                             TRACE=str(trace), TARGET_EXIT=str(status)))
+                self.assertEqual(trace.read_text().splitlines().count(target), 1,
+                                 "the required mutation step must invoke the release suite exactly once")
+                self.assertEqual(result.returncode, status, result.stdout + result.stderr)
+                gate = subprocess.run(["bash", "-c", fan_in], text=True, capture_output=True,
+                    env=dict(os.environ, MODE="docs-only", SCOPE="success",
+                             CANON_LOCALES="failure" if result.returncode else "success",
+                             NATIVE_LOGIC="success", VALIDATION="success", PRODUCT="skipped",
+                             DOCS_ONLY="success"))
+                self.assertEqual(gate.returncode == 0, status == 0, gate.stdout + gate.stderr)
+
+    def test_release_candidate_suite_runs_and_blocks_required_build_even_for_docs_only(self):
+        self._assert_release_candidate_suite_blocks(read(".github/workflows/ci.yml"))
+
+    def test_release_candidate_suite_cannot_be_dropped_or_its_failure_tolerated(self):
+        workflow = read(".github/workflows/ci.yml")
+        target = "Scripts/test_release_verify_candidate.py"
+        self.assertTrue(target in workflow, "required release suite invocation is absent")
+        step = "      - name: Mutation drives prove tampering, stale canon and wrong locale maps fail\n"
+        mutations = {
+            "deleted": workflow.replace(target, "", 1),
+            "commented": workflow.replace(target, "# " + target, 1),
+            "failure_swallowed": workflow.replace('python3 "$test_file"',
+                                                   'python3 "$test_file" || true', 1),
+            "docs_condition": workflow.replace(step, step + "        if: needs.change-scope.outputs.mode != 'docs-only'\n", 1),
+            "step_tolerates_failure": workflow.replace(step, step + "        continue-on-error: true\n", 1),
+            "job_tolerates_failure": workflow.replace("  canon-locales:\n",
+                                                       "  canon-locales:\n    continue-on-error: true\n", 1),
+        }
+        for case, mutated in mutations.items():
+            with self.subTest(case=case), self.assertRaises(AssertionError):
+                self._assert_release_candidate_suite_blocks(mutated)
 
     def test_real_labelset_proofs_reach_required_build_even_for_docs_only(self):
         workflow = read(".github/workflows/ci.yml")
