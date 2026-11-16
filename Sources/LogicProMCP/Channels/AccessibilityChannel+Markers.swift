@@ -551,6 +551,8 @@ extension AccessibilityChannel {
                 ]
             ))
         }
+        // The list is known closed here (checked above), so only the screen's identity is read.
+        let originBeforeOpen = markerListOrigin(runtime: runtime, listWasOpen: false)
         let menuResult = await pressMarkerMenuItem(.openList)
         guard menuResult.isSuccess else {
             return .error(HonestContract.encodeStateC(
@@ -560,6 +562,7 @@ extension AccessibilityChannel {
         }
         for _ in 0..<20 {
             if AXLogicProElements.findMarkerListWindow(runtime: runtime) != nil {
+                if let originBeforeOpen { recordOpenedMarkerList(originBeforeOpen) }
                 return .success(HonestContract.encodeStateA(extras: [
                     "operation": "nav.open_marker_list",
                     "already_open": false,
