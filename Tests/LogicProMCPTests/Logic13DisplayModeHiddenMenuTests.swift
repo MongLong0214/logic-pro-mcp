@@ -12,6 +12,9 @@ import Testing
 private final class HiddenMenuState: @unchecked Sendable {
     var open = false
     var actions: [String] = []
+    /// Set once a mode item has been pressed; the read failures below start only then, so the menu
+    /// is first observed open through fully readable reads.
+    var itemPressed = false
 }
 
 private struct HiddenMenuFixture {
@@ -56,19 +59,37 @@ private struct HiddenMenuFixture {
         b.setChildren(window, [popup])
     }
 
-    func runtime(hitTestReadable: Bool = true) -> AXHelpers.Runtime {
+    /// `menuStaysOpen`: the item press and AXCancel are acknowledged but the menu stays on screen.
+    /// `failingAfterPress`: once an item was pressed, this element's attribute read fails -25204 on both
+    /// the plain and the status-preserving read path.
+    func runtime(
+        hitTestReadable: Bool = true, menuStaysOpen: Bool = false,
+        failingAfterPress: (element: AXUIElement, attribute: String)? = nil
+    ) -> AXHelpers.Runtime {
         let b = b, popup = popup, menu = menu, background = background, items = items, state = state
-        return b.makeAXRuntime(appElement: app, setAttributeHandler: nil, performActionHandler: { element, action in
+        let failingID = failingAfterPress.map { b.elementID($0.element) }, failingAttribute = failingAfterPress?.attribute
+        @Sendable func fails(_ element: AXUIElement, _ attribute: String) -> Bool {
+            state.itemPressed && failingID == b.elementID(element) && failingAttribute == attribute
+        }
+        return b.makeAXRuntime(appElement: app, attributeValueHandler: { element, attribute -> AnyObject?? in
+            fails(element, attribute) ? Optional<AnyObject?>.some(nil) : nil
+        }, attributeValueResultHandler: { element, attribute in
+            fails(element, attribute) ? .failure(.init(raw: AXError.cannotComplete.rawValue)) : nil
+        }, setAttributeHandler: nil, performActionHandler: { element, action in
             state.actions.append(action)
             if CFEqual(element, popup), action == (kAXShowMenuAction as String) { state.open = true; return true }
-            if CFEqual(element, menu), action == (kAXCancelAction as String) { state.open = false; return true }
+            if CFEqual(element, menu), action == (kAXCancelAction as String) {
+                if !menuStaysOpen { state.open = false }
+                return true
+            }
             if action == (kAXPressAction as String), let title = b.attributeValue(element, kAXTitleAttribute as String) as? String {
                 b.setAttribute(popup, kAXValueAttribute as String, title)
                 for (candidate, item) in items {
                     if candidate == title { b.setAttribute(item, "AXMenuItemMarkChar", "✓") }
                     else { b.removeAttribute(item, "AXMenuItemMarkChar") }
                 }
-                state.open = false
+                state.itemPressed = true
+                if !menuStaysOpen { state.open = false }
                 return true
             }
             return false
@@ -101,4 +122,50 @@ private struct HiddenMenuFixture {
     let result = ControlBarDisplayMode.selectBeats(in: f.popup, window: f.window, runtime: f.runtime(hitTestReadable: false))
     if case .unavailable = result { Issue.record("unreadable hit-test reported as unavailable: \(result)") }
     if case .switched = result { Issue.record("unreadable hit-test switched: \(result)") }
+}
+
+// Review 1582 R1(b): a failed role or parent read on the hit-tested chain is not an empty traversal.
+// The menu stays on screen (as Logic 13 leaves it); once it has been observed open, one read on the
+// chain under the hit point fails -25204. Closure must not be certified from that failure.
+
+private func expectMenuNotCertifiedClosed(_ result: ControlBarDisplayMode.Switch, open: Bool) {
+    #expect(open, "the fixture menu must still be on screen")
+    guard case .unsettled(_, let reason) = result else {
+        Issue.record("a menu still on screen was reported closed: \(result)"); return
+    }
+    #expect(reason == "display_mode_menu_not_closed", "\(reason)")
+}
+
+@Test func logic13MenuStillOnScreenWithReadableChainIsNotClosed() {
+    // Control: with every read answering, the open menu is seen and the switch reports it unclosed.
+    let f = HiddenMenuFixture()
+    let result = ControlBarDisplayMode.selectBeats(
+        in: f.popup, window: f.window, runtime: f.runtime(menuStaysOpen: true))
+    expectMenuNotCertifiedClosed(result, open: f.state.open)
+}
+
+@Test func logic13MenuWhoseParentCannotBeReadIsNotCertifiedClosed() {
+    let f = HiddenMenuFixture()
+    let result = ControlBarDisplayMode.selectBeats(
+        in: f.popup, window: f.window,
+        runtime: f.runtime(menuStaysOpen: true, failingAfterPress: (f.menu, kAXParentAttribute as String)))
+    expectMenuNotCertifiedClosed(result, open: f.state.open)
+}
+
+@Test func logic13MenuWhoseRoleCannotBeReadIsNotCertifiedClosed() {
+    let f = HiddenMenuFixture()
+    let result = ControlBarDisplayMode.selectBeats(
+        in: f.popup, window: f.window,
+        runtime: f.runtime(menuStaysOpen: true, failingAfterPress: (f.menu, kAXRoleAttribute as String)))
+    expectMenuNotCertifiedClosed(result, open: f.state.open)
+}
+
+@Test func logic13MenuItemWhoseParentCannotBeReadIsNotCertifiedClosed() {
+    // The intermediate link: the hit lands on the "비트" item, whose AXParent is the menu.
+    let f = HiddenMenuFixture()
+    let item = f.items["비트"]!
+    let result = ControlBarDisplayMode.selectBeats(
+        in: f.popup, window: f.window,
+        runtime: f.runtime(menuStaysOpen: true, failingAfterPress: (item, kAXParentAttribute as String)))
+    expectMenuNotCertifiedClosed(result, open: f.state.open)
 }
