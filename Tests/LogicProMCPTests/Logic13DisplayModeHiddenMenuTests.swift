@@ -84,13 +84,15 @@ private struct HiddenMenuFixture {
     let f = HiddenMenuFixture()
     let runtime = f.runtime()
     let result = ControlBarDisplayMode.selectBeats(in: f.popup, window: f.window, runtime: runtime)
+    // The menu must be gone whatever the switch answered: Logic 13 left it on screen (layer 101).
+    #expect(!f.state.open)
     guard case .switched(let lease) = result else {
         Issue.record("expected .switched, got \(result)"); return
     }
     #expect(lease.original == "비트 및 프로젝트")
-    #expect(f.state.open == false)
-    #expect(ControlBarDisplayMode.restore(lease, window: f.window, popup: f.popup, runtime: runtime) == .restored)
-    #expect(f.state.open == false)
+    let restored = ControlBarDisplayMode.restore(lease, window: f.window, popup: f.popup, runtime: runtime)
+    #expect(!f.state.open)
+    #expect(restored == .restored)
 }
 
 @Test func logic13HiddenMenuWithUnreadableHitTestIsNeverCalledAbsent() {

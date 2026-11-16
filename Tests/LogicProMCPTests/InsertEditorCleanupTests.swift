@@ -71,7 +71,7 @@ private struct EditorFixture {
     }
 }
 
-@Test func insertClosesTheEditorItOpenedAndReadsBackMainWindowFocus() {
+@Test func insertClosesTheEditorItOpenedAndReadsBackMainWindowFocus() throws {
     let f = EditorFixture(closeTakesEffect: true, focusReturnsToMain: true)
     let runtime = f.runtime(closeTakesEffect: true, focusReturnsToMain: true)
     let baseline = AccessibilityChannel.insertEditorWindowBaseline(runtime: runtime)
@@ -80,14 +80,18 @@ private struct EditorFixture {
         since: baseline, pluginID: "logic.stock.effect.gain", runtime: runtime)
     #expect(result["post_insert_editor_windows_opened"] as? Int == 1)
     #expect(f.pressed.value == 1)
-    #expect(result["post_insert_editor_windows_closed"] as? Bool == true)
-    #expect(result["post_insert_main_window_focused"] as? Bool == true)
+    let editorWindowsClosed = try #require(result["post_insert_editor_windows_closed"] as? Bool)
+    #expect(editorWindowsClosed)
+    let mainWindowFocused = try #require(result["post_insert_main_window_focused"] as? Bool)
+    #expect(mainWindowFocused)
     #expect(f.focusWrites.value == 1)
-    #expect(result["post_insert_focus_restored"] as? Bool == true)
-    #expect(result["post_insert_editor_cleanup_observed"] as? Bool == true)
+    let focusRestored = try #require(result["post_insert_focus_restored"] as? Bool)
+    #expect(focusRestored)
+    let editorCleanupObserved = try #require(result["post_insert_editor_cleanup_observed"] as? Bool)
+    #expect(editorCleanupObserved)
 }
 
-@Test func insertFocusWriteThatDoesNotLandIsNotReportedRestored() {
+@Test func insertFocusWriteThatDoesNotLandIsNotReportedRestored() throws {
     // AX answers success to the focus write but the key view stays on the strip (Logic 13 group targets).
     let f = EditorFixture(closeTakesEffect: true, focusReturnsToMain: true)
     let runtime = f.runtime(closeTakesEffect: true, focusReturnsToMain: true, focusWriteTakesEffect: false)
@@ -95,41 +99,51 @@ private struct EditorFixture {
     f.openEditor()
     let result = AccessibilityChannel.closeEditorsOpenedByInsert(
         since: baseline, pluginID: "logic.stock.effect.gain", runtime: runtime)
-    #expect(result["post_insert_editor_windows_closed"] as? Bool == true)
-    #expect(result["post_insert_focus_restore_attempted"] as? Bool == true)
-    #expect(result["post_insert_focus_restored"] as? Bool == false)
-    #expect(result["post_insert_editor_cleanup_observed"] as? Bool == false)
+    let editorWindowsClosed = try #require(result["post_insert_editor_windows_closed"] as? Bool)
+    #expect(editorWindowsClosed)
+    let focusRestoreAttempted = try #require(result["post_insert_focus_restore_attempted"] as? Bool)
+    #expect(focusRestoreAttempted)
+    let focusRestored = try #require(result["post_insert_focus_restored"] as? Bool)
+    #expect(!focusRestored)
+    let editorCleanupObserved = try #require(result["post_insert_editor_cleanup_observed"] as? Bool)
+    #expect(!editorCleanupObserved)
 }
 
-@Test func insertEditorThatStaysOpenIsNotReportedClosed() {
+@Test func insertEditorThatStaysOpenIsNotReportedClosed() throws {
     let f = EditorFixture(closeTakesEffect: false, focusReturnsToMain: false)
     let runtime = f.runtime(closeTakesEffect: false, focusReturnsToMain: false)
     let baseline = AccessibilityChannel.insertEditorWindowBaseline(runtime: runtime)
     f.openEditor()
     let result = AccessibilityChannel.closeEditorsOpenedByInsert(
         since: baseline, pluginID: "logic.stock.effect.gain", runtime: runtime)
-    #expect(result["post_insert_editor_windows_closed"] as? Bool == false)
-    #expect(result["post_insert_editor_cleanup_observed"] as? Bool == false)
+    let editorWindowsClosed = try #require(result["post_insert_editor_windows_closed"] as? Bool)
+    #expect(!editorWindowsClosed)
+    let editorCleanupObserved = try #require(result["post_insert_editor_cleanup_observed"] as? Bool)
+    #expect(!editorCleanupObserved)
 }
 
-@Test func insertEditorClosedWithoutMainFocusIsNotReportedRestored() {
+@Test func insertEditorClosedWithoutMainFocusIsNotReportedRestored() throws {
     let f = EditorFixture(closeTakesEffect: true, focusReturnsToMain: false)
     let runtime = f.runtime(closeTakesEffect: true, focusReturnsToMain: false)
     let baseline = AccessibilityChannel.insertEditorWindowBaseline(runtime: runtime)
     f.openEditor()
     let result = AccessibilityChannel.closeEditorsOpenedByInsert(
         since: baseline, pluginID: "logic.stock.effect.gain", runtime: runtime)
-    #expect(result["post_insert_editor_windows_closed"] as? Bool == true)
-    #expect(result["post_insert_main_window_focused"] as? Bool == false)
-    #expect(result["post_insert_editor_cleanup_observed"] as? Bool == false)
+    let editorWindowsClosed = try #require(result["post_insert_editor_windows_closed"] as? Bool)
+    #expect(editorWindowsClosed)
+    let mainWindowFocused = try #require(result["post_insert_main_window_focused"] as? Bool)
+    #expect(!mainWindowFocused)
+    let editorCleanupObserved = try #require(result["post_insert_editor_cleanup_observed"] as? Bool)
+    #expect(!editorCleanupObserved)
 }
 
-@Test func insertWithoutReadableBaselineFailsClosed() {
+@Test func insertWithoutReadableBaselineFailsClosed() throws {
     let f = EditorFixture(closeTakesEffect: true, focusReturnsToMain: true)
     let runtime = f.runtime(closeTakesEffect: true, focusReturnsToMain: true)
     f.openEditor()
     let result = AccessibilityChannel.closeEditorsOpenedByInsert(
         since: nil, pluginID: "logic.stock.effect.gain", runtime: runtime)
-    #expect(result["post_insert_editor_cleanup_observed"] as? Bool == false)
+    let editorCleanupObserved = try #require(result["post_insert_editor_cleanup_observed"] as? Bool)
+    #expect(!editorCleanupObserved)
     #expect(f.pressed.value == 0)
 }

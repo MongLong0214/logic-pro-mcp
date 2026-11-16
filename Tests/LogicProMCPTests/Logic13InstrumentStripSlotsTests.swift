@@ -64,7 +64,7 @@ private struct Logic13InstrumentStrip {
     }
 }
 
-@Test func logic13InstrumentStripMIDISlotIsNotAnEmptyInsert() {
+@Test func logic13InstrumentStripMIDISlotIsNotAnEmptyInsert() throws {
     let b = FakeAXRuntimeBuilder()
     let strip = Logic13InstrumentStrip(b)
     let read = AXLogicProElements.audioPluginInsertSlots(children: strip.children, runtime: b.makeAXRuntime())
@@ -73,6 +73,9 @@ private struct Logic13InstrumentStrip {
     #expect(!read.contains { $0.readStatus == .unclassified })
     #expect(!read.contains { CFEqual($0.element, strip.midiSlot) })
     #expect(!read.contains { CFEqual($0.element, strip.instrument) })
-    #expect(read.first.map { CFEqual($0.element, strip.emptyInsert) && $0.index == 0 && $0.isEmpty } == true)
+    let first = try #require(read.first)
+    #expect(CFEqual(first.element, strip.emptyInsert))
+    #expect(first.index == 0)
+    #expect(first.isEmpty)
     #expect(b.actionCalls.isEmpty)
 }
