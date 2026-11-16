@@ -810,6 +810,42 @@ struct QualificationRunnerTests {
         #expect(result.operationResults[operation.rawValue]?.status != .passed)
     }
 
+    /// A track write acts only on the selected track, so the recipe addresses the row Logic reads
+    /// as selected and not a fixed row. Here the SECOND row is selected.
+    @Test(arguments: [OperationID.tracksRename, .editUndo, .editRedo])
+    func nameRecipesAddressTheSelectedRowNotRowZero(operation: OperationID) throws {
+        let fixture = try SlowHandshakeFixture(nameRecipe: operation, selectedRow: "second")
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+        let targets = try result.wireFrames.filter { $0.direction == .request && $0.operationID.hasPrefix("phase_b.") }.compactMap { frame -> String? in
+            let request = try #require(sharedJSONObject(frame.payload))
+            let params = request["params"] as? [String: Any]
+            let arguments = params?["arguments"] as? [String: Any]
+            guard arguments?["command"] as? String == "rename" else { return nil }
+            return (arguments?["params"] as? [String: Any])?["target_ref"] as? String
+        }
+        #expect(!targets.isEmpty)
+        #expect(targets.allSatisfy { $0 == "peer-track" }, "\(targets)")
+    }
+
+    /// With no selected track there is nothing a write could act on, and the recipe says so.
+    @Test(arguments: [OperationID.tracksRename, .editUndo, .editRedo])
+    func nameRecipesRefuseWhenNoTrackIsSelected(operation: OperationID) throws {
+        let fixture = try SlowHandshakeFixture(nameRecipe: operation, selectedRow: "none")
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+        let observed = try #require(result.operationResults[operation.rawValue])
+        #expect(observed.mutationRestore == nil)
+        let refusal = observed.mutationRestoreRefusal ?? "none"
+        #expect(refusal.contains("0 tracks are selected"), "\(refusal)")
+    }
+
     @Test(arguments: [OperationID.tracksRename, .editUndo, .editRedo])
     func healthyNameRecipesUseExactReferencesForEveryRename(operation: OperationID) throws {
         let fixture = try SlowHandshakeFixture(nameRecipe: operation)
@@ -4682,7 +4718,12 @@ struct QualificationRunnerTests {
         // Every operation is bracketed by a read-only observation of Logic's UI
         // (layer-101 menu, modal, leftover window, focus). A violation fails the operation and
         // names it. The invariants are never optional in the live gate.
-        let result = try QualificationTransport(uiObserver: QualificationUIInvariants.observeLogic).drive(.init(
+        // The gate starts from the canonical fixture state or not at all: the starting state is
+        // read before the first operation and every unmet condition is named.
+        let result = try QualificationTransport(
+            uiObserver: QualificationUIInvariants.observeLogic,
+            startingWindowFacts: QualificationStartingState.observeLogicWindows
+        ).drive(.init(
             executableURL: Self.releaseExecutableURL,
             environment: ProcessInfo.processInfo.environment,
             expectedOperationCount: OperationRegistry.specs.count,
@@ -6496,7 +6537,7 @@ struct QualificationRunnerTests {
              nameRecipe: OperationID? = nil, nameIdentityFault: String = "none",
              nameCleanupContention: String = "none", nameStageDelay: TimeInterval = 0,
              nameCleanupDelay: TimeInterval = 0,
-             nameStageFailure: String = "none",
+             nameStageFailure: String = "none", selectedRow: String = "first",
              countInCycle: String? = nil, autopunchCycle: String? = nil,
              playheadStep: OperationID? = nil, playheadFault: String = "none", playheadAtBoundary: Bool = false,
              playheadOrigin: String? = nil, valueCycle: OperationID? = nil,
@@ -6553,6 +6594,8 @@ struct QualificationRunnerTests {
                 moving=$initial_moving
                 position=1
                 name_recipe=none
+                track_selected=true
+                peer_selected=false
                 name_fault=none
                 name_cleanup_contention=none
                 name_stage_delay=0
@@ -6646,7 +6689,7 @@ struct QualificationRunnerTests {
                             first_ref=$track_ref; first_name=$track_name
                             second_ref=$peer_ref; second_name=$peer_name
                         fi
-                        printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://tracks","text":"{\\"source\\":\\"ax_live\\",\\"cache_age_sec\\":0,\\"readable\\":true,\\"ax_occluded\\":false,\\"data\\":[{\\"name\\":\\"%s\\",\\"track_ref\\":\\"%s\\"},{\\"name\\":\\"%s\\",\\"track_ref\\":\\"%s\\"}]}"}]}}\n' "$id" "$first_name" "$first_ref" "$second_name" "$second_ref" ;;
+                        printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://tracks","text":"{\\"source\\":\\"ax_live\\",\\"cache_age_sec\\":0,\\"readable\\":true,\\"ax_occluded\\":false,\\"data\\":[{\\"name\\":\\"%s\\",\\"track_ref\\":\\"%s\\",\\"isSelected\\":%s},{\\"name\\":\\"%s\\",\\"track_ref\\":\\"%s\\",\\"isSelected\\":%s}]}"}]}}\n' "$id" "$first_name" "$first_ref" "$([ "$first_ref" = "$peer_ref" ] && echo $peer_selected || echo $track_selected)" "$second_name" "$second_ref" "$([ "$second_ref" = "$peer_ref" ] && echo $peer_selected || echo $track_selected)" ;;
                       *'"uri":"logic://transport/state"'*)
                         transport_reads=$((transport_reads + 1))
                         if [ "$transport_fault" = baseline_malformed ] && [ "$transport_reads" = 1 ]; then
@@ -7065,6 +7108,13 @@ struct QualificationRunnerTests {
                 if let playheadOrigin {
                     script = script.replacingOccurrences(of: "step_position=9.3.2.120", with: "step_position=\(playheadOrigin)")
                         .replacingOccurrences(of: "step_origin=9.3.2.120", with: "step_origin=\(playheadOrigin)")
+                }
+                if selectedRow == "second" {
+                    script = script
+                        .replacingOccurrences(of: "track_selected=true", with: "track_selected=false")
+                        .replacingOccurrences(of: "peer_selected=false", with: "peer_selected=true")
+                } else if selectedRow == "none" {
+                    script = script.replacingOccurrences(of: "track_selected=true", with: "track_selected=false")
                 }
                 if let nameRecipe {
                     script = script.replacingOccurrences(of: "name_recipe=none", with: "name_recipe=\(nameRecipe.rawValue)")

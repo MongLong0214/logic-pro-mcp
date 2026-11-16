@@ -1494,9 +1494,16 @@ struct QualificationTransport: Sendable {
     /// that answers nil fails the operation, so an unavailable observation is never a clean one.
     let uiObserver: @Sendable () -> QualificationUIObservation?
     let uiSettleSleep: @Sendable (TimeInterval) -> Void
+    /// When set, `drive` reads the starting state before the first operation and refuses to start
+    /// unless it is the canonical one (`QualificationStartingState`): main window frontmost, the
+    /// keyboard on the track group, exactly one selected track, a stopped transport, and no menu,
+    /// modal, editor or Marker List. The live gate always sets it; a transport built without it
+    /// (a unit test of the transport itself) checks nothing about the machine it runs on.
+    let startingWindowFacts: (@Sendable () -> QualificationStartingWindowFacts)?
 
     init(
         uiObserver: @escaping @Sendable () -> QualificationUIObservation?,
+        startingWindowFacts: (@Sendable () -> QualificationStartingWindowFacts)? = nil,
         handshakeTimeout: TimeInterval = 45,
         requestTimeout: TimeInterval = 10,
         shutdownGrace: TimeInterval = 1,
@@ -1535,6 +1542,7 @@ struct QualificationTransport: Sendable {
         self.supportBundleRemover = supportBundleRemover
         self.uiObserver = uiObserver
         self.uiSettleSleep = uiSettleSleep
+        self.startingWindowFacts = startingWindowFacts
     }
 
     /// Environment the same-artifact qualification drives the server with.
@@ -1735,6 +1743,10 @@ struct QualificationTransport: Sendable {
             )
             preparedReadParams.merge(readPreparation.params) { current, _ in current }
             readProbePreparationFailures.merge(readPreparation.failures) { current, _ in current }
+            if let startingWindowFacts {
+                try requireCanonicalStartingState(
+                    session, nextID: &nextID, windowFacts: startingWindowFacts)
+            }
             for spec in request.operations {
                 // The UI as this operation found it. Read before anything is sent.
                 let uiBefore = uiObserver()
@@ -2654,18 +2666,6 @@ struct QualificationTransport: Sendable {
     /// A table rather than a switch because the addition it invites is a ROW — an operation, plus
     /// the field a reader can check it against. An operation with no honest independent field does
     /// not belong here and must not be given one that merely correlates.
-    /// #373 Phase B: the toggles whose actuator refuses unless the TARGET TRACK is the only
-    /// selected one, so the recipe has to arrange that before it writes.
-    ///
-    /// `tracks.arm` posts a key chord, and Logic's record-arm acts on the selection — so the rung
-    /// re-checks `selectionIsExclusive(index:)` immediately before every post and refuses
-    /// otherwise. Measured 2026-09-14: driven on its own after a `select`, `tracks.arm` answers
-    /// State A verified on the same track the sweep failed on; inside the sweep nothing had
-    /// selected it, the rung refused, and the answer that reached the recipe was the next channel's.
-    /// `mute` and `solo` write an AX value and need no selection, which is why they are not here —
-    /// staging one for them would move a selection the cycle has no reason to touch.
-    static let requiresExclusiveSelection: Set<OperationID> = [.tracksArm]
-
     static let booleanToggleReadbackField: [OperationID: String] = [
         .tracksMute: "isMuted",
         .tracksSolo: "isSoloed",
@@ -2838,6 +2838,68 @@ struct QualificationTransport: Sendable {
         }
         let selected = rows.enumerated().filter { ($0.element["isSelected"] as? Bool) == true }
         return (selected.count == 1 ? selected[0].offset : nil, 2)
+    }
+
+    /// Reads the starting state and stops the run, naming every unmet condition, unless it is the
+    /// canonical one. It repairs nothing: a gate that quietly arranged its own start would hide
+    /// the difference between the machine it was given and the machine it ran on.
+    private func requireCanonicalStartingState(
+        _ session: QualificationSubprocessSession,
+        nextID: inout Int,
+        windowFacts: @Sendable () -> QualificationStartingWindowFacts
+    ) throws {
+        let ui = uiObserver()
+        let facts = windowFacts()
+        var selectedCount: Int?
+        let tracksID = nextID
+        nextID += 2
+        _ = try? invoke(
+            session, id: tracksID, tool: "logic_system", command: "refresh_cache",
+            params: [:], phase: "starting_state.tracks.refresh")
+        if let data = try? resourceReadback(
+            session, id: tracksID + 1, uri: "logic://tracks", phase: "starting_state.tracks") {
+            selectedCount = QualificationStartingState.selectedTrackCount(tracksResource: data)
+        }
+        var stopped: Bool?
+        if let transport = try? observedTransportMotion(
+            session, nextID: &nextID, phase: "starting_state.transport") {
+            stopped = transport.motion == .stopped
+        }
+        let unmet = QualificationStartingState.unmetConditions(
+            QualificationStartingStateReadings(
+                ui: ui, windowFacts: facts, selectedTrackCount: selectedCount,
+                transportStopped: stopped))
+        guard unmet.isEmpty else {
+            throw QualificationTransportError.protocolViolation(unmet.joined(separator: " | "))
+        }
+    }
+
+    /// The track a write recipe addresses: the one `logic://tracks` reads as selected.
+    ///
+    /// On Logic 13 a track write acts only on the selected track, so a recipe that addresses a
+    /// fixed row targets a track the product cannot act on. The target is read back from Logic
+    /// instead, and exactly one selected track is required: none or several is a refusal that says
+    /// so, never a guess at a row.
+    private func selectedTrackTarget(
+        _ session: QualificationSubprocessSession,
+        id: Int,
+        phase: String
+    ) throws -> (index: Int, spent: Int) {
+        _ = try? invoke(
+            session, id: id, tool: "logic_system", command: "refresh_cache",
+            params: [:], phase: "\(phase).refresh")
+        let data = try resourceReadback(session, id: id + 1, uri: "logic://tracks", phase: phase)
+        guard let count = QualificationStartingState.selectedTrackCount(tracksResource: data) else {
+            throw QualificationTransportError.protocolViolation(
+                "\(phase): logic://tracks did not report the selection, so there is no selected "
+                    + "track to address")
+        }
+        guard let index = QualificationStartingState.selectedTrackIndex(tracksResource: data) else {
+            throw QualificationTransportError.protocolViolation(
+                "\(phase): \(count) tracks are selected and exactly one is required; the write "
+                    + "recipe acts on the selected track and will not guess which")
+        }
+        return (index, 2)
     }
 
     /// #373 Phase B: the mutating operations whose recipe restores a VALUE rather than flipping a
@@ -4118,8 +4180,15 @@ struct QualificationTransport: Sendable {
         func step() -> Int { defer { nextID += 1 }; return nextID }
         let probeValue = "qualification_phase_b_probe"
 
+        // The track written is the selected one, read back from Logic: a write acts only on the
+        // selected track on Logic 13. The identity guards below stay bound to its `track_ref`.
+        let target = try selectedTrackTarget(
+            session, id: nextID, phase: "phase_b.target_selection")
+        nextID += target.spent
+        let trackIndex = target.index
+
         let pre = try observedTrackString(
-            session, id: readStep(), trackIndex: 0, field: readbackField,
+            session, id: readStep(), trackIndex: trackIndex, field: readbackField,
             phase: "phase_b.pre_state")
         guard pre.value != probeValue else {
             throw QualificationTransportError.protocolViolation(
@@ -4142,7 +4211,7 @@ struct QualificationTransport: Sendable {
                 var cleanupID = nextID + 900
                 for _ in 0..<4 {
                     guard let current = try? observedTrackString(
-                        session, id: cleanupID, trackIndex: 0, field: readbackField,
+                        session, id: cleanupID, trackIndex: trackIndex, field: readbackField,
                         phase: "phase_b.cleanup_preflight"),
                         current.trackRef == pre.trackRef, current.value == probeValue else { break }
                     cleanupID += 2
@@ -4156,7 +4225,7 @@ struct QualificationTransport: Sendable {
                         continue
                     }
                     guard let seen = try? observedTrackString(
-                        session, id: cleanupID, trackIndex: 0, field: readbackField,
+                        session, id: cleanupID, trackIndex: trackIndex, field: readbackField,
                         phase: "phase_b.cleanup_readback") else { break }
                     cleanupID += 2
                     guard seen.trackRef == pre.trackRef else { break }
@@ -4166,7 +4235,7 @@ struct QualificationTransport: Sendable {
         }
         nameCustodyLost = true
         let after = try observedTrackString(
-            session, id: readStep(), trackIndex: 0, field: readbackField,
+            session, id: readStep(), trackIndex: trackIndex, field: readbackField,
             phase: "phase_b.readback")
         guard after.trackRef == pre.trackRef else {
             throw QualificationTransportError.protocolViolation(
@@ -4188,7 +4257,7 @@ struct QualificationTransport: Sendable {
         }
         nameCustodyLost = true
         let restored = try observedTrackString(
-            session, id: readStep(), trackIndex: 0, field: readbackField,
+            session, id: readStep(), trackIndex: trackIndex, field: readbackField,
             phase: "phase_b.restore_readback")
         guard restored.trackRef == pre.trackRef else {
             throw QualificationTransportError.protocolViolation(
@@ -4263,11 +4332,18 @@ struct QualificationTransport: Sendable {
         spec: OperationSpec,
         direction: HistoryDirection
     ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
-        let trackIndex = 0
         let probeName = "qualification_phase_b_probe"
         var nextID = id
         func readStep() -> Int { defer { nextID += 2 }; return nextID }
         func step() -> Int { defer { nextID += 1 }; return nextID }
+
+        // The staged edit is a rename of the SELECTED track, read back from Logic: a track write
+        // acts only on the selected track on Logic 13, so a fixed row was never renamed and the
+        // edit this cycle meant to stage was not on the undo stack.
+        let target = try selectedTrackTarget(
+            session, id: nextID, phase: "phase_b.target_selection")
+        nextID += target.spent
+        let trackIndex = target.index
 
         let original = try observedTrackString(
             session, id: readStep(), trackIndex: trackIndex, field: "name",
@@ -5809,45 +5885,21 @@ struct QualificationTransport: Sendable {
         spec: OperationSpec,
         readbackField: String
     ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
-        let trackIndex = 0
         var nextID = id
         // Each observation spends TWO ids — a refresh and the resource read — so the step counter
         // advances by two for reads and one for writes.
         func readStep() -> Int { defer { nextID += 2 }; return nextID }
         func step() -> Int { defer { nextID += 1 }; return nextID }
 
-        // STAGE THE PRECONDITION the actuator documents, and put the selection back afterwards.
-        // The prior selection is read first so the restore returns the operator's own row rather
-        // than one this recipe manufactured.
-        var priorSelection: Int?
-        if Self.requiresExclusiveSelection.contains(spec.id) {
-            let before = try observedSelectedTrackIndex(
-                session, id: nextID, phase: "phase_b.selection_precondition")
-            nextID += before.spent
-            priorSelection = before.index
-            if before.index != trackIndex {
-                _ = try invoke(
-                    session, id: step(), tool: spec.tool.rawValue, command: "select",
-                    params: ["index": trackIndex], phase: "phase_b.selection_precondition",
-                    timeout: spec.deadline.seconds + 5)
-                let staged = try observedSelectedTrackIndex(
-                    session, id: nextID, phase: "phase_b.selection_precondition_readback")
-                nextID += staged.spent
-                guard staged.index == trackIndex else {
-                    throw QualificationTransportError.protocolViolation(
-                        "phase_b.selection_precondition: track \(trackIndex) is not the selected "
-                            + "row (\(staged.index.map(String.init) ?? "none")), and "
-                            + "\(spec.id.rawValue) refuses to write onto a selection it does not own")
-                }
-            }
-        }
-        defer {
-            if let priorSelection, priorSelection != trackIndex {
-                _ = try? invoke(
-                    session, id: nextID + 800, tool: spec.tool.rawValue, command: "select",
-                    params: ["index": priorSelection], phase: "phase_b.selection_restore")
-            }
-        }
+        // THE TARGET IS THE SELECTED TRACK, read back from Logic. A write on Logic 13 acts only on
+        // the selected row, so addressing a fixed index asked the product for a track it cannot
+        // act on (`tracks.arm` refused: "track 0 is not the selected row"). The selection is not
+        // changed here: the starting state has exactly one selected track and the cycle leaves it
+        // selected.
+        let target = try selectedTrackTarget(
+            session, id: nextID, phase: "phase_b.target_selection")
+        nextID += target.spent
+        let trackIndex = target.index
 
         // A POLLED read spends more than two ids, so each one advances `nextID` by what it
         // actually spent. Keeping `readStep()`'s fixed two here would hand a later step an id this
