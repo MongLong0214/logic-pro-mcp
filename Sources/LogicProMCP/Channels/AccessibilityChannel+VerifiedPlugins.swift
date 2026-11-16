@@ -5951,11 +5951,21 @@ extension AccessibilityChannel {
 
     /// Logic 13 opens the new plug-in's editor and gives it the key window when an insert lands
     /// (measured 2026-11-16: AXFocusedWindow = the "오디오 2" editor, AXFocusedUIElement -25212).
-    /// Every later keyboard op then refuses on unreadable focus. Close each window that was not
-    /// present before the slot actuation, then read back both its absence and that the focused
-    /// window is the original main window again. Nothing here is reported as restored unless read.
+    /// Every later keyboard op then refuses on unreadable focus. Close the editor this insert opened,
+    /// then read back both its absence and that the focused window is the original main window
+    /// again. Nothing here is reported as restored unless read.
+    ///
+    /// Being new since the baseline is not ownership (review 1582 R2): any window can appear while
+    /// the mount is polled. A new window is closed only when it is an open plug-in editor titled with
+    /// the target track whose direct static-text header names the inserted plug-in (the rule
+    /// `matchingPluginEditorWindows` applies for `editorCloseAllowed`), and that proof plus
+    /// `targetIsCurrent` are re-checked before every press. A new window whose ownership is not
+    /// proven is left open and reported; focus is then not touched either.
     static func closeEditorsOpenedByInsert(
-        since baseline: InsertEditorWindowBaseline?, pluginID: String, runtime: AXLogicProElements.Runtime
+        since baseline: InsertEditorWindowBaseline?, pluginID: String,
+        trackName: String?, observedPluginName: String?,
+        targetIsCurrent: () -> Bool,
+        runtime: AXLogicProElements.Runtime
     ) -> [String: Any] {
         guard let baseline else {
             return ["post_insert_editor_cleanup_observed": false, "post_insert_editor_cleanup_reason": "baseline_unreadable"]
@@ -5969,16 +5979,39 @@ extension AccessibilityChannel {
         let opened = windows.filter { window in
             !CFEqual(window, baseline.main) && !baseline.windows.contains { CFEqual($0, window) }
         }
+        /// The editors that identify this insert now: target-track title and a header naming the plug-in.
+        func ownedEditors() -> Result<[AXUIElement], AXHelpers.AXStatusError>? {
+            guard let trackName else { return nil }
+            return AXLogicProElements.matchingPluginEditorWindows(
+                forTrackName: trackName, matchingPluginID: pluginID,
+                matchingObservedPluginName: observedPluginName, runtime: runtime)
+        }
+        var ownershipReason: String?
+        var owned: [AXUIElement] = []
+        if !opened.isEmpty {
+            switch ownedEditors() {
+            case .none: ownershipReason = "target_track_unbound"
+            case .some(.failure): ownershipReason = "editor_ownership_unreadable"
+            case .some(.success(let editors)):
+                owned = opened.filter { window in editors.contains { CFEqual($0, window) } }
+            }
+        }
+        let unowned = opened.filter { window in !owned.contains { CFEqual($0, window) } }
+        if ownershipReason == nil, !unowned.isEmpty { ownershipReason = "unowned_window_left_open" }
         let outcomes = closePluginEditorsOpenedByThisOperation(
-            opened, trackName: "", pluginID: pluginID, runtime: runtime)
+            owned, trackName: trackName ?? "", pluginID: pluginID, runtime: runtime,
+            allowingChanges: { window in
+                guard targetIsCurrent(), case .success(let editors)? = ownedEditors() else { return false }
+                return editors.contains { CFEqual($0, window) }
+            })
         // Read the absence back from a fresh AXWindows list, not from the close outcomes.
         let closed: Bool
         if case .success(.some(let after)) = AXHelpers.getAttributeResult(
             app, kAXWindowsAttribute as String, runtime: runtime.ax) as Result<[AXUIElement]?, AXHelpers.AXStatusError> {
-            closed = !opened.contains { window in after.contains { CFEqual($0, window) } }
+            closed = !owned.contains { window in after.contains { CFEqual($0, window) } }
         } else { closed = false }
         var focusRestored = false
-        if closed {
+        if closed, unowned.isEmpty {
             for attempt in 0..<10 {
                 if let focused: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedWindowAttribute as String, runtime: runtime.ax),
                    CFEqual(focused, baseline.main) { focusRestored = true; break }
@@ -6010,11 +6043,14 @@ extension AccessibilityChannel {
             "post_insert_focus_restore_attempted": elementRestoreAttempted,
             "post_insert_focus_restored": elementFocusRestored,
             "post_insert_editor_windows_opened": opened.count,
+            "post_insert_editor_windows_owned": owned.count,
+            "post_insert_unowned_windows_left_open": unowned.count,
             "post_insert_editor_close_attempts": outcomes.reduce(0) { $0 + $1.attemptCount },
             "post_insert_editor_windows_closed": closed,
             "post_insert_main_window_focused": focusRestored,
-            "post_insert_editor_cleanup_observed": closed && focusRestored && elementFocusRestored,
+            "post_insert_editor_cleanup_observed": closed && unowned.isEmpty && focusRestored && elementFocusRestored,
         ]
+        if let ownershipReason { result["post_insert_editor_cleanup_reason"] = ownershipReason }
         if !closed { result["post_insert_editor_cleanup_diagnostics"] = outcomes.map(\.diagnostics) }
         return result
     }
@@ -6870,7 +6906,12 @@ extension AccessibilityChannel {
         if let detected = newlyMountedSlot(pluginID: pluginID, pre: preInventory, post: postInventory) {
             trace["observed_slot"] = detected.slot
             trace["observed_name"] = detected.name ?? NSNull()
-            trace.merge(closeEditorsOpenedByInsert(since: preInsertWindows, pluginID: pluginID, runtime: runtime)) { $1 }
+            let cleanupTarget = authorizedPluginTrack
+            trace.merge(closeEditorsOpenedByInsert(
+                since: preInsertWindows, pluginID: pluginID,
+                trackName: cleanupTarget?.trackName, observedPluginName: detected.name,
+                targetIsCurrent: { cleanupTarget.map { AXPluginTrackBinding.isStable($0, runtime: runtime) } ?? false },
+                runtime: runtime)) { $1 }
             return (.mounted(slot: detected.slot, pluginID: pluginID, observedName: detected.name), trace)
         }
 
