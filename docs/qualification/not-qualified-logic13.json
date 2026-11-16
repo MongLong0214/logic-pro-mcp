@@ -73,6 +73,11 @@
       "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs a selected MIDI region with off-grid notes; Event List positions are the readback (recipe, DESIGN 6a)"
     },
     {
+      "operation": "edit.redo",
+      "reason": "recipe_refused",
+      "detail": "Logic 13 re-mints the track_ref of a track whose rename is undone, and redo is staged by undoing a rename first (measured on the selected track in the live gate: phase_b.stage_undo_readback: track identity changed), so the cycle cannot prove it undid its own edit on the same track and withholds the history step"
+    },
+    {
       "operation": "edit.select_all",
       "reason": "unknown_param_probe_only",
       "detail": "only the unknown-parameter zero-write probe ran; strict-param validation rejects it before the handler is looked up, so the handler never ran; needs a known region census and a host count of selected regions (recipe, DESIGN 6a)"
@@ -195,7 +200,7 @@
     {
       "operation": "mixer.get_output_verified",
       "reason": "semantic_validator_unavailable",
-      "detail": "the oracle declares an independent-readback deferral (best status is protocolSmoke); needs a strip with a classified output; the last native run failed its inspect-census probe (mixer_read_probe_inspection)"
+      "detail": "the oracle declares an independent-readback deferral (best status is protocolSmoke); the product's own strip listing does supply a physical mix_ target_ref on Logic 13 (inspect_session strips: six strips, each audio strip with an observed output) and the read answered with it (current_output stereo_output), but the sweep's classifier of the listing's output label does not recognise the Korean label of the Stereo Output slot, so the gate sent no target_ref and the read refused with invalid_params; even with a target_ref the oracle's best status here is protocolSmoke"
     },
     {
       "operation": "mixer.get_send_bypass_verified",
@@ -205,7 +210,7 @@
     {
       "operation": "mixer.get_send_destination_verified",
       "reason": "semantic_validator_unavailable",
-      "detail": "the oracle declares an independent-readback deferral (best status is protocolSmoke); needs an occupied send in the fixture"
+      "detail": "the oracle declares an independent-readback deferral (best status is protocolSmoke); needs an occupied send in the fixture; the fresh strip listing reports every send slot observed_empty on this fixture, so there is no target_ref and ordinal to pass"
     },
     {
       "operation": "mixer.insert_plugin",
