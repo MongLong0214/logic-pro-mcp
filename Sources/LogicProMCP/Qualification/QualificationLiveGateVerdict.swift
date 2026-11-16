@@ -80,10 +80,20 @@ struct QualificationNotQualifiedEntry: Codable, Equatable, Sendable {
     let detail: String
 }
 
+/// An operation this release claims as fixed or supported on Logic 13 (#1586 §4), with the commit
+/// that claims it and the live evidence it was measured by. The live gate requires each one to be
+/// EXERCISED in the same run, so a claimed op cannot slide onto the NOT_QUALIFIED list and pass.
+struct QualificationPromisedEntry: Codable, Equatable, Sendable {
+    let operation: String
+    let commit: String
+    let evidence: String
+}
+
 struct QualificationNotQualifiedList: Codable, Equatable, Sendable {
     let schema: Int
     let platform: String
     let entries: [QualificationNotQualifiedEntry]
+    var promised: [QualificationPromisedEntry] = []
 
     static func parse(_ data: Data) throws -> QualificationNotQualifiedList {
         try JSONDecoder().decode(QualificationNotQualifiedList.self, from: data)
@@ -451,6 +461,19 @@ enum QualificationLiveGateVerdict {
                 break // failed / missing / value-check failures were reported above
             }
         }
+        let verdictByID = Dictionary(
+            evaluations.map { ($0.operationID, $0.verdict) }, uniquingKeysWith: { first, _ in first })
+        for promise in list.promised {
+            switch verdictByID[promise.operation] {
+            case .exercised?:
+                break
+            case .notQualified(let reason)?:
+                found.append(
+                    "\(promise.operation): promised by \(promise.commit) but NOT_QUALIFIED (\(reason.rawValue)) this run")
+            case nil:
+                found.append("\(promise.operation): promised by \(promise.commit) but not requested in this run")
+            }
+        }
         return found
     }
 
@@ -484,6 +507,23 @@ enum QualificationLiveGateVerdict {
         }
         let listed = Dictionary(
             list.entries.map { ($0.operation, $0) }, uniquingKeysWith: { first, _ in first })
+        var promisedSeen = Set<String>()
+        for promise in list.promised {
+            if !registry.contains(promise.operation) {
+                found.append("\(promise.operation): promised but not in the registry")
+            }
+            if !promisedSeen.insert(promise.operation).inserted {
+                found.append("\(promise.operation): promised more than once")
+            }
+            if let entry = listed[promise.operation] {
+                found.append(
+                    "\(promise.operation): promised by \(promise.commit) but on the NOT_QUALIFIED list as \(entry.reason)")
+            }
+            if promise.commit.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                || promise.evidence.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                found.append("\(promise.operation): a promise needs its claiming commit and its live evidence")
+            }
+        }
         for spec in requested {
             guard let reason = staticReason(for: spec, fixture: fixture) else { continue }
             guard let entry = listed[spec.id.rawValue] else {

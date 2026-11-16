@@ -572,5 +572,17 @@
       "reason": "unsupported_by_contract",
       "detail": "registry availability .unsupported: the production contract answers a typed unsupported refusal; probing it with valid params is a later milestone (DESIGN 6a)"
     }
+  ],
+  "promised": [
+    {
+      "operation": "tracks.mute",
+      "commit": "3bd8a23f",
+      "evidence": "impl-logic13/R5/L3-after.driver.stdout (exit 0, binary sha a3913473 = impl-logic13/bin/r5-after): with track-group focus the op answers state A, the track header reads it on, the restore reads it off; with a rename AXTextField focused it refuses unsafe_focus_for_synthetic_key before actuation and the field keeps its text"
+    },
+    {
+      "operation": "tracks.solo",
+      "commit": "3bd8a23f",
+      "evidence": "impl-logic13/R5/L3-after.driver.stdout (exit 0, binary sha a3913473 = impl-logic13/bin/r5-after): with track-group focus the op answers state A, the track header reads it on, the restore reads it off; with a rename AXTextField focused it refuses unsafe_focus_for_synthetic_key before actuation and the field keeps its text"
+    }
   ]
 }

@@ -517,4 +517,88 @@ struct QualificationLiveGateVerdictTests {
         #expect(unreadable.verdict == .notQualified(.valueCheckFailed))
         #expect(unreadable.violations.contains { $0.hasPrefix("plugins.get_inventory: value check:") })
     }
+
+    // MARK: promised operations (#1586 §4)
+
+    /// A boolean-toggle write cycle on one track: off → on (read back) → off (read back).
+    static func toggleRecord(
+        _ id: OperationID, field: String, readbackRef: String = "track-1", restored: Bool = false
+    ) -> QualificationMutationRestoreRecord {
+        func row(_ ref: String, _ value: Bool) -> String {
+            #"{"source":"ax_live","data":[{"track_ref":"\#(ref)","\#(field)":\#(value)}]}"#
+        }
+        return QualificationMutationRestoreRecord(
+            operationID: id.rawValue,
+            preState: row("track-1", false),
+            mutation: #"{"state":"A","success":true}"#,
+            readback: row(readbackRef, true),
+            restore: #"{"state":"A","success":true}"#,
+            restoreReadback: row("track-1", restored))
+    }
+
+    static func promiseRun(solo: QualificationOperationResult? = nil) -> [QualificationOperationResult] {
+        OperationRegistry.specs.map { spec in
+            switch spec.id {
+            case .tracksMute: Self.probeOnly(.tracksMute, record: toggleRecord(.tracksMute, field: "isMuted"))
+            case .tracksSolo:
+                solo ?? Self.probeOnly(.tracksSolo, record: toggleRecord(.tracksSolo, field: "isSoloed"))
+            default: spec.mutability == .mutating ? Self.probeOnly(spec.id) : Self.read(spec.id)
+            }
+        }
+    }
+
+    static func promiseViolations(_ results: [QualificationOperationResult]) throws -> [String] {
+        let committed = try QualificationNotQualifiedListFile.load()
+        return QualificationLiveGateVerdict.violations(
+            results: results, requested: OperationRegistry.specs, fixture: nil, list: committed
+        ).filter { $0.contains("promised") }
+    }
+
+    @Test func theCommittedPromisesAreSoundAndNotListedAsGaps() throws {
+        let committed = try QualificationNotQualifiedListFile.load()
+        #expect(Set(committed.promised.map(\.operation)) == ["tracks.mute", "tracks.solo"])
+        let found = QualificationLiveGateVerdict.listViolations(
+            list: committed, requested: OperationRegistry.specs, fixture: nil)
+        #expect(!found.contains { $0.contains("promised") }, "\(found)")
+    }
+
+    @Test func aValidRunSatisfiesEveryPromise() throws {
+        let found = try Self.promiseViolations(Self.promiseRun())
+        #expect(found.isEmpty, "\(found)")
+    }
+
+    /// The discriminating case: only solo turns NOT_QUALIFIED while mute stays green.
+    @Test func onePromisedOpTurningNotQualifiedFailsTheGateAndNamesOnlyIt() throws {
+        let found = try Self.promiseViolations(Self.promiseRun(solo: Self.probeOnly(.tracksSolo)))
+        #expect(found.contains { $0.hasPrefix("tracks.solo: promised by") && $0.contains("recipe_refused") })
+        #expect(!found.contains { $0.hasPrefix("tracks.mute:") })
+    }
+
+    @Test func aPromisedWriteOnTheWrongTargetFailsTheGate() throws {
+        let wrong = Self.probeOnly(
+            .tracksSolo, record: Self.toggleRecord(.tracksSolo, field: "isSoloed", readbackRef: "track-2"))
+        let found = try Self.promiseViolations(Self.promiseRun(solo: wrong))
+        #expect(found.contains { $0.hasPrefix("tracks.solo: promised by") })
+    }
+
+    @Test func aPromisedWriteWhoseRestoreFailedFailsTheGate() throws {
+        let unrestored = Self.probeOnly(
+            .tracksSolo, record: Self.toggleRecord(.tracksSolo, field: "isSoloed", restored: true))
+        let found = try Self.promiseViolations(Self.promiseRun(solo: unrestored))
+        #expect(found.contains { $0.hasPrefix("tracks.solo: promised by") && $0.contains("restore_not_verified") })
+    }
+
+    @Test func aPromisedOpOnTheNotQualifiedListIsAStaticFailure() throws {
+        let committed = try QualificationNotQualifiedListFile.load()
+        let listedToo = QualificationNotQualifiedList(
+            schema: committed.schema, platform: committed.platform,
+            entries: committed.entries + [
+                QualificationNotQualifiedEntry(operation: "tracks.solo", reason: "recipe_refused", detail: "x"),
+            ],
+            promised: committed.promised)
+        let found = QualificationLiveGateVerdict.listViolations(
+            list: listedToo, requested: OperationRegistry.specs, fixture: nil)
+        #expect(found.contains { $0.hasPrefix("tracks.solo: promised by") && $0.contains("NOT_QUALIFIED list") })
+        #expect(!found.contains { $0.hasPrefix("tracks.mute:") })
+    }
 }
