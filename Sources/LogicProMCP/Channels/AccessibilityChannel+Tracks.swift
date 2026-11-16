@@ -2153,7 +2153,7 @@ extension AccessibilityChannel {
         guard let indexStr = params["index"], let index = Int(indexStr) else {
             return .error("Missing or invalid 'index' parameter")
         }
-        // Read the focus before anything else touches Logic. Measured on Logic 13 (7801, R5/D2-*, D3-*):
+        // Read the focus before anything else touches Logic. Measured on Logic 13 (7801):
         // with the track rename field focused, the field was already gone when the press rung
         // started. Looking up the header's toggle ended the edit and COMMITTED its pending text,
         // and the key rung's focus guard then saw a checkbox and let the key through.

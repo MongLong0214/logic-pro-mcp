@@ -4,7 +4,7 @@ import Foundation
 import Testing
 @testable import LogicProMCP
 
-/// DESIGN §2: per-operation UI invariants, driven from measured window-server and AX values with
+/// Per-operation UI invariants, driven from measured window-server and AX values with
 /// no Logic.
 ///
 /// Measured values used here:
@@ -14,7 +14,7 @@ import Testing
 /// - a closing window keeps its id, unnamed, for about 1.3 s.
 ///
 /// NO `#expect(<Bool> == <Bool>)` (#393).
-@Suite("DESIGN §2 per-operation UI invariants")
+@Suite("Per-operation UI invariants")
 struct QualificationUIInvariantsTests {
     static let logicPID: pid_t = 4242
     static let otherPID: pid_t = 777

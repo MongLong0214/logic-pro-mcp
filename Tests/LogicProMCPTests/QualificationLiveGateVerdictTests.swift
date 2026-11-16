@@ -19,12 +19,12 @@ enum QualificationNotQualifiedListFile {
     }
 }
 
-/// DESIGN §1 and §4: the live gate's verdict function, driven from recorded and constructed
+/// The live gate's verdict function, driven from recorded and constructed
 /// results, with no Logic. Every rule here has a source mutant (see the impl-gate evidence) that
 /// turns it red.
 ///
 /// NO `#expect(<Bool> == <Bool>)` (#393): booleans are asserted bare or negated.
-@Suite("DESIGN §1 live-gate verdict")
+@Suite("Live-gate verdict function")
 struct QualificationLiveGateVerdictTests {
     static func spec(_ id: OperationID) -> OperationSpec {
         OperationRegistry.specs.first { $0.id == id }!
@@ -411,7 +411,7 @@ struct QualificationLiveGateVerdictTests {
         #expect(shorter.markdown != list.markdown)
     }
 
-    // MARK: DESIGN §4 value checks
+    // MARK: value checks
 
     private static let m4Empty = #"{"event_list_item_count_text":"0개의 이벤트","raw_rows":[],"selected_region_observation":{"end_bar":130,"kind":"midi","name":"Deluxe Classic","start_bar":129,"track_index":1},"state":"B"}"#
     private static func rows(_ pitches: [Int], countText: String) -> String {
@@ -518,7 +518,7 @@ struct QualificationLiveGateVerdictTests {
         #expect(unreadable.violations.contains { $0.hasPrefix("plugins.get_inventory: value check:") })
     }
 
-    // MARK: promised operations (#1586 §4)
+    // MARK: promised operations
 
     /// A boolean-toggle write cycle on one track: off → on (read back) → off (read back).
     static func toggleRecord(

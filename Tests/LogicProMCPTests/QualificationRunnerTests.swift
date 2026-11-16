@@ -4631,7 +4631,7 @@ struct QualificationRunnerTests {
         "Requires LOGIC_PRO_MCP_RUN_LIVE_QA=1 and a release build; use Scripts/release-qualify.sh."
     ))
     func realReleaseBinaryExecutesEveryOperationWithIndependentReadback() throws {
-        // DESIGN §2: every operation is bracketed by a read-only observation of Logic's UI
+        // Every operation is bracketed by a read-only observation of Logic's UI
         // (layer-101 menu, modal, leftover window, focus). A violation fails the operation and
         // names it. The invariants are never optional in the live gate.
         let result = try QualificationTransport(uiObserver: QualificationUIInvariants.observeLogic).drive(.init(
@@ -4661,7 +4661,7 @@ struct QualificationRunnerTests {
         #expect(operationResults.allSatisfy { $0.status != .failed })
         #expect(liveGate.accounted == operationResults.count)
 
-        // DESIGN §1: every one of the registry's operations gets EXACTLY ONE verdict, EXERCISED or
+        // Every one of the registry's operations gets EXACTLY ONE verdict, EXERCISED or
         // NOT_QUALIFIED with a reason, and the NOT_QUALIFIED set must equal the committed list.
         // The assertions above stay; this adds what they tolerated (a recipe that refused, a
         // readback that was never compared, protocolSmoke, a precondition disposition).

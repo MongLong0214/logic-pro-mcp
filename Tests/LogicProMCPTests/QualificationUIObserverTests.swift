@@ -7,14 +7,13 @@ import Testing
 /// The live UI-invariant reader (`QualificationUIInvariants.observeLogic`) driven through a fake AX
 /// runtime, so the reads themselves (not hand-built observations) are under test.
 ///
-/// Measured values used here (Logic Pro 13.0 7801, ko, Aqua session, impl-logic13/R6/S1-focus and
-/// S0-appwins): AXWindows reads one AXStandardWindow "NativeLogic13-9995.logicx - 트랙" whose AXModal
+/// Measured values used here (Logic Pro 13.0 7801, ko, Aqua session): AXWindows reads one AXStandardWindow "NativeLogic13-9995.logicx - 트랙" whose AXModal
 /// reads false; AXFocusedUIElement reads an AXGroup "트랙" whose AXWindow is that main window; two
 /// successive reads of the focused element and of AXWindows are CFEqual.
 /// -25204 (cannotComplete) is what a fresh Background-session process reads; -25212 is noValue.
 ///
-/// Review 1582 round 1: R1 (a failed read became an empty window list or a nil modal flag, so the
-/// gate saw zero violations) and R3 (focus identity compared descriptive fields only).
+/// Two defects these tests pin: a failed read became an empty window list or a nil modal flag, so the
+/// gate saw zero violations; and focus identity compared descriptive fields only.
 ///
 /// NO `#expect(<Bool> == <Bool>)` (#393).
 @Suite("UI-invariant reader: unreadable is not absent, identity is the element")
@@ -106,7 +105,7 @@ struct QualificationUIObserverTests {
         #expect(!QualificationUIInvariants.violations(before: before, after: after).contains { $0.contains("focus_moved") })
     }
 
-    // MARK: R1 — a failed read is not an empty answer
+    // MARK: a failed read is not an empty answer
 
     @Test func aWindowListThatCannotBeReadBeforeAndAfterFailsAsUnreadable() {
         let f = Fixture()
@@ -130,7 +129,7 @@ struct QualificationUIObserverTests {
         #expect(Self.unreadable(found), "\(found)")
     }
 
-    /// impl-logic13/R6/S9-wins2, after a Logic 13 insert: AXWindows listed a tooltip whose role read
+    /// After a Logic 13 insert: AXWindows listed a tooltip whose role read
     /// AXHelpTag, AXTitle -25212, AXSubrole -25205, AXModal -25205 (CG layer 103).
     private static func addHelpTag(_ f: Fixture, roleStatus: Int32? = nil) -> AXUIElement {
         let tag = f.b.element(7)
@@ -207,7 +206,7 @@ struct QualificationUIObserverTests {
         #expect(Self.unreadable(found), "\(found)")
     }
 
-    // MARK: R3 — identity is the AX element, not its description
+    // MARK: identity is the AX element, not its description
 
     @Test func focusMovingBetweenTwoIdenticallyDescribedControlsIsMoved() {
         let f = Fixture()

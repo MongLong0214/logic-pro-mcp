@@ -2,7 +2,7 @@ import ApplicationServices
 import CoreGraphics
 import Foundation
 
-// DESIGN §2 (analysis-gate): per-operation UI invariants for the live driver.
+// Per-operation UI invariants for the live driver.
 //
 // After every operation the gate used to look at nothing but the operation's own reply, so a
 // layer-101 menu left on screen (measured: a 234x355 window at 1077,98 after record_sequence), a
@@ -27,7 +27,7 @@ struct QualificationWindowFacts: Equatable, Sendable {
 }
 
 /// One of Logic's AX windows. Identity is the AX element (CFEqual), never the descriptive fields:
-/// two windows with the same title and subrole are two windows (review 1582 R3).
+/// two windows with the same title and subrole are two windows.
 struct QualificationAXWindowFacts: Equatable, @unchecked Sendable {
     let element: AXUIElement
     let title: String?
@@ -41,7 +41,7 @@ struct QualificationAXWindowFacts: Equatable, @unchecked Sendable {
 }
 
 /// The keyboard-focused element. Identity is the AX element and its window, compared with CFEqual
-/// (review 1582 R3): distinct controls Logic describes identically (same role, same description, same
+///: distinct controls Logic describes identically (same role, same description, same
 /// window title) are different focus targets. The descriptive fields only name it in a violation.
 struct QualificationFocusIdentity: Equatable, @unchecked Sendable {
     let element: AXUIElement
@@ -80,7 +80,7 @@ struct QualificationUIObservation: Equatable, Sendable {
     /// The AXError of the focus read. Anything but 0 is a violation: a read that did not happen is
     /// not "no focus".
     let focusStatus: Int32
-    /// Every read this observation needed and did not get (review 1582 R1). Each one fails the
+    /// Every read this observation needed and did not get. Each one fails the
     /// operation as `ui_invariant_unreadable`; none is ever taken as an empty answer.
     let unreadable: [String]
 
@@ -260,7 +260,7 @@ enum QualificationUIInvariants {
                 // AXModal is the modal invariant itself: only a Bool is a reading. 0c4ada89 recorded a
                 // real blocker passing when an entry's absent AXModal was taken as "not modal". The one
                 // exception is the recorded #1063 rule: an entry whose role READS as AXHelpTag is a
-                // tooltip (measured after a Logic 13 insert, impl-logic13/R6/S9-wins2: role AXHelpTag,
+                // tooltip (measured after a Logic 13 insert, role AXHelpTag,
                 // AXModal -25205, CG layer 103). It is still an AX window, so its appearing or closing
                 // is a window delta; a failed or other role keeps the entry unreadable.
                 var modal: Bool?

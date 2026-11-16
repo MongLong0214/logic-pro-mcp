@@ -124,7 +124,7 @@ private struct HiddenMenuFixture {
     if case .switched = result { Issue.record("unreadable hit-test switched: \(result)") }
 }
 
-// Review 1582 R1(b): a failed role or parent read on the hit-tested chain is not an empty traversal.
+// A failed role or parent read on the hit-tested chain is not an empty traversal.
 // The menu stays on screen (as Logic 13 leaves it); once it has been observed open, one read on the
 // chain under the hit point fails -25204. Closure must not be certified from that failure.
 

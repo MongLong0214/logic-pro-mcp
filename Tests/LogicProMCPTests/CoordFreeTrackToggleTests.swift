@@ -1283,7 +1283,7 @@ struct CoordFreeTrackToggleTests {
         var value = false
 
         /// Publishes the press's effect on the first focus read AFTER the press (a gate read).
-        /// The toggle also reads focus before it touches anything (R5 item 2), and that read
+        /// The toggle also reads focus before it touches anything, and that read
         /// precedes the press, so it must not publish.
         init(app: AXUIElement, button: AXUIElement, pressed: @escaping () -> Bool) {
             self.app = app
@@ -1797,7 +1797,7 @@ struct CoordFreeTrackToggleTests {
 
     // MARK: - Round 5 item 2: a focused text editor refuses the whole toggle, press rung included
 
-    /// Measured on Logic 13 (7801, ko), impl-logic13/R4/L34-rename, L34-mixername and L20-new-rename:
+    /// Measured on Logic 13 (7801, ko), on the track rename field and the Mixer strip name field:
     /// with the track rename field or the Mixer strip name field focused (AXTextField, AXValue
     /// settable), `mute` returned State A `keyboard-mute` and the field was gone afterwards. The focus
     /// guard sat only in front of the key rung. This fixture models an actuation that ends the editor
@@ -1814,7 +1814,7 @@ struct CoordFreeTrackToggleTests {
         return (field, inputMonitoring)
     }
 
-    @Test("R5 item 2: a focused rename field refuses the toggle before any rung actuates and leaves the editor open",
+    @Test("a focused rename field refuses the toggle before any rung actuates and leaves the editor open",
           arguments: ["track.set_mute", "track.set_solo", "track.set_arm"])
     func toggleRefusesBeforeActuatingWhileATextEditorIsFocused(operation: String) async throws {
         let f = makeToggleFixture()
@@ -1852,7 +1852,7 @@ struct CoordFreeTrackToggleTests {
         #expect(!(try #require(boolValue(f, f.arm[0]))))
     }
 
-    @Test("R5 item 2: a non-text-role element with a settable insertion point is a text editor before actuation too")
+    @Test("a non-text-role element with a settable insertion point is a text editor before actuation too")
     func toggleRefusesAnInsertionPointEditorBeforeActuating() async throws {
         let f = makeToggleFixture()
         let (field, _) = focusTextEditorThatAnActuationCloses(f, role: kAXLayoutItemRole as String)
@@ -1869,7 +1869,7 @@ struct CoordFreeTrackToggleTests {
         #expect(f.builder.actionCalls.isEmpty)
     }
 
-    @Test("R5 item 2: the Logic 13 strip group (insertion point, nothing settable) still lets the press rung run")
+    @Test("the Logic 13 strip group (insertion point, nothing settable) still lets the press rung run")
     func pressRungStillRunsUnderThePassiveStripGroup() async throws {
         let f = makeToggleFixture()
         let strip = f.builder.element(9700)

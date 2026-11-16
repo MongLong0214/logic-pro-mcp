@@ -8,8 +8,7 @@ import Testing
 // the main window plus a new AXDialog titled "오디오 2" (the plug-in editor), AXFocusedWindow was that
 // editor and AXFocusedUIElement answered -25212. Once the editor closed, Logic gave the key view to
 // the "오디오 1" channel-strip group instead of the pre-insert focus (B6-insert-focus-fix2.stdout).
-// The editor's direct children are Logic 13's measured plug-in editor header (impl-logic13/R6/
-// S2-dialogs.stdout, a Compressor editor on "Studio Grand"): a 닫기 button, a 바이패스 AXCheckBox and
+// The editor's direct children are Logic 13's measured plug-in editor header (a Compressor editor on "Studio Grand"): a 닫기 button, a 바이패스 AXCheckBox and
 // two direct AXStaticText values, the plug-in name and the track name. Here they read "Gain" and
 // "오디오 2", the names the insert of Gain on "오디오 2" observed (B8-insert-focus-fix3).
 // No AX element is read from a running Logic.
@@ -194,7 +193,7 @@ private struct EditorFixture {
     #expect(f.pressed.value == 0)
 }
 
-// Review 1582 R2: a window that is new since the baseline is not thereby the insert's editor.
+// A window that is new since the baseline is not thereby the insert's editor.
 
 /// An unrelated standard window (the Event List window, "이벤트 목록 열기" in Logic 13's 윈도우 menu)
 /// that appears while the mount is polled, with its own close button.

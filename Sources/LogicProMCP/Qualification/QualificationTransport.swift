@@ -1488,7 +1488,7 @@ struct QualificationTransport: Sendable {
         QualificationSubprocessSession
     ) throws -> QualificationSubprocessSession.ShutdownOutcome
     let supportBundleRemover: @Sendable (URL, SecureFD.Identity) throws -> String
-    /// DESIGN §2. Reads Logic's UI (window server + AX, read-only) once before and once after every
+    /// Reads Logic's UI (window server + AX, read-only) once before and once after every
     /// operation. Nil leaves the invariants unchecked, which is what the unit-test fakes want and
     /// what the live gate must never do: the live test passes `QualificationUIInvariants.observeLogic`.
     let uiObserver: (@Sendable () -> QualificationUIObservation?)?
@@ -1735,7 +1735,7 @@ struct QualificationTransport: Sendable {
             preparedReadParams.merge(readPreparation.params) { current, _ in current }
             readProbePreparationFailures.merge(readPreparation.failures) { current, _ in current }
             for spec in request.operations {
-                // DESIGN §2: the UI as this operation found it. Read before anything is sent.
+                // The UI as this operation found it. Read before anything is sent.
                 let uiBefore = uiObserver?()
                 var response: (text: String, isError: Bool)?
                 var responseRequestID: String?
@@ -2195,7 +2195,7 @@ struct QualificationTransport: Sendable {
                 let transportRecipeFailure = Self.transportExpectedPlaying[spec.id] == nil
                     ? nil
                     : phaseBRefusal
-                // DESIGN §2: every operation, after its readback. The reason is JOINED with the
+                // Every operation, after its readback. The reason is JOINED with the
                 // existing one rather than replacing it, so a UI violation cannot hide behind an
                 // earlier reason and an earlier reason cannot hide it.
                 let uiViolation: String? = uiObserver.flatMap { observe in

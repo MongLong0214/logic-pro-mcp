@@ -5955,7 +5955,7 @@ extension AccessibilityChannel {
     /// then read back both its absence and that the focused window is the original main window
     /// again. Nothing here is reported as restored unless read.
     ///
-    /// Being new since the baseline is not ownership (review 1582 R2): any window can appear while
+    /// Being new since the baseline is not ownership: any window can appear while
     /// the mount is polled. A new window is closed only when it is an open plug-in editor titled with
     /// the target track whose direct static-text header names the inserted plug-in (the rule
     /// `matchingPluginEditorWindows` applies for `editorCloseAllowed`), and that proof plus

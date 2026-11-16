@@ -446,7 +446,7 @@ enum ControlBarDisplayMode {
     /// AXMenu, so presence is decided by the hit-test, never by re-reading a held element.
     /// nil means unknown, which callers never treat as closed: the hit-test could not read or
     /// answered no element, or a role or parent read on the chain above the hit failed (review 1582
-    /// R1(b): a failed read used to end the walk as "no menu", so `menuIsClosed` certified a menu
+    /// A failed read used to end the walk as "no menu", so `menuIsClosed` certified a menu
     /// still on screen). Only a read answer ends the walk with no menu: a non-menu chain whose parent
     /// is definitively absent (-25205/-25212), or four readable non-menu levels.
     private static func unlistedMenu(under popup: AXUIElement, runtime: AXHelpers.Runtime) -> [AXUIElement]? {

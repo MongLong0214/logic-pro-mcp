@@ -1,6 +1,6 @@
 import Foundation
 
-// DESIGN §1 and §4 (analysis-gate): the live gate's verdict, as a pure function.
+// The live gate's verdict, as a pure function.
 //
 // Until this existed `realReleaseBinaryExecutesEveryOperationWithIndependentReadback` accepted
 // "the recipe ran and refused", "the readback was fetched and never compared", "only the
@@ -80,7 +80,7 @@ struct QualificationNotQualifiedEntry: Codable, Equatable, Sendable {
     let detail: String
 }
 
-/// An operation this release claims as fixed or supported on Logic 13 (#1586 §4), with the commit
+/// An operation this release claims as fixed or supported on Logic 13 with the commit
 /// that claims it and the live evidence it was measured by. The live gate requires each one to be
 /// EXERCISED in the same run, so a claimed op cannot slide onto the NOT_QUALIFIED list and pass.
 struct QualificationPromisedEntry: Codable, Equatable, Sendable {
@@ -135,7 +135,7 @@ struct QualificationNotQualifiedList: Codable, Equatable, Sendable {
     }
 }
 
-/// Facts about the disposable fixture the value checks bind to (DESIGN §3/§4). Nil in a run that
+/// Facts about the disposable fixture the value checks bind to. Nil in a run that
 /// built no fixture: the operations that need these facts are then NOT_QUALIFIED, never passed.
 struct QualificationLiveGateFixtureFacts: Equatable, Sendable {
     /// N: the known note count of the one selected MIDI region.
@@ -152,7 +152,7 @@ enum QualificationLiveGateValueChecks {
     /// The operations whose credit rests on a fixture-bound value check.
     static let operations: Set<OperationID> = [.midiReadSelectedRegionEvents, .pluginsGetInventory]
 
-    /// DESIGN §4. `raw_rows.count == N`, the count text agrees with it, and the pitches (when
+    /// `raw_rows.count == N`, the count text agrees with it, and the pitches (when
     /// known) are the region's. An empty row list next to a `0개의 이벤트` count text is exactly the
     /// measured M4 body and is a violation whenever N > 0.
     static func midiRowsViolations(
@@ -204,7 +204,7 @@ enum QualificationLiveGateValueChecks {
         return violations
     }
 
-    /// DESIGN §4. The software-instrument track's plug-in inventory is State A and complete, for
+    /// The software-instrument track's plug-in inventory is State A and complete, for
     /// that track, with no slot the strip could not read or classify.
     static func siInventoryViolations(responseData: Data, siTrackIndex: Int) -> [String] {
         guard let root = JSONInspector.parse(responseData) as? [String: Any] else {
