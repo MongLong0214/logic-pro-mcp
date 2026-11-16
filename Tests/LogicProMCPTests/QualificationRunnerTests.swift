@@ -7230,7 +7230,7 @@ extension QualificationRunnerTests {
 
     @Test func theDriverBracketsEveryOperationWithUIObservationsAndPassesWhenClean() throws {
         let clean = QualificationUIObservation(focus: QualificationFocusIdentity(
-            role: "AXGroup", subrole: nil, description: "믹서", windowTitle: "Untitled"))
+            element: AXUIElementCreateApplication(50_001), window: nil, role: "AXGroup", subrole: nil, description: "믹서", windowTitle: "Untitled"))
         let script = UIScript([clean])
         let operation = try driveFastForward(observer: { script.next() })
         #expect(operation.status == .passed)
@@ -7240,7 +7240,7 @@ extension QualificationRunnerTests {
 
     @Test func aLeakedMenuAfterAnOperationFailsThatOperationAndNamesIt() throws {
         let before = QualificationUIObservation(focus: QualificationFocusIdentity(
-            role: "AXGroup", subrole: nil, description: "믹서", windowTitle: "Untitled"))
+            element: AXUIElementCreateApplication(50_001), window: nil, role: "AXGroup", subrole: nil, description: "믹서", windowTitle: "Untitled"))
         let leak = QualificationUIObservation(
             menuLayerWindows: [93: QualificationWindowFacts(
                 layer: 101, title: nil, bounds: CGRect(x: 1077, y: 98, width: 234, height: 355))],

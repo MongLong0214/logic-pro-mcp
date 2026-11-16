@@ -1,3 +1,4 @@
+@preconcurrency import ApplicationServices
 import CoreGraphics
 import Foundation
 import Testing
@@ -32,10 +33,13 @@ struct QualificationUIInvariantsTests {
         return row
     }
 
+    /// Distinct AX elements: identity is the element (CFEqual), the fields only describe it.
+    private static func element(_ id: Int) -> AXUIElement { AXUIElementCreateApplication(pid_t(50_000 + id)) }
+
     private static let mixerGroup = QualificationFocusIdentity(
-        role: "AXGroup", subrole: nil, description: "믹서", windowTitle: "Untitled - 트랙")
+        element: element(1), window: nil, role: "AXGroup", subrole: nil, description: "믹서", windowTitle: "Untitled - 트랙")
     private static let strip = QualificationFocusIdentity(
-        role: "AXLayoutItem", subrole: nil, description: "오디오 1", windowTitle: "Untitled - 트랙")
+        element: element(2), window: nil, role: "AXLayoutItem", subrole: nil, description: "오디오 1", windowTitle: "Untitled - 트랙")
 
     private static func observe(
         _ windows: [[String: Any]] = [],
@@ -80,7 +84,7 @@ struct QualificationUIInvariantsTests {
     }
 
     @Test func anAXModalWindowIsAViolationEvenWithoutAModalLayer() {
-        let sheet = QualificationAXWindowFacts(title: "Go To Position", subrole: "AXDialog", modal: true)
+        let sheet = QualificationAXWindowFacts(element: Self.element(4), title: "Go To Position", subrole: "AXDialog", modal: true)
         let found = QualificationUIInvariants.violations(
             before: Self.observe([Self.main]), after: Self.observe([Self.main], ax: [sheet]))
         #expect(found.contains { $0.contains("modal_present(AXModal window \"Go To Position\")") }, "\(found)")
@@ -88,7 +92,7 @@ struct QualificationUIInvariantsTests {
 
     @Test func aLeftoverPluginEditorWindowIsAViolationNamingIt() {
         let editor = Self.cg(number: 11, layer: 0, width: 520, height: 400, name: "Channel EQ")
-        let axEditor = QualificationAXWindowFacts(title: "Channel EQ", subrole: "AXStandardWindow", modal: false)
+        let axEditor = QualificationAXWindowFacts(element: Self.element(5), title: "Channel EQ", subrole: "AXStandardWindow", modal: false)
         let found = QualificationUIInvariants.violations(
             before: Self.observe([Self.main]),
             after: Self.observe([Self.main, editor], ax: [axEditor]))
@@ -97,7 +101,7 @@ struct QualificationUIInvariantsTests {
     }
 
     @Test func aLeftoverMarkerListWindowIsAViolation() {
-        let markerList = QualificationAXWindowFacts(title: "마커 목록", subrole: "AXFloatingWindow", modal: false)
+        let markerList = QualificationAXWindowFacts(element: Self.element(6), title: "마커 목록", subrole: "AXFloatingWindow", modal: false)
         let found = QualificationUIInvariants.violations(
             before: Self.observe([Self.main]), after: Self.observe([Self.main], ax: [markerList]))
         #expect(found.contains { $0.contains("window_left_open(AX \"마커 목록\"") }, "\(found)")
@@ -129,7 +133,7 @@ struct QualificationUIInvariantsTests {
 
     @Test func focusOnTheSameRoleButAnotherElementIsStillMoved() {
         let other = QualificationFocusIdentity(
-            role: "AXLayoutItem", subrole: nil, description: "오디오 2", windowTitle: "Untitled - 트랙")
+            element: Self.element(3), window: nil, role: "AXLayoutItem", subrole: nil, description: "오디오 2", windowTitle: "Untitled - 트랙")
         let found = QualificationUIInvariants.violations(
             before: Self.observe([Self.main], focus: Self.strip),
             after: Self.observe([Self.main], focus: other))

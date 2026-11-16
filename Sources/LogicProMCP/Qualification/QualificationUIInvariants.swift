@@ -26,13 +26,26 @@ struct QualificationWindowFacts: Equatable, Sendable {
     }
 }
 
-struct QualificationAXWindowFacts: Equatable, Hashable, Sendable {
+/// One of Logic's AX windows. Identity is the AX element (CFEqual), never the descriptive fields:
+/// two windows with the same title and subrole are two windows (review 1582 R3).
+struct QualificationAXWindowFacts: Equatable, @unchecked Sendable {
+    let element: AXUIElement
     let title: String?
     let subrole: String?
     let modal: Bool?
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        CFEqual(lhs.element, rhs.element) && lhs.title == rhs.title && lhs.subrole == rhs.subrole
+            && lhs.modal == rhs.modal
+    }
 }
 
-struct QualificationFocusIdentity: Equatable, Sendable {
+/// The keyboard-focused element. Identity is the AX element and its window, compared with CFEqual
+/// (review 1582 R3): distinct controls Logic describes identically (same role, same description, same
+/// window title) are different focus targets. The descriptive fields only name it in a violation.
+struct QualificationFocusIdentity: Equatable, @unchecked Sendable {
+    let element: AXUIElement
+    let window: AXUIElement?
     let role: String?
     let subrole: String?
     let description: String?
@@ -40,6 +53,15 @@ struct QualificationFocusIdentity: Equatable, Sendable {
 
     var summary: String {
         "\(role ?? "?")/\(subrole ?? "-") \"\(description ?? "")\" in \"\(windowTitle ?? "")\""
+    }
+
+    static func == (lhs: Self, rhs: Self) -> Bool {
+        guard CFEqual(lhs.element, rhs.element) else { return false }
+        switch (lhs.window, rhs.window) {
+        case (nil, nil): return true
+        case let (left?, right?): return CFEqual(left, right)
+        default: return false
+        }
     }
 }
 
@@ -50,27 +72,36 @@ struct QualificationUIObservation: Equatable, Sendable {
     let modalLayerWindows: [Int: QualificationWindowFacts]
     /// Every other Logic-owned on-screen window, by window-server number.
     let windows: [Int: QualificationWindowFacts]
-    /// Logic's AX windows, as a multiset keyed by title and subrole.
+    /// Logic's AX windows. Meaningful only when `axWindowsRead`.
     let axWindows: [QualificationAXWindowFacts]
+    /// False when the AXWindows list itself did not read: an empty `axWindows` is then unknown.
+    let axWindowsRead: Bool
     let focus: QualificationFocusIdentity?
     /// The AXError of the focus read. Anything but 0 is a violation: a read that did not happen is
     /// not "no focus".
     let focusStatus: Int32
+    /// Every read this observation needed and did not get (review 1582 R1). Each one fails the
+    /// operation as `ui_invariant_unreadable`; none is ever taken as an empty answer.
+    let unreadable: [String]
 
     init(
         menuLayerWindows: [Int: QualificationWindowFacts] = [:],
         modalLayerWindows: [Int: QualificationWindowFacts] = [:],
         windows: [Int: QualificationWindowFacts] = [:],
         axWindows: [QualificationAXWindowFacts] = [],
+        axWindowsRead: Bool = true,
         focus: QualificationFocusIdentity? = nil,
-        focusStatus: Int32 = 0
+        focusStatus: Int32 = 0,
+        unreadable: [String] = []
     ) {
         self.menuLayerWindows = menuLayerWindows
         self.modalLayerWindows = modalLayerWindows
         self.windows = windows
         self.axWindows = axWindows
+        self.axWindowsRead = axWindowsRead
         self.focus = focus
         self.focusStatus = focusStatus
+        self.unreadable = unreadable
     }
 }
 
@@ -86,8 +117,10 @@ enum QualificationUIInvariants {
         cgWindows: [[String: Any]],
         logicPID: pid_t,
         axWindows: [QualificationAXWindowFacts],
+        axWindowsRead: Bool = true,
         focus: QualificationFocusIdentity?,
-        focusStatus: Int32
+        focusStatus: Int32,
+        unreadable: [String] = []
     ) -> QualificationUIObservation {
         let menuLevel = LogicOnScreenWindows.popupMenuLevel
         let modalLevel = LogicOnScreenWindows.modalPanelLevel
@@ -106,7 +139,8 @@ enum QualificationUIInvariants {
         }
         return QualificationUIObservation(
             menuLayerWindows: menus, modalLayerWindows: modals, windows: others,
-            axWindows: axWindows, focus: focus, focusStatus: focusStatus)
+            axWindows: axWindows, axWindowsRead: axWindowsRead, focus: focus, focusStatus: focusStatus,
+            unreadable: unreadable)
     }
 
     // MARK: rules
@@ -135,15 +169,21 @@ enum QualificationUIInvariants {
             let summary = before.windows[number]?.summary ?? "?"
             found.append("ui_invariant: window_closed(window \(number), \(summary))")
         }
-        let beforeAX = multiset(before.axWindows)
-        let afterAX = multiset(after.axWindows)
-        for (window, count) in afterAX where count > (beforeAX[window] ?? 0) {
-            found.append(
-                "ui_invariant: window_left_open(AX \"\(window.title ?? "")\" subrole \(window.subrole ?? "-"))")
+        if before.axWindowsRead, after.axWindowsRead {
+            for window in after.axWindows where !before.axWindows.contains(where: { CFEqual($0.element, window.element) }) {
+                found.append(
+                    "ui_invariant: window_left_open(AX \"\(window.title ?? "")\" subrole \(window.subrole ?? "-"))")
+            }
+            for window in before.axWindows where !after.axWindows.contains(where: { CFEqual($0.element, window.element) }) {
+                found.append(
+                    "ui_invariant: window_closed(AX \"\(window.title ?? "")\" subrole \(window.subrole ?? "-"))")
+            }
         }
-        for (window, count) in beforeAX where count > (afterAX[window] ?? 0) {
-            found.append(
-                "ui_invariant: window_closed(AX \"\(window.title ?? "")\" subrole \(window.subrole ?? "-"))")
+        for read in after.unreadable {
+            found.append("ui_invariant: ui_invariant_unreadable(after: \(read))")
+        }
+        for read in before.unreadable {
+            found.append("ui_invariant: ui_invariant_unreadable(baseline: \(read))")
         }
         if after.focusStatus != 0 {
             found.append("ui_invariant: focus_unreadable(AXError \(after.focusStatus))")
@@ -154,10 +194,6 @@ enum QualificationUIInvariants {
                 "ui_invariant: focus_moved(\(before.focus?.summary ?? "none") -> \(after.focus?.summary ?? "none"))")
         }
         return found
-    }
-
-    private static func multiset(_ windows: [QualificationAXWindowFacts]) -> [QualificationAXWindowFacts: Int] {
-        windows.reduce(into: [:]) { $0[$1, default: 0] += 1 }
     }
 
     // MARK: settle
@@ -192,40 +228,91 @@ enum QualificationUIInvariants {
         let pid = app.processIdentifier
         guard let cg = CGWindowListCopyWindowInfo([.optionOnScreenOnly], kCGNullWindowID)
             as? [[String: Any]] else { return nil }
-        let root = AXUIElementCreateApplication(pid)
-        var axWindows: [QualificationAXWindowFacts] = []
-        if case .success(let windows?) = AXHelpers.getAttributeResult(root, kAXWindowsAttribute as String)
-            as Result<[AXUIElement]?, AXHelpers.AXStatusError> {
-            axWindows = windows.map { window in
-                let modal: Bool? = (AXHelpers.getAttributeResult(window, "AXModal")
-                    as Result<Bool?, AXHelpers.AXStatusError>).successValue ?? nil
-                let subrole: String? = (AXHelpers.getAttributeResult(window, kAXSubroleAttribute as String)
-                    as Result<String?, AXHelpers.AXStatusError>).successValue ?? nil
-                return QualificationAXWindowFacts(
-                    title: AXHelpers.getTitle(window), subrole: subrole, modal: modal)
+        return observeLogic(pid: pid, cgWindows: cg, runtime: .production)
+    }
+
+    static func observeLogic(
+        pid: pid_t, cgWindows cg: [[String: Any]], runtime: AXHelpers.Runtime
+    ) -> QualificationUIObservation {
+        let root = runtime.axApp(pid)
+        var unreadable: [String] = []
+        /// A descriptive string field: a value or a definitive absence (-25205/-25212) is an answer;
+        /// any other status is recorded as unreadable, never as nil.
+        func text(_ element: AXUIElement, _ attribute: String, _ what: String) -> String? {
+            switch AXHelpers.getAttributeResult(element, attribute, runtime: runtime)
+                as Result<String?, AXHelpers.AXStatusError> {
+            case .success(let value): return value
+            case .failure(let error) where error.isDefinitiveAbsence: return nil
+            case .failure(let error):
+                unreadable.append("\(what) \(attribute) AXError \(error.raw)")
+                return nil
             }
+        }
+        var axWindows: [QualificationAXWindowFacts] = []
+        var axWindowsRead = false
+        switch AXHelpers.getAttributeResult(root, kAXWindowsAttribute as String, runtime: runtime)
+            as Result<[AXUIElement]?, AXHelpers.AXStatusError> {
+        case .success(let windows?):
+            axWindowsRead = true
+            axWindows = windows.map { window in
+                let title = text(window, kAXTitleAttribute as String, "window")
+                let subrole = text(window, kAXSubroleAttribute as String, "window \"\(title ?? "")\"")
+                // AXModal is the modal invariant itself: only a Bool is a reading. 0c4ada89 recorded a
+                // real blocker passing when an entry's absent AXModal was taken as "not modal". The one
+                // exception is the recorded #1063 rule: an entry whose role READS as AXHelpTag is a
+                // tooltip (measured after a Logic 13 insert, impl-logic13/R6/S9-wins2: role AXHelpTag,
+                // AXModal -25205, CG layer 103). It is still an AX window, so its appearing or closing
+                // is a window delta; a failed or other role keeps the entry unreadable.
+                var modal: Bool?
+                switch AXHelpers.getAttributeResult(window, "AXModal", runtime: runtime)
+                    as Result<Bool?, AXHelpers.AXStatusError> {
+                case .success(let value?): modal = value
+                case .success(nil):
+                    if !AccessibilityChannel.windowRoleReadsAsHelpTag(window, runtime: runtime) {
+                        unreadable.append("window \"\(title ?? "")\" AXModal absent")
+                    }
+                case .failure(let error):
+                    if !AccessibilityChannel.windowRoleReadsAsHelpTag(window, runtime: runtime) {
+                        unreadable.append("window \"\(title ?? "")\" AXModal AXError \(error.raw)")
+                    }
+                }
+                return QualificationAXWindowFacts(element: window, title: title, subrole: subrole, modal: modal)
+            }
+        case .success(nil):
+            unreadable.append("AXWindows absent")
+        case .failure(let error):
+            unreadable.append("AXWindows AXError \(error.raw)")
         }
         var focus: QualificationFocusIdentity?
         var status: Int32 = 0
         let read: Result<AXUIElement?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
-            root, kAXFocusedUIElementAttribute as String)
+            root, kAXFocusedUIElementAttribute as String, runtime: runtime)
         switch read {
         case .success(let element?):
-            let subrole: String? = (AXHelpers.getAttributeResult(element, kAXSubroleAttribute as String)
+            var window: AXUIElement?
+            switch AXHelpers.getAttributeResult(element, kAXWindowAttribute as String, runtime: runtime)
+                as Result<AXUIElement?, AXHelpers.AXStatusError> {
+            case .success(let value): window = value
+            case .failure(let error) where error.isDefinitiveAbsence: window = nil
+            case .failure(let error):
+                unreadable.append("focus AXWindow AXError \(error.raw)")
+            }
+            // Descriptive only: they name the element in a violation and take no part in identity.
+            let subrole: String? = (AXHelpers.getAttributeResult(element, kAXSubroleAttribute as String, runtime: runtime)
                 as Result<String?, AXHelpers.AXStatusError>).successValue ?? nil
-            let window: AXUIElement? = (AXHelpers.getAttributeResult(element, kAXWindowAttribute as String)
-                as Result<AXUIElement?, AXHelpers.AXStatusError>).successValue ?? nil
             focus = QualificationFocusIdentity(
-                role: AXHelpers.getRole(element), subrole: subrole,
-                description: AXHelpers.getDescription(element),
-                windowTitle: window.flatMap { AXHelpers.getTitle($0) })
+                element: element, window: window,
+                role: AXHelpers.getRole(element, runtime: runtime), subrole: subrole,
+                description: AXHelpers.getDescription(element, runtime: runtime),
+                windowTitle: window.flatMap { AXHelpers.getTitle($0, runtime: runtime) })
         case .success(nil):
             status = Int32(AXError.noValue.rawValue)
         case .failure(let error):
             status = error.raw
         }
         return observation(
-            cgWindows: cg, logicPID: pid, axWindows: axWindows, focus: focus, focusStatus: status)
+            cgWindows: cg, logicPID: pid, axWindows: axWindows, axWindowsRead: axWindowsRead,
+            focus: focus, focusStatus: status, unreadable: unreadable)
     }
 }
 
