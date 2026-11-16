@@ -4631,7 +4631,10 @@ struct QualificationRunnerTests {
         "Requires LOGIC_PRO_MCP_RUN_LIVE_QA=1 and a release build; use Scripts/release-qualify.sh."
     ))
     func realReleaseBinaryExecutesEveryOperationWithIndependentReadback() throws {
-        let result = try QualificationTransport().drive(.init(
+        // DESIGN §2: every operation is bracketed by a read-only observation of Logic's UI
+        // (layer-101 menu, modal, leftover window, focus). A violation fails the operation and
+        // names it. The invariants are never optional in the live gate.
+        let result = try QualificationTransport(uiObserver: QualificationUIInvariants.observeLogic).drive(.init(
             executableURL: Self.releaseExecutableURL,
             environment: ProcessInfo.processInfo.environment,
             expectedOperationCount: OperationRegistry.specs.count,
@@ -4657,6 +4660,29 @@ struct QualificationRunnerTests {
         #expect(operationResults.count == OperationRegistry.specs.count)
         #expect(operationResults.allSatisfy { $0.status != .failed })
         #expect(liveGate.accounted == operationResults.count)
+
+        // DESIGN §1: every one of the registry's operations gets EXACTLY ONE verdict, EXERCISED or
+        // NOT_QUALIFIED with a reason, and the NOT_QUALIFIED set must equal the committed list.
+        // The assertions above stay; this adds what they tolerated (a recipe that refused, a
+        // readback that was never compared, protocolSmoke, a precondition disposition).
+        let notQualifiedList = try QualificationNotQualifiedListFile.load()
+        let gateViolations = QualificationLiveGateVerdict.violations(
+            results: operationResults,
+            requested: OperationRegistry.specs,
+            fixture: nil,
+            list: notQualifiedList
+        )
+        let verdicts = QualificationLiveGateVerdict.verdicts(
+            results: operationResults, requested: OperationRegistry.specs, fixture: nil)
+        print(QualificationLiveGateVerdictReport.summaryLine(verdicts))
+        #expect(
+            verdicts.count == OperationRegistry.specs.count
+                && Set(verdicts.map(\.operationID)).count == OperationRegistry.specs.count
+        )
+        #expect(
+            gateViolations.isEmpty,
+            "live-gate verdict violations:\n\(gateViolations.joined(separator: "\n"))"
+        )
         let uiLanguage = Self.logicUILanguage()
         #expect(
             liveGate.failures.isEmpty,
@@ -7169,5 +7195,75 @@ struct QualificationRunnerTests {
             return try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
         }
 
+    }
+}
+
+/// The wiring: the live driver brackets EVERY operation, and a violation fails that operation
+/// and names it.
+extension QualificationRunnerTests {
+    private final class UIScript: @unchecked Sendable {
+        private let lock = NSLock()
+        private var readings: [QualificationUIObservation?]
+        private(set) var reads = 0
+        init(_ readings: [QualificationUIObservation?]) { self.readings = readings }
+        func next() -> QualificationUIObservation? {
+            lock.lock(); defer { lock.unlock() }
+            reads += 1
+            return readings.count > 1 ? readings.removeFirst() : readings.first ?? nil
+        }
+    }
+
+    private func driveFastForward(
+        observer: (@Sendable () -> QualificationUIObservation?)?
+    ) throws -> QualificationOperationResult {
+        let fixture = try SlowHandshakeFixture(playheadStep: .transportFastForward)
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .transportFastForward })
+        let result = try QualificationTransport(
+            handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2,
+            uiObserver: observer, uiSettleSleep: { _ in }
+        ).drive(.init(
+            executableURL: fixture.executableURL, environment: ["HANDSHAKE_DELAY": "0"],
+            expectedOperationCount: 0, operations: [spec]))
+        return try #require(result.operationResults[spec.id.rawValue])
+    }
+
+    @Test func theDriverBracketsEveryOperationWithUIObservationsAndPassesWhenClean() throws {
+        let clean = QualificationUIObservation(focus: QualificationFocusIdentity(
+            role: "AXGroup", subrole: nil, description: "믹서", windowTitle: "Untitled"))
+        let script = UIScript([clean])
+        let operation = try driveFastForward(observer: { script.next() })
+        #expect(operation.status == .passed)
+        #expect(operation.failureReason == nil)
+        #expect(script.reads >= 2, "one observation before and one after the operation")
+    }
+
+    @Test func aLeakedMenuAfterAnOperationFailsThatOperationAndNamesIt() throws {
+        let before = QualificationUIObservation(focus: QualificationFocusIdentity(
+            role: "AXGroup", subrole: nil, description: "믹서", windowTitle: "Untitled"))
+        let leak = QualificationUIObservation(
+            menuLayerWindows: [93: QualificationWindowFacts(
+                layer: 101, title: nil, bounds: CGRect(x: 1077, y: 98, width: 234, height: 355))],
+            focus: before.focus)
+        let script = UIScript([before, leak])
+        let operation = try driveFastForward(observer: { script.next() })
+        #expect(operation.status == .failed)
+        let reason = try #require(operation.failureReason)
+        #expect(reason.contains("transport.fast_forward:"))
+        #expect(reason.contains("logic_menu_layer_101_open"))
+        #expect(reason.contains("234x355@1077,98"))
+    }
+
+    @Test func aBaselineThatCannotBeReadFailsTheOperationInsteadOfSkippingTheCheck() throws {
+        let script = UIScript([nil])
+        let operation = try driveFastForward(observer: { script.next() })
+        #expect(operation.status == .failed)
+        let reason = try #require(operation.failureReason)
+        #expect(reason.contains("baseline observation unavailable"))
+    }
+
+    @Test func withoutAnObserverTheInvariantsAreNotChecked() throws {
+        let operation = try driveFastForward(observer: nil)
+        #expect(operation.status == .passed)
     }
 }
