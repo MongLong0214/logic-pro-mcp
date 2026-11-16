@@ -286,6 +286,12 @@ extension AccessibilityChannel {
     }
 
     static func readSendBypassSnapshot(ordinal: Int, runtime: AXLogicProElements.Runtime) async -> SendBypassSnapshot? {
+        await readSendBypassSnapshot(ordinal: ordinal, runtime: runtime, refusal: { _ in })
+    }
+
+    /// `refusal` receives the output observation's own refusal hint when that read is what failed.
+    static func readSendBypassSnapshot(ordinal: Int, runtime: AXLogicProElements.Runtime,
+        refusal: (String) -> Void) async -> SendBypassSnapshot? {
         guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
               let physical = AXMixerStripBinding.current, let app = AXLogicProElements.appRoot(runtime: runtime),
               let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: runtime.ax),
@@ -294,6 +300,9 @@ extension AccessibilityChannel {
               slot.levelRaw?.isFinite == true,
               let population = AXLogicProElements.mixerChannelStripsIfCompletelyRead(in: physical.mixer, runtime: runtime.ax)?.strips else { return nil }
         let reading = await getOutputObservation(runtime: runtime, sendOrdinal: ordinal)
+        if reading.assignment == nil, case .error(let body) = reading.result,
+           let object = try? JSONSerialization.jsonObject(with: Data(body.utf8)) as? [String: Any],
+           let hint = object["hint"] as? String { refusal(hint) }
         guard (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
               let assignment = reading.assignment, let checks = reading.sendNonRoutingChecks, !checks.isEmpty,
               let control = reading.sendControl else { return nil }
@@ -316,8 +325,11 @@ extension AccessibilityChannel {
             return refuse(.invalidParams, "An exact occupied-send census ordinal and literal Boolean request are required.")
         }
         extras["send_ordinal"] = ordinal
-        guard let before = await readSendBypassSnapshot(ordinal: ordinal, runtime: runtime) else {
-            return refuse(.readbackUnavailable, "The original checkbox, raw send state, checked route or protected source did not remain observed.")
+        var outputRefusal: String?
+        guard let before = await readSendBypassSnapshot(ordinal: ordinal, runtime: runtime,
+            refusal: { outputRefusal = $0 }) else {
+            return refuse(.readbackUnavailable, "The original checkbox, raw send state, checked route or protected source did not remain observed."
+                + (outputRefusal.map { " Output observation: \($0)" } ?? ""))
         }
         extras["before"] = before.value; extras["bypassed"] = before.value
         extras["checked_destination"] = before.assignment.json
@@ -886,9 +898,12 @@ extension AccessibilityChannel {
             if !permitted, sendReplacement != nil { Log.info("Routing focus refused: keyboard observation", subsystem: "ax") }
             return permitted
         }
-        guard focusAllowsAcquisition(),
-              !AXLogicProElements.dialogPresenceReason(runtime: runtime).isBlocked else {
-            return refuse(.readbackUnavailable, "Cannot acquire an output menu while focus or modal state is unsafe or unreadable.")
+        // Each refusal names the guard that fired, so a caller can tell the focus guard from the modal one.
+        guard focusAllowsAcquisition() else {
+            return refuse(.readbackUnavailable, "Cannot acquire an output menu: the keyboard-focus guard refused Logic's focused element (\(readLogicKeyboardFocus(runtime: runtime))).")
+        }
+        guard !AXLogicProElements.dialogPresenceReason(runtime: runtime).isBlocked else {
+            return refuse(.readbackUnavailable, "Cannot acquire an output menu: the modal guard found a blocking or unreadable dialog state.")
         }
         guard let playing = AXLogicProElements.readControlBarCheckboxValue(matching: AXLocalePolicy.transportPlayControl, runtime: runtime),
               let recording = AXLogicProElements.readControlBarCheckboxValue(matching: AXLocalePolicy.transportRecordControl, runtime: runtime) else {

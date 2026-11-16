@@ -499,7 +499,10 @@ struct Issue965HeldSelectionAssociationTests {
             case "unchanged_focus", "popup_unchanged_no_focused_window", "ordinary_no_focused_window":
                 f.builder.setAttribute(f.app, kAXFocusedUIElementAttribute as String, association.originalFocus)
                 f.builder.setAttribute(association.originalFocus, kAXInsertionPointLineNumberAttribute as String, 0)
-                #expect(AccessibilityChannel.readLogicKeyboardFocus(runtime: logic) != .notTextEditing,
+                // Owner decision 2026-11-16: this native-shaped strip (insertion point, nothing settable)
+                // is no longer text editing, but it is not ordinary focus: the full passive-strip witness
+                // still has to qualify it.
+                #expect(AccessibilityChannel.readLogicKeyboardFocus(runtime: logic) == .passiveInsertionPoint(role: kAXLayoutItemRole as String),
                     "The existing full passive-strip witness, not a global focus exemption, must qualify this native-shaped control")
             case "foreign_document": f.builder.setAttribute(f.window, kAXDocumentAttribute as String, "file:///tmp/Foreign.logicx")
             case "popup_foreign_window": f.builder.setAttribute(f.app, kAXFocusedWindowAttribute as String, f.builder.element(1_965_982))

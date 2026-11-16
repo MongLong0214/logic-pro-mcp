@@ -2978,15 +2978,31 @@ extension AccessibilityChannel {
         /// The focused element edits text. `byInsertionPoint` is false when its role is an
         /// editable one and true when only a text insertion point gave it away.
         case textEditing(role: String, byInsertionPoint: Bool)
+        /// A focused element of a non-text role answers a text insertion point, but AX reads both
+        /// its AXSelectedTextRange and AXValue as not settable (the Logic 13 channel-strip group).
+        /// It does not edit text, so a synthetic key or a background read need not yield to it.
+        /// It is not `.notTextEditing` either: a reader that lends such a focus only under its
+        /// passive witness (`PassiveMixerReadFocus`, the header and routing witnesses) still
+        /// requires that witness, so window, document, strip and value custody stay enforced.
+        case passiveInsertionPoint(role: String)
         /// The focused element and its role were read, and it does not edit text.
         case notTextEditing
         case unreadable(UnreadableStage)
+
+        /// The focus read, and it is no text editor: `.notTextEditing` or `.passiveInsertionPoint`.
+        var readsAsNoEditor: Bool {
+            switch self {
+            case .notTextEditing, .passiveInsertionPoint: return true
+            case .textEditing, .unreadable: return false
+            }
+        }
     }
 
     /// Reads Logic's focused UI element (the application element's `AXFocusedUIElement`) and
     /// classifies it: an editable text surface (rename field, Notes, search/combo box) by role, or
-    /// any element exposing a text insertion point, since that marks an editable surface even when
-    /// the role is unusual.
+    /// an element of another role that exposes a text insertion point unless AX reads both its
+    /// AXSelectedTextRange and AXValue as not settable (`.passiveInsertionPoint`, the Logic 13
+    /// channel-strip group).
     static func readLogicKeyboardFocus(runtime: AXLogicProElements.Runtime) -> LogicKeyboardFocus {
         guard let app = AXLogicProElements.appRoot(runtime: runtime) else {
             return .unreadable(.appRoot)
@@ -3014,12 +3030,26 @@ extension AccessibilityChannel {
         if editableRoles.contains(role) {
             return .textEditing(role: role, byInsertionPoint: false)
         }
-        if let _: NSNumber = AXHelpers.getAttribute(
+        guard let _: NSNumber = AXHelpers.getAttribute(
             focused, kAXInsertionPointLineNumberAttribute, runtime: runtime.ax
-        ) {
-            return .textEditing(role: role, byInsertionPoint: true)
+        ) else {
+            return .notTextEditing
         }
-        return .notTextEditing
+        // An insertion point alone does not prove an editable surface. Measured on Logic 13
+        // (2026-11-16): a focused mixer channel-strip group (AXLayoutItem) answers
+        // AXInsertionPointLineNumber=0 and AXSelectedTextRange={0,0}, yet neither AXValue nor
+        // AXSelectedTextRange is settable on it, while a focused text field reports both settable.
+        // Only a read `false` for both rules the surface out; an unreadable claim keeps it editing.
+        let rangeSettable = AXHelpers.isAttributeSettable(
+            focused, kAXSelectedTextRangeAttribute, runtime: runtime.ax
+        )
+        let valueSettable = AXHelpers.isAttributeSettable(
+            focused, kAXValueAttribute, runtime: runtime.ax
+        )
+        if rangeSettable == false, valueSettable == false {
+            return .passiveInsertionPoint(role: role)
+        }
+        return .textEditing(role: role, byInsertionPoint: true)
     }
 
     /// #6 — refuse a synthetic global command key when Logic's keyboard focus is
@@ -3060,7 +3090,7 @@ extension AccessibilityChannel {
                 reason: "a text-editing surface with an insertion point is focused",
                 focus: role
             )
-        case .notTextEditing:
+        case .notTextEditing, .passiveInsertionPoint:
             return nil
         }
     }
@@ -3623,7 +3653,9 @@ extension AccessibilityChannel {
                 // The owned setter may close its editor during that value read,
                 // after the earlier held-editor check. Verify the same original
                 // target/footprint; never post Return into the replacement focus.
-                if case .notTextEditing = editorFocus,
+                // A passive strip focus (`.passiveInsertionPoint`) is not an editor either: the
+                // editor closed, so verify the committed name; Return is never posted into it.
+                if editorFocus.readsAsNoEditor,
                    editorValue == nil || editorValue?.utf8.elementsEqual(desired.utf8) == true {
                     return committedSetterResult()
                 }
@@ -3750,7 +3782,9 @@ extension AccessibilityChannel {
         // fail-closed"; #1103 review R2, F1: the wait retried an unreadable reading).
         var reading = focus()
         var attempt = 1
-        while case .notTextEditing = reading, attempt < focusWaitAttempts {
+        // A passive strip focus is not the editor yet, exactly like an ordinary focus.
+        while reading.readsAsNoEditor,
+              attempt < focusWaitAttempts {
             mouseRuntime.sleepMicros(focusWaitMicros)
             reading = focus()
             attempt += 1
@@ -3792,6 +3826,7 @@ extension AccessibilityChannel {
             switch reading {
             case .textEditing(let role, _): return role
             case .notTextEditing: return "not_text_editing"
+            case .passiveInsertionPoint(let role): return "passive_insertion_point_\(role)"
             case .unreadable(let stage): return "unreadable_\(stage)"
             }
         }
