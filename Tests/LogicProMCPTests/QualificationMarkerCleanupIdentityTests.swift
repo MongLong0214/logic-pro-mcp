@@ -22,7 +22,8 @@ import Testing
         init(
             listOpenInitially: Bool,
             closeAfterCreate: Bool = false,
-            refreshPolls: String = "when_open"
+            refreshPolls: String = "when_open",
+            ghostPolls: Int = 0
         ) throws {
             directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("qualification-marker-cleanup-\(UUID().uuidString)", isDirectory: true)
@@ -36,6 +37,7 @@ import Testing
                 script = script.replacingOccurrences(of: "close_after_create=false", with: "close_after_create=true")
             }
             script = script.replacingOccurrences(of: "refresh_polls=when_open", with: "refresh_polls=\(refreshPolls)")
+            script = script.replacingOccurrences(of: "ghost_polls=0", with: "ghost_polls=\(ghostPolls)")
             try Data(script.utf8).write(to: executableURL)
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executableURL.path)
         }
@@ -73,6 +75,11 @@ import Testing
         close_after_create=false
         refresh_polls=when_open
         name_applies=true
+        # `ghost_polls=N`: after a delete, the list keeps showing the deleted row for N fresh polls,
+        # as Logic's AX table does while it settles (measured: still present 1.8 s after a delete).
+        ghost_polls=0
+        echo 0 > ghost-left
+        : > ghost
         created=false
         printf 'Verse|5.1.1.1\nChorus|9.1.1.1\n' > live
         cp live originals
@@ -88,7 +95,13 @@ import Testing
         # The product's marker cache: a successful poll copies the open list, a failed one keeps the rows
         # and only marks them unreadable (StateCache.markMarkersUnreadable).
         poll_markers() {
-            if [ -f list-open ]; then cp live cache; echo true > cache-readable; now_epoch > cache-epoch; return 0; fi
+            if [ -f list-open ]; then
+                left=$(cat ghost-left)
+                if [ "$left" -gt 0 ]; then
+                    cat live ghost | /usr/bin/sort -s -t'|' -k2,2n > cache; echo $((left - 1)) > ghost-left
+                else cp live cache; fi
+                echo true > cache-readable; now_epoch > cache-epoch; return 0
+            fi
             echo false > cache-readable; return 1
         }
         rows_json() {
@@ -163,6 +176,7 @@ import Testing
                 if [ -n "$row" ]; then
                     /usr/bin/sed -i '' "$((index + 1))d" live
                     printf 'delete %s %s\n' "$index" "$row" >> writes
+                    if [ "$ghost_polls" -gt 0 ]; then printf '%s\n' "$row" > ghost; echo "$ghost_polls" > ghost-left; fi
                     ok
                 else refuse element_not_found; fi
                 release_list ;;
@@ -248,6 +262,24 @@ import Testing
                 "every original marker survives: live \(fixture.live), writes \(fixture.writes)")
         #expect(!fixture.writes.contains { $0.hasPrefix("delete") }, "no delete without a fresh read: \(fixture.writes)")
         #expect(observed?.mutationRestore == nil)
+    }
+
+    /// Logic's list settles slowly after a delete: it keeps showing the deleted probe, freshly read,
+    /// for longer than the disappearance wait. A cleanup that took those rows as a reason to delete
+    /// again sent its next delete at index 0, which was by then the user's marker. Once a delete's
+    /// effect is unconfirmed, no further delete may be sent.
+    @Test(arguments: markerOperations)
+    func aDeleteWhoseDisappearanceNeverSettlesIsNotFollowedByAnother(operation: OperationID) throws {
+        let fixture = try Fixture(listOpenInitially: true, ghostPolls: 8)
+        defer { fixture.remove() }
+        _ = try drive(fixture, operation)
+
+        #expect(Self.originals.allSatisfy(fixture.live.contains),
+                "every original marker survives: live \(fixture.live), writes \(fixture.writes)")
+        let foreignDeletes = fixture.writes.filter {
+            $0.hasPrefix("delete") && !$0.contains("qualification_phase_b")
+        }
+        #expect(foreignDeletes.isEmpty, "only the probe is ever deleted: \(fixture.writes)")
     }
 
     /// Positive control: a list that stays open gives fresh reads throughout, and the cycle stages,

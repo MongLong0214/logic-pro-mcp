@@ -3719,23 +3719,26 @@ struct QualificationTransport: Sendable {
         return (last.0, last.1, spent)
     }
 
-    /// Removes what a marker cycle staged, found BY NAME on a fresh read before EVERY delete.
+    /// Removes what a marker cycle staged, found BY NAME on a fresh read before the delete.
     ///
-    /// The first read is a plain one; after a delete the next read waits for the names to be gone
-    /// (the list settles slowly, and a read that still shows a deleted probe would otherwise send a
-    /// second delete at a row that is no longer the probe). A read that is not fresh ends the
-    /// cleanup: the marker may remain, and the witness says so rather than guessing at an index.
+    /// At most ONE delete is sent while its effect is unconfirmed. After a delete — this cleanup's
+    /// own, or one the cycle already sent (`deletePending`) — the next read waits for the names to
+    /// be gone, and if they still read present when that wait runs out, nothing more is sent: the
+    /// list settles slowly and keeps showing a deleted row, freshly read, and a second delete at
+    /// that row's index lands on whatever marker moved into it, which is the user's. A read that is
+    /// not fresh ends the cleanup the same way. Either way the marker may remain, and the witness
+    /// says so rather than guessing at an index.
     private func removeStagedMarkers(
         _ session: QualificationSubprocessSession,
         startingAt id: Int,
         names: [String],
-        attempts: Int,
+        deletePending: Bool,
         tool: String,
         cleanup: PhaseCCleanupWitness
     ) {
         var cleanupID = id
-        var deleted = false
-        for _ in 0..<attempts {
+        var deleted = deletePending
+        for _ in 0..<2 {
             let seen: (count: Int, raw: String, spent: Int)
             do {
                 seen = try observedMarkerCount(
@@ -3751,6 +3754,12 @@ struct QualificationTransport: Sendable {
                 cleanup.note(deleted ? "removed" : "nothing staged remains")
                 return
             }
+            guard !deleted else {
+                cleanup.note("withheld, \(names.joined(separator: " or ")) still reads present after "
+                    + "delete_marker, so that delete's effect is unconfirmed and no further delete is "
+                    + "sent; it may remain")
+                return
+            }
             _ = try? invoke(
                 session, id: cleanupID, tool: tool, command: "delete_marker",
                 params: ["index": index], phase: "phase_b.cleanup")
@@ -3758,7 +3767,6 @@ struct QualificationTransport: Sendable {
             deleted = true
             cleanup.note("delete_marker index \(index)")
         }
-        cleanup.note("budget spent, \(names.joined(separator: " or ")) may remain")
     }
 
     /// #373 Phase B for the project tempo.
@@ -3927,7 +3935,7 @@ struct QualificationTransport: Sendable {
         // `markerCreateRestoreCycle` for why an unchecked delete is not a removal.
         defer {
             removeStagedMarkers(
-                session, startingAt: nextID + 900, names: [probeName], attempts: 6,
+                session, startingAt: nextID + 900, names: [probeName], deletePending: false,
                 tool: spec.tool.rawValue, cleanup: cleanup)
         }
         let listed = try observedMarkerCount(
@@ -5168,6 +5176,9 @@ struct QualificationTransport: Sendable {
         // permanent one, and the fixture needed manual cleaning. A create-shaped recipe that can
         // throw between the create and the delete is a recipe that edits the project on failure.
         var createdMarkerNeedsRemoval = true
+        // Set once the restore's delete is sent and cleared only when a fresh read shows the probe
+        // gone, so the cleanup never sends a second delete on top of an unconfirmed one.
+        var restoreDeletePending = false
         defer {
             if createdMarkerNeedsRemoval {
                 // THE CLEANUP VERIFIES. A first version issued one best-effort delete and moved on,
@@ -5177,8 +5188,8 @@ struct QualificationTransport: Sendable {
                 // unverified success claims this whole change exists to remove, so it retries until
                 // the probe is gone or its budget runs out — on fresh reads only.
                 removeStagedMarkers(
-                    session, startingAt: nextID + 900, names: [probeName], attempts: 4,
-                    tool: spec.tool.rawValue, cleanup: cleanup)
+                    session, startingAt: nextID + 900, names: [probeName],
+                    deletePending: restoreDeletePending, tool: spec.tool.rawValue, cleanup: cleanup)
             }
         }
 
@@ -5196,6 +5207,7 @@ struct QualificationTransport: Sendable {
                 "phase_b.readback: the marker count rose but no row carries \(probeName) — the "
                     + "cycle cannot identify what it created and will not delete by guess")
         }
+        restoreDeletePending = true
         let restore = try invoke(
             session, id: nextID, tool: spec.tool.rawValue, command: "delete_marker",
             params: ["index": createdIndex], phase: "phase_b.restore")
@@ -5277,14 +5289,17 @@ struct QualificationTransport: Sendable {
         // `let` for the same reason as the history cycle: the staged marker is still there when the
         // record closes, because that is what "restored" means for a rename or a delete.
         let stagedMarkerNeedsRemoval = true
+        // The delete-mode mutation IS a delete of the staged marker: from when it is sent until a
+        // fresh read shows the marker gone, the cleanup must not send another on top of it.
+        var mutationDeletePending = false
         defer {
             if stagedMarkerNeedsRemoval {
                 // The mutation under test may have renamed it, so the cleanup looks for BOTH
                 // names. A cleanup that only knew the name it staged would leave the marker
                 // behind exactly when the rename half-succeeded.
                 removeStagedMarkers(
-                    session, startingAt: nextID + 900, names: [probeName, renamedName], attempts: 6,
-                    tool: spec.tool.rawValue, cleanup: cleanup)
+                    session, startingAt: nextID + 900, names: [probeName, renamedName],
+                    deletePending: mutationDeletePending, tool: spec.tool.rawValue, cleanup: cleanup)
             }
         }
 
@@ -5302,6 +5317,7 @@ struct QualificationTransport: Sendable {
         case .rename: ["index": stagedIndex, "name": renamedName]
         case .delete: ["index": stagedIndex]
         }
+        if mode == .delete { mutationDeletePending = true }
         let mutation = try invoke(
             session, id: nextID, tool: spec.tool.rawValue, command: spec.command,
             params: mutationParams, phase: "phase_b.mutation",
@@ -5341,6 +5357,7 @@ struct QualificationTransport: Sendable {
                     "phase_b.readback: after delete_marker \(probeName) must be absent at a count "
                         + "of \(pre.count - 1); the list reports \(after.count)")
             }
+            mutationDeletePending = false // a fresh read shows it gone
         }
 
         // The restore's target is resolved AGAIN from the readback rather than reused from the
