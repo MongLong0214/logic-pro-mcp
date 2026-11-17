@@ -929,6 +929,18 @@ struct QualificationOperationResult: Equatable, Sendable {
         }
     }
 
+    /// Where a refusal says it stopped, read from the response itself.
+    var refusalPhase: String? { Self.refusalString("plugin_view_switch_phase", in: responseData) }
+
+    /// What a refusal says it saw, read from the response itself.
+    var refusalObservation: String? { Self.refusalString("what_was_observed", in: responseData) }
+
+    private static func refusalString(_ key: String, in data: Data?) -> String? {
+        guard let data,
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return object[key] as? String
+    }
+
     /// A diagnostic reason for a failed live-gate disposition, derived only
     /// from the captured request, readback, and response observations.
     var liveGateFailureReason: String? {
@@ -951,7 +963,9 @@ struct QualificationOperationResult: Equatable, Sendable {
         case .readOnly:
             if isError != false {
                 return "operation request returned a refusal: "
-                    + Self.unavailableDetail(error: error, hint: hint)
+                    + Self.unavailableDetail(
+                        error: error, hint: hint,
+                        phase: refusalPhase, observed: refusalObservation)
             }
             if let reason = readbackFreshness.refusalReason {
                 return "independent readback was not admissible: \(reason)"
@@ -1087,14 +1101,26 @@ struct QualificationOperationResult: Equatable, Sendable {
     ///
     /// Kept deliberately literal: an attestation is read by someone deciding whether a shortfall is
     /// their environment or the product, and a paraphrase is where that distinction goes missing.
-    static func unavailableDetail(error: String?, hint: String?) -> String {
+    ///
+    /// A refusal can also name where it stopped (`plugin_view_switch_phase`) and what it saw
+    /// (`what_was_observed`) without naming a precondition. Those are quoted too: a failure that
+    /// arrives as a bare code cannot be told from a rate defect, and an intermittent one is lost.
+    /// Quoting them changes only the text; it never moves a refusal out of `.failed`.
+    static func unavailableDetail(
+        error: String?, hint: String?, phase: String? = nil, observed: String? = nil
+    ) -> String {
         let code = error?.trimmingCharacters(in: .whitespacesAndNewlines)
         let reason = hint?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let phaseText = phase?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let observedText = observed?.trimmingCharacters(in: .whitespacesAndNewlines)
+        var named = ""
+        if let phaseText, !phaseText.isEmpty { named += " [phase `\(phaseText)`]" }
+        if let observedText, !observedText.isEmpty { named += " [observed: \(observedText)]" }
         switch (code?.isEmpty == false ? code : nil, reason?.isEmpty == false ? reason : nil) {
         case let (.some(code), .some(reason)):
-            return "read-only operation refused with `\(code)`: \(reason)"
+            return "read-only operation refused with `\(code)`: \(reason)" + named
         case let (.some(code), .none):
-            return "read-only operation refused with `\(code)` and named no precondition"
+            return "read-only operation refused with `\(code)` and named no precondition" + named
         case let (.none, .some(reason)):
             return "read-only operation did not return a successful typed response: \(reason)"
         case (.none, .none):

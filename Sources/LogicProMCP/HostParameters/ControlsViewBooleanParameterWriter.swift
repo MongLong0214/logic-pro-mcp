@@ -472,12 +472,33 @@ enum ControlsViewBooleanParameterWriter {
     ) -> ViewPreparationResult {
         let effectiveWindowRefresher = windowRefresher ?? { window }
         let entryView: PluginWindowView
-        let entryObservation = observedView(
+        // A window Logic has only just opened can expose its table before the
+        // rows that make it Controls-shaped. That is an unsettled structure, not
+        // a refusal: wait for it, bounded by the same deadline a view switch
+        // gets, and refuse `entry_view_not_confirmed` only when it never settles.
+        // Only a structure that is present-but-unconfirmed is waited on. An
+        // unreadable window is refused at once and a view is never guessed.
+        let entryDeadline = Date().addingTimeInterval(max(0, confirmationTimeout))
+        var entryObservation = observedView(
             in: window,
             windowRefresher: effectiveWindowRefresher,
             headerBoundUndescribedView: headerBoundUndescribedView,
             runtime: runtime
         )
+        while case .success(.none) = entryObservation {
+            let remaining = entryDeadline.timeIntervalSinceNow
+            guard remaining > 0 else { break }
+            guard allowingChanges() else {
+                return .refused(.contextOwnershipEnded, restoration: nil)
+            }
+            Thread.sleep(forTimeInterval: min(viewConfirmationPollInterval, remaining))
+            entryObservation = observedView(
+                in: window,
+                windowRefresher: effectiveWindowRefresher,
+                headerBoundUndescribedView: headerBoundUndescribedView,
+                runtime: runtime
+            )
+        }
         switch entryObservation {
         case let .success(.some(observed)):
             entryView = observed
