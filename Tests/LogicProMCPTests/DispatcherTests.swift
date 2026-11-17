@@ -323,11 +323,17 @@ private actor SequencedTransportReadbackChannel: Channel {
 private actor SequencedMarkersChannel: Channel {
     nonisolated let id: ChannelID
     var markerSnapshots: [[MarkerState]]
+    /// What the channel's create reports about the Arrange region selection; nil omits the field.
+    let createRegionSelection: String?
     var executedOps: [(String, [String: String])] = []
 
-    init(id: ChannelID = .accessibility, markerSnapshots: [[MarkerState]]) {
+    init(
+        id: ChannelID = .accessibility, markerSnapshots: [[MarkerState]],
+        createRegionSelection: String? = nil
+    ) {
         self.id = id
         self.markerSnapshots = markerSnapshots
+        self.createRegionSelection = createRegionSelection
     }
 
     func start() async throws {}
@@ -339,7 +345,9 @@ private actor SequencedMarkersChannel: Channel {
         case "nav.open_marker_list":
             return .success(HonestContract.encodeStateA())
         case "nav.create_marker":
-            return .success(HonestContract.encodeStateB(reason: .readbackUnavailable))
+            return .success(HonestContract.encodeStateB(
+                reason: .readbackUnavailable,
+                extras: createRegionSelection.map { ["region_selection": $0] } ?? [:]))
         case "nav.get_markers":
             guard !markerSnapshots.isEmpty else {
                 return .error("missing marker snapshot")
@@ -4238,6 +4246,64 @@ func testProjectDispatcherLaunchReconcilesTimeoutOnlyWithObservedRunningState(_ 
     #expect(object["reason"] as? String == "readback_mismatch")
     #expect(object["requested_name"] as? String == "Bridge")
     #expect(object["observed_marker_name"] as? String == "Marker 2")
+}
+
+/// Logic's Create Marker clears the region selection and the channel writes it back. A create whose
+/// selection did not read back as it was left a side effect behind, and is not a clean success.
+@Test func testNavigateDispatcherCreateMarkerRefusesStateAWhenRegionSelectionWasNotRestored() async throws {
+    let router = ChannelRouter()
+    let markersAX = SequencedMarkersChannel(
+        markerSnapshots: [
+            [MarkerState(id: 0, name: "Intro", position: "1.1.1.1", positionSource: .parser)],
+            [
+                MarkerState(id: 0, name: "Intro", position: "1.1.1.1", positionSource: .parser),
+                MarkerState(id: 1, name: "Bridge", position: "9.1.1.1", positionSource: .parser),
+            ],
+        ],
+        createRegionSelection: "not_restored"
+    )
+    await router.register(markersAX)
+
+    let result = await NavigateDispatcher.handle(
+        command: "create_marker",
+        params: ["name": .string("Bridge")],
+        router: router,
+        cache: StateCache()
+    )
+
+    #expect(result.isError!)
+    let object = try #require(parseDispatcherObject(dispatcherText(result)))
+    #expect(object["state"] as? String == "B")
+    #expect(object["reason"] as? String == "readback_mismatch")
+    #expect(object["region_selection"] as? String == "not_restored")
+    #expect(object["observed_marker_name"] as? String == "Bridge")
+}
+
+@Test func testNavigateDispatcherCreateMarkerReportsARestoredRegionSelection() async throws {
+    let router = ChannelRouter()
+    let markersAX = SequencedMarkersChannel(
+        markerSnapshots: [
+            [MarkerState(id: 0, name: "Intro", position: "1.1.1.1", positionSource: .parser)],
+            [
+                MarkerState(id: 0, name: "Intro", position: "1.1.1.1", positionSource: .parser),
+                MarkerState(id: 1, name: "Bridge", position: "9.1.1.1", positionSource: .parser),
+            ],
+        ],
+        createRegionSelection: "restored"
+    )
+    await router.register(markersAX)
+
+    let result = await NavigateDispatcher.handle(
+        command: "create_marker",
+        params: ["name": .string("Bridge")],
+        router: router,
+        cache: StateCache()
+    )
+
+    #expect(!result.isError!)
+    let object = try #require(parseDispatcherObject(dispatcherText(result)))
+    #expect(object["state"] as? String == "A")
+    #expect(object["region_selection"] as? String == "restored")
 }
 
 @Test func testNavigateDispatcherCreateMarkerDetectsMiddleInsertionDespiteShiftedIDs() async throws {

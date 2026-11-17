@@ -538,7 +538,8 @@ def swift_containment(repo=REPO):
             if not f.endswith(".swift"):
                 continue
             try:
-                body = open(os.path.join(root, f), encoding="utf-8", errors="replace").read()
+                with open(os.path.join(root, f), encoding="utf-8", errors="replace") as handle:
+                    body = handle.read()
             except OSError:
                 continue
             names |= set(re.findall(r"AXLocalePolicy\s*\.\s*(\w+)\s*\.containsAny", body))
@@ -575,7 +576,8 @@ def swift_exact_strict(repo=REPO):
             if not f.endswith(".swift"):
                 continue
             try:
-                body = open(os.path.join(root, f), encoding="utf-8", errors="replace").read()
+                with open(os.path.join(root, f), encoding="utf-8", errors="replace") as handle:
+                    body = handle.read()
             except OSError:
                 continue
             # `matches(` may carry the value argument before `mode:`, and the call is often split
@@ -611,7 +613,8 @@ def swift_prefix(repo=REPO):
             if not f.endswith(".swift"):
                 continue
             try:
-                body = open(os.path.join(root, f), encoding="utf-8", errors="replace").read()
+                with open(os.path.join(root, f), encoding="utf-8", errors="replace") as handle:
+                    body = handle.read()
             except OSError:
                 continue
             # `MenuPath(bar: <x>, item: <name>, itemMode: .prefix)` — the item is the label whose
@@ -646,7 +649,8 @@ def swift_template(repo=REPO):
             if not f.endswith(".swift"):
                 continue
             try:
-                body = open(os.path.join(root, f), encoding="utf-8", errors="replace").read()
+                with open(os.path.join(root, f), encoding="utf-8", errors="replace") as handle:
+                    body = handle.read()
             except OSError:
                 continue
             names |= set(re.findall(

@@ -39,24 +39,78 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-          mode=docs-only
-          changed=0
-          while IFS= read -r -d '' path; do
-            changed=$((changed + 1))
-            case "$path" in
-              docs/*|*.md) ;;
-              *) mode=full ;;
-            esac
-          done < <(git diff --no-renames --name-only -z "$BASE_SHA" "$GITHUB_SHA")
-          if [ "$changed" -eq 0 ]; then mode=full; fi
+          mode=full
+          changes="$RUNNER_TEMP/change-scope.txt"
+          # Canon, locale and other consumed documents are validation inputs. Only an
+          # existing regular roadmap file's content edit can omit the Swift suites.
+          # Capture the diff first so a Git failure cannot publish a successful scope.
+          git diff --no-renames --raw --no-abbrev "$BASE_SHA" "$GITHUB_SHA" > "$changes"
+          if [ "$(wc -l < "$changes")" -eq 1 ] &&
+             LC_ALL=C grep -Eq '^:100644 100644 [0-9a-f]{40} [0-9a-f]{40} M[[:space:]]docs/roadmap/README[.]md$' "$changes"; then
+            mode=docs-only
+          fi
           if [ "$mode" = full ]; then full_validation=true; else full_validation=false; fi
           echo "mode=$mode" >> "$GITHUB_OUTPUT"
           echo "full-validation=$full_validation" >> "$GITHUB_OUTPUT"
 
+  # Canon and locale validation is intentionally independent of change-scope. A documentation
+  # edit can alter a citation, observation or generated mapping just as readily as a source edit,
+  # and a skipped required proof is not a pass.
+  canon-locales:
+    name: canon-locales
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+
+      - name: Verify pinned Apple corpus, citations and every declared locale
+        run: |
+          set -euo pipefail
+          python3 Scripts/logic_canon.py status
+          python3 Scripts/check-canon-drift.py
+          python3 Scripts/check-canon-citations.py
+          python3 Scripts/check-canon-prose-numbers.py
+          python3 Scripts/check-policy-literals-against-canon.py
+          python3 Scripts/check-labelsets-are-derived.py
+          python3 Scripts/check-new-labelsets-name-a-row.py
+          python3 Scripts/check-labelset-census-only-shrinks.py
+          python3 Scripts/check-locale-detection-is-derived.py
+          python3 Scripts/check-locale-policy-coverage.py
+          python3 Scripts/locale_labels.py --check
+          python3 Scripts/check-locale-labels-json.py
+          python3 Scripts/check-observation-records.py
+          python3 Scripts/check-observation-ratchets.py
+
+      - name: Mutation drives prove tampering, stale canon and wrong locale maps fail
+        run: |
+          set -euo pipefail
+          tests=(
+            Scripts/test_logic_canon.py
+            Scripts/test_canon_citation_diagnostics.py
+            Scripts/test_canon_citations_guard.py
+            Scripts/test_canon_corrections.py
+            Scripts/test_canon_drift.py
+            Scripts/test_canon_presence.py
+            Scripts/test_canon_prose_numbers.py
+            Scripts/test_labelsets_are_derived.py
+            Scripts/test_new_labelsets_name_a_row.py
+            Scripts/test_locale_detection_is_derived.py
+            Scripts/test_locale_labels_json.py
+            Scripts/test_policy_literals_against_canon.py
+            Scripts/test_observation_records.py
+            Scripts/test_observation_ratchets.py
+            Scripts/test_release_verify_candidate.py
+            Scripts/test_required_verification_workflow.py
+          )
+          for test_file in "${tests[@]}"; do
+            python3 "$test_file"
+          done
+
   release-build:
     name: release-build
     needs: change-scope
-    if: ${{ needs.change-scope.outputs.full-validation == 'true' }}
     runs-on: macos-15-intel
     timeout-minutes: 60
     steps:
@@ -95,7 +149,7 @@ jobs:
       - name: Publish release executable for fault-exclusion tests
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: release-runtime-${{ github.run_id }}
+          name: release-runtime-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/release-runtime
           retention-days: 1
           if-no-files-found: error
@@ -119,6 +173,15 @@ jobs:
           set -euo pipefail
           bash Scripts/ci-forbid-dead-expect.sh
           bash Scripts/ci-forbid-hardcoded-menu-bar-item.sh
+
+      # Whether the Formula's version is published, and whether its sha256 is that release's,
+      # needs GitHub and a token, so it runs here rather than inside the unit suite. Native
+      # qualification runs the unit suite with no GitHub credentials, and a unit test that asked
+      # GitHub failed there with HTTP none. VersionConsistencyTests keeps the offline half.
+      - name: Formula names the newest published release and its hash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: bash Scripts/ci-verify-formula-sha.sh
 
       - name: Run Python product tests in parallel
         run: |
@@ -248,12 +311,11 @@ jobs:
       - name: Download release executable
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
         with:
-          name: release-runtime-${{ github.run_id }}
+          name: release-runtime-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/release-runtime
 
       - name: Run this exact serial shard
         env:
-          GH_TOKEN: ${{ github.token }}
           SHARD: ${{ matrix.shard }}
           SHARD_MODE: ${{ matrix.mode }}
         run: |
@@ -330,7 +392,7 @@ jobs:
           set -euo pipefail
           test "$SCOPE" = success
           test "$MODE" = docs-only
-          test "$RELEASE" = skipped
+          test "$RELEASE" = success
           test "$TEST_BUILD" = skipped
           test "$SHARDS" = skipped
 
@@ -417,23 +479,108 @@ jobs:
           if-no-files-found: warn
           overwrite: true
 
+  # The trusted Logic host runs Scripts/ci-native-qualify.sh against this run's exact
+  # release-runtime artifact. The authenticated exact-SHA status is consumed here; no mock,
+  # hosted-runner skip or source-only substitute can produce success.
+  native-logic-e2e:
+    name: native-logic-e2e
+    needs: [release-build, product-validation]
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      actions: read
+      contents: read
+      statuses: read
+    steps:
+      - name: Require successful exact-artifact native Logic qualification
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_ATTEMPT: ${{ github.run_attempt }}
+          EXPECTED_SHA: ${{ github.sha }}
+          EXPECTED_TARGET: https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
+          RELEASE_BUILD: ${{ needs.release-build.result }}
+          RUN_ID: ${{ github.run_id }}
+          PRODUCT_VALIDATION: ${{ needs.product-validation.result }}
+        run: |
+          set -euo pipefail
+          test "$RELEASE_BUILD" = success
+          test "$PRODUCT_VALIDATION" = success
+          gh api "repos/$GITHUB_REPOSITORY/commits/$EXPECTED_SHA/status?per_page=100" \
+            > "$RUNNER_TEMP/combined-status.json"
+          gh api --paginate --slurp \
+            "repos/$GITHUB_REPOSITORY/commits/$EXPECTED_SHA/statuses?per_page=100" \
+            > "$RUNNER_TEMP/status-pages.json"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts?per_page=100" \
+            > "$RUNNER_TEMP/artifacts.json"
+          python3 - "$RUNNER_TEMP/combined-status.json" "$RUNNER_TEMP/status-pages.json" \
+            "$RUNNER_TEMP/artifacts.json" \
+            "$EXPECTED_SHA" "$EXPECTED_TARGET" "$EXPECTED_ATTEMPT" "$RUN_ID" <<'PY'
+          import json, re, sys
+          status_response = json.load(open(sys.argv[1], encoding="utf-8"))
+          status_pages = json.load(open(sys.argv[2], encoding="utf-8"))
+          artifacts = json.load(open(sys.argv[3], encoding="utf-8")).get("artifacts", [])
+          expected_sha, expected_target = sys.argv[4], sys.argv[5]
+          expected_attempt, run_id = sys.argv[6], sys.argv[7]
+          if status_response.get("sha") != expected_sha:
+              raise SystemExit("combined native status response SHA mismatch")
+          if not isinstance(status_pages, list) or not all(isinstance(page, list) for page in status_pages):
+              raise SystemExit("full commit status pages have an unexpected shape")
+          rows = [row for page in status_pages for row in page]
+          name = f"release-runtime-{run_id}-{expected_attempt}"
+          matches = [row for row in artifacts if row.get("name") == name]
+          if len(matches) != 1:
+              raise SystemExit(f"expected one current {name!r} artifact, found {len(matches)}")
+          artifact = matches[0]
+          artifact_id, digest = artifact.get("id"), artifact.get("digest")
+          if artifact.get("expired") is not False:
+              raise SystemExit("release runtime artifact is expired or has unknown expiry state")
+          if isinstance(artifact_id, bool) or not isinstance(artifact_id, int) or artifact_id < 1:
+              raise SystemExit("release runtime artifact id is not a positive integer")
+          if not isinstance(digest, str) or not re.fullmatch(r"sha256:[0-9a-f]{64}", digest):
+              raise SystemExit("release runtime artifact has no canonical SHA-256 digest")
+          receipt = f"Native PASS a={expected_attempt} id={artifact_id} d={digest[7:]}"
+          if len(receipt) > 140:
+              raise SystemExit("native receipt exceeds GitHub's commit-status description limit")
+          exact = [row for row in rows if row.get("context") == "logic-native-e2e"]
+          if not exact:
+              raise SystemExit(
+                  "missing exact native status; run Scripts/ci-native-qualify.sh "
+                  f"for candidate {expected_sha} and run {run_id} on the trusted Logic host")
+          latest = exact[0]
+          if latest.get("target_url") != expected_target:
+              raise SystemExit("native status belongs to another CI run attempt")
+          if latest.get("state") != "success":
+              raise SystemExit(f"native status is {latest.get('state')!r}, not success")
+          if latest.get("description") != receipt:
+              raise SystemExit("native status does not bind the current artifact id and digest")
+          creator = latest.get("creator") or {}
+          if creator.get("login") != "MongLong0214" or creator.get("id") != 97578200:
+              raise SystemExit("native status was not published by the trusted repository owner")
+          print("Current run-attempt artifact passed native Logic qualification")
+          PY
+
   build:
     name: build
     runs-on: ubuntu-latest
-    needs: [change-scope, product-validation]
+    needs: [change-scope, canon-locales, native-logic-e2e, product-validation]
     if: always()
     timeout-minutes: 5
     steps:
       - name: Product validation must pass
         env:
           SCOPE: ${{ needs.change-scope.result }}
+          CANON_LOCALES: ${{ needs.canon-locales.result }}
           MODE: ${{ needs.change-scope.outputs.mode }}
+          NATIVE_LOGIC: ${{ needs.native-logic-e2e.result }}
           VALIDATION: ${{ needs.product-validation.result }}
           PRODUCT: ${{ needs.product-validation.outputs.outcome }}
           DOCS_ONLY: ${{ needs.product-validation.outputs.docs-only }}
         run: |
           set -euo pipefail
           test "$SCOPE" = success
+          test "$CANON_LOCALES" = success
+          test "$NATIVE_LOGIC" = success
           test "$VALIDATION" = success
           if [ "$MODE" = full ]; then
             test "$PRODUCT" = success

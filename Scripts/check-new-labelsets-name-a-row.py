@@ -121,6 +121,15 @@ def prove_composition(name, entry, members, canon, failures):
                             f"re-derive is the same claim as no row at all.")
             return True
 
+    try:
+        required = set(canon.LOCALE_NAMES)
+        sources = canon.load_manifest()["sources"]
+        if not required or not isinstance(sources, dict):
+            raise canon.CanonError("the supported locales or provider manifest is empty/malformed")
+    except (canon.CanonError, OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+        failures.append(f"{name}: cannot determine composition provider locales: {exc}")
+        return True
+
     factors = {}
     for kind in ("template", "noun"):
         try:
@@ -129,6 +138,24 @@ def prove_composition(name, entry, members, canon, failures):
             failures.append(f"{name}: `composed_from.{kind}` is not a reference: {exc}")
             return True
         values = spec[f"{kind}_values"]
+        namespace = canon.TRANSLATION_NAMESPACE.get(reference.source, reference.source)
+        try:
+            provider_locales = {locale for source, block in sources.items()
+                                if canon.TRANSLATION_NAMESPACE.get(source, source) == namespace
+                                for locale in block.get("locales", []) if locale != "-"}
+        except (TypeError, AttributeError) as exc:
+            failures.append(f"{name}: cannot read {kind} provider locales: {exc}")
+            return True
+        if provider_locales != required:
+            failures.append(f"{name}: {kind} provider locales {sorted(provider_locales)} do not "
+                            f"match supported UI locales {sorted(required)}")
+            return True
+        if not isinstance(values, dict) or set(values) != required:
+            seen = set(values) if isinstance(values, dict) else set()
+            failures.append(f"{name}: `composed_from.{kind}_values` must name every supported "
+                            f"UI locale: missing locales {sorted(required - seen)}, "
+                            f"extra locales {sorted(seen - required)}")
+            return True
         for locale, value in values.items():
             # Locale by locale, against the row's committed digest. This is the step that makes
             # declared text usable: it cannot be invented, and a value from a neighbouring row --
@@ -137,6 +164,12 @@ def prove_composition(name, entry, members, canon, failures):
                                      reference.key, reference.field)
             try:
                 canon.check_citation(str(located), value)
+                # Human-readable citations normalize NBSP and surrounding whitespace. The v3
+                # #ci row preserves those bytes, so it must agree too before composing a label.
+                precise = canon.CanonRef(reference.source, reference.unit, locale,
+                                         reference.key, reference.field + canon.CASE_INSENSITIVE)
+                if canon.resolve_offline(precise) != canon.ci_digest(value):
+                    raise canon.CanonError("the pinned row differs in whitespace/NBSP")
             except canon.CanonError as exc:
                 failures.append(f"{name}: `composed_from.{kind}_values[{locale}]` = {value!r} is "
                                 f"not what that row holds: {exc}")
@@ -150,13 +183,23 @@ def prove_composition(name, entry, members, canon, failures):
 
     composed = {factors["template"][locale].replace("%@", factors["noun"][locale])
                 for locale in shared}
-    missing = sorted(composed - set(members))
+    # Only the track-header/content group readers use LabelSet.containsNormalized
+    # (AXLogicProElements.isTrackHeadersDescription and region enumeration). Lowercasing alone
+    # is narrower than that matcher; do not fold accents, NBSP or ß to ss. Other consumers keep
+    # exact spelling: MIDIKeyCommandSurfaceResolver resolves metronome commandNames with
+    # Set.contains after trimming/removing a trailing *, without changing case.
+    member_key = (str.lower if name in ("trackHeadersDescription", "trackContentExplicit")
+                  else lambda text: text)
+    member_keys = {member_key(member) for member in members}
+    composed_keys = {member_key(value) for value in composed}
+    missing = sorted(value for value in composed if member_key(value) not in member_keys)
     if missing:
         failures.append(
             f"{name}: the composition produces {missing}, which the LabelSet does not carry. A "
             f"language Logic assembles and this set cannot match is the gap the set exists to "
             f"close.")
-    unexplained = sorted(set(members) - composed - set(spec.get("extra") or []))
+    unexplained = sorted(member for member in members if member_key(member) not in composed_keys
+                         and member not in (spec.get("extra") or []))
     if unexplained:
         failures.append(
             f"{name}: carries {unexplained}, which is neither composed nor declared under "

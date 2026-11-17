@@ -221,6 +221,38 @@ struct OperationRegistryTests {
         }
     }
 
+    @Test("Verified popup reads own and release the existing Logic mutation gate",
+          arguments: ["get_output_verified", "get_send_destination_verified"])
+    func verifiedPopupReadOwnsExistingMutationGate(_ command: String) async throws {
+        for readCommand in ["get_output_verified", "get_input_bus_verified",
+                            "get_send_destination_verified", "get_send_bypass_verified"] {
+            let spec = try #require(OperationRegistry.spec(
+                tool: "logic_mixer", command: readCommand))
+            #expect(spec.mutability == .readOnly)
+        }
+        let gate = LogicMutationGate()
+        let result = await LogicProServer.runWithDeadline(
+            tool: "logic_mixer", command: command, mutationGate: gate
+        ) {
+            guard let context = OperationTraceContext.current else {
+                Issue.record("Verified popup read must receive an operation trace context")
+                return toolTextResult(.error("missing operation trace context"))
+            }
+            #expect(context.mutationGateAcquired)
+            #expect(context.ownsGate())
+            do { try SessionPopulationObservation.requireOwnedAcquisition() }
+            catch { Issue.record("Verified popup read must own its existing acquisition gate: \(error)") }
+            let competing = gate.tryAcquire(operation: "test.competing_mutation")
+            #expect(competing == nil)
+            if let competing { gate.release(competing) }
+            return toolTextResult(.success("owned verified popup read"))
+        }
+        #expect(sharedToolText(result) == "owned verified popup read")
+        #expect(!gate.isHeldByEntitledHolder())
+        let successor = try #require(gate.tryAcquire(operation: "test.successor"))
+        gate.release(successor)
+    }
+
     @Test("The compound checked-input writer receives its registered medium deadline under the real owned gate")
     func inputBusWriterReceivesCompoundDeadlineUnderRealOwnedGate() async throws {
         let spec = try #require(OperationRegistry.spec(tool: "logic_mixer", command: "set_input_bus_verified"))

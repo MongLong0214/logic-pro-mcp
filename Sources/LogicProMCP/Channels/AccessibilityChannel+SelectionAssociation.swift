@@ -93,6 +93,8 @@ extension AccessibilityChannel {
         private var expectedFocus: AXUIElement
         private var originalSelectedChild: AXUIElement?
         private var expectedSelectedChild: AXUIElement?
+        private var mixerSelectionByHeader: [Int: AXUIElement] = [:]
+        private var railSelectionProvenNoEffect = false
         private let originalRailFocus: AXUIElement?
         private let originalHeaderFocus: OwnedTrackStackObservationNavigation.ReadFocusScope.PassiveHeaderReadFocus?
         private let retainedTrackBindings: [AXTrackBinding.Binding]?
@@ -2005,10 +2007,13 @@ extension AccessibilityChannel {
 
         private func select(_ index: Int, referenceIsCurrent: @Sendable () async -> Bool,
                             stoppingWhen stop: @Sendable () -> Bool,
-                            requiresNonStackHeader: Bool = false) async -> Bool {
+                            requiresNonStackHeader: Bool = false,
+                            requestedMixerCandidates: [AXUIElement] = []) async -> Bool {
+            if !railSelectionProvenNoEffect {
+                guard AXHelpers.isAttributeSettable(rail, kAXSelectedChildrenAttribute as String,
+                    runtime: logic.ax) == true else { return false }
+            }
             guard !lost, !stop(), (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
-                  AXHelpers.isAttributeSettable(rail, kAXSelectedChildrenAttribute as String,
-                runtime: logic.ax) == true,
                   let beforeViewport = await selectionEntryViewport(
                     referenceIsCurrent: referenceIsCurrent, stoppingWhen: stop),
                   Self.sameViewport(beforeViewport, expectedViewport),
@@ -2017,6 +2022,10 @@ extension AccessibilityChannel {
                   owned(), selectedChildCustodyMatches(),
                   !requiresNonStackHeader || (AXValueExtractors.extractTrackStackState(from: headers[index],
                     runtime: logic.ax).isStackHeader == false && owned() && selectedChildCustodyMatches()) else { return false }
+            if railSelectionProvenNoEffect {
+                return await selectThroughHeldMixer(index, referenceIsCurrent: referenceIsCurrent,
+                    stoppingWhen: stop, requestedCandidates: requestedMixerCandidates)
+            }
             // The selected-child read is a new deciding read. Renew the request
             // reference after it, then check the pure lease without another AX
             // read before the selection write.
@@ -2135,6 +2144,89 @@ extension AccessibilityChannel {
                     expectedViewport = afterViewport
                     guard retainMixerViewportAfterOwnedAction() else { return false }
                     return permitsRead() && !stop() && accepted
+                }
+                if attempt < Self.selectionSettlementDelays.count {
+                    do { try await Task.sleep(for: Self.selectionSettlementDelays[attempt]) } catch { return false }
+                }
+            }
+            guard accepted, !lost else { return false }
+            railSelectionProvenNoEffect = true
+            return await selectThroughHeldMixer(index, referenceIsCurrent: referenceIsCurrent,
+                stoppingWhen: stop, requestedCandidates: requestedMixerCandidates)
+        }
+
+        /// Logic 13 can acknowledge the exact rail setter without moving its
+        /// selection. In that measured state, use only this request's held Mixer
+        /// children and require the reciprocal child/header transition itself.
+        private func selectThroughHeldMixer(_ index: Int,
+                                            referenceIsCurrent: @Sendable () async -> Bool,
+                                            stoppingWhen stop: @Sendable () -> Bool,
+                                            requestedCandidates: [AXUIElement]) async -> Bool {
+            guard let precedingChild = expectedSelectedChild,
+                  AXHelpers.isAttributeSettable(mixer, kAXSelectedChildrenAttribute as String,
+                    runtime: logic.ax) == true else { return false }
+            var candidates: [AXUIElement] = []
+            func appendUnique(_ candidate: AXUIElement) {
+                guard !CFEqual(candidate, precedingChild),
+                      strips.filter({ CFEqual($0, candidate) }).count == 1,
+                      !candidates.contains(where: { CFEqual($0, candidate) }) else { return }
+                candidates.append(candidate)
+            }
+            if let known = mixerSelectionByHeader[index] { appendUnique(known) }
+            requestedCandidates.forEach(appendUnique)
+            strips.filter({ !CFEqual($0, precedingChild) }).forEach(appendUnique)
+            guard let candidate = candidates.first else { return false }
+            // Preserve both existing callback bookends, but run the former
+            // action-boundary callback before the final native custody proof.
+            guard !stop(), await referenceIsCurrent(),
+                  !stop(), await referenceIsCurrent(),
+                  let decidingViewport = await selectionEntryViewport(
+                    referenceIsCurrent: referenceIsCurrent, stoppingWhen: stop),
+                  Self.sameViewport(decidingViewport, expectedViewport),
+                  permitsRead(), owned(), selectedChildCustodyMatches(),
+                  mixerViewportIsExpected(),
+                  (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil else { return false }
+            // Every callback runs before the final current native custody and
+            // viewport bookends above. The pure acquisition lease is last, so
+            // no stale capability or callback observation can cross this write.
+            effects.navigationPerformed = true; effects.restoration = "not_restored"
+            if !effects.attempted.contains("mixer_selection") { effects.attempted.append("mixer_selection") }
+            let accepted = AXHelpers.setAttribute(mixer, kAXSelectedChildrenAttribute as String,
+                [candidate] as CFArray, runtime: logic.ax)
+            for attempt in 0...Self.selectionSettlementDelays.count {
+                guard !stop(), await referenceIsCurrent(),
+                      (try? SessionPopulationObservation.requireOwnedAcquisition()) != nil,
+                      owned() else { return false }
+                let selectedIndex = Self.exclusiveIndex(headers, ax: logic.ax)
+                let selectedChild: AXUIElement?
+                if case .observed(let child) = selectedChildRead() { selectedChild = child }
+                else { selectedChild = nil }
+                if let selectedIndex, let selectedChild, CFEqual(selectedChild, candidate) {
+                    guard let focus: AXUIElement = AXHelpers.getAttribute(app,
+                            kAXFocusedUIElementAttribute as String, runtime: logic.ax),
+                          CFEqual(focus, candidate) || (originalRailFocus.map({ CFEqual($0, focus) }) == true),
+                          let afterViewport = observedCurrentViewport() else { return false }
+                    // Even a false acknowledgement, or a transition to another
+                    // exact held header, may have changed Logic. Retain that
+                    // state only as temporary cleanup custody so observe() can
+                    // run the exact original-child inverse. It never becomes a
+                    // requested association unless both target and ACK agree.
+                    expectedIndex = selectedIndex; expectedFocus = focus
+                    expectedSelectedChild = candidate
+                    expectedViewport = afterViewport
+                    if !effects.changed.contains("mixer_selection") { effects.changed.append("mixer_selection") }
+                    guard retainMixerViewportAfterOwnedAction() else { return false }
+                    let current = permitsRead() && !stop()
+                    if selectedIndex == index, accepted, current {
+                        mixerSelectionByHeader[index] = candidate
+                        return true
+                    }
+                    return false
+                }
+                // A successful no-op or a transition to a different exact
+                // header is not permission to try unrelated strips.
+                if selectedIndex != expectedIndex || selectedChild.map({ !CFEqual($0, precedingChild) }) == true {
+                    return false
                 }
                 if attempt < Self.selectionSettlementDelays.count {
                     do { try await Task.sleep(for: Self.selectionSettlementDelays[attempt]) } catch { return false }
@@ -2595,6 +2687,7 @@ extension AccessibilityChannel {
             switch selectedChildRead() {
             case .observed(let child):
                 originalSelectedChild = child; expectedSelectedChild = child
+                mixerSelectionByHeader[originalIndex] = child
                 guard permitsRead(), !stop() else { return [] }
             case .unavailable: break
             case .unverified:
@@ -2624,6 +2717,19 @@ extension AccessibilityChannel {
                 collectionEnd = start.advanced(by: reserve > .zero ? remaining - reserve : remaining / 4)
             } else { collectionEnd = nil }
             var observed: [(Int, AXUIElement)] = []
+            let requestedMixerCandidates: [AXUIElement]
+            if let observingPeerStrips {
+                guard observingPeerStrips.allSatisfy({ peer in
+                    CFEqual(peer.window, window) && CFEqual(peer.mixer, mixer)
+                        && peer.document.utf8.elementsEqual(document.utf8)
+                        && strips.filter({ CFEqual($0, peer.strip) }).count == 1
+                        && observingPeerStrips.filter({ CFEqual($0.strip, peer.strip) }).count == 1
+                }) else {
+                    effects.reason = "association_selection_unverified"
+                    return []
+                }
+                requestedMixerCandidates = observingPeerStrips.map(\.strip)
+            } else { requestedMixerCandidates = [] }
             func requestedPeersWereObserved() -> Bool {
                 guard allHeldHeaders, !observed.isEmpty,
                       observingPeerHeaders != nil || observingPeerStrips != nil else { return false }
@@ -2669,7 +2775,8 @@ extension AccessibilityChannel {
                 guard await referenceIsCurrent(), !stop() else { restored = false; break }
                 let precedingStrip = associationStrip
                 let advanced = await select(challenge, referenceIsCurrent: referenceIsCurrent, stoppingWhen: stop,
-                    requiresNonStackHeader: !allHeldHeaders)
+                    requiresNonStackHeader: !allHeldHeaders,
+                    requestedMixerCandidates: requestedMixerCandidates)
                 let challengeStrip = associationStrip
                 if allHeldHeaders {
                     guard advanced else { selectionsVerified = false; break }
@@ -2683,7 +2790,8 @@ extension AccessibilityChannel {
                         // header again from the original strip; if it still does
                         // not change strip, leave just this association unknown.
                         guard await referenceIsCurrent(),
-                              await select(originalIndex, referenceIsCurrent: referenceIsCurrent, stoppingWhen: stop) else {
+                              await select(originalIndex, referenceIsCurrent: referenceIsCurrent, stoppingWhen: stop,
+                                requestedMixerCandidates: requestedMixerCandidates) else {
                             selectionsVerified = false; break
                         }
                         if !CFEqual(associationStrip, originalAssociationStrip) {
@@ -2695,7 +2803,8 @@ extension AccessibilityChannel {
                         }
                         originalPairVerified = true
                         guard await referenceIsCurrent(),
-                              await select(challenge, referenceIsCurrent: referenceIsCurrent, stoppingWhen: stop) else {
+                              await select(challenge, referenceIsCurrent: referenceIsCurrent, stoppingWhen: stop,
+                                requestedMixerCandidates: requestedMixerCandidates) else {
                             selectionsVerified = false; break
                         }
                         if !CFEqual(associationStrip, originalAssociationStrip) { observed.append((challenge, associationStrip)) }

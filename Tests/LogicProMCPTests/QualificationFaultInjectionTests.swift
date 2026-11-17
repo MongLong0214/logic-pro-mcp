@@ -78,6 +78,7 @@ struct QualificationFaultInjectionTests {
         var childEnvironment = ProcessInfo.processInfo.environment
         childEnvironment[QualificationFaultInjection.environmentKey] = mode.rawValue
         let result = try QualificationTransport(
+            uiObserver: unchangedUIForTests,
             requestTimeout: 30,
             shutdownGrace: 1
         ).drive(.init(
@@ -181,6 +182,7 @@ struct QualificationFaultInjectionTests {
         var childEnvironment = ProcessInfo.processInfo.environment
         for (key, value) in faultEnv { childEnvironment[key] = value }
         let result = try QualificationTransport(
+            uiObserver: unchangedUIForTests,
             requestTimeout: 30,
             shutdownGrace: 1
         ).drive(.init(

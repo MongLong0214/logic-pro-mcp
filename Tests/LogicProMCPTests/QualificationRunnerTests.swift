@@ -12,7 +12,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(playheadStep: operation)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         #expect(result.operationResults[operation.rawValue]?.status == .passed)
@@ -46,7 +46,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(playheadStep: .transportFastForward, playheadFault: "stage_lost_step_reply")
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == .transportFastForward })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         #expect(FileManager.default.fileExists(atPath: fixture.directory.appendingPathComponent("step-fault-consumed").path))
@@ -66,7 +66,7 @@ struct QualificationRunnerTests {
         )
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == .transportFastForward })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         #expect(FileManager.default.fileExists(
@@ -88,7 +88,7 @@ struct QualificationRunnerTests {
         )
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         #expect(FileManager.default.fileExists(
@@ -109,7 +109,7 @@ struct QualificationRunnerTests {
         )
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == .transportFastForward })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         #expect(result.operationResults[spec.id.rawValue]?.status == .passed)
@@ -129,7 +129,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(playheadStep: operation, playheadOrigin: origin)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         #expect(result.operationResults[operation.rawValue]?.status == .notQualified)
@@ -151,7 +151,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(playheadStep: operation, playheadFault: shape)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         #expect(FileManager.default.fileExists(atPath: fixture.directory.appendingPathComponent("step-fault-consumed").path))
@@ -303,6 +303,7 @@ struct QualificationRunnerTests {
             $0.id == .systemExportSupportBundle
         })
         let result = try QualificationTransport(
+            uiObserver: unchangedUIForTests,
             handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2,
             supportBundleRoot: { root }
         ).drive(.init(
@@ -343,6 +344,7 @@ struct QualificationRunnerTests {
             $0.id == .systemExportSupportBundle
         })
         let result = try QualificationTransport(
+            uiObserver: unchangedUIForTests,
             handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2,
             supportBundleRoot: { root }
         ).drive(.init(
@@ -378,6 +380,7 @@ struct QualificationRunnerTests {
         })
         do {
             _ = try QualificationTransport(
+                uiObserver: unchangedUIForTests,
                 handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2,
                 supportBundleRoot: { root }
             ).drive(.init(
@@ -413,6 +416,7 @@ struct QualificationRunnerTests {
         })
         do {
             _ = try QualificationTransport(
+                uiObserver: unchangedUIForTests,
                 handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2,
                 supportBundleRoot: { root }
             ).drive(.init(
@@ -448,6 +452,7 @@ struct QualificationRunnerTests {
         })
         do {
             _ = try QualificationTransport(
+                uiObserver: unchangedUIForTests,
                 handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2,
                 supportBundleRoot: { root },
                 supportBundleQuiescer: { _ in
@@ -495,6 +500,7 @@ struct QualificationRunnerTests {
             $0.id == .systemExportSupportBundle
         })
         let result = try QualificationTransport(
+            uiObserver: unchangedUIForTests,
             handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2,
             supportBundleRoot: { root },
             supportBundleRemover: { _, _ in
@@ -630,7 +636,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(playheadStep: operation, playheadAtBoundary: true)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         #expect(result.operationResults[operation.rawValue]?.status == .passed)
@@ -669,7 +675,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(playheadStep: operation, playheadFault: shape, playheadAtBoundary: true)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         #expect(FileManager.default.fileExists(atPath: fixture.directory.appendingPathComponent("step-fault-consumed").path))
@@ -694,7 +700,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(autopunchCycle: "healthy")
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == .transportToggleAutopunch })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         let observed = try #require(result.operationResults[spec.id.rawValue])
@@ -723,7 +729,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(autopunchCycle: shape)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == .transportToggleAutopunch })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         #expect(FileManager.default.fileExists(atPath: fixture.directory.appendingPathComponent("autopunch-fault-consumed").path))
@@ -743,7 +749,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(countInCycle: "healthy")
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == .transportToggleCountIn })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         let observed = try #require(result.operationResults[spec.id.rawValue])
@@ -772,7 +778,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(countInCycle: shape)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == .transportToggleCountIn })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         #expect(FileManager.default.fileExists(atPath: fixture.directory.appendingPathComponent("count-in-fault-consumed").path))
@@ -793,7 +799,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(nameRecipe: operation, nameIdentityFault: shape)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         #expect(FileManager.default.fileExists(atPath: fixture.directory.appendingPathComponent("identity-fault-consumed").path),
@@ -804,12 +810,48 @@ struct QualificationRunnerTests {
         #expect(result.operationResults[operation.rawValue]?.status != .passed)
     }
 
+    /// A track write acts only on the selected track, so the recipe addresses the row Logic reads
+    /// as selected and not a fixed row. Here the SECOND row is selected.
+    @Test(arguments: [OperationID.tracksRename, .editUndo, .editRedo])
+    func nameRecipesAddressTheSelectedRowNotRowZero(operation: OperationID) throws {
+        let fixture = try SlowHandshakeFixture(nameRecipe: operation, selectedRow: "second")
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+        let targets = try result.wireFrames.filter { $0.direction == .request && $0.operationID.hasPrefix("phase_b.") }.compactMap { frame -> String? in
+            let request = try #require(sharedJSONObject(frame.payload))
+            let params = request["params"] as? [String: Any]
+            let arguments = params?["arguments"] as? [String: Any]
+            guard arguments?["command"] as? String == "rename" else { return nil }
+            return (arguments?["params"] as? [String: Any])?["target_ref"] as? String
+        }
+        #expect(!targets.isEmpty)
+        #expect(targets.allSatisfy { $0 == "peer-track" }, "\(targets)")
+    }
+
+    /// With no selected track there is nothing a write could act on, and the recipe says so.
+    @Test(arguments: [OperationID.tracksRename, .editUndo, .editRedo])
+    func nameRecipesRefuseWhenNoTrackIsSelected(operation: OperationID) throws {
+        let fixture = try SlowHandshakeFixture(nameRecipe: operation, selectedRow: "none")
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+        let observed = try #require(result.operationResults[operation.rawValue])
+        #expect(observed.mutationRestore == nil)
+        let refusal = observed.mutationRestoreRefusal ?? "none"
+        #expect(refusal.contains("0 tracks are selected"), "\(refusal)")
+    }
+
     @Test(arguments: [OperationID.tracksRename, .editUndo, .editRedo])
     func healthyNameRecipesUseExactReferencesForEveryRename(operation: OperationID) throws {
         let fixture = try SlowHandshakeFixture(nameRecipe: operation)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         let observed = try #require(result.operationResults[operation.rawValue])
@@ -844,6 +886,7 @@ struct QualificationRunnerTests {
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
 
         let result = try QualificationTransport(
+            uiObserver: unchangedUIForTests,
             handshakeTimeout: 2,
             requestTimeout: 1,
             shutdownGrace: 2
@@ -868,7 +911,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(nameRecipe: operation, nameIdentityFault: shape)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         let observed = try #require(result.operationResults[operation.rawValue])
@@ -911,6 +954,7 @@ struct QualificationRunnerTests {
         let marker = fixture.directory.appendingPathComponent("gate-reclaimed")
 
         let result = try QualificationTransport(
+            uiObserver: unchangedUIForTests,
             handshakeTimeout: 2,
             requestTimeout: 1,
             shutdownGrace: 2,
@@ -957,6 +1001,7 @@ struct QualificationRunnerTests {
         let marker = fixture.directory.appendingPathComponent("gate-reclaimed")
 
         let result = try QualificationTransport(
+            uiObserver: unchangedUIForTests,
             handshakeTimeout: 2,
             requestTimeout: 2,
             shutdownGrace: 2,
@@ -1004,6 +1049,7 @@ struct QualificationRunnerTests {
         let probe = CleanupSleepProbe()
 
         _ = try QualificationTransport(
+            uiObserver: unchangedUIForTests,
             handshakeTimeout: 2,
             requestTimeout: 2,
             shutdownGrace: 2,
@@ -1035,7 +1081,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(valueCycle: operation)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
 
@@ -1059,7 +1105,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(valueCycle: operation, valueFault: fault)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 0.2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 0.2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
 
@@ -1085,7 +1131,7 @@ struct QualificationRunnerTests {
             valueCycle: .mixerSetVolume, valueFault: "lost_mutation_reply")
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == .mixerSetVolume })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 0.2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 0.2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
 
@@ -1104,7 +1150,7 @@ struct QualificationRunnerTests {
             valueCycle: operation, valueFault: "malformed_after_compensation_noop")
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
 
@@ -1121,7 +1167,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(valueCycle: operation, valueFault: "refused_forward")
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
 
@@ -1581,6 +1627,41 @@ struct QualificationRunnerTests {
         #expect(params[.pluginsGetHostParameterManifest]?["target_ref"] as? String == "ins_3")
     }
 
+    @Test func anAmbiguousNamedTrackDoesNotInvalidateThePluginReadProbePreparation() throws {
+        let tracks = try JSONSerialization.data(withJSONObject: [
+            "source": "ax_live", "readable": true,
+            "data": [["id": 0, "track_ref": "trk_a"], ["id": 1, "track_ref": "trk_b"]],
+        ])
+        func refusal(reason: String = "arrange_name_ambiguous", withPlugins: Bool = false) throws -> Data {
+            var body: [String: Any] = [
+                "state": "B", "success": true, "verified": false,
+                "reason": "readback_unavailable", "binding_refusal_reason": reason,
+            ]
+            if withPlugins { body["plugins"] = [] }
+            return try JSONSerialization.data(withJSONObject: body)
+        }
+        let good = try JSONSerialization.data(withJSONObject: [
+            "state": "A", "complete": true,
+            "plugins": [[
+                "read_status": "ok", "occupied": true,
+                "plugin_id": "logic.stock.effect.compressor", "plugin_insert_ref": "ins_0",
+            ]],
+        ])
+        let params = try QualificationTransport.preparePluginReadProbeParams(
+            tracksRead: { tracks },
+            inventoryRead: { try $0 == 0 ? good : refusal() })
+        #expect(params[.pluginsGetHostParameterManifest]?["target_ref"] as? String == "ins_0")
+
+        // Any other refusal, or a refusal that also carries inserts, still fails the preparation.
+        for other in [try refusal(reason: "something_else"), try refusal(withPlugins: true)] {
+            #expect(throws: QualificationTransportError.self) {
+                _ = try QualificationTransport.preparePluginReadProbeParams(
+                    tracksRead: { tracks },
+                    inventoryRead: { $0 == 0 ? good : other })
+            }
+        }
+    }
+
     @Test func pluginReadProbePreparationPropagatesMalformedDiscoveryAsFailure() throws {
         let malformedTracks = try JSONSerialization.data(withJSONObject: [
             "source": "project_file", "readable": false, "data": [],
@@ -1688,6 +1769,275 @@ struct QualificationRunnerTests {
         #expect(preparation.failures.isEmpty)
         #expect(preparation.params[.pluginsGetHostParameterManifest]?["target_ref"] as? String
             == "ins_3")
+    }
+
+    @Test func sequentialPluginReadPreparationReplacesStaleReferencesAndFailsClosed() throws {
+        var prepared: [OperationID: [String: Any]] = [
+            .pluginsGetHostParameterManifest: ["target_ref": "ins_old_manifest"],
+            .pluginsGetParamVerified: ["target_ref": "ins_old_scalar", "param": "gain"],
+        ]
+        var preparationCount = 0
+
+        let refreshedFailure = QualificationTransport.refreshPluginReadProbeParams(
+            for: .pluginsGetParamVerified,
+            preparedReadParams: &prepared,
+            refresh: {
+                (
+                    QualificationPluginReadRefreshReceipt(
+                        source: "ax_fallback_poller",
+                        refreshed: true,
+                        changedSections: ["tracks"]
+                    ),
+                    false
+                )
+            },
+            pluginPreparation: {
+                preparationCount += 1
+                return [
+                    .pluginsGetParamVerified: ["target_ref": "ins_fresh_scalar", "param": "gain"]
+                ]
+            }
+        )
+
+        #expect(refreshedFailure == nil)
+        #expect(preparationCount == 1)
+        #expect(prepared[.pluginsGetParamVerified]?["target_ref"] as? String
+            == "ins_fresh_scalar")
+        #expect(prepared[.pluginsGetHostParameterManifest] == nil)
+
+        let malformedFailure = QualificationTransport.refreshPluginReadProbeParams(
+            for: .pluginsGetParamVerified,
+            preparedReadParams: &prepared,
+            refresh: {
+                (
+                    QualificationPluginReadRefreshReceipt(
+                        source: "ax_fallback_poller",
+                        refreshed: true,
+                        changedSections: ["tracks"]
+                    ),
+                    false
+                )
+            },
+            pluginPreparation: {
+                preparationCount += 1
+                throw QualificationTransportError.protocolViolation("fresh inventory malformed")
+            }
+        )
+
+        #expect(preparationCount == 2)
+        let observedMalformedFailure = try #require(malformedFailure)
+        #expect(observedMalformedFailure.contains("fresh plug-in read-probe preparation failed"))
+        #expect(QualificationTransport.pluginReadProbeOperationIDs.allSatisfy {
+            prepared[$0] == nil
+        })
+    }
+
+    @Test func everyPluginReadBoundaryRefreshesBeforeDiscoveryAndRefreshFailureClearsAuthority() throws {
+        var prepared: [OperationID: [String: Any]] = [
+            .pluginsGetParamVerified: ["target_ref": "ins_stale", "param": "gain"]
+        ]
+        var events: [String] = []
+        var generation = 0
+
+        for operation in [OperationID.pluginsGetHostParameterManifest, .pluginsGetParamVerified] {
+            let failure = QualificationTransport.refreshPluginReadProbeParams(
+                for: operation,
+                preparedReadParams: &prepared,
+                refresh: {
+                    events.append("refresh")
+                    generation += 1
+                    return (
+                        QualificationPluginReadRefreshReceipt(
+                            source: "ax_fallback_poller",
+                            refreshed: true,
+                            changedSections: ["tracks"]
+                        ),
+                        false
+                    )
+                },
+                pluginPreparation: {
+                    events.append("tracks")
+                    events.append("inventory")
+                    return [operation: ["target_ref": "ins_fresh_\(generation)"]]
+                }
+            )
+            #expect(failure == nil)
+            #expect(prepared[operation]?["target_ref"] as? String == "ins_fresh_\(generation)")
+        }
+        #expect(events == [
+            "refresh", "tracks", "inventory",
+            "refresh", "tracks", "inventory",
+        ])
+
+        prepared[.pluginsGetParamVerified] = ["target_ref": "ins_stale_again"]
+        let refused = QualificationTransport.refreshPluginReadProbeParams(
+            for: .pluginsGetParamVerified,
+            preparedReadParams: &prepared,
+            refresh: {
+                events.append("refresh_refused")
+                    return (
+                        QualificationPluginReadRefreshReceipt(
+                            source: "ax_fallback_poller",
+                            refreshed: true,
+                            changedSections: ["tracks"]
+                        ),
+                        true
+                    )
+            },
+            pluginPreparation: {
+                events.append("unexpected_discovery")
+                return [.pluginsGetParamVerified: ["target_ref": "ins_forbidden"]]
+            }
+        )
+        let refusedFailure = try #require(refused)
+        #expect(refusedFailure.contains("fresh plug-in read-probe refresh failed"))
+        #expect(!events.contains("unexpected_discovery"))
+        #expect(QualificationTransport.pluginReadProbeOperationIDs.allSatisfy {
+            prepared[$0] == nil
+        })
+
+        let invalidReceipts: [QualificationPluginReadRefreshReceipt?] = [
+            nil,
+            QualificationPluginReadRefreshReceipt(
+                source: "ax_fallback_poller", refreshed: false, changedSections: ["tracks"]),
+            QualificationPluginReadRefreshReceipt(
+                source: "ax_fallback_poller", refreshed: true, changedSections: ["transport"]),
+            QualificationPluginReadRefreshReceipt(
+                source: "none", refreshed: true, changedSections: ["tracks"]),
+        ]
+        for (index, receipt) in invalidReceipts.enumerated() {
+            prepared[.pluginsGetParamVerified] = ["target_ref": "ins_stale_\(index)"]
+            var discoveryCalled = false
+            let invalid = QualificationTransport.refreshPluginReadProbeParams(
+                for: .pluginsGetParamVerified,
+                preparedReadParams: &prepared,
+                refresh: { (receipt, false) },
+                pluginPreparation: {
+                    discoveryCalled = true
+                    return [.pluginsGetParamVerified: ["target_ref": "ins_forbidden"]]
+                }
+            )
+            #expect(invalid != nil)
+            #expect(!discoveryCalled)
+            #expect(QualificationTransport.pluginReadProbeOperationIDs.allSatisfy {
+                prepared[$0] == nil
+            })
+        }
+
+        prepared[.pluginsGetParamVerified] = ["target_ref": "ins_stale_thrown"]
+        let thrown = QualificationTransport.refreshPluginReadProbeParams(
+            for: .pluginsGetParamVerified,
+            preparedReadParams: &prepared,
+            refresh: {
+                events.append("refresh_thrown")
+                throw QualificationTransportError.closedPipe(phase: "plugin boundary refresh")
+            },
+            pluginPreparation: {
+                events.append("unexpected_discovery_after_throw")
+                return [.pluginsGetParamVerified: ["target_ref": "ins_forbidden"]]
+            }
+        )
+        let thrownFailure = try #require(thrown)
+        #expect(thrownFailure.contains("fresh plug-in read-probe refresh failed"))
+        #expect(!events.contains("unexpected_discovery_after_throw"))
+        #expect(QualificationTransport.pluginReadProbeOperationIDs.allSatisfy {
+            prepared[$0] == nil
+        })
+    }
+
+    @Test func pluginReadQualificationRequiresCleanupOnlyForAnEditorItOpened() throws {
+        func response(
+            state: String = "A",
+            openerAttempted: Bool,
+            closeObserved: Bool? = nil,
+            cleanupUnobserved: Bool? = nil
+        ) throws -> Data {
+            var object: [String: Any] = [
+                "state": state,
+                "opener_action_attempted": openerAttempted,
+            ]
+            if let closeObserved { object["editor_close_observed"] = closeObserved }
+            if let cleanupUnobserved { object["editor_cleanup_unobserved"] = cleanupUnobserved }
+            return try JSONSerialization.data(withJSONObject: object)
+        }
+
+        let verifiedOwnedClose = try response(openerAttempted: true, closeObserved: true)
+        #expect(QualificationTransport.pluginReadProbeCleanupFailure(
+            responseData: verifiedOwnedClose
+        ) == nil)
+
+        let unclosedOwnedEditor = try response(
+            openerAttempted: true,
+            closeObserved: false,
+            cleanupUnobserved: true
+        )
+        let cleanupFailure = try #require(QualificationTransport.pluginReadProbeCleanupFailure(
+            responseData: unclosedOwnedEditor
+        ))
+        #expect(cleanupFailure.contains("did not prove exact editor cleanup"))
+
+        let reusedCallerEditor = try response(openerAttempted: false)
+        #expect(QualificationTransport.pluginReadProbeCleanupFailure(
+            responseData: reusedCallerEditor
+        ) == nil)
+
+        let refusal = try response(state: "C", openerAttempted: true, closeObserved: false)
+        #expect(QualificationTransport.pluginReadProbeCleanupFailure(
+            responseData: refusal
+        ) == nil)
+    }
+
+    @Test func parameterPlanNestedOwnedEditorCleanupFailureCannotPromote() throws {
+        func observation(
+            openerAttempted: Bool,
+            closeObserved: Bool? = nil,
+            cleanupUnobserved: Bool? = nil,
+            stillOpen: Bool? = nil
+        ) -> [String: Any] {
+            var response: [String: Any] = [
+                "state": "A",
+                "opener_action_attempted": openerAttempted,
+            ]
+            if let closeObserved { response["editor_close_observed"] = closeObserved }
+            if let cleanupUnobserved { response["editor_cleanup_unobserved"] = cleanupUnobserved }
+            if let stillOpen { response["editor_still_open"] = stillOpen }
+            return response
+        }
+        func plan(initial: [String: Any], final: [String: Any]) throws -> Data {
+            try JSONSerialization.data(withJSONObject: [
+                "state": "A",
+                "operation": "logic_plugins.plan_parameter_changes",
+                "entries": [[
+                    "read_observations": [
+                        ["bookend": "initial", "response": initial],
+                        ["bookend": "final", "response": final],
+                    ]
+                ]],
+            ])
+        }
+
+        let callerOwned = observation(openerAttempted: false)
+        #expect(QualificationTransport.pluginReadProbeCleanupFailure(
+            responseData: try plan(initial: callerOwned, final: callerOwned)
+        ) == nil)
+
+        let cleanOwned = observation(openerAttempted: true, closeObserved: true)
+        let failures: [[String: Any]] = [
+            observation(openerAttempted: true, closeObserved: false),
+            observation(openerAttempted: true, closeObserved: true, cleanupUnobserved: true),
+            observation(openerAttempted: true, closeObserved: true, stillOpen: true),
+        ]
+        for failed in failures {
+            let initialFailure = try #require(QualificationTransport.pluginReadProbeCleanupFailure(
+                responseData: try plan(initial: failed, final: cleanOwned)
+            ))
+            #expect(initialFailure.contains("nested initial"))
+
+            let finalFailure = try #require(QualificationTransport.pluginReadProbeCleanupFailure(
+                responseData: try plan(initial: cleanOwned, final: failed)
+            ))
+            #expect(finalFailure.contains("nested final"))
+        }
     }
 
     @Test func mixerOnlyReadProbePreparationRefreshesWithoutPluginPreparation() {
@@ -1974,12 +2324,31 @@ struct QualificationRunnerTests {
         #expect(result.status == (shape == "live" ? .passed : .notQualified))
     }
 
+    /// Playback moves the playhead, and the cycle restored only the transport's MOTION, so every
+    /// play, pause or stop cycle left the playhead somewhere else and the next run started from a
+    /// different place. The cycle puts the playhead back where it was and reads it there.
+    @Test(arguments: [OperationID.transportPlay, .transportStop, .transportPause])
+    func aTransportCycleLeavesThePlayheadWhereItStarted(operation: OperationID) throws {
+        let fixture = try SlowHandshakeFixture(transportNativePause: true)
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+        let position = try String(
+            contentsOf: fixture.directory.appendingPathComponent("transport-position"), encoding: .utf8
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        #expect(position == "1", "playhead at bar \(position) after the cycle; it started at bar 1")
+        #expect(result.operationResults[operation.rawValue]?.status == .passed,
+                "\(result.operationResults[operation.rawValue]?.mutationRestoreRefusal ?? "no refusal")")
+    }
+
     @Test(arguments: [false, true])
     func stoppedTransportMustBeObservedBeforeARecipeAcquiresChanges(cached: Bool) throws {
         let fixture = try SlowHandshakeFixture(transportNativePause: true, cachedTransport: cached)
         defer { fixture.remove() }
         let pause = try #require(OperationRegistry.specs.first { $0.id == .transportPause })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [pause]))
         let effects = result.wireFrames.filter { $0.direction == .request &&
@@ -2033,7 +2402,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(transportNativePause: true, initialTransportMotion: original)
         defer { fixture.remove() }
         let spec = try #require(OperationRegistry.specs.first { $0.tool == .logicTransport && $0.command == command })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
         let observed = try #require(result.operationResults[spec.id.rawValue])
@@ -2053,7 +2422,7 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(transportNativePause: true)
         defer { fixture.remove() }
         let pause = try #require(OperationRegistry.specs.first { $0.id == .transportPause })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [pause]))
         let observed = try #require(result.operationResults[pause.id.rawValue])
@@ -2074,18 +2443,173 @@ struct QualificationRunnerTests {
         let fixture = try SlowHandshakeFixture(transportRefusal: true)
         defer { fixture.remove() }
         let pause = try #require(OperationRegistry.specs.first { $0.id == .transportPause })
-        let result = try QualificationTransport(handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
             .drive(.init(executableURL: fixture.executableURL,
                 environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [pause]))
         let observed = try #require(result.operationResults[pause.id.rawValue])
-        #expect(observed.status != .passed, "a refused mutation never acquires write-cycle credit")
+        #expect(observed.status == .failed, "a refused transport recipe is a merge-blocking failure")
+        #expect(observed.liveGateDisposition == .failed)
         #expect(observed.mutationRestore == nil)
+        let refusal = try #require(observed.failureReason)
+        #expect(refusal.contains("phase_b.mutation"))
+        #expect(refusal.contains("compensating restore"))
+        #expect(refusal.contains("verified exact stopped"))
         #expect(try String(contentsOf: fixture.directory.appendingPathComponent("playing"), encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines) == "false")
+        #expect(try String(contentsOf: fixture.directory.appendingPathComponent("moving"), encoding: .utf8)
             .trimmingCharacters(in: .whitespacesAndNewlines) == "false")
         let requests = try String(contentsOf: fixture.directory.appendingPathComponent("requests"), encoding: .utf8)
         #expect(requests.contains("\"command\":\"play\""), "the real recipe must stage playback")
         #expect(requests.contains("\"command\":\"pause\""), "the refused mutation must actually run")
         #expect(requests.contains("\"command\":\"stop\""), "the acquired precondition must be compensated")
+        #expect(result.wireFrames.contains {
+            $0.direction == .response && $0.operationID == "phase_b.cleanup_readback"
+        })
+    }
+
+    @Test(arguments: [
+        "cleanup_state_c",
+        "cleanup_no_effect",
+        "cleanup_malformed_readback",
+        "restore_state_c_baseline_coincident",
+    ])
+    func transportRestoreRefusalsAndUnverifiedCleanupAreFatal(fault: String) throws {
+        let normalMutation = fault == "restore_state_c_baseline_coincident"
+        let fixture = try SlowHandshakeFixture(
+            transportRefusal: !normalMutation,
+            transportNativePause: normalMutation,
+            transportFault: fault
+        )
+        defer { fixture.remove() }
+        let pause = try #require(OperationRegistry.specs.first { $0.id == .transportPause })
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [pause]))
+        let observed = try #require(result.operationResults[pause.id.rawValue])
+        #expect(observed.status == .failed)
+        #expect(observed.liveGateDisposition == .failed)
+        #expect(observed.mutationRestore == nil, "a refused or unverified restore earns no cycle credit")
+        let refusal = try #require(observed.failureReason)
+        #expect(refusal.contains("phase_b"))
+        #expect(refusal.contains("compensating restore"))
+        if fault == "cleanup_malformed_readback" {
+            #expect(refusal.contains("unverified") || refusal.contains("malformed"))
+        } else if fault == "restore_state_c_baseline_coincident" {
+            #expect(refusal.contains("phase_b.restore"))
+        } else {
+            #expect(refusal.contains("residual") || refusal.contains("not restored"))
+        }
+    }
+
+    @Test func wholeRunTransportBookendRepairsButFailsCrossOperationLeak() throws {
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true,
+            transportFault: "cross_operation_leak"
+        )
+        defer { fixture.remove() }
+        let pause = try #require(OperationRegistry.specs.first { $0.id == .transportPause })
+        let health = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0,
+                operations: [pause, health]))
+        let observed = try #require(result.operationResults[pause.id.rawValue])
+        #expect(observed.status == .failed)
+        #expect(observed.liveGateDisposition == .failed)
+        let failure = try #require(observed.failureReason)
+        #expect(failure.contains("whole-run transport baseline"))
+        #expect(failure.contains("verified exact stopped"))
+        #expect(try String(contentsOf: fixture.directory.appendingPathComponent("playing"), encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines) == "false")
+        #expect(try String(contentsOf: fixture.directory.appendingPathComponent("moving"), encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines) == "false")
+    }
+
+    @Test(arguments: ["baseline_malformed", "final_malformed"])
+    func transportMotionReadFailuresNeverReuseRequestIDs(fault: String) throws {
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true,
+            transportFault: fault
+        )
+        defer { fixture.remove() }
+        let pause = try #require(OperationRegistry.specs.first { $0.id == .transportPause })
+        _ = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [pause]))
+        let requests = try String(
+            contentsOf: fixture.directory.appendingPathComponent("requests"),
+            encoding: .utf8
+        )
+        let ids = requests.split(separator: "\n").compactMap { line -> Int? in
+            guard let data = String(line).data(using: .utf8),
+                  let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                return nil
+            }
+            return object["id"] as? Int
+        }
+        #expect(!ids.isEmpty)
+        #expect(Set(ids).count == ids.count, "\(fault): \(ids)")
+        #expect(zip(ids, ids.dropFirst()).allSatisfy(<), "\(fault): \(ids)")
+    }
+
+    @Test func wholeRunPausedBaselineCompensationStagesMovingBeforePause() throws {
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true,
+            transportFault: "cross_operation_stop",
+            initialTransportMotion: "paused"
+        )
+        defer { fixture.remove() }
+        let pause = try #require(OperationRegistry.specs.first { $0.id == .transportPause })
+        let health = try #require(OperationRegistry.specs.first { $0.id == .systemHealth })
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0,
+                operations: [pause, health]))
+        let observed = try #require(result.operationResults[pause.id.rawValue])
+        #expect(observed.status == .failed)
+        let failure = try #require(observed.failureReason)
+        #expect(failure.contains("whole-run transport baseline"))
+        #expect(failure.contains("verified exact paused"))
+        #expect(try String(contentsOf: fixture.directory.appendingPathComponent("playing"), encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines) == "true")
+        #expect(try String(contentsOf: fixture.directory.appendingPathComponent("moving"), encoding: .utf8)
+            .trimmingCharacters(in: .whitespacesAndNewlines) == "false")
+    }
+
+    @Test(arguments: ["missing_mutation", "missing_readback", "refused", "not_moving"])
+    func transportRestoreStagingEvidenceMustBeCompleteAndVerified(shape: String) throws {
+        let fixture = try SlowHandshakeFixture(
+            transportNativePause: true,
+            initialTransportMotion: "paused"
+        )
+        defer { fixture.remove() }
+        let stop = try #require(OperationRegistry.specs.first { $0.id == .transportStop })
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [stop]))
+        let original = try #require(result.mutationRestoreRecords.first)
+        #expect(original.verifiedCycleShape)
+        var stagingMutation = original.stagingMutation
+        var stagingReadback = original.stagingReadback
+        switch shape {
+        case "missing_mutation": stagingMutation = nil
+        case "missing_readback": stagingReadback = nil
+        case "refused":
+            stagingMutation = #"{"state":"C","error":"restore_refused","write_attempted":false}"#
+        case "not_moving": stagingReadback = original.preState
+        default: break
+        }
+        let corrupted = QualificationMutationRestoreRecord(
+            operationID: original.operationID,
+            preState: original.preState,
+            mutation: original.mutation,
+            readback: original.readback,
+            restore: original.restore,
+            restoreReadback: original.restoreReadback,
+            stagingMutation: stagingMutation,
+            stagingReadback: stagingReadback
+        )
+        #expect(!corrupted.verifiedCycleShape, "\(shape) must not earn restore-cycle credit")
     }
 
     @Test("Only intentionally withheld mutations get a non-crediting not-run receipt",
@@ -2206,6 +2730,7 @@ struct QualificationRunnerTests {
         let probe = LibraryReadbackProbe()
 
         let drive = try QualificationTransport(
+            uiObserver: unchangedUIForTests,
             handshakeTimeout: 2,
             requestTimeout: 2,
             shutdownGrace: 2,
@@ -2241,6 +2766,7 @@ struct QualificationRunnerTests {
         let probe = LibraryReadbackProbe()
 
         let drive = try QualificationTransport(
+            uiObserver: unchangedUIForTests,
             handshakeTimeout: 2,
             requestTimeout: 2,
             shutdownGrace: 2,
@@ -3616,12 +4142,13 @@ struct QualificationRunnerTests {
         defer { fixture.remove() }
         var environment = ProcessInfo.processInfo.environment
         environment["HANDSHAKE_DELAY"] = "0.2"
-        let productionTransport = QualificationTransport()
+        let productionTransport = QualificationTransport(uiObserver: unchangedUIForTests)
         #expect(productionTransport.handshakeTimeout >= 30)
         #expect(productionTransport.requestTimeout == 10)
 
         do {
             let result = try QualificationTransport(
+                uiObserver: unchangedUIForTests,
                 handshakeTimeout: 5,
                 requestTimeout: 0.1,
                 shutdownGrace: 1
@@ -4096,7 +4623,22 @@ struct QualificationRunnerTests {
         ])
         #expect(exact.failed == 0)
 
+        let noSelection = QualificationLiveGateSummary(operationResults: [
+            result(reason: "no_region_selected"),
+        ])
+        #expect(noSelection.notExercisableWithoutPreconditions == [
+            .init(
+                operationID: OperationID.midiReadSelectedRegionEvents.rawValue,
+                reason: "requires exactly one selected MIDI region"
+            ),
+        ])
+        #expect(noSelection.failed == 0)
+
         let changed = [
+            result(reason: "selected_region_count_not_one"),
+            result(reason: "selection_unreadable"),
+            result(reason: "no_region_selected", writeAttempted: true),
+            result(reason: "no_region_selected", rowSelectionRestored: true),
             result(state: "B"),
             result(error: "different_error"),
             result(reason: "different_scope_failure"),
@@ -4207,7 +4749,15 @@ struct QualificationRunnerTests {
         "Requires LOGIC_PRO_MCP_RUN_LIVE_QA=1 and a release build; use Scripts/release-qualify.sh."
     ))
     func realReleaseBinaryExecutesEveryOperationWithIndependentReadback() throws {
-        let result = try QualificationTransport().drive(.init(
+        // Every operation is bracketed by a read-only observation of Logic's UI
+        // (layer-101 menu, modal, leftover window, focus). A violation fails the operation and
+        // names it. The invariants are never optional in the live gate.
+        // The gate starts from the canonical fixture state or not at all: the starting state is
+        // read before the first operation and every unmet condition is named.
+        let result = try QualificationTransport(
+            uiObserver: QualificationUIInvariants.observeLogic,
+            startingWindowFacts: QualificationStartingState.observeLogicWindows
+        ).drive(.init(
             executableURL: Self.releaseExecutableURL,
             environment: ProcessInfo.processInfo.environment,
             expectedOperationCount: OperationRegistry.specs.count,
@@ -4233,6 +4783,29 @@ struct QualificationRunnerTests {
         #expect(operationResults.count == OperationRegistry.specs.count)
         #expect(operationResults.allSatisfy { $0.status != .failed })
         #expect(liveGate.accounted == operationResults.count)
+
+        // Every one of the registry's operations gets EXACTLY ONE verdict, EXERCISED or
+        // NOT_QUALIFIED with a reason, and the NOT_QUALIFIED set must equal the committed list.
+        // The assertions above stay; this adds what they tolerated (a recipe that refused, a
+        // readback that was never compared, protocolSmoke, a precondition disposition).
+        let notQualifiedList = try QualificationNotQualifiedListFile.load()
+        let gateViolations = QualificationLiveGateVerdict.violations(
+            results: operationResults,
+            requested: OperationRegistry.specs,
+            fixture: nil,
+            list: notQualifiedList
+        )
+        let verdicts = QualificationLiveGateVerdict.verdicts(
+            results: operationResults, requested: OperationRegistry.specs, fixture: nil)
+        print(QualificationLiveGateVerdictReport.summaryLine(verdicts))
+        #expect(
+            verdicts.count == OperationRegistry.specs.count
+                && Set(verdicts.map(\.operationID)).count == OperationRegistry.specs.count
+        )
+        #expect(
+            gateViolations.isEmpty,
+            "live-gate verdict violations:\n\(gateViolations.joined(separator: "\n"))"
+        )
         let uiLanguage = Self.logicUILanguage()
         #expect(
             liveGate.failures.isEmpty,
@@ -4379,6 +4952,7 @@ struct QualificationRunnerTests {
             ],
             drive: { request in
                 let observed = try QualificationTransport(
+                    uiObserver: unchangedUIForTests,
                     requestTimeout: 30,
                     shutdownGrace: 1
                 ).drive(request)
@@ -4475,6 +5049,7 @@ struct QualificationRunnerTests {
             ],
             drive: { request in
                 let observed = try QualificationTransport(
+                    uiObserver: unchangedUIForTests,
                     requestTimeout: 30,
                     shutdownGrace: 1
                 ).drive(request)
@@ -4536,6 +5111,7 @@ struct QualificationRunnerTests {
 
         do {
             _ = try QualificationTransport(
+                uiObserver: unchangedUIForTests,
                 handshakeTimeout: 0.1,
                 requestTimeout: 0.05,
                 shutdownGrace: 1
@@ -4570,6 +5146,7 @@ struct QualificationRunnerTests {
         environment["PID_FILE"] = pidURL.path
         do {
             _ = try QualificationTransport(
+                uiObserver: unchangedUIForTests,
                 handshakeTimeout: 0.5,
                 requestTimeout: 0.5,
                 shutdownGrace: 2
@@ -5504,13 +6081,13 @@ struct QualificationRunnerTests {
 
     private static func recipeShapedRecord(
         mutation: String = #"{"state":"A","success":true}"#,
-        restoreReadback: String = #"{"source":"ax_live","data":[{"track_ref":"track-1","name":"Before"}]}"#
+        restoreReadback: String = #"{"source":"ax_live","data":[{"track_ref":"track-1","isSelected":true,"name":"Before"}]}"#
     ) -> QualificationMutationRestoreRecord {
         QualificationMutationRestoreRecord(
             operationID: OperationID.tracksRename.rawValue,
-            preState: #"{"source":"ax_live","data":[{"track_ref":"track-1","name":"Before"}]}"#,
+            preState: #"{"source":"ax_live","data":[{"track_ref":"track-1","isSelected":true,"name":"Before"}]}"#,
             mutation: mutation,
-            readback: #"{"source":"ax_live","data":[{"track_ref":"track-1","name":"After"}]}"#,
+            readback: #"{"source":"ax_live","data":[{"track_ref":"track-1","isSelected":true,"name":"After"}]}"#,
             restore: #"{"state":"A","success":true}"#,
             restoreReadback: restoreReadback
         )
@@ -5988,12 +6565,13 @@ struct QualificationRunnerTests {
         let executableURL: URL
 
         init(transportRefusal: Bool = false, transportNativePause: Bool = false,
+             transportFault: String = "none",
              libraryReadback: Bool = false,
              initialTransportMotion: String = "stopped", cachedTransport: Bool = false,
              nameRecipe: OperationID? = nil, nameIdentityFault: String = "none",
              nameCleanupContention: String = "none", nameStageDelay: TimeInterval = 0,
              nameCleanupDelay: TimeInterval = 0,
-             nameStageFailure: String = "none",
+             nameStageFailure: String = "none", selectedRow: String = "first",
              countInCycle: String? = nil, autopunchCycle: String? = nil,
              playheadStep: OperationID? = nil, playheadFault: String = "none", playheadAtBoundary: Bool = false,
              playheadOrigin: String? = nil, valueCycle: OperationID? = nil,
@@ -6033,7 +6611,8 @@ struct QualificationRunnerTests {
             IFS= read -r request_line || exit 0
             IFS= read -r request_line || exit 0
             """#
-            if transportRefusal || transportNativePause || libraryReadback || nameRecipe != nil || countInCycle != nil
+            if transportRefusal || transportNativePause || transportFault != "none"
+                || libraryReadback || nameRecipe != nil || countInCycle != nil
                 || autopunchCycle != nil || playheadStep != nil || valueCycle != nil || supportBundleCycle {
                 script = try #require(script.components(separatedBy: "# AFTER SEED").first) + #"""
                 cd "$(dirname "$0")" || exit 1
@@ -6041,11 +6620,16 @@ struct QualificationRunnerTests {
                 initial_moving=false
                 playing=$initial_playing
                 native_pause=false
+                transport_fault=none
+                transport_writes=0
+                transport_reads=0
                 resource_source=ax_live
                 resource_unverified=false
                 moving=$initial_moving
                 position=1
                 name_recipe=none
+                track_selected=true
+                peer_selected=false
                 name_fault=none
                 name_cleanup_contention=none
                 name_stage_delay=0
@@ -6139,8 +6723,17 @@ struct QualificationRunnerTests {
                             first_ref=$track_ref; first_name=$track_name
                             second_ref=$peer_ref; second_name=$peer_name
                         fi
-                        printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://tracks","text":"{\\"source\\":\\"ax_live\\",\\"cache_age_sec\\":0,\\"readable\\":true,\\"ax_occluded\\":false,\\"data\\":[{\\"name\\":\\"%s\\",\\"track_ref\\":\\"%s\\"},{\\"name\\":\\"%s\\",\\"track_ref\\":\\"%s\\"}]}"}]}}\n' "$id" "$first_name" "$first_ref" "$second_name" "$second_ref" ;;
+                        printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://tracks","text":"{\\"source\\":\\"ax_live\\",\\"cache_age_sec\\":0,\\"readable\\":true,\\"ax_occluded\\":false,\\"data\\":[{\\"name\\":\\"%s\\",\\"track_ref\\":\\"%s\\",\\"isSelected\\":%s},{\\"name\\":\\"%s\\",\\"track_ref\\":\\"%s\\",\\"isSelected\\":%s}]}"}]}}\n' "$id" "$first_name" "$first_ref" "$([ "$first_ref" = "$peer_ref" ] && echo $peer_selected || echo $track_selected)" "$second_name" "$second_ref" "$([ "$second_ref" = "$peer_ref" ] && echo $peer_selected || echo $track_selected)" ;;
                       *'"uri":"logic://transport/state"'*)
+                        transport_reads=$((transport_reads + 1))
+                        if [ "$transport_fault" = baseline_malformed ] && [ "$transport_reads" = 1 ]; then
+                            printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"not-json"}]}}\n' "$id"
+                            continue
+                        fi
+                        if [ "$transport_fault" = final_malformed ] && [ "$transport_reads" = 9 ]; then
+                            printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"not-json"}]}}\n' "$id"
+                            continue
+                        fi
                         if [ "$playhead_step" != none ]; then
                             step_reads=$((step_reads + 1))
                             step_value=$step_position
@@ -6188,13 +6781,31 @@ struct QualificationRunnerTests {
                             printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"{\\"source\\":\\"%s\\",\\"unverified\\":%s,\\"cache_age_sec\\":%s,\\"data\\":{\\"state\\":{\\"isCountInEnabled\\":%s}}}"}]}}\n' "$id" "$count_in_source" "$count_in_unverified" "$count_in_age" "$count_in_value"
                             continue
                         fi
+                        if [ "$transport_fault" = cleanup_malformed_readback ] && [ -f transport-cleanup-command ] && [ ! -f transport-cleanup-read-fault-consumed ]; then
+                            touch transport-cleanup-read-fault-consumed
+                            printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"not-json"}]}}\n' "$id"
+                            continue
+                        fi
                         if [ "$moving" = true ]; then position=$((position + 1)); fi
+                        printf '%s\n' "$position" > transport-position
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"{\\"source\\":\\"%s\\",\\"unverified\\":%s,\\"cache_age_sec\\":0,\\"observed_tempo\\":120,\\"data\\":{\\"state\\":{\\"isPlaying\\":%s,\\"isRecording\\":false,\\"isCycleEnabled\\":false,\\"observedCycleEnabled\\":false,\\"tempo\\":120,\\"position\\":\\"%s.1\\",\\"positionReadback\\":{\\"value\\":\\"%s.1\\",\\"observedComponents\\":[\\"bar\\",\\"beat\\"]}}}}"}]}}\n' "$id" "$resource_source" "$resource_unverified" "$playing" "$position" "$position" ;;
                       *'"uri":"logic://system/operations"'*)
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://system/operations","text":"{\\"schema_version\\":1,\\"generated_at\\":\\"1970-01-01T00:00:00Z\\",\\"operation_count\\":0,\\"operations\\":[]}"}]}}\n' "$id" ;;
                       *'"uri":"logic://system/health"'*)
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://system/health","text":"{\\"logic_pro_running\\":true,\\"logic_pro_version\\":\\"11.2\\",\\"logic_pro_bundle_id\\":\\"com.apple.logic10\\",\\"logic_pro_variant\\":\\"desktop\\",\\"logic_pro_ui_locale\\":\\"en-US\\",\\"process_metadata_resolved\\":true}"}]}}\n' "$id" ;;
                       *'"command":"health"'*)
+                        if [ "$transport_fault" = cross_operation_leak ] && [ -f transport-cycle-complete ]; then
+                            playing=true; moving=true
+                            printf '%s\n' "$playing" > playing
+                            printf '%s\n' "$moving" > moving
+                            rm -f transport-cycle-complete
+                        fi
+                        if [ "$transport_fault" = cross_operation_stop ] && [ -f transport-cycle-complete ]; then
+                            playing=false; moving=false
+                            printf '%s\n' "$playing" > playing
+                            printf '%s\n' "$moving" > moving
+                            rm -f transport-cycle-complete
+                        fi
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"logic_pro_running\\":true,\\"logic_pro_version\\":\\"11.2\\",\\"logic_pro_bundle_id\\":\\"com.apple.logic10\\",\\"logic_pro_variant\\":\\"desktop\\",\\"logic_pro_ui_locale\\":\\"en-US\\",\\"process_metadata_resolved\\":true,\\"logic_pro_variants\\":[{\\"variant\\":\\"desktop\\",\\"bundle_id\\":\\"com.apple.logic10\\",\\"installed\\":true,\\"running\\":true},{\\"variant\\":\\"creator_studio\\",\\"bundle_id\\":\\"com.apple.mobilelogic\\",\\"installed\\":false,\\"running\\":false}]}"}]}}\n' "$id" ;;
                       *'__adr001b_no_write_probe'*)
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"invalid_params\\",\\"write_attempted\\":false}"}]}}\n' "$id" ;;
@@ -6307,6 +6918,14 @@ struct QualificationRunnerTests {
                         printf '%s\n' "$step_position" > step-position
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"B\\",\\"success\\":true,\\"verified\\":false,\\"reason\\":\\"readback_unavailable\\",\\"method\\":\\"cgevent\\",\\"sent\\":true}"}]}}\n' "$id" ;;
                       *'"command":"goto_position"'*)
+                        # Outside the step recipes a goto_position moves the playhead to the bar it names.
+                        if [ "$playhead_step" = none ]; then
+                            to=$(printf '%s' "$request" | /usr/bin/sed -n 's/.*"position":"\([0-9][0-9]*\)\..*/\1/p')
+                            [ -n "$to" ] && position=$to
+                            printf '%s\n' "$position" > transport-position
+                            printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true,\\"write_attempted\\":true}"}]}}\n' "$id"
+                            continue
+                        fi
                         if [ "$step_fault" = refused_restore ] && [ "$step_position" != "$step_origin" ] && [ "$step_restore_attempts" = 0 ]; then
                             step_restore_attempts=$((step_restore_attempts + 1))
                             touch step-fault-consumed
@@ -6461,19 +7080,44 @@ struct QualificationRunnerTests {
                         printf '%s\n' "$track_name" > track-name
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true}"}]}}\n' "$id" ;;
                       *'"command":"pause"'*)
+                        transport_writes=$((transport_writes + 1))
                         if [ "$native_pause" = true ]; then
-                            playing=true
-                            moving=false
+                            if [ "$playing" = true ]; then moving=false; fi
                             printf '%s\n' "$playing" > playing
                             printf '%s\n' "$moving" > moving
+                            [ "$transport_writes" = 3 ] && touch transport-cycle-complete
                             printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true}"}]}}\n' "$id"
                         else
                             printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"readback_unavailable\\",\\"write_attempted\\":false}"}]}}\n' "$id"
                         fi ;;
                       *)
                         case "$request" in
-                          *'"command":"play"'*) playing=true; moving=true ;;
-                          *'"command":"stop"'*) playing=false; moving=false ;;
+                          *'"command":"play"'*)
+                            transport_writes=$((transport_writes + 1))
+                            playing=true; moving=true ;;
+                          *'"command":"stop"'*)
+                            transport_writes=$((transport_writes + 1))
+                            if [ "$transport_writes" = 3 ]; then
+                                case "$transport_fault" in
+                                  cleanup_state_c)
+                                    touch transport-cleanup-command
+                                    printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"cleanup_refused\\",\\"write_attempted\\":false}"}]}}\n' "$id"
+                                    continue ;;
+                                  cleanup_no_effect)
+                                    touch transport-cleanup-command
+                                    printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true,\\"write_attempted\\":true}"}]}}\n' "$id"
+                                    continue ;;
+                                  restore_state_c_baseline_coincident)
+                                    playing=false; moving=false
+                                    printf '%s\n' "$playing" > playing
+                                    printf '%s\n' "$moving" > moving
+                                    printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"C\\",\\"error\\":\\"restore_refused\\",\\"write_attempted\\":true}"}]}}\n' "$id"
+                                    continue ;;
+                                  cleanup_malformed_readback) touch transport-cleanup-command ;;
+                                esac
+                            fi
+                            playing=false; moving=false
+                            [ "$transport_writes" = 3 ] && touch transport-cycle-complete ;;
                         esac
                         printf '%s\n' "$playing" > playing
                         printf '%s\n' "$moving" > moving
@@ -6482,6 +7126,10 @@ struct QualificationRunnerTests {
                 done
                 """#
                 if transportNativePause { script = script.replacingOccurrences(of: "native_pause=false", with: "native_pause=true") }
+                if transportFault != "none" {
+                    script = script.replacingOccurrences(
+                        of: "transport_fault=none", with: "transport_fault=\(transportFault)")
+                }
                 if let countInCycle = countInCycle ?? autopunchCycle {
                     script = script.replacingOccurrences(of: "count_in_cycle=none", with: "count_in_cycle=\(countInCycle)")
                 }
@@ -6503,6 +7151,13 @@ struct QualificationRunnerTests {
                 if let playheadOrigin {
                     script = script.replacingOccurrences(of: "step_position=9.3.2.120", with: "step_position=\(playheadOrigin)")
                         .replacingOccurrences(of: "step_origin=9.3.2.120", with: "step_origin=\(playheadOrigin)")
+                }
+                if selectedRow == "second" {
+                    script = script
+                        .replacingOccurrences(of: "track_selected=true", with: "track_selected=false")
+                        .replacingOccurrences(of: "peer_selected=false", with: "peer_selected=true")
+                } else if selectedRow == "none" {
+                    script = script.replacingOccurrences(of: "track_selected=true", with: "track_selected=false")
                 }
                 if let nameRecipe {
                     script = script.replacingOccurrences(of: "name_recipe=none", with: "name_recipe=\(nameRecipe.rawValue)")
@@ -6685,5 +7340,169 @@ struct QualificationRunnerTests {
             return try #require(JSONSerialization.jsonObject(with: data) as? [String: Any])
         }
 
+    }
+}
+
+/// A UI that reads the same before and after every operation: no menu, modal or window, focus
+/// unchanged. For transports driving a scripted server and no Logic, so the UI invariants are
+/// checked and find nothing.
+let unchangedUIForTests: @Sendable () -> QualificationUIObservation? = {
+    QualificationUIObservation(focus: QualificationFocusIdentity(
+        element: AXUIElementCreateApplication(50_000), window: nil, role: "AXGroup", subrole: nil,
+        description: "트랙", windowTitle: "Untitled"))
+}
+
+/// The wiring: the live driver brackets EVERY operation, and a violation fails that operation
+/// and names it.
+extension QualificationRunnerTests {
+    private final class UIScript: @unchecked Sendable {
+        private let lock = NSLock()
+        private var readings: [QualificationUIObservation?]
+        private(set) var reads = 0
+        init(_ readings: [QualificationUIObservation?]) { self.readings = readings }
+        func next() -> QualificationUIObservation? {
+            lock.lock(); defer { lock.unlock() }
+            reads += 1
+            return readings.count > 1 ? readings.removeFirst() : readings.first ?? nil
+        }
+    }
+
+    private func driveFastForward(
+        observer: @escaping @Sendable () -> QualificationUIObservation?
+    ) throws -> QualificationOperationResult {
+        let fixture = try SlowHandshakeFixture(playheadStep: .transportFastForward)
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .transportFastForward })
+        let result = try QualificationTransport(
+            uiObserver: observer,
+            handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2,
+            uiSettleSleep: { _ in }
+        ).drive(.init(
+            executableURL: fixture.executableURL, environment: ["HANDSHAKE_DELAY": "0"],
+            expectedOperationCount: 0, operations: [spec]))
+        return try #require(result.operationResults[spec.id.rawValue])
+    }
+
+    private static let mixerFocus = QualificationUIObservation(focus: QualificationFocusIdentity(
+        element: AXUIElementCreateApplication(50_001), window: nil, role: "AXGroup", subrole: nil,
+        description: "믹서", windowTitle: "Untitled"))
+
+    @Test func theDriverBracketsEveryOperationWithUIObservationsAndPassesWhenClean() throws {
+        let script = UIScript([Self.mixerFocus])
+        let operation = try driveFastForward(observer: { script.next() })
+        #expect(operation.status == .passed)
+        #expect(operation.failureReason == nil)
+        #expect(script.reads >= 2, "one observation before and one after the operation")
+    }
+
+    @Test func aLeakedMenuAfterAnOperationFailsThatOperationAndNamesIt() throws {
+        let before = Self.mixerFocus
+        let leak = QualificationUIObservation(
+            menuLayerWindows: [93: QualificationWindowFacts(
+                layer: 101, title: nil, bounds: CGRect(x: 1077, y: 98, width: 234, height: 355))],
+            focus: before.focus)
+        let script = UIScript([before, leak])
+        let operation = try driveFastForward(observer: { script.next() })
+        #expect(operation.status == .failed)
+        let reason = try #require(operation.failureReason)
+        #expect(reason.contains("transport.fast_forward:"))
+        #expect(reason.contains("logic_menu_layer_101_open"))
+        #expect(reason.contains("234x355@1077,98"))
+    }
+
+    @Test func aBaselineThatCannotBeReadFailsTheOperationInsteadOfSkippingTheCheck() throws {
+        let script = UIScript([nil])
+        let operation = try driveFastForward(observer: { script.next() })
+        #expect(operation.status == .failed)
+        let reason = try #require(operation.failureReason)
+        #expect(reason.contains("baseline observation unavailable"))
+    }
+
+    // MARK: the shipped `--qualify` path
+
+    /// Runs `--qualify` through `QualificationRunner.Runtime.transportDrive`, the drive
+    /// `Runtime.production` uses, against a scripted server answering `transport.fast_forward`,
+    /// with `observer` standing in for Logic's UI. Returns that operation's case and its evidence.
+    private func qualifyFastForwardThroughTheShippedDrive(
+        observer: @escaping @Sendable () -> QualificationUIObservation?
+    ) async throws -> (qualificationCase: QualificationCase, evidence: CaseEvidence) {
+        let server = try SlowHandshakeFixture(playheadStep: .transportFastForward)
+        defer { server.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.id == .transportFastForward })
+        let fixture = try Fixture(
+            specs: [spec],
+            executableData: try Data(contentsOf: server.executableURL),
+            environmentAdditions: ["HANDSHAKE_DELAY": "0"],
+            drive: QualificationRunner.Runtime.transportDrive(uiObserver: observer))
+        defer { fixture.remove() }
+        let attestation = try await fixture.qualify()
+        let qualificationCase = try #require(attestation.cases.first { $0.operationID == spec.id.rawValue })
+        let evidenceURL = fixture.directory.appendingPathComponent(
+            try #require(qualificationCase.evidenceFiles.first))
+        let evidence = try JSONDecoder().decode(CaseEvidence.self, from: Data(contentsOf: evidenceURL))
+        return (qualificationCase, evidence)
+    }
+
+    @Test func theShippedQualifyPathVerifiesAnOperationWhoseUIStayedClean() async throws {
+        let script = UIScript([Self.mixerFocus])
+        let (qualificationCase, evidence) = try await qualifyFastForwardThroughTheShippedDrive(
+            observer: { script.next() })
+        #expect(qualificationCase.status == .passed)
+        #expect(qualificationCase.verified)
+        #expect(evidence.verified)
+        #expect(evidence.failureReason == nil)
+        #expect(script.reads >= 2, "the shipped drive observed the UI before and after the operation")
+    }
+
+    @Test func theShippedQualifyPathDoesNotVerifyAnOperationThatLeftAMenuOpen() async throws {
+        let leak = QualificationUIObservation(
+            menuLayerWindows: [93: QualificationWindowFacts(
+                layer: 101, title: nil, bounds: CGRect(x: 1077, y: 98, width: 234, height: 355))],
+            focus: Self.mixerFocus.focus)
+        let script = UIScript([Self.mixerFocus, leak])
+        let (qualificationCase, evidence) = try await qualifyFastForwardThroughTheShippedDrive(
+            observer: { script.next() })
+        #expect(qualificationCase.status == .failed)
+        #expect(!qualificationCase.verified)
+        #expect(!evidence.verified)
+        let reason = try #require(evidence.failureReason)
+        #expect(reason.contains("transport.fast_forward: ui_invariant: logic_menu_layer_101_open"))
+    }
+
+    @Test func theShippedQualifyPathDoesNotVerifyAnOperationThatMovedTheFocus() async throws {
+        // Identical descriptive fields, a different element: the focus moved.
+        let moved = QualificationUIObservation(focus: QualificationFocusIdentity(
+            element: AXUIElementCreateApplication(50_002), window: nil, role: "AXGroup", subrole: nil,
+            description: "믹서", windowTitle: "Untitled"))
+        let script = UIScript([Self.mixerFocus, moved])
+        let (qualificationCase, evidence) = try await qualifyFastForwardThroughTheShippedDrive(
+            observer: { script.next() })
+        #expect(qualificationCase.status == .failed)
+        #expect(!qualificationCase.verified)
+        #expect(!evidence.verified)
+        let reason = try #require(evidence.failureReason)
+        #expect(reason.contains("transport.fast_forward: ui_invariant: focus_moved("))
+    }
+
+    @Test func theShippedQualifyPathDoesNotVerifyAnOperationWhoseUICannotBeObserved() async throws {
+        let script = UIScript([nil])
+        let (qualificationCase, evidence) = try await qualifyFastForwardThroughTheShippedDrive(
+            observer: { script.next() })
+        #expect(qualificationCase.status == .failed)
+        #expect(!qualificationCase.verified)
+        #expect(!evidence.verified)
+        let reason = try #require(evidence.failureReason)
+        #expect(reason.contains("ui_invariant: transport.fast_forward: baseline observation unavailable"))
+    }
+
+    @Test func theShippedQualifyPathDoesNotVerifyAnOperationWhoseAfterStateCannotBeObserved() async throws {
+        let script = UIScript([Self.mixerFocus, nil])
+        let (qualificationCase, evidence) = try await qualifyFastForwardThroughTheShippedDrive(
+            observer: { script.next() })
+        #expect(qualificationCase.status == .failed)
+        #expect(!qualificationCase.verified)
+        #expect(!evidence.verified)
+        let reason = try #require(evidence.failureReason)
+        #expect(reason.contains("transport.fast_forward: ui_invariant: observation_unavailable"))
     }
 }

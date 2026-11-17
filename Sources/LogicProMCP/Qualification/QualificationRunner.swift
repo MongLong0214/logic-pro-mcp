@@ -39,11 +39,18 @@ package struct QualificationRunner: Sendable {
                 }
             },
             beforeEvidenceRead: { _ in },
-            drive: { request in
-                try QualificationTransport().drive(request)
-            },
+            drive: transportDrive(uiObserver: QualificationUIInvariants.observeLogic),
             atlasPairs: { AtlasCapture.pairsForThisRun() }
         )
+
+        /// The drive `--qualify` uses: the subprocess transport, observing Logic's UI around every
+        /// operation. An operation that leaves a menu, modal or editor open, moves the focus, or
+        /// whose UI cannot be observed fails, so its case evidence is never `verified`.
+        static func transportDrive(
+            uiObserver: @escaping @Sendable () -> QualificationUIObservation?
+        ) -> @Sendable (QualificationDriveRequest) async throws -> QualificationDriveResult {
+            { request in try QualificationTransport(uiObserver: uiObserver).drive(request) }
+        }
     }
 
     private struct QualifyOptions {

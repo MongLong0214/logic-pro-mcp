@@ -151,11 +151,10 @@ func testAutomationPermissionStatusMapping(status: Int32, expected: PermissionCh
     #expect(state == expected)
 }
 
-@Test func testSystemEventsPermissionProbeLaunchesWithoutActivationThenRetriesNonprompting() {
+@Test func testSystemEventsPermissionProbeDoesNotLaunchOrRetryForMissingProcess() {
     final class Observation: @unchecked Sendable {
         var statuses = [Int32(procNotFound), Int32(noErr)]
         var asks: [Bool] = []
-        var launchedBundleIDs: [String] = []
     }
     let observation = Observation()
 
@@ -164,46 +163,40 @@ func testAutomationPermissionStatusMapping(status: Int32, expected: PermissionCh
             #expect(bundleID == "com.apple.systemevents")
             observation.asks.append(askUserIfNeeded)
             return observation.statuses.removeFirst()
-        },
-        launchWithoutActivation: { bundleID in
-            observation.launchedBundleIDs.append(bundleID)
-            return true
         }
     )
 
-    #expect(state == .granted)
-    #expect(observation.asks == [false, false])
-    #expect(observation.launchedBundleIDs == ["com.apple.systemevents"])
+    #expect(state == .notVerifiable)
+    #expect(observation.asks == [false])
+    #expect(observation.statuses == [Int32(noErr)], "a later grant must not be queried")
 }
 
 @Test func testSystemEventsPermissionProbeDoesNotLaunchForConsentOrDenial() {
     for status in [Int32(errAEEventWouldRequireUserConsent), Int32(errAEEventNotPermitted)] {
-        var launchCount = 0
+        var queryCount = 0
         let state = PermissionChecker.nonPromptingSystemEventsAutomationState(
-            determinePermission: { _, askUserIfNeeded in
+            determinePermission: { bundleID, askUserIfNeeded in
+                #expect(bundleID == "com.apple.systemevents")
+                queryCount += 1
                 #expect(!askUserIfNeeded)
                 return status
-            },
-            launchWithoutActivation: { _ in
-                launchCount += 1
-                return true
             }
         )
 
         #expect(state == .notGranted)
-        #expect(launchCount == 0)
+        #expect(queryCount == 1)
     }
 }
 
-@Test func testSystemEventsPermissionProbeFailsClosedWhenBackgroundLaunchFails() {
+@Test func testSystemEventsPermissionProbeFailsClosedWhenTargetIsUnavailable() {
     var queryCount = 0
     let state = PermissionChecker.nonPromptingSystemEventsAutomationState(
-        determinePermission: { _, askUserIfNeeded in
+        determinePermission: { bundleID, askUserIfNeeded in
+            #expect(bundleID == "com.apple.systemevents")
             queryCount += 1
             #expect(!askUserIfNeeded)
             return Int32(procNotFound)
-        },
-        launchWithoutActivation: { _ in false }
+        }
     )
 
     #expect(state == .notVerifiable)

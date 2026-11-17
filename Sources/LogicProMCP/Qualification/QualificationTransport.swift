@@ -1,6 +1,7 @@
 import Foundation
 import Darwin
 import CoreMIDI
+import MCP
 
 struct QualificationDriveRequest: Sendable {
     let executableURL: URL
@@ -220,16 +221,18 @@ struct QualificationMutationRestoreRecord: Codable, Equatable, Sendable {
                   let observedValue = observed[field] as? Double else { return nil }
             return oldValue == observedValue
         case .trackBoolean(let field):
-            guard let old = Self.track(before, index: 0),
-                  let observed = Self.track(after, index: 0),
+            guard let row = Self.selectedRowIndex(before),
+                  let old = Self.track(before, index: row),
+                  let observed = Self.track(after, index: row),
                   let oldRef = old["track_ref"] as? String, !oldRef.isEmpty,
                   let observedRef = observed["track_ref"] as? String, oldRef == observedRef,
                   let oldValue = old[field] as? Bool,
                   let observedValue = observed[field] as? Bool else { return nil }
             return oldValue == observedValue
         case .trackName:
-            guard let old = Self.track(before, index: 0),
-                  let observed = Self.track(after, index: 0),
+            guard let row = Self.selectedRowIndex(before),
+                  let old = Self.track(before, index: row),
+                  let observed = Self.track(after, index: row),
                   let oldRef = old["track_ref"] as? String, !oldRef.isEmpty,
                   let observedRef = observed["track_ref"] as? String, oldRef == observedRef,
                   let oldValue = old["name"] as? String,
@@ -295,6 +298,19 @@ struct QualificationMutationRestoreRecord: Codable, Equatable, Sendable {
     }
 
     func verifiedCycleShape(using policy: QualificationMutationRestorePolicy) -> Bool {
+        if case .transportMotion = policy {
+            switch (stagingMutation, stagingReadback) {
+            case (nil, nil):
+                break
+            case let (mutation?, readback?):
+                guard Self.writeResponse(mutation),
+                      QualificationTransport.recordedTransportMotion(readback) == .moving else {
+                    return false
+                }
+            default:
+                return false
+            }
+        }
         guard policy.isValid,
               readingThatDidNotHappen == nil,
               mutationMovedRecipeValue(using: policy),
@@ -318,6 +334,15 @@ struct QualificationMutationRestoreRecord: Codable, Equatable, Sendable {
             return nil
         }
         return rows[index]
+    }
+
+    /// The row of the single selected track in `envelope`, nil when none or several are selected.
+    /// The boolean and name recipes write the selected track, so the recipe's own record is read at
+    /// that row; the identity check against the same row of the later reading stays.
+    private static func selectedRowIndex(_ envelope: [String: Any]) -> Int? {
+        guard let rows = envelope["data"] as? [[String: Any]] else { return nil }
+        let selected = rows.indices.filter { (rows[$0]["isSelected"] as? Bool) == true }
+        return selected.count == 1 ? selected[0] : nil
     }
 
     private static func selectedTrackRefs(_ rows: [[String: Any]]) -> [String]? {
@@ -798,11 +823,14 @@ struct QualificationOperationResult: Equatable, Sendable {
         case .midiReadSelectedRegionEvents:
             guard state == "C",
                   error == "selected_region_event_read_unavailable",
-                  reason == "selection_scope_incomplete",
                   writeAttempted == false,
                   rowSelectionWriteAttempted == false,
                   rowSelectionRestored == false else { return nil }
-            return "requires a complete selected Arrange-region scope"
+            switch reason {
+            case "selection_scope_incomplete": return "requires a complete selected Arrange-region scope"
+            case "no_region_selected": return "requires exactly one selected MIDI region"
+            default: return nil
+            }
         default:
             return nil
         }
@@ -901,6 +929,18 @@ struct QualificationOperationResult: Equatable, Sendable {
         }
     }
 
+    /// Where a refusal says it stopped, read from the response itself.
+    var refusalPhase: String? { Self.refusalString("plugin_view_switch_phase", in: responseData) }
+
+    /// What a refusal says it saw, read from the response itself.
+    var refusalObservation: String? { Self.refusalString("what_was_observed", in: responseData) }
+
+    private static func refusalString(_ key: String, in data: Data?) -> String? {
+        guard let data,
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return object[key] as? String
+    }
+
     /// A diagnostic reason for a failed live-gate disposition, derived only
     /// from the captured request, readback, and response observations.
     var liveGateFailureReason: String? {
@@ -923,7 +963,9 @@ struct QualificationOperationResult: Equatable, Sendable {
         case .readOnly:
             if isError != false {
                 return "operation request returned a refusal: "
-                    + Self.unavailableDetail(error: error, hint: hint)
+                    + Self.unavailableDetail(
+                        error: error, hint: hint,
+                        phase: refusalPhase, observed: refusalObservation)
             }
             if let reason = readbackFreshness.refusalReason {
                 return "independent readback was not admissible: \(reason)"
@@ -1059,14 +1101,26 @@ struct QualificationOperationResult: Equatable, Sendable {
     ///
     /// Kept deliberately literal: an attestation is read by someone deciding whether a shortfall is
     /// their environment or the product, and a paraphrase is where that distinction goes missing.
-    static func unavailableDetail(error: String?, hint: String?) -> String {
+    ///
+    /// A refusal can also name where it stopped (`plugin_view_switch_phase`) and what it saw
+    /// (`what_was_observed`) without naming a precondition. Those are quoted too: a failure that
+    /// arrives as a bare code cannot be told from a rate defect, and an intermittent one is lost.
+    /// Quoting them changes only the text; it never moves a refusal out of `.failed`.
+    static func unavailableDetail(
+        error: String?, hint: String?, phase: String? = nil, observed: String? = nil
+    ) -> String {
         let code = error?.trimmingCharacters(in: .whitespacesAndNewlines)
         let reason = hint?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let phaseText = phase?.trimmingCharacters(in: .whitespacesAndNewlines)
+        let observedText = observed?.trimmingCharacters(in: .whitespacesAndNewlines)
+        var named = ""
+        if let phaseText, !phaseText.isEmpty { named += " [phase `\(phaseText)`]" }
+        if let observedText, !observedText.isEmpty { named += " [observed: \(observedText)]" }
         switch (code?.isEmpty == false ? code : nil, reason?.isEmpty == false ? reason : nil) {
         case let (.some(code), .some(reason)):
-            return "read-only operation refused with `\(code)`: \(reason)"
+            return "read-only operation refused with `\(code)`: \(reason)" + named
         case let (.some(code), .none):
-            return "read-only operation refused with `\(code)` and named no precondition"
+            return "read-only operation refused with `\(code)` and named no precondition" + named
         case let (.none, .some(reason)):
             return "read-only operation did not return a successful typed response: \(reason)"
         case (.none, .none):
@@ -1452,6 +1506,16 @@ enum QualificationTransportError: Error, Equatable, CustomStringConvertible, Sen
     }
 }
 
+struct QualificationPluginReadRefreshReceipt: Equatable, Sendable {
+    let source: String
+    let refreshed: Bool
+    let changedSections: Set<String>
+
+    var provesFreshTracks: Bool {
+        source == "ax_fallback_poller" && refreshed && changedSections.contains("tracks")
+    }
+}
+
 struct QualificationTransport: Sendable {
     let handshakeTimeout: TimeInterval
     let requestTimeout: TimeInterval
@@ -1464,8 +1528,22 @@ struct QualificationTransport: Sendable {
         QualificationSubprocessSession
     ) throws -> QualificationSubprocessSession.ShutdownOutcome
     let supportBundleRemover: @Sendable (URL, SecureFD.Identity) throws -> String
+    /// Reads Logic's UI (window server + AX, read-only) once before and once after every
+    /// operation. Required: a transport cannot be built without one, so no driven operation skips
+    /// the UI invariants. Live drives pass `QualificationUIInvariants.observeLogic`. An observer
+    /// that answers nil fails the operation, so an unavailable observation is never a clean one.
+    let uiObserver: @Sendable () -> QualificationUIObservation?
+    let uiSettleSleep: @Sendable (TimeInterval) -> Void
+    /// When set, `drive` reads the starting state before the first operation and refuses to start
+    /// unless it is the canonical one (`QualificationStartingState`): main window frontmost, the
+    /// keyboard on the track group, exactly one selected track, a stopped transport, and no menu,
+    /// modal, editor or Marker List. The live gate always sets it; a transport built without it
+    /// (a unit test of the transport itself) checks nothing about the machine it runs on.
+    let startingWindowFacts: (@Sendable () -> QualificationStartingWindowFacts)?
 
     init(
+        uiObserver: @escaping @Sendable () -> QualificationUIObservation?,
+        startingWindowFacts: (@Sendable () -> QualificationStartingWindowFacts)? = nil,
         handshakeTimeout: TimeInterval = 45,
         requestTimeout: TimeInterval = 10,
         shutdownGrace: TimeInterval = 1,
@@ -1488,6 +1566,9 @@ struct QualificationTransport: Sendable {
         },
         supportBundleRemover: @escaping @Sendable (URL, SecureFD.Identity) throws -> String = {
             try QualificationTransport.removeOwnedSupportBundle(at: $0, expectedIdentity: $1)
+        },
+        uiSettleSleep: @escaping @Sendable (TimeInterval) -> Void = {
+            Thread.sleep(forTimeInterval: $0)
         }
     ) {
         self.handshakeTimeout = handshakeTimeout
@@ -1499,6 +1580,9 @@ struct QualificationTransport: Sendable {
         self.supportBundleRoot = supportBundleRoot
         self.supportBundleQuiescer = supportBundleQuiescer
         self.supportBundleRemover = supportBundleRemover
+        self.uiObserver = uiObserver
+        self.uiSettleSleep = uiSettleSleep
+        self.startingWindowFacts = startingWindowFacts
     }
 
     /// Environment the same-artifact qualification drives the server with.
@@ -1634,8 +1718,57 @@ struct QualificationTransport: Sendable {
             var preparedReadParams: [OperationID: [String: Any]] = [:]
             var readProbePreparationFailures: [OperationID: String] = [:]
             let requestedIDs = Set(request.operations.map(\.id))
+            let requestedTransportOperations = Set(Self.transportExpectedPlaying.keys)
+                .intersection(requestedIDs)
+            let wholeRunTransportSpec = request.operations.first {
+                requestedTransportOperations.contains($0.id)
+            }
+            var wholeRunTransportBaseline: (motion: TransportMotion, raw: String)?
+            var wholeRunTransportFailure: String?
+            if !requestedTransportOperations.isEmpty {
+                do {
+                    wholeRunTransportBaseline = try observedTransportMotion(
+                        session,
+                        nextID: &nextID,
+                        phase: "transport_run.pre_state"
+                    )
+                } catch {
+                    wholeRunTransportFailure = "whole-run transport baseline unreadable: "
+                        + Self.observedFailureReason(from: error, during: "transport_run.pre_state")
+                        + "; residual unverified"
+                }
+            }
             let requestedMixerReads = Self.mixerReadProbeOperationIDs.intersection(requestedIDs)
             let requestedPluginReads = Self.pluginReadProbeOperationIDs.intersection(requestedIDs)
+            let pluginReadRefresh: () throws
+                -> (receipt: QualificationPluginReadRefreshReceipt?, isError: Bool) = {
+                let refreshID = nextID
+                nextID += 1
+                return try pluginReadBoundaryRefresh(
+                    session,
+                    id: refreshID,
+                    timeout: try Self.readProbeRefreshTimeout()
+                )
+            }
+            let pluginReadPreparation: () throws -> [OperationID: [String: Any]] = {
+                try Self.preparePluginReadProbeParams(
+                    tracksRead: {
+                        let tracksReadID = nextID
+                        nextID += 1
+                        return try resourceReadback(
+                            session, id: tracksReadID, uri: "logic://tracks",
+                            phase: "plugin_read_probe_tracks")
+                    },
+                    inventoryRead: { track in
+                        let inventoryID = nextID
+                        nextID += 1
+                        return try pluginInventory(
+                            session, id: inventoryID, track: track,
+                            phase: "plugin_read_probe_inventory.\(track)"
+                        )
+                    }
+                )
+            }
             let readPreparation = Self.prepareRequestedReadProbeParams(
                 requestedMixerReads: requestedMixerReads,
                 requestedPluginReads: requestedPluginReads,
@@ -1646,44 +1779,21 @@ struct QualificationTransport: Sendable {
                         session, id: refreshID, tool: "logic_system", command: "refresh_cache",
                         params: [:], phase: "read_probe_refresh", timeout: timeout)
                 },
-                pluginPreparation: {
-                    try Self.preparePluginReadProbeParams(
-                        tracksRead: {
-                            let tracksReadID = nextID
-                            nextID += 1
-                            return try resourceReadback(
-                                session, id: tracksReadID, uri: "logic://tracks",
-                                phase: "plugin_read_probe_tracks")
-                        },
-                        inventoryRead: { track in
-                            let inventoryID = nextID
-                            nextID += 1
-                            return try pluginInventory(
-                                session, id: inventoryID, track: track,
-                                phase: "plugin_read_probe_inventory.\(track)"
-                            )
-                        }
-                    )
-                }
+                pluginPreparation: pluginReadPreparation
             )
             preparedReadParams.merge(readPreparation.params) { current, _ in current }
             readProbePreparationFailures.merge(readPreparation.failures) { current, _ in current }
+            if let startingWindowFacts {
+                try requireCanonicalStartingState(
+                    session, nextID: &nextID, windowFacts: startingWindowFacts)
+            }
             for spec in request.operations {
+                // The UI as this operation found it. Read before anything is sent.
+                let uiBefore = uiObserver()
                 var response: (text: String, isError: Bool)?
                 var responseRequestID: String?
                 var responseFailure: String? = readProbePreparationFailures[spec.id]
                 var liveFixturePrecondition: QualificationLiveFixturePrecondition?
-                if responseFailure == nil,
-                   requestedPluginReads.contains(spec.id),
-                   preparedReadParams[spec.id] == nil {
-                    liveFixturePrecondition = switch spec.id {
-                    case .pluginsGetHostParameterManifest: .pluginHostManifestTarget
-                    case .pluginsGetParamVerified: .pluginReadableParameter
-                    case .pluginsGetChannelEQStateVerified: .pluginChannelEQ
-                    case .pluginsPlanParameterChanges: .pluginPlannableParameter
-                    default: nil
-                    }
-                }
                 var phaseBRecord: QualificationMutationRestoreRecord?
                 var phaseBRefusal: String?
                 // `tracks.rename` reuses the negative probe's response below and never reaches the
@@ -1754,15 +1864,17 @@ struct QualificationTransport: Sendable {
                         // shape both share, so one machine covers both without the recipe having to
                         // know which dispatcher it landed in.
                         if Self.playheadRestoreOperations.contains(spec.id) {
+                            let cleanupWitness = PhaseCCleanupWitness()
                             do {
                                 let cycle = try playheadRestoreCycle(
-                                    session, startingAt: nextID, spec: spec)
+                                    session, startingAt: nextID, spec: spec, cleanup: cleanupWitness)
                                 mutationRestoreRecords.append(cycle.record)
                                 phaseBRecord = cycle.record
                                 nextID = cycle.nextID
                             } catch {
                                 phaseBRefusal = Self.observedFailureReason(
                                     from: error, during: "phase_b recipe")
+                                    + "; cleanup: " + cleanupWitness.summary
                                 nextID += 14
                             }
                         }
@@ -1851,42 +1963,51 @@ struct QualificationTransport: Sendable {
                                 nextID += 40
                             }
                         }
+                        // The marker cycles report what their cleanup did on a refusal: a probe
+                        // the cleanup could not identify on a fresh read is left, and named.
                         if spec.id == .navigateGotoMarker {
+                            let cleanupWitness = PhaseCCleanupWitness()
                             do {
                                 let cycle = try markerNavigationRestoreCycle(
-                                    session, startingAt: nextID, spec: spec)
+                                    session, startingAt: nextID, spec: spec, cleanup: cleanupWitness)
                                 mutationRestoreRecords.append(cycle.record)
                                 phaseBRecord = cycle.record
                                 nextID = cycle.nextID
                             } catch {
                                 phaseBRefusal = Self.observedFailureReason(
                                     from: error, during: "phase_b recipe")
+                                    + "; cleanup: " + cleanupWitness.summary
                                 nextID += 60
                             }
                         }
                         if let mode = Self.markerStagedRestoreMode[spec.id] {
+                            let cleanupWitness = PhaseCCleanupWitness()
                             do {
                                 let cycle = try markerStagedRestoreCycle(
-                                    session, startingAt: nextID, spec: spec, mode: mode)
+                                    session, startingAt: nextID, spec: spec, mode: mode,
+                                    cleanup: cleanupWitness)
                                 mutationRestoreRecords.append(cycle.record)
                                 phaseBRecord = cycle.record
                                 nextID = cycle.nextID
                             } catch {
                                 phaseBRefusal = Self.observedFailureReason(
                                     from: error, during: "phase_b recipe")
+                                    + "; cleanup: " + cleanupWitness.summary
                                 nextID += 60
                             }
                         }
                         if spec.id == .navigateCreateMarker {
+                            let cleanupWitness = PhaseCCleanupWitness()
                             do {
                                 let cycle = try markerCreateRestoreCycle(
-                                    session, startingAt: nextID, spec: spec)
+                                    session, startingAt: nextID, spec: spec, cleanup: cleanupWitness)
                                 mutationRestoreRecords.append(cycle.record)
                                 phaseBRecord = cycle.record
                                 nextID = cycle.nextID
                             } catch {
                                 phaseBRefusal = Self.observedFailureReason(
                                     from: error, during: "phase_b recipe")
+                                    + "; cleanup: " + cleanupWitness.summary
                                 nextID += 40
                             }
                         }
@@ -2017,6 +2138,23 @@ struct QualificationTransport: Sendable {
                                     from: error, during: "fresh mixer read-probe inspection")
                             }
                         }
+                        if responseFailure == nil, requestedPluginReads.contains(spec.id) {
+                            responseFailure = Self.refreshPluginReadProbeParams(
+                                for: spec.id,
+                                preparedReadParams: &preparedReadParams,
+                                refresh: pluginReadRefresh,
+                                pluginPreparation: pluginReadPreparation
+                            )
+                            if responseFailure == nil, preparedReadParams[spec.id] == nil {
+                                liveFixturePrecondition = switch spec.id {
+                                case .pluginsGetHostParameterManifest: .pluginHostManifestTarget
+                                case .pluginsGetParamVerified: .pluginReadableParameter
+                                case .pluginsGetChannelEQStateVerified: .pluginChannelEQ
+                                case .pluginsPlanParameterChanges: .pluginPlannableParameter
+                                default: nil
+                                }
+                            }
+                        }
                         let responseID = nextID
                         nextID += 1
                         responseRequestID = String(responseID)
@@ -2040,6 +2178,13 @@ struct QualificationTransport: Sendable {
                     responseFailure = responseFailure ?? Self.observedFailureReason(
                         from: error,
                         during: "operation request"
+                    )
+                }
+                if responseFailure == nil,
+                   requestedPluginReads.contains(spec.id),
+                   let response {
+                    responseFailure = Self.pluginReadProbeCleanupFailure(
+                        responseData: Data(response.text.utf8)
                     )
                 }
                 var readbackSource = Self.readbackSource(for: spec)
@@ -2111,6 +2256,25 @@ struct QualificationTransport: Sendable {
                         phase: "operation_probe.\(spec.id.rawValue)"
                     ) as OperationProbeResult
                 }
+                let transportRecipeFailure = Self.transportExpectedPlaying[spec.id] == nil
+                    ? nil
+                    : phaseBRefusal
+                // Every operation, after its readback. The reason is JOINED with the
+                // existing one rather than replacing it, so a UI violation cannot hide behind an
+                // earlier reason and an earlier reason cannot hide it.
+                let uiViolation: String? = {
+                    guard let uiBefore else {
+                        return "ui_invariant: \(spec.id.rawValue): baseline observation unavailable"
+                    }
+                    let found = QualificationUIInvariants.settledViolations(
+                        before: uiBefore, observe: uiObserver, sleep: uiSettleSleep)
+                    return found.isEmpty
+                        ? nil
+                        : "\(spec.id.rawValue): " + found.joined(separator: "; ")
+                }()
+                let combinedFailure = [
+                    responseFailure ?? readbackFailure ?? transportRecipeFailure, uiViolation,
+                ].compactMap { $0 }.joined(separator: " | ")
                 operationResults[spec.id.rawValue] = QualificationOperationResult(
                     operationID: spec.id.rawValue,
                     tool: spec.tool.rawValue,
@@ -2131,11 +2295,55 @@ struct QualificationTransport: Sendable {
                     readbackData: readbackData,
                     verification: spec.verification,
                     deadline: spec.deadline,
-                    failureReason: responseFailure ?? readbackFailure,
+                    failureReason: combinedFailure.isEmpty ? nil : combinedFailure,
                     liveFixturePrecondition: liveFixturePrecondition,
                     mutationRestore: phaseBRecord,
                     mutationRestoreRefusal: phaseBRefusal
                 )
+            }
+            if !requestedTransportOperations.isEmpty,
+               wholeRunTransportFailure == nil,
+               let baseline = wholeRunTransportBaseline,
+               let transportSpec = wholeRunTransportSpec {
+                do {
+                    let final = try observedTransportMotion(
+                        session,
+                        nextID: &nextID,
+                        phase: "transport_run.final_state"
+                    )
+                    if final.motion != baseline.motion {
+                        let compensation = compensateTransportMotion(
+                            session,
+                            spec: transportSpec,
+                            target: baseline.motion,
+                            nextID: &nextID,
+                            phase: "transport_run.cleanup"
+                        )
+                        wholeRunTransportFailure = "whole-run transport baseline changed from "
+                            + "\(baseline.motion) to \(final.motion); compensating restore: "
+                            + compensation.summary
+                    }
+                } catch {
+                    let compensation = compensateTransportMotion(
+                        session,
+                        spec: transportSpec,
+                        target: baseline.motion,
+                        nextID: &nextID,
+                        phase: "transport_run.cleanup"
+                    )
+                    wholeRunTransportFailure = "whole-run transport final state unreadable: "
+                        + Self.observedFailureReason(from: error, during: "transport_run.final_state")
+                        + "; compensating restore: " + compensation.summary
+                }
+            }
+            if let wholeRunTransportFailure {
+                for operation in requestedTransportOperations {
+                    guard let existing = operationResults[operation.rawValue] else { continue }
+                    operationResults[operation.rawValue] = Self.appendingFailure(
+                        wholeRunTransportFailure,
+                        to: existing
+                    )
+                }
             }
             let healthAfter = try health(session, id: nextID, phase: "health_after")
             nextID += 1
@@ -2194,6 +2402,40 @@ struct QualificationTransport: Sendable {
             }
             throw error
         }
+    }
+
+    private static func appendingFailure(
+        _ additionalFailure: String,
+        to result: QualificationOperationResult
+    ) -> QualificationOperationResult {
+        let combined = [result.failureReason, additionalFailure]
+            .compactMap { $0 }
+            .joined(separator: " | ")
+        return QualificationOperationResult(
+            operationID: result.operationID,
+            tool: result.tool,
+            command: result.command,
+            mutability: result.mutability,
+            requestID: result.requestID,
+            responseData: result.responseData,
+            isError: result.isError,
+            state: result.state,
+            error: result.error,
+            hint: result.hint,
+            reason: result.reason,
+            writeAttempted: result.writeAttempted,
+            rowSelectionWriteAttempted: result.rowSelectionWriteAttempted,
+            rowSelectionRestored: result.rowSelectionRestored,
+            readbackSource: result.readbackSource,
+            readbackRequestID: result.readbackRequestID,
+            readbackData: result.readbackData,
+            verification: result.verification,
+            deadline: result.deadline,
+            failureReason: combined,
+            liveFixturePrecondition: result.liveFixturePrecondition,
+            mutationRestore: result.mutationRestore,
+            mutationRestoreRefusal: result.mutationRestoreRefusal
+        )
     }
 
     private func initialize(_ session: QualificationSubprocessSession) throws -> QualificationHandshake {
@@ -2400,6 +2642,24 @@ struct QualificationTransport: Sendable {
         )
     }
 
+    private func pluginReadBoundaryRefresh(
+        _ session: QualificationSubprocessSession,
+        id: Int,
+        timeout: TimeInterval
+    ) throws -> (receipt: QualificationPluginReadRefreshReceipt?, isError: Bool) {
+        let result: ToolCallResult = try session.request(
+            id: id,
+            method: "tools/call",
+            params: [
+                "name": "logic_system",
+                "arguments": ["command": "refresh_cache", "params": [:]],
+            ],
+            phase: "plugin_read_probe_refresh",
+            timeout: timeout
+        )
+        return (result.pluginReadRefreshReceipt, result.isError == true)
+    }
+
     private func pluginInventory(
         _ session: QualificationSubprocessSession,
         id: Int,
@@ -2457,18 +2717,6 @@ struct QualificationTransport: Sendable {
     /// A table rather than a switch because the addition it invites is a ROW — an operation, plus
     /// the field a reader can check it against. An operation with no honest independent field does
     /// not belong here and must not be given one that merely correlates.
-    /// #373 Phase B: the toggles whose actuator refuses unless the TARGET TRACK is the only
-    /// selected one, so the recipe has to arrange that before it writes.
-    ///
-    /// `tracks.arm` posts a key chord, and Logic's record-arm acts on the selection — so the rung
-    /// re-checks `selectionIsExclusive(index:)` immediately before every post and refuses
-    /// otherwise. Measured 2026-09-14: driven on its own after a `select`, `tracks.arm` answers
-    /// State A verified on the same track the sweep failed on; inside the sweep nothing had
-    /// selected it, the rung refused, and the answer that reached the recipe was the next channel's.
-    /// `mute` and `solo` write an AX value and need no selection, which is why they are not here —
-    /// staging one for them would move a selection the cycle has no reason to touch.
-    static let requiresExclusiveSelection: Set<OperationID> = [.tracksArm]
-
     static let booleanToggleReadbackField: [OperationID: String] = [
         .tracksMute: "isMuted",
         .tracksSolo: "isSoloed",
@@ -2641,6 +2889,68 @@ struct QualificationTransport: Sendable {
         }
         let selected = rows.enumerated().filter { ($0.element["isSelected"] as? Bool) == true }
         return (selected.count == 1 ? selected[0].offset : nil, 2)
+    }
+
+    /// Reads the starting state and stops the run, naming every unmet condition, unless it is the
+    /// canonical one. It repairs nothing: a gate that quietly arranged its own start would hide
+    /// the difference between the machine it was given and the machine it ran on.
+    private func requireCanonicalStartingState(
+        _ session: QualificationSubprocessSession,
+        nextID: inout Int,
+        windowFacts: @Sendable () -> QualificationStartingWindowFacts
+    ) throws {
+        let ui = uiObserver()
+        let facts = windowFacts()
+        var selectedCount: Int?
+        let tracksID = nextID
+        nextID += 2
+        _ = try? invoke(
+            session, id: tracksID, tool: "logic_system", command: "refresh_cache",
+            params: [:], phase: "starting_state.tracks.refresh")
+        if let data = try? resourceReadback(
+            session, id: tracksID + 1, uri: "logic://tracks", phase: "starting_state.tracks") {
+            selectedCount = QualificationStartingState.selectedTrackCount(tracksResource: data)
+        }
+        var stopped: Bool?
+        if let transport = try? observedTransportMotion(
+            session, nextID: &nextID, phase: "starting_state.transport") {
+            stopped = transport.motion == .stopped
+        }
+        let unmet = QualificationStartingState.unmetConditions(
+            QualificationStartingStateReadings(
+                ui: ui, windowFacts: facts, selectedTrackCount: selectedCount,
+                transportStopped: stopped))
+        guard unmet.isEmpty else {
+            throw QualificationTransportError.protocolViolation(unmet.joined(separator: " | "))
+        }
+    }
+
+    /// The track a write recipe addresses: the one `logic://tracks` reads as selected.
+    ///
+    /// On Logic 13 a track write acts only on the selected track, so a recipe that addresses a
+    /// fixed row targets a track the product cannot act on. The target is read back from Logic
+    /// instead, and exactly one selected track is required: none or several is a refusal that says
+    /// so, never a guess at a row.
+    private func selectedTrackTarget(
+        _ session: QualificationSubprocessSession,
+        id: Int,
+        phase: String
+    ) throws -> (index: Int, spent: Int) {
+        _ = try? invoke(
+            session, id: id, tool: "logic_system", command: "refresh_cache",
+            params: [:], phase: "\(phase).refresh")
+        let data = try resourceReadback(session, id: id + 1, uri: "logic://tracks", phase: phase)
+        guard let count = QualificationStartingState.selectedTrackCount(tracksResource: data) else {
+            throw QualificationTransportError.protocolViolation(
+                "\(phase): logic://tracks did not report the selection, so there is no selected "
+                    + "track to address")
+        }
+        guard let index = QualificationStartingState.selectedTrackIndex(tracksResource: data) else {
+            throw QualificationTransportError.protocolViolation(
+                "\(phase): \(count) tracks are selected and exactly one is required; the write "
+                    + "recipe acts on the selected track and will not guess which")
+        }
+        return (index, 2)
     }
 
     /// #373 Phase B: the mutating operations whose recipe restores a VALUE rather than flipping a
@@ -2983,8 +3293,9 @@ struct QualificationTransport: Sendable {
         nextID: inout Int,
         phase: String
     ) throws -> (motion: TransportMotion, raw: String) {
-        let first = try observedPlaying(session, id: nextID, phase: phase)
+        let firstID = nextID
         nextID += 2
+        let first = try observedPlaying(session, id: firstID, phase: phase)
         if !first.playing { return (.stopped, first.raw) }
         guard let data = first.raw.data(using: .utf8),
               let envelope = try JSONSerialization.jsonObject(with: data) as? [String: Any],
@@ -2993,8 +3304,10 @@ struct QualificationTransport: Sendable {
             throw QualificationTransportError.protocolViolation("\(phase): transport motion tempo unavailable")
         }
         Thread.sleep(forTimeInterval: Double(gap) / 1_000_000_000)
-        let second = try observedPlaying(session, id: nextID, phase: "\(phase).motion_confirming")
+        let secondID = nextID
         nextID += 2
+        let second = try observedPlaying(
+            session, id: secondID, phase: "\(phase).motion_confirming")
         guard second.playing,
               let secondData = second.raw.data(using: .utf8),
               var secondEnvelope = try JSONSerialization.jsonObject(with: secondData) as? [String: Any] else {
@@ -3008,6 +3321,90 @@ struct QualificationTransport: Sendable {
             throw QualificationTransportError.protocolViolation("\(phase): transport position motion unavailable")
         }
         return (motion, raw)
+    }
+
+    private func compensateTransportMotion(
+        _ session: QualificationSubprocessSession,
+        spec: OperationSpec,
+        target: TransportMotion,
+        nextID: inout Int,
+        phase: String
+    ) -> (verified: Bool, summary: String) {
+        do {
+            var observed = try observedTransportMotion(
+                session,
+                nextID: &nextID,
+                phase: "\(phase).pre_state"
+            )
+            if observed.motion == target {
+                return (true, "verified exact \(target) without a restore write")
+            }
+
+            var refusedReplies: [String] = []
+            func writeAndObserve(
+                _ command: String,
+                expected: TransportMotion,
+                stage: String
+            ) throws -> (motion: TransportMotion, raw: String) {
+                let requestID = nextID
+                nextID += 1
+                let reply = try invoke(
+                    session,
+                    id: requestID,
+                    tool: spec.tool.rawValue,
+                    command: command,
+                    params: [:],
+                    phase: stage,
+                    timeout: spec.deadline.seconds + 5
+                )
+                if Self.mutationSaysItFailed(reply.text) {
+                    refusedReplies.append(command)
+                }
+                let readback = try observedTransportMotion(
+                    session,
+                    nextID: &nextID,
+                    phase: "\(stage)_readback"
+                )
+                guard readback.motion == expected else {
+                    throw QualificationTransportError.protocolViolation(
+                        "\(stage): residual \(readback.motion), expected \(expected)"
+                    )
+                }
+                return readback
+            }
+
+            if target == .paused, observed.motion == .stopped {
+                observed = try writeAndObserve(
+                    "play", expected: .moving, stage: "\(phase).stage_moving")
+            }
+            if observed.motion != target {
+                observed = try writeAndObserve(
+                    target.restoreCommand, expected: target, stage: phase)
+            }
+            guard observed.motion == target else {
+                return (
+                    false,
+                    "residual \(observed.motion), expected \(target)"
+                )
+            }
+            if !refusedReplies.isEmpty {
+                return (
+                    false,
+                    "restore reply refused for \(refusedReplies.joined(separator: ", ")); "
+                        + "exact target \(target) observed"
+                )
+            }
+            return (
+                true,
+                "verified exact \(target)"
+            )
+        } catch {
+            return (
+                false,
+                "residual unverified: "
+                    + Self.observedFailureReason(from: error, during: phase)
+            )
+        }
     }
 
     /// #373 Phase B for transport. Same five steps, with one extra obligation the others do not
@@ -3031,64 +3428,123 @@ struct QualificationTransport: Sendable {
         let inverse = expected == .moving ? "stop" : "play"
 
         let pre = try observedTransportMotion(session, nextID: &nextID, phase: "phase_b.pre_state")
-        var needsRestore = false
-        defer {
-            if needsRestore {
-                // A staged precondition is acquired work too. A later refused mutation/readback
-                // must not leave it behind; failure still carries no verified cycle record.
-                _ = try? invoke(session, id: nextID + 900, tool: spec.tool.rawValue,
-                    command: pre.motion.restoreCommand, params: [:],
-                    phase: "phase_b.cleanup", timeout: spec.deadline.seconds + 5)
+        // Playback moves the playhead, and restoring the MOTION does not bring it back: every
+        // play, pause and stop cycle left the playhead elsewhere, and the next run started from
+        // a different place (measured: 30.3 before a gate, 5.2 after). From a stopped start the
+        // exact position is read here and put back, verified, on every exit.
+        let prePosition = pre.motion == .stopped ? Self.observedPlayheadPosition(pre.raw) : nil
+        var playheadRestoreAttempted = false
+        var workMayHaveLanded = false
+        do {
+            if pre.motion == expected || (expected == .paused && pre.motion != .moving) {
+                workMayHaveLanded = true
+                let precondition = try invoke(
+                    session, id: step(), tool: spec.tool.rawValue, command: inverse,
+                    params: [:], phase: "phase_b.precondition")
+                guard !Self.mutationSaysItFailed(precondition.text) else {
+                    throw QualificationTransportError.protocolViolation(
+                        "phase_b.precondition: \(spec.id.rawValue) refused the staging request: "
+                            + precondition.text.prefix(220))
+                }
+                let staged = try observedTransportMotion(
+                    session, nextID: &nextID, phase: "phase_b.precondition_readback")
+                guard staged.motion == (expected == .moving ? .stopped : .moving) else {
+                    throw QualificationTransportError.protocolViolation(
+                        "phase_b.precondition: could not stage independent transport motion")
+                }
             }
-        }
-        if pre.motion == expected || (expected == .paused && pre.motion != .moving) {
-            needsRestore = true
-            _ = try invoke(
-                session, id: step(), tool: spec.tool.rawValue, command: inverse,
-                params: [:], phase: "phase_b.precondition")
-            let staged = try observedTransportMotion(
-                session, nextID: &nextID, phase: "phase_b.precondition_readback")
-            guard staged.motion == (expected == .moving ? .stopped : .moving) else {
+            workMayHaveLanded = true
+            let mutation = try invoke(
+                session, id: step(), tool: spec.tool.rawValue, command: spec.command,
+                params: [:], phase: "phase_b.mutation",
+                timeout: spec.deadline.seconds + 5)
+            guard !Self.mutationSaysItFailed(mutation.text) else {
                 throw QualificationTransportError.protocolViolation(
-                    "phase_b.precondition: could not stage independent transport motion")
+                    "phase_b.mutation: \(spec.id.rawValue) refused the real request: "
+                        + mutation.text.prefix(220))
             }
-        }
-        needsRestore = true
-        let mutation = try invoke(
-            session, id: step(), tool: spec.tool.rawValue, command: spec.command,
-            params: [:], phase: "phase_b.mutation",
-            timeout: spec.deadline.seconds + 5)
-        guard !Self.mutationSaysItFailed(mutation.text) else {
-            throw QualificationTransportError.protocolViolation(
-                "phase_b.mutation: \(spec.id.rawValue) refused the real request: "
-                    + mutation.text.prefix(220))
-        }
-        let after = try observedTransportMotion(session, nextID: &nextID, phase: "phase_b.readback")
-        guard after.motion == expected else {
-            throw QualificationTransportError.protocolViolation(
-                "phase_b.readback: independent transport motion differs from requested mode")
-        }
-        let restore = try invoke(
-            session, id: step(), tool: spec.tool.rawValue,
-            command: pre.motion.restoreCommand, params: [:], phase: "phase_b.restore")
-        let restored = try observedTransportMotion(
-            session, nextID: &nextID, phase: "phase_b.restore_readback")
-        guard restored.motion == pre.motion else {
-            throw QualificationTransportError.protocolViolation(
-                "phase_b.restore_readback: independent transport motion was not restored")
-        }
-        needsRestore = false
-        return (
-            QualificationMutationRestoreRecord(
+            let after = try observedTransportMotion(session, nextID: &nextID, phase: "phase_b.readback")
+            guard after.motion == expected else {
+                throw QualificationTransportError.protocolViolation(
+                    "phase_b.readback: independent transport motion differs from requested mode")
+            }
+            var restoreStagingMutation: String?
+            var restoreStagingReadback: String?
+            if pre.motion == .paused, after.motion == .stopped {
+                let stage = try invoke(
+                    session, id: step(), tool: spec.tool.rawValue,
+                    command: "play", params: [:], phase: "phase_b.restore_precondition")
+                guard !Self.mutationSaysItFailed(stage.text) else {
+                    throw QualificationTransportError.protocolViolation(
+                        "phase_b.restore_precondition: \(spec.id.rawValue) refused the moving stage: "
+                            + stage.text.prefix(220))
+                }
+                let staged = try observedTransportMotion(
+                    session, nextID: &nextID, phase: "phase_b.restore_precondition_readback")
+                guard staged.motion == .moving else {
+                    throw QualificationTransportError.protocolViolation(
+                        "phase_b.restore_precondition_readback: transport did not reach moving")
+                }
+                restoreStagingMutation = stage.text
+                restoreStagingReadback = staged.raw
+            }
+            let restore = try invoke(
+                session, id: step(), tool: spec.tool.rawValue,
+                command: pre.motion.restoreCommand, params: [:], phase: "phase_b.restore")
+            guard !Self.mutationSaysItFailed(restore.text) else {
+                throw QualificationTransportError.protocolViolation(
+                    "phase_b.restore: \(spec.id.rawValue) refused the restore: "
+                        + restore.text.prefix(220))
+            }
+            let restored = try observedTransportMotion(
+                session, nextID: &nextID, phase: "phase_b.restore_readback")
+            guard restored.motion == pre.motion else {
+                throw QualificationTransportError.protocolViolation(
+                    "phase_b.restore_readback: independent transport motion was not restored")
+            }
+            let record = QualificationMutationRestoreRecord(
                 operationID: spec.id.rawValue,
                 preState: pre.raw,
                 mutation: mutation.text,
                 readback: after.raw,
                 restore: restore.text,
-                restoreReadback: restored.raw
-            ),
-            nextID
-        )
+                restoreReadback: restored.raw,
+                stagingMutation: restoreStagingMutation,
+                stagingReadback: restoreStagingReadback
+            )
+            guard record.verifiedCycleShape else {
+                throw QualificationTransportError.protocolViolation(
+                    "phase_b.restore_readback: recorded transport cycle did not verify")
+            }
+            if let prePosition, Self.observedPlayheadPosition(restored.raw) != prePosition {
+                playheadRestoreAttempted = true
+                let fix = restorePlayhead(
+                    session, nextID: &nextID, to: prePosition, phase: "phase_b.playhead_restore")
+                guard fix.restored else {
+                    throw QualificationTransportError.protocolViolation(
+                        "phase_b.playhead_restore: \(fix.summary)")
+                }
+            }
+            workMayHaveLanded = false
+            return (record, nextID)
+        } catch {
+            guard workMayHaveLanded else { throw error }
+            let compensation = compensateTransportMotion(
+                session,
+                spec: spec,
+                target: pre.motion,
+                nextID: &nextID,
+                phase: "phase_b.cleanup"
+            )
+            var playhead = ""
+            if let prePosition, !playheadRestoreAttempted {
+                playhead = "; " + restorePlayhead(
+                    session, nextID: &nextID, to: prePosition, phase: "phase_b.playhead_restore").summary
+            }
+            throw QualificationTransportError.protocolViolation(
+                "\(error) | compensating restore: \(compensation.summary)\(playhead)"
+            )
+        }
     }
 
     /// #373 Phase B for `tracks.select`. The moved thing is WHICH row carries `isSelected`, so the
@@ -3186,6 +3642,42 @@ struct QualificationTransport: Sendable {
         case names(present: [String], absent: [String])
     }
 
+    /// Why a `logic://markers` body is not a fresh, readable reading of the Marker List taken at or
+    /// after `since`, or nil when it is one.
+    ///
+    /// Every marker decision in these recipes — which index to delete, rename or navigate to, and
+    /// whether a probe is present or gone — is taken from this read, so it has to be the list as
+    /// it stands now. The marker operations close the Marker List they open, and with it closed the
+    /// product keeps its last rows and only marks them unreadable (`source: cache`). Those rows
+    /// still parse: a cleanup that took its index from them deleted index 0 again after its probe
+    /// was gone, and index 0 was then the user's marker. A readable, recent body is not enough
+    /// either — the create's own readback lands in the cache before the list closes, and a refresh
+    /// that misses the poller's marker tick serves it unchanged. So the read must have been made
+    /// AFTER `since`, the moment the caller began this observation (after its last write).
+    static func markerReadRefusal(_ data: Data, since: Date) -> String? {
+        guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            return "the body is not a JSON object"
+        }
+        let cause = (object["reason"] as? String).map { ", reason \($0)" } ?? ""
+        if let refusal = QualificationReadbackFreshness.verdict(
+            for: data, uri: "logic://markers", verification: .readbackRequired, deadline: .short
+        ).refusalReason {
+            return "\(refusal) (source \(object["source"] as? String ?? "absent")\(cause))"
+        }
+        guard let stamp = object["fetched_at"] as? String,
+              let fetched = ISO8601DateFormatter.cacheFormatter.date(from: stamp) else {
+            return "readback_fetched_at_unknown"
+        }
+        // The stamp carries milliseconds; compare against `since` truncated to the same grain so a
+        // read in the same millisecond is not refused for the formatter's rounding.
+        let floor = Date(timeIntervalSince1970: (since.timeIntervalSince1970 * 1000).rounded(.down) / 1000)
+        guard fetched >= floor else {
+            return "readback_predates_this_read (fetched_at \(stamp))"
+        }
+        guard object["data"] is [[String: Any]] else { return "readback_rows_absent" }
+        return nil
+    }
+
     private func observedMarkerCount(
         _ session: QualificationSubprocessSession,
         id: Int,
@@ -3202,8 +3694,14 @@ struct QualificationTransport: Sendable {
         // not relaxing the assertion: the loop exits early only on the state the caller already
         // decided is correct, and a wrong state simply runs out the budget and is returned as it
         // is, to be judged by the guard that asked.
+        //
+        // ONLY A FRESH READ COUNTS (`markerReadRefusal`). A body that is not one is skipped, never
+        // returned; if no attempt produces one this THROWS, so a caller has no rows to act on and
+        // stops — before staging when it has not written yet, and without deleting in a cleanup.
+        let since = Date()
         var spent = 0
-        var last: (Int, String) = (-1, "")
+        var last: (Int, String)?
+        var refusal = "no read was made"
         for attempt in 0..<6 {
             // WAIT between attempts. The first version polled with no delay, so six attempts
             // finished in well under a second — far too fast for this list. Measured 2026-09-14: a
@@ -3219,6 +3717,10 @@ struct QualificationTransport: Sendable {
                 session, id: id + spent, uri: "logic://markers", phase: phase)
             spent += 1
             let raw = String(decoding: data, as: UTF8.self)
+            if let reason = Self.markerReadRefusal(data, since: since) {
+                refusal = reason
+                continue
+            }
             let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
             let rows = (object?["data"] as? [[String: Any]]) ?? []
             last = (rows.count, raw)
@@ -3231,7 +3733,62 @@ struct QualificationTransport: Sendable {
             }
             if settled { break }
         }
+        guard let last else {
+            throw QualificationTransportError.protocolViolation(
+                "\(phase): logic://markers gave no fresh, readable marker list (\(refusal)), so there is "
+                    + "no marker identity to act on and nothing is written or deleted on it")
+        }
         return (last.0, last.1, spent)
+    }
+
+    /// Removes what a marker cycle staged, found BY NAME on a fresh read before the delete.
+    ///
+    /// At most ONE delete is sent while its effect is unconfirmed. After a delete — this cleanup's
+    /// own, or one the cycle already sent (`deletePending`) — the next read waits for the names to
+    /// be gone, and if they still read present when that wait runs out, nothing more is sent: the
+    /// list settles slowly and keeps showing a deleted row, freshly read, and a second delete at
+    /// that row's index lands on whatever marker moved into it, which is the user's. A read that is
+    /// not fresh ends the cleanup the same way. Either way the marker may remain, and the witness
+    /// says so rather than guessing at an index.
+    private func removeStagedMarkers(
+        _ session: QualificationSubprocessSession,
+        startingAt id: Int,
+        names: [String],
+        deletePending: Bool,
+        tool: String,
+        cleanup: PhaseCCleanupWitness
+    ) {
+        var cleanupID = id
+        var deleted = deletePending
+        for _ in 0..<2 {
+            let seen: (count: Int, raw: String, spent: Int)
+            do {
+                seen = try observedMarkerCount(
+                    session, id: cleanupID,
+                    settling: deleted ? .names(present: [], absent: names) : .read,
+                    phase: "phase_b.cleanup_readback")
+            } catch {
+                cleanup.note("withheld, \(names.joined(separator: " or ")) may remain: \(error)")
+                return
+            }
+            cleanupID += seen.spent
+            guard let index = names.lazy.compactMap({ markerIndex(named: $0, in: seen.raw) }).first else {
+                cleanup.note(deleted ? "removed" : "nothing staged remains")
+                return
+            }
+            guard !deleted else {
+                cleanup.note("withheld, \(names.joined(separator: " or ")) still reads present after "
+                    + "delete_marker, so that delete's effect is unconfirmed and no further delete is "
+                    + "sent; it may remain")
+                return
+            }
+            _ = try? invoke(
+                session, id: cleanupID, tool: tool, command: "delete_marker",
+                params: ["index": index], phase: "phase_b.cleanup")
+            cleanupID += 1
+            deleted = true
+            cleanup.note("delete_marker index \(index)")
+        }
     }
 
     /// #373 Phase B for the project tempo.
@@ -3357,7 +3914,8 @@ struct QualificationTransport: Sendable {
     private func markerNavigationRestoreCycle(
         _ session: QualificationSubprocessSession,
         startingAt id: Int,
-        spec: OperationSpec
+        spec: OperationSpec,
+        cleanup: PhaseCCleanupWitness
     ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
         var nextID = id
         let probeName = "qualification_phase_b_probe"
@@ -3367,6 +3925,11 @@ struct QualificationTransport: Sendable {
         let origin = try observedTransportPosition(
             session, id: readStep(), phase: "phase_b.stage_precondition")
         let originBar = try observedBar(of: origin.raw, phase: "phase_b.stage_precondition")
+        guard let originPosition = Self.observedPlayheadPosition(origin.raw) else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.stage_precondition: the playhead position did not read, so it could not "
+                    + "be put back; nothing is moved")
+        }
         let markerBar = originBar > 4 ? originBar - 3 : originBar + 3
 
         let existing = try observedMarkerCount(
@@ -3377,6 +3940,18 @@ struct QualificationTransport: Sendable {
                 "phase_b.stage_precondition: a marker named \(probeName) is already in the "
                     + "project — an earlier run left it, and this cycle cannot tell its own marker "
                     + "from that one")
+        }
+        // FROM THE PARK ON THE PLAYHEAD IS MOVED, so every exit puts it back at the exact position
+        // it read, verified. Registered before the marker cleanup below, so it runs after it.
+        // A refusal after the park used to leave the playhead here, and the next run then started
+        // with the selected region out of view and refused its starting state.
+        var playheadOwed = true
+        defer {
+            if playheadOwed {
+                var restoreID = nextID + 950
+                cleanup.note(restorePlayhead(
+                    session, nextID: &restoreID, to: originPosition, phase: "phase_b.playhead_restore").summary)
+            }
         }
         _ = try invoke(
             session, id: step(), tool: spec.tool.rawValue, command: "goto_bar",
@@ -3398,18 +3973,9 @@ struct QualificationTransport: Sendable {
         // A MARKER NOW EXISTS. Every exit removes it, and the removal is verified — see
         // `markerCreateRestoreCycle` for why an unchecked delete is not a removal.
         defer {
-            var cleanupID = nextID + 900
-            for _ in 0..<6 {
-                guard let seen = try? observedMarkerCount(
-                    session, id: cleanupID, settling: .read, phase: "phase_b.cleanup_readback"
-                ) else { break }
-                cleanupID += seen.spent
-                guard let index = markerIndex(named: probeName, in: seen.raw) else { break }
-                _ = try? invoke(
-                    session, id: cleanupID, tool: spec.tool.rawValue, command: "delete_marker",
-                    params: ["index": index], phase: "phase_b.cleanup")
-                cleanupID += 1
-            }
+            removeStagedMarkers(
+                session, startingAt: nextID + 900, names: [probeName], deletePending: false,
+                tool: spec.tool.rawValue, cleanup: cleanup)
         }
         let listed = try observedMarkerCount(
             session, id: nextID, settling: .names(present: [probeName], absent: []),
@@ -3460,6 +4026,8 @@ struct QualificationTransport: Sendable {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.restore_readback: playhead is at bar \(restoredBar), expected \(preBar)")
         }
+        // Exact, not just the bar: the cycle's own return is a goto_bar.
+        if Self.observedPlayheadPosition(restored.raw) == originPosition { playheadOwed = false }
         return (
             QualificationMutationRestoreRecord(
                 operationID: spec.id.rawValue,
@@ -3473,10 +4041,63 @@ struct QualificationTransport: Sendable {
         )
     }
 
+    /// The playhead as `logic://transport/state` shows it (`data.state.position`, `bar.beat` on
+    /// Logic 13), or nil when it is absent or not a position a `goto_position` can name.
+    static func observedPlayheadPosition(_ raw: String) -> String? {
+        guard let data = raw.data(using: .utf8),
+              let envelope = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let payload = envelope["data"] as? [String: Any],
+              let state = payload["state"] as? [String: Any],
+              let position = state["position"] as? String,
+              gotoPositionRequest(for: position) != nil else { return nil }
+        return position
+    }
+
+    /// The `goto_position` request for an observed position. Components the transport does not
+    /// show are the first division and tick, so the request reads back as the same position.
+    static func gotoPositionRequest(for observed: String) -> String? {
+        let parts = observed.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
+        guard (1...4).contains(parts.count), parts.allSatisfy({ Int($0) != nil }) else { return nil }
+        let request = (parts + Array(repeating: "1", count: 4 - parts.count)).joined(separator: ".")
+        return TransportDispatcher.isValidPositionString(request) ? request : nil
+    }
+
+    /// Puts the playhead back at `observed` and reads it there. The reply is not the evidence —
+    /// Logic 13 answers State B for a control bar that shows only bar and beat — the independent
+    /// transport readback is. A recipe that moved the playhead owes this on every exit, or the
+    /// next run starts from somewhere else.
+    private func restorePlayhead(
+        _ session: QualificationSubprocessSession,
+        nextID: inout Int,
+        to observed: String,
+        phase: String
+    ) -> (restored: Bool, summary: String) {
+        guard let request = Self.gotoPositionRequest(for: observed) else {
+            return (false, "playhead not restored: \(observed) is not a position goto_position can name")
+        }
+        do {
+            _ = try invoke(
+                session, id: nextID, tool: "logic_transport", command: "goto_position",
+                params: ["position": request], phase: phase, timeout: 30)
+            nextID += 1
+            let read = try observedTransportPosition(session, id: nextID, phase: "\(phase)_readback")
+            nextID += read.spent
+            guard let now = Self.observedPlayheadPosition(read.raw) else {
+                return (false, "playhead position unreadable after goto_position \(request)")
+            }
+            return now == observed
+                ? (true, "playhead back at \(observed)")
+                : (false, "playhead at \(now) after goto_position \(request), expected \(observed)")
+        } catch {
+            return (false, "playhead restore to \(observed) failed: \(error)")
+        }
+    }
+
     private func playheadRestoreCycle(
         _ session: QualificationSubprocessSession,
         startingAt id: Int,
-        spec: OperationSpec
+        spec: OperationSpec,
+        cleanup: PhaseCCleanupWitness
     ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
         var nextID = id
         func readStep() -> Int { defer { nextID += 2 }; return nextID }
@@ -3484,8 +4105,23 @@ struct QualificationTransport: Sendable {
 
         let pre = try observedTransportPosition(session, id: readStep(), phase: "phase_b.pre_state")
         let preBar = try observedBar(of: pre.raw, phase: "phase_b.pre_state")
+        guard let prePosition = Self.observedPlayheadPosition(pre.raw) else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.pre_state: the playhead position did not read, so it could not be put "
+                    + "back; nothing is moved")
+        }
         // Somewhere else in the arrangement, and never bar 0 — `goto_bar` counts from 1.
         let target = preBar > 4 ? preBar - 3 : preBar + 3
+        // FROM THE MUTATION ON THE PLAYHEAD MAY HAVE MOVED, so every exit puts it back at the
+        // exact position it read, verified — a refusal used to leave it where the write put it.
+        var playheadOwed = true
+        defer {
+            if playheadOwed {
+                var restoreID = nextID + 950
+                cleanup.note(restorePlayhead(
+                    session, nextID: &restoreID, to: prePosition, phase: "phase_b.playhead_restore").summary)
+            }
+        }
         let mutation = try invoke(
             session, id: step(), tool: spec.tool.rawValue, command: spec.command,
             params: ["bar": target], phase: "phase_b.mutation",
@@ -3516,6 +4152,16 @@ struct QualificationTransport: Sendable {
         guard restoredBar == preBar else {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.restore_readback: playhead is at bar \(restoredBar), expected \(preBar)")
+        }
+        // The operation's own inverse addresses a BAR, so it lands on the bar's first beat. The
+        // record is about the bar; the playhead is then put back on the beat it was on.
+        playheadOwed = false
+        if Self.observedPlayheadPosition(restored.raw) != prePosition {
+            let fix = restorePlayhead(
+                session, nextID: &nextID, to: prePosition, phase: "phase_b.playhead_restore")
+            guard fix.restored else {
+                throw QualificationTransportError.protocolViolation("phase_b.playhead_restore: \(fix.summary)")
+            }
         }
         return (
             QualificationMutationRestoreRecord(
@@ -3795,8 +4441,15 @@ struct QualificationTransport: Sendable {
         func step() -> Int { defer { nextID += 1 }; return nextID }
         let probeValue = "qualification_phase_b_probe"
 
+        // The track written is the selected one, read back from Logic: a write acts only on the
+        // selected track on Logic 13. The identity guards below stay bound to its `track_ref`.
+        let target = try selectedTrackTarget(
+            session, id: nextID, phase: "phase_b.target_selection")
+        nextID += target.spent
+        let trackIndex = target.index
+
         let pre = try observedTrackString(
-            session, id: readStep(), trackIndex: 0, field: readbackField,
+            session, id: readStep(), trackIndex: trackIndex, field: readbackField,
             phase: "phase_b.pre_state")
         guard pre.value != probeValue else {
             throw QualificationTransportError.protocolViolation(
@@ -3819,7 +4472,7 @@ struct QualificationTransport: Sendable {
                 var cleanupID = nextID + 900
                 for _ in 0..<4 {
                     guard let current = try? observedTrackString(
-                        session, id: cleanupID, trackIndex: 0, field: readbackField,
+                        session, id: cleanupID, trackIndex: trackIndex, field: readbackField,
                         phase: "phase_b.cleanup_preflight"),
                         current.trackRef == pre.trackRef, current.value == probeValue else { break }
                     cleanupID += 2
@@ -3833,7 +4486,7 @@ struct QualificationTransport: Sendable {
                         continue
                     }
                     guard let seen = try? observedTrackString(
-                        session, id: cleanupID, trackIndex: 0, field: readbackField,
+                        session, id: cleanupID, trackIndex: trackIndex, field: readbackField,
                         phase: "phase_b.cleanup_readback") else { break }
                     cleanupID += 2
                     guard seen.trackRef == pre.trackRef else { break }
@@ -3843,7 +4496,7 @@ struct QualificationTransport: Sendable {
         }
         nameCustodyLost = true
         let after = try observedTrackString(
-            session, id: readStep(), trackIndex: 0, field: readbackField,
+            session, id: readStep(), trackIndex: trackIndex, field: readbackField,
             phase: "phase_b.readback")
         guard after.trackRef == pre.trackRef else {
             throw QualificationTransportError.protocolViolation(
@@ -3865,7 +4518,7 @@ struct QualificationTransport: Sendable {
         }
         nameCustodyLost = true
         let restored = try observedTrackString(
-            session, id: readStep(), trackIndex: 0, field: readbackField,
+            session, id: readStep(), trackIndex: trackIndex, field: readbackField,
             phase: "phase_b.restore_readback")
         guard restored.trackRef == pre.trackRef else {
             throw QualificationTransportError.protocolViolation(
@@ -3940,11 +4593,18 @@ struct QualificationTransport: Sendable {
         spec: OperationSpec,
         direction: HistoryDirection
     ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
-        let trackIndex = 0
         let probeName = "qualification_phase_b_probe"
         var nextID = id
         func readStep() -> Int { defer { nextID += 2 }; return nextID }
         func step() -> Int { defer { nextID += 1 }; return nextID }
+
+        // The staged edit is a rename of the SELECTED track, read back from Logic: a track write
+        // acts only on the selected track on Logic 13, so a fixed row was never renamed and the
+        // edit this cycle meant to stage was not on the undo stack.
+        let target = try selectedTrackTarget(
+            session, id: nextID, phase: "phase_b.target_selection")
+        nextID += target.spent
+        let trackIndex = target.index
 
         let original = try observedTrackString(
             session, id: readStep(), trackIndex: trackIndex, field: "name",
@@ -4606,7 +5266,8 @@ struct QualificationTransport: Sendable {
     private func markerCreateRestoreCycle(
         _ session: QualificationSubprocessSession,
         startingAt id: Int,
-        spec: OperationSpec
+        spec: OperationSpec,
+        cleanup: PhaseCCleanupWitness
     ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
         var nextID = id
         let probeName = "qualification_phase_b_probe"
@@ -4634,6 +5295,9 @@ struct QualificationTransport: Sendable {
         // permanent one, and the fixture needed manual cleaning. A create-shaped recipe that can
         // throw between the create and the delete is a recipe that edits the project on failure.
         var createdMarkerNeedsRemoval = true
+        // Set once the restore's delete is sent and cleared only when a fresh read shows the probe
+        // gone, so the cleanup never sends a second delete on top of an unconfirmed one.
+        var restoreDeletePending = false
         defer {
             if createdMarkerNeedsRemoval {
                 // THE CLEANUP VERIFIES. A first version issued one best-effort delete and moved on,
@@ -4641,19 +5305,10 @@ struct QualificationTransport: Sendable {
                 // the marker list settles slowly enough that a single unchecked delete is not a
                 // removal, it is a request. An unverified cleanup is the same shape as the
                 // unverified success claims this whole change exists to remove, so it retries until
-                // the count is back where it started or its budget runs out.
-                var cleanupID = nextID + 900
-                for _ in 0..<4 {
-                    guard let seen = try? observedMarkerCount(
-                        session, id: cleanupID, settling: .read, phase: "phase_b.cleanup_readback"
-                    ) else { break }
-                    cleanupID += seen.spent
-                    guard let index = markerIndex(named: probeName, in: seen.raw) else { break }
-                    _ = try? invoke(
-                        session, id: cleanupID, tool: spec.tool.rawValue, command: "delete_marker",
-                        params: ["index": index], phase: "phase_b.cleanup")
-                    cleanupID += 1
-                }
+                // the probe is gone or its budget runs out — on fresh reads only.
+                removeStagedMarkers(
+                    session, startingAt: nextID + 900, names: [probeName],
+                    deletePending: restoreDeletePending, tool: spec.tool.rawValue, cleanup: cleanup)
             }
         }
 
@@ -4671,6 +5326,7 @@ struct QualificationTransport: Sendable {
                 "phase_b.readback: the marker count rose but no row carries \(probeName) — the "
                     + "cycle cannot identify what it created and will not delete by guess")
         }
+        restoreDeletePending = true
         let restore = try invoke(
             session, id: nextID, tool: spec.tool.rawValue, command: "delete_marker",
             params: ["index": createdIndex], phase: "phase_b.restore")
@@ -4723,7 +5379,8 @@ struct QualificationTransport: Sendable {
         _ session: QualificationSubprocessSession,
         startingAt id: Int,
         spec: OperationSpec,
-        mode: MarkerStagedMode
+        mode: MarkerStagedMode,
+        cleanup: PhaseCCleanupWitness
     ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
         var nextID = id
         let probeName = "qualification_phase_b_probe"
@@ -4751,25 +5408,17 @@ struct QualificationTransport: Sendable {
         // `let` for the same reason as the history cycle: the staged marker is still there when the
         // record closes, because that is what "restored" means for a rename or a delete.
         let stagedMarkerNeedsRemoval = true
+        // The delete-mode mutation IS a delete of the staged marker: from when it is sent until a
+        // fresh read shows the marker gone, the cleanup must not send another on top of it.
+        var mutationDeletePending = false
         defer {
             if stagedMarkerNeedsRemoval {
-                var cleanupID = nextID + 900
-                for _ in 0..<6 {
-                    guard let seen = try? observedMarkerCount(
-                        session, id: cleanupID, settling: .read, phase: "phase_b.cleanup_readback"
-                    ) else { break }
-                    cleanupID += seen.spent
-                    // The mutation under test may have renamed it, so the cleanup looks for BOTH
-                    // names. A cleanup that only knew the name it staged would leave the marker
-                    // behind exactly when the rename half-succeeded.
-                    let index = markerIndex(named: probeName, in: seen.raw)
-                        ?? markerIndex(named: renamedName, in: seen.raw)
-                    guard let index else { break }
-                    _ = try? invoke(
-                        session, id: cleanupID, tool: spec.tool.rawValue, command: "delete_marker",
-                        params: ["index": index], phase: "phase_b.cleanup")
-                    cleanupID += 1
-                }
+                // The mutation under test may have renamed it, so the cleanup looks for BOTH
+                // names. A cleanup that only knew the name it staged would leave the marker
+                // behind exactly when the rename half-succeeded.
+                removeStagedMarkers(
+                    session, startingAt: nextID + 900, names: [probeName, renamedName],
+                    deletePending: mutationDeletePending, tool: spec.tool.rawValue, cleanup: cleanup)
             }
         }
 
@@ -4787,6 +5436,7 @@ struct QualificationTransport: Sendable {
         case .rename: ["index": stagedIndex, "name": renamedName]
         case .delete: ["index": stagedIndex]
         }
+        if mode == .delete { mutationDeletePending = true }
         let mutation = try invoke(
             session, id: nextID, tool: spec.tool.rawValue, command: spec.command,
             params: mutationParams, phase: "phase_b.mutation",
@@ -4826,6 +5476,7 @@ struct QualificationTransport: Sendable {
                     "phase_b.readback: after delete_marker \(probeName) must be absent at a count "
                         + "of \(pre.count - 1); the list reports \(after.count)")
             }
+            mutationDeletePending = false // a fresh read shows it gone
         }
 
         // The restore's target is resolved AGAIN from the readback rather than reused from the
@@ -5486,45 +6137,21 @@ struct QualificationTransport: Sendable {
         spec: OperationSpec,
         readbackField: String
     ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
-        let trackIndex = 0
         var nextID = id
         // Each observation spends TWO ids — a refresh and the resource read — so the step counter
         // advances by two for reads and one for writes.
         func readStep() -> Int { defer { nextID += 2 }; return nextID }
         func step() -> Int { defer { nextID += 1 }; return nextID }
 
-        // STAGE THE PRECONDITION the actuator documents, and put the selection back afterwards.
-        // The prior selection is read first so the restore returns the operator's own row rather
-        // than one this recipe manufactured.
-        var priorSelection: Int?
-        if Self.requiresExclusiveSelection.contains(spec.id) {
-            let before = try observedSelectedTrackIndex(
-                session, id: nextID, phase: "phase_b.selection_precondition")
-            nextID += before.spent
-            priorSelection = before.index
-            if before.index != trackIndex {
-                _ = try invoke(
-                    session, id: step(), tool: spec.tool.rawValue, command: "select",
-                    params: ["index": trackIndex], phase: "phase_b.selection_precondition",
-                    timeout: spec.deadline.seconds + 5)
-                let staged = try observedSelectedTrackIndex(
-                    session, id: nextID, phase: "phase_b.selection_precondition_readback")
-                nextID += staged.spent
-                guard staged.index == trackIndex else {
-                    throw QualificationTransportError.protocolViolation(
-                        "phase_b.selection_precondition: track \(trackIndex) is not the selected "
-                            + "row (\(staged.index.map(String.init) ?? "none")), and "
-                            + "\(spec.id.rawValue) refuses to write onto a selection it does not own")
-                }
-            }
-        }
-        defer {
-            if let priorSelection, priorSelection != trackIndex {
-                _ = try? invoke(
-                    session, id: nextID + 800, tool: spec.tool.rawValue, command: "select",
-                    params: ["index": priorSelection], phase: "phase_b.selection_restore")
-            }
-        }
+        // THE TARGET IS THE SELECTED TRACK, read back from Logic. A write on Logic 13 acts only on
+        // the selected row, so addressing a fixed index asked the product for a track it cannot
+        // act on (`tracks.arm` refused: "track 0 is not the selected row"). The selection is not
+        // changed here: the starting state has exactly one selected track and the cycle leaves it
+        // selected.
+        let target = try selectedTrackTarget(
+            session, id: nextID, phase: "phase_b.target_selection")
+        nextID += target.spent
+        let trackIndex = target.index
 
         // A POLLED read spends more than two ids, so each one advances `nextID` by what it
         // actually spent. Keeping `readStep()`'s fixed two here would hand a later step an id this
@@ -5870,6 +6497,17 @@ struct QualificationTransport: Sendable {
 
     /// Prepare plug-in probes from their own two authorities only. Session inspection is a Mixer
     /// source and must not suppress a valid plug-in inventory when that unrelated read refuses.
+    static func isTypedBindingRefusal(_ data: Data) -> Bool {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              object["state"] as? String == "B",
+              let success = object["success"], JSONInspector.isBoolean(success), success as? Bool == true,
+              let verified = object["verified"], JSONInspector.isBoolean(verified), verified as? Bool == false,
+              object["reason"] as? String == "readback_unavailable",
+              object["binding_refusal_reason"] as? String == "arrange_name_ambiguous",
+              object["plugins"] == nil else { return false }
+        return true
+    }
+
     static func preparePluginReadProbeParams(
         tracksRead: () throws -> Data,
         inventoryRead: (Int) throws -> Data
@@ -5880,7 +6518,11 @@ struct QualificationTransport: Sendable {
                 "plugin_read_probe_tracks: response was not a complete live referenced Arrange inventory"
             )
         }
-        let inventories = try trackIndices.map(inventoryRead)
+        // A track the product itself refuses to name (two Arrange tracks carry its name) answers
+        // with this exact typed binding refusal. It reports no inserts, so it can neither supply
+        // nor contradict a probe target and is not part of the census. Every other answer, an
+        // incomplete or malformed one included, still invalidates the whole preparation.
+        let inventories = try trackIndices.map(inventoryRead).filter { !isTypedBindingRefusal($0) }
         guard let params = validatedPluginReadProbeParams(from: inventories) else {
             throw QualificationTransportError.protocolViolation(
                 "plugin_read_probe_inventory: response was malformed, incomplete, or not current"
@@ -5927,6 +6569,86 @@ struct QualificationTransport: Sendable {
                 Dictionary(uniqueKeysWithValues: requestedPluginReads.map { ($0, failure) })
             )
         }
+    }
+
+    /// Plug-in references are request-scoped observations. A prior probe can navigate or open an
+    /// editor, so the sweep must not reuse an `ins_` reference captured before that operation.
+    /// Remove every earlier plug-in authority before asking for the next complete live census;
+    /// malformed discovery therefore cannot fall back to a stale target.
+    static func refreshPluginReadProbeParams(
+        for operation: OperationID,
+        preparedReadParams: inout [OperationID: [String: Any]],
+        refresh: () throws -> (receipt: QualificationPluginReadRefreshReceipt?, isError: Bool),
+        pluginPreparation: () throws -> [OperationID: [String: Any]]
+    ) -> String? {
+        guard pluginReadProbeOperationIDs.contains(operation) else { return nil }
+        for operationID in pluginReadProbeOperationIDs {
+            preparedReadParams.removeValue(forKey: operationID)
+        }
+        do {
+            let result = try refresh()
+            guard !result.isError else {
+                throw QualificationTransportError.protocolViolation(
+                    "plugin_read_probe_refresh: tool returned isError"
+                )
+            }
+            guard result.receipt?.provesFreshTracks == true else {
+                throw QualificationTransportError.protocolViolation(
+                    "plugin_read_probe_refresh: receipt did not prove a poller-applied tracks advance"
+                )
+            }
+        } catch {
+            return observedFailureReason(
+                from: error,
+                during: "fresh plug-in read-probe refresh"
+            )
+        }
+        do {
+            let current = try pluginPreparation()
+            for (operationID, params) in current where pluginReadProbeOperationIDs.contains(operationID) {
+                preparedReadParams[operationID] = params
+            }
+            return nil
+        } catch {
+            return observedFailureReason(
+                from: error,
+                during: "fresh plug-in read-probe preparation"
+            )
+        }
+    }
+
+    /// A read that opened an editor owns its cleanup. Do not let a semantically valid value count
+    /// as qualification evidence while that exact operation reports the editor still present or
+    /// its absence unobserved. Reused caller-owned editors have no cleanup authority and are not
+    /// reclassified here; the product's strict wrong-header refusal remains the deciding guard.
+    static func pluginReadProbeCleanupFailure(responseData: Data) -> String? {
+        guard let object = try? JSONSerialization.jsonObject(with: responseData) as? [String: Any],
+              object["state"] as? String == "A" else { return nil }
+        func ownedCleanupFailed(_ response: [String: Any]) -> Bool {
+            guard response["state"] as? String == "A",
+                  response["opener_action_attempted"] as? Bool == true else { return false }
+            return response["editor_close_observed"] as? Bool != true
+                || response["editor_cleanup_unobserved"] as? Bool == true
+                || response["editor_still_open"] as? Bool == true
+        }
+        if ownedCleanupFailed(object) {
+            return "plug-in read-probe response did not prove exact editor cleanup"
+        }
+        guard object["operation"] as? String == "logic_plugins.plan_parameter_changes",
+              let entries = object["entries"] as? [[String: Any]] else { return nil }
+        for entry in entries {
+            guard let observations = entry["read_observations"] as? [[String: Any]] else {
+                continue
+            }
+            for observation in observations {
+                guard let bookend = observation["bookend"] as? String,
+                      (bookend == "initial" || bookend == "final"),
+                      let response = observation["response"] as? [String: Any],
+                      ownedCleanupFailed(response) else { continue }
+                return "plug-in read-probe nested \(bookend) response did not prove exact editor cleanup"
+            }
+        }
+        return nil
     }
 
     /// Mixer read operations can spend longer navigating than the resource freshness window.
@@ -6169,6 +6891,11 @@ struct QualificationTransport: Sendable {
         case .logicMixer, .logicPlugins:
             return "logic://mixer"
         case .logicNavigate:
+            // `goto_bar` moves the playhead and its recipe restores it, both read from the
+            // transport resource. The marker list is not what it changes, and a passive read of
+            // it refuses (`marker_list_not_open`) whenever no Marker List is open, which left
+            // the cycle's verified restore unable to be credited (measured on Logic 13).
+            if spec.id == .navigateGotoBar { return "logic://transport/state" }
             return "logic://markers"
         case .logicEdit:
             return "logic://tracks"
@@ -6511,6 +7238,20 @@ private struct ToolCallResult: Decodable {
 
     let content: [Content]
     let isError: Bool?
+    let structuredContent: Value?
+
+    var pluginReadRefreshReceipt: QualificationPluginReadRefreshReceipt? {
+        guard let object = structuredContent?.objectValue,
+              let source = object["source"]?.stringValue,
+              let refreshed = object["refreshed"]?.boolValue,
+              let changed = object["changed_sections"]?.arrayValue,
+              changed.allSatisfy({ $0.stringValue != nil }) else { return nil }
+        return QualificationPluginReadRefreshReceipt(
+            source: source,
+            refreshed: refreshed,
+            changedSections: Set(changed.compactMap { $0.stringValue })
+        )
+    }
 
     func text(phase: String) throws -> String {
         guard let content = content.first(where: { $0.type == "text" }),

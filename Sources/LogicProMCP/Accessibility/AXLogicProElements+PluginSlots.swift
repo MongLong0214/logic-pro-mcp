@@ -491,6 +491,9 @@ extension AXLogicProElements {
             || AXLocalePolicy.inputSlotHelpKeyword.containsAny(in: text)
             || AXLocalePolicy.outputSlotHelpKeyword.containsAny(in: text)
             || AXLocalePolicy.sendSlotHelpKeyword.containsAny(in: text)
+            // Logic 13 draws an instrument strip's empty MIDI effect slot one adjacency step
+            // above the instrument group (22 px slots, 28 px apart), so geometry alone admits it.
+            || AXLocalePolicy.midiEffectSlotHelpKeyword.containsAny(in: text)
     }
 
     // internal (not private): called cross-file from the core AXLogicProElements

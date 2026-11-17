@@ -50,4 +50,27 @@ struct QualificationUnavailableDetailTests {
         let detail = QualificationOperationResult.unavailableDetail(error: "  ", hint: "\n ")
         #expect(detail.contains("neither an error code nor a precondition"))
     }
+
+    @Test("a refusal's own phase and observation are quoted, and the refusal stays a failure")
+    func refusalPhaseAndObservationAreQuoted() throws {
+        let detail = QualificationOperationResult.unavailableDetail(
+            error: "plugin_view_not_confirmed", hint: String?.none,
+            phase: "entry_view_not_confirmed", observed: "the entry view was not confirmed")
+        #expect(detail.contains("plugin_view_not_confirmed"))
+        #expect(detail.contains("entry_view_not_confirmed"))
+        #expect(detail.contains("the entry view was not confirmed"))
+        #expect(detail.contains("named no precondition"))
+
+        let body = #"{"error":"plugin_view_not_confirmed","plugin_view_switch_phase":"entry_view_not_confirmed","what_was_observed":"the entry view was not confirmed","state":"C"}"#
+        let result = QualificationOperationResult(
+            operationID: "plugins.get_param_verified", tool: "logic_plugins",
+            command: "get_param_verified", mutability: .readOnly, requestID: "1",
+            responseData: Data(body.utf8), isError: true, state: "C",
+            error: "plugin_view_not_confirmed", hint: nil, writeAttempted: false,
+            readbackSource: "logic://x", readbackRequestID: "2", readbackData: Data("{}".utf8), failureReason: nil)
+        #expect(result.refusalPhase == "entry_view_not_confirmed")
+        #expect(result.liveGateDisposition == .failed)
+        let reason = try #require(result.liveGateFailureReason)
+        #expect(reason.contains("entry_view_not_confirmed"))
+    }
 }

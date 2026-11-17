@@ -745,7 +745,7 @@ enum ExactTrackNameAdapter {
                   source.runtime.focusedApplicationPID() == pid else { return false }
             switch AccessibilityChannel.readLogicKeyboardFocus(runtime: source.runtime) {
             case .notTextEditing: sampledOriginalFocus = true
-            case .textEditing:
+            case .textEditing, .passiveInsertionPoint:
                 guard let app = AXLogicProElements.appRoot(runtime: source.runtime),
                       let focus: AXUIElement = AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String,
                         runtime: source.runtime.ax) else { return false }
