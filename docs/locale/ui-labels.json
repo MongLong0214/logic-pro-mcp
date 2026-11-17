@@ -9,8 +9,8 @@
   "build": "7801"
  },
  "canon_logic": {
-  "version": "12.3",
-  "build": "6674"
+  "version": "13.0",
+  "build": "7801"
  },
  "supported_locales": [
   "en-US",
@@ -1917,9 +1917,10 @@
     "Configurazione…",
     "Configuração…",
     "设置…",
+    "设定…",
     "設定⋯"
    ],
-   "rationale": "Opens the Control Surface Setup window. MEASURED in all four locales at AXMenuItem[Control Surfaces]/AXMenu: en-US `Setup…`, ko-KR `설정…`, ja-JP `設定…`, de-DE `Setup …` (U+0020 before the ellipsis, unlike en-US). Collides with `Settings…` on ko-KR AND ja-JP -- see the doc comment. German does not collide.",
+   "rationale": "Opens the Control Surface Setup window. zh_CN reads 设置… on Logic 12.3 (6674) and 设定… on 13.0 (7801); both are kept. MEASURED in all four locales at AXMenuItem[Control Surfaces]/AXMenu: en-US `Setup…`, ko-KR `설정…`, ja-JP `設定…`, de-DE `Setup …` (U+0020 before the ellipsis, unlike en-US). Collides with `Settings…` on ko-KR AND ja-JP -- see the doc comment. German does not collide.",
    "provenance": {
     "Setup …": {
      "attribute": "title",
@@ -2021,9 +2022,10 @@
     "Configurazione superfici di controllo",
     "Configuração de Superfície de Controle",
     "控制表面设置",
+    "控制表面设定",
     "控制表面設定"
    ],
-   "rationale": "Identifies the Setup window by AXWindow title; this is the reading that disambiguates the two ko-KR `설정…` items. ko-KR `컨트롤 서피스 설정` read live 2026-09-15 on Logic 12.3 (6674). The English canonical is Apple's documented title and is NOT measured on this host. ja-JP and de-DE unmeasured.",
+   "rationale": "Identifies the Setup window by AXWindow title; zh_CN reads 控制表面设置 on Logic 12.3 (6674) and 控制表面设定 on 13.0 (7801), and both are kept; this is the reading that disambiguates the two ko-KR `설정…` items. ko-KR `컨트롤 서피스 설정` read live 2026-09-15 on Logic 12.3 (6674). The English canonical is Apple's documented title and is NOT measured on this host. ja-JP and de-DE unmeasured.",
    "provenance": {
     "컨트롤 서피스 설정": {
      "attribute": "title",
@@ -2063,7 +2065,7 @@
     "fr-FR": "strings:fr:ships_up_to_case:Configuration de la surface de contrôle",
     "it-IT": "strings:it:ships_up_to_case:Configurazione superfici di controllo",
     "pt-BR": "strings:pt:ships_up_to_case:Configuração de Superfície de Controle",
-    "zh-CN": "strings:zh_CN:ships_up_to_case:控制表面设置",
+    "zh-CN": "quickhelp:zh_CN:ships_up_to_case:控制表面设定",
     "zh-TW": "strings:zh_TW:ships_up_to_case:控制表面設定"
    },
    "coverage_currency": {
@@ -3192,7 +3194,7 @@
     "fr-FR": "strings:fr:ships_up_to_case:Position",
     "it-IT": "strings:it:ships_up_to_case:Posizione",
     "pt-BR": "strings:pt:ships_up_to_case:Posição",
-    "zh-CN": "strings:zh_CN:ships_up_to_case:位置",
+    "zh-CN": "quickhelp:zh_CN:ships_up_to_case:位置",
     "zh-TW": "strings:zh_TW:ships_up_to_case:位置"
    },
    "coverage_currency": {
@@ -3462,14 +3464,14 @@
    },
    "coverage_derived": {
     "en-US": "nibstrings:en:ships_up_to_case:Aftertouch",
-    "ko-KR": "strings:ko:ships_up_to_case:애프터터치",
-    "ja-JP": "strings:ja:ships_up_to_case:アフタータッチ",
-    "de-DE": "strings:de:ships_up_to_case:Aftertouch",
-    "es-ES": "strings:es:ships_up_to_case:Aftertouch",
-    "fr-FR": "strings:fr:ships_up_to_case:Aftertouch",
+    "ko-KR": "quickhelp:ko:ships_up_to_case:Aftertouch",
+    "ja-JP": "quickhelp:ja:ships_up_to_case:Aftertouch",
+    "de-DE": "quickhelp:de:ships_up_to_case:Aftertouch",
+    "es-ES": "quickhelp:es:ships_up_to_case:Aftertouch",
+    "fr-FR": "quickhelp:fr:ships_up_to_case:Aftertouch",
     "it-IT": "strings:it:ships_up_to_case:Aftertouch",
     "pt-BR": "strings:pt:ships_up_to_case:Aftertouch",
-    "zh-CN": "strings:zh_CN:ships_up_to_case:触后",
+    "zh-CN": "quickhelp:zh_CN:ships_up_to_case:Aftertouch",
     "zh-TW": "strings:zh_TW:ships_up_to_case:後觸"
    }
   },
@@ -3497,7 +3499,7 @@
     "zh-TW": "derived"
    },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:Controller",
+    "en-US": "strings:en:ships_up_to_case:Controller",
     "ko-KR": "strings:ko:ships_up_to_case:컨트롤러",
     "ja-JP": "strings:ja:ships_up_to_case:コントローラ",
     "de-DE": "strings:de:ships_up_to_case:Controller",
@@ -3535,14 +3537,14 @@
    },
    "coverage_derived": {
     "en-US": "nibstrings:en:ships_up_to_case:Notes",
-    "ko-KR": "strings:ko:ships_up_to_case:노트",
-    "ja-JP": "strings:ja:ships_up_to_case:ノート",
-    "de-DE": "strings:de:ships_up_to_case:Noten",
-    "es-ES": "strings:es:ships_up_to_case:Notas",
+    "ko-KR": "quickhelp:ko:ships_up_to_case:노트",
+    "ja-JP": "quickhelp:ja:ships_up_to_case:Note",
+    "de-DE": "quickhelp:de:ships_up_to_case:Note",
+    "es-ES": "quickhelp:es:ships_up_to_case:Notas",
     "fr-FR": "strings:fr:ships_up_to_case:Notes",
     "it-IT": "strings:it:ships_up_to_case:Note",
     "pt-BR": "strings:pt:ships_up_to_case:Notas",
-    "zh-CN": "strings:zh_CN:ships_up_to_case:音符",
+    "zh-CN": "quickhelp:zh_CN:ships_up_to_case:音符",
     "zh-TW": "strings:zh_TW:ships_up_to_case:音符"
    }
   },
@@ -3554,9 +3556,10 @@
     "Pitchbend",
     "Inflexión de tono",
     "弯音",
-    "滑音"
+    "滑音",
+    "彎音"
    ],
-   "rationale": "Event List pitch-bend filter; ten-locale titles derived from the cited Apple row.",
+   "rationale": "Event List pitch-bend filter; ten-locale titles derived from the cited Apple row. Logic 12.3 (6674) shipped 滑音 in zh_TW; Logic 13.0 (7801) ships 彎音, and 滑音 stays for 12.x.",
    "match": "exact",
    "coverage": {
     "en-US": "derived",
@@ -3572,14 +3575,14 @@
    },
    "coverage_derived": {
     "en-US": "nibstrings:en:ships_up_to_case:Pitch Bend",
-    "ko-KR": "strings:ko:ships_up_to_case:피치 벤드",
-    "ja-JP": "strings:ja:ships_up_to_case:ピッチベンド",
-    "de-DE": "strings:de:ships_up_to_case:Pitchbend",
-    "es-ES": "strings:es:ships_up_to_case:Inflexión de tono",
-    "fr-FR": "strings:fr:ships_up_to_case:Pitch Bend",
+    "ko-KR": "quickhelp:ko:ships_up_to_case:Pitch Bend",
+    "ja-JP": "quickhelp:ja:ships_up_to_case:Pitch Bend",
+    "de-DE": "quickhelp:de:ships_up_to_case:Pitch Bend",
+    "es-ES": "quickhelp:es:ships_up_to_case:Pitch Bend",
+    "fr-FR": "quickhelp:fr:ships_up_to_case:Pitch Bend",
     "it-IT": "strings:it:ships_up_to_case:Pitch Bend",
     "pt-BR": "strings:pt:ships_up_to_case:Pitch Bend",
-    "zh-CN": "strings:zh_CN:ships_up_to_case:弯音",
+    "zh-CN": "quickhelp:zh_CN:ships_up_to_case:Pitch Bend",
     "zh-TW": "strings:zh_TW:ships_up_to_case:滑音"
    }
   },
@@ -4331,7 +4334,8 @@
     "パン",
     "Panning",
     "声像",
-    "相位"
+    "相位",
+    "聲像"
    ],
    "rationale": "Retired locator for the track-header pan slider; superseded by sliderPanHint. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the inspector strip's pan slider.",
    "roles": [
@@ -4996,7 +5000,7 @@
     "fr-FR": "strings:fr:ships_up_to_case:Marqueur",
     "it-IT": "strings:it:ships_up_to_case:Marcatore",
     "pt-BR": "strings:pt:ships_up_to_case:Marcador",
-    "zh-CN": "strings:zh_CN:ships_up_to_case:标记",
+    "zh-CN": "quickhelp:zh_CN:ships_up_to_case:标记",
     "zh-TW": "strings:zh_TW:ships_up_to_case:標記"
    }
   },
@@ -5560,15 +5564,15 @@
     "zh-TW": "derived"
    },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:Create Tracks for Selected Channel Strips",
-    "ko-KR": "strings:ko:ships_up_to_case:선택한 채널 스트립에 대해 트랙 생성",
-    "ja-JP": "strings:ja:ships_up_to_case:選択したチャンネルストリップのトラックを作成",
-    "de-DE": "strings:de:ships_up_to_case:Spuren für ausgewählte Channel-Strips erzeugen",
-    "es-ES": "strings:es:ships_up_to_case:Crear pistas para canales seleccionados",
+    "en-US": "quickhelp:en:ships_up_to_case:Create Tracks for Selected Channel Strips",
+    "ko-KR": "quickhelp:ko:ships_up_to_case:선택한 채널 스트립에 대해 트랙 생성",
+    "ja-JP": "quickhelp:ja:ships_up_to_case:選択したチャンネルストリップのトラックを作成",
+    "de-DE": "quickhelp:de:ships_up_to_case:Spuren für ausgewählte Channel-Strips erzeugen",
+    "es-ES": "quickhelp:es:ships_up_to_case:Crear pistas para canales seleccionados",
     "fr-FR": "strings:fr:ships_up_to_case:Créer des pistes pour les tranches de console sélectionnées",
     "it-IT": "strings:it:ships_up_to_case:Crea tracce per le channel strip selezionate",
     "pt-BR": "strings:pt:ships_up_to_case:Criar Pistas dos Canais Selecionados",
-    "zh-CN": "strings:zh_CN:ships_up_to_case:为选定的通道条创建轨道",
+    "zh-CN": "quickhelp:zh_CN:ships_up_to_case:为选定的通道条创建轨道",
     "zh-TW": "strings:zh_TW:ships_up_to_case:為所選的聲道控制排製作音軌"
    }
   },
@@ -5640,15 +5644,15 @@
     "zh-TW": "derived"
    },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:Create New Auxiliary Channel Strip",
-    "ko-KR": "strings:ko:ships_up_to_case:새로운 보조 채널 스트립 생성",
-    "ja-JP": "strings:ja:ships_up_to_case:新規オグジュアリーチャンネルストリップを作成",
-    "de-DE": "strings:de:ships_up_to_case:Neuen Aux-Channel-Strip erzeugen",
-    "es-ES": "strings:es:ships_up_to_case:Crear nuevo canal auxiliar",
-    "fr-FR": "strings:fr:ships_up_to_case:Créer une tranche de console auxiliaire",
+    "en-US": "quickhelp:en:ships_up_to_case:Create New Auxiliary Channel Strip",
+    "ko-KR": "quickhelp:ko:ships_up_to_case:Create New Auxiliary Channel Strip",
+    "ja-JP": "quickhelp:ja:ships_up_to_case:Create New Auxiliary Channel Strip",
+    "de-DE": "quickhelp:de:ships_up_to_case:Create New Auxiliary Channel Strip",
+    "es-ES": "quickhelp:es:ships_up_to_case:Create New Auxiliary Channel Strip",
+    "fr-FR": "quickhelp:fr:ships_up_to_case:Create New Auxiliary Channel Strip",
     "it-IT": "strings:it:ships_up_to_case:Crea nuova channel strip ausiliaria",
     "pt-BR": "strings:pt:ships_up_to_case:Criar Novo Canal Auxiliar",
-    "zh-CN": "strings:zh_CN:ships_up_to_case:创建新的辅助通道条",
+    "zh-CN": "quickhelp:zh_CN:ships_up_to_case:Create New Auxiliary Channel Strip",
     "zh-TW": "strings:zh_TW:ships_up_to_case:製作新的輔助聲道控制排"
    }
   },
@@ -5682,13 +5686,13 @@
    "coverage_derived": {
     "en-US": "nibstrings:en:ships_up_to_case:gain reduction meter",
     "ko-KR": "strings:ko:ships_up_to_case:게인 축소 측정기",
-    "ja-JP": "strings:ja:ships_up_to_case:ゲインリダクションメーター",
-    "de-DE": "strings:de:ships_up_to_case:Pegelreduktionsmesser",
-    "es-ES": "strings:es:ships_up_to_case:medidor de reducción de ganancia",
+    "ja-JP": "quickhelp:ja:ships_up_to_case:ゲインリダクションメーター",
+    "de-DE": "quickhelp:de:ships_up_to_case:Pegelreduktionsmesser",
+    "es-ES": "quickhelp:es:ships_up_to_case:medidor de reducción de ganancia",
     "fr-FR": "strings:fr:ships_up_to_case:mesure de la réduction du gain",
     "it-IT": "strings:it:ships_up_to_case:misuratore riduzione guadagno",
     "pt-BR": "strings:pt:ships_up_to_case:medidor de redução de ganho",
-    "zh-CN": "strings:zh_CN:ships_up_to_case:增益降低指示器",
+    "zh-CN": "quickhelp:zh_CN:ships_up_to_case:增益降低指示器",
     "zh-TW": "strings:zh_TW:ships_up_to_case:增益減弱測量計"
    }
   },
@@ -6090,7 +6094,7 @@
     "ko-KR": "niblabels:ko:ships_up_to_case:모두",
     "ja-JP": "niblabels:ja:ships_up_to_case:すべて",
     "de-DE": "quickhelp:de:ships_up_to_case:Alle",
-    "es-ES": "strings:es:ships_up_to_case:Todo",
+    "es-ES": "quickhelp:es:ships_up_to_case:Todo",
     "fr-FR": "strings:fr:ships_up_to_case:Tout",
     "it-IT": "strings:it:ships_up_to_case:Tutto",
     "pt-BR": "strings:pt:ships_up_to_case:Tudo",
@@ -6205,15 +6209,15 @@
     "zh-TW": "derived"
    },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:Scroll To",
-    "ko-KR": "strings:ko:ships_up_to_case:다음으로 스크롤",
-    "ja-JP": "strings:ja:ships_up_to_case:スクロール",
+    "en-US": "quickhelp:en:ships_up_to_case:Scroll To",
+    "ko-KR": "quickhelp:ko:ships_up_to_case:다음으로 스크롤",
+    "ja-JP": "quickhelp:ja:ships_up_to_case:スクロール",
     "de-DE": "strings:de:ships_up_to_case:Scrollen zu",
-    "es-ES": "strings:es:ships_up_to_case:Desplazar vista a",
+    "es-ES": "quickhelp:es:ships_up_to_case:Desplazar vista a",
     "fr-FR": "strings:fr:ships_up_to_case:Glisser vers",
     "it-IT": "strings:it:ships_up_to_case:Scorri fino a",
     "pt-BR": "strings:pt:ships_up_to_case:Rolar para",
-    "zh-CN": "strings:zh_CN:ships_up_to_case:滚动到",
+    "zh-CN": "quickhelp:zh_CN:ships_up_to_case:滚动到",
     "zh-TW": "strings:zh_TW:ships_up_to_case:捲動到"
    }
   },
@@ -10405,7 +10409,8 @@
     "밸런스",
     "パン",
     "声像",
-    "相位"
+    "相位",
+    "聲像"
    ],
    "rationale": "Classifies a slider as a pan control; read-only. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the inspector strip's pan slider.",
    "provenance": {
@@ -10466,7 +10471,7 @@
     "it-IT": "niblabels:it:ships_up_to_case:panning",
     "pt-BR": "niblabels:pt:ships_up_to_case:pan",
     "zh-CN": "niblabels:zh_CN:ships_up_to_case:声像",
-    "zh-TW": "niblabels:zh_TW:ships_up_to_case:相位"
+    "zh-TW": "niblabels:zh_TW:ships_up_to_case:聲像"
    },
    "coverage_currency": {
     "ja-JP": "superseded",
@@ -11980,11 +11985,11 @@
     "zh-TW": "derived"
    },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:Show/Hide Hidden Tracks",
-    "ko-KR": "strings:ko:ships_up_to_case:가려진 트랙 보기/가리기",
+    "en-US": "quickhelp:en:ships_up_to_case:Show/Hide Hidden Tracks",
+    "ko-KR": "quickhelp:ko:ships_up_to_case:가려진 트랙 보기/가리기",
     "ja-JP": "strings:ja:ships_up_to_case:非表示にしたトラックを表示/非表示",
-    "de-DE": "strings:de:ships_up_to_case:Ausgeblendete Spuren ein-/ausblenden",
-    "es-ES": "strings:es:ships_up_to_case:Mostrar/ocultar pistas ocultas",
+    "de-DE": "quickhelp:de:ships_up_to_case:Ausgeblendete Spuren ein-/ausblenden",
+    "es-ES": "quickhelp:es:ships_up_to_case:Mostrar/ocultar pistas ocultas",
     "fr-FR": "strings:fr:ships_up_to_case:Afficher/Masquer les pistes masquées",
     "it-IT": "strings:it:ships_up_to_case:Mostra/nascondi tracce nascoste",
     "pt-BR": "strings:pt:ships_up_to_case:Mostra/oculta as pistas ocultas",
@@ -12020,15 +12025,15 @@
    },
    "coverage_derived": {
     "en-US": "strings:en:ships_up_to_case:Hide Track",
-    "ko-KR": "strings:ko:ships_up_to_case:트랙 가리기",
+    "ko-KR": "niblabels:ko:ships_up_to_case:트랙 가리기",
     "ja-JP": "strings:ja:ships_up_to_case:トラックを非表示",
     "de-DE": "strings:de:ships_up_to_case:Spur ausblenden",
     "es-ES": "strings:es:ships_up_to_case:Ocultar pista",
     "fr-FR": "strings:fr:ships_up_to_case:Masquer la piste",
     "it-IT": "strings:it:ships_up_to_case:Nascondi traccia",
     "pt-BR": "strings:pt:ships_up_to_case:Ocultar pista",
-    "zh-CN": "strings:zh_CN:ships_up_to_case:隐藏轨道",
-    "zh-TW": "strings:zh_TW:ships_up_to_case:隱藏音軌"
+    "zh-CN": "niblabels:zh_CN:ships_up_to_case:隐藏轨道",
+    "zh-TW": "niblabels:zh_TW:ships_up_to_case:隱藏音軌"
    }
   },
   "trackInputMonitoringButton": {
@@ -12630,7 +12635,8 @@
     "Punch automatico",
     "Punch automático",
     "自动插入",
-    "自動錄音"
+    "自動錄音",
+    "自動插錄"
    ],
    "rationale": "Locates Logic's Control Bar Autopunch checkbox for AXPress; State A is still gated by readback.",
    "match": "exact",
@@ -12656,7 +12662,7 @@
     "it-IT": "strings:it:ships_up_to_case:Punch automatico",
     "pt-BR": "strings:pt:ships_up_to_case:Punch automático",
     "zh-CN": "strings:zh_CN:ships_up_to_case:自动插入",
-    "zh-TW": "strings:zh_TW:ships_up_to_case:自動錄音"
+    "zh-TW": "strings:zh_TW:ships_up_to_case:自動插錄"
    }
   },
   "transportContainerMetadata": {
@@ -12895,7 +12901,7 @@
     "ko-KR": "quickhelp:ko:ships_up_to_case:session player",
     "ja-JP": "quickhelp:ja:ships_up_to_case:session player",
     "de-DE": "quickhelp:de:ships_up_to_case:session player",
-    "es-ES": "quickhelp:es:ships_up_to_case:Explorador de loops",
+    "es-ES": "quickhelp:es:ships_up_to_case:Parrilla de Live Loops",
     "fr-FR": "strings:fr:ships_up_to_case:session player",
     "it-IT": "strings:it:ships_up_to_case:session player",
     "pt-BR": "strings:pt:ships_up_to_case:session player",
@@ -13159,8 +13165,8 @@
    "coverage_derived": {
     "en-US": "niblabels:en:ships_up_to_case:Input",
     "ko-KR": "niblabels:ko:ships_up_to_case:입력",
-    "ja-JP": "quickhelp:ja:ships_up_to_case:Input",
-    "de-DE": "strings:de:ships_up_to_case:Input",
+    "ja-JP": "niblabels:ja:ships_up_to_case:入力",
+    "de-DE": "niblabels:de:ships_up_to_case:Eingang",
     "es-ES": "niblabels:es:ships_up_to_case:Entrada",
     "fr-FR": "niblabels:fr:ships_up_to_case:Entrée",
     "it-IT": "niblabels:it:ships_up_to_case:Ingresso",

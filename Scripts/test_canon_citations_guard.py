@@ -528,6 +528,50 @@ class GuardBehaviour(unittest.TestCase):
         self.assertIn("names a different Logic, so this is allowed", result.stderr)
         self.assertNotIn("over the same Logic", result.stderr)
 
+    # -- rule 7, applied to the policy literals when Logic itself changes --------------------------
+    # A Logic update turns a string Apple shipped at the base into one the pinned Logic does not.
+    # That is not a wrong string typed: it must not read as new debt, and only that.
+
+    def _policy_literals(self):
+        return os.path.join(self.root, "docs", "canon", "POLICY-LITERALS.json")
+
+    def _reclassify_one_literal_as_nowhere(self, different_logic):
+        self._make_repo_with_a_base()
+        with open(self._policy_literals(), encoding="utf-8") as handle:
+            body = json.load(handle)
+        shipped = sorted(name for name, where in body["literals"].items() if where != "nowhere")[0]
+        body["literals"][shipped] = "nowhere"
+        with open(self._policy_literals(), "w", encoding="utf-8") as handle:
+            json.dump(body, handle, ensure_ascii=False)
+        if different_logic:
+            self._rewrite_manifest(lambda m: m.update(logic=dict(m.get("logic") or {}, build="9999")))
+        return shipped
+
+    def test_a_literal_the_older_logic_shipped_is_not_new_debt_under_a_different_logic(self):
+        shipped = self._reclassify_one_literal_as_nowhere(different_logic=True)
+        result = self.run_guard()
+        self.assertNotIn(f"{shipped!r} was added to the list of literals classified as answered "
+                         f"nowhere", result.stderr)
+        self.assertIn("were shipped by the merge base's", result.stderr)
+
+    def test_the_same_literal_is_new_debt_over_the_same_logic(self):
+        shipped = self._reclassify_one_literal_as_nowhere(different_logic=False)
+        result = self.run_guard()
+        self.assertIn(f"{shipped!r} was added to the list of literals classified as answered "
+                      f"nowhere", result.stderr)
+
+    def test_a_literal_typed_new_and_answered_nowhere_is_debt_under_a_different_logic(self):
+        self._make_repo_with_a_base()
+        with open(self._policy_literals(), encoding="utf-8") as handle:
+            body = json.load(handle)
+        body["literals"]["zzz typed this just now"] = "nowhere"
+        with open(self._policy_literals(), "w", encoding="utf-8") as handle:
+            json.dump(body, handle, ensure_ascii=False)
+        self._rewrite_manifest(lambda m: m.update(logic=dict(m.get("logic") or {}, build="9999")))
+        result = self.run_guard()
+        self.assertIn("'zzz typed this just now' was added to the list of literals classified as "
+                      "answered nowhere", result.stderr)
+
     # -- rule 7 over the CI skip allowance: MOVED ----------------------------------------------
     # `CI-SKIPS.json` is how many cases a guard may skip under CI. It says nothing about Logic, it
     # moved to `.github/ci/` in #951, and the three cases that drove it -- raising an allowance,

@@ -9,6 +9,7 @@
       "horizontalZoomSlider→가로 확대/축소",
       "inputSlotHelpKeyword→Slot d’entrée",
       "inspectorChannelStripHelpPrefix→Tranche de console d’inspecteur gauche",
+      "keyCommandsControlSurfaceColumnTitle→控制介面",
       "midiEffectSlotHelpKeyword→Slot d’effet MIDI",
       "midiImportTempoAlertText→Tempo-Informationen",
       "nonInsertButtonText→게인 축소",
@@ -30,9 +31,9 @@
       "trackRecordButton→Rec",
       "trackRecordButton→레코드 활성화",
       "trackTypeInstrument→software",
-      "trackTypeMaster→stereo out",
       "transportAutopunchControl→Auto Punch",
       "transportAutopunchControl→Auto-Punch",
+      "transportAutopunchControl→自動錄音",
       "transportKeywordFalseFriends→live loop 그리드 보기/가리기",
       "transportMetronomeControl→クリック",
       "transportMetronomeControl→클릭",
@@ -3518,9 +3519,7 @@
         "windowMenuBar"
       ]
     },
-    "canon_pinned_to_a_superseded_logic": [
-      "12.3 (6674)"
-    ]
+    "canon_pinned_to_a_superseded_logic": []
   },
   "note": "What the ledger does not know, as SETS of identities. A member may leave; a new member fails CI. Sets rather than counts because a count is defeated by a swap — add one undocumented variant, document a different one, and the total is unchanged while the ledger knows strictly less about a new string. The guard also compares against the MERGE BASE, so raising the file in the same commit as the regression does not help. Raising requires a dated reason under `raised`. ADR-019 D8. Live: observations-status.py --unproven",
   "raised": {
@@ -3679,12 +3678,13 @@
       "reason": "#892: `supported_locales` went from four to ten, so the ledger asks whether any observation record covers each surface in these six languages. None does, and no derivation can change that: a surface census is a READING taken on a running Logic, and this repository has run Korean, Japanese, German and English. That is the honest difference between this axis and the coverage one -- a label's ten languages come from Apple's rows, and a census of what the mixer looks like on a Spanish Logic does not. These were always absent; the ledger simply had no column to say so. They may only shrink from here, and each closes when somebody runs that language and files a census."
     },
     "undocumented_variants": {
-      "date": "2026-09-28",
+      "date": "2026-11-17",
+      "reason": "Logic 13.0 (7801) re-ingest: Apple replaced two zh_TW strings Logic 12.3 (6674) shipped and the product keeps both because it must work on 12.x. keyCommandsControlSurfaceColumnTitle→控制介面 is the 12.3 Key Commands column header (13.0 ships 控制表面) and transportAutopunchControl→自動錄音 is the 12.3 Autopunch label (13.0 ships 自動插錄). Neither is in 13.0's corpus any more, so the ledger can no longer call them derived, and no record has read them on a Logic.",
       "members": [
-        "inspectorChannelStripHelpPrefix→Tranche de console d’inspecteur gauche",
-        "midiEffectSlotHelpKeyword→Slot d’effet MIDI"
+        "keyCommandsControlSurfaceColumnTitle→控制介面",
+        "transportAutopunchControl→自動錄音"
       ],
-      "reason": "#904: the fr-FR QuickHelp titles these two sets now derive from -- INS_086_MidiSlot and INS_005_LeftArrangeCS -- ship with a TRAILING U+00A0, read 2026-09-28 with Scripts/logic_canon.py resolve over Logic 12.3 (6674), and the members drop it, exactly as #291 R1 did for the input, output and send slots. `presence` trims the ends and says each ships; the casefold ledger compares the raw value and does not. Both sets match by CONTAINMENT or PREFIX on the help string, and LabelSet.labels trims its members anyway, so the member is the substring the product looks for -- but what a French Logic's AXHelp carries has not been read, so the fr-FR cells stay unmeasured until one is."
+      "historical_reason": "Historical rationale retained from 2026-09-28 (members: inspectorChannelStripHelpPrefix→Tranche de console d’inspecteur gauche, midiEffectSlotHelpKeyword→Slot d’effet MIDI): #904: the fr-FR QuickHelp titles these two sets now derive from -- INS_086_MidiSlot and INS_005_LeftArrangeCS -- ship with a TRAILING U+00A0, read 2026-09-28 with Scripts/logic_canon.py resolve over Logic 12.3 (6674), and the members drop it, exactly as #291 R1 did for the input, output and send slots. `presence` trims the ends and says each ships; the casefold ledger compares the raw value and does not. Both sets match by CONTAINMENT or PREFIX on the help string, and LabelSet.labels trims its members anyway, so the member is the substring the product looks for -- but what a French Logic's AXHelp carries has not been read, so the fr-FR cells stay unmeasured until one is."
     },
     "unmeasured_coverage.es-ES": {
       "date": "2026-09-25",
@@ -3735,7 +3735,7 @@
     },
     "records_from_a_superseded_build": {
       "date": "2026-11-17",
-      "reason": "Logic 13.0 (7801) declared as the current release in AXLocalePolicy; every earlier reading, every derived cell (canon pinned to 12.3) and every unmeasured cell is now counted as not measured on it, to be closed by per-locale census records",
+      "reason": "Logic 13.0 (7801) declared as the current release in AXLocalePolicy; every earlier reading, every derived cell and every unmeasured cell is counted as not measured on it, to be closed by per-locale census. The canon was re-ingested on 13.0 (7801), so a derived cell now rests on the declared release; it is Apple's corpus and never a reading of Logic, so it stays counted until a census reads it.",
       "members": [
         "2026-09-03-sort-settle-witness-accepts-prescroll-order",
         "2026-09-03-sort-tracks-by-track-name-is-inert",
@@ -4123,7 +4123,7 @@
     },
     "label_readings_from_a_superseded_build": {
       "date": "2026-11-17",
-      "reason": "Logic 13.0 (7801) declared as the current release in AXLocalePolicy; every earlier reading, every derived cell (canon pinned to 12.3) and every unmeasured cell is now counted as not measured on it, to be closed by per-locale census records",
+      "reason": "Logic 13.0 (7801) declared as the current release in AXLocalePolicy; every earlier reading, every derived cell and every unmeasured cell is counted as not measured on it, to be closed by per-locale census. The canon was re-ingested on 13.0 (7801), so a derived cell now rests on the declared release; it is Apple's corpus and never a reading of Logic, so it stays counted until a census reads it.",
       "members": [
         "allTracksAsAudioFilesMenuItem→Alle Spuren als Audiodateien …",
         "allTracksAsAudioFilesMenuItem→すべてのトラックをオーディオファイルとして…",
@@ -4249,7 +4249,7 @@
     },
     "cells_not_measured_on_current_version.en-US": {
       "date": "2026-11-17",
-      "reason": "Logic 13.0 (7801) declared as the current release in AXLocalePolicy; every earlier reading, every derived cell (canon pinned to 12.3) and every unmeasured cell is now counted as not measured on it, to be closed by per-locale census records",
+      "reason": "Logic 13.0 (7801) declared as the current release in AXLocalePolicy; every earlier reading, every derived cell and every unmeasured cell is counted as not measured on it, to be closed by per-locale census. The canon was re-ingested on 13.0 (7801), so a derived cell now rests on the declared release; it is Apple's corpus and never a reading of Logic, so it stays counted until a census reads it.",
       "members": [
         "allMIDITracksAsMIDIFileMenuItem",
         "allTracksAsAudioFilesMenuItem",
@@ -4510,7 +4510,7 @@
     },
     "cells_not_measured_on_current_version.ko-KR": {
       "date": "2026-11-17",
-      "reason": "Logic 13.0 (7801) declared as the current release in AXLocalePolicy; every earlier reading, every derived cell (canon pinned to 12.3) and every unmeasured cell is now counted as not measured on it, to be closed by per-locale census records",
+      "reason": "Logic 13.0 (7801) declared as the current release in AXLocalePolicy; every earlier reading, every derived cell and every unmeasured cell is counted as not measured on it, to be closed by per-locale census. The canon was re-ingested on 13.0 (7801), so a derived cell now rests on the declared release; it is Apple's corpus and never a reading of Logic, so it stays counted until a census reads it.",
       "members": [
         "allMIDITracksAsMIDIFileMenuItem",
         "allTracksAsAudioFilesMenuItem",
@@ -4771,7 +4771,7 @@
     },
     "cells_not_measured_on_current_version.ja-JP": {
       "date": "2026-11-17",
-      "reason": "Logic 13.0 (7801) declared as the current release in AXLocalePolicy; every earlier reading, every derived cell (canon pinned to 12.3) and every unmeasured cell is now counted as not measured on it, to be closed by per-locale census records",
+      "reason": "Logic 13.0 (7801) declared as the current release in AXLocalePolicy; every earlier reading, every derived cell and every unmeasured cell is counted as not measured on it, to be closed by per-locale census. The canon was re-ingested on 13.0 (7801), so a derived cell now rests on the declared release; it is Apple's corpus and never a reading of Logic, so it stays counted until a census reads it.",
       "members": [
         "allMIDITracksAsMIDIFileMenuItem",
         "allTracksAsAudioFilesMenuItem",
@@ -5032,7 +5032,7 @@
     },
     "cells_not_measured_on_current_version.de-DE": {
       "date": "2026-11-17",
-      "reason": "Logic 13.0 (7801) declared as the current release in AXLocalePolicy; every earlier reading, every derived cell (canon pinned to 12.3) and every unmeasured cell is now counted as not measured on it, to be closed by per-locale census records",
+      "reason": "Logic 13.0 (7801) declared as the current release in AXLocalePolicy; every earlier reading, every derived cell and every unmeasured cell is counted as not measured on it, to be closed by per-locale census. The canon was re-ingested on 13.0 (7801), so a derived cell now rests on the declared release; it is Apple's corpus and never a reading of Logic, so it stays counted until a census reads it.",
       "members": [
         "allMIDITracksAsMIDIFileMenuItem",
         "allTracksAsAudioFilesMenuItem",
@@ -5293,7 +5293,7 @@
     },
     "cells_not_measured_on_current_version.es-ES": {
       "date": "2026-11-17",
-      "reason": "Logic 13.0 (7801) declared as the current release in AXLocalePolicy; every earlier reading, every derived cell (canon pinned to 12.3) and every unmeasured cell is now counted as not measured on it, to be closed by per-locale census records",
+      "reason": "Logic 13.0 (7801) declared as the current release in AXLocalePolicy; every earlier reading, every derived cell and every unmeasured cell is counted as not measured on it, to be closed by per-locale census. The canon was re-ingested on 13.0 (7801), so a derived cell now rests on the declared release; it is Apple's corpus and never a reading of Logic, so it stays counted until a census reads it.",
       "members": [
         "allMIDITracksAsMIDIFileMenuItem",
         "allTracksAsAudioFilesMenuItem",
@@ -5554,7 +5554,7 @@
     },
     "cells_not_measured_on_current_version.fr-FR": {
       "date": "2026-11-17",
-      "reason": "Logic 13.0 (7801) declared as the current release in AXLocalePolicy; every earlier reading, every derived cell (canon pinned to 12.3) and every unmeasured cell is now counted as not measured on it, to be closed by per-locale census records",
+      "reason": "Logic 13.0 (7801) declared as the current release in AXLocalePolicy; every earlier reading, every derived cell and every unmeasured cell is counted as not measured on it, to be closed by per-locale census. The canon was re-ingested on 13.0 (7801), so a derived cell now rests on the declared release; it is Apple's corpus and never a reading of Logic, so it stays counted until a census reads it.",
       "members": [
         "allMIDITracksAsMIDIFileMenuItem",
         "allTracksAsAudioFilesMenuItem",
@@ -5815,7 +5815,7 @@
     },
     "cells_not_measured_on_current_version.it-IT": {
       "date": "2026-11-17",
-      "reason": "Logic 13.0 (7801) declared as the current release in AXLocalePolicy; every earlier reading, every derived cell (canon pinned to 12.3) and every unmeasured cell is now counted as not measured on it, to be closed by per-locale census records",
+      "reason": "Logic 13.0 (7801) declared as the current release in AXLocalePolicy; every earlier reading, every derived cell and every unmeasured cell is counted as not measured on it, to be closed by per-locale census. The canon was re-ingested on 13.0 (7801), so a derived cell now rests on the declared release; it is Apple's corpus and never a reading of Logic, so it stays counted until a census reads it.",
       "members": [
         "allMIDITracksAsMIDIFileMenuItem",
         "allTracksAsAudioFilesMenuItem",
@@ -6076,7 +6076,7 @@
     },
     "cells_not_measured_on_current_version.pt-BR": {
       "date": "2026-11-17",
-      "reason": "Logic 13.0 (7801) declared as the current release in AXLocalePolicy; every earlier reading, every derived cell (canon pinned to 12.3) and every unmeasured cell is now counted as not measured on it, to be closed by per-locale census records",
+      "reason": "Logic 13.0 (7801) declared as the current release in AXLocalePolicy; every earlier reading, every derived cell and every unmeasured cell is counted as not measured on it, to be closed by per-locale census. The canon was re-ingested on 13.0 (7801), so a derived cell now rests on the declared release; it is Apple's corpus and never a reading of Logic, so it stays counted until a census reads it.",
       "members": [
         "allMIDITracksAsMIDIFileMenuItem",
         "allTracksAsAudioFilesMenuItem",
@@ -6337,7 +6337,7 @@
     },
     "cells_not_measured_on_current_version.zh-CN": {
       "date": "2026-11-17",
-      "reason": "Logic 13.0 (7801) declared as the current release in AXLocalePolicy; every earlier reading, every derived cell (canon pinned to 12.3) and every unmeasured cell is now counted as not measured on it, to be closed by per-locale census records",
+      "reason": "Logic 13.0 (7801) declared as the current release in AXLocalePolicy; every earlier reading, every derived cell and every unmeasured cell is counted as not measured on it, to be closed by per-locale census. The canon was re-ingested on 13.0 (7801), so a derived cell now rests on the declared release; it is Apple's corpus and never a reading of Logic, so it stays counted until a census reads it.",
       "members": [
         "allMIDITracksAsMIDIFileMenuItem",
         "allTracksAsAudioFilesMenuItem",
@@ -6598,7 +6598,7 @@
     },
     "cells_not_measured_on_current_version.zh-TW": {
       "date": "2026-11-17",
-      "reason": "Logic 13.0 (7801) declared as the current release in AXLocalePolicy; every earlier reading, every derived cell (canon pinned to 12.3) and every unmeasured cell is now counted as not measured on it, to be closed by per-locale census records",
+      "reason": "Logic 13.0 (7801) declared as the current release in AXLocalePolicy; every earlier reading, every derived cell and every unmeasured cell is counted as not measured on it, to be closed by per-locale census. The canon was re-ingested on 13.0 (7801), so a derived cell now rests on the declared release; it is Apple's corpus and never a reading of Logic, so it stays counted until a census reads it.",
       "members": [
         "allMIDITracksAsMIDIFileMenuItem",
         "allTracksAsAudioFilesMenuItem",
@@ -6855,13 +6855,6 @@
         "verticalZoomSlider",
         "viewMenuBar",
         "windowMenuBar"
-      ]
-    },
-    "canon_pinned_to_a_superseded_logic": {
-      "date": "2026-11-17",
-      "reason": "Logic 13.0 (7801) declared as the current release in AXLocalePolicy; every earlier reading, every derived cell (canon pinned to 12.3) and every unmeasured cell is now counted as not measured on it, to be closed by per-locale census records",
-      "members": [
-        "12.3 (6674)"
       ]
     }
   },

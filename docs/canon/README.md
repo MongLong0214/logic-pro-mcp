@@ -457,7 +457,7 @@ and `MANIFEST.json` to agree, instead of one text edit.
 **Three is the cost of adding a row, not the cost of every forgery, and this paragraph used to say
 three flatly.** Review 2026-09-19 replaced the CONTENTS of `absence/strings.es.u32` — keeping only
 the prefixes the cited `es` rows need, randomising the rest, and keeping the entry count at the
-47926 the manifest records — then refreshed the manifest's `artifacts` digest. TWO files, every
+figure the manifest records for it — then refreshed the manifest's `artifacts` digest. TWO files, every
 guard green, and `is_absent("strings", "es", "Editar")` flipped from False to True for a string
 Logic ships. The count ratchet compares a number and the digest compares the bytes that same edit
 rewrote, so nothing looked at the contents. Nothing offline can: an entry nobody has cited has no
@@ -517,3 +517,20 @@ Scripts/check-canon-citations.py          # the gate. Runs in CI.
 installed Logic and fails on drift. Rebuild, and every citation whose digest moved fails loudly —
 which is the point: a citation that silently still "resolves" after Apple changed the string is
 exactly the failure this axis exists to end.
+
+What a rebuild on a new Logic needed, first measured on 13.0 (7801) over 12.3 (6674), so the next
+one starts from it rather than from the failures:
+
+* A bundle shape the extractor has never met stops the build naming the file. 13.0 brought
+  `NSStringDeviceSpecificRuleType` in Jet2P's `Localizable.stringsdict`; it is read as one row per
+  device name.
+* `QUICKHELP_LOCALE_ALIASES` is checked against the bundle and the build refuses a mismatch.
+  `it`, `pt` and `zh_TW` lost their English copy of `QuickHelp.plist`; they are still aliases, and
+  that the running Logic then reads English's file is the bundle's fallback, not a measurement.
+* A string Apple replaced stays a member while the app must work on the older Logic. The
+  `nowhere` list may only shrink, except for a literal the merge base's Logic shipped, counted
+  when `MANIFEST.json` names a different Logic; the guard prints how many.
+* Cited rows Apple removed are re-pointed at the row that now carries the value, then
+  `Scripts/locale_labels.py --write`; the generated tables are never edited.
+* The order is: build, `check-policy-literals-against-canon.py --reclassify`, build again (the
+  ledger is cut from the classification), `locale_labels.py --write`.

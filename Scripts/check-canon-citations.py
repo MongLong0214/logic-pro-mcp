@@ -255,6 +255,44 @@ def _ratchet_members(blob, key):
     return set(value or [])
 
 
+def _literals_apple_shipped_at_the_base():
+    """Literals the merge base's Logic shipped, when this tree pins a DIFFERENT Logic.
+
+    A Logic update moves a string from `strings_value` to `nowhere` without anyone typing a wrong
+    one: Logic 12.3 (6674) shipped `自動錄音` and Logic 13.0 (7801) ships `自動插錄`, and the old one
+    stays as a member while the app must work on 12.x. Counting it as new debt would make a
+    re-ingest unmergeable, or tell the author to drop 12.x. It is not new debt -- Apple shipped it
+    at the base -- so it is not counted, and the note says how many so a reviewer sees the size.
+
+    Narrow on purpose. Only a literal the BASE classified as answered somewhere, and only while the
+    manifest's `logic` block differs from the base's; a literal the base already counted as nowhere
+    stays counted, and so does one typed new in this change.
+    """
+    base = _merge_base()
+    if base is None:
+        return set()
+    was = _at_base(base, "docs/canon/MANIFEST.json")
+    now = _json(os.path.join(REPO, "docs", "canon", "MANIFEST.json"), {})
+    if not isinstance(was, dict) or (was.get("logic") or {}) == (now.get("logic") or {}):
+        return set()
+    before = _at_base(base, "docs/canon/POLICY-LITERALS.json")
+    literals = before.get("literals") if isinstance(before, dict) else None
+    if not isinstance(literals, dict):
+        return set()
+    return {name for name, where in literals.items() if where != "nowhere"}
+
+
+def _policy_literal_debt(blob, key):
+    """The literals answered nowhere in Logic, less those an older Logic shipped (see above)."""
+    debt = _ratchet_members(blob, key)
+    carried = debt & _literals_apple_shipped_at_the_base()
+    if carried and blob == _json(os.path.join(REPO, "docs", "canon", "POLICY-LITERALS.json"), None):
+        _note(f"docs/canon/POLICY-LITERALS.json: {len(carried)} literal(s) are answered nowhere in "
+              f"the pinned Logic and were shipped by the merge base's: not counted as new debt "
+              f"because the manifest names a different Logic.")
+    return debt - carried
+
+
 def _labelset_waiver_members(blob, key):
     """The LabelSet names waived from naming a row.
 
@@ -284,7 +322,7 @@ RATCHETS = (
     R("docs/canon/WITHOUT-CANON.json", "records", "shrink",
       "records predating the canon axis", _ratchet_members),
     R("docs/canon/POLICY-LITERALS.json", "literals", "shrink",
-      "literals classified as answered nowhere in Logic", _ratchet_members),
+      "literals classified as answered nowhere in Logic", _policy_literal_debt),
     R("docs/canon/NOT-A-RECORD.json", "files", "shrink",
       "files in docs/observations that are declared not to be records", _ratchet_members),
     R("docs/canon/LOGIC-FACING.json", "prefixes", "grow",

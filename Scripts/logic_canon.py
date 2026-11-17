@@ -126,8 +126,12 @@ PIN_EVERY_ROW = frozenset({"plugin_names"})
 #: not a value: resolution never returns the English as that locale's text (ADR-027 D6, #1028).
 NOT_LOCALIZED = "not_localized"
 
-#: Ten NAMES, seven FILES. `en.lproj`, `it.lproj`, `pt.lproj` and `zh_TW.lproj` ship the same
-#: QuickHelp.plist byte for byte (sha256 3ed7aa22...), so it, pt and zh_TW are untranslated English.
+#: Ten NAMES, seven FILES. `it`, `pt` and `zh_TW` have no QuickHelp of their own, so they are
+#: untranslated English. In Logic 12.3 (6674) they shipped `QuickHelp.plist` as the English file
+#: byte for byte (sha256 3ed7aa22...). In Logic 13.0 (7801) they ship NO `QuickHelp.plist` at all,
+#: only the translated `QuickHelpDefault.plist`; that the running Logic then reads `en.lproj`'s file
+#: is the bundle's own fallback and has NOT been measured on an Italian, Portuguese or Traditional
+#: Chinese Logic. `verify_quickhelp_aliases` counts both shapes as an alias.
 #: This matters twice. A claim that something "holds across ten locales" counts three agreements
 #: that are true by construction -- an earlier revision of the AXHelp record said exactly that, and
 #: the number was right while the sentence overstated its own independence. And a user running
@@ -802,13 +806,26 @@ def join_confidence(locale: str) -> str:
 
 
 def extract_quickhelp(app: str):
+    """Every QuickHelp row, per `.lproj`.
+
+    A `.lproj` with `QuickHelpDefault.plist` and no `QuickHelp.plist` (it, pt and zh_TW in Logic
+    13.0 (7801); in 12.3 (6674) they shipped the English file byte for byte) is read from
+    `en.lproj/QuickHelp.plist` under its own locale. That is the English file in that locale,
+    which `localization_states` then pins `not_localized`: the same state 12.3 had, reached
+    through the bundle's fallback instead of a copy. `verify_quickhelp_aliases` refuses the build
+    if the set of such locales is not `QUICKHELP_LOCALE_ALIASES`.
+    """
     resources = os.path.join(app, "Contents", "Resources")
+    english = os.path.join(resources, "en.lproj", "QuickHelp.plist")
     for entry in sorted(os.listdir(resources)):
         if not entry.endswith(".lproj"):
             continue
         locale = entry[: -len(".lproj")]
         for base in ("QuickHelp", "QuickHelpDefault"):
             path = os.path.join(resources, entry, f"{base}.plist")
+            if (base == "QuickHelp" and not os.path.exists(path)
+                    and os.path.exists(os.path.join(resources, entry, "QuickHelpDefault.plist"))):
+                path = english
             if not os.path.exists(path):
                 continue
             loaded = load_plist(path)
@@ -932,6 +949,36 @@ def extract_stringsdict(app: str):
                 yield from _stringsdict_entry(path, unit, locale, key, entry)
 
 
+#: Apple's device variation (Logic 13.0, Jet2P's `ERROR_NO_INTERNET_MESSAGE_*`): the entry is not a
+#: format with plural rules but one dict of per-device strings. 0 such entries in Logic 12.3 (6674),
+#: 2 per locale in 13.0 (7801).
+DEVICE_RULE = "NSStringDeviceSpecificRuleType"
+
+
+def _stringsdict_device_entry(unit: str, locale: str, key: str, entry: dict, refuse) -> list:
+    """A device-variation entry's rows: key `<entry key>/NSStringDeviceSpecificRuleType`, one row
+    per device name (`mac`, `iphone`, `other`, ...), the field being that name.
+
+    Complete or nothing, as for a plural entry: the rule is the entry's only content (a `Comment`
+    is the localiser's note and is not read), every device name is `[A-Za-z0-9_]+` holding a
+    string, and `other` -- the form Apple falls back to -- is present.
+    """
+    rule = entry[DEVICE_RULE]
+    for sibling in entry:
+        if sibling not in (DEVICE_RULE, "Comment"):
+            raise refuse(f"carries {sibling!r} beside {DEVICE_RULE}, a shape this extractor does "
+                         f"not read. Stopping rather than skipping.")
+    if not isinstance(rule, dict) or "other" not in rule:
+        raise refuse(f"has a {DEVICE_RULE} that is not a dict with an `other` form")
+    rows = []
+    for device, text in rule.items():
+        if not isinstance(device, str) or not _STRINGSDICT_VARIABLE.fullmatch(device) \
+                or not isinstance(text, str):
+            raise refuse(f"has {DEVICE_RULE}/{device!r}, which is not a device name holding a string")
+        rows.append((unit, locale, f"{key}/{DEVICE_RULE}", device, text))
+    return rows
+
+
 def _stringsdict_entry(path: str, unit: str, locale: str, key: str, entry) -> list:
     """One `.stringsdict` entry's rows, or a CanonDecodeError naming the file and key.
 
@@ -958,6 +1005,8 @@ def _stringsdict_entry(path: str, unit: str, locale: str, key: str, entry) -> li
 
     if not isinstance(entry, dict):
         raise refuse("is not a dict")
+    if DEVICE_RULE in entry:
+        return _stringsdict_device_entry(unit, locale, key, entry, refuse)
     if "NSStringLocalizedFormatKey" not in entry:
         raise refuse("has no NSStringLocalizedFormatKey, so its plural forms format nothing")
     rows = []
@@ -1957,6 +2006,10 @@ class QuickHelpIndex:
     def from_app(cls, app: str, locale: str, *, unit: str = "QuickHelp",
                  min_anchor: int = DEFAULT_MIN_ANCHOR) -> "QuickHelpIndex":
         path = os.path.join(app, "Contents", "Resources", f"{locale}.lproj", f"{unit}.plist")
+        if not os.path.exists(path) and QUICKHELP_LOCALE_ALIASES.get(locale):
+            # Logic 13.0 ships no `QuickHelp.plist` for it, pt and zh_TW; see QUICKHELP_LOCALE_ALIASES.
+            path = os.path.join(app, "Contents", "Resources",
+                                f"{QUICKHELP_LOCALE_ALIASES[locale]}.lproj", f"{unit}.plist")
         loaded = load_plist(path)
         by_composed: dict[str, list[str]] = {}
         for key, value in loaded.items():
@@ -3511,15 +3564,21 @@ def verify_quickhelp_aliases(app: str) -> dict:
     """
     resources = os.path.join(app, "Contents", "Resources")
     by_digest: dict[str, list[str]] = {}
+    without_file: list[str] = []
     for entry in sorted(os.listdir(resources)):
         if not entry.endswith(".lproj"):
             continue
         path = os.path.join(resources, entry, "QuickHelp.plist")
         if os.path.exists(path):
             by_digest.setdefault(_file_digest(path), []).append(entry[: -len(".lproj")])
+        elif os.path.exists(os.path.join(resources, entry, "QuickHelpDefault.plist")):
+            # Logic 13.0 (7801): no QuickHelp.plist, so the bundle falls back to English's.
+            without_file.append(entry[: -len(".lproj")])
     groups = {digest[:12]: sorted(locales) for digest, locales in by_digest.items()}
+    if without_file:
+        groups["no QuickHelp.plist"] = sorted(without_file)
 
-    same_as = {}
+    same_as = {locale: "en" for locale in without_file}
     for locales in by_digest.values():
         if "en" in locales:
             for locale in locales:
