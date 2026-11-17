@@ -587,5 +587,83 @@ class RequiredVerificationWorkflow(unittest.TestCase):
         self.assertTrue(any(p.startswith("candidate-package:") for p in problems), problems)
 
 
+RELEASE_PATH_SCRIPTS = (
+    "release.sh", "release-qualify.sh", "release-stable.sh", "release-package.sh",
+    "release-fetch-qualified-inputs.sh", "release-build-universal.sh",
+    "release-verify-formula-install-paths.sh", "ci-native-qualify.sh",
+)
+BASH32 = "/bin/bash"
+# Constructs that fail on the macOS stock bash 3.2 (or, for a bare array
+# expansion, only when the array is empty under `set -u`).
+BASH4_ONLY = (
+    (r'(?<!\+)"\$\{\w+\[[@*]\]\}"', "bare array expansion (unbound when empty under set -u)"),
+    (r"(?<!\+)(?<![\"\w])\$\{\w+\[[@*]\]\}", "unquoted bare array expansion"),
+    (r"\bdeclare\s+-[a-zA-Z]*A", "declare -A"),
+    (r"\b(mapfile|readarray)\b", "mapfile/readarray"),
+    (r"\$\{\w+(,,|\^\^|,|\^)\}", "case-modifying expansion"),
+    (r"&>>", "&>>"),
+    (r"\|&", "|&"),
+    (r"\[-\d+\]", "negative array index"),
+    (r"\bwait\s+-n\b", "wait -n"),
+    (r"\blocal\s+-n\b|\bdeclare\s+-n\b", "namerefs"),
+    (r"\$\{\w+@[QEPAa]\}", "${var@op}"),
+    (r"\[\[\s+-v\s", "[[ -v ]]"),
+)
+
+
+class ReleaseScriptsRunOnBash32(unittest.TestCase):
+    """The release path must run on /bin/bash 3.2, the macOS stock shell."""
+
+    def test_no_construct_that_breaks_bash32(self):
+        problems = []
+        for name in RELEASE_PATH_SCRIPTS:
+            text = read(f"Scripts/{name}")
+            for number, line in enumerate(text.splitlines(), 1):
+                if line.lstrip().startswith("#"):
+                    continue
+                for pattern, label in BASH4_ONLY:
+                    if re.search(pattern, line):
+                        problems.append(f"{name}:{number}: {label}: {line.strip()}")
+        self.assertEqual(problems, [])
+
+    def test_scripts_parse_under_stock_bash(self):
+        if not os.path.exists(BASH32):
+            self.skipTest("no /bin/bash")
+        for name in RELEASE_PATH_SCRIPTS:
+            result = subprocess.run([BASH32, "-n", os.path.join(REPO, "Scripts", name)],
+                                    capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, f"{name}: {result.stderr}")
+
+    def run_fetch_candidate_evidence(self, run_attempt):
+        if not os.path.exists(BASH32):
+            self.skipTest("no /bin/bash")
+        match = re.search(r"^fetch_candidate_evidence\(\) \{\n.*?^\}\n",
+                          read("Scripts/release.sh"), re.S | re.M)
+        self.assertTrue(match, "fetch_candidate_evidence not found in release.sh")
+        with tempfile.TemporaryDirectory() as tmp:
+            script = textwrap.dedent("""\
+                set -euo pipefail
+                REPO=o/r RUN_ID=1 QUALIFIED=abc RUN_ATTEMPT="$1" EVIDENCE_DIR="$2"
+                gh() { echo '{"run_attempt": 1}'; }
+                python3() {
+                  if [ "$1" = - ]; then command python3 "$@"; else echo "$@" > "$EVIDENCE_DIR/argv"; fi
+                }
+                """) + match.group(0) + "fetch_candidate_evidence first\n"
+            result = subprocess.run([BASH32, "-c", script, "bash", run_attempt, tmp],
+                                    cwd=REPO, text=True, capture_output=True)
+            argv = pathlib.Path(tmp, "argv").read_text() if pathlib.Path(tmp, "argv").exists() else ""
+            return result, argv
+
+    def test_fetch_candidate_evidence_with_empty_run_attempt(self):
+        result, argv = self.run_fetch_candidate_evidence("")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertNotIn("--expected-attempt", argv)
+
+    def test_fetch_candidate_evidence_with_run_attempt(self):
+        result, argv = self.run_fetch_candidate_evidence("2")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertIn("--expected-attempt 2", argv)
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
