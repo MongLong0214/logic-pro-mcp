@@ -561,8 +561,9 @@ extension AccessibilityChannel {
             ))
         }
         for _ in 0..<20 {
-            if AXLogicProElements.findMarkerListWindow(runtime: runtime) != nil {
-                if let originBeforeOpen { recordOpenedMarkerList(originBeforeOpen) }
+            if let binding = AXLogicProElements.markerListBinding(runtime: runtime) {
+                // The exact window that appeared, bound to its project: cleanup closes this one.
+                if let originBeforeOpen { recordOpenedMarkerList(originBeforeOpen, opened: binding) }
                 return .success(HonestContract.encodeStateA(extras: [
                     "operation": "nav.open_marker_list",
                     "already_open": false,

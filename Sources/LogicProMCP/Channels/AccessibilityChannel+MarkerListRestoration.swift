@@ -6,9 +6,11 @@ import Foundation
 /// the window stayed on screen and every later operation inherited the moved focus. An operation
 /// must close what it opened and put the focus back.
 ///
-/// Ownership is exact: only a Marker List window that was NOT in the window census before the
-/// operation, and that is the bound Marker List now, is closed. A list the user already had open
-/// is never touched.
+/// Ownership is exact: the opener retains the very window it saw appear and the project it was
+/// bound to, and only that window is closed, after its project binding is read again. A list the
+/// user already had open, or another project's list, is never touched. Absence is proved only by
+/// a window census that was read; a census or focus read that fails leaves the outcome unverified
+/// rather than reporting it closed or restored.
 extension AccessibilityChannel {
     struct MarkerListOrigin: @unchecked Sendable {
         let app: AXUIElement
@@ -17,6 +19,15 @@ extension AccessibilityChannel {
         let main: AXUIElement?
         let focusedWindow: AXUIElement?
         let focusedElement: AXUIElement?
+    }
+
+    /// The Marker List window an operation opened, and the project document it was bound to when
+    /// it appeared. Cleanup acts on this element only: rediscovering "the current project's list"
+    /// later would find another project's list once the user had switched to it.
+    struct OpenedMarkerList: @unchecked Sendable {
+        let origin: MarkerListOrigin
+        let window: AXUIElement
+        let projectDocument: String
     }
 
     struct MarkerListRestoration: Equatable, Sendable {
@@ -33,26 +44,33 @@ extension AccessibilityChannel {
     /// gate, so two cannot interleave.
     private final class OpenedListLedger: @unchecked Sendable {
         private let lock = NSLock()
-        private var origin: MarkerListOrigin?
-        func record(_ value: MarkerListOrigin) { lock.withLock { origin = value } }
-        func take() -> MarkerListOrigin? { lock.withLock { let value = origin; origin = nil; return value } }
+        private var opened: OpenedMarkerList?
+        func record(_ value: OpenedMarkerList) { lock.withLock { opened = value } }
+        func take() -> OpenedMarkerList? { lock.withLock { let value = opened; opened = nil; return value } }
     }
     private static let openedListLedger = OpenedListLedger()
 
-    static func recordOpenedMarkerList(_ origin: MarkerListOrigin) {
-        guard !origin.listWasOpen else { return }
-        openedListLedger.record(origin)
+    /// Records the list `binding` names as opened by this operation. A window that was already in
+    /// the census taken before the open is not this operation's, and nothing is recorded for it.
+    static func recordOpenedMarkerList(
+        _ origin: MarkerListOrigin,
+        opened binding: AXLogicProElements.MarkerListBinding
+    ) {
+        guard !origin.listWasOpen,
+              !origin.windows.contains(where: { CFEqual($0, binding.window) }) else { return }
+        openedListLedger.record(OpenedMarkerList(
+            origin: origin, window: binding.window, projectDocument: binding.projectDocument))
     }
 
     /// Closes the list `nav.open_marker_list` opened and restores focus. Answers State A with
     /// `marker_list_closed` / `ui_restored`; with nothing recorded it states that nothing was owned.
     static func releaseMarkerList(runtime: AXLogicProElements.Runtime) async -> ChannelResult {
-        guard let origin = openedListLedger.take() else {
+        guard let opened = openedListLedger.take() else {
             return .success(HonestContract.encodeStateA(extras: [
                 "operation": "nav.release_marker_list", "owned": false,
             ]))
         }
-        let restoration = await restoreMarkerListOrigin(origin, runtime: runtime)
+        let restoration = await restoreMarkerListOrigin(opened, runtime: runtime)
         var extras: [String: Any] = [
             "operation": "nav.release_marker_list", "owned": true,
             "marker_list_closed": restoration.closed,
@@ -67,8 +85,7 @@ extension AccessibilityChannel {
         listWasOpen knownListWasOpen: Bool? = nil
     ) -> MarkerListOrigin? {
         guard let app = AXLogicProElements.appRoot(runtime: runtime),
-              let windows: [AXUIElement] = AXHelpers.getAttribute(
-                app, kAXWindowsAttribute as String, runtime: runtime.ax) else { return nil }
+              case .success(let windows) = windowCensus(app, runtime: runtime) else { return nil }
         return MarkerListOrigin(
             app: app, windows: windows,
             listWasOpen: knownListWasOpen ?? (AXLogicProElements.findMarkerListWindow(runtime: runtime) != nil),
@@ -77,33 +94,45 @@ extension AccessibilityChannel {
             focusedElement: AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: runtime.ax))
     }
 
-    /// Puts the focus back on the window and element it was on, and answers whether a fresh read
-    /// agrees. A write that AX accepted is not evidence: only the re-read counts.
-    static func restoreFocus(_ origin: MarkerListOrigin, runtime: AXLogicProElements.Runtime) -> Bool {
-        func current(_ attribute: String) -> AXUIElement? {
-            AXHelpers.getAttribute(origin.app, attribute, runtime: runtime.ax)
+    /// The application's window list, or the AX status that kept it from being read. A window is
+    /// absent only when a census that WAS read lacks it; a failed read says nothing either way.
+    static func windowCensus(
+        _ app: AXUIElement,
+        runtime: AXLogicProElements.Runtime
+    ) -> Result<[AXUIElement], AXHelpers.AXStatusError> {
+        let read: Result<[AXUIElement]?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+            app, kAXWindowsAttribute as String, runtime: runtime.ax)
+        switch read {
+        case .success(.some(let windows)): return .success(windows)
+        case .success(.none): return .failure(.malformedAttribute)
+        case .failure(let status): return .failure(status)
         }
-        func same(_ left: AXUIElement?, _ right: AXUIElement?) -> Bool {
-            switch (left, right) {
-            case (nil, nil): return true
-            case let (l?, r?): return CFEqual(l, r)
-            default: return false
-            }
+    }
+
+    /// Puts the focus back on the window and element it was on, and answers whether a fresh read
+    /// agrees. A write that AX accepted is not evidence: only the re-read counts. Only elements
+    /// that were READ on both sides compare: a failed read is not a reading, so two failed reads
+    /// are not equal focus, and a focus that could not be read before cannot be shown restored.
+    static func restoreFocus(_ origin: MarkerListOrigin, runtime: AXLogicProElements.Runtime) -> Bool {
+        guard let focusedWindow = origin.focusedWindow,
+              let focusedElement = origin.focusedElement else { return false }
+        func current(_ attribute: String) -> AXUIElement? {
+            let read: Result<AXUIElement?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+                origin.app, attribute, runtime: runtime.ax)
+            guard case .success(.some(let element)) = read else { return nil }
+            return element
         }
         func focusMatches() -> Bool {
-            same(current(kAXFocusedWindowAttribute as String), origin.focusedWindow)
-                && same(current(kAXFocusedUIElementAttribute as String), origin.focusedElement)
+            guard let window = current(kAXFocusedWindowAttribute as String),
+                  let element = current(kAXFocusedUIElementAttribute as String) else { return false }
+            return CFEqual(window, focusedWindow) && CFEqual(element, focusedElement)
         }
         if !focusMatches() {
             if let main = origin.main {
                 _ = AXHelpers.setAttribute(main, kAXMainAttribute as String, kCFBooleanTrue, runtime: runtime.ax)
             }
-            if let window = origin.focusedWindow {
-                _ = AXHelpers.setAttribute(window, kAXFocusedAttribute as String, kCFBooleanTrue, runtime: runtime.ax)
-            }
-            if let element = origin.focusedElement {
-                _ = AXHelpers.setAttribute(element, kAXFocusedAttribute as String, kCFBooleanTrue, runtime: runtime.ax)
-            }
+            _ = AXHelpers.setAttribute(focusedWindow, kAXFocusedAttribute as String, kCFBooleanTrue, runtime: runtime.ax)
+            _ = AXHelpers.setAttribute(focusedElement, kAXFocusedAttribute as String, kCFBooleanTrue, runtime: runtime.ax)
             Thread.sleep(forTimeInterval: 0.1)
         }
         return focusMatches()
@@ -122,33 +151,94 @@ extension AccessibilityChannel {
     }
 
     static func restoreMarkerListOrigin(
-        _ origin: MarkerListOrigin,
+        _ opened: OpenedMarkerList,
         runtime: AXLogicProElements.Runtime
     ) async -> MarkerListRestoration {
+        let app = opened.origin.app
+        func present(in windows: [AXUIElement]) -> Bool { windows.contains { CFEqual($0, opened.window) } }
+        func unreadableCensus(_ status: AXHelpers.AXStatusError, _ when: String) -> String {
+            "the window census could not be read \(when) (AX status \(status.diagnosticLabel)), "
+                + "so the Marker List's closure is unverified"
+        }
         var reason: String?
         var closed = false
-        if !origin.listWasOpen {
-            if let list = AXLogicProElements.findMarkerListWindow(runtime: runtime) {
-                if origin.windows.contains(where: { CFEqual($0, list) }) {
-                    reason = "the Marker List window pre-dates the operation"
-                } else if let button: AXUIElement = AXHelpers.getAttribute(
-                    list, kAXCloseButtonAttribute as String, runtime: runtime.ax) {
+        switch windowCensus(app, runtime: runtime) {
+        case .failure(let status):
+            reason = unreadableCensus(status, "before the close")
+        case .success(let windows) where !present(in: windows):
+            closed = true // a census that was read no longer holds the window this operation opened
+        case .success:
+            // Still open. Act on it only while it is still the list of the project it was opened
+            // for: an element can outlive its project, and a project change is not ours to undo.
+            let document: Result<String?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+                opened.window, kAXDocumentAttribute as String, runtime: runtime.ax)
+            switch document {
+            case .success(.some(let value)) where value == opened.projectDocument:
+                if let button: AXUIElement = AXHelpers.getAttribute(
+                    opened.window, kAXCloseButtonAttribute as String, runtime: runtime.ax) {
                     _ = AXHelpers.performAction(button, kAXPressAction as String, runtime: runtime.ax)
+                    var lastFailure: AXHelpers.AXStatusError?
                     for _ in 0..<30 {
-                        if AXLogicProElements.findMarkerListWindow(runtime: runtime) == nil { closed = true; break }
+                        switch windowCensus(app, runtime: runtime) {
+                        case .success(let windows):
+                            lastFailure = nil
+                            closed = !present(in: windows)
+                        case .failure(let status):
+                            lastFailure = status
+                        }
+                        if closed { break }
                         try? await Task.sleep(for: .milliseconds(50))
                     }
-                    if !closed { reason = "the Marker List window did not close" }
+                    if !closed {
+                        reason = lastFailure.map { unreadableCensus($0, "after the close") }
+                            ?? "the Marker List window did not close"
+                    }
                 } else {
                     reason = "the Marker List window has no readable close button"
                 }
-            } else {
-                closed = true // the operation never left a list open
+            case .success:
+                reason = "the window this operation opened is no longer bound to its project, so it was left open"
+            case .failure(let status):
+                reason = "the opened window's project could not be read (AX status \(status.diagnosticLabel)), "
+                    + "so it was left open"
             }
         }
-        let focusRestored = restoreFocus(origin, runtime: runtime)
-        if !focusRestored, reason == nil { reason = "focus did not return to the element it was on" }
+        let focusRestored: Bool
+        if let unbound = await projectBindingRefusal(opened, runtime: runtime) {
+            focusRestored = false
+            if reason == nil { reason = unbound }
+        } else {
+            focusRestored = restoreFocus(opened.origin, runtime: runtime)
+            if !focusRestored, reason == nil { reason = "focus did not return to the element it was on" }
+        }
         return MarkerListRestoration(closed: closed, focusRestored: focusRestored, reason: reason)
+    }
+
+    /// Why focus must not be written back, or nil when it may. Putting the focus back is an act
+    /// on the screen, and it is this operation's only while the project it opened the list for is
+    /// still the one in front: a user who moved to another project keeps the focus they put there.
+    private static func projectBindingRefusal(
+        _ opened: OpenedMarkerList,
+        runtime: AXLogicProElements.Runtime
+    ) async -> String? {
+        var last = "the main window could not be read, so focus restoration is unverified"
+        for attempt in 0..<10 {
+            if attempt > 0 { try? await Task.sleep(for: .milliseconds(50)) }
+            let main: Result<AXUIElement?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+                opened.origin.app, kAXMainWindowAttribute as String, runtime: runtime.ax)
+            guard case .success(.some(let window)) = main else { continue }
+            let document: Result<String?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+                window, kAXDocumentAttribute as String, runtime: runtime.ax)
+            switch document {
+            case .success(.some(let value)) where value == opened.projectDocument:
+                return nil
+            case .success(.some):
+                return "another project is in front now, so focus was left where the user put it"
+            default:
+                last = "the main window's project could not be read, so focus restoration is unverified"
+            }
+        }
+        return last
     }
 
     /// Runs a marker operation and, when it opened the Marker List itself (the opener records the
@@ -160,8 +250,8 @@ extension AccessibilityChannel {
         _ operation: () async -> ChannelResult
     ) async -> ChannelResult {
         let result = await operation()
-        guard let origin = openedListLedger.take() else { return result }
-        let restoration = await restoreMarkerListOrigin(origin, runtime: runtime)
+        guard let opened = openedListLedger.take() else { return result }
+        let restoration = await restoreMarkerListOrigin(opened, runtime: runtime)
         var extras: [String: Any] = [
             "marker_list_closed": restoration.closed,
             "ui_restored": restoration.closed && restoration.focusRestored,

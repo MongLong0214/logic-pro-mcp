@@ -15,10 +15,22 @@ import Testing
         let close: AXUIElement
         let strip: AXUIElement
         let listTable: AXUIElement
+        /// A second project, for the user switching to it while an operation holds the list.
+        let otherArrange: AXUIElement
+        let otherList: AXUIElement
+        let otherClose: AXUIElement
+        let otherStrip: AXUIElement
         let lock = NSLock()
         var closePressable = true
         var focusWritable = true
         var presses = 0
+        var otherPresses = 0
+        /// The app's AXWindows read fails (the census is unavailable), as an AX status, not as [].
+        var windowsUnreadable = false
+        /// After the close is pressed, the census can no longer be read.
+        var windowsUnreadableAfterPress = false
+        /// The app's focused-window and focused-element reads fail.
+        var focusUnreadable = false
 
         init(listOpen: Bool) {
             app = builder.element(1)
@@ -27,6 +39,17 @@ import Testing
             close = builder.element(4)
             strip = builder.element(5)
             listTable = builder.element(6)
+            otherArrange = builder.element(7)
+            otherList = builder.element(8)
+            otherClose = builder.element(9)
+            otherStrip = builder.element(10)
+            builder.setAttribute(otherArrange, kAXTitleAttribute as String, "Q.logicx - 트랙")
+            builder.setAttribute(otherArrange, kAXDocumentAttribute as String, "/Q.logicx")
+            builder.setAttribute(otherList, kAXTitleAttribute as String, "Q.logicx - 마커 목록")
+            builder.setAttribute(otherList, kAXDocumentAttribute as String, "/Q.logicx")
+            builder.setAttribute(otherList, kAXCloseButtonAttribute as String, otherClose)
+            builder.setAttribute(otherClose, kAXRoleAttribute as String, kAXButtonRole as String)
+            builder.setAttribute(otherStrip, kAXWindowAttribute as String, otherArrange)
             builder.setAttribute(app, kAXMainWindowAttribute as String, arrange)
             builder.setAttribute(arrange, kAXTitleAttribute as String, "P.logicx - 트랙")
             builder.setAttribute(arrange, kAXDocumentAttribute as String, "/P.logicx")
@@ -43,13 +66,32 @@ import Testing
 
         /// What the operation does to the screen: open the list and move the key view into it.
         func openList(_ ledgerRuntime: AXLogicProElements.Runtime, record: Bool = true) {
-            // The opener records the screen it found, exactly as `defaultOpenMarkerList` does.
-            if record, let origin = AccessibilityChannel.markerListOrigin(runtime: ledgerRuntime, listWasOpen: false) {
-                AccessibilityChannel.recordOpenedMarkerList(origin)
-            }
+            // The opener reads the screen it found, then records the exact list window it saw
+            // appear and that window's project, as `defaultOpenMarkerList` does.
+            let origin = record
+                ? AccessibilityChannel.markerListOrigin(runtime: ledgerRuntime, listWasOpen: false) : nil
             builder.setAttribute(app, kAXWindowsAttribute as String, [arrange, list])
             builder.setAttribute(app, kAXFocusedWindowAttribute as String, list)
             builder.setAttribute(app, kAXFocusedUIElementAttribute as String, listTable)
+            if let origin, let binding = AXLogicProElements.markerListBinding(runtime: ledgerRuntime) {
+                AccessibilityChannel.recordOpenedMarkerList(origin, opened: binding)
+            }
+        }
+
+        /// The user switches to another open project and opens ITS Marker List.
+        func switchToOtherProject() {
+            setWindows(windows + [otherArrange, otherList])
+            builder.setAttribute(app, kAXMainWindowAttribute as String, otherArrange)
+            builder.setAttribute(app, kAXFocusedWindowAttribute as String, otherArrange)
+            builder.setAttribute(app, kAXFocusedUIElementAttribute as String, otherStrip)
+        }
+
+        var windows: [AXUIElement] {
+            builder.attributeValue(app, kAXWindowsAttribute as String) as? [AXUIElement] ?? []
+        }
+
+        func setWindows(_ value: [AXUIElement]) {
+            builder.setAttribute(app, kAXWindowsAttribute as String, value)
         }
 
         var windowCount: Int {
@@ -60,20 +102,44 @@ import Testing
             builder.makeAXRuntime().attributeValue(app, kAXFocusedUIElementAttribute as String) as! AXUIElement?
         }
 
+        /// Whether a read of `attribute` on `element` fails with an AX status right now.
+        private func readFails(_ element: AXUIElement, _ attribute: String) -> Bool {
+            guard CFEqual(element, app) else { return false }
+            if attribute == kAXWindowsAttribute as String { return windowsUnreadable }
+            if attribute == kAXFocusedWindowAttribute as String
+                || attribute == kAXFocusedUIElementAttribute as String { return focusUnreadable }
+            return false
+        }
+
         var runtime: AXLogicProElements.Runtime {
             builder.makeLogicRuntime(
                 appElement: app,
+                attributeValueHandler: { [self] element, attribute in
+                    readFails(element, attribute) ? .some(nil) : nil
+                },
+                attributeValueResultHandler: { [self] element, attribute in
+                    readFails(element, attribute)
+                        ? .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue)) : nil
+                },
                 setAttributeHandler: { [self] element, attribute, value in
                     guard attribute == kAXFocusedAttribute as String, focusWritable else { return false }
-                    let owner = CFEqual(element, strip) ? arrange : list
+                    let owner = CFEqual(element, strip) ? arrange
+                        : CFEqual(element, otherStrip) ? otherArrange : list
                     builder.setAttribute(app, kAXFocusedUIElementAttribute as String, element)
                     builder.setAttribute(app, kAXFocusedWindowAttribute as String, owner)
                     return true
                 },
                 performActionHandler: { [self] element, action in
-                    guard CFEqual(element, close), action == kAXPressAction as String else { return false }
+                    guard action == kAXPressAction as String else { return false }
+                    if CFEqual(element, otherClose) {
+                        otherPresses += 1
+                        setWindows(windows.filter { !CFEqual($0, otherList) })
+                        return true
+                    }
+                    guard CFEqual(element, close) else { return false }
                     presses += 1
-                    if closePressable { builder.setAttribute(app, kAXWindowsAttribute as String, [arrange]) }
+                    if closePressable { setWindows(windows.filter { !CFEqual($0, list) }) }
+                    if windowsUnreadableAfterPress { windowsUnreadable = true }
                     return true
                 })
         }
@@ -170,6 +236,90 @@ import Testing
     @Test func anEntryWhoseFocusCannotBeRestoredSaysSo() {
         let screen = Screen(listOpen: false)
         screen.focusWritable = false
+        let runtime = screen.runtime
+        let result = AccessibilityChannel.withFocusRestored(runtime: runtime) {
+            screen.openList(runtime, record: false)
+            return .success(#"{"success":true}"#)
+        }
+        let restored = Self.body(result)["focus_restored"] as? Bool ?? true
+        #expect(!restored, "\(Self.body(result))")
+    }
+
+    // MARK: - Ownership and observation
+
+    /// The user moves to another project and opens ITS Marker List while this operation holds its
+    /// own. Cleanup closes only the window it opened, never the other project's, and does not pull
+    /// the focus back to a project the user has left.
+    @Test func anotherProjectsMarkerListIsNeverClosedAndItsFocusIsNotTaken() async {
+        let screen = Screen(listOpen: false)
+        let runtime = screen.runtime
+        let result = await AccessibilityChannel.withMarkerListRestored(runtime: runtime) {
+            screen.openList(runtime)
+            screen.switchToOtherProject()
+            return .success(#"{"success":true}"#)
+        }
+        let body = Self.body(result)
+        #expect(screen.otherPresses == 0, "the other project's list was pressed closed: \(body)")
+        #expect(screen.windows.contains { CFEqual($0, screen.otherList) }, "\(body)")
+        #expect(!screen.windows.contains { CFEqual($0, screen.list) }, "the list this operation opened is closed")
+        let focusStayed = screen.focusedElement.map { CFEqual($0, screen.otherStrip) } ?? false
+        #expect(focusStayed, "focus was pulled back to the project the user left: \(body)")
+        let restoredReported = body["ui_restored"] as? Bool ?? true
+        #expect(!restoredReported, "\(body)")
+    }
+
+    /// A window census that cannot be read proves nothing about the list: it is not "closed".
+    @Test func aCensusThatCannotBeReadNeverReportsTheListClosed() async {
+        let screen = Screen(listOpen: false)
+        let runtime = screen.runtime
+        let result = await AccessibilityChannel.withMarkerListRestored(runtime: runtime) {
+            screen.openList(runtime)
+            screen.windowsUnreadable = true
+            return .success(#"{"success":true}"#)
+        }
+        let body = Self.body(result)
+        let closedReported = body["marker_list_closed"] as? Bool ?? true
+        #expect(!closedReported, "\(body)")
+        let restoredReported = body["ui_restored"] as? Bool ?? true
+        #expect(!restoredReported, "\(body)")
+    }
+
+    /// The close was pressed, and the census then failed. The list may still be open.
+    @Test func aCensusThatFailsAfterTheCloseIsPressedLeavesClosureUnverified() async {
+        let screen = Screen(listOpen: false)
+        screen.closePressable = false
+        screen.windowsUnreadableAfterPress = true
+        let runtime = screen.runtime
+        let result = await AccessibilityChannel.withMarkerListRestored(runtime: runtime) {
+            screen.openList(runtime)
+            return .success(#"{"success":true}"#)
+        }
+        let body = Self.body(result)
+        #expect(screen.presses == 1, "\(body)")
+        let closedReported = body["marker_list_closed"] as? Bool ?? true
+        #expect(!closedReported, "\(body)")
+        let restoredReported = body["ui_restored"] as? Bool ?? true
+        #expect(!restoredReported, "\(body)")
+    }
+
+    /// Two failed focus reads are not two equal focus readings.
+    @Test func focusThatCannotBeReadIsNotReportedRestored() async {
+        let screen = Screen(listOpen: false)
+        screen.focusUnreadable = true
+        let runtime = screen.runtime
+        let result = await AccessibilityChannel.withMarkerListRestored(runtime: runtime) {
+            screen.openList(runtime)
+            return .success(#"{"success":true}"#)
+        }
+        let body = Self.body(result)
+        let restoredReported = body["ui_restored"] as? Bool ?? true
+        #expect(!restoredReported, "\(body)")
+    }
+
+    /// The tempo entry shares the focus restoration: unreadable focus is not restored focus.
+    @Test func aTypedEntryWhoseFocusCannotBeReadIsNotReportedRestored() {
+        let screen = Screen(listOpen: false)
+        screen.focusUnreadable = true
         let runtime = screen.runtime
         let result = AccessibilityChannel.withFocusRestored(runtime: runtime) {
             screen.openList(runtime, record: false)
