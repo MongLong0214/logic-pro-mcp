@@ -1935,42 +1935,51 @@ struct QualificationTransport: Sendable {
                                 nextID += 40
                             }
                         }
+                        // The marker cycles report what their cleanup did on a refusal: a probe
+                        // the cleanup could not identify on a fresh read is left, and named.
                         if spec.id == .navigateGotoMarker {
+                            let cleanupWitness = PhaseCCleanupWitness()
                             do {
                                 let cycle = try markerNavigationRestoreCycle(
-                                    session, startingAt: nextID, spec: spec)
+                                    session, startingAt: nextID, spec: spec, cleanup: cleanupWitness)
                                 mutationRestoreRecords.append(cycle.record)
                                 phaseBRecord = cycle.record
                                 nextID = cycle.nextID
                             } catch {
                                 phaseBRefusal = Self.observedFailureReason(
                                     from: error, during: "phase_b recipe")
+                                    + "; cleanup: " + cleanupWitness.summary
                                 nextID += 60
                             }
                         }
                         if let mode = Self.markerStagedRestoreMode[spec.id] {
+                            let cleanupWitness = PhaseCCleanupWitness()
                             do {
                                 let cycle = try markerStagedRestoreCycle(
-                                    session, startingAt: nextID, spec: spec, mode: mode)
+                                    session, startingAt: nextID, spec: spec, mode: mode,
+                                    cleanup: cleanupWitness)
                                 mutationRestoreRecords.append(cycle.record)
                                 phaseBRecord = cycle.record
                                 nextID = cycle.nextID
                             } catch {
                                 phaseBRefusal = Self.observedFailureReason(
                                     from: error, during: "phase_b recipe")
+                                    + "; cleanup: " + cleanupWitness.summary
                                 nextID += 60
                             }
                         }
                         if spec.id == .navigateCreateMarker {
+                            let cleanupWitness = PhaseCCleanupWitness()
                             do {
                                 let cycle = try markerCreateRestoreCycle(
-                                    session, startingAt: nextID, spec: spec)
+                                    session, startingAt: nextID, spec: spec, cleanup: cleanupWitness)
                                 mutationRestoreRecords.append(cycle.record)
                                 phaseBRecord = cycle.record
                                 nextID = cycle.nextID
                             } catch {
                                 phaseBRefusal = Self.observedFailureReason(
                                     from: error, during: "phase_b recipe")
+                                    + "; cleanup: " + cleanupWitness.summary
                                 nextID += 40
                             }
                         }
@@ -3585,6 +3594,42 @@ struct QualificationTransport: Sendable {
         case names(present: [String], absent: [String])
     }
 
+    /// Why a `logic://markers` body is not a fresh, readable reading of the Marker List taken at or
+    /// after `since`, or nil when it is one.
+    ///
+    /// Every marker decision in these recipes — which index to delete, rename or navigate to, and
+    /// whether a probe is present or gone — is taken from this read, so it has to be the list as
+    /// it stands now. The marker operations close the Marker List they open, and with it closed the
+    /// product keeps its last rows and only marks them unreadable (`source: cache`). Those rows
+    /// still parse: a cleanup that took its index from them deleted index 0 again after its probe
+    /// was gone, and index 0 was then the user's marker. A readable, recent body is not enough
+    /// either — the create's own readback lands in the cache before the list closes, and a refresh
+    /// that misses the poller's marker tick serves it unchanged. So the read must have been made
+    /// AFTER `since`, the moment the caller began this observation (after its last write).
+    static func markerReadRefusal(_ data: Data, since: Date) -> String? {
+        guard let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] else {
+            return "the body is not a JSON object"
+        }
+        let cause = (object["reason"] as? String).map { ", reason \($0)" } ?? ""
+        if let refusal = QualificationReadbackFreshness.verdict(
+            for: data, uri: "logic://markers", verification: .readbackRequired, deadline: .short
+        ).refusalReason {
+            return "\(refusal) (source \(object["source"] as? String ?? "absent")\(cause))"
+        }
+        guard let stamp = object["fetched_at"] as? String,
+              let fetched = ISO8601DateFormatter.cacheFormatter.date(from: stamp) else {
+            return "readback_fetched_at_unknown"
+        }
+        // The stamp carries milliseconds; compare against `since` truncated to the same grain so a
+        // read in the same millisecond is not refused for the formatter's rounding.
+        let floor = Date(timeIntervalSince1970: (since.timeIntervalSince1970 * 1000).rounded(.down) / 1000)
+        guard fetched >= floor else {
+            return "readback_predates_this_read (fetched_at \(stamp))"
+        }
+        guard object["data"] is [[String: Any]] else { return "readback_rows_absent" }
+        return nil
+    }
+
     private func observedMarkerCount(
         _ session: QualificationSubprocessSession,
         id: Int,
@@ -3601,8 +3646,14 @@ struct QualificationTransport: Sendable {
         // not relaxing the assertion: the loop exits early only on the state the caller already
         // decided is correct, and a wrong state simply runs out the budget and is returned as it
         // is, to be judged by the guard that asked.
+        //
+        // ONLY A FRESH READ COUNTS (`markerReadRefusal`). A body that is not one is skipped, never
+        // returned; if no attempt produces one this THROWS, so a caller has no rows to act on and
+        // stops — before staging when it has not written yet, and without deleting in a cleanup.
+        let since = Date()
         var spent = 0
-        var last: (Int, String) = (-1, "")
+        var last: (Int, String)?
+        var refusal = "no read was made"
         for attempt in 0..<6 {
             // WAIT between attempts. The first version polled with no delay, so six attempts
             // finished in well under a second — far too fast for this list. Measured 2026-09-14: a
@@ -3618,6 +3669,10 @@ struct QualificationTransport: Sendable {
                 session, id: id + spent, uri: "logic://markers", phase: phase)
             spent += 1
             let raw = String(decoding: data, as: UTF8.self)
+            if let reason = Self.markerReadRefusal(data, since: since) {
+                refusal = reason
+                continue
+            }
             let object = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any]
             let rows = (object?["data"] as? [[String: Any]]) ?? []
             last = (rows.count, raw)
@@ -3630,7 +3685,54 @@ struct QualificationTransport: Sendable {
             }
             if settled { break }
         }
+        guard let last else {
+            throw QualificationTransportError.protocolViolation(
+                "\(phase): logic://markers gave no fresh, readable marker list (\(refusal)), so there is "
+                    + "no marker identity to act on and nothing is written or deleted on it")
+        }
         return (last.0, last.1, spent)
+    }
+
+    /// Removes what a marker cycle staged, found BY NAME on a fresh read before EVERY delete.
+    ///
+    /// The first read is a plain one; after a delete the next read waits for the names to be gone
+    /// (the list settles slowly, and a read that still shows a deleted probe would otherwise send a
+    /// second delete at a row that is no longer the probe). A read that is not fresh ends the
+    /// cleanup: the marker may remain, and the witness says so rather than guessing at an index.
+    private func removeStagedMarkers(
+        _ session: QualificationSubprocessSession,
+        startingAt id: Int,
+        names: [String],
+        attempts: Int,
+        tool: String,
+        cleanup: PhaseCCleanupWitness
+    ) {
+        var cleanupID = id
+        var deleted = false
+        for _ in 0..<attempts {
+            let seen: (count: Int, raw: String, spent: Int)
+            do {
+                seen = try observedMarkerCount(
+                    session, id: cleanupID,
+                    settling: deleted ? .names(present: [], absent: names) : .read,
+                    phase: "phase_b.cleanup_readback")
+            } catch {
+                cleanup.note("withheld, \(names.joined(separator: " or ")) may remain: \(error)")
+                return
+            }
+            cleanupID += seen.spent
+            guard let index = names.lazy.compactMap({ markerIndex(named: $0, in: seen.raw) }).first else {
+                cleanup.note(deleted ? "removed" : "nothing staged remains")
+                return
+            }
+            _ = try? invoke(
+                session, id: cleanupID, tool: tool, command: "delete_marker",
+                params: ["index": index], phase: "phase_b.cleanup")
+            cleanupID += 1
+            deleted = true
+            cleanup.note("delete_marker index \(index)")
+        }
+        cleanup.note("budget spent, \(names.joined(separator: " or ")) may remain")
     }
 
     /// #373 Phase B for the project tempo.
@@ -3756,7 +3858,8 @@ struct QualificationTransport: Sendable {
     private func markerNavigationRestoreCycle(
         _ session: QualificationSubprocessSession,
         startingAt id: Int,
-        spec: OperationSpec
+        spec: OperationSpec,
+        cleanup: PhaseCCleanupWitness
     ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
         var nextID = id
         let probeName = "qualification_phase_b_probe"
@@ -3797,18 +3900,9 @@ struct QualificationTransport: Sendable {
         // A MARKER NOW EXISTS. Every exit removes it, and the removal is verified — see
         // `markerCreateRestoreCycle` for why an unchecked delete is not a removal.
         defer {
-            var cleanupID = nextID + 900
-            for _ in 0..<6 {
-                guard let seen = try? observedMarkerCount(
-                    session, id: cleanupID, settling: .read, phase: "phase_b.cleanup_readback"
-                ) else { break }
-                cleanupID += seen.spent
-                guard let index = markerIndex(named: probeName, in: seen.raw) else { break }
-                _ = try? invoke(
-                    session, id: cleanupID, tool: spec.tool.rawValue, command: "delete_marker",
-                    params: ["index": index], phase: "phase_b.cleanup")
-                cleanupID += 1
-            }
+            removeStagedMarkers(
+                session, startingAt: nextID + 900, names: [probeName], attempts: 6,
+                tool: spec.tool.rawValue, cleanup: cleanup)
         }
         let listed = try observedMarkerCount(
             session, id: nextID, settling: .names(present: [probeName], absent: []),
@@ -5019,7 +5113,8 @@ struct QualificationTransport: Sendable {
     private func markerCreateRestoreCycle(
         _ session: QualificationSubprocessSession,
         startingAt id: Int,
-        spec: OperationSpec
+        spec: OperationSpec,
+        cleanup: PhaseCCleanupWitness
     ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
         var nextID = id
         let probeName = "qualification_phase_b_probe"
@@ -5054,19 +5149,10 @@ struct QualificationTransport: Sendable {
                 // the marker list settles slowly enough that a single unchecked delete is not a
                 // removal, it is a request. An unverified cleanup is the same shape as the
                 // unverified success claims this whole change exists to remove, so it retries until
-                // the count is back where it started or its budget runs out.
-                var cleanupID = nextID + 900
-                for _ in 0..<4 {
-                    guard let seen = try? observedMarkerCount(
-                        session, id: cleanupID, settling: .read, phase: "phase_b.cleanup_readback"
-                    ) else { break }
-                    cleanupID += seen.spent
-                    guard let index = markerIndex(named: probeName, in: seen.raw) else { break }
-                    _ = try? invoke(
-                        session, id: cleanupID, tool: spec.tool.rawValue, command: "delete_marker",
-                        params: ["index": index], phase: "phase_b.cleanup")
-                    cleanupID += 1
-                }
+                // the probe is gone or its budget runs out — on fresh reads only.
+                removeStagedMarkers(
+                    session, startingAt: nextID + 900, names: [probeName], attempts: 4,
+                    tool: spec.tool.rawValue, cleanup: cleanup)
             }
         }
 
@@ -5136,7 +5222,8 @@ struct QualificationTransport: Sendable {
         _ session: QualificationSubprocessSession,
         startingAt id: Int,
         spec: OperationSpec,
-        mode: MarkerStagedMode
+        mode: MarkerStagedMode,
+        cleanup: PhaseCCleanupWitness
     ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
         var nextID = id
         let probeName = "qualification_phase_b_probe"
@@ -5166,23 +5253,12 @@ struct QualificationTransport: Sendable {
         let stagedMarkerNeedsRemoval = true
         defer {
             if stagedMarkerNeedsRemoval {
-                var cleanupID = nextID + 900
-                for _ in 0..<6 {
-                    guard let seen = try? observedMarkerCount(
-                        session, id: cleanupID, settling: .read, phase: "phase_b.cleanup_readback"
-                    ) else { break }
-                    cleanupID += seen.spent
-                    // The mutation under test may have renamed it, so the cleanup looks for BOTH
-                    // names. A cleanup that only knew the name it staged would leave the marker
-                    // behind exactly when the rename half-succeeded.
-                    let index = markerIndex(named: probeName, in: seen.raw)
-                        ?? markerIndex(named: renamedName, in: seen.raw)
-                    guard let index else { break }
-                    _ = try? invoke(
-                        session, id: cleanupID, tool: spec.tool.rawValue, command: "delete_marker",
-                        params: ["index": index], phase: "phase_b.cleanup")
-                    cleanupID += 1
-                }
+                // The mutation under test may have renamed it, so the cleanup looks for BOTH
+                // names. A cleanup that only knew the name it staged would leave the marker
+                // behind exactly when the rename half-succeeded.
+                removeStagedMarkers(
+                    session, startingAt: nextID + 900, names: [probeName, renamedName], attempts: 6,
+                    tool: spec.tool.rawValue, cleanup: cleanup)
             }
         }
 

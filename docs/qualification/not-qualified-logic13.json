@@ -265,22 +265,22 @@
     {
       "operation": "navigate.create_marker",
       "reason": "recipe_refused",
-      "detail": "the recipe reads logic://markers, which refuses with marker_list_not_open once the operation has closed the Marker List it opened, and nav.capture_markers cannot stand in on Logic 13 (measured: AXTitle read -25212, then scroll_inventory -25200), so there is no independent marker readback that does not leave the list open"
+      "detail": "the recipe acts only on a fresh, readable logic://markers read, and with the Marker List closed (the operations close the list they open) that read is marker_list_not_open, so the recipe refuses before it stages anything; nav.capture_markers cannot stand in on Logic 13 (measured: AXTitle read -25212, then scroll_inventory -25200), so there is no independent marker readback that does not leave the list open"
     },
     {
       "operation": "navigate.delete_marker",
       "reason": "recipe_refused",
-      "detail": "the recipe reads logic://markers, which refuses with marker_list_not_open once the operation has closed the Marker List it opened, and nav.capture_markers cannot stand in on Logic 13 (measured: AXTitle read -25212, then scroll_inventory -25200), so there is no independent marker readback that does not leave the list open"
+      "detail": "the recipe acts only on a fresh, readable logic://markers read, and with the Marker List closed (the operations close the list they open) that read is marker_list_not_open, so the recipe refuses before it stages anything; nav.capture_markers cannot stand in on Logic 13 (measured: AXTitle read -25212, then scroll_inventory -25200), so there is no independent marker readback that does not leave the list open"
     },
     {
       "operation": "navigate.goto_marker",
       "reason": "recipe_refused",
-      "detail": "the recipe reads logic://markers, which refuses with marker_list_not_open once the operation has closed the Marker List it opened, and nav.capture_markers cannot stand in on Logic 13 (measured: AXTitle read -25212, then scroll_inventory -25200), so there is no independent marker readback that does not leave the list open"
+      "detail": "the recipe acts only on a fresh, readable logic://markers read, and with the Marker List closed (the operations close the list they open) that read is marker_list_not_open, so the recipe refuses before it stages anything; nav.capture_markers cannot stand in on Logic 13 (measured: AXTitle read -25212, then scroll_inventory -25200), so there is no independent marker readback that does not leave the list open"
     },
     {
       "operation": "navigate.rename_marker",
       "reason": "recipe_refused",
-      "detail": "the recipe reads logic://markers, which refuses with marker_list_not_open once the operation has closed the Marker List it opened, and nav.capture_markers cannot stand in on Logic 13 (measured: AXTitle read -25212, then scroll_inventory -25200), so there is no independent marker readback that does not leave the list open"
+      "detail": "the recipe acts only on a fresh, readable logic://markers read, and with the Marker List closed (the operations close the list they open) that read is marker_list_not_open, so the recipe refuses before it stages anything; nav.capture_markers cannot stand in on Logic 13 (measured: AXTitle read -25212, then scroll_inventory -25200), so there is no independent marker readback that does not leave the list open"
     },
     {
       "operation": "navigate.set_zoom",
