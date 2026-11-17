@@ -23,7 +23,8 @@ import Testing
             listOpenInitially: Bool,
             closeAfterCreate: Bool = false,
             refreshPolls: String = "when_open",
-            ghostPolls: Int = 0
+            ghostPolls: Int = 0,
+            barWriteOvershoot: Bool = false
         ) throws {
             directory = FileManager.default.temporaryDirectory
                 .appendingPathComponent("qualification-marker-cleanup-\(UUID().uuidString)", isDirectory: true)
@@ -38,6 +39,9 @@ import Testing
             }
             script = script.replacingOccurrences(of: "refresh_polls=when_open", with: "refresh_polls=\(refreshPolls)")
             script = script.replacingOccurrences(of: "ghost_polls=0", with: "ghost_polls=\(ghostPolls)")
+            if barWriteOvershoot {
+                script = script.replacingOccurrences(of: "bar_overshoot=false", with: "bar_overshoot=true")
+            }
             try Data(script.utf8).write(to: executableURL)
             try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: executableURL.path)
         }
@@ -51,6 +55,8 @@ import Testing
         var live: [String] { lines("live") }
         /// Every marker write the double accepted, in order.
         var writes: [String] { lines("writes") }
+        /// The playhead's bar as the double holds it. Every recipe starts at bar 1.
+        var bar: Int? { lines("bar").first.flatMap { Int($0) } }
 
         func remove() { try? FileManager.default.removeItem(at: directory) }
 
@@ -78,6 +84,9 @@ import Testing
         # `ghost_polls=N`: after a delete, the list keeps showing the deleted row for N fresh polls,
         # as Logic's AX table does while it settles (measured: still present 1.8 s after a delete).
         ghost_polls=0
+        # `bar_overshoot=true`: the first bar write lands one bar past the request, so the
+        # cycle's readback disagrees and it refuses with the playhead moved.
+        bar_overshoot=false
         echo 0 > ghost-left
         : > ghost
         created=false
@@ -190,9 +199,17 @@ import Testing
                     ok
                 else refuse element_not_found; fi
                 release_list ;;
-              *'"command":"goto_bar"'*)
-                param_int bar > bar
-                printf 'goto_bar %s\n' "$(cat bar)" >> writes
+              *'"command":"goto_bar"'*|*'"command":"goto_position"'*)
+                to=$(param_int bar)
+                if [ -n "$to" ]; then
+                    if [ "$bar_overshoot" = true ]; then to=$((to + 1)); bar_overshoot=false; fi
+                    printf 'goto_bar %s\n' "$to" >> writes
+                else
+                    at=$(param_string position)
+                    to=${at%%.*}
+                    printf 'goto_position %s\n' "$at" >> writes
+                fi
+                printf '%s\n' "$to" > bar
                 ok ;;
               *'"command":"goto_marker"'*)
                 # The product resolves a marker name against its cached list.
@@ -225,6 +242,7 @@ import Testing
         let fixture = try Fixture(listOpenInitially: false)
         defer { fixture.remove() }
         let observed = try drive(fixture, operation)
+        #expect(fixture.bar == 1, "the playhead is back where it started: bar \(fixture.bar.map(String.init) ?? "unread"), writes \(fixture.writes)")
 
         #expect(fixture.live == Self.originals, "every original marker survives: \(fixture.writes)")
         #expect(fixture.writes.isEmpty, "nothing is staged on an unreadable marker read: \(fixture.writes)")
@@ -241,6 +259,7 @@ import Testing
         let fixture = try Fixture(listOpenInitially: true, closeAfterCreate: true)
         defer { fixture.remove() }
         let observed = try drive(fixture, operation)
+        #expect(fixture.bar == 1, "the playhead is back where it started: bar \(fixture.bar.map(String.init) ?? "unread"), writes \(fixture.writes)")
 
         #expect(Self.originals.allSatisfy(fixture.live.contains),
                 "every original marker survives: live \(fixture.live), writes \(fixture.writes)")
@@ -257,6 +276,7 @@ import Testing
             listOpenInitially: true, closeAfterCreate: true, refreshPolls: "never_after_create")
         defer { fixture.remove() }
         let observed = try drive(fixture, .navigateCreateMarker)
+        #expect(fixture.bar == 1, "the playhead is back where it started: bar \(fixture.bar.map(String.init) ?? "unread"), writes \(fixture.writes)")
 
         #expect(Self.originals.allSatisfy(fixture.live.contains),
                 "every original marker survives: live \(fixture.live), writes \(fixture.writes)")
@@ -273,6 +293,7 @@ import Testing
         let fixture = try Fixture(listOpenInitially: true, ghostPolls: 8)
         defer { fixture.remove() }
         _ = try drive(fixture, operation)
+        #expect(fixture.bar == 1, "the playhead is back where it started: bar \(fixture.bar.map(String.init) ?? "unread"), writes \(fixture.writes)")
 
         #expect(Self.originals.allSatisfy(fixture.live.contains),
                 "every original marker survives: live \(fixture.live), writes \(fixture.writes)")
@@ -282,6 +303,19 @@ import Testing
         #expect(foreignDeletes.isEmpty, "only the probe is ever deleted: \(fixture.writes)")
     }
 
+    /// The playhead recipes (`navigate.goto_bar`, `transport.goto_position`) refuse when the move
+    /// does not read back as requested, and that refusal used to leave the playhead where the
+    /// mutation put it. Every exit after a move puts it back, verified by a read.
+    @Test(arguments: [OperationID.navigateGotoBar, .transportGotoPosition])
+    func aPlayheadCycleThatRefusesAfterMovingPutsThePlayheadBack(operation: OperationID) throws {
+        let fixture = try Fixture(listOpenInitially: true, barWriteOvershoot: true)
+        defer { fixture.remove() }
+        let observed = try drive(fixture, operation)
+
+        #expect(observed?.mutationRestore == nil, "the overshoot must refuse the cycle: \(fixture.writes)")
+        #expect(fixture.bar == 1, "the playhead is back where it started: bar \(fixture.bar.map(String.init) ?? "unread"), writes \(fixture.writes)")
+    }
+
     /// Positive control: a list that stays open gives fresh reads throughout, and the cycle stages,
     /// exercises, restores and removes its own marker by name.
     @Test(arguments: markerOperations)
@@ -289,6 +323,7 @@ import Testing
         let fixture = try Fixture(listOpenInitially: true)
         defer { fixture.remove() }
         let observed = try drive(fixture, operation)
+        #expect(fixture.bar == 1, "the playhead is back where it started: bar \(fixture.bar.map(String.init) ?? "unread"), writes \(fixture.writes)")
 
         #expect(fixture.live == Self.originals, "live \(fixture.live), writes \(fixture.writes)")
         #expect(observed?.mutationRestore != nil, "\(observed?.mutationRestoreRefusal ?? "no refusal")")

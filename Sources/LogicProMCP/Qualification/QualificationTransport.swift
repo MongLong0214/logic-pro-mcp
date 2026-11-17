@@ -1864,15 +1864,17 @@ struct QualificationTransport: Sendable {
                         // shape both share, so one machine covers both without the recipe having to
                         // know which dispatcher it landed in.
                         if Self.playheadRestoreOperations.contains(spec.id) {
+                            let cleanupWitness = PhaseCCleanupWitness()
                             do {
                                 let cycle = try playheadRestoreCycle(
-                                    session, startingAt: nextID, spec: spec)
+                                    session, startingAt: nextID, spec: spec, cleanup: cleanupWitness)
                                 mutationRestoreRecords.append(cycle.record)
                                 phaseBRecord = cycle.record
                                 nextID = cycle.nextID
                             } catch {
                                 phaseBRefusal = Self.observedFailureReason(
                                     from: error, during: "phase_b recipe")
+                                    + "; cleanup: " + cleanupWitness.summary
                                 nextID += 14
                             }
                         }
@@ -3426,6 +3428,12 @@ struct QualificationTransport: Sendable {
         let inverse = expected == .moving ? "stop" : "play"
 
         let pre = try observedTransportMotion(session, nextID: &nextID, phase: "phase_b.pre_state")
+        // Playback moves the playhead, and restoring the MOTION does not bring it back: every
+        // play, pause and stop cycle left the playhead elsewhere, and the next run started from
+        // a different place (measured: 30.3 before a gate, 5.2 after). From a stopped start the
+        // exact position is read here and put back, verified, on every exit.
+        let prePosition = pre.motion == .stopped ? Self.observedPlayheadPosition(pre.raw) : nil
+        var playheadRestoreAttempted = false
         var workMayHaveLanded = false
         do {
             if pre.motion == expected || (expected == .paused && pre.motion != .moving) {
@@ -3508,6 +3516,15 @@ struct QualificationTransport: Sendable {
                 throw QualificationTransportError.protocolViolation(
                     "phase_b.restore_readback: recorded transport cycle did not verify")
             }
+            if let prePosition, Self.observedPlayheadPosition(restored.raw) != prePosition {
+                playheadRestoreAttempted = true
+                let fix = restorePlayhead(
+                    session, nextID: &nextID, to: prePosition, phase: "phase_b.playhead_restore")
+                guard fix.restored else {
+                    throw QualificationTransportError.protocolViolation(
+                        "phase_b.playhead_restore: \(fix.summary)")
+                }
+            }
             workMayHaveLanded = false
             return (record, nextID)
         } catch {
@@ -3519,8 +3536,13 @@ struct QualificationTransport: Sendable {
                 nextID: &nextID,
                 phase: "phase_b.cleanup"
             )
+            var playhead = ""
+            if let prePosition, !playheadRestoreAttempted {
+                playhead = "; " + restorePlayhead(
+                    session, nextID: &nextID, to: prePosition, phase: "phase_b.playhead_restore").summary
+            }
             throw QualificationTransportError.protocolViolation(
-                "\(error) | compensating restore: \(compensation.summary)"
+                "\(error) | compensating restore: \(compensation.summary)\(playhead)"
             )
         }
     }
@@ -3903,6 +3925,11 @@ struct QualificationTransport: Sendable {
         let origin = try observedTransportPosition(
             session, id: readStep(), phase: "phase_b.stage_precondition")
         let originBar = try observedBar(of: origin.raw, phase: "phase_b.stage_precondition")
+        guard let originPosition = Self.observedPlayheadPosition(origin.raw) else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.stage_precondition: the playhead position did not read, so it could not "
+                    + "be put back; nothing is moved")
+        }
         let markerBar = originBar > 4 ? originBar - 3 : originBar + 3
 
         let existing = try observedMarkerCount(
@@ -3913,6 +3940,18 @@ struct QualificationTransport: Sendable {
                 "phase_b.stage_precondition: a marker named \(probeName) is already in the "
                     + "project — an earlier run left it, and this cycle cannot tell its own marker "
                     + "from that one")
+        }
+        // FROM THE PARK ON THE PLAYHEAD IS MOVED, so every exit puts it back at the exact position
+        // it read, verified. Registered before the marker cleanup below, so it runs after it.
+        // A refusal after the park used to leave the playhead here, and the next run then started
+        // with the selected region out of view and refused its starting state.
+        var playheadOwed = true
+        defer {
+            if playheadOwed {
+                var restoreID = nextID + 950
+                cleanup.note(restorePlayhead(
+                    session, nextID: &restoreID, to: originPosition, phase: "phase_b.playhead_restore").summary)
+            }
         }
         _ = try invoke(
             session, id: step(), tool: spec.tool.rawValue, command: "goto_bar",
@@ -3987,6 +4026,8 @@ struct QualificationTransport: Sendable {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.restore_readback: playhead is at bar \(restoredBar), expected \(preBar)")
         }
+        // Exact, not just the bar: the cycle's own return is a goto_bar.
+        if Self.observedPlayheadPosition(restored.raw) == originPosition { playheadOwed = false }
         return (
             QualificationMutationRestoreRecord(
                 operationID: spec.id.rawValue,
@@ -4000,10 +4041,63 @@ struct QualificationTransport: Sendable {
         )
     }
 
+    /// The playhead as `logic://transport/state` shows it (`data.state.position`, `bar.beat` on
+    /// Logic 13), or nil when it is absent or not a position a `goto_position` can name.
+    static func observedPlayheadPosition(_ raw: String) -> String? {
+        guard let data = raw.data(using: .utf8),
+              let envelope = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any],
+              let payload = envelope["data"] as? [String: Any],
+              let state = payload["state"] as? [String: Any],
+              let position = state["position"] as? String,
+              gotoPositionRequest(for: position) != nil else { return nil }
+        return position
+    }
+
+    /// The `goto_position` request for an observed position. Components the transport does not
+    /// show are the first division and tick, so the request reads back as the same position.
+    static func gotoPositionRequest(for observed: String) -> String? {
+        let parts = observed.split(separator: ".", omittingEmptySubsequences: false).map(String.init)
+        guard (1...4).contains(parts.count), parts.allSatisfy({ Int($0) != nil }) else { return nil }
+        let request = (parts + Array(repeating: "1", count: 4 - parts.count)).joined(separator: ".")
+        return TransportDispatcher.isValidPositionString(request) ? request : nil
+    }
+
+    /// Puts the playhead back at `observed` and reads it there. The reply is not the evidence —
+    /// Logic 13 answers State B for a control bar that shows only bar and beat — the independent
+    /// transport readback is. A recipe that moved the playhead owes this on every exit, or the
+    /// next run starts from somewhere else.
+    private func restorePlayhead(
+        _ session: QualificationSubprocessSession,
+        nextID: inout Int,
+        to observed: String,
+        phase: String
+    ) -> (restored: Bool, summary: String) {
+        guard let request = Self.gotoPositionRequest(for: observed) else {
+            return (false, "playhead not restored: \(observed) is not a position goto_position can name")
+        }
+        do {
+            _ = try invoke(
+                session, id: nextID, tool: "logic_transport", command: "goto_position",
+                params: ["position": request], phase: phase, timeout: 30)
+            nextID += 1
+            let read = try observedTransportPosition(session, id: nextID, phase: "\(phase)_readback")
+            nextID += read.spent
+            guard let now = Self.observedPlayheadPosition(read.raw) else {
+                return (false, "playhead position unreadable after goto_position \(request)")
+            }
+            return now == observed
+                ? (true, "playhead back at \(observed)")
+                : (false, "playhead at \(now) after goto_position \(request), expected \(observed)")
+        } catch {
+            return (false, "playhead restore to \(observed) failed: \(error)")
+        }
+    }
+
     private func playheadRestoreCycle(
         _ session: QualificationSubprocessSession,
         startingAt id: Int,
-        spec: OperationSpec
+        spec: OperationSpec,
+        cleanup: PhaseCCleanupWitness
     ) throws -> (record: QualificationMutationRestoreRecord, nextID: Int) {
         var nextID = id
         func readStep() -> Int { defer { nextID += 2 }; return nextID }
@@ -4011,8 +4105,23 @@ struct QualificationTransport: Sendable {
 
         let pre = try observedTransportPosition(session, id: readStep(), phase: "phase_b.pre_state")
         let preBar = try observedBar(of: pre.raw, phase: "phase_b.pre_state")
+        guard let prePosition = Self.observedPlayheadPosition(pre.raw) else {
+            throw QualificationTransportError.protocolViolation(
+                "phase_b.pre_state: the playhead position did not read, so it could not be put "
+                    + "back; nothing is moved")
+        }
         // Somewhere else in the arrangement, and never bar 0 — `goto_bar` counts from 1.
         let target = preBar > 4 ? preBar - 3 : preBar + 3
+        // FROM THE MUTATION ON THE PLAYHEAD MAY HAVE MOVED, so every exit puts it back at the
+        // exact position it read, verified — a refusal used to leave it where the write put it.
+        var playheadOwed = true
+        defer {
+            if playheadOwed {
+                var restoreID = nextID + 950
+                cleanup.note(restorePlayhead(
+                    session, nextID: &restoreID, to: prePosition, phase: "phase_b.playhead_restore").summary)
+            }
+        }
         let mutation = try invoke(
             session, id: step(), tool: spec.tool.rawValue, command: spec.command,
             params: ["bar": target], phase: "phase_b.mutation",
@@ -4043,6 +4152,16 @@ struct QualificationTransport: Sendable {
         guard restoredBar == preBar else {
             throw QualificationTransportError.protocolViolation(
                 "phase_b.restore_readback: playhead is at bar \(restoredBar), expected \(preBar)")
+        }
+        // The operation's own inverse addresses a BAR, so it lands on the bar's first beat. The
+        // record is about the bar; the playhead is then put back on the beat it was on.
+        playheadOwed = false
+        if Self.observedPlayheadPosition(restored.raw) != prePosition {
+            let fix = restorePlayhead(
+                session, nextID: &nextID, to: prePosition, phase: "phase_b.playhead_restore")
+            guard fix.restored else {
+                throw QualificationTransportError.protocolViolation("phase_b.playhead_restore: \(fix.summary)")
+            }
         }
         return (
             QualificationMutationRestoreRecord(

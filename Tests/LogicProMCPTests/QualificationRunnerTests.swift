@@ -2324,6 +2324,25 @@ struct QualificationRunnerTests {
         #expect(result.status == (shape == "live" ? .passed : .notQualified))
     }
 
+    /// Playback moves the playhead, and the cycle restored only the transport's MOTION, so every
+    /// play, pause or stop cycle left the playhead somewhere else and the next run started from a
+    /// different place. The cycle puts the playhead back where it was and reads it there.
+    @Test(arguments: [OperationID.transportPlay, .transportStop, .transportPause])
+    func aTransportCycleLeavesThePlayheadWhereItStarted(operation: OperationID) throws {
+        let fixture = try SlowHandshakeFixture(transportNativePause: true)
+        defer { fixture.remove() }
+        let spec = try #require(OperationRegistry.specs.first { $0.id == operation })
+        let result = try QualificationTransport(uiObserver: unchangedUIForTests, handshakeTimeout: 2, requestTimeout: 2, shutdownGrace: 2)
+            .drive(.init(executableURL: fixture.executableURL,
+                environment: ["HANDSHAKE_DELAY": "0"], expectedOperationCount: 0, operations: [spec]))
+        let position = try String(
+            contentsOf: fixture.directory.appendingPathComponent("transport-position"), encoding: .utf8
+        ).trimmingCharacters(in: .whitespacesAndNewlines)
+        #expect(position == "1", "playhead at bar \(position) after the cycle; it started at bar 1")
+        #expect(result.operationResults[operation.rawValue]?.status == .passed,
+                "\(result.operationResults[operation.rawValue]?.mutationRestoreRefusal ?? "no refusal")")
+    }
+
     @Test(arguments: [false, true])
     func stoppedTransportMustBeObservedBeforeARecipeAcquiresChanges(cached: Bool) throws {
         let fixture = try SlowHandshakeFixture(transportNativePause: true, cachedTransport: cached)
@@ -6768,6 +6787,7 @@ struct QualificationRunnerTests {
                             continue
                         fi
                         if [ "$moving" = true ]; then position=$((position + 1)); fi
+                        printf '%s\n' "$position" > transport-position
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://transport/state","text":"{\\"source\\":\\"%s\\",\\"unverified\\":%s,\\"cache_age_sec\\":0,\\"observed_tempo\\":120,\\"data\\":{\\"state\\":{\\"isPlaying\\":%s,\\"isRecording\\":false,\\"isCycleEnabled\\":false,\\"observedCycleEnabled\\":false,\\"tempo\\":120,\\"position\\":\\"%s.1\\",\\"positionReadback\\":{\\"value\\":\\"%s.1\\",\\"observedComponents\\":[\\"bar\\",\\"beat\\"]}}}}"}]}}\n' "$id" "$resource_source" "$resource_unverified" "$playing" "$position" "$position" ;;
                       *'"uri":"logic://system/operations"'*)
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"contents":[{"uri":"logic://system/operations","text":"{\\"schema_version\\":1,\\"generated_at\\":\\"1970-01-01T00:00:00Z\\",\\"operation_count\\":0,\\"operations\\":[]}"}]}}\n' "$id" ;;
@@ -6898,6 +6918,14 @@ struct QualificationRunnerTests {
                         printf '%s\n' "$step_position" > step-position
                         printf '{"jsonrpc":"2.0","id":%s,"result":{"isError":true,"content":[{"type":"text","text":"{\\"state\\":\\"B\\",\\"success\\":true,\\"verified\\":false,\\"reason\\":\\"readback_unavailable\\",\\"method\\":\\"cgevent\\",\\"sent\\":true}"}]}}\n' "$id" ;;
                       *'"command":"goto_position"'*)
+                        # Outside the step recipes a goto_position moves the playhead to the bar it names.
+                        if [ "$playhead_step" = none ]; then
+                            to=$(printf '%s' "$request" | /usr/bin/sed -n 's/.*"position":"\([0-9][0-9]*\)\..*/\1/p')
+                            [ -n "$to" ] && position=$to
+                            printf '%s\n' "$position" > transport-position
+                            printf '{"jsonrpc":"2.0","id":%s,"result":{"content":[{"type":"text","text":"{\\"state\\":\\"A\\",\\"verified\\":true,\\"write_attempted\\":true}"}]}}\n' "$id"
+                            continue
+                        fi
                         if [ "$step_fault" = refused_restore ] && [ "$step_position" != "$step_origin" ] && [ "$step_restore_attempts" = 0 ]; then
                             step_restore_attempts=$((step_restore_attempts + 1))
                             touch step-fault-consumed
