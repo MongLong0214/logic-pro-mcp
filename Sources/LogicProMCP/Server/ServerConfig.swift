@@ -98,5 +98,5 @@ struct ServerConfig: Sendable {
 
 struct LogicProSupport: Sendable {
     static let minimumSupportedLogicVersion = "12.0.1"
-    static let latestValidatedLogicVersion = "12.3"
+    static let latestValidatedLogicVersion = "13.0"
 }
