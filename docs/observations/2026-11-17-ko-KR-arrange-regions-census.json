@@ -1,0 +1,75 @@
+{
+  "id": "2026-11-17-ko-KR-arrange-regions-census",
+  "date": "2026-11-17",
+  "schema": 2,
+  "subject": "Every string the arrange.regions surface exposes to AX in ko-KR",
+  "question": "What labels does Logic show on arrange.regions in ko-KR, and on which elements?",
+  "verdict": "works",
+  "issues": [
+    768,
+    778
+  ],
+  "surface": "arrange.regions",
+  "host": {
+    "app": "Logic Pro",
+    "build": "7801",
+    "locale": "ko-KR",
+    "os": "macOS 26.3 (25D125)",
+    "version": "13.0"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "Scripts/observations/locale-census.sh ko-KR",
+    "expected": "a census in ko-KR whose arrange.regions rows carry the same 18 distinct strings; a differing set means Logic's labels moved and every provenance citing this record wants re-reading",
+    "cost": "~1 min with Logic open on the fixture project in that locale"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+  ],
+  "evidence": [
+    "evidence/2026-11-17-ko-KR-navigation-free.census.json"
+  ],
+  "method": "Read, never actuated. The menu bar and every menu were walked without opening them; the main window was walked to depth 8. Each element with any string became one row of the evidence file; rows were assigned to this surface by what their path or help text passes through, and rows no rule could place are counted in limits rather than filed.",
+  "observations": [
+    {
+      "what": "rows on arrange.regions",
+      "rows": 15,
+      "distinct_strings": 18,
+      "distinct_identifiers": 0
+    },
+    {
+      "what": "the strings, verbatim",
+      "strings": [
+        "1개의 ‘오디오 1’ 트랙",
+        "2개의 ‘오디오 2’ 트랙",
+        "3개의 ‘Deluxe Classic’ 트랙",
+        "4개의 ‘Studio Grand’ 트랙",
+        "MIDI 리전",
+        "MIDI 입력",
+        "MIDI 입력   ⌥I, MIDI 인 버튼. 기존 MIDI 리전에 노트를 추가하려면 클릭하거나, MIDI 리전에서 두 번 클릭하여 뮤직 타이핑 또는 외부 MIDI 키보드를 사용하여 선택한 노트의 피치/벨로시티를 변경합니다. ",
+        "루프",
+        "리전 경로",
+        "리전은 1 마디 에서 시작하여 2 마디 에서 끝납니다., MIDI 리전. MIDI 노트 및 컨트롤러 이벤트를 포함합니다. 가운데를 드래그하여 이동하고, 하단 가장자리를 드래그하여 크기를 조정하며, 상단 오른쪽 모서리를 드래그하여 루핑합니다. 도구를 사용하여 그 외의 편집을 수행합니다. ",
+        "오른쪽 경계 이동",
+        "왼쪽 경계 이동",
+        "작업공간. 오디오, MIDI 및 Session Player 리전의 녹음, 편집 및 편곡을 위한 기본 영역으로, 다양한 트랙 유형으로 나뉩니다. ",
+        "추가 정보",
+        "추가 정보 표시, 추가 정보 버튼. 노트 이벤트의 릴리즈 벨로시티와 같은, 이벤트 또는 리전에 저장된 모든 정보를 보거나 가립니다. ",
+        "트랙 추가   ⌥⌘N",
+        "트랙 추가 버튼. 오디오 및 소프트웨어 악기 트랙을 추가합니다. 트랙을 녹음, 편집 및 리전 편곡에 사용합니다. ",
+        "트랙 콘텐츠"
+      ]
+    },
+    {
+      "what": "identifiers seen",
+      "identifiers": []
+    }
+  ],
+  "conclusion": "On this host in ko-KR, arrange.regions exposes 15 elements carrying 18 distinct strings. Every string is in the evidence file verbatim, which is what lets a label variant cite this record: the guard requires the string to occur in the observations or evidence, and here it does or it does not.",
+  "limits": [
+    "Navigation-free surfaces only: nothing behind a menu press or a button was opened, so this says nothing about the mixer, plug-in editors or the editors.",
+    "177 window rows matched no surface rule and are not filed under any record; they are in the evidence file and can be re-classified when a rule exists.",
+    "One project, one host, one build. A label that depends on project content — a track name, a region name — is a reading of this fixture, not of Logic."
+  ],
+  "supersedes": null
+}

@@ -52,14 +52,14 @@
    "not_measured_on_current": 255
   },
   "ko-KR": {
-   "current": 0,
-   "superseded": 49,
+   "current": 48,
+   "superseded": 12,
    "unknown_version": 0,
    "unverified": 0,
-   "derived": 205,
+   "derived": 194,
    "unmeasured": 1,
    "retired": 1,
-   "not_measured_on_current": 255
+   "not_measured_on_current": 207
   },
   "ja-JP": {
    "current": 0,
@@ -157,10 +157,28 @@
     "將所有 MIDI 音軌轉換為 MIDI 檔案⋯"
    ],
    "rationale": "Whole-project MIDI export leaf, distinct from Selection as MIDI and the separate Export All MIDI Tracks key-command name. The Korean leaf was observed in the native File > Export menu; the remaining spellings are derived from this installed menu row, not additional live qualifications.",
+   "provenance": {
+    "모든 MIDI 트랙을 MIDI 파일로…": {
+     "attribute": "title",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "모든 MIDI 트랙을 MIDI 파일로…",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "role": "AXMenuItem"
+    }
+   },
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
     "en-US": "derived",
-    "ko-KR": "derived",
+    "ko-KR": "measured",
     "ja-JP": "derived",
     "de-DE": "derived",
     "es-ES": "derived",
@@ -172,7 +190,6 @@
    },
    "coverage_derived": {
     "en-US": "strings:en:ships_up_to_case:All MIDI Tracks as MIDI File…",
-    "ko-KR": "strings:ko:ships_up_to_case:모든 MIDI 트랙을 MIDI 파일로…",
     "ja-JP": "strings:ja:ships_up_to_case:すべてのMIDIトラックをMIDIファイルとして…",
     "de-DE": "strings:de:ships_up_to_case:Alle MIDI-Spuren als MIDI-Datei …",
     "es-ES": "strings:es:ships_up_to_case:Todas las pistas MIDI como archivo MIDI…",
@@ -181,6 +198,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Todas as Pistas de MIDI como Arquivo de MIDI…",
     "zh-CN": "strings:zh_CN:ships_up_to_case:所有 MIDI 轨道为 MIDI 文件…",
     "zh-TW": "strings:zh_TW:ships_up_to_case:將所有 MIDI 音軌轉換為 MIDI 檔案⋯"
+   },
+   "coverage_currency": {
+    "ko-KR": "current"
    }
   },
   "allTracksAsAudioFilesMenuItem": {
@@ -226,15 +246,15 @@
     },
     "모든 트랙을 오디오 파일로…": {
      "attribute": "title",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
      "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
+     "logic_build": "7801",
+     "logic_version": "13.0",
      "match": "exact",
      "observed": "모든 트랙을 오디오 파일로…",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "record_sha256": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
      "role": "AXMenuItem"
     }
    },
@@ -282,7 +302,7 @@
    },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded",
+    "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
    }
@@ -476,17 +496,6 @@
      "record": "2026-09-05-ja-JP-mixer-channel_strips-census",
      "record_sha256": "07b15e0769abdc67f136e5db1cd714a32ac79150b708259f28bb0454a3a08469",
      "role": "AXButton"
-    },
-    "오디오 플러그인": {
-     "attribute": "description",
-     "date": "2026-09-05",
-     "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "observed": "오디오 플러그인",
-     "record": "2026-09-05-ko-KR-mixer-channel_strips-census",
-     "record_sha256": "b2746eea148d02d324ca00b282bf4753a03694f41a5fd3f827b883fea9180d4c",
-     "role": "AXButton"
     }
    },
    "roles": [
@@ -495,7 +504,7 @@
    "match": "contains",
    "coverage": {
     "en-US": "measured",
-    "ko-KR": "measured",
+    "ko-KR": "derived",
     "ja-JP": "measured",
     "de-DE": "derived",
     "es-ES": "derived",
@@ -524,6 +533,7 @@
     "en-US": "820bc68abe7801f3f24733562306d7260ce19b728db4d7a9b6c17c73fc43d7a8"
    },
    "coverage_derived": {
+    "ko-KR": "niblabels:ko:ships_up_to_case:오디오 이펙트",
     "de-DE": "quickhelp:de:ships_up_to_case:Audioeffekt-Slot",
     "es-ES": "quickhelp:es:ships_up_to_case:Ranura de efectos de audio",
     "fr-FR": "quickhelp:fr:ships_up_to_case:Slot d’effet audio ",
@@ -534,7 +544,6 @@
    },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded",
     "ja-JP": "superseded"
    }
   },
@@ -929,15 +938,15 @@
     },
     "바운스": {
      "attribute": "title",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
      "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
+     "logic_build": "7801",
+     "logic_version": "13.0",
      "match": "exact",
      "observed": "바운스",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "record_sha256": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
      "role": "AXMenuItem"
     }
    },
@@ -985,7 +994,7 @@
    },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded",
+    "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
    }
@@ -1845,15 +1854,15 @@
     },
     "설정…": {
      "attribute": "title",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
      "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
+     "logic_build": "7801",
+     "logic_version": "13.0",
      "match": "exact",
      "observed": "설정…",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "record_sha256": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
      "role": "AXMenuItem"
     }
    },
@@ -1901,7 +1910,7 @@
    },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded",
+    "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
    }
@@ -1950,15 +1959,15 @@
     },
     "설정…": {
      "attribute": "title",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
      "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
+     "logic_build": "7801",
+     "logic_version": "13.0",
      "match": "exact",
      "observed": "설정…",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "record_sha256": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
      "role": "AXMenuItem"
     }
    },
@@ -2006,7 +2015,7 @@
    },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded",
+    "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
    }
@@ -2114,15 +2123,15 @@
     },
     "컨트롤 서피스": {
      "attribute": "title",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
      "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
+     "logic_build": "7801",
+     "logic_version": "13.0",
      "match": "exact",
      "observed": "컨트롤 서피스",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "record_sha256": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
      "role": "AXMenuItem"
     }
    },
@@ -2170,7 +2179,7 @@
    },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded",
+    "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
    }
@@ -2259,15 +2268,15 @@
     },
     "마커 생성": {
      "attribute": "title",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
      "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
+     "logic_build": "7801",
+     "logic_version": "13.0",
      "match": "exact",
      "observed": "마커 생성",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "record_sha256": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
      "role": "AXMenuItem"
     }
    },
@@ -2315,7 +2324,7 @@
    },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded",
+    "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
    }
@@ -2449,10 +2458,28 @@
     "刪除音軌"
    ],
    "rationale": "Track-menu leaf, derived from the row Apple keys it under so every language ",
+   "provenance": {
+    "트랙 삭제": {
+     "attribute": "title",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "트랙 삭제",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "role": "AXMenuItem"
+    }
+   },
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
     "en-US": "derived",
-    "ko-KR": "derived",
+    "ko-KR": "measured",
     "ja-JP": "derived",
     "de-DE": "derived",
     "es-ES": "derived",
@@ -2464,7 +2491,6 @@
    },
    "coverage_derived": {
     "en-US": "quickhelp:en:ships_up_to_case:Delete Track",
-    "ko-KR": "quickhelp:ko:ships_up_to_case:트랙 삭제",
     "ja-JP": "quickhelp:ja:ships_up_to_case:トラックを削除",
     "de-DE": "quickhelp:de:ships_up_to_case:Spur löschen",
     "es-ES": "quickhelp:es:ships_up_to_case:Eliminar pista",
@@ -2473,6 +2499,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Apagar Pista",
     "zh-CN": "quickhelp:zh_CN:ships_up_to_case:删除轨道",
     "zh-TW": "strings:zh_TW:ships_up_to_case:刪除音軌"
+   },
+   "coverage_currency": {
+    "ko-KR": "current"
    }
   },
   "deleteTracksPrimaryButton": {
@@ -2608,15 +2637,15 @@
     },
     "편집": {
      "attribute": "title",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
      "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
+     "logic_build": "7801",
+     "logic_version": "13.0",
      "match": "exact",
      "observed": "편집",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "record_sha256": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
      "role": "AXMenuBarItem"
     }
    },
@@ -2664,7 +2693,7 @@
    },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded",
+    "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
    }
@@ -3898,15 +3927,15 @@
     },
     "내보내기": {
      "attribute": "title",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
      "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
+     "logic_build": "7801",
+     "logic_version": "13.0",
      "match": "exact",
      "observed": "내보내기",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "record_sha256": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
      "role": "AXMenuItem"
     }
    },
@@ -3954,7 +3983,7 @@
    },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded",
+    "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
    }
@@ -4001,15 +4030,15 @@
     },
     "파일": {
      "attribute": "title",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
      "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
+     "logic_build": "7801",
+     "logic_version": "13.0",
      "match": "exact",
      "observed": "파일",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "record_sha256": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
      "role": "AXMenuBarItem"
     }
    },
@@ -4057,7 +4086,7 @@
    },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded",
+    "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
    }
@@ -4104,15 +4133,15 @@
     },
     "이동": {
      "attribute": "title",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
      "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
+     "logic_build": "7801",
+     "logic_version": "13.0",
      "match": "exact",
      "observed": "이동",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "record_sha256": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
      "role": "AXMenuItem"
     }
    },
@@ -4160,7 +4189,7 @@
    },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded",
+    "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
    }
@@ -4265,15 +4294,15 @@
     },
     "위치…": {
      "attribute": "title",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
      "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
+     "logic_build": "7801",
+     "logic_version": "13.0",
      "match": "exact",
      "observed": "위치…",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "record_sha256": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
      "role": "AXMenuItem"
     }
    },
@@ -4321,7 +4350,7 @@
    },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded",
+    "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
    }
@@ -4546,15 +4575,15 @@
     },
     "가져오기": {
      "attribute": "title",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
      "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
+     "logic_build": "7801",
+     "logic_version": "13.0",
      "match": "exact",
      "observed": "가져오기",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "record_sha256": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
      "role": "AXMenuItem"
     }
    },
@@ -4602,7 +4631,7 @@
    },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded",
+    "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
    }
@@ -4618,30 +4647,13 @@
     "输入插槽"
    ],
    "rationale": "Detects a channel strip's input slot by its AXHelp string; read-only classifier.",
-   "provenance": {
-    "입력 슬롯": {
-     "attribute": "help",
-     "count_seen": 1,
-     "date": "2026-09-04",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "contains",
-     "neighbour_hazard": "입력 모니터링 버튼 shares its first word; match the full phrase",
-     "observed": "입력 슬롯. 채널 스트립 입력 소스를 선택합니다…",
-     "record": "2026-09-04-mixer-slot-readback-was-a-one-language-match",
-     "record_sha256": "d28359fd51845fe0f0372d68b53f87cbdd89b2ab1c64640151227100e92aa892",
-     "role": "AXButton"
-    }
-   },
    "roles": [
     "AXButton"
    ],
    "match": "contains",
    "coverage": {
     "en-US": "derived",
-    "ko-KR": "measured",
+    "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
     "es-ES": "derived",
@@ -4653,13 +4665,11 @@
    },
    "coverage_derived": {
     "en-US": "quickhelp:en:ships_up_to_case:input slot",
+    "ko-KR": "quickhelp:ko:ships_up_to_case:입력 슬롯",
     "ja-JP": "quickhelp:ja:ships_up_to_case:入力スロット",
     "de-DE": "quickhelp:de:ships_up_to_case:Input-Slot",
     "es-ES": "quickhelp:es:ships_up_to_case:Ranura de entrada",
     "zh-CN": "quickhelp:zh_CN:ships_up_to_case:输入插槽"
-   },
-   "coverage_currency": {
-    "ko-KR": "superseded"
    }
   },
   "inspectorChannelStripHelpPrefix": {
@@ -4686,19 +4696,6 @@
      "record": "2026-09-05-ja-JP-mixer-channel_strips-census",
      "record_sha256": "07b15e0769abdc67f136e5db1cd714a32ac79150b708259f28bb0454a3a08469",
      "role": "AXLayoutItem"
-    },
-    "왼쪽 인스펙터 채널 스트립": {
-     "attribute": "help",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "prefix",
-     "observed": "왼쪽 인스펙터 채널 스트립. 믹서를 열지 않고 선택한 트랙의 신호를 제어합니다. ",
-     "record": "2026-09-05-ko-KR-mixer-channel_strips-census",
-     "record_sha256": "b2746eea148d02d324ca00b282bf4753a03694f41a5fd3f827b883fea9180d4c",
-     "role": "AXLayoutItem"
     }
    },
    "roles": [
@@ -4707,7 +4704,7 @@
    "match": "prefix",
    "coverage": {
     "en-US": "derived",
-    "ko-KR": "measured",
+    "ko-KR": "derived",
     "ja-JP": "measured",
     "de-DE": "derived",
     "es-ES": "derived",
@@ -4719,12 +4716,12 @@
    },
    "coverage_derived": {
     "en-US": "quickhelp:en:ships_up_to_case:left inspector channel strip",
+    "ko-KR": "quickhelp:ko:ships_up_to_case:왼쪽 인스펙터 채널 스트립",
     "de-DE": "quickhelp:de:ships_up_to_case:Linkes Informationsfenster für Channel-Strip",
     "es-ES": "quickhelp:es:ships_up_to_case:Canal de inspector izquierdo",
     "zh-CN": "quickhelp:zh_CN:ships_up_to_case:左检查器通道条"
    },
    "coverage_currency": {
-    "ko-KR": "superseded",
     "ja-JP": "superseded"
    }
   },
@@ -5294,19 +5291,6 @@
    ],
    "rationale": "Import submenu leaf that opens the MIDI file chooser for midi.import_file. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
-    "MIDI 파일…": {
-     "attribute": "title",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "MIDI 파일…",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "record_sha256": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9",
-     "role": "AXMenuItem"
-    },
     "MIDI-Datei …": {
      "attribute": "title",
      "date": "2026-09-12",
@@ -5331,6 +5315,19 @@
      "observed": "MIDIファイル…",
      "record": "2026-09-05-ja-JP-arrange-menus-census",
      "record_sha256": "774c5d58d15774d9d704c969278b41ad68929ba51665aa31631b2d6c5270bd65",
+     "role": "AXMenuItem"
+    },
+    "MIDI 파일…": {
+     "attribute": "title",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "MIDI 파일…",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
      "role": "AXMenuItem"
     }
    },
@@ -5378,7 +5375,7 @@
    },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded",
+    "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
    }
@@ -5708,8 +5705,24 @@
     "檢閱器"
    ],
    "rationale": "Marks an inspector ancestor so mixer-area detection skips it; read-only classifier.",
+   "provenance": {
+    "인스펙터": {
+     "attribute": "title",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "인스펙터 가리기",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "role": "AXMenuItem"
+    }
+   },
    "roles": [
-    "AXGroup"
+    "AXGroup",
+    "AXMenuItem"
    ],
    "match": "contains",
    "coverage": {
@@ -5731,7 +5744,6 @@
     "fr-FR": "2026-09-25-979-fr-FR-main-window-areas-by-row",
     "it-IT": "2026-09-25-979-it-IT-main-window-areas-by-row",
     "ja-JP": "2026-09-25-979-ja-JP-main-window-areas-by-row",
-    "ko-KR": "2026-09-25-979-ko-KR-main-window-areas-by-row",
     "pt-BR": "2026-09-25-979-pt-BR-main-window-areas-by-row",
     "zh-CN": "2026-09-25-979-zh-CN-main-window-areas-by-row",
     "zh-TW": "2026-09-25-979-zh-TW-main-window-areas-by-row"
@@ -5743,7 +5755,6 @@
     "fr-FR": "AXGroup",
     "it-IT": "AXGroup",
     "ja-JP": "AXGroup",
-    "ko-KR": "AXGroup",
     "pt-BR": "AXGroup",
     "zh-CN": "AXGroup",
     "zh-TW": "AXGroup"
@@ -5755,7 +5766,6 @@
     "fr-FR": "description",
     "it-IT": "description",
     "ja-JP": "description",
-    "ko-KR": "description",
     "pt-BR": "description",
     "zh-CN": "description",
     "zh-TW": "description"
@@ -5767,14 +5777,12 @@
     "fr-FR": "AXWindow#1/AXGroup#6",
     "it-IT": "AXWindow#1/AXGroup#6",
     "ja-JP": "AXWindow#1/AXGroup#6",
-    "ko-KR": "AXWindow#1/AXGroup#6",
     "pt-BR": "AXWindow#1/AXGroup#6",
     "zh-CN": "AXWindow#1/AXGroup#6",
     "zh-TW": "AXWindow#1/AXGroup#6"
    },
    "coverage_logic_version": {
     "en-US": "12.3",
-    "ko-KR": "12.3",
     "ja-JP": "12.3",
     "de-DE": "12.3",
     "es-ES": "12.3",
@@ -5786,7 +5794,6 @@
    },
    "coverage_logic_build": {
     "en-US": "6674",
-    "ko-KR": "6674",
     "ja-JP": "6674",
     "de-DE": "6674",
     "es-ES": "6674",
@@ -5798,7 +5805,6 @@
    },
    "coverage_record_sha256": {
     "en-US": "fd8362e741fd6f7c4c50c7f1f76c138187d1633d07f8579c961aaf222dcacecd",
-    "ko-KR": "2e9525408d71ee3cbfea8abe74e1097f5fb713720d49d8af2ee13b6090b8e408",
     "ja-JP": "54a66a517a4e2b166a03dcaa87dee9b41499efe07c2944e28ef971a1c8d79591",
     "de-DE": "efed9d933ab83d0d4018b4e6d89badb837086af1432b90b6ec3bab3d41168a34",
     "es-ES": "0f565be08a03e2f1162e93e344cd5544be624e81eeb961b58ef963b8c5a7ab11",
@@ -5810,7 +5816,7 @@
    },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded",
+    "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded",
     "es-ES": "superseded",
@@ -5912,20 +5918,6 @@
    ],
    "rationale": "Identifies the mixer container by exact normalized name; read-only classifier.",
    "provenance": {
-    "믹서": {
-     "attribute": "description",
-     "date": "2026-09-25",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "믹서",
-     "path_contains": "/AXWindow/AXGroup/AXLayoutArea",
-     "record": "2026-09-25-977-ko-KR-mixer-area-by-description",
-     "record_sha256": "276f4321a4c4ddf18290c6a0c2dac3fd1d904d705af579be0a467a9e657a9f61",
-     "role": "AXLayoutArea"
-    },
     "ミキサー": {
      "attribute": "description",
      "date": "2026-09-25",
@@ -5991,7 +5983,7 @@
    "match": "exact",
    "coverage": {
     "en-US": "measured",
-    "ko-KR": "measured",
+    "ko-KR": "derived",
     "ja-JP": "measured",
     "de-DE": "measured",
     "es-ES": "measured",
@@ -6050,9 +6042,11 @@
     "pt-BR": "16c13e2efeb1501446367e81db1ff7c0f870114ed21ebc3085c3260e0b06ec08",
     "zh-TW": "3a79acf143eecff4fe2dfebe0a4430985ca42bb4b7ec00c0b9c8de6a02d4baf5"
    },
+   "coverage_derived": {
+    "ko-KR": "strings:ko:ships_up_to_case:믹서"
+   },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded",
     "ja-JP": "superseded",
     "de-DE": "superseded",
     "es-ES": "superseded",
@@ -6608,6 +6602,19 @@
      "record": "2026-09-12-de-DE-arrange-menus-census",
      "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
      "role": "AXMenuItem"
+    },
+    "이동": {
+     "attribute": "title",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "이동",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -6616,7 +6623,7 @@
    "match": "exact",
    "coverage": {
     "en-US": "derived",
-    "ko-KR": "derived",
+    "ko-KR": "measured",
     "ja-JP": "derived",
     "de-DE": "measured",
     "es-ES": "derived",
@@ -6628,7 +6635,6 @@
    },
    "coverage_derived": {
     "en-US": "strings:en:ships_up_to_case:Move",
-    "ko-KR": "strings:ko:ships_up_to_case:이동",
     "ja-JP": "strings:ja:ships_up_to_case:移動",
     "es-ES": "strings:es:ships_up_to_case:Trasladar",
     "fr-FR": "strings:fr:ships_up_to_case:Déplacer",
@@ -6638,6 +6644,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:移動"
    },
    "coverage_currency": {
+    "ko-KR": "current",
     "de-DE": "superseded"
    }
   },
@@ -6683,15 +6690,15 @@
     },
     "탐색": {
      "attribute": "title",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
      "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
+     "logic_build": "7801",
+     "logic_version": "13.0",
      "match": "exact",
      "observed": "탐색",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "record_sha256": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
      "role": "AXMenuBarItem"
     }
    },
@@ -6739,7 +6746,7 @@
    },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded",
+    "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
    }
@@ -6771,6 +6778,19 @@
      "record": "2026-09-12-de-DE-arrange-menus-census",
      "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
      "role": "AXMenuItem"
+    },
+    "새로운 오디오 트랙": {
+     "attribute": "title",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "새로운 오디오 트랙",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -6779,7 +6799,7 @@
    "match": "exact",
    "coverage": {
     "en-US": "derived",
-    "ko-KR": "derived",
+    "ko-KR": "measured",
     "ja-JP": "derived",
     "de-DE": "measured",
     "es-ES": "derived",
@@ -6791,7 +6811,6 @@
    },
    "coverage_derived": {
     "en-US": "quickhelp:en:ships_up_to_case:New Audio Track",
-    "ko-KR": "quickhelp:ko:ships_up_to_case:새로운 오디오 트랙",
     "ja-JP": "quickhelp:ja:ships_up_to_case:新規オーディオトラック",
     "es-ES": "quickhelp:es:ships_up_to_case:Nueva pista de audio",
     "fr-FR": "strings:fr:ships_up_to_case:Nouvelle piste audio",
@@ -6801,6 +6820,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:新增音訊音軌"
    },
    "coverage_currency": {
+    "ko-KR": "current",
     "de-DE": "superseded"
    }
   },
@@ -6831,6 +6851,19 @@
      "record": "2026-09-12-de-DE-arrange-menus-census",
      "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
      "role": "AXMenuItem"
+    },
+    "새로운 외부 MIDI 트랙": {
+     "attribute": "title",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "새로운 외부 MIDI 트랙",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -6839,7 +6872,7 @@
    "match": "exact",
    "coverage": {
     "en-US": "derived",
-    "ko-KR": "derived",
+    "ko-KR": "measured",
     "ja-JP": "derived",
     "de-DE": "measured",
     "es-ES": "derived",
@@ -6851,7 +6884,6 @@
    },
    "coverage_derived": {
     "en-US": "quickhelp:en:ships_up_to_case:New External MIDI Track",
-    "ko-KR": "strings:ko:ships_up_to_case:새로운 외부 MIDI 트랙",
     "ja-JP": "quickhelp:ja:ships_up_to_case:新規外部MIDIトラック",
     "es-ES": "quickhelp:es:ships_up_to_case:Nueva pista MIDI externa",
     "fr-FR": "strings:fr:ships_up_to_case:Nouvelle piste MIDI externe",
@@ -6861,6 +6893,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:新增外部 MIDI 音軌"
    },
    "coverage_currency": {
+    "ko-KR": "current",
     "de-DE": "superseded"
    }
   },
@@ -6907,15 +6940,15 @@
     },
     "신규": {
      "attribute": "title",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
      "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
+     "logic_build": "7801",
+     "logic_version": "13.0",
      "match": "exact",
      "observed": "신규",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "record_sha256": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
      "role": "AXMenuItem"
     }
    },
@@ -6963,7 +6996,7 @@
    },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded",
+    "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
    }
@@ -6996,6 +7029,19 @@
      "record": "2026-09-12-de-DE-arrange-menus-census",
      "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
      "role": "AXMenuItem"
+    },
+    "새로운 Session Player SI 트랙…": {
+     "attribute": "title",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "새로운 Session Player SI 트랙…",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -7004,7 +7050,7 @@
    "match": "exact",
    "coverage": {
     "en-US": "derived",
-    "ko-KR": "derived",
+    "ko-KR": "measured",
     "ja-JP": "derived",
     "de-DE": "measured",
     "es-ES": "derived",
@@ -7016,7 +7062,6 @@
    },
    "coverage_derived": {
     "en-US": "strings:en:ships_up_to_case:New Session Player SI Track…",
-    "ko-KR": "strings:ko:ships_up_to_case:새로운 Session Player SI 트랙…",
     "ja-JP": "strings:ja:ships_up_to_case:新規Session Playerソフトウェア音源トラック…",
     "es-ES": "strings:es:ships_up_to_case:Nueva pista SI de Session Player…",
     "fr-FR": "strings:fr:ships_up_to_case:Nouvelle piste SI Session Player…",
@@ -7026,6 +7071,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:新增 Session Player SI 音軌⋯"
    },
    "coverage_currency": {
+    "ko-KR": "current",
     "de-DE": "superseded"
    }
   },
@@ -7056,6 +7102,19 @@
      "record": "2026-09-12-de-DE-arrange-menus-census",
      "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
      "role": "AXMenuItem"
+    },
+    "새로운 소프트웨어 악기 트랙": {
+     "attribute": "title",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "새로운 소프트웨어 악기 트랙",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -7064,7 +7123,7 @@
    "match": "exact",
    "coverage": {
     "en-US": "derived",
-    "ko-KR": "derived",
+    "ko-KR": "measured",
     "ja-JP": "derived",
     "de-DE": "measured",
     "es-ES": "derived",
@@ -7076,7 +7135,6 @@
    },
    "coverage_derived": {
     "en-US": "quickhelp:en:ships_up_to_case:New Software Instrument Track",
-    "ko-KR": "quickhelp:ko:ships_up_to_case:새로운 소프트웨어 악기 트랙",
     "ja-JP": "quickhelp:ja:ships_up_to_case:新規ソフトウェア音源トラック",
     "es-ES": "quickhelp:es:ships_up_to_case:Nueva pista de instrumento de software",
     "fr-FR": "strings:fr:ships_up_to_case:Nouvelle piste d’instrument logiciel",
@@ -7086,6 +7144,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:新增軟體樂器音軌"
    },
    "coverage_currency": {
+    "ko-KR": "current",
     "de-DE": "superseded"
    }
   },
@@ -7382,15 +7441,15 @@
     },
     "마커 목록 열기": {
      "attribute": "title",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
      "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
+     "logic_build": "7801",
+     "logic_version": "13.0",
      "match": "exact",
      "observed": "마커 목록 열기",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "record_sha256": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
      "role": "AXMenuItem"
     }
    },
@@ -7438,7 +7497,7 @@
    },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded",
+    "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
    }
@@ -7529,29 +7588,13 @@
     "输出插槽"
    ],
    "rationale": "Detects a channel strip's output slot by its AXHelp string; read-only classifier.",
-   "provenance": {
-    "출력 슬롯": {
-     "attribute": "help",
-     "count_seen": 4,
-     "date": "2026-09-04",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "contains",
-     "observed": "출력 슬롯. 채널 스트립 신호가 전송되는…",
-     "record": "2026-09-04-mixer-slot-readback-was-a-one-language-match",
-     "record_sha256": "d28359fd51845fe0f0372d68b53f87cbdd89b2ab1c64640151227100e92aa892",
-     "role": "AXButton"
-    }
-   },
    "roles": [
     "AXButton"
    ],
    "match": "contains",
    "coverage": {
     "en-US": "derived",
-    "ko-KR": "measured",
+    "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
     "es-ES": "derived",
@@ -7563,13 +7606,11 @@
    },
    "coverage_derived": {
     "en-US": "quickhelp:en:ships_up_to_case:output slot",
+    "ko-KR": "quickhelp:ko:ships_up_to_case:출력 슬롯",
     "ja-JP": "quickhelp:ja:ships_up_to_case:出力スロット",
     "de-DE": "quickhelp:de:ships_up_to_case:Output-Slot",
     "es-ES": "quickhelp:es:ships_up_to_case:Ranura de salida",
     "zh-CN": "quickhelp:zh_CN:ships_up_to_case:输出插槽"
-   },
-   "coverage_currency": {
-    "ko-KR": "superseded"
    }
   },
   "physicalOutputLabelPrefix": {
@@ -7678,15 +7719,29 @@
      "record": "2026-09-05-ja-JP-arrange-transport-census",
      "record_sha256": "0debb63450bf83758ad355a70c0c5902b059e040d77f6881b6b4eda442a18375",
      "role": "AXGroup"
+    },
+    "재생헤드 위치": {
+     "attribute": "title",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "재생헤드 위치에 있는 마커 삭제",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
-    "AXGroup"
+    "AXGroup",
+    "AXMenuItem"
    ],
    "match": "contains",
    "coverage": {
     "en-US": "measured",
-    "ko-KR": "derived",
+    "ko-KR": "measured",
     "ja-JP": "measured",
     "de-DE": "derived",
     "es-ES": "derived",
@@ -7715,7 +7770,6 @@
     "en-US": "37b79ee0db594ed11491014487b12da2b77c10d9b9b0f0173e34e5d0d262f793"
    },
    "coverage_derived": {
-    "ko-KR": "quickhelp:ko:ships_up_to_case:재생헤드 위치",
     "de-DE": "quickhelp:de:ships_up_to_case:Position der Abspielposition",
     "es-ES": "quickhelp:es:ships_up_to_case:Posición del cursor de reproducción",
     "fr-FR": "strings:fr:ships_up_to_case:Position de la tête de lecture",
@@ -7726,6 +7780,7 @@
    },
    "coverage_currency": {
     "en-US": "superseded",
+    "ko-KR": "current",
     "ja-JP": "superseded"
    }
   },
@@ -7814,20 +7869,6 @@
    ],
    "rationale": "Locates an insert slot's bypass toggle; read-only locator (structural fallback exists). Read live 2026-09-25 at a Compressor insert slot in all ten locales, each the same row's value (docs/observations/2026-09-25-977-<locale>-insert-slot-bypass-and-open.json, #977). Checked offline by Scripts/check-labelsets-are-derived.py.",
    "provenance": {
-    "바이패스": {
-     "attribute": "description",
-     "date": "2026-09-25",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "contains",
-     "observed": "바이패스",
-     "path_contains": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
-     "record": "2026-09-25-977-ko-KR-insert-slot-bypass-and-open",
-     "record_sha256": "b2719d399b2ad7f0b6c4e1b3e8503889a3954da80156d8857a4a5879c8414d68",
-     "role": "AXCheckBox"
-    },
     "バイパス": {
      "attribute": "description",
      "date": "2026-09-25",
@@ -7925,11 +7966,25 @@
      "record": "2026-09-25-977-zh-TW-insert-slot-bypass-and-open",
      "record_sha256": "a0ba88a9564e307f024ebaa7e7379eb9870e39b9b6e50eb4de75646126e5511c",
      "role": "AXCheckBox"
+    },
+    "바이패스": {
+     "attribute": "title",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "모든 컨트롤 서피스 바이패스",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
+    "AXButton",
     "AXCheckBox",
-    "AXButton"
+    "AXMenuItem"
    ],
    "match": "contains",
    "coverage": {
@@ -7974,7 +8029,7 @@
    },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded",
+    "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded",
     "es-ES": "superseded",
@@ -7998,20 +8053,6 @@
    ],
    "rationale": "Identifies a plug-in editor window by its bypass toggle, which is what keeps an open editor from reading as a blocking modal. Read live 2026-09-25 in all ten locales, each the same row's value (docs/observations/2026-09-25-977-<locale>-plugin-editor-is-not-a-blocking-modal.json, #977). Checked offline by Scripts/check-labelsets-are-derived.py.",
    "provenance": {
-    "바이패스": {
-     "attribute": "description",
-     "date": "2026-09-25",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "바이패스",
-     "path_contains": "/AXWindow/AXCheckBox",
-     "record": "2026-09-25-977-ko-KR-plugin-editor-is-not-a-blocking-modal",
-     "record_sha256": "224eec609951b3c03561b3b6d9dc6c4540cef8f71e72f5b1a11cf6a24127202f",
-     "role": "AXCheckBox"
-    },
     "バイパス": {
      "attribute": "description",
      "date": "2026-09-25",
@@ -8104,7 +8145,7 @@
    "match": "exact",
    "coverage": {
     "en-US": "measured",
-    "ko-KR": "measured",
+    "ko-KR": "derived",
     "ja-JP": "measured",
     "de-DE": "measured",
     "es-ES": "measured",
@@ -8149,9 +8190,11 @@
     "de-DE": "095485978df18bc7ec5a3f44afea18b70b9ee055fb4767625134ac90a4cd5664",
     "pt-BR": "09ca13c5cfb5e512b5aa7058b3a2db3ce26151ed96d5c9602aeac05849ce660a"
    },
+   "coverage_derived": {
+    "ko-KR": "quickhelp:ko:ships_up_to_case:바이패스"
+   },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded",
     "ja-JP": "superseded",
     "de-DE": "superseded",
     "es-ES": "superseded",
@@ -8909,15 +8952,15 @@
     },
     "프로젝트 또는 섹션…": {
      "attribute": "title",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
      "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
+     "logic_build": "7801",
+     "logic_version": "13.0",
      "match": "exact",
      "observed": "프로젝트 또는 섹션…",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "record_sha256": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
      "role": "AXMenuItem"
     }
    },
@@ -8965,7 +9008,7 @@
    },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded",
+    "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
    }
@@ -9673,10 +9716,28 @@
     "이름 변경"
    ],
    "rationale": "Track-menu leaf, derived from the row Apple keys it under so every language ",
+   "provenance": {
+    "트랙 이름 변경": {
+     "attribute": "title",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "트랙 이름 변경",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "role": "AXMenuItem"
+    }
+   },
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
     "en-US": "derived",
-    "ko-KR": "derived",
+    "ko-KR": "measured",
     "ja-JP": "derived",
     "de-DE": "derived",
     "es-ES": "derived",
@@ -9688,7 +9749,6 @@
    },
    "coverage_derived": {
     "en-US": "quickhelp:en:ships_up_to_case:Rename Track",
-    "ko-KR": "quickhelp:ko:ships_up_to_case:트랙 이름 변경",
     "ja-JP": "quickhelp:ja:ships_up_to_case:トラック名を変更",
     "de-DE": "quickhelp:de:ships_up_to_case:Spur umbenennen",
     "es-ES": "quickhelp:es:ships_up_to_case:Renombrar pista",
@@ -9697,6 +9757,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Renomear Pista",
     "zh-CN": "quickhelp:zh_CN:ships_up_to_case:给轨道重新命名",
     "zh-TW": "strings:zh_TW:ships_up_to_case:重新命名音軌"
+   },
+   "coverage_currency": {
+    "ko-KR": "current"
    }
   },
   "saveAsMenuItem": {
@@ -9742,15 +9805,15 @@
     },
     "별도 저장…": {
      "attribute": "title",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
      "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
+     "logic_build": "7801",
+     "logic_version": "13.0",
      "match": "exact",
      "observed": "별도 저장…",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "record_sha256": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
      "role": "AXMenuItem"
     }
    },
@@ -9798,7 +9861,7 @@
    },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded",
+    "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
    }
@@ -10210,13 +10273,28 @@
     "隱藏混音器"
    ],
    "rationale": "Discovers the dynamic Mixer action before structural readback. The MAMobileGeneralUI Show/Hide Mixer keys describe exactly the two actions read on the opened EN/KO desktop menu; bare Mixer and preferences rows do not. Shipped additional discovery values do not establish native ten-locale navigation or restoration.",
+   "provenance": {
+    "믹서 가리기": {
+     "attribute": "title",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "믹서 가리기",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "role": "AXMenuItem"
+    }
+   },
    "roles": [
     "AXMenuItem"
    ],
    "match": "exact",
    "coverage": {
     "en-US": "derived",
-    "ko-KR": "derived",
+    "ko-KR": "measured",
     "ja-JP": "derived",
     "de-DE": "derived",
     "es-ES": "derived",
@@ -10228,7 +10306,6 @@
    },
    "coverage_derived": {
     "en-US": "strings:en:ships_up_to_case:Show Mixer",
-    "ko-KR": "strings:ko:ships_up_to_case:믹서 보기",
     "ja-JP": "strings:ja:ships_up_to_case:ミキサーを表示",
     "de-DE": "strings:de:ships_up_to_case:Mixer einblenden",
     "es-ES": "strings:es:ships_up_to_case:Mostrar mezclador",
@@ -10237,6 +10314,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Mostrar Mixer",
     "zh-CN": "strings:zh_CN:ships_up_to_case:显示混音器",
     "zh-TW": "strings:zh_TW:ships_up_to_case:顯示混音器"
+   },
+   "coverage_currency": {
+    "ko-KR": "current"
    }
   },
   "showStepInputKeyboardMenuItem": {
@@ -10368,6 +10448,19 @@
      "record": "2026-09-12-de-DE-arrange-menus-census",
      "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
      "role": "AXMenuItem"
+    },
+    "템포 목록 보기": {
+     "attribute": "title",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "템포 목록 보기",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -10376,7 +10469,7 @@
    "match": "exact",
    "coverage": {
     "en-US": "derived",
-    "ko-KR": "derived",
+    "ko-KR": "measured",
     "ja-JP": "derived",
     "de-DE": "measured",
     "es-ES": "derived",
@@ -10388,7 +10481,6 @@
    },
    "coverage_derived": {
     "en-US": "quickhelp:en:ships_up_to_case:Show Tempo List",
-    "ko-KR": "quickhelp:ko:ships_up_to_case:템포 목록 보기",
     "ja-JP": "quickhelp:ja:ships_up_to_case:テンポリストを表示",
     "es-ES": "quickhelp:es:ships_up_to_case:Mostrar lista de tempo",
     "fr-FR": "strings:fr:ships_up_to_case:Afficher la liste du tempo",
@@ -10398,6 +10490,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:顯示拍速列表"
    },
    "coverage_currency": {
+    "ko-KR": "current",
     "de-DE": "superseded"
    }
   },
@@ -10426,6 +10519,19 @@
      "record": "2026-09-05-ja-JP-arrange-menus-census",
      "record_sha256": "774c5d58d15774d9d704c969278b41ad68929ba51665aa31631b2d6c5270bd65",
      "role": "AXMenuItem"
+    },
+    "패닝": {
+     "attribute": "title",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "볼륨, 패닝, 센드에 대해 각 1개의 오토메이션 포인트 생성",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -10435,7 +10541,7 @@
    "match": "contains",
    "coverage": {
     "en-US": "derived",
-    "ko-KR": "derived",
+    "ko-KR": "measured",
     "ja-JP": "measured",
     "de-DE": "measured",
     "es-ES": "derived",
@@ -10465,7 +10571,6 @@
    },
    "coverage_derived": {
     "en-US": "niblabels:en:ships_up_to_case:pan",
-    "ko-KR": "niblabels:ko:ships_up_to_case:패닝",
     "es-ES": "quickhelp:es:ships_up_to_case:pan",
     "fr-FR": "niblabels:fr:ships_up_to_case:pan",
     "it-IT": "niblabels:it:ships_up_to_case:panning",
@@ -10474,6 +10579,7 @@
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:聲像"
    },
    "coverage_currency": {
+    "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
    }
@@ -10551,6 +10657,19 @@
      "record": "2026-09-05-ja-JP-arrange-menus-census",
      "record_sha256": "774c5d58d15774d9d704c969278b41ad68929ba51665aa31631b2d6c5270bd65",
      "role": "AXMenuItem"
+    },
+    "볼륨": {
+     "attribute": "title",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "볼륨, 패닝, 센드에 대해 각 1개의 오토메이션 포인트 생성",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -10560,7 +10679,7 @@
    "match": "contains",
    "coverage": {
     "en-US": "derived",
-    "ko-KR": "derived",
+    "ko-KR": "measured",
     "ja-JP": "measured",
     "de-DE": "measured",
     "es-ES": "derived",
@@ -10572,7 +10691,6 @@
    },
    "coverage_derived": {
     "en-US": "niblabels:en:ships_up_to_case:volume",
-    "ko-KR": "niblabels:ko:ships_up_to_case:볼륨",
     "es-ES": "niblabels:es:ships_up_to_case:Volumen",
     "fr-FR": "niblabels:fr:ships_up_to_case:volume",
     "it-IT": "niblabels:it:ships_up_to_case:volume",
@@ -10581,6 +10699,7 @@
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:音量"
    },
    "coverage_currency": {
+    "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
    }
@@ -10664,7 +10783,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "ko-KR": "2026-09-05-ko-KR-arrange-menus-census"
+    "ko-KR": "2026-11-17-ko-KR-arrange-menus-census"
    },
    "coverage_roles": {
     "ko-KR": "AXMenuItem"
@@ -10673,13 +10792,13 @@
     "ko-KR": "title"
    },
    "coverage_logic_version": {
-    "ko-KR": "12.3"
+    "ko-KR": "13.0"
    },
    "coverage_logic_build": {
-    "ko-KR": "6674"
+    "ko-KR": "7801"
    },
    "coverage_record_sha256": {
-    "ko-KR": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9"
+    "ko-KR": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746"
    },
    "coverage_derived": {
     "en-US": "strings:en:ships_up_to_case:Audio Channel",
@@ -10693,7 +10812,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:聲道"
    },
    "coverage_currency": {
-    "ko-KR": "superseded"
+    "ko-KR": "current"
    }
   },
   "sortTracksByCreationDateMenuItem": {
@@ -10727,7 +10846,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "ko-KR": "2026-09-05-ko-KR-arrange-menus-census"
+    "ko-KR": "2026-11-17-ko-KR-arrange-menus-census"
    },
    "coverage_roles": {
     "ko-KR": "AXMenuItem"
@@ -10736,13 +10855,13 @@
     "ko-KR": "title"
    },
    "coverage_logic_version": {
-    "ko-KR": "12.3"
+    "ko-KR": "13.0"
    },
    "coverage_logic_build": {
-    "ko-KR": "6674"
+    "ko-KR": "7801"
    },
    "coverage_record_sha256": {
-    "ko-KR": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9"
+    "ko-KR": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746"
    },
    "coverage_derived": {
     "en-US": "strings:en:ships_up_to_case:Creation Date",
@@ -10756,7 +10875,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:製作日期"
    },
    "coverage_currency": {
-    "ko-KR": "superseded"
+    "ko-KR": "current"
    }
   },
   "sortTracksByInstrumentNameMenuItem": {
@@ -10807,7 +10926,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "ko-KR": "2026-09-05-ko-KR-arrange-menus-census"
+    "ko-KR": "2026-11-17-ko-KR-arrange-menus-census"
    },
    "coverage_roles": {
     "ko-KR": "AXMenuItem"
@@ -10816,13 +10935,13 @@
     "ko-KR": "title"
    },
    "coverage_logic_version": {
-    "ko-KR": "12.3"
+    "ko-KR": "13.0"
    },
    "coverage_logic_build": {
-    "ko-KR": "6674"
+    "ko-KR": "7801"
    },
    "coverage_record_sha256": {
-    "ko-KR": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9"
+    "ko-KR": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746"
    },
    "coverage_derived": {
     "ja-JP": "niblabels:ja:ships_up_to_case:音源名",
@@ -10836,7 +10955,7 @@
    },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded"
+    "ko-KR": "current"
    }
   },
   "sortTracksByMIDIChannelMenuItem": {
@@ -10887,7 +11006,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "ko-KR": "2026-09-05-ko-KR-arrange-menus-census"
+    "ko-KR": "2026-11-17-ko-KR-arrange-menus-census"
    },
    "coverage_roles": {
     "ko-KR": "AXMenuItem"
@@ -10896,13 +11015,13 @@
     "ko-KR": "title"
    },
    "coverage_logic_version": {
-    "ko-KR": "12.3"
+    "ko-KR": "13.0"
    },
    "coverage_logic_build": {
-    "ko-KR": "6674"
+    "ko-KR": "7801"
    },
    "coverage_record_sha256": {
-    "ko-KR": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9"
+    "ko-KR": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746"
    },
    "coverage_derived": {
     "ja-JP": "quickhelp:ja:ships_up_to_case:MIDIチャンネル",
@@ -10916,7 +11035,7 @@
    },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded"
+    "ko-KR": "current"
    }
   },
   "sortTracksByMenuItem": {
@@ -10949,7 +11068,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "ko-KR": "2026-09-05-ko-KR-arrange-menus-census"
+    "ko-KR": "2026-11-17-ko-KR-arrange-menus-census"
    },
    "coverage_roles": {
     "ko-KR": "AXMenuItem"
@@ -10958,13 +11077,13 @@
     "ko-KR": "title"
    },
    "coverage_logic_version": {
-    "ko-KR": "12.3"
+    "ko-KR": "13.0"
    },
    "coverage_logic_build": {
-    "ko-KR": "6674"
+    "ko-KR": "7801"
    },
    "coverage_record_sha256": {
-    "ko-KR": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9"
+    "ko-KR": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746"
    },
    "coverage_derived": {
     "en-US": "strings:en:ships_up_to_case:Sort Tracks by",
@@ -10978,7 +11097,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:按以下方式排列音軌"
    },
    "coverage_currency": {
-    "ko-KR": "superseded"
+    "ko-KR": "current"
    }
   },
   "sortTracksByOutputChannelMenuItem": {
@@ -11012,7 +11131,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "ko-KR": "2026-09-05-ko-KR-arrange-menus-census"
+    "ko-KR": "2026-11-17-ko-KR-arrange-menus-census"
    },
    "coverage_roles": {
     "ko-KR": "AXMenuItem"
@@ -11021,13 +11140,13 @@
     "ko-KR": "title"
    },
    "coverage_logic_version": {
-    "ko-KR": "12.3"
+    "ko-KR": "13.0"
    },
    "coverage_logic_build": {
-    "ko-KR": "6674"
+    "ko-KR": "7801"
    },
    "coverage_record_sha256": {
-    "ko-KR": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9"
+    "ko-KR": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746"
    },
    "coverage_derived": {
     "en-US": "strings:en:ships_up_to_case:Output Channel",
@@ -11041,7 +11160,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:輸出聲道"
    },
    "coverage_currency": {
-    "ko-KR": "superseded"
+    "ko-KR": "current"
    }
   },
   "sortTracksByTrackNameMenuItem": {
@@ -11075,7 +11194,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "ko-KR": "2026-09-05-ko-KR-arrange-menus-census"
+    "ko-KR": "2026-11-17-ko-KR-arrange-menus-census"
    },
    "coverage_roles": {
     "ko-KR": "AXMenuItem"
@@ -11084,13 +11203,13 @@
     "ko-KR": "title"
    },
    "coverage_logic_version": {
-    "ko-KR": "12.3"
+    "ko-KR": "13.0"
    },
    "coverage_logic_build": {
-    "ko-KR": "6674"
+    "ko-KR": "7801"
    },
    "coverage_record_sha256": {
-    "ko-KR": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9"
+    "ko-KR": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746"
    },
    "coverage_derived": {
     "en-US": "nibstrings:en:ships_up_to_case:Track Name",
@@ -11104,7 +11223,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:音軌名稱"
    },
    "coverage_currency": {
-    "ko-KR": "superseded"
+    "ko-KR": "current"
    }
   },
   "sortTracksByUsedMenuItem": {
@@ -11138,7 +11257,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "ko-KR": "2026-09-05-ko-KR-arrange-menus-census"
+    "ko-KR": "2026-11-17-ko-KR-arrange-menus-census"
    },
    "coverage_roles": {
     "ko-KR": "AXMenuItem"
@@ -11147,13 +11266,13 @@
     "ko-KR": "title"
    },
    "coverage_logic_version": {
-    "ko-KR": "12.3"
+    "ko-KR": "13.0"
    },
    "coverage_logic_build": {
-    "ko-KR": "6674"
+    "ko-KR": "7801"
    },
    "coverage_record_sha256": {
-    "ko-KR": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9"
+    "ko-KR": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746"
    },
    "coverage_derived": {
     "en-US": "strings:en:ships_up_to_case:Used, Unused",
@@ -11167,7 +11286,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:已使用、未使用"
    },
    "coverage_currency": {
-    "ko-KR": "superseded"
+    "ko-KR": "current"
    }
   },
   "stemExportCommitButton": {
@@ -11505,13 +11624,28 @@
     "拍速"
    ],
    "rationale": "Measured 2026-09-02 on live Logic Pro 12.3 ko-KR as the Edit-menu submenu `템포`.",
+   "provenance": {
+    "템포": {
+     "attribute": "title",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "템포",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "role": "AXMenuItem"
+    }
+   },
    "roles": [
     "AXMenuItem"
    ],
    "match": "exact",
    "coverage": {
     "en-US": "derived",
-    "ko-KR": "derived",
+    "ko-KR": "measured",
     "ja-JP": "derived",
     "de-DE": "measured",
     "es-ES": "derived",
@@ -11541,7 +11675,6 @@
    },
    "coverage_derived": {
     "en-US": "niblabels:en:ships_up_to_case:Tempo",
-    "ko-KR": "niblabels:ko:ships_up_to_case:템포",
     "ja-JP": "niblabels:ja:ships_up_to_case:テンポ",
     "es-ES": "niblabels:es:ships_up_to_case:Tempo",
     "fr-FR": "niblabels:fr:ships_up_to_case:Tempo",
@@ -11551,6 +11684,7 @@
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:拍速"
    },
    "coverage_currency": {
+    "ko-KR": "current",
     "de-DE": "superseded"
    }
   },
@@ -11603,6 +11737,21 @@
     "拍速"
    ],
    "rationale": "Identifies the tempo slider; verbatim (lowercased) description match; read-only. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the Control Bar tempo slider.",
+   "provenance": {
+    "템포": {
+     "attribute": "title",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "스마트 템포…",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "role": "AXMenuItem"
+    }
+   },
    "roles": [
     "AXMenuItem",
     "AXSlider"
@@ -11610,7 +11759,7 @@
    "match": "contains",
    "coverage": {
     "en-US": "derived",
-    "ko-KR": "derived",
+    "ko-KR": "measured",
     "ja-JP": "derived",
     "de-DE": "measured",
     "es-ES": "derived",
@@ -11640,7 +11789,6 @@
    },
    "coverage_derived": {
     "en-US": "niblabels:en:ships_up_to_case:tempo",
-    "ko-KR": "niblabels:ko:ships_up_to_case:템포",
     "ja-JP": "niblabels:ja:ships_up_to_case:テンポ",
     "es-ES": "niblabels:es:ships_up_to_case:tempo",
     "fr-FR": "niblabels:fr:ships_up_to_case:tempo",
@@ -11650,6 +11798,7 @@
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:拍速"
    },
    "coverage_currency": {
+    "ko-KR": "current",
     "de-DE": "superseded"
    }
   },
@@ -11714,6 +11863,19 @@
      "record": "2026-09-12-de-DE-arrange-menus-census",
      "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
      "role": "AXMenuItem"
+    },
+    "재생헤드로": {
+     "attribute": "title",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "재생헤드로",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -11722,7 +11884,7 @@
    "match": "exact",
    "coverage": {
     "en-US": "derived",
-    "ko-KR": "derived",
+    "ko-KR": "measured",
     "ja-JP": "derived",
     "de-DE": "measured",
     "es-ES": "derived",
@@ -11734,7 +11896,6 @@
    },
    "coverage_derived": {
     "en-US": "strings:en:ships_up_to_case:To Playhead",
-    "ko-KR": "strings:ko:ships_up_to_case:재생헤드로",
     "ja-JP": "strings:ja:ships_up_to_case:再生ヘッド位置に",
     "es-ES": "strings:es:ships_up_to_case:Al cursor de reproducción",
     "fr-FR": "strings:fr:ships_up_to_case:Vers la tête de lecture",
@@ -11744,6 +11905,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:至播放磁頭"
    },
    "coverage_currency": {
+    "ko-KR": "current",
     "de-DE": "superseded"
    }
   },
@@ -11761,10 +11923,28 @@
     "切換隱藏顯示區"
    ],
    "rationale": "Track menu leaf observed in English Logic 12.3. All ten strings were read from Apple's Toggle Hide View row; static derivation is not all-language native qualification. Only exact, unique physical menu custody authorizes the temporary hidden-view action.",
+   "provenance": {
+    "보기 가리기 토글": {
+     "attribute": "title",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "ko-KR",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "보기 가리기 토글",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "role": "AXMenuItem"
+    }
+   },
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
     "en-US": "derived",
-    "ko-KR": "derived",
+    "ko-KR": "measured",
     "ja-JP": "derived",
     "de-DE": "derived",
     "es-ES": "derived",
@@ -11776,7 +11956,6 @@
    },
    "coverage_derived": {
     "en-US": "strings:en:ships_up_to_case:Toggle Hide View",
-    "ko-KR": "strings:ko:ships_up_to_case:보기 가리기 토글",
     "ja-JP": "strings:ja:ships_up_to_case:非表示を切り替え",
     "de-DE": "strings:de:ships_up_to_case:„Spuren ausblenden“ ein-/ausschalten",
     "es-ES": "strings:es:ships_up_to_case:Activar/desactivar vista oculta",
@@ -11785,6 +11964,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Ativar/Desativar Ocultar Visualização",
     "zh-CN": "strings:zh_CN:ships_up_to_case:开关隐藏视图",
     "zh-TW": "strings:zh_TW:ships_up_to_case:切換隱藏顯示區"
+   },
+   "coverage_currency": {
+    "ko-KR": "current"
    }
   },
   "trackContentExplicit": {
@@ -12118,15 +12300,15 @@
     },
     "트랙": {
      "attribute": "title",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
      "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
+     "logic_build": "7801",
+     "logic_version": "13.0",
      "match": "exact",
      "observed": "트랙",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "record_sha256": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
      "role": "AXMenuBarItem"
     }
    },
@@ -12174,7 +12356,7 @@
    },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded",
+    "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
    }
@@ -13360,15 +13542,15 @@
     },
     "보기": {
      "attribute": "title",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
      "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
+     "logic_build": "7801",
+     "logic_version": "13.0",
      "match": "exact",
      "observed": "보기",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "record_sha256": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
      "role": "AXMenuBarItem"
     }
    },
@@ -13416,7 +13598,7 @@
    },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded",
+    "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
    }
@@ -13464,15 +13646,15 @@
     },
     "윈도우": {
      "attribute": "title",
-     "date": "2026-09-05",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "date": "2026-11-17",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
      "locale": "ko-KR",
-     "logic_build": "6674",
-     "logic_version": "12.3",
+     "logic_build": "7801",
+     "logic_version": "13.0",
      "match": "exact",
      "observed": "윈도우",
-     "record": "2026-09-05-ko-KR-arrange-menus-census",
-     "record_sha256": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9",
+     "record": "2026-11-17-ko-KR-arrange-menus-census",
+     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
      "role": "AXMenuBarItem"
     }
    },
@@ -13520,7 +13702,7 @@
    },
    "coverage_currency": {
     "en-US": "superseded",
-    "ko-KR": "superseded",
+    "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "superseded"
    }
