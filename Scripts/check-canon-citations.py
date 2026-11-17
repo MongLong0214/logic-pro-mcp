@@ -255,44 +255,6 @@ def _ratchet_members(blob, key):
     return set(value or [])
 
 
-def _literals_apple_shipped_at_the_base():
-    """Literals the merge base's Logic shipped, when this tree pins a DIFFERENT Logic.
-
-    A Logic update moves a string from `strings_value` to `nowhere` without anyone typing a wrong
-    one: Logic 12.3 (6674) shipped `自動錄音` and Logic 13.0 (7801) ships `自動插錄`, and the old one
-    stays as a member while the app must work on 12.x. Counting it as new debt would make a
-    re-ingest unmergeable, or tell the author to drop 12.x. It is not new debt -- Apple shipped it
-    at the base -- so it is not counted, and the note says how many so a reviewer sees the size.
-
-    Narrow on purpose. Only a literal the BASE classified as answered somewhere, and only while the
-    manifest's `logic` block differs from the base's; a literal the base already counted as nowhere
-    stays counted, and so does one typed new in this change.
-    """
-    base = _merge_base()
-    if base is None:
-        return set()
-    was = _at_base(base, "docs/canon/MANIFEST.json")
-    now = _json(os.path.join(REPO, "docs", "canon", "MANIFEST.json"), {})
-    if not isinstance(was, dict) or (was.get("logic") or {}) == (now.get("logic") or {}):
-        return set()
-    before = _at_base(base, "docs/canon/POLICY-LITERALS.json")
-    literals = before.get("literals") if isinstance(before, dict) else None
-    if not isinstance(literals, dict):
-        return set()
-    return {name for name, where in literals.items() if where != "nowhere"}
-
-
-def _policy_literal_debt(blob, key):
-    """The literals answered nowhere in Logic, less those an older Logic shipped (see above)."""
-    debt = _ratchet_members(blob, key)
-    carried = debt & _literals_apple_shipped_at_the_base()
-    if carried and blob == _json(os.path.join(REPO, "docs", "canon", "POLICY-LITERALS.json"), None):
-        _note(f"docs/canon/POLICY-LITERALS.json: {len(carried)} literal(s) are answered nowhere in "
-              f"the pinned Logic and were shipped by the merge base's: not counted as new debt "
-              f"because the manifest names a different Logic.")
-    return debt - carried
-
-
 def _labelset_waiver_members(blob, key):
     """The LabelSet names waived from naming a row.
 
@@ -321,8 +283,6 @@ def _labelset_waiver_members(blob, key):
 RATCHETS = (
     R("docs/canon/WITHOUT-CANON.json", "records", "shrink",
       "records predating the canon axis", _ratchet_members),
-    R("docs/canon/POLICY-LITERALS.json", "literals", "shrink",
-      "literals classified as answered nowhere in Logic", _policy_literal_debt),
     R("docs/canon/NOT-A-RECORD.json", "files", "shrink",
       "files in docs/observations that are declared not to be records", _ratchet_members),
     R("docs/canon/LOGIC-FACING.json", "prefixes", "grow",
@@ -376,6 +336,120 @@ def check_waivers_only_shrink(failures: list) -> None:
     """
     ratchet.check(REPO, RATCHETS, failures, history=_HISTORY,
                   owner=os.path.basename(__file__))
+    check_policy_nowhere_only_shrinks(failures)
+
+
+def check_policy_nowhere_only_shrinks(failures: list) -> None:
+    """A new unexplained policy literal is debt, except for a proved Logic transition.
+
+    `POLICY-LITERALS.json` is ordinarily a shrinking waiver: classifying a new interface string as
+    `nowhere` must fail. Apple can also remove a string between Logic builds, however. Treating that
+    measured removal as a new waiver made a fully regenerated Logic 13 corpus impossible to land.
+
+    A different version string alone is not an escape. Every newly `nowhere` literal must be
+    re-proved ABSENT from every corpus pinned by the replacement manifest. A shipped value, an
+    unconfirmed 32-bit prefix, an unreadable corpus, or the same Logic build still fails. The
+    policy-literal guard separately enforces source/map set equality and bucket correctness; the
+    release qualifier separately proves the pinned manifest matches the installed Logic host.
+    """
+    base = _merge_base()
+    if base is None:
+        return                      # ratchet.check already reports an unreadable base under CI
+    before = _at_base(base, "docs/canon/POLICY-LITERALS.json")
+    if before is None:
+        return
+    if isinstance(before, ratchet.Unknown):
+        failures.append(
+            f"{before.why}. The policy-literal ratchet cannot be made, and an unmade comparison "
+            f"is a failure rather than a pass.")
+        return
+    now = _json(POLICY_CLASSIFICATION, {})
+    if not isinstance(before.get("literals"), dict) or not isinstance(now.get("literals"), dict):
+        failures.append(
+            "docs/canon/POLICY-LITERALS.json: the policy-literal ratchet requires a map under "
+            "`literals` on both sides. A renamed key makes the comparison silently empty.")
+        return
+
+    was, is_now = (_ratchet_members(before, "literals"),
+                   _ratchet_members(now, "literals"))
+    added = sorted(is_now - was)
+    if not added:
+        return
+
+    before_manifest = _at_base(base, "docs/canon/MANIFEST.json")
+    now_manifest = _json(os.path.join(REPO, "docs", "canon", "MANIFEST.json"), {})
+    if isinstance(before_manifest, ratchet.Unknown):
+        failures.append(
+            f"{before_manifest.why}. Whether Logic changed cannot be answered, so newly "
+            f"`nowhere` policy literals remain refused.")
+        return
+    before_logic = (before_manifest or {}).get("logic") or {}
+    now_logic = now_manifest.get("logic") or {}
+    before_identity = tuple(str(before_logic.get(field) or "")
+                            for field in ("version", "build"))
+    now_identity = tuple(str(now_logic.get(field) or "")
+                         for field in ("version", "build"))
+    if (not all(before_identity) or not all(now_identity)
+            or before_identity == now_identity):
+        for literal in added:
+            failures.append(
+                f"docs/canon/POLICY-LITERALS.json: {literal!r} was added to the list of literals "
+                f"classified as answered nowhere in Logic. That list may only SHRINK. A change "
+                f"that breaks the rule and waives itself in the same commit passes every check "
+                f"that reads only the tree.")
+        return
+
+    prior_literals = before["literals"]
+    invalid_transitions = []
+    for literal in added:
+        previous = prior_literals.get(literal)
+        if previous not in {"strings_value", "quickhelp_title"}:
+            failures.append(
+                f"docs/canon/POLICY-LITERALS.json: {literal!r} is newly `nowhere` while Logic "
+                f"changed, but the prior policy classified it as {previous!r}. A build transition "
+                f"may preserve an Apple removal from a previously answered bucket; it may not "
+                f"introduce arbitrary new waiver text.")
+            invalid_transitions.append(literal)
+    if invalid_transitions:
+        return
+
+    corpora = sorted(required_corpora(now_manifest))
+    if not corpora:
+        failures.append(
+            "docs/canon/POLICY-LITERALS.json: Logic changed and new `nowhere` literals appeared, "
+            "but the replacement manifest pins no corpus in which to prove them absent.")
+        return
+    disproved = False
+    for literal in added:
+        for source, locale in corpora:
+            try:
+                verdict = canon.presence(source, locale, literal)
+            except canon.CanonError as exc:
+                failures.append(
+                    f"docs/canon/POLICY-LITERALS.json: {literal!r} is newly `nowhere` after a "
+                    f"Logic transition, but {source}/{locale} could not prove absence: {exc}")
+                disproved = True
+                break
+            if verdict == canon.SHIPS:
+                failures.append(
+                    f"docs/canon/POLICY-LITERALS.json: {literal!r} is newly `nowhere` after a "
+                    f"Logic transition, but the replacement corpus {source}/{locale} holds it.")
+                disproved = True
+                break
+            if verdict == canon.UNCONFIRMED:
+                failures.append(
+                    f"docs/canon/POLICY-LITERALS.json: {literal!r} is newly `nowhere` after a "
+                    f"Logic transition, but {source}/{locale} has an unconfirmed hash prefix. "
+                    f"Run `Scripts/logic_canon.py confirm {literal!r}` on the pinned Logic.")
+                disproved = True
+                break
+    if disproved:
+        return
+    _note(
+        f"docs/canon/POLICY-LITERALS.json added {len(added)} `nowhere` literal(s) while Logic "
+        f"changed from {before_logic.get('version')} ({before_logic.get('build')}) to "
+        f"{now_logic.get('version')} ({now_logic.get('build')}); each was re-proved absent from "
+        f"every pinned corpus, so the build transition is allowed here.")
 
 
 #: Numbers under `sources.*.shape` and `sources.*.round_trip` that may move DOWN without the

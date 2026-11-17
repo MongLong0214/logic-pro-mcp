@@ -31,14 +31,13 @@ find. The repository could not tell which, because it had no notion of a citatio
 
 ## If you are opening an issue or a pull request
 
-**What you have to provide.** One sentence, in the body, citing Logic, naming the behavioural
-record the change rests on, or saying you are not talking about it.
+**How to state evidence.** Cite Logic, name the behavioural record the change rests on, or say
+that the change states no fact about Logic.
 
-On an ISSUE that sentence is asked for, not required: nothing is blocked, nothing is closed, and
-you do not need a corpus build — or Logic — to report a problem. Open it with whatever evidence you
-have, including none. The authorized workflow may map the report to a row and add the reference;
-if it cannot do so within its evidence budget, it preserves the gap and terminates that attempt
-without requesting a manual mapping. The form below is what a pull request is gated on.
+You do not need a corpus build — or Logic — to report a problem. Open an issue with the evidence
+you have. The current CI checks committed files; it does not fetch issue or pull-request bodies.
+The citation forms below also work with the checker's optional `--text` input, but there is no
+`pr-policy.yml` or `canon-issue.yml` workflow enforcing those discussion-body rules.
 
 * Stating something about Logic: a `logic-canon://<source>/<locale>#value` reference AND the value
   in quotes. The forms and what each proves are below under *A citation without a key*. A worked
@@ -85,16 +84,10 @@ is measured live and recorded under `docs/observations/`; no gate here establish
 The authorized evidence workflow must establish them noninteractively or finish unsuccessfully
 with the missing boundary explicit.
 
-**An issue is advised; a pull request is gated.** `canon-issue.yml` leaves ONE note on an issue and
-edits that same note as you edit the body; nothing is blocked and no label is applied. A pull
-request is different: `pr-policy` is a required check and a refusal blocks the merge. If the
-checker itself could not finish — a corpus it could not read, a crash — it says so and blames
-nobody; that is a repository-side failure, not a finding about your text.
-
-**Where CI-integrity policy lives.** Not here. `.github/ci/` holds the four lists about this
-repository's own CI — which jobs must gate, which commands must run, which guards may skip, which
-guards have no test — owned by `Scripts/check-every-ci-job-is-required.py`. Editing one of those
-does not go through the citation rule, because none of them rests on a row of Apple's data.
+**Committed evidence gates a pull request.** `ci.yml` runs the canon, locale and observation
+checks in `canon-locales` on every pull request. Its failure, cancellation or skip fails required
+`build`, including for documentation-only changes. A missing corpus or checker error is a failed
+verification; it cannot establish anything about Logic.
 
 ## The rule
 
@@ -129,13 +122,10 @@ check time   (needs nothing)   resolve a citation against what was committed
 | `PROSE-NUMBERS.json` | numbers this README may state that no artifact and no record carries, and why each has none. May only shrink |
 | `NOT-A-RECORD.json` | files under `docs/observations/` that are not observation records. May only shrink |
 
-Four more lists were here until #951: `CI-GATE.json`, `CI-SKIPS.json`, `GUARDS-WITHOUT-A-TEST.json`
-and `GUARD-TESTS-BLIND-TO-THEIR-GUARD.json`. They hold job names, guard names and test counts —
-nothing about Logic — and they now live in `.github/ci/`, ratcheted by
-`Scripts/check-every-ci-job-is-required.py`. **Where CI-integrity policy lives is `.github/ci/`.**
-They were here only because the merge-base comparison happened to be written in this directory's
-guard, and the cost was real: a contributor correcting a guard name had to satisfy the citation
-rule over a change that rests on no row of Apple's data.
+Historical CI bookkeeping lists (`CI-GATE.json`, `CI-SKIPS.json`, `GUARDS-WITHOUT-A-TEST.json`
+and `GUARD-TESTS-BLIND-TO-THEIR-GUARD.json`) moved out of this directory in #951 and were later
+removed during CI simplification. The current executable checks and required dependency are in `ci.yml`; those
+removed lists are not part of the canon or its refresh path.
 
 ### A citation without a key
 
@@ -384,18 +374,16 @@ logic-canon://<source>/<unit>/<locale>/<key>#<field>
 
 | where | what runs | what happens when it refuses |
 |---|---|---|
-| files in the tree | `Scripts/check-canon-citations.py`, discovered and run by `run-repo-guards.py` in `ci.yml`'s macOS `test` job | the job fails; `build` needs it, so the merge is blocked |
-| the files a pull request touches | the same script with `--changed pr-changed.txt`, in `pr-policy.yml` | `pr-policy` is a required context, so the merge is blocked |
-| a pull request body | the same script with `--text pr-body.md --changed pr-changed.txt`, in `pr-policy.yml` | the same |
-| issue bodies | `Scripts/canon_issue_bot.py`, run by `canon-issue.yml` on `issues: [opened, edited]` | **nothing is blocked.** It leaves one advisory note and edits that same note as the body changes |
+| committed canon and citations | `logic_canon.py status`, `check-canon-drift.py`, `check-canon-citations.py`, `check-canon-prose-numbers.py` and `check-policy-literals-against-canon.py` in `ci.yml`'s Ubuntu `canon-locales` job | the job fails; required `build` needs success, so merge is blocked |
+| every declared locale and its evidence | `check-labelsets-are-derived.py`, `check-locale-detection-is-derived.py`, `check-locale-policy-coverage.py`, `locale_labels.py --check`, `check-locale-labels-json.py`, `check-observation-records.py` and `check-observation-ratchets.py` in that same job | missing or wrong mappings, unsupported coverage claims and invalid observations fail the same required check |
+| the checks' failure behavior | the canon/locale mutation and regression drivers listed in `canon-locales`, including real guard refusals and the required fan-in shell | a regression that accepts malformed evidence fails the job |
+| actual Logic and release bytes | `release-qualify.sh` drives the exact artifact with independent readback and write → read → restore; `native-logic-e2e` consumes its result for the candidate, run attempt, artifact ID and digest | a missing or failed native qualification fails required `build`; `release.sh` qualifies the packaged candidate before publication |
 
-The pull-request row named a `canon-citations-in-the-pull-request` job until #950 moved the body
-check into `pr-policy.yml`; the job is gone and the requirement is not. The issue row said
-"nothing checks an issue mechanically yet" until #951.
-
-A pull request body is not a file, so the tree-wide sweep could not see it — and the two documents
-a change is actually reviewed through were exempt from the rule they carry. That is the
-named-site / enforcement-site gap in its usual shape, and it is why rule 11 exists.
+`canon-locales`, the release executable and the native gate run even when the only change is a
+regular content edit to `docs/roadmap/README.md`. Canon, locale and other consumed documents use
+full product validation. Issue/PR discussion bodies have no automated body gate in the current
+workflows. Offline mapping coverage does not establish native behavior in every language;
+`unmeasured`, `not_localized` and historical-build evidence retain their stated limits.
 
 ### The opt-out
 
@@ -502,8 +490,8 @@ check against the code. That is worth building and is not built.
 ## Commands
 
 ```
-Scripts/logic_canon.py build              # needs Logic. Re-pins everything.
-Scripts/logic_canon.py status             # has the installed Logic drifted from the pin?
+python3 Scripts/logic_canon.py build     # installed Logic required; extract and re-pin
+python3 Scripts/logic_canon.py status    # offline drift, plus host corpus comparison when installed
 Scripts/logic_canon.py resolve <ref>      # what value does this reference name?
 Scripts/logic_canon.py check <ref>=<val>  # does this quote hold, offline?
 Scripts/logic_canon.py absent <src> <loc> <text>
@@ -511,25 +499,56 @@ Scripts/logic_canon.py axhelp             # reverse live AXHelp readings into ke
 Scripts/check-canon-citations.py          # the gate. Runs in CI.
 ```
 
-## When Logic updates
+## Extract, refresh and check
 
-`MANIFEST.json` pins a digest over every corpus byte. `logic_canon.py status` compares it to the
-installed Logic and fails on drift. Rebuild, and every citation whose digest moved fails loudly —
-which is the point: a citation that silently still "resolves" after Apple changed the string is
-exactly the failure this axis exists to end.
+On a machine with the intended Logic version installed, run from the repository root:
+
+```bash
+python3 Scripts/logic_canon.py build
+python3 Scripts/check-policy-literals-against-canon.py --reclassify
+python3 Scripts/locale_labels.py --write
+python3 Scripts/logic_canon.py status
+```
+
+`build` extracts Apple's sources, refreshes cited indexes, absence sets and ledgers, and records
+their digests and Logic build in `MANIFEST.json`. Reclassification refreshes policy-literal
+classifications against those Apple bytes; locale generation synchronizes the JSON ledger and shipped Python/Swift
+tables. Review the resulting diff and changed citations before committing it. These commands
+update repository data; they do not run Logic E2E or qualify a release.
+
+Every pull request then executes the offline checks and mutation tests in `canon-locales` above.
+Ubuntu has no Logic: `status` reports that the installed build was not compared, while the
+citation/integrity checks verify the committed artifacts and `check-canon-drift.py` verifies the
+extractor/source pin. On the Logic host, `status` also compares the installed version, build and
+source digests and fails on drift. A changed or unresolved citation, stale generated mapping,
+damaged artifact or lost coverage remains a failure until its actual input is corrected.
+
+`test_logic_canon.py` also preserves a historical AXHelp measurement. On a machine with Logic
+installed, supply its archived Apple source explicitly when running the complete driver:
+
+```bash
+LPM_HISTORICAL_LOGIC_APP="/path/to/archived/Logic Pro.app" python3 Scripts/test_logic_canon.py
+```
+
+Only that historical assertion uses the supplied archive. It checks the source version/build
+and original QuickHelp digest against the committed measurement, plus the archived bytes of the
+resolver's string-table fallbacks; missing or different inputs fail. An explicitly supplied value,
+including an empty one, is validated before optional installed-bundle eligibility, also when the
+driver is loaded through unittest. The other installed-bundle
+tests still read the current application. These are static corpus checks, not native AX readback
+or release qualification. Hosted machines without Logic retain the existing installed-bundle
+skips; the offline extraction and input-validation cases still execute.
 
 What a rebuild on a new Logic needed, first measured on 13.0 (7801) over 12.3 (6674), so the next
 one starts from it rather than from the failures:
 
 * A bundle shape the extractor has never met stops the build naming the file. 13.0 brought
-  `NSStringDeviceSpecificRuleType` in Jet2P's `Localizable.stringsdict`; it is read as one row per
-  device name.
-* `QUICKHELP_LOCALE_ALIASES` is checked against the bundle and the build refuses a mismatch.
-  `it`, `pt` and `zh_TW` lost their English copy of `QuickHelp.plist`; they are still aliases, and
-  that the running Logic then reads English's file is the bundle's fallback, not a measurement.
-* A string Apple replaced stays a member while the app must work on the older Logic. The
-  `nowhere` list may only shrink, except for a literal the merge base's Logic shipped, counted
-  when `MANIFEST.json` names a different Logic; the guard prints how many.
+  `NSStringDeviceSpecificRuleType` in Jet2P's `Localizable.stringsdict`.
+* A locale whose `QuickHelp.plist` is absent is read through the development localization, and the
+  build records that fallback; it is not a measurement of what the running Logic shows in that language.
+* A string Apple replaced stays a member while the app must work on the older Logic, but a literal
+  newly classified `nowhere` after a Logic change must be re-proved absent from every pinned corpus
+  (`check_policy_nowhere_only_shrinks` in `Scripts/check-canon-citations.py`).
 * Cited rows Apple removed are re-pointed at the row that now carries the value, then
   `Scripts/locale_labels.py --write`; the generated tables are never edited.
 * The order is: build, `check-policy-literals-against-canon.py --reclassify`, build again (the

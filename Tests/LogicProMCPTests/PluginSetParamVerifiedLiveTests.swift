@@ -48,6 +48,15 @@ private enum ControlsCheckboxWriteBehavior: Sendable, Equatable {
     case mixedThenChanged
 }
 
+private enum PluginWindowReplacementAfterRestoration: Sendable, Equatable {
+    case exact
+    case duplicate
+    case wrongPlugin
+    case wrongTrack
+    case targetDrift
+    case closeFailure
+}
+
 /// A live-path fixture. The slider's AXValueDescription is recomputed from its
 /// AXValue on every write so a write updates the readback the way Logic does
 /// ("60 %"). `forcedAfterValue` models a sticky/taper mismatch; `otherTracks`
@@ -98,6 +107,7 @@ private final class LiveFixture: @unchecked Sendable {
         sliderUsesSignedPositiveDisplay: Bool = false,
         onSliderDisplayAfterWrite: (@Sendable (FakeAXRuntimeBuilder, AXUIElement) -> Void)? = nil,
         onSliderAttributeRead: (@Sendable (FakeAXRuntimeBuilder, AXUIElement, String, Int) -> Void)? = nil,
+        onAttributeRead: (@Sendable (FakeAXRuntimeBuilder, AXUIElement, String) -> Void)? = nil,
         pluginWindowStaticTextValues: [String]? = nil,
         pluginWindowTitleReadFails: Bool = false,
         pluginWindowsReadStatusBeforeTargetOpen: AXHelpers.AXStatusError? = nil,
@@ -117,6 +127,7 @@ private final class LiveFixture: @unchecked Sendable {
         // accepted press. Only the freshly acquired control closes the exact
         // editor window.
         pluginCloseControlRenewsAfterFirstAttempt: Bool = false,
+        pluginWindowReplacementAfterRestoration: PluginWindowReplacementAfterRestoration? = nil,
         controlsViewRowLabel: String? = nil,
         controlsViewControlRole: String = kAXCheckBoxRole as String,
         controlsCheckboxBefore: Bool = false,
@@ -127,6 +138,7 @@ private final class LiveFixture: @unchecked Sendable {
         viewMenuPressChangesTitle: Bool = true,
         viewMenuSelectionSetsUnconfirmedStructure: Bool = false,
         viewMenuBecomesUnavailableAfterControlsSelection: Bool = false,
+        viewMenuBecomesUnavailableAfterAnySelection: Bool = false,
         viewMenuReadFailsAfterFirstSelection: Bool = false,
         controlsTableReadFailsAfterRestoration: Bool = false,
         invalidateTargetSlotAfterViewSelection: Bool = false,
@@ -156,6 +168,9 @@ private final class LiveFixture: @unchecked Sendable {
         let slider = b.element(1005)
         let pluginClose = b.element(1006)
         let renewedPluginClose = b.element(100_915)
+        let replacementPluginWindow = b.element(100_916)
+        let replacementPluginClose = b.element(100_917)
+        let duplicateReplacementPluginWindow = b.element(100_918)
         let pluginBypass = b.element(1007)
         let pluginLink = b.element(1008)
         let controlsViewSwitcher = b.element(1009)
@@ -301,6 +316,8 @@ private final class LiveFixture: @unchecked Sendable {
             pluginWindowTitleBeforeSlotPress ?? trackDisplayName
         )
         b.setAttribute(pluginWindow, kAXCloseButtonAttribute as String, pluginClose)
+        b.setAttribute(pluginClose, kAXWindowAttribute as String, pluginWindow)
+        b.setAttribute(renewedPluginClose, kAXWindowAttribute as String, pluginWindow)
         b.setAttribute(pluginWindow, kAXMainAttribute as String, pluginWindowPresent)
         b.setAttribute(pluginWindow, kAXFocusedAttribute as String, pluginWindowPresent)
         let staticTexts = (pluginWindowStaticTextValues ?? ["보기:", pluginSlotName, trackDisplayName])
@@ -311,6 +328,18 @@ private final class LiveFixture: @unchecked Sendable {
                 b.setAttribute(text, kAXValueAttribute as String, value)
                 return text
             }
+        b.setAttribute(replacementPluginClose, kAXRoleAttribute as String, kAXButtonRole as String)
+        b.setAttribute(replacementPluginWindow, kAXRoleAttribute as String, kAXWindowRole as String)
+        b.setAttribute(replacementPluginWindow, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+        b.setAttribute(replacementPluginWindow, kAXCloseButtonAttribute as String, replacementPluginClose)
+        b.setAttribute(replacementPluginClose, kAXWindowAttribute as String, replacementPluginWindow)
+        b.setAttribute(replacementPluginWindow, kAXMainAttribute as String, true)
+        b.setAttribute(replacementPluginWindow, kAXFocusedAttribute as String, true)
+        b.setAttribute(duplicateReplacementPluginWindow, kAXRoleAttribute as String, kAXWindowRole as String)
+        b.setAttribute(duplicateReplacementPluginWindow, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+        b.setAttribute(duplicateReplacementPluginWindow, kAXCloseButtonAttribute as String, replacementPluginClose)
+        b.setAttribute(duplicateReplacementPluginWindow, kAXMainAttribute as String, true)
+        b.setAttribute(duplicateReplacementPluginWindow, kAXFocusedAttribute as String, true)
         let ambiguousEditorSlider = b.element(100_913)
         if ambiguousEditorSliderAfterViewSelection {
             b.setAttribute(ambiguousEditorSlider, kAXRoleAttribute as String, kAXSliderRole as String)
@@ -396,12 +425,38 @@ private final class LiveFixture: @unchecked Sendable {
         let targetOpenButtonKey = targetOpenButton.map { b.elementID($0) }
         let pluginCloseKey = b.elementID(pluginClose)
         let renewedPluginCloseKey = b.elementID(renewedPluginClose)
+        let replacementPluginCloseKey = b.elementID(replacementPluginClose)
         let controlsCheckboxKey = b.elementID(controlsCheckbox)
         let controlsViewMenuItemKey = b.elementID(controlsViewMenuItem)
         let editorViewMenuItemKey = b.elementID(editorViewMenuItem)
         let controlsViewSwitcherKey = b.elementID(controlsViewSwitcher)
         let controlsWindowChildren = controlsViewWindowChildren
         let editorWindowChildren = pluginWindowChildren
+        let replacementPluginName = b.element(100_919)
+        let replacementTrackName = b.element(100_920)
+        let duplicatePluginName = b.element(100_921)
+        let duplicateTrackName = b.element(100_922)
+        for text in [replacementPluginName, replacementTrackName, duplicatePluginName, duplicateTrackName] {
+            b.setAttribute(text, kAXRoleAttribute as String, kAXStaticTextRole as String)
+        }
+        let replacementTitle = pluginWindowReplacementAfterRestoration == .wrongTrack
+            ? "Other Track" : trackDisplayName
+        let replacementPlugin = pluginWindowReplacementAfterRestoration == .wrongPlugin
+            ? "Noise Gate" : pluginSlotName
+        b.setAttribute(replacementPluginWindow, kAXTitleAttribute as String, replacementTitle)
+        b.setAttribute(replacementPluginName, kAXValueAttribute as String, replacementPlugin)
+        b.setAttribute(replacementTrackName, kAXValueAttribute as String, replacementTitle)
+        b.setChildren(
+            replacementPluginWindow,
+            [pluginBypass, pluginLink, slider, replacementPluginName, replacementTrackName, controlsViewSwitcher]
+        )
+        b.setAttribute(duplicateReplacementPluginWindow, kAXTitleAttribute as String, trackDisplayName)
+        b.setAttribute(duplicatePluginName, kAXValueAttribute as String, pluginSlotName)
+        b.setAttribute(duplicateTrackName, kAXValueAttribute as String, trackDisplayName)
+        b.setChildren(
+            duplicateReplacementPluginWindow,
+            [pluginBypass, pluginLink, slider, duplicatePluginName, duplicateTrackName, controlsViewSwitcher]
+        )
         let selectionHeaderRows = headerRows
         let forced = forcedAfterValue
         let writeBehavior = sliderWriteBehavior
@@ -414,6 +469,7 @@ private final class LiveFixture: @unchecked Sendable {
         let runtime = b.makeLogicRuntime(
             appElement: app,
             attributeValueHandler: { element, attribute in
+                onAttributeRead?(b, element, attribute)
                 if CFEqual(element, slider) {
                     onSliderAttributeRead?(b, slider, attribute, sliderWriteCount.value)
                 }
@@ -424,6 +480,7 @@ private final class LiveFixture: @unchecked Sendable {
                 return nil
             },
             attributeValueResultHandler: { element, attribute in
+                onAttributeRead?(b, element, attribute)
                 if CFEqual(element, slider) {
                     onSliderAttributeRead?(b, slider, attribute, sliderWriteCount.value)
                 }
@@ -571,7 +628,9 @@ private final class LiveFixture: @unchecked Sendable {
                 if key == controlsViewSwitcherKey {
                     guard action == (kAXPressAction as String) else { return false }
                     guard !(viewMenuBecomesUnavailableAfterControlsSelection
-                        && controlsViewMenuPressCount.value > 0) else {
+                        && controlsViewMenuPressCount.value > 0),
+                        !(viewMenuBecomesUnavailableAfterAnySelection
+                            && controlsViewMenuPressCount.value + editorViewMenuPressCount.value > 0) else {
                         return true
                     }
                     menuOpen.value = true
@@ -631,6 +690,23 @@ private final class LiveFixture: @unchecked Sendable {
                     if viewMenuPressChangesTitle {
                         b.setAttribute(controlsViewSwitcher, kAXTitleAttribute as String, "편집기")
                     }
+                    if let replacement = pluginWindowReplacementAfterRestoration {
+                        let replacementWindows = replacement == .duplicate
+                            ? [replacementPluginWindow, duplicateReplacementPluginWindow]
+                            : [replacementPluginWindow]
+                        b.setAttribute(
+                            app,
+                            kAXWindowsAttribute as String,
+                            [arrangeWindow] + replacementWindows
+                        )
+                        if replacement == .targetDrift, let targetSlotForViewMutation {
+                            b.setAttribute(
+                                targetSlotForViewMutation,
+                                kAXDescriptionAttribute as String,
+                                "Noise Gate"
+                            )
+                        }
+                    }
                     return true
                 }
                 guard action == (kAXPressAction as String) else { return true }
@@ -652,6 +728,13 @@ private final class LiveFixture: @unchecked Sendable {
                 if key == renewedPluginCloseKey {
                     pluginCloseControlPressCount.value += 1
                     if !pluginCloseControlFailsToClose {
+                        b.setAttribute(app, kAXWindowsAttribute as String, [arrangeWindow])
+                    }
+                    return true
+                }
+                if key == replacementPluginCloseKey {
+                    pluginCloseControlPressCount.value += 1
+                    if pluginWindowReplacementAfterRestoration != .closeFailure {
                         b.setAttribute(app, kAXWindowsAttribute as String, [arrangeWindow])
                     }
                     return true
@@ -4211,6 +4294,81 @@ private final class Counter: @unchecked Sendable {
     #expect(remainingWindows.count == 1)
 }
 
+@Test func testOwnedEditorCleanupRefusesACloseButtonOwnedByTheArrangeWindow() async throws {
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginWindowPresent: false,
+        openWindowOnSlotPress: true
+    )
+    let b = fixture.builder
+    let arrange = b.element(1001)
+    let close = b.element(1006)
+    b.setAttribute(close, kAXWindowAttribute as String, arrange)
+
+    let object = await runLive(fixture: fixture, params: thresholdParams())
+
+    #expect(object["state"] as? String == "A")
+    #expect(fixture.pluginCloseControlPressCount.value == 0,
+        "cleanup must never press a close control owned by another window")
+    #expect(!(try #require(object["editor_close_observed"] as? Bool)))
+    let diagnostics = try #require(object["editor_cleanup_diagnostics"] as? [[String: Any]])
+    let diagnostic = try #require(diagnostics.first)
+    #expect(diagnostic["close_button_window_status"] as? String == "mismatch")
+    let remainingWindows = try #require(
+        b.attributeValue(fixture.app, kAXWindowsAttribute as String) as? [AXUIElement]
+    )
+    #expect(remainingWindows.count == 2)
+}
+
+@Test func testOwnedEditorCleanupRechecksCancellationAfterItsFinalIdentityRead() async throws {
+    let closeOwnerRead = MutableBox(false)
+    let cancelled = MutableBox(false)
+    let fixture = LiveFixture(
+        beforeValue: 51,
+        pluginWindowPresent: false,
+        openWindowOnSlotPress: true,
+        onAttributeRead: { builder, element, attribute in
+            if CFEqual(element, builder.element(1006)), attribute == kAXWindowAttribute as String {
+                closeOwnerRead.value = true
+            } else if closeOwnerRead.value, CFEqual(element, builder.element(1004)),
+                      attribute == kAXSubroleAttribute as String {
+                cancelled.value = true
+            }
+        }
+    )
+    fixture.builder.setAttribute(
+        fixture.builder.element(1001),
+        kAXDocumentAttribute as String,
+        URL(fileURLWithPath: expectedPath).absoluteString
+    )
+    let context = OperationTraceContext(
+        ownsGate: { true },
+        cancellationRequested: { cancelled.value }
+    )
+
+    let result = await OperationTraceContext.$current.withValue(context) {
+        await AccessibilityChannel.defaultGetParamVerified(
+            params: parameterReadParams(), runtime: parameterReadRuntime(fixture)
+        )
+    }
+    let object = try #require(sharedJSONObject(result.message))
+
+    #expect(cancelled.value)
+    #expect(fixture.pluginCloseControlPressCount.value == 0,
+        "a close press cannot cross cancellation during the final native identity read")
+    #expect(!(try #require(object["editor_close_attempted"] as? Bool)),
+        "a refused close cannot claim that native action was attempted")
+    #expect(!(try #require(object["editor_close_observed"] as? Bool)))
+    let diagnostics = try #require(object["editor_cleanup_diagnostics"] as? [[String: Any]])
+    let diagnostic = try #require(diagnostics.first)
+    #expect(diagnostic["close_button_window_status"] as? String == "matches")
+    #expect(diagnostic["attempt_count"] as? Int == 0)
+    let remainingWindows = try #require(
+        fixture.builder.attributeValue(fixture.app, kAXWindowsAttribute as String) as? [AXUIElement]
+    )
+    #expect(remainingWindows.count == 2)
+}
+
 @Test func testIssue1417OwnedEditorCleanupRecognizesExactWindowAbsentDuringRetrySettlement() async throws {
     let fixture = LiveFixture(
         pluginWindowPresent: false,
@@ -4346,6 +4504,57 @@ func testIssue1417OwnedEditorCleanupPreservesCloseButtonReadFailure(_ kind: Stri
         #expect(diagnostic["close_button_read_error"] == nil)
     }
     #expect(fixture.pluginCloseControlPressCount.value == 0)
+}
+
+@Test(arguments: ["nil", "malformed", "no_value", "attribute_unsupported", "unreadable"])
+func testOwnedEditorCleanupRequiresReadableExactCloseButtonWindow(_ kind: String) async throws {
+    let fixture = LiveFixture(pluginWindowPresent: false, openWindowOnSlotPress: true)
+    let b = fixture.builder
+    let close = b.element(1006)
+    let sampled = MutableBox(false)
+    b.setAttribute(
+        b.element(1001),
+        kAXDocumentAttribute as String,
+        URL(fileURLWithPath: expectedPath).absoluteString
+    )
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        if CFEqual(element, b.element(1005)), attribute == kAXValueAttribute as String {
+            sampled.value = true
+        }
+        guard sampled.value, CFEqual(element, close),
+              attribute == kAXWindowAttribute as String else { return nil }
+        switch kind {
+        case "nil": return .success(nil)
+        case "malformed": return .success("not-an-ax-window" as NSString)
+        case "no_value":
+            return .failure(AXHelpers.AXStatusError(raw: AXError.noValue.rawValue))
+        case "attribute_unsupported":
+            return .failure(AXHelpers.AXStatusError(raw: AXError.attributeUnsupported.rawValue))
+        default:
+            return .failure(AXHelpers.AXStatusError(raw: AXError.cannotComplete.rawValue))
+        }
+    })
+
+    let result = await AccessibilityChannel.defaultGetParamVerified(
+        params: parameterReadParams(), runtime: runtime
+    )
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(!(try #require(object["editor_close_observed"] as? Bool)))
+    let diagnostics = try #require(object["editor_cleanup_diagnostics"] as? [[String: Any]])
+    let diagnostic = try #require(diagnostics.first)
+    let expectedStatus = switch kind {
+    case "unreadable": "unreadable"
+    case "malformed": "mismatch"
+    default: "absent"
+    }
+    #expect(diagnostic["close_button_window_status"] as? String == expectedStatus)
+    #expect(diagnostic["attempt_count"] as? Int == 0)
+    #expect(diagnostic["window_membership"] as? String == "present")
+    #expect(fixture.pluginCloseControlPressCount.value == 0)
+    let remainingWindows = try #require(
+        b.attributeValue(fixture.app, kAXWindowsAttribute as String) as? [AXUIElement]
+    )
+    #expect(remainingWindows.count == 2)
 }
 
 @Test(arguments: ["no_value", "attribute_unsupported"])
@@ -5090,11 +5299,14 @@ func testIssue299CompressorCircuitUncertainCurrentValueRemainsUnknown(_ kind: St
 // sibling slider and its value indicator. Boolean rows contain two named radio
 // buttons. These reads must not borrow the writer's single-control authority.
 private func gainReadFixture(_ param: String = "gain", controls: Bool = false,
-                             windowPresent: Bool = true, openOnPress: Bool = false) -> LiveFixture {
+                             windowPresent: Bool = true, openOnPress: Bool = false,
+                             replacementAfterRestoration: PluginWindowReplacementAfterRestoration? = nil) -> LiveFixture {
     let labels = ["gain": "Gain:", "phase_invert": "Phase Invert:", "phase_invert_left": "Phase Left:",
         "phase_invert_right": "Phase Right:", "swap_lr": "Swap L/R:", "mono": "Make Mono:"]
     let fixture = LiveFixture(pluginSlotName: "Gain", pluginWindowPresent: windowPresent,
-        openWindowOnSlotPress: openOnPress, controlsViewRowLabel: labels[param],
+        openWindowOnSlotPress: openOnPress,
+        pluginWindowReplacementAfterRestoration: replacementAfterRestoration,
+        controlsViewRowLabel: labels[param],
         controlsViewInitiallySelected: controls, viewSettleDelay: 0)
     let b = fixture.builder
     b.setAttribute(b.element(1001), kAXDocumentAttribute as String, URL(fileURLWithPath: expectedPath).absoluteString)
@@ -5749,6 +5961,392 @@ func testIssue1396GainEditorDescriptionFailureStillReadsAndRestoresOwnedView(_ a
     #expect(fixture.currentPluginViewTitle == "편집기")
     #expect(fixture.sliderWriteCount.value == 0)
     #expect(fixture.controlsCheckboxPressCount.value == 0)
+}
+
+@Test func testOwnedReadCleanupReacquiresExactEditorReplacedByViewRestoration() async throws {
+    let fixture = gainReadFixture(
+        windowPresent: false,
+        openOnPress: true,
+        replacementAfterRestoration: .exact
+    )
+
+    let result = await AccessibilityChannel.defaultGetParamVerified(
+        params: gainReadParams(),
+        runtime: parameterReadRuntime(fixture)
+    )
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(object["state"] as? String == "A", "\(object)")
+    #expect(try #require(object["plugin_view_restore_observed"] as? Bool))
+    #expect(try #require(object["editor_close_attempted"] as? Bool))
+    #expect(try #require(object["editor_close_observed"] as? Bool))
+    #expect(object["editor_cleanup_unobserved"] == nil)
+    #expect(object["editor_still_open"] == nil)
+    #expect(fixture.pluginCloseControlPressCount.value == 1)
+    let remainingWindows = try #require(
+        fixture.builder.attributeValue(fixture.app, kAXWindowsAttribute as String) as? [AXUIElement]
+    )
+    #expect(remainingWindows.count == 1)
+}
+
+@Test func testOwnedReadCleanupReacquiresExactEditorThatSettlesAfterRestorePick() async throws {
+    let fixture = gainReadFixture(
+        windowPresent: false,
+        openOnPress: true
+    )
+    let b = fixture.builder
+    let arrange = b.element(1001)
+    let replacement = b.element(100_916)
+    let postRestoreWindowReads = MutableBox(0)
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        guard fixture.editorViewMenuPressCount.value > 0,
+              CFEqual(element, fixture.app),
+              attribute == kAXWindowsAttribute as String else {
+            return nil
+        }
+        postRestoreWindowReads.value += 1
+        if postRestoreWindowReads.value == 1 {
+            b.setAttribute(fixture.app, kAXWindowsAttribute as String, [arrange, replacement])
+        }
+        return nil
+    })
+
+    let result = await AccessibilityChannel.defaultGetParamVerified(
+        params: gainReadParams(),
+        runtime: runtime
+    )
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(postRestoreWindowReads.value >= 2)
+    #expect(object["state"] as? String == "A", "\(object)")
+    #expect(try #require(object["plugin_view_restore_observed"] as? Bool))
+    #expect(try #require(object["editor_close_attempted"] as? Bool))
+    #expect(try #require(object["editor_close_observed"] as? Bool))
+    #expect(object["editor_cleanup_unobserved"] == nil)
+    #expect(fixture.pluginCloseControlPressCount.value == 1)
+    let remainingWindows = try #require(
+        b.attributeValue(fixture.app, kAXWindowsAttribute as String) as? [AXUIElement]
+    )
+    #expect(remainingWindows.count == 1)
+}
+
+@Test func testOwnedReadCleanupNeverAdoptsAReplacementThatAppearsAfterViewConfirmation() async throws {
+    let fixture = gainReadFixture(
+        windowPresent: false,
+        openOnPress: true
+    )
+    let b = fixture.builder
+    let arrange = b.element(1001)
+    let replacement = b.element(100_916)
+    let postRestoreWindowReads = MutableBox(0)
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        guard fixture.editorViewMenuPressCount.value > 0,
+              CFEqual(element, fixture.app),
+              attribute == kAXWindowsAttribute as String else {
+            return nil
+        }
+        postRestoreWindowReads.value += 1
+        if postRestoreWindowReads.value == 2 {
+            b.setAttribute(fixture.app, kAXWindowsAttribute as String, [arrange, replacement])
+        }
+        return nil
+    })
+
+    let result = await AccessibilityChannel.defaultGetParamVerified(
+        params: gainReadParams(),
+        runtime: runtime
+    )
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(postRestoreWindowReads.value >= 2)
+    #expect(object["state"] as? String == "C", "\(object)")
+    #expect(fixture.pluginCloseControlPressCount.value == 0,
+        "a same-target editor first observed after confirmation is caller-owned")
+    let remainingWindows = try #require(
+        b.attributeValue(fixture.app, kAXWindowsAttribute as String) as? [AXUIElement]
+    )
+    #expect(remainingWindows.contains { CFEqual($0, replacement) })
+}
+
+@Test func testOwnedReadCleanupNeverFollowsASecondReplacementDuringViewConfirmation() async throws {
+    let fixture = gainReadFixture(
+        windowPresent: false,
+        openOnPress: true
+    )
+    let b = fixture.builder
+    let arrange = b.element(1001)
+    let firstReplacement = b.element(100_916)
+    let secondReplacement = b.element(100_930)
+    let secondPluginName = b.element(100_931)
+    let secondTrackName = b.element(100_932)
+    let postRestoreWindowReads = MutableBox(0)
+    // The first exact replacement is still in Controls view. Before the next
+    // confirmation poll, a caller swaps it for another same-header editor.
+    b.setChildren(firstReplacement, [
+        b.element(1007), b.element(1008), b.element(100_919), b.element(100_920),
+        b.element(1009), b.element(100_903),
+    ])
+    b.setAttribute(secondReplacement, kAXRoleAttribute as String, kAXWindowRole as String)
+    b.setAttribute(secondReplacement, kAXSubroleAttribute as String, kAXDialogSubrole as String)
+    b.setAttribute(secondReplacement, kAXCloseButtonAttribute as String, b.element(100_917))
+    b.setAttribute(secondReplacement, kAXMainAttribute as String, true)
+    b.setAttribute(secondReplacement, kAXFocusedAttribute as String, true)
+    b.setAttribute(secondReplacement, kAXTitleAttribute as String, trackName)
+    for text in [secondPluginName, secondTrackName] {
+        b.setAttribute(text, kAXRoleAttribute as String, kAXStaticTextRole as String)
+    }
+    b.setAttribute(secondPluginName, kAXValueAttribute as String, "Gain")
+    b.setAttribute(secondTrackName, kAXValueAttribute as String, trackName)
+    b.setChildren(secondReplacement, [
+        b.element(1007), b.element(1008), b.element(1005), secondPluginName,
+        secondTrackName, b.element(1009),
+    ])
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        guard fixture.editorViewMenuPressCount.value > 0,
+              CFEqual(element, fixture.app),
+              attribute == kAXWindowsAttribute as String else {
+            return nil
+        }
+        postRestoreWindowReads.value += 1
+        if postRestoreWindowReads.value == 1 {
+            b.setAttribute(fixture.app, kAXWindowsAttribute as String, [arrange, firstReplacement])
+        } else if postRestoreWindowReads.value == 2 {
+            b.setAttribute(fixture.app, kAXWindowsAttribute as String, [arrange, secondReplacement])
+        }
+        return nil
+    })
+
+    let result = await AccessibilityChannel.defaultGetParamVerified(
+        params: gainReadParams(),
+        runtime: runtime
+    )
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(postRestoreWindowReads.value >= 3)
+    #expect(try #require(object["plugin_view_restore_observed"] as? Bool), "\(object)")
+    #expect(object["state"] as? String == "C", "\(object)")
+    #expect(fixture.pluginCloseControlPressCount.value == 0,
+        "cleanup custody cannot follow a second same-header replacement during confirmation")
+    let remainingWindows = try #require(
+        b.attributeValue(fixture.app, kAXWindowsAttribute as String) as? [AXUIElement]
+    )
+    #expect(remainingWindows.contains { CFEqual($0, secondReplacement) })
+}
+
+@Test func testOwnedReadCleanupNeverAdoptsUserReplacementWithoutViewRestoreReceipt() async throws {
+    let fixture = LiveFixture(
+        pluginWindowPresent: false,
+        openWindowOnSlotPress: true,
+        viewSettleDelay: 0
+    )
+    let b = fixture.builder
+    let arrange = b.element(1001)
+    let original = b.element(1004)
+    let replacement = b.element(100_916)
+    b.setAttribute(
+        arrange,
+        kAXDocumentAttribute as String,
+        URL(fileURLWithPath: expectedPath).absoluteString
+    )
+    let parameterWasRead = MutableBox(false)
+    let userReplacedWindow = MutableBox(false)
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        if CFEqual(element, b.element(1005)),
+           attribute == kAXValueDescriptionAttribute as String {
+            parameterWasRead.value = true
+        }
+        if parameterWasRead.value, !userReplacedWindow.value,
+           CFEqual(element, fixture.app), attribute == kAXWindowsAttribute as String {
+            userReplacedWindow.value = true
+            b.setAttribute(fixture.app, kAXWindowsAttribute as String, [arrange, replacement])
+        }
+        return nil
+    })
+
+    let result = await AccessibilityChannel.defaultGetParamVerified(
+        params: parameterReadParams(),
+        runtime: runtime
+    )
+    let object = try #require(sharedJSONObject(result.message))
+    #expect(userReplacedWindow.value, "\(object)")
+    #expect(fixture.controlsViewMenuPressCount.value == 0)
+    #expect(fixture.editorViewMenuPressCount.value == 0)
+    #expect(fixture.pluginCloseControlPressCount.value == 0,
+        "a same-target window created without the operation's view restoration is caller-owned")
+    let remaining = try #require(
+        b.attributeValue(fixture.app, kAXWindowsAttribute as String) as? [AXUIElement]
+    )
+    #expect(!remaining.contains { CFEqual($0, original) })
+    #expect(remaining.contains { CFEqual($0, replacement) })
+}
+
+@Test func testOwnedReadCleanupReceiptNeverFollowsASecondReplacement() async throws {
+    let fixture = gainReadFixture(
+        windowPresent: false,
+        openOnPress: true,
+        replacementAfterRestoration: .exact
+    )
+    let b = fixture.builder
+    let arrange = b.element(1001)
+    let firstReplacement = b.element(100_916)
+    let secondReplacement = b.element(100_918)
+    let postRestoreWindowReads = MutableBox(0)
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        guard fixture.editorViewMenuPressCount.value > 0,
+              CFEqual(element, fixture.app), attribute == kAXWindowsAttribute as String else {
+            return nil
+        }
+        postRestoreWindowReads.value += 1
+        if postRestoreWindowReads.value == 3 {
+            b.setAttribute(fixture.app, kAXWindowsAttribute as String, [arrange, secondReplacement])
+        }
+        return nil
+    })
+
+    _ = await AccessibilityChannel.defaultGetParamVerified(
+        params: gainReadParams(),
+        runtime: runtime
+    )
+    #expect(postRestoreWindowReads.value >= 3)
+    #expect(fixture.pluginCloseControlPressCount.value == 0)
+    let remaining = try #require(
+        b.attributeValue(fixture.app, kAXWindowsAttribute as String) as? [AXUIElement]
+    )
+    #expect(!remaining.contains { CFEqual($0, firstReplacement) })
+    #expect(remaining.contains { CFEqual($0, secondReplacement) })
+}
+
+@Test func testOwnedReadCleanupRequiresAnActualRestorePickBoundary() async throws {
+    let fixture = LiveFixture(
+        pluginWindowPresent: false,
+        openWindowOnSlotPress: true,
+        controlsViewInitiallySelected: true,
+        viewMenuBecomesUnavailableAfterAnySelection: true,
+        viewSettleDelay: 0
+    )
+    let b = fixture.builder
+    let arrange = b.element(1001)
+    let original = b.element(1004)
+    let replacement = b.element(100_916)
+    let switcherID = b.elementID(b.element(1009))
+    b.setAttribute(
+        arrange,
+        kAXDocumentAttribute as String,
+        URL(fileURLWithPath: expectedPath).absoluteString
+    )
+    let userReplacedWindow = MutableBox(false)
+    let postFailedSwitchWindowReads = MutableBox(0)
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        let switcherPresses = fixture.axActions.value.filter {
+            $0.element == switcherID && $0.name == kAXPressAction as String
+        }.count
+        if switcherPresses >= 2,
+           CFEqual(element, fixture.app), attribute == kAXWindowsAttribute as String {
+            postFailedSwitchWindowReads.value += 1
+            if postFailedSwitchWindowReads.value == 2, !userReplacedWindow.value {
+                userReplacedWindow.value = true
+                b.setAttribute(fixture.app, kAXWindowsAttribute as String, [arrange, replacement])
+            }
+        }
+        return nil
+    })
+
+    _ = await AccessibilityChannel.defaultGetParamVerified(
+        params: parameterReadParams(),
+        runtime: runtime
+    )
+    #expect(userReplacedWindow.value)
+    #expect(postFailedSwitchWindowReads.value >= 2)
+    #expect(fixture.editorViewMenuPressCount.value == 1)
+    #expect(fixture.controlsViewMenuPressCount.value == 0,
+        "the restoration failed before the exact Controls AXPick")
+    #expect(fixture.pluginCloseControlPressCount.value == 0,
+        "a later observed-view refresh cannot turn a caller replacement into owned cleanup")
+    let remaining = try #require(
+        b.attributeValue(fixture.app, kAXWindowsAttribute as String) as? [AXUIElement]
+    )
+    #expect(!remaining.contains { CFEqual($0, original) })
+    #expect(remaining.contains { CFEqual($0, replacement) })
+}
+
+@Test func testOwnedReadRestoreRechecksContextAfterWillPickObservation() async throws {
+    let fixture = gainReadFixture(
+        windowPresent: false,
+        openOnPress: true
+    )
+    let b = fixture.builder
+    let arrange = b.element(1001)
+    let replacement = b.element(100_916)
+    let targetSlot = b.element(1306)
+    let switcherID = b.elementID(b.element(1009))
+    let postRestoreSwitcherWindowReads = MutableBox(0)
+    let revokedDuringWillPick = MutableBox(false)
+    let runtime = parameterReadRuntime(fixture, attributeRead: { element, attribute in
+        let switcherPresses = fixture.axActions.value.filter {
+            $0.element == switcherID && $0.name == kAXPressAction as String
+        }.count
+        if switcherPresses >= 2,
+           CFEqual(element, fixture.app), attribute == kAXWindowsAttribute as String {
+            postRestoreSwitcherWindowReads.value += 1
+            if postRestoreSwitcherWindowReads.value == 4, !revokedDuringWillPick.value {
+                revokedDuringWillPick.value = true
+                b.setAttribute(targetSlot, kAXDescriptionAttribute as String, "Noise Gate")
+                b.setAttribute(fixture.app, kAXWindowsAttribute as String, [arrange, replacement])
+            }
+        }
+        return nil
+    })
+
+    _ = await AccessibilityChannel.defaultGetParamVerified(
+        params: gainReadParams(),
+        runtime: runtime
+    )
+    #expect(revokedDuringWillPick.value)
+    #expect(fixture.controlsViewMenuPressCount.value == 1)
+    #expect(fixture.editorViewMenuPressCount.value == 0,
+        "context revoked by the willPick observation must prevent the inverse AXPick")
+    #expect(fixture.pluginCloseControlPressCount.value == 0,
+        "the caller replacement is not operation-owned cleanup")
+    let remaining = try #require(
+        b.attributeValue(fixture.app, kAXWindowsAttribute as String) as? [AXUIElement]
+    )
+    #expect(remaining.contains { CFEqual($0, replacement) })
+}
+
+@Test(arguments: [
+    PluginWindowReplacementAfterRestoration.duplicate,
+    .wrongPlugin,
+    .wrongTrack,
+    .targetDrift,
+    .closeFailure,
+])
+private func testOwnedReadCleanupRefusesUnprovenOrUnclosedReplacement(
+    _ replacement: PluginWindowReplacementAfterRestoration
+) async throws {
+    let fixture = gainReadFixture(
+        windowPresent: false,
+        openOnPress: true,
+        replacementAfterRestoration: replacement
+    )
+
+    let result = await AccessibilityChannel.defaultGetParamVerified(
+        params: gainReadParams(),
+        runtime: parameterReadRuntime(fixture)
+    )
+    let object = try #require(sharedJSONObject(result.message))
+    let closeAttempted = try #require(object["editor_close_attempted"] as? Bool)
+    let closeObserved = try #require(object["editor_close_observed"] as? Bool)
+    #expect(!closeObserved, "\(replacement): \(object)")
+    if replacement == .closeFailure {
+        #expect(closeAttempted)
+        #expect(fixture.pluginCloseControlPressCount.value == 3)
+        #expect(try #require(object["editor_still_open"] as? Bool))
+    } else {
+        #expect(object["state"] as? String == "C", "\(replacement): \(object)")
+        #expect(!closeAttempted)
+        #expect(fixture.pluginCloseControlPressCount.value == 0)
+        #expect(try #require(object["editor_cleanup_unobserved"] as? Bool))
+    }
+    let remainingWindows = try #require(
+        fixture.builder.attributeValue(fixture.app, kAXWindowsAttribute as String) as? [AXUIElement]
+    )
+    #expect(remainingWindows.count > 1)
 }
 
 @Test func testIssue1396GainRadioFalseDoesNotReadAdjacentRowWithSameTitles() async throws {

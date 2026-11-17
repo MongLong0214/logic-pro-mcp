@@ -410,7 +410,7 @@ enum AXLocalePolicy {
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Position#value")
     static let eventListColumnStatus = LabelSet(canonical: "Status", variants: ["상태", "状況", "Estado", "État", "Stato", "状态", "狀態"],
         rationale: "Event List status column; identity is the canonical English form."
-            + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
+            + " Logic 13 removed the old ContentRelocation nib row; the surviving Logic.framework Status row carries exactly these ten locale values. Checked offline by Scripts/check-labelsets-are-derived.py.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Status#value")
     static let eventListColumnChannel = LabelSet(canonical: "Ch", variants: ["채널", "Kan.", "Can.", "Ca.", "Canale", "Canal", "通道", "聲道"],
         rationale: "Event List channel column; identity is the canonical English form."
@@ -2888,7 +2888,7 @@ enum AXLocalePolicy {
         canonical: "bus",
         variants: ["버스", "バス", "总线", "匯流排"],
         rationale: "Classifies a bus track; read-only classifier."
-            + " Extended on 2026-09-16 to every locale Logic ships by reading the row Apple keys this control; the strings this label already carried are each one of that row's own values, so nothing measured was dropped and nothing was typed. Checked offline by Scripts/check-labelsets-are-derived.py.",
+            + " Logic 13 removed MAToolKit's lowercase bus row; Logic.framework's Bus row carries exactly these ten locale values. Checked offline by Scripts/check-labelsets-are-derived.py.",
         derivedFrom: "logic-canon://strings/Contents%2FFrameworks%2FLogic.framework%2FVersions%2FA%2FResources%2FLocalizable.strings/en/Bus#value"
     )
     static let trackTypeMaster = LabelSet(

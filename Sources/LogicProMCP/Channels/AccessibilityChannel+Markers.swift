@@ -551,6 +551,22 @@ extension AccessibilityChannel {
                 ]
             ))
         }
+        // The list is known closed here (checked above), so only the screen's identity is read —
+        // including the project in front, which is what makes the list that appears this
+        // operation's. Without a readable origin project nothing could be shown to be ours, so
+        // nothing is opened.
+        guard let originBeforeOpen = markerListOrigin(runtime: runtime, listWasOpen: false),
+              originBeforeOpen.projectDocument != nil else {
+            return .error(HonestContract.encodeStateC(
+                error: .readbackUnavailable,
+                hint: "The project in front could not be read, so a Marker List opened now could not be shown to be this operation's; nothing was opened.",
+                extras: [
+                    "operation": "nav.open_marker_list",
+                    "failure_stage": "origin_project_unreadable",
+                    "write_attempted": false,
+                ]
+            ))
+        }
         let menuResult = await pressMarkerMenuItem(.openList)
         guard menuResult.isSuccess else {
             return .error(HonestContract.encodeStateC(
@@ -559,7 +575,21 @@ extension AccessibilityChannel {
             ))
         }
         for _ in 0..<20 {
-            if AXLogicProElements.findMarkerListWindow(runtime: runtime) != nil {
+            if let binding = AXLogicProElements.markerListBinding(runtime: runtime) {
+                // The exact window that appeared, bound to its project: cleanup closes this one.
+                // A list of another project (the user switched while the menu action was awaited)
+                // is not adopted, and the operation does not go on as if its own list were open.
+                guard recordOpenedMarkerList(originBeforeOpen, opened: binding) else {
+                    return .error(HonestContract.encodeStateC(
+                        error: .readbackUnavailable,
+                        hint: "The Marker List now open is not bound to the project that was in front when it was opened, so it was not adopted and is left as it is.",
+                        extras: [
+                            "operation": "nav.open_marker_list",
+                            "failure_stage": "project_changed_during_open",
+                            "write_attempted": true,
+                        ]
+                    ))
+                }
                 return .success(HonestContract.encodeStateA(extras: [
                     "operation": "nav.open_marker_list",
                     "already_open": false,
@@ -598,6 +628,10 @@ extension AccessibilityChannel {
                 hint: "The arrange window could not be focused before creating a marker."
             ))
         }
+        // Logic's Create Marker selects the new marker and clears the region selection. Read it
+        // here, immediately before the press; it is written back below. See
+        // AccessibilityChannel+RegionSelectionRestore.swift.
+        let regionSelectionBefore = regionSelectionReading(runtime: runtime)
         let menuResult = await pressMarkerMenuItem(.create)
         guard menuResult.isSuccess else {
             return .error(HonestContract.encodeStateC(
@@ -638,6 +672,17 @@ extension AccessibilityChannel {
             }
         }
 
+        // After the name: the name write acts on the selected marker, so the region selection is
+        // put back only once nothing here needs the new marker selected.
+        let regionSelection = restoreRegionSelection(
+            before: regionSelectionBefore,
+            read: { regionSelectionReading(runtime: runtime) },
+            select: { item in
+                AXHelpers.setAttribute(item, kAXSelectedAttribute, kCFBooleanTrue, runtime: runtime.ax)
+            },
+            settle: { usleep(350_000) }
+        )
+
         var extras: [String: Any] = [
             "operation": "nav.create_marker",
             "method": "accessibility_menu",
@@ -645,6 +690,7 @@ extension AccessibilityChannel {
             "sent": true,
             "marker_count_before_channel": before.count,
             "marker_count_after_channel": after.count,
+            "region_selection": regionSelection.rawValue,
         ]
         if let requestedName, !requestedName.isEmpty {
             extras["requested_name"] = requestedName

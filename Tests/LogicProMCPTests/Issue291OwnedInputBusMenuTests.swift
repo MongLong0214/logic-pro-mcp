@@ -38,7 +38,7 @@ struct Issue291OwnedInputBusMenuTests {
         let f=p.f
         let binding=AXMixerStripBinding.Binding(window:f.window,mixer:f.mixer,strip:f.strips[0],document:document ?? f.bundle.absoluteString)
         return await AXMixerStripBinding.$current.withValue(binding) {
-            await AccessibilityChannel.getInputBusVerified(runtime:f.logic,timing:.immediate)
+            (await AccessibilityChannel.getInputBusObservation(runtime:f.logic,timing:.immediate)).result
         }
     }
 
@@ -360,6 +360,411 @@ struct Issue291OwnedInputBusMenuTests {
         #expect(body["popup_menu_state"] as? String == "closed")
         #expect(f.mutations.count == 2)
         #expect(f.mutations.last?.1 == kAXCancelAction as String)
+    }
+
+    @Test("Input cleanup can renew a redrawn stopped transport only in the exact source window",
+          arguments: ["stopped", "stopped_no_held", "stopped_no_held_transient_scalar",
+                      "final_document", "duplicate", "foreign", "unreadable", "playing", "recording"])
+    func inputCleanupReobservesRedrawnStoppedTransport(_ state: String) async throws {
+        final class Probe: @unchecked Sendable {
+            var redrawn = false
+            var freshPlayReads = 0
+            var postFreshStripReads = 0
+            var finalDriftInjected = false
+        }
+        let p = try prepare(1), f = p.f, probe = Probe()
+        defer { try? FileManager.default.removeItem(at: f.bundle) }
+        let oldBar = f.b.element(2_910_300)
+        let newBar = f.b.element(291_975), newPlay = f.b.element(291_976)
+        let newRecord = f.b.element(291_977), duplicatePlay = f.b.element(291_978)
+        f.b.setRole(newBar, kAXGroupRole as String)
+        f.b.setAttribute(newBar, kAXDescriptionAttribute as String, "Control Bar")
+        for (control, label) in [(newPlay, "Play"), (newRecord, "Record"), (duplicatePlay, "Play")] {
+            f.b.setRole(control, kAXCheckBoxRole as String)
+            f.b.setAttribute(control, kAXDescriptionAttribute as String, label)
+            f.b.setAttribute(control, kAXValueAttribute as String,
+                (state == "playing" && CFEqual(control, newPlay))
+                    || (state == "recording" && CFEqual(control, newRecord)) ? 1 : 0)
+            f.b.setChildren(control, [])
+        }
+        f.b.setChildren(newBar, state == "duplicate"
+            ? [newPlay, duplicatePlay, newRecord] : [newPlay, newRecord])
+        f.attributeReadResult = { node, attribute in
+            if ["stopped_no_held_transient_scalar", "final_document"].contains(state), probe.redrawn,
+               CFEqual(node, newPlay), attribute == kAXValueAttribute as String {
+                probe.freshPlayReads += 1
+                if probe.freshPlayReads <= 4 {
+                    return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                }
+            }
+            if state == "unreadable", CFEqual(node, newPlay),
+               attribute == kAXValueAttribute as String {
+                return .failure(.init(raw: AXError.cannotComplete.rawValue))
+            }
+            return nil
+        }
+        f.onChildrenResultRead = { node in
+            if state == "final_document", probe.freshPlayReads >= 5, CFEqual(node, f.strips[0]) {
+                probe.postFreshStripReads += 1
+                if probe.postFreshStripReads == 8 {
+                    probe.finalDriftInjected = true
+                    f.b.setAttribute(f.window, kAXDocumentAttribute as String, "file:///foreign.logicx")
+                }
+            }
+            guard !probe.redrawn, CFEqual(node, f.mixer),
+                  f.mutations.contains(where: { $0.1 == kAXCancelAction as String }) else { return }
+            probe.redrawn = true
+            let retained = f.logic.ax.children(f.window).filter { !CFEqual($0, oldBar) }
+            f.b.setChildren(f.window, state == "foreign" ? retained : retained + [newBar])
+        }
+        let base = f.logic
+        let ax = AXHelpers.Runtime(axApp: base.ax.axApp, attributeValue: base.ax.attributeValue,
+            attributeIsSettable: base.ax.attributeIsSettable, setAttributeValue: base.ax.setAttributeValue,
+            children: base.ax.children, performAction: base.ax.performAction, childCount: base.ax.childCount,
+            actionNames: base.ax.actionNames, actionNamesResult: base.ax.actionNamesResult,
+            childrenResult: base.ax.childrenResult, attributeValueResult: base.ax.attributeValueResult,
+            performActionResult: base.ax.performActionResult, elementAtPosition: base.ax.elementAtPosition,
+            attributeValuesResult: { node, attributes in
+                .success(attributes.map { attribute in
+                    if attribute == kAXChildrenAttribute as String { return base.ax.children(node) as NSArray }
+                    return base.ax.attributeValue(node, attribute) ?? NSNull()
+                })
+            })
+        let runtime = state.hasPrefix("stopped_no_held") || state == "final_document" ? base : AXLogicProElements.Runtime(
+            logicProPID: base.logicProPID, ax: ax, onScreenWindowList: base.onScreenWindowList,
+            focusedApplicationPID: base.focusedApplicationPID)
+        let binding = AXMixerStripBinding.Binding(window: f.window, mixer: f.mixer,
+            strip: f.strips[0], document: f.bundle.absoluteString)
+        let result = await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true)) {
+            await AXMixerStripBinding.$current.withValue(binding) {
+                (await AccessibilityChannel.getInputBusObservation(runtime: runtime, timing: .immediate)).result
+            }
+        }
+        let body = try #require(sharedJSONObject(result.message))
+        #expect(probe.redrawn)
+        if state == "final_document" { #expect(probe.finalDriftInjected) }
+        let succeeds = state.hasPrefix("stopped")
+        #expect(body["state"] as? String == (succeeds ? "A" : "C"), "\(body)")
+        #expect((body["current_input"] as? [String: Any])?["number"] as? Int ==
+            (succeeds ? 1 : nil))
+        #expect(body["popup_menu_state"] as? String == "closed")
+        let receipt = try #require(body["input_transport_fallback"] as? [String: Any])
+        let heldTransportCaptured = try #require(receipt["held_transport_captured"] as? Bool)
+        if state.hasPrefix("stopped_no_held") || state == "final_document" {
+            #expect(!heldTransportCaptured)
+        } else {
+            #expect(heldTransportCaptured)
+        }
+        if state == "stopped_no_held" {
+            let fallbackAttempted = try #require(receipt["fallback_attempted"] as? Bool)
+            #expect(!fallbackAttempted)
+        } else {
+            let fallbackAttempted = try #require(receipt["fallback_attempted"] as? Bool)
+            let heldTransportMatched = try #require(receipt["held_transport_matched"] as? Bool)
+            #expect(fallbackAttempted)
+            #expect(!heldTransportMatched)
+        }
+        if (state.hasPrefix("stopped") && state != "stopped_no_held") || state == "final_document" {
+            #expect(receipt["fresh_transport"] as? String == "stopped")
+            #expect(receipt["first_failed_checkpoint"] as? String == "none")
+        }
+        if state == "playing" || state == "recording" {
+            #expect(receipt["fresh_transport"] as? String == state)
+            #expect(receipt["first_failed_checkpoint"] as? String == "fresh_transport")
+        }
+        #expect(f.mutations.count == 2)
+        #expect(f.mutations.first?.1 == kAXPressAction as String)
+        #expect(f.mutations.last?.1 == kAXCancelAction as String)
+    }
+
+    @Test("A transient post-close source miss cannot let a matching held transport suppress fresh recovery")
+    func matchingHeldTransportStillRunsFreshFallbackAfterTransientSourceMiss() async throws {
+        final class Probe: @unchecked Sendable { var sourceRetired = false; var sourceRestored = false }
+        let p = try prepare(1), f = p.f, probe = Probe()
+        defer { try? FileManager.default.removeItem(at: f.bundle) }
+        f.onChildrenResultRead = { node in
+            guard !probe.sourceRetired, CFEqual(node, f.mixer),
+                  f.mutations.contains(where: { $0.1 == kAXCancelAction as String }) else { return }
+            probe.sourceRetired = true
+            f.b.setChildren(f.mixer, [f.strips[1]])
+        }
+        let base = f.logic
+        let ax = AXHelpers.Runtime(axApp: base.ax.axApp, attributeValue: base.ax.attributeValue,
+            attributeIsSettable: base.ax.attributeIsSettable, setAttributeValue: base.ax.setAttributeValue,
+            children: base.ax.children, performAction: base.ax.performAction, childCount: base.ax.childCount,
+            actionNames: base.ax.actionNames, actionNamesResult: base.ax.actionNamesResult,
+            childrenResult: base.ax.childrenResult, attributeValueResult: base.ax.attributeValueResult,
+            performActionResult: base.ax.performActionResult, elementAtPosition: base.ax.elementAtPosition,
+            attributeValuesResult: { node, attributes in
+                if probe.sourceRetired, !probe.sourceRestored,
+                   f.mutations.contains(where: { $0.1 == kAXCancelAction as String }) {
+                    probe.sourceRestored = true
+                    f.b.setChildren(f.mixer, f.strips)
+                }
+                return .success(attributes.map { attribute in
+                    if attribute == kAXChildrenAttribute as String { return base.ax.children(node) as NSArray }
+                    return base.ax.attributeValue(node, attribute) ?? NSNull()
+                })
+            })
+        let runtime = AXLogicProElements.Runtime(logicProPID: base.logicProPID, ax: ax,
+            onScreenWindowList: base.onScreenWindowList, focusedApplicationPID: base.focusedApplicationPID)
+        let binding = AXMixerStripBinding.Binding(window: f.window, mixer: f.mixer,
+            strip: f.strips[0], document: f.bundle.absoluteString)
+        let result = await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true)) {
+            await AXMixerStripBinding.$current.withValue(binding) {
+                (await AccessibilityChannel.getInputBusObservation(runtime: runtime, timing: .immediate)).result
+            }
+        }
+        let body = try #require(sharedJSONObject(result.message))
+        let receipt = try #require(body["input_transport_fallback"] as? [String: Any])
+        #expect(probe.sourceRetired && probe.sourceRestored)
+        let heldTransportCaptured = try #require(receipt["held_transport_captured"] as? Bool)
+        let heldTransportMatched = try #require(receipt["held_transport_matched"] as? Bool)
+        let fallbackAttempted = try #require(receipt["fallback_attempted"] as? Bool)
+        #expect(heldTransportCaptured)
+        #expect(heldTransportMatched)
+        #expect(fallbackAttempted, "\(body)")
+        #expect(receipt["fresh_transport"] as? String == "stopped")
+        #expect(receipt["first_failed_checkpoint"] as? String == "none")
+        #expect(body["state"] as? String == "A", "\(body)")
+        #expect((body["current_input"] as? [String: Any])?["number"] as? Int == 1)
+        #expect(f.mutations.map(\.1) == [kAXPressAction as String, kAXCancelAction as String])
+    }
+
+    @Test("Input fresh fallback settles one transient stopped-transport AX failure within its readback deadline")
+    func inputFreshFallbackRetriesOneTransientTransportRead() async throws {
+        final class Probe: @unchecked Sendable {
+            var sourceRetired = false
+            var sourceRestored = false
+            var postRestorePlayValueReads = 0
+            var injectedFailure = false
+        }
+        let p = try prepare(1), f = p.f, probe = Probe()
+        defer { try? FileManager.default.removeItem(at: f.bundle) }
+        f.onChildrenResultRead = { node in
+            guard !probe.sourceRetired, CFEqual(node, f.mixer),
+                  f.mutations.contains(where: { $0.1 == kAXCancelAction as String }) else { return }
+            probe.sourceRetired = true
+            f.b.setChildren(f.mixer, [f.strips[1]])
+        }
+        let base = f.logic
+        let controlBar = try #require(base.ax.children(f.window).first {
+            AXHelpers.getAttribute($0, kAXDescriptionAttribute as String, runtime: base.ax) as String? == "Control Bar"
+        })
+        let play = try #require(base.ax.children(controlBar).first {
+            AXHelpers.getAttribute($0, kAXDescriptionAttribute as String, runtime: base.ax) as String? == "Play"
+        })
+        let ax = AXHelpers.Runtime(axApp: base.ax.axApp, attributeValue: base.ax.attributeValue,
+            attributeIsSettable: base.ax.attributeIsSettable, setAttributeValue: base.ax.setAttributeValue,
+            children: base.ax.children, performAction: base.ax.performAction, childCount: base.ax.childCount,
+            actionNames: base.ax.actionNames, actionNamesResult: base.ax.actionNamesResult,
+            childrenResult: base.ax.childrenResult,
+            attributeValueResult: { node, attribute in
+                if probe.sourceRestored, CFEqual(node, play), attribute == kAXValueAttribute as String {
+                    probe.postRestorePlayValueReads += 1
+                    if probe.postRestorePlayValueReads == 1 {
+                        probe.injectedFailure = true
+                        return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                    }
+                }
+                return base.ax.attributeValueResult?(node, attribute)
+                    ?? .success(base.ax.attributeValue(node, attribute))
+            },
+            performActionResult: base.ax.performActionResult, elementAtPosition: base.ax.elementAtPosition,
+            attributeValuesResult: { node, attributes in
+                if probe.sourceRetired, !probe.sourceRestored,
+                   f.mutations.contains(where: { $0.1 == kAXCancelAction as String }) {
+                    probe.sourceRestored = true
+                    f.b.setChildren(f.mixer, f.strips)
+                }
+                return .success(attributes.map { attribute in
+                    if attribute == kAXChildrenAttribute as String { return base.ax.children(node) as NSArray }
+                    return base.ax.attributeValue(node, attribute) ?? NSNull()
+                })
+            })
+        let runtime = AXLogicProElements.Runtime(logicProPID: base.logicProPID, ax: ax,
+            onScreenWindowList: base.onScreenWindowList, focusedApplicationPID: base.focusedApplicationPID)
+        let binding = AXMixerStripBinding.Binding(window: f.window, mixer: f.mixer,
+            strip: f.strips[0], document: f.bundle.absoluteString)
+        let timing = AccessibilityChannel.OutputAssignmentTiming(
+            popupOpenTimeoutMs: 0, popupCloseTimeoutMs: 0,
+            readbackTimeoutMs: 100, pollIntervalMs: 0)
+        let result = await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true)) {
+            await AXMixerStripBinding.$current.withValue(binding) {
+                (await AccessibilityChannel.getInputBusObservation(runtime: runtime, timing: timing)).result
+            }
+        }
+        let body = try #require(sharedJSONObject(result.message))
+        let receipt = try #require(body["input_transport_fallback"] as? [String: Any])
+        #expect(probe.sourceRetired && probe.sourceRestored && probe.injectedFailure)
+        #expect(probe.postRestorePlayValueReads >= 2)
+        let heldTransportMatched = try #require(receipt["held_transport_matched"] as? Bool)
+        let fallbackAttempted = try #require(receipt["fallback_attempted"] as? Bool)
+        #expect(heldTransportMatched)
+        #expect(fallbackAttempted)
+        #expect(receipt["fresh_transport"] as? String == "stopped")
+        #expect(body["state"] as? String == "A", "\(body)")
+        #expect((body["current_input"] as? [String: Any])?["number"] as? Int == 1)
+        #expect(f.mutations.map(\.1) == [kAXPressAction as String, kAXCancelAction as String])
+    }
+
+    @Test("Input fresh fallback cannot begin another proof after its native popup bookend crosses the deadline")
+    func inputFreshFallbackStopsAfterPopupBookendCrossesDeadline() async throws {
+        final class Probe: @unchecked Sendable {
+            var sourceRetired = false
+            var sourceRestored = false
+            var postRestorePlayValueReads = 0
+            var injectedFailure = false
+            var popupAbsenceWindowReads = 0
+            var delayedPostWaitBookend = false
+        }
+        let p = try prepare(1), f = p.f, probe = Probe()
+        defer { try? FileManager.default.removeItem(at: f.bundle) }
+        f.onChildrenResultRead = { node in
+            guard !probe.sourceRetired, CFEqual(node, f.mixer),
+                  f.mutations.contains(where: { $0.1 == kAXCancelAction as String }) else { return }
+            probe.sourceRetired = true
+            f.b.setChildren(f.mixer, [f.strips[1]])
+        }
+        let base = f.logic
+        let controlBar = try #require(base.ax.children(f.window).first {
+            AXHelpers.getAttribute($0, kAXDescriptionAttribute as String, runtime: base.ax) as String? == "Control Bar"
+        })
+        let play = try #require(base.ax.children(controlBar).first {
+            AXHelpers.getAttribute($0, kAXDescriptionAttribute as String, runtime: base.ax) as String? == "Play"
+        })
+        let ax = AXHelpers.Runtime(axApp: base.ax.axApp, attributeValue: base.ax.attributeValue,
+            attributeIsSettable: base.ax.attributeIsSettable, setAttributeValue: base.ax.setAttributeValue,
+            children: base.ax.children, performAction: base.ax.performAction, childCount: base.ax.childCount,
+            actionNames: base.ax.actionNames, actionNamesResult: base.ax.actionNamesResult,
+            childrenResult: base.ax.childrenResult,
+            attributeValueResult: { node, attribute in
+                if probe.sourceRestored, CFEqual(node, play), attribute == kAXValueAttribute as String {
+                    probe.postRestorePlayValueReads += 1
+                    if probe.postRestorePlayValueReads == 1 {
+                        probe.injectedFailure = true
+                        return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                    }
+                }
+                return base.ax.attributeValueResult?(node, attribute)
+                    ?? .success(base.ax.attributeValue(node, attribute))
+            },
+            performActionResult: base.ax.performActionResult, elementAtPosition: base.ax.elementAtPosition,
+            attributeValuesResult: { node, attributes in
+                if probe.sourceRetired, !probe.sourceRestored,
+                   f.mutations.contains(where: { $0.1 == kAXCancelAction as String }) {
+                    probe.sourceRestored = true
+                    f.b.setChildren(f.mixer, f.strips)
+                }
+                return .success(attributes.map { attribute in
+                    if attribute == kAXChildrenAttribute as String { return base.ax.children(node) as NSArray }
+                    return base.ax.attributeValue(node, attribute) ?? NSNull()
+                })
+            })
+        let runtime = AXLogicProElements.Runtime(logicProPID: base.logicProPID, ax: ax,
+            onScreenWindowList: {
+                if probe.injectedFailure {
+                    probe.popupAbsenceWindowReads += 1
+                    if probe.popupAbsenceWindowReads == 2 {
+                        probe.delayedPostWaitBookend = true
+                        Thread.sleep(forTimeInterval: 0.15)
+                    }
+                }
+                return base.onScreenWindowList()
+            }, focusedApplicationPID: base.focusedApplicationPID)
+        let binding = AXMixerStripBinding.Binding(window: f.window, mixer: f.mixer,
+            strip: f.strips[0], document: f.bundle.absoluteString)
+        let timing = AccessibilityChannel.OutputAssignmentTiming(
+            popupOpenTimeoutMs: 0, popupCloseTimeoutMs: 0,
+            readbackTimeoutMs: 100, pollIntervalMs: 0)
+        let result = await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true)) {
+            await AXMixerStripBinding.$current.withValue(binding) {
+                (await AccessibilityChannel.getInputBusObservation(runtime: runtime, timing: timing)).result
+            }
+        }
+        let body = try #require(sharedJSONObject(result.message))
+        let receipt = try #require(body["input_transport_fallback"] as? [String: Any])
+        #expect(probe.sourceRetired && probe.sourceRestored && probe.injectedFailure)
+        #expect(probe.delayedPostWaitBookend)
+        #expect(probe.postRestorePlayValueReads == 1, "a proof began after the deadline")
+        #expect(body["state"] as? String == "C", "\(body)")
+        #expect(body["current_input"] == nil)
+        #expect(receipt["exit_reason"] as? String == "deadline", "\(receipt)")
+        #expect(receipt["attempt_count"] as? Int == 1)
+        #expect(f.mutations.map(\.1) == [kAXPressAction as String, kAXCancelAction as String])
+    }
+
+    @Test("Input fresh fallback settles transient absence of the identical original physical source")
+    func inputFreshFallbackRetriesTransientOriginalSourceAbsence() async throws {
+        final class Probe: @unchecked Sendable {
+            var sourceRetired = false
+            var sourceRestored = false
+            var mixerReadsAfterHeldTransport = 0
+        }
+        let p = try prepare(1), f = p.f, probe = Probe()
+        defer { try? FileManager.default.removeItem(at: f.bundle) }
+        f.onChildrenResultRead = { node in
+            guard !probe.sourceRetired, CFEqual(node, f.mixer),
+                  f.mutations.contains(where: { $0.1 == kAXCancelAction as String }) else { return }
+            probe.sourceRetired = true
+            f.b.setChildren(f.mixer, [f.strips[1]])
+        }
+        let base = f.logic
+        let ax = AXHelpers.Runtime(axApp: base.ax.axApp, attributeValue: base.ax.attributeValue,
+            attributeIsSettable: base.ax.attributeIsSettable, setAttributeValue: base.ax.setAttributeValue,
+            children: base.ax.children, performAction: base.ax.performAction, childCount: base.ax.childCount,
+            actionNames: base.ax.actionNames, actionNamesResult: base.ax.actionNamesResult,
+            childrenResult: { node in
+                if probe.sourceRestored, CFEqual(node, f.mixer) {
+                    probe.mixerReadsAfterHeldTransport += 1
+                    if probe.mixerReadsAfterHeldTransport == 5 {
+                        return .success([f.strips[1]])
+                    }
+                }
+                return base.ax.childrenResult?(node) ?? .success(base.ax.children(node))
+            },
+            attributeValueResult: base.ax.attributeValueResult,
+            performActionResult: base.ax.performActionResult, elementAtPosition: base.ax.elementAtPosition,
+            attributeValuesResult: { node, attributes in
+                if probe.sourceRetired, !probe.sourceRestored,
+                   f.mutations.contains(where: { $0.1 == kAXCancelAction as String }) {
+                    probe.sourceRestored = true
+                    f.b.setChildren(f.mixer, f.strips)
+                }
+                return .success(attributes.map { attribute in
+                    if attribute == kAXChildrenAttribute as String { return base.ax.children(node) as NSArray }
+                    return base.ax.attributeValue(node, attribute) ?? NSNull()
+                })
+            })
+        let runtime = AXLogicProElements.Runtime(logicProPID: base.logicProPID, ax: ax,
+            onScreenWindowList: base.onScreenWindowList, focusedApplicationPID: base.focusedApplicationPID)
+        let binding = AXMixerStripBinding.Binding(window: f.window, mixer: f.mixer,
+            strip: f.strips[0], document: f.bundle.absoluteString)
+        let timing = AccessibilityChannel.OutputAssignmentTiming(
+            popupOpenTimeoutMs: 0, popupCloseTimeoutMs: 0,
+            readbackTimeoutMs: 100, pollIntervalMs: 0)
+        let result = await OperationTraceContext.$current.withValue(.init(mutationGateAcquired: true)) {
+            await AXMixerStripBinding.$current.withValue(binding) {
+                (await AccessibilityChannel.getInputBusObservation(runtime: runtime, timing: timing)).result
+            }
+        }
+        let body = try #require(sharedJSONObject(result.message))
+        let receipt = try #require(body["input_transport_fallback"] as? [String: Any])
+        #expect(probe.sourceRetired && probe.sourceRestored)
+        #expect(probe.mixerReadsAfterHeldTransport >= 5)
+        let heldTransportMatched = try #require(receipt["held_transport_matched"] as? Bool)
+        let fallbackAttempted = try #require(receipt["fallback_attempted"] as? Bool)
+        let sourcePresent = try #require(receipt["source_present"] as? Bool)
+        #expect(heldTransportMatched)
+        #expect(fallbackAttempted)
+        #expect(receipt["first_failed_checkpoint"] as? String == "source_present", "\(receipt)")
+        #expect(sourcePresent)
+        #expect(receipt["fresh_transport"] as? String == "stopped")
+        #expect(receipt["exit_reason"] as? String == "accepted")
+        #expect(receipt["attempt_count"] as? Int == 2)
+        #expect(body["state"] as? String == "A", "\(body)")
+        #expect((body["current_input"] as? [String: Any])?["number"] as? Int == 1)
+        #expect(f.mutations.map(\.1) == [kAXPressAction as String, kAXCancelAction as String])
     }
 
     @Test("A checked non-Bus menu cannot retain input facts after original source, document or label custody is lost",
@@ -1210,10 +1615,95 @@ struct Issue291OwnedInputBusMenuTests {
         #expect(f.mutations.isEmpty)
     }
 
-    private func publishPublicInput(_ p: Prepared) async throws -> (dependencies: HandlerDependencies, source: String, track: String, project: String) {
+    private final class PublicInputAssociationProbe: @unchecked Sendable {
+        let mode: String
+        var selections: [Int] = []
+        var retainedAssociationPresent = false
+        var transientWindowRefused = false
+        init(mode: String = "healthy") { self.mode = mode }
+    }
+
+    private func publicInputAssociationRuntime(
+        _ p: Prepared, probe: PublicInputAssociationProbe
+    ) throws -> AXLogicProElements.Runtime {
+        let f = p.f, base = f.logic
+        let rail = try #require(AXLogicProElements.uniqueTrackHeaderRail(
+            in: f.window, runtime: base))
+        f.b.setAttributeSettable(rail, kAXSelectedChildrenAttribute as String, true)
+        f.b.setAttribute(rail, kAXSelectedChildrenAttribute as String, [f.headers[0]])
+        for index in f.headers.indices {
+            f.b.setAttribute(f.headers[index], kAXSelectedAttribute as String, index == 0)
+        }
+        f.b.setAttribute(f.app, kAXFocusedUIElementAttribute as String,
+            probe.mode == "wrong_mapping" ? f.strips[1] : f.strips[0])
+        let ax = AXHelpers.Runtime(axApp: base.ax.axApp, attributeValue: base.ax.attributeValue,
+            attributeIsSettable: { element, attribute in
+                if CFEqual(element, rail), attribute == kAXSelectedChildrenAttribute as String { return true }
+                return base.ax.attributeIsSettable(element, attribute)
+            }, setAttributeValue: { element, attribute, value in
+                guard CFEqual(element, rail), attribute == kAXSelectedChildrenAttribute as String else {
+                    return base.ax.setAttributeValue(element, attribute, value)
+                }
+                guard let selected = value as? [AXUIElement], selected.count == 1,
+                      let index = f.headers.firstIndex(where: { CFEqual($0, selected[0]) }) else { return false }
+                probe.selections.append(index)
+                if probe.mode == "inverse_failure", index == 0, probe.selections.count > 1 { return false }
+                let popupClosed = f.mutations.contains(where: { $0.1 == kAXCancelAction as String })
+                if probe.mode == "post_popup_inverse_failure", popupClosed,
+                   index == 1, probe.selections.count >= 4 { return false }
+                if probe.mode == "duplicate_mapping", probe.selections.count == 1 {
+                    f.b.setChildren(f.mixer, [f.strips[0], f.strips[0], f.strips[1]])
+                }
+                for current in f.headers.indices {
+                    f.b.setAttribute(f.headers[current], kAXSelectedAttribute as String, current == index)
+                }
+                f.b.setAttribute(rail, kAXSelectedChildrenAttribute as String, [f.headers[index]])
+                let focus = probe.mode == "wrong_mapping"
+                    || (probe.mode == "post_popup_inverse_failure" && popupClosed && index == 0)
+                    ? f.strips[1] : f.strips[index]
+                f.b.setAttribute(f.app, kAXFocusedUIElementAttribute as String, focus)
+                if probe.mode == "post_association_invalid", index == 0,
+                   probe.selections.count == 2 {
+                    f.b.setActionNames(f.outputs[0], [])
+                }
+                return true
+            }, children: base.ax.children, performAction: base.ax.performAction,
+            childCount: base.ax.childCount, actionNames: base.ax.actionNames,
+            actionNamesResult: base.ax.actionNamesResult, childrenResult: base.ax.childrenResult,
+            attributeValueResult: { element, attribute in
+                if probe.mode == "transient_stale", CFEqual(element, f.app),
+                   attribute == kAXWindowsAttribute as String,
+                   !probe.transientWindowRefused {
+                    probe.transientWindowRefused = true
+                    return .failure(.init(raw: AXError.cannotComplete.rawValue))
+                }
+                let passiveAttributes = [kAXValueAttribute, kAXSelectedTextAttribute,
+                    kAXNumberOfCharactersAttribute, kAXInsertionPointLineNumberAttribute] as [String]
+                if f.strips.contains(where: { CFEqual($0, element) }),
+                   passiveAttributes.contains(attribute),
+                   base.ax.attributeValue(element, attribute) == nil {
+                    return .failure(.init(raw: AXError.noValue.rawValue))
+                }
+                return base.ax.attributeValueResult?(element, attribute)
+                    ?? .success(base.ax.attributeValue(element, attribute) as AnyObject?)
+            },
+            performActionResult: base.ax.performActionResult,
+            elementAtPosition: base.ax.elementAtPosition,
+            attributeValuesResult: base.ax.attributeValuesResult)
+        return AXLogicProElements.Runtime(logicProPID: base.logicProPID, ax: ax,
+            onScreenWindowList: base.onScreenWindowList,
+            focusedApplicationPID: base.focusedApplicationPID)
+    }
+
+    private func publishPublicInput(
+        _ p: Prepared, associationMode: String = "healthy"
+    ) async throws -> (dependencies: HandlerDependencies, source: String, track: String,
+                       project: String, association: PublicInputAssociationProbe) {
         let f = p.f
         let cache = StateCache(), registry = TargetRegistry(), router = ChannelRouter()
-        let channel = f.channel()
+        let association = PublicInputAssociationProbe(mode: associationMode)
+        let logic = try publicInputAssociationRuntime(p, probe: association)
+        let channel = f.channel(logicOverride: logic)
         await router.register(channel)
         let poller = StatePoller(axChannel: channel, cache: cache,
             runtime: .init(hasVisibleWindow: { true }, dialogPresent: { false }, blockingDialogInfo: { nil },
@@ -1222,10 +1712,10 @@ struct Issue291OwnedInputBusMenuTests {
         let mixer = try await ResourceHandlers.read(uri: "logic://mixer", cache: cache, router: router,
             targetRegistry: registry, fileReader: .unavailable)
         let strips = try #require(sharedJSONObject(sharedResourceText(mixer))?["strips"] as? [[String: Any]])
-        var source: String?
+        var source: String?, sourceBinding: AXMixerStripBinding.Binding?
         for reference in strips.compactMap({ $0["mixer_strip_ref"] as? String }) {
             if let physical = await registry.resolve(TargetReference(rawValue: reference))?.physicalMixerStrip,
-               CFEqual(physical.strip, f.strips[0]) { source = reference }
+               CFEqual(physical.strip, f.strips[0]) { source = reference; sourceBinding = physical }
         }
         let tracks = try await ResourceHandlers.read(uri: "logic://tracks", cache: cache, router: router,
             targetRegistry: registry, fileReader: .unavailable)
@@ -1234,11 +1724,16 @@ struct Issue291OwnedInputBusMenuTests {
         let project = try await ResourceHandlers.read(uri: "logic://project/info", cache: cache, router: router,
             targetRegistry: registry, fileReader: .unavailable)
         let projectRef = try #require((sharedJSONObject(sharedResourceText(project))?["data"] as? [String: Any])?["project_ref"] as? String)
+        if let source, let sourceBinding {
+            association.retainedAssociationPresent = await cache.retainedMixerAssociation(
+                reference: .init(rawValue: source), source: sourceBinding,
+                snapshot: await registry.currentSnapshot) != nil
+        }
         #expect(f.mutations.isEmpty, "Issuing physical references must not navigate or write")
         let dependencies = HandlerDependencies(router: router, cache: cache, targetRegistry: registry, poller: poller,
             dialogPresent: { false }, supportBundleExporter: nil, mutationGate: LogicMutationGate(),
             liveTrackNames: { [0: "A", 1: "B"] }, projectFileReader: .unavailable)
-        return (dependencies, try #require(source), track, projectRef)
+        return (dependencies, try #require(source), track, projectRef, association)
     }
 
     private func publicInput(_ dependencies: HandlerDependencies, params: [String: Value], referencesEnabled: Bool = true) async throws -> [String: Any] {
@@ -1318,6 +1813,69 @@ struct Issue291OwnedInputBusMenuTests {
         }
     }
 
+    @Test("Public input builds an exact request-owned association before opening its popup")
+    func publicInputBusBuildsRequestOwnedAssociation() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let p = try prepare(), f = p.f
+            defer { try? FileManager.default.removeItem(at: f.bundle) }
+            let published = try await publishPublicInput(p)
+            #expect(!published.association.retainedAssociationPresent)
+            let body = try await publicInput(published.dependencies,
+                params: ["target_ref": .string(published.source)])
+            #expect(body["state"] as? String == "A", "\(body)")
+            #expect(body["target_ref"] as? String == published.source)
+            let input = try #require(body["current_input"] as? [String: Any])
+            #expect(input["kind"] as? String == "bus" && input["number"] as? Int == 1)
+            #expect(body["popup_menu_state"] as? String == "closed")
+            #expect(published.association.selections == [1, 0])
+            let originalHeaderSelected = try #require(
+                f.b.attributeValue(f.headers[0], kAXSelectedAttribute as String) as? Bool)
+            #expect(originalHeaderSelected)
+            let focus: AXUIElement = try #require(AXHelpers.getAttribute(
+                f.app, kAXFocusedUIElementAttribute as String, runtime: f.logic.ax))
+            #expect(CFEqual(focus, f.strips[0]))
+            #expect(f.mutations.map(\.1) == [kAXPressAction as String, kAXCancelAction as String])
+            #expect(!f.mutations.contains { CFEqual($0.0, p.leaf) || CFEqual($0.0, p.inputLeaf) })
+        }
+    }
+
+    @Test("Public input association refuses wrong, duplicate, unrestored, or preexisting-popup scope",
+          arguments: ["wrong_mapping", "duplicate_mapping", "inverse_failure", "preexisting_popup"])
+    func publicInputBusRefusesUnownedAssociation(_ mode: String) async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let p = try prepare(), f = p.f
+            defer { try? FileManager.default.removeItem(at: f.bundle) }
+            let published = try await publishPublicInput(p, associationMode: mode)
+            if mode == "preexisting_popup" {
+                f.b.setAttribute(f.root, kAXParentAttribute as String, f.mixer)
+                f.b.setChildren(f.mixer, f.strips + [f.root])
+                f.popupWindowsOverride = [[
+                    kCGWindowOwnerPID as String: f.pid,
+                    kCGWindowNumber as String: 291_901,
+                    kCGWindowLayer as String: LogicOnScreenWindows.popupMenuLevel,
+                    kCGWindowBounds as String: CGRect(
+                        x: 20, y: 100, width: 230, height: 175).dictionaryRepresentation,
+                ]]
+            }
+            let body = try await publicInput(published.dependencies,
+                params: ["target_ref": .string(published.source)])
+            #expect(body["state"] as? String == "C", "\(body)")
+            #expect(body["current_input"] == nil)
+            #expect(f.mutations.isEmpty)
+            if mode == "preexisting_popup" {
+                #expect(published.association.selections.isEmpty)
+            } else {
+                #expect(!published.association.selections.isEmpty)
+                let effects = try #require(body["ui_effects"] as? [String: Any])
+                let navigationPerformed = try #require(effects["navigation_performed"] as? Bool)
+                #expect(navigationPerformed)
+                if mode == "inverse_failure" {
+                    #expect(effects["restoration"] as? String != "restored")
+                }
+            }
+        }
+    }
+
     @Test(arguments: ["track", "unknown", "removed"])
     func publicInputBusRejectsNonPhysicalOrStaleReference(target: String) async throws {
         try await FeatureFlags.withAdr002TargetRefForTests(true) {
@@ -1335,6 +1893,96 @@ struct Issue291OwnedInputBusMenuTests {
             let attempted = try #require(body["write_attempted"] as? Bool)
             #expect(!attempted)
         }
+    }
+
+    @Test("A first stale physical census cannot recover into popup acquisition")
+    func publicInputStaleCensusCannotRecoverIntoPopup() async throws {
+        let p = try prepare(), f = p.f
+        defer { try? FileManager.default.removeItem(at: f.bundle) }
+        let association = PublicInputAssociationProbe(mode: "transient_stale")
+        let runtime = try publicInputAssociationRuntime(p, probe: association)
+        let binding = AXMixerStripBinding.Binding(window: f.window, mixer: f.mixer,
+            strip: f.strips[0], document: f.bundle.absoluteString)
+        let gate = LogicMutationGate()
+        let claim = try #require(gate.tryAcquire(operation: "mixer.get_input_bus_verified"))
+        defer { gate.release(claim) }
+        let context = OperationTraceContext(mutationGateAcquired: true,
+            ownsGate: { gate.stillOwns(claim) })
+        let result = await OperationTraceContext.$current.withValue(context) {
+            await AXMixerStripBinding.$current.withValue(binding) {
+                await AccessibilityChannel.getInputBusVerified(runtime: runtime, timing: .immediate)
+            }
+        }
+        let body = try #require(sharedJSONObject(result.message))
+        #expect(association.transientWindowRefused)
+        #expect(body["state"] as? String == "C", "\(body)")
+        #expect(body["error"] as? String == "stale_target_reference")
+        #expect(body["operation"] as? String == "mixer.get_input_bus_verified")
+        #expect(body["current_input"] == nil)
+        #expect(body["popup_menu_state"] as? String == "not_opened")
+        let writeAttempted = try #require(body["write_attempted"] as? Bool)
+        let navigationAttempted = try #require(body["navigation_attempted"] as? Bool)
+        #expect(!writeAttempted)
+        #expect(!navigationAttempted)
+        #expect(f.mutations.isEmpty)
+        #expect(association.selections.isEmpty)
+    }
+
+    @Test("Public input retains association navigation effects when later source validation refuses")
+    func publicInputRetainsAssociationEffectsBeforePopupRefusal() async throws {
+        try await FeatureFlags.withAdr002TargetRefForTests(true) {
+            let p = try prepare(), f = p.f
+            defer { try? FileManager.default.removeItem(at: f.bundle) }
+            let published = try await publishPublicInput(p,
+                associationMode: "post_association_invalid")
+            let body = try await publicInput(published.dependencies,
+                params: ["target_ref": .string(published.source)])
+            #expect(published.association.selections == [1, 0])
+            #expect(body["state"] as? String == "C", "\(body)")
+            #expect(body["current_input"] == nil)
+            #expect(body["popup_menu_state"] as? String == "not_opened")
+            let navigationAttempted = try #require(body["navigation_attempted"] as? Bool)
+            let effects = try #require(body["ui_effects"] as? [String: Any])
+            let navigationPerformed = try #require(effects["navigation_performed"] as? Bool)
+            #expect(navigationAttempted)
+            #expect(navigationPerformed)
+            #expect(effects["restoration"] as? String == "restored")
+            #expect(f.mutations.isEmpty)
+        }
+    }
+
+    @Test("Public input keeps a later failed restoration over restored association preflight")
+    func publicInputAssociationEffectsDoNotOverwriteLaterRestorationFailure() async throws {
+        final class Probe: @unchecked Sendable { var retired = false }
+        let p = try prepare(), f = p.f, probe = Probe()
+        defer { try? FileManager.default.removeItem(at: f.bundle) }
+        let published = try await publishPublicInput(p,
+            associationMode: "post_popup_inverse_failure")
+        let rail = try #require(AXLogicProElements.uniqueTrackHeaderRail(
+            in: f.window, runtime: f.logic))
+        f.onChildrenResultRead = { element in
+            guard CFEqual(element, f.mixer), !probe.retired,
+                  f.mutations.contains(where: { $0.1 == kAXCancelAction as String }) else { return }
+            probe.retired = true
+            f.b.setChildren(f.mixer, [f.strips[1]])
+            for index in f.headers.indices {
+                f.b.setAttribute(f.headers[index], kAXSelectedAttribute as String, index == 1)
+            }
+            f.b.setAttribute(rail, kAXSelectedChildrenAttribute as String, [f.headers[1]])
+            f.b.setAttribute(f.app, kAXFocusedUIElementAttribute as String, f.strips[1])
+        }
+        let body = try await publicInput(published.dependencies,
+            params: ["target_ref": .string(published.source)])
+        #expect(probe.retired)
+        #expect(body["state"] as? String == "C", "\(body)")
+        let navigationAttempted = try #require(body["navigation_attempted"] as? Bool)
+        let effects = try #require(body["ui_effects"] as? [String: Any])
+        let navigationPerformed = try #require(effects["navigation_performed"] as? Bool)
+        #expect(navigationAttempted)
+        #expect(navigationPerformed)
+        #expect(effects["restoration"] as? String == "not_restored")
+        #expect(effects["reason"] as? String != nil)
+        #expect(f.mutations.map(\.1) == [kAXPressAction as String, kAXCancelAction as String])
     }
 
     @Test(arguments: ["track", "index", "value", "destination", "ordinal"])

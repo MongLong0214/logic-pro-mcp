@@ -4391,6 +4391,8 @@ private final class LockedFlag: @unchecked Sendable {
     #expect(!missingTrack.isSuccess)
     #expect(missingTrack.message.contains("Track at index 4 not found"))
 
+    // A readable focus that is no text editor (the track list), so the mute reaches its lookup.
+    builder.setAttribute(app, kAXFocusedUIElementAttribute as String, trackList)
     let missingMute = await channel.execute(operation: "track.set_mute", params: ["index": "0"])
     #expect(!missingMute.isSuccess)
     #expect(missingMute.message.contains("Cannot find Mute button"))

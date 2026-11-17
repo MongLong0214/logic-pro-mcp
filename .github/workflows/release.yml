@@ -66,6 +66,17 @@ jobs:
           DEVELOPER_DIR=/Library/Developer/CommandLineTools xcrun --find swift
           uname -m
           sw_vers
+      - name: Verify pinned Apple corpus, citations and every declared locale
+        run: |
+          set -euo pipefail
+          python3 Scripts/logic_canon.py status
+          python3 Scripts/check-canon-drift.py
+          python3 Scripts/check-canon-citations.py
+          python3 Scripts/check-canon-prose-numbers.py
+          python3 Scripts/check-policy-literals-against-canon.py
+          python3 Scripts/check-labelsets-are-derived.py
+          python3 Scripts/locale_labels.py --check
+          python3 Scripts/check-observation-ratchets.py
       - name: Build release binary once
         env:
           RELEASE_VERSION: ${{ inputs.release_version }}

@@ -315,6 +315,72 @@ class GuardBehaviour(unittest.TestCase):
         result = self.run_guard()
         self.assertNotIn("LOGIC-FACING", result.stderr)
 
+    def _add_nowhere_policy_literal(self, literal):
+        path = os.path.join(self.root, "docs", "canon", "POLICY-LITERALS.json")
+        with open(path, encoding="utf-8") as handle:
+            body = json.load(handle)
+        body["literals"][literal] = "nowhere"
+        with open(path, "w", encoding="utf-8") as handle:
+            json.dump(body, handle, ensure_ascii=False)
+
+    def test_a_new_nowhere_literal_over_the_same_logic_fails(self):
+        """A build transition must not become a general escape from the debt ratchet."""
+        self._add_nowhere_policy_literal("not shipped anywhere same build 91xq")
+        result = self.run_guard()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("may only SHRINK", result.stderr)
+
+    def test_a_brand_new_nowhere_literal_under_a_different_logic_still_fails(self):
+        literal = "not shipped anywhere changed build 91xq"
+        self._add_nowhere_policy_literal(literal)
+        manifest_path = os.path.join(self.root, "docs", "canon", "MANIFEST.json")
+        with open(manifest_path, encoding="utf-8") as handle:
+            manifest = json.load(handle)
+        manifest["logic"] = dict(manifest.get("logic") or {}, build="9999")
+        with open(manifest_path, "w", encoding="utf-8") as handle:
+            json.dump(manifest, handle, ensure_ascii=False)
+        result = self.run_guard()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("may not introduce arbitrary new waiver text", result.stderr)
+
+    def test_metadata_only_logic_change_does_not_open_the_transition_exception(self):
+        self._add_nowhere_policy_literal("not shipped metadata only 91xq")
+        manifest_path = os.path.join(self.root, "docs", "canon", "MANIFEST.json")
+        with open(manifest_path, encoding="utf-8") as handle:
+            manifest = json.load(handle)
+        manifest["logic"] = dict(manifest.get("logic") or {}, app="Renamed Logic")
+        with open(manifest_path, "w", encoding="utf-8") as handle:
+            json.dump(manifest, handle, ensure_ascii=False)
+        result = self.run_guard()
+        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+        self.assertIn("may only SHRINK", result.stderr)
+
+    def test_a_previously_answered_literal_removed_by_different_logic_is_reproved_and_allowed(self):
+        """Apple may remove a string, but the replacement corpus must prove that exact fact.
+
+        The base must already classify the literal as answered; a build bump cannot invent a new
+        waiver. The replacement corpus then proves the old literal absent everywhere.
+        """
+        literal = "removed by changed build 91xq"
+        policy_path = os.path.join(self.root, "docs", "canon", "POLICY-LITERALS.json")
+        with open(policy_path, encoding="utf-8") as handle:
+            policy = json.load(handle)
+        policy["literals"][literal] = "strings_value"
+        with open(policy_path, "w", encoding="utf-8") as handle:
+            json.dump(policy, handle, ensure_ascii=False)
+        self.assertEqual(self._git("add", "-A").returncode, 0)
+        self.assertEqual(self._git("commit", "--amend", "--no-edit", "-q").returncode, 0)
+        self._add_nowhere_policy_literal(literal)
+        manifest_path = os.path.join(self.root, "docs", "canon", "MANIFEST.json")
+        with open(manifest_path, encoding="utf-8") as handle:
+            manifest = json.load(handle)
+        manifest["logic"] = dict(manifest.get("logic") or {}, build="9999")
+        with open(manifest_path, "w", encoding="utf-8") as handle:
+            json.dump(manifest, handle, ensure_ascii=False)
+        result = self.run_guard()
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("re-proved absent from every pinned corpus", result.stderr)
+
     # `test_removing_from_a_requirement_list_fails` used to sit here, over `CI-GATE.json`. That
     # list and the three other CI-only lists moved to `.github/ci/` with their owner in #951, and
     # the case moved with them, to `test_every_ci_job_is_required.py`. A case left behind would
@@ -527,50 +593,6 @@ class GuardBehaviour(unittest.TestCase):
         result = self.run_guard()
         self.assertIn("names a different Logic, so this is allowed", result.stderr)
         self.assertNotIn("over the same Logic", result.stderr)
-
-    # -- rule 7, applied to the policy literals when Logic itself changes --------------------------
-    # A Logic update turns a string Apple shipped at the base into one the pinned Logic does not.
-    # That is not a wrong string typed: it must not read as new debt, and only that.
-
-    def _policy_literals(self):
-        return os.path.join(self.root, "docs", "canon", "POLICY-LITERALS.json")
-
-    def _reclassify_one_literal_as_nowhere(self, different_logic):
-        self._make_repo_with_a_base()
-        with open(self._policy_literals(), encoding="utf-8") as handle:
-            body = json.load(handle)
-        shipped = sorted(name for name, where in body["literals"].items() if where != "nowhere")[0]
-        body["literals"][shipped] = "nowhere"
-        with open(self._policy_literals(), "w", encoding="utf-8") as handle:
-            json.dump(body, handle, ensure_ascii=False)
-        if different_logic:
-            self._rewrite_manifest(lambda m: m.update(logic=dict(m.get("logic") or {}, build="9999")))
-        return shipped
-
-    def test_a_literal_the_older_logic_shipped_is_not_new_debt_under_a_different_logic(self):
-        shipped = self._reclassify_one_literal_as_nowhere(different_logic=True)
-        result = self.run_guard()
-        self.assertNotIn(f"{shipped!r} was added to the list of literals classified as answered "
-                         f"nowhere", result.stderr)
-        self.assertIn("were shipped by the merge base's", result.stderr)
-
-    def test_the_same_literal_is_new_debt_over_the_same_logic(self):
-        shipped = self._reclassify_one_literal_as_nowhere(different_logic=False)
-        result = self.run_guard()
-        self.assertIn(f"{shipped!r} was added to the list of literals classified as answered "
-                      f"nowhere", result.stderr)
-
-    def test_a_literal_typed_new_and_answered_nowhere_is_debt_under_a_different_logic(self):
-        self._make_repo_with_a_base()
-        with open(self._policy_literals(), encoding="utf-8") as handle:
-            body = json.load(handle)
-        body["literals"]["zzz typed this just now"] = "nowhere"
-        with open(self._policy_literals(), "w", encoding="utf-8") as handle:
-            json.dump(body, handle, ensure_ascii=False)
-        self._rewrite_manifest(lambda m: m.update(logic=dict(m.get("logic") or {}, build="9999")))
-        result = self.run_guard()
-        self.assertIn("'zzz typed this just now' was added to the list of literals classified as "
-                      "answered nowhere", result.stderr)
 
     # -- rule 7 over the CI skip allowance: MOVED ----------------------------------------------
     # `CI-SKIPS.json` is how many cases a guard may skip under CI. It says nothing about Logic, it

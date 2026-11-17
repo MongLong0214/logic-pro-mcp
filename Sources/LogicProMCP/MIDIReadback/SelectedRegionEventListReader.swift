@@ -66,6 +66,10 @@ enum SelectedRegionEventListReader {
     enum Refusal: Error, Equatable, Sendable {
         case selectionUnreadable
         case selectionScopeIncomplete
+        /// The whole arrangement was read, and no region in it reads as selected. Only a COMPLETE,
+        /// readable scope with zero selected regions says this; an unreadable or partial read
+        /// never does.
+        case noRegionSelected
         case selectedRegionCount(Int)
         case selectionChanged
         case eventRowsChanged
@@ -98,6 +102,7 @@ enum SelectedRegionEventListReader {
     ) throws -> PartialRead {
         let before = try selection()
         guard before.scopeComplete else { throw Refusal.selectionScopeIncomplete }
+        if before.selected.isEmpty { throw Refusal.noRegionSelected }
         guard before.selected.count == 1, let region = before.selected.first else {
             throw Refusal.selectedRegionCount(before.selected.count)
         }
@@ -134,6 +139,7 @@ enum SelectedRegionEventListReader {
     ) throws -> PartialRead {
         let before = try selection()
         guard before.scopeComplete else { throw Refusal.selectionScopeIncomplete }
+        if before.selected.isEmpty { throw Refusal.noRegionSelected }
         guard before.selected.count == 1, let region = before.selected.first else {
             throw Refusal.selectedRegionCount(before.selected.count)
         }
@@ -246,6 +252,8 @@ enum SelectedRegionEventListReader {
             reason = "selection_unreadable"
         case Refusal.selectionScopeIncomplete:
             reason = "selection_scope_incomplete"
+        case Refusal.noRegionSelected:
+            reason = "no_region_selected"
         case Refusal.selectedRegionCount:
             reason = "selected_region_count_not_one"
         case Refusal.selectionChanged:

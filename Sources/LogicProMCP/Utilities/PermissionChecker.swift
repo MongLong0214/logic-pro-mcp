@@ -220,9 +220,8 @@ enum PermissionChecker {
         // `tell application "System Events"`. Excluding it let
         // `--check-permissions` exit 0 while those paths fail mid-mutation with
         // an Apple Events denial — the exact #188 false-green. The production
-        // probe is unconditional. If the lazily launched System Events agent is
-        // absent, it is started without activation before the nonprompting
-        // permission query is retried once.
+        // probe is unconditional. An absent System Events agent remains
+        // not-verifiable; checking permission never starts it or retries.
         //
         // This is a plain Bool by design for callers that must fail closed on
         // anything short of a VERIFIED grant (`--check-permissions` exit code,
@@ -308,10 +307,9 @@ enum PermissionChecker {
 
     /// Check if Automation permission for System Events is granted. Required by
     /// the MIDI import / tempo-dialog / project-state paths that drive
-    /// `tell application "System Events"`. The probe is unconditional and may
-    /// start the lazily launched System Events agent without activation before
-    /// querying consent. A denied or undetermined target returns `notGranted`
-    /// through the legacy Bool API.
+    /// `tell application "System Events"`. The probe is unconditional and
+    /// nonprompting. An unavailable target remains not-verifiable without
+    /// launching it; the legacy Bool API fails closed for every non-grant.
     static func checkSystemEventsAutomation() -> Bool {
         checkSystemEventsAutomation(runtime: .production)
     }
@@ -409,57 +407,24 @@ enum PermissionChecker {
         return automationState(for: status)
     }
 
-    /// System Events is an agent and may not exist until its first consumer.
-    /// `AEDeterminePermissionToAutomateTarget` reports that ordinary lazy state
-    /// as `procNotFound`. Start only that exact bundle without activation, then
-    /// retry the same nonprompting query once. A failed launch or retry remains
-    /// not-verifiable; denial and consent-required results never launch it.
+    /// Observe System Events consent without changing the target's lifecycle.
+    /// `procNotFound`, a timeout and other unavailable states remain not-verifiable.
     static func nonPromptingSystemEventsAutomationState() -> CheckState {
         nonPromptingSystemEventsAutomationState(
             coordinator: automationPermissionQueries,
-            determinePermission: determineAutomationPermission,
-            launchWithoutActivation: launchApplicationWithoutActivation
+            determinePermission: determineAutomationPermission
         )
     }
 
     static func nonPromptingSystemEventsAutomationState(
-        determinePermission: @escaping (String, Bool) -> Int32,
-        launchWithoutActivation: (String) -> Bool
+        coordinator: AutomationPermissionQueryCoordinator = AutomationPermissionQueryCoordinator(),
+        determinePermission: @escaping (String, Bool) -> Int32
     ) -> CheckState {
-        nonPromptingSystemEventsAutomationState(
-            coordinator: AutomationPermissionQueryCoordinator(),
-            determinePermission: determinePermission,
-            launchWithoutActivation: launchWithoutActivation
+        nonPromptingAutomationState(
+            bundleID: "com.apple.systemevents",
+            coordinator: coordinator,
+            determinePermission: determinePermission
         )
-    }
-
-    static func nonPromptingSystemEventsAutomationState(
-        coordinator: AutomationPermissionQueryCoordinator,
-        determinePermission: @escaping (String, Bool) -> Int32,
-        launchWithoutActivation: (String) -> Bool
-    ) -> CheckState {
-        let bundleID = "com.apple.systemevents"
-        guard let firstStatus = coordinator.query(
-            bundleID: bundleID,
-            timeout: automationPermissionTimeout,
-            determinePermission: determinePermission
-        ) else {
-            return .notVerifiable
-        }
-        guard firstStatus == Int32(procNotFound) else {
-            return automationState(for: firstStatus)
-        }
-        guard launchWithoutActivation(bundleID) else {
-            return .notVerifiable
-        }
-        guard let retryStatus = coordinator.query(
-            bundleID: bundleID,
-            timeout: automationPermissionTimeout,
-            determinePermission: determinePermission
-        ) else {
-            return .notVerifiable
-        }
-        return automationState(for: retryStatus)
     }
 
     private static func automationState(for status: Int32) -> CheckState {
@@ -470,22 +435,6 @@ enum PermissionChecker {
             return .notGranted
         default:
             return .notVerifiable
-        }
-    }
-
-    private static func launchApplicationWithoutActivation(bundleID: String) -> Bool {
-        guard let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: bundleID) else {
-            return false
-        }
-        do {
-            _ = try NSWorkspace.shared.launchApplication(
-                at: url,
-                options: [.withoutActivation],
-                configuration: [:]
-            )
-            return true
-        } catch {
-            return false
         }
     }
 

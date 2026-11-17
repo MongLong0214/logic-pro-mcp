@@ -241,13 +241,15 @@ actor AccessibilityChannel: Channel {
                 toggleStepInputKeyboard: {
                     AccessibilityChannel.defaultToggleStepInputKeyboard(runtime: logicRuntime)
                 },
-                setTempo: {
-                    AccessibilityChannel.defaultSetTempo(
-                        params: $0,
-                        runtime: logicRuntime,
-                        mouseRuntime: controlBarMouseRuntime,
-                        runFallback: runTempoFallback
-                    )
+                setTempo: { params in
+                    AccessibilityChannel.withFocusRestored(runtime: logicRuntime) {
+                        AccessibilityChannel.defaultSetTempo(
+                            params: params,
+                            runtime: logicRuntime,
+                            mouseRuntime: controlBarMouseRuntime,
+                            runFallback: runTempoFallback
+                        )
+                    }
                 },
                 setCycleRange: { AccessibilityChannel.defaultSetCycleRange(params: $0, runtime: logicRuntime) },
                 tracks: { AccessibilityChannel.defaultGetTracks(runtime: logicRuntime) },
@@ -287,23 +289,22 @@ actor AccessibilityChannel: Channel {
                 projectInfo: { AccessibilityChannel.defaultGetProjectInfo(runtime: logicRuntime) },
                 markers: { AccessibilityChannel.defaultGetMarkers(runtime: logicRuntime) },
                 openMarkerList: { await AccessibilityChannel.defaultOpenMarkerList(runtime: logicRuntime) },
-                createMarker: {
-                    await AccessibilityChannel.defaultCreateMarker(
-                        params: $0,
-                        runtime: logicRuntime
-                    )
+                createMarker: { params in
+                    // The dispatcher opens the list for this operation and releases it itself.
+                    await AccessibilityChannel.defaultCreateMarker(params: params, runtime: logicRuntime)
                 },
-                renameMarker: {
-                    await AccessibilityChannel.defaultRenameMarker(
-                        params: $0,
-                        runtime: logicRuntime
-                    )
+                renameMarker: { params in
+                    await AccessibilityChannel.withMarkerListRestored(runtime: logicRuntime) {
+                        await AccessibilityChannel.defaultRenameMarker(params: params, runtime: logicRuntime)
+                    }
                 },
                 deleteMarker: { params in
-                    await AccessibilityChannel.defaultDeleteMarker(
-                        index: Int(params["index"] ?? "") ?? -1,
-                        runtime: logicRuntime
-                    )
+                    await AccessibilityChannel.withMarkerListRestored(runtime: logicRuntime) {
+                        await AccessibilityChannel.defaultDeleteMarker(
+                            index: Int(params["index"] ?? "") ?? -1,
+                            runtime: logicRuntime
+                        )
+                    }
                 },
                 importMIDIFile: { await AccessibilityChannel.defaultImportMIDIFile(path: $0, runtime: logicRuntime) },
                 confirmNewTrackDialog: confirmNewTrackDialog,
@@ -2336,6 +2337,8 @@ actor AccessibilityChannel: Channel {
             return runtime.markers()
         case "nav.open_marker_list":
             return await runtime.openMarkerList()
+        case "nav.release_marker_list":
+            return await Self.releaseMarkerList(runtime: runtime.logicRuntime)
         case "nav.capture_markers":
             return await Self.defaultCaptureMarkers(
                 runtime: runtime.logicRuntime,

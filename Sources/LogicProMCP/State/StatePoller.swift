@@ -576,7 +576,7 @@ actor StatePoller {
         switch focus {
         case .textEditing:
             return true
-        case .notTextEditing, .unreadable:
+        case .notTextEditing, .passiveInsertionPoint, .unreadable:
             return false
         }
     }

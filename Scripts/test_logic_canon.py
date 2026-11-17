@@ -12,6 +12,7 @@ with and without a runtime prefix, and requires the parser to name the key it st
 against every key rather than a sample, because the interesting cases are the rare ones.
 """
 import importlib.util
+import hashlib
 import json
 import os
 import plistlib
@@ -23,6 +24,19 @@ from unittest import mock
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 APP = "/Applications/Logic Pro.app"
+HISTORICAL_EVIDENCE = os.path.join(
+    REPO, "docs", "observations", "evidence", "2026-09-15-axhelp-is-quickhelp-composed.json")
+# Korean StringsIndex fallbacks from the same archived source. Its entire `strings`
+# corpus digest matches MANIFEST.json at 923d8bfac08c890b55b48841f498f7fe7564ac25;
+# that manifest pins the corpus as a whole, not these individual input files.
+HISTORICAL_STRING_HASHES = {
+    "Contents/Frameworks/Logic.framework/Versions/A/Resources/Localizable.strings":
+        "280a10d98989f3507603a85393a97a1be040351bc2550c43b2a493e8a0aa647e",
+    "Contents/Frameworks/Logic.framework/Versions/A/Resources/ControllerAssignments.strings":
+        "d1168c6f233724fcde0cdd4d2e0fd26396dbf32751650842ea28f518ed22386a",
+    "Contents/Frameworks/Logic.framework/Versions/A/Resources/ActionBarCustomization.strings":
+        "0a55eef260956ad10b450fb45627114aee6199c6a42dbf3080d912aa81e71baf",
+}
 
 
 def _load():
@@ -37,6 +51,52 @@ canon = _load()
 sys.path.insert(0, os.path.join(REPO, "Scripts"))
 import nibarchive  # noqa: E402  -- after REPO is on the path
 HAVE_LOGIC = os.path.isdir(APP)
+
+
+def historical_logic_app():
+    """Require the explicit Apple source the preserved AXHelp measurement describes."""
+    app = os.environ.get("LPM_HISTORICAL_LOGIC_APP")
+    if not app:
+        raise AssertionError("LPM_HISTORICAL_LOGIC_APP must name the archived Logic source for "
+                             "the historical AXHelp fixture; the installed application is not a fallback")
+    try:
+        with open(HISTORICAL_EVIDENCE, encoding="utf-8") as handle:
+            evidence = json.load(handle)
+        with open(os.path.join(app, "Contents", "Info.plist"), "rb") as handle:
+            info = plistlib.load(handle)
+        expected = evidence["host"]
+        if (info.get("CFBundleShortVersionString"), info.get("CFBundleVersion")) != \
+                (expected["version"], expected["build"]):
+            raise AssertionError("historical Logic source version/build does not match the "
+                                 f"recorded {expected['version']} ({expected['build']})")
+        pinned = [source["ko_sha256"] for source in evidence["canonical_sources"]
+                  if "ko_sha256" in source]
+        if len(pinned) != 1:
+            raise AssertionError("historical evidence must pin exactly one Korean QuickHelp digest")
+        path, _locale = canon.quickhelp_resource(app, "ko", "QuickHelp")
+        with open(path, "rb") as handle:
+            actual = hashlib.sha256(handle.read()).hexdigest()
+        if actual != pinned[0]:
+            raise AssertionError("historical Logic QuickHelp source digest does not match the "
+                                 "original measurement")
+        if set(HISTORICAL_STRING_HASHES) != set(canon.LOGIC_STRING_UNITS):
+            raise AssertionError("historical Logic fallback digest pins do not cover every resolver input")
+        for unit, expected_digest in HISTORICAL_STRING_HASHES.items():
+            parent, name = os.path.split(unit)
+            with open(os.path.join(app, parent, "ko.lproj", name), "rb") as handle:
+                actual = hashlib.sha256(handle.read()).hexdigest()
+            if actual != expected_digest:
+                raise AssertionError(f"historical Logic fallback {name} digest does not match "
+                                     "the archived source")
+    except (OSError, ValueError, canon.CanonError) as error:
+        raise AssertionError(f"cannot read the explicit historical Logic source: {error}") from error
+    return app
+
+
+# Explicit input errors must fail even when installed-bundle tests are ineligible.
+# This also runs for unittest/import loaders, before their class-level skip decision.
+if "LPM_HISTORICAL_LOGIC_APP" in os.environ:
+    historical_logic_app()
 
 
 class Decoding(unittest.TestCase):
@@ -1395,6 +1455,130 @@ class EnglishAndItsTranslationsMustMeet(unittest.TestCase):
                          "and an artefact that will not reproduce from a different walk order")
 
 
+class HistoricalSourceBinding(unittest.TestCase):
+    """The archived measurement cannot silently consume the machine's current Logic."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.app = os.path.join(self.tmp.name, "Logic Pro.app")
+        self.resources = os.path.join(self.app, "Contents", "Resources", "ko.lproj")
+        os.makedirs(self.resources)
+        self.info = os.path.join(self.app, "Contents", "Info.plist")
+        with open(self.info, "wb") as handle:
+            plistlib.dump({"CFBundleShortVersionString": "12.3", "CFBundleVersion": "6674"}, handle)
+        self.quickhelp = os.path.join(self.resources, "QuickHelp.plist")
+        with open(self.quickhelp, "wb") as handle:
+            plistlib.dump({"key": {"_LOCALIZABLE_": {"Title": "historical control"}}}, handle)
+        with open(self.quickhelp, "rb") as handle:
+            self.digest = hashlib.sha256(handle.read()).hexdigest()
+        self.fallbacks = []
+        self.string_hashes = {}
+        for unit in canon.LOGIC_STRING_UNITS:
+            parent, name = os.path.split(unit)
+            path = os.path.join(self.app, parent, "ko.lproj", name)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            payload = plistlib.dumps({"key": "historical strings control"})
+            with open(path, "wb") as handle:
+                handle.write(payload)
+            self.fallbacks.append(path)
+            self.string_hashes[unit] = hashlib.sha256(payload).hexdigest()
+        # Controlled metadata is used only by this input-validation fixture. The real
+        # historical test below always reads the existing committed observation evidence.
+        self.evidence = os.path.join(self.tmp.name, "source-evidence.json")
+        with open(self.evidence, "w") as handle:
+            json.dump({"host": {"version": "12.3", "build": "6674"},
+                       "canonical_sources": [{"ko_sha256": self.digest}]}, handle)
+
+    def source(self, path):
+        with mock.patch.dict(os.environ, LPM_HISTORICAL_LOGIC_APP=path), \
+                mock.patch.dict(globals(), HISTORICAL_EVIDENCE=self.evidence,
+                                HISTORICAL_STRING_HASHES=self.string_hashes):
+            return historical_logic_app()
+
+    def test_explicit_matching_source_is_accepted(self):
+        self.assertEqual(self.source(self.app), self.app)
+
+    def test_an_unsupplied_source_fails_instead_of_using_installed_logic(self):
+        with self.assertRaisesRegex(AssertionError, "LPM_HISTORICAL_LOGIC_APP"):
+            self.source("")
+
+    def test_an_absent_or_invalid_source_fails(self):
+        for path in (os.path.join(self.tmp.name, "absent.app"), self.quickhelp):
+            with self.subTest(path=path), self.assertRaisesRegex(AssertionError, "historical Logic source"):
+                self.source(path)
+
+    def test_a_different_version_or_build_fails(self):
+        for version, build in (("13.0", "7801"), ("12.3", "9999")):
+            with open(self.info, "wb") as handle:
+                plistlib.dump({"CFBundleShortVersionString": version, "CFBundleVersion": build}, handle)
+            with self.subTest(version=version, build=build), \
+                    self.assertRaisesRegex(AssertionError, "version/build"):
+                self.source(self.app)
+
+    def test_a_tampered_corpus_fails_even_with_the_right_version(self):
+        with open(self.quickhelp, "ab") as handle:
+            handle.write(b"tampered")
+        with self.assertRaisesRegex(AssertionError, "QuickHelp.*digest"):
+            self.source(self.app)
+
+    def test_a_tampered_fallback_fails_even_with_the_right_quickhelp(self):
+        for path in self.fallbacks:
+            with open(path, "rb") as handle:
+                before = handle.read()
+            with open(path, "ab") as handle:
+                handle.write(b"tampered")
+            with self.subTest(path=path), self.assertRaisesRegex(AssertionError, "fallback.*digest"):
+                self.source(self.app)
+            with open(path, "wb") as handle:
+                handle.write(before)
+
+    def test_a_missing_fallback_fails_instead_of_weakening_resolution(self):
+        for path in self.fallbacks:
+            with open(path, "rb") as handle:
+                before = handle.read()
+            os.unlink(path)
+            with self.subTest(path=path), self.assertRaisesRegex(AssertionError, "historical Logic source"):
+                self.source(self.app)
+            with open(path, "wb") as handle:
+                handle.write(before)
+
+    def test_headless_module_loading_refuses_an_explicit_invalid_source_before_skipping(self):
+        import subprocess
+        script = """
+import os, runpy, sys, unittest
+from unittest import mock
+actual_isdir = os.path.isdir
+with mock.patch('os.path.isdir', side_effect=lambda path:
+                False if os.fspath(path) == '/Applications/Logic Pro.app' else actual_isdir(path)):
+    module = runpy.run_path('Scripts/test_logic_canon.py')
+assert module['HAVE_LOGIC'] is False
+suite = unittest.defaultTestLoader.loadTestsFromTestCase(module['AgainstTheRealCorpus'])
+result = unittest.TextTestRunner().run(suite)
+assert result.testsRun == 4 and len(result.skipped) == 4
+sys.exit(0 if result.wasSuccessful() else 1)
+"""
+        env = dict(os.environ)
+        env.pop("LPM_HISTORICAL_LOGIC_APP", None)
+        control = subprocess.run([sys.executable, "-c", script], cwd=REPO, env=env,
+                                 text=True, capture_output=True)
+        self.assertEqual(control.returncode, 0, control.stdout + control.stderr)
+        cases = {"empty": "", "absent": os.path.join(self.tmp.name, "absent.app"),
+                 "invalid_path": self.quickhelp, "wrong_digest": self.app}
+        for case, path in cases.items():
+            with self.subTest(case=case):
+                result = subprocess.run([sys.executable, "-c", script], cwd=REPO,
+                    env=dict(env, LPM_HISTORICAL_LOGIC_APP=path), text=True, capture_output=True)
+                self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+                self.assertIn("AssertionError", result.stderr)
+        with open(self.info, "wb") as handle:
+            plistlib.dump({"CFBundleShortVersionString": "13.0", "CFBundleVersion": "7801"}, handle)
+        result = subprocess.run([sys.executable, "-c", script], cwd=REPO,
+            env=dict(env, LPM_HISTORICAL_LOGIC_APP=self.app), text=True, capture_output=True)
+        self.assertNotEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("version/build", result.stderr)
+
+
 @unittest.skipUnless(HAVE_LOGIC, "needs Logic installed")
 class AgainstTheRealCorpus(unittest.TestCase):
     def test_every_key_round_trips_from_a_composed_axhelp(self):
@@ -1440,8 +1624,8 @@ class AgainstTheRealCorpus(unittest.TestCase):
         QuickHelp: `Library Focus triangle` became `Browser Focus triangle` (13.0 renamed the
         Library to the Browser), and the Control Bar and Project Tempo menu texts were reworded.
 
-        This is the measurement the whole canon axis rests on, so it runs as a test: if a Logic
-        update or an extractor change moves it, the number moves here rather than in a document.
+        The source is bound to this historical measurement. Installed-bundle round trips
+        exercise the current Logic separately; changing its text cannot change this assertion.
         """
         # The readings live in the repository, not in /tmp. They were read from `/tmp/axlive2.tsv`
         # on the machine that ran Logic, and that is where this test looked -- so on any other
@@ -1449,7 +1633,7 @@ class AgainstTheRealCorpus(unittest.TestCase):
         # boot. So the case written because "the measurement the whole canon axis rests on" should
         # move when Logic moves could not run for anybody, including its author tomorrow.
         values = self._live_axhelp_values()
-        resolver = canon.AXStringResolver(APP, "ko")
+        resolver = canon.AXStringResolver(historical_logic_app(), "ko")
         unresolved = [value for value in values if resolver.resolve(value) is None]
         self.assertEqual(len(values), 114)
         self.assertEqual(len(unresolved), 4)

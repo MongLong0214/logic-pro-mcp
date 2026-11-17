@@ -66,7 +66,8 @@ class FakeLogic:
         os.makedirs(os.path.join(self.app, "Contents", "Resources"), exist_ok=True)
         with open(os.path.join(self.app, "Contents", "Info.plist"), "wb") as handle:
             plistlib.dump({"CFBundleName": "Logic Pro", "CFBundleShortVersionString": version,
-                           "CFBundleVersion": build}, handle)
+                           "CFBundleVersion": build,
+                           "CFBundleDevelopmentRegion": "English"}, handle)
         for rel, data in files.items():
             path = os.path.join(self.app, rel)
             os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -153,6 +154,34 @@ def _qh_bundle():
 
 
 class D1AnEnglishFileIsNotItalian(unittest.TestCase):
+    def test_a_missing_localized_resource_uses_only_the_declared_development_locale(self):
+        with tempfile.TemporaryDirectory() as tmp, pointed_at(tmp, aliases={}):
+            files = _qh_bundle()
+            del files["Contents/Resources/it.lproj/QuickHelp.plist"]
+            files["Contents/Resources/it.lproj/Marker.txt"] = b"declared locale"
+            fake = FakeLogic(tmp, files)
+            it_ref = _ref("quickhelp", "QuickHelp", "it", "K1", "Title")
+            fake.cite(it_ref)
+            manifest = _build(fake, ["quickhelp"])
+            self.assertEqual(manifest["sources"]["quickhelp"]["resource_fallbacks"],
+                             {"it": {"QuickHelp": "en"}})
+            self.assertEqual(canon.resolve_offline(canon.CanonRef.parse(it_ref)),
+                             canon.NOT_LOCALIZED)
+
+    def test_a_missing_resource_never_guesses_an_undeclared_development_locale(self):
+        with tempfile.TemporaryDirectory() as tmp, pointed_at(tmp, aliases={}):
+            files = _qh_bundle()
+            del files["Contents/Resources/it.lproj/QuickHelp.plist"]
+            files["Contents/Resources/it.lproj/Marker.txt"] = b"declared locale"
+            fake = FakeLogic(tmp, files)
+            info = os.path.join(fake.app, "Contents", "Info.plist")
+            with open(info, "wb") as handle:
+                plistlib.dump({"CFBundleName": "Logic Pro", "CFBundleShortVersionString": "12.3",
+                               "CFBundleVersion": "6674",
+                               "CFBundleDevelopmentRegion": "GuessMe"}, handle)
+            with self.assertRaisesRegex(canon.CanonError, "cannot be assigned a fallback"):
+                _build(fake, ["quickhelp"])
+
     def test_a_byte_identical_file_resolves_to_not_localized(self):
         with tempfile.TemporaryDirectory() as tmp, pointed_at(tmp):
             fake = FakeLogic(tmp, _qh_bundle())
@@ -428,11 +457,59 @@ class StringsDict(unittest.TestCase):
     def test_a_shape_it_cannot_read_stops_naming_the_file(self):
         with tempfile.TemporaryDirectory() as tmp:
             bad = plistlib.dumps({"t": {"NSStringLocalizedFormatKey": "%#@n@",
-                                        "n": {"NSStringFormatSpecTypeKey": "NSStringDeviceSpecificRuleType"}}})
+                                        "n": {"NSStringFormatSpecTypeKey": "UnknownRuleType"}}})
             fake = FakeLogic(tmp, {"Contents/Resources/en.lproj/Bad.stringsdict": bad})
             with self.assertRaises(canon.CanonError) as caught:
                 list(canon.extract_stringsdict(fake.app))
             self.assertIn("Bad.stringsdict", str(caught.exception))
+
+    def test_device_specific_forms_are_extracted_per_locale(self):
+        entry = {
+            "NSStringDeviceSpecificRuleType": {
+                "iphone": "phone text",
+                "mac": "Mac text",
+                "other": "fallback text",
+            }
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = FakeLogic(tmp, {
+                "Contents/Resources/en.lproj/Device.stringsdict":
+                    plistlib.dumps({"network_error": entry}),
+            })
+            rows = sorted(r[2:] for r in canon.extract_stringsdict(fake.app))
+        self.assertEqual(rows, [
+            ("network_error/NSStringDeviceSpecificRuleType", "iphone", "phone text"),
+            ("network_error/NSStringDeviceSpecificRuleType", "mac", "Mac text"),
+            ("network_error/NSStringDeviceSpecificRuleType", "other", "fallback text"),
+        ])
+
+    def test_device_specific_rule_without_mac_is_refused(self):
+        entry = {"NSStringDeviceSpecificRuleType": {"other": "fallback text"}}
+        with tempfile.TemporaryDirectory() as tmp:
+            fake = FakeLogic(tmp, {
+                "Contents/Resources/en.lproj/Device.stringsdict":
+                    plistlib.dumps({"network_error": entry}),
+            })
+            with self.assertRaises(canon.CanonDecodeError) as caught:
+                list(canon.extract_stringsdict(fake.app))
+        self.assertIn("missing required device form(s): mac", str(caught.exception))
+
+    def test_device_specific_rule_with_unknown_or_non_string_form_is_refused(self):
+        for forms, needle in [
+            ({"mac": "Mac text", "other": "fallback", "visionpro": "future"},
+             "unknown device form"),
+            ({"mac": 1, "other": "fallback"}, "must hold a string"),
+        ]:
+            with self.subTest(forms=forms):
+                entry = {"NSStringDeviceSpecificRuleType": forms}
+                with tempfile.TemporaryDirectory() as tmp:
+                    fake = FakeLogic(tmp, {
+                        "Contents/Resources/en.lproj/Device.stringsdict":
+                            plistlib.dumps({"network_error": entry}),
+                    })
+                    with self.assertRaises(canon.CanonDecodeError) as caught:
+                        list(canon.extract_stringsdict(fake.app))
+                self.assertIn(needle, str(caught.exception))
 
 
 class AStringsDictEntryIsCompleteOrItFails(unittest.TestCase):
@@ -745,89 +822,6 @@ class TheGeneratedTableSaysNotLocalized(unittest.TestCase):
                 self.assertNotIn(f'"{locale}": "Toggle Track Record Enable"', block)
                 self.assertIn(f'"{locale}": "', block, "each carries Apple's own spelling")
         self.assertIn('"en-US": "Toggle Track Record Enable"', block, "the control: English stays")
-
-
-class LogicThirteenShapes(unittest.TestCase):
-    """Two shapes Logic 13.0 (7801) introduced and the 12.3 (6674) extractor refused or mis-pinned.
-
-    Mutation killed, per test: deleting the line it names. `_stringsdict_device_entry` (the
-    `DEVICE_RULE in entry` branch in `_stringsdict_entry`), the `other` requirement, the sibling
-    refusal, the English fallback in `extract_quickhelp`, and the `without_file` branch of
-    `verify_quickhelp_aliases`.
-    """
-
-    @staticmethod
-    def _device(**forms):
-        return {"NSStringDeviceSpecificRuleType": forms}
-
-    def _rows(self, entry):
-        with tempfile.TemporaryDirectory() as tmp:
-            fake = FakeLogic(tmp, {"Contents/Resources/en.lproj/Dev.stringsdict":
-                                   plistlib.dumps({"NO_INTERNET": entry})})
-            return list(canon.extract_stringsdict(fake.app))
-
-    def test_a_device_variation_entry_is_one_row_per_device(self):
-        rows = self._rows(self._device(mac="Check Settings", other="Check your network"))
-        by_field = {r[3]: (r[2], r[4]) for r in rows}
-        self.assertEqual(by_field["mac"], ("NO_INTERNET/NSStringDeviceSpecificRuleType",
-                                           "Check Settings"))
-        self.assertEqual(by_field["other"][1], "Check your network")
-        self.assertEqual(len(rows), 2)
-
-    def test_a_device_variation_without_other_is_refused(self):
-        with self.assertRaises(canon.CanonDecodeError) as caught:
-            self._rows(self._device(mac="Check Settings"))
-        self.assertIn("`other` form", str(caught.exception))
-
-    def test_a_device_variation_beside_a_plural_rule_is_refused(self):
-        entry = {**self._device(other="x"), "NSStringLocalizedFormatKey": "%#@n@"}
-        with self.assertRaises(canon.CanonDecodeError) as caught:
-            self._rows(entry)
-        self.assertIn("beside NSStringDeviceSpecificRuleType", str(caught.exception))
-
-    def test_a_device_variation_holding_a_non_string_is_refused(self):
-        with self.assertRaises(canon.CanonDecodeError):
-            self._rows(self._device(other=3))
-
-    @staticmethod
-    def _quickhelp(title):
-        return plistlib.dumps({"K": {"_LOCALIZABLE_": {"Title": title, "Text": "Body"}}})
-
-    def _bundle(self, tmp, *, italian_file):
-        files = {"Contents/Resources/en.lproj/QuickHelp.plist": self._quickhelp("Mute"),
-                 "Contents/Resources/it.lproj/QuickHelpDefault.plist": self._quickhelp("Ciao")}
-        if italian_file:
-            files["Contents/Resources/it.lproj/QuickHelp.plist"] = self._quickhelp("Mute")
-        return FakeLogic(tmp, files)
-
-    def test_a_locale_with_no_quickhelp_plist_reads_the_english_file(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            rows = list(canon.extract_quickhelp(self._bundle(tmp, italian_file=False).app))
-        italian = {(r[0], r[2], r[3]): r[4] for r in rows if r[1] == "it"}
-        self.assertEqual(italian[("QuickHelp", "K", "Title")], "Mute")
-        self.assertEqual(italian[("QuickHelpDefault", "K", "Title")], "Ciao")
-
-    def test_that_unit_is_pinned_not_localized_so_nothing_resolves_it_to_italian(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            rows = list(canon.extract_quickhelp(self._bundle(tmp, italian_file=False).app))
-        states = canon.localization_states({"quickhelp": rows})
-        self.assertEqual(states[("quickhelp", "QuickHelp", "it")], canon.NOT_LOCALIZED)
-
-    def test_the_alias_table_accepts_a_missing_file_and_a_byte_identical_one(self):
-        for italian_file in (False, True):
-            with tempfile.TemporaryDirectory() as tmp:
-                app = self._bundle(tmp, italian_file=italian_file).app
-                with pointed_at(tmp, aliases={"it": "en"}):
-                    groups = canon.verify_quickhelp_aliases(app)
-                self.assertIn("it", sum(groups.values(), []))
-
-    def test_a_missing_file_the_table_does_not_name_is_refused(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            app = self._bundle(tmp, italian_file=False).app
-            with pointed_at(tmp, aliases={}):
-                with self.assertRaises(canon.CanonError) as caught:
-                    canon.verify_quickhelp_aliases(app)
-        self.assertIn("QUICKHELP_LOCALE_ALIASES", str(caught.exception))
 
 
 if __name__ == "__main__":

@@ -283,8 +283,11 @@ import Testing
 
 @Test func ci_documentationShortcutCannotHideSourceRenames() throws {
     let workflow = try scriptContents(".github/workflows/ci.yml")
-    #expect(workflow.contains("git diff --no-renames --name-only -z"))
-    #expect(workflow.contains("docs/*|*.md"))
-    #expect(workflow.contains("*) mode=full"))
-    #expect(workflow.contains("if [ \"$changed\" -eq 0 ]; then mode=full; fi"))
+    #expect(workflow.contains("git diff --no-renames --raw --no-abbrev"))
+    #expect(workflow.contains("100644 100644"))
+    #expect(workflow.contains("docs/roadmap/README[.]md$"))
+    #expect(!workflow.contains("docs/*|*.md"))
+    #expect(workflow.contains("mode=full"))
+    #expect(workflow.contains("Scripts/test_required_verification_workflow.py"),
+            "CI must execute the Git fixtures that prove consumed documents, renames and failed diffs cannot bypass validation")
 }

@@ -9,7 +9,13 @@ enum AXMixerStripBinding {
         let strip: AXUIElement
         let document: String
 
-        var projectPath: String? { URL(string: document)?.path }
+        var projectPath: String? {
+            guard let url = URL(string: document), url.isFileURL,
+                  url.host == nil || url.host == "" || url.host == "localhost",
+                  url.user == nil, url.password == nil, url.port == nil,
+                  url.query == nil, url.fragment == nil else { return nil }
+            return ProjectReferenceIssuance.canonicalObservedProjectPath(url.path)
+        }
 
         func matches(_ other: Binding) -> Bool {
             CFEqual(window, other.window) && CFEqual(mixer, other.mixer) && CFEqual(strip, other.strip)

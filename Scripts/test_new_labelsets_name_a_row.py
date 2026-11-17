@@ -237,9 +237,10 @@ class AComposition(unittest.TestCase):
         spec.update(over)
         return {"composed_from": spec}
 
-    def _run(self, entry, members, present=("Show %@", "%@ einblenden", "Library", "Bibliothek")):
+    def _run(self, entry, members, present=("Show %@", "%@ einblenden", "Library", "Bibliothek"),
+             name="s"):
         failures = []
-        declared = guard.prove_composition("s", entry, members, _StubCanon(present), failures)
+        declared = guard.prove_composition(name, entry, members, _StubCanon(present), failures)
         return declared, failures
 
     def test_a_composition_matching_the_members_passes(self):
@@ -273,6 +274,31 @@ class AComposition(unittest.TestCase):
         declared, failures = self._run(
             spec, ["Show Library", "Bibliothek einblenden", "Bibliothek"])
         self.assertEqual(failures, [])
+
+    def test_case_changes_require_a_normalized_track_group_consumer(self):
+        for name in ("trackHeadersDescription", "trackContentExplicit"):
+            with self.subTest(name=name):
+                declared, failures = self._run(
+                    self._spec(), ["show library", "bibliothek einblenden"], name=name)
+                self.assertTrue(declared)
+                self.assertEqual(failures, [])
+
+    def test_other_compositions_keep_exact_member_comparison(self):
+        _, failures = self._run(self._spec(), ["show library", "bibliothek einblenden"])
+        self.assertTrue(any("the LabelSet does not carry" in f for f in failures), failures)
+
+    def test_member_comparison_does_not_fold_accents_nbsp_or_sharp_s(self):
+        for name in ("s", "trackHeadersDescription", "trackContentExplicit"):
+            for member in ("Bíbliothek einblenden", "Bibliothek\u00a0einblenden"):
+                with self.subTest(name=name, member=member):
+                    _, failures = self._run(self._spec(), ["Show Library", member], name=name)
+                    self.assertTrue(any("the LabelSet does not carry" in f for f in failures), failures)
+            with self.subTest(name=name, member="Show Straße"):
+                _, failures = self._run(
+                    self._spec(noun_values={"en": "STRASSE", "de": "Bibliothek"}),
+                    ["Show Straße", "Bibliothek einblenden"],
+                    present=("Show %@", "%@ einblenden", "STRASSE", "Bibliothek"), name=name)
+                self.assertTrue(any("the LabelSet does not carry" in f for f in failures), failures)
 
     def test_an_extra_without_a_reason_is_refused(self):
         spec = self._spec(extra=["Bibliothek"])
@@ -311,13 +337,98 @@ class _StubCanon:
 
     def __init__(self, present):
         self.present = set(present)
+        self.checked = {}
+
+    LOCALE_NAMES = ("en", "de")
+    TRANSLATION_NAMESPACE = {}
+
+    def load_manifest(self):
+        return {"sources": {"strings": {"locales": list(self.LOCALE_NAMES)}}}
+
+    CASE_INSENSITIVE = canon_for_stub.CASE_INSENSITIVE
+    ci_digest = staticmethod(canon_for_stub.ci_digest)
+
+    def resolve_offline(self, ref):
+        original = self.CanonRef(ref.source, ref.unit, ref.locale, ref.key,
+                                 ref.field.removesuffix(self.CASE_INSENSITIVE))
+        return self.ci_digest(self.checked[str(original)])
 
     def check_citation(self, ref, value):
         if value not in self.present:
             raise self.CanonError(f"{value!r} is not at {ref}")
+        self.checked[ref] = value
 
 
-class TheRepositorysOwnComposition(unittest.TestCase):
+class TheRepositorysOwnComposition(GuardRun):
+    def _run_repository(self, waivers, canon=None, source=None):
+        with open(os.path.join(REPO, "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"),
+                  encoding="utf-8") as handle:
+            original = handle.read()
+        return self.run_guard(original, original if source is None else source,
+                              waivers=waivers, canon=canon)
+
+    def test_metronome_command_member_case_mutation_is_refused(self):
+        with open(os.path.join(REPO, "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"),
+                  encoding="utf-8") as handle:
+            source = handle.read()
+        original = '"Metronom-Klick ein/aus"'
+        self.assertEqual(source.count(original), 1)
+        mutated = source.replace(original, '"metronom-klick ein/aus"', 1)
+        code, err = self._run_repository(guard.waivers(), source=mutated)
+        self.assertEqual(code, 1, err)
+        self.assertIn("metronomeClickKeyCommandName: the composition produces", err)
+        self.assertIn("Metronom-Klick ein/aus", err)
+
+    def test_a_missing_spanish_factor_on_either_or_both_sides_is_refused(self):
+        # Spanish and Portuguese compose the SAME member. A set intersection or member union
+        # still sees Mostrar Biblioteca after Spanish vanishes; it must check the locale axes.
+        for fields in (("template_values",), ("noun_values",),
+                       ("template_values", "noun_values")):
+            with self.subTest(fields=fields):
+                waivers = guard.waivers()
+                composition = waivers["showLibraryMenuItem"]["composed_from"]
+                for field in fields:
+                    del composition[field]["es"]
+                code, err = self._run_repository(waivers)
+                self.assertEqual(code, 1, err)
+                self.assertIn("missing locales ['es']", err)
+
+    def test_wrong_factor_and_unknown_locale_are_refused_by_the_entrypoint(self):
+        mutations = (("wrong_row", "noun_values", "de", "Mediathek", "not what that row holds"),
+                     ("wrong_accent", "noun_values", "fr", "Bibliotheque", "not what that row holds"),
+                     ("wrong_nbsp", "template_values", "en", "Show\u00a0%@", "not what that row holds"),
+                     ("unknown_locale", "noun_values", "unknown", "Library", "extra locales ['unknown']"))
+        for case, field, locale, value, diagnostic in mutations:
+            with self.subTest(case=case):
+                waivers = guard.waivers()
+                waivers["showLibraryMenuItem"]["composed_from"][field][locale] = value
+                code, err = self._run_repository(waivers)
+                self.assertEqual(code, 1, err)
+                self.assertIn(diagnostic, err)
+
+    def test_a_provider_manifest_missing_a_supported_locale_is_refused(self):
+        canon = _load("canon_with_missing_provider_locale", "logic_canon.py")
+        manifest = canon.load_manifest()
+        manifest["sources"]["strings"]["locales"].remove("es")
+        canon.load_manifest = lambda: manifest
+        code, err = self._run_repository(guard.waivers(), canon=canon)
+        self.assertEqual(code, 1, err)
+        self.assertIn("provider", err)
+        self.assertIn("es", err)
+
+    def test_all_four_compositions_name_every_supported_locale_and_verify(self):
+        canon = _load("canon_for_composition_locale_control", "logic_canon.py")
+        waivers = guard.waivers()
+        composed = {name: entry["composed_from"] for name, entry in waivers.items()
+                    if "composed_from" in entry}
+        self.assertEqual(set(composed), {"metronomeClickKeyCommandName", "showLibraryMenuItem",
+                                         "trackHeadersDescription", "trackContentExplicit"})
+        for name, composition in composed.items():
+            for field in ("template_values", "noun_values"):
+                self.assertEqual(set(composition[field]), set(canon.LOCALE_NAMES), (name, field))
+        code, err = self._run_repository(waivers)
+        self.assertEqual(code, 0, err)
+
     def test_show_library_is_declared_as_a_composition_and_still_verifies(self):
         """Pins the repository's own state.
 
