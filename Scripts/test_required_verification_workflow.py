@@ -52,6 +52,34 @@ def step_script(workflow, job, step):
     return textwrap.dedent(script.group(1))
 
 
+def history_reading_scripts():
+    """Every `Scripts/check-*.py` that compares against the merge base or a ratchet."""
+    scripts = pathlib.Path(REPO, "Scripts")
+    return sorted(
+        path.name for path in scripts.glob("check-*.py")
+        if re.search(r"merge[-_]base|ratchet", path.read_text(encoding="utf-8"), re.I)
+    )
+
+
+def history_checkout_problems(workflow, scripts):
+    """Jobs that run a history-reading script without a full-history checkout."""
+    problems = []
+    for match in re.finditer(r"^  ([A-Za-z0-9_-]+):\n", workflow, re.M):
+        job = match.group(1)
+        body = job_body(workflow, job) or ""
+        used = [name for name in scripts if re.search(rf"Scripts/{re.escape(name)}\b", body)]
+        if not used:
+            continue
+        checkouts = re.findall(
+            r"- uses: actions/checkout@\S+.*?\n((?:        .*\n)*)", body)
+        if not checkouts:
+            problems.append(f"{job}: runs {used[0]} with no checkout step")
+        for options in checkouts:
+            if not re.search(r"^          fetch-depth: 0\s*$", options, re.M):
+                problems.append(f"{job}: runs {used[0]} but its checkout lacks fetch-depth: 0")
+    return problems
+
+
 def workflow_problems(workflow):
     problems = []
     canon = job_body(workflow, "canon-locales") or ""
@@ -539,6 +567,24 @@ class RequiredVerificationWorkflow(unittest.TestCase):
         ):
             self.assertIn(required, gate)
         self.assertNotIn("skip", gate.lower())
+
+    def test_every_job_that_reads_git_history_checks_out_full_history(self):
+        scripts = history_reading_scripts()
+        self.assertIn("check-canon-citations.py", scripts)
+        self.assertIn("check-observation-ratchets.py", scripts)
+        for name in ("ci.yml", "release.yml"):
+            self.assertEqual(
+                history_checkout_problems(read(f".github/workflows/{name}"), scripts), [], name)
+
+    def test_a_checkout_without_full_history_is_detected(self):
+        scripts = history_reading_scripts()
+        release = read(".github/workflows/release.yml")
+        shallow = release.replace(
+            "        with:\n          ref: ${{ inputs.candidate_sha }}\n          fetch-depth: 0\n",
+            "        with:\n          ref: ${{ inputs.candidate_sha }}\n", 1)
+        self.assertNotEqual(shallow, release)
+        problems = history_checkout_problems(shallow, scripts)
+        self.assertTrue(any(p.startswith("candidate-package:") for p in problems), problems)
 
 
 if __name__ == "__main__":
