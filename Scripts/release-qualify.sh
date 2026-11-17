@@ -54,7 +54,7 @@ debug_live_tests=(
     "runnerRejectsPartialStateObservedFromRealServer"
 )
 test_inventory="$(swift test list)"
-for live_test in "${release_live_tests[@]}" "${debug_live_tests[@]}"; do
+for live_test in ${release_live_tests[@]+"${release_live_tests[@]}"} ${debug_live_tests[@]+"${debug_live_tests[@]}"}; do
     match_count="$(
         printf '%s\n' "$test_inventory" | awk -v suffix="/${live_test}()" '
             length($0) >= length(suffix) &&
@@ -95,7 +95,7 @@ if ! .build/release/LogicProMCP --check-permissions; then
     echo "Error: the release binary lacks a macOS permission the live qualification needs; the lines above name it (#985)." >&2
     exit 1
 fi
-for live_test in "${release_live_tests[@]}"; do
+for live_test in ${release_live_tests[@]+"${release_live_tests[@]}"}; do
     LOGIC_PRO_MCP_RUN_LIVE_QA=1 swift test --no-parallel --filter "$live_test"
     verify_candidate_bytes
 done
@@ -103,7 +103,7 @@ if [ ! -x .build/debug/LogicProMCP ]; then
     echo "Error: the debug LogicProMCP executable required by the fault-negative live test is missing." >&2
     exit 1
 fi
-for live_test in "${debug_live_tests[@]}"; do
+for live_test in ${debug_live_tests[@]+"${debug_live_tests[@]}"}; do
     LOGIC_PRO_MCP_RUN_LIVE_QA=1 swift test --no-parallel --filter "$live_test"
     verify_candidate_bytes
 done
