@@ -153,6 +153,50 @@ def workflow_problems(workflow):
     return problems
 
 
+# The jobs that compile, run and merge the coverage-instrumented tests, and the one that builds the
+# exact artifact native qualification runs. They share one architecture because a profile is only
+# valid against the binary that wrote it.
+MACOS_JOBS = ("release-build", "test-build", "test-shards", "product-validation")
+MACOS_LABEL = "macos-15"
+
+
+def runner_problems(workflow):
+    """Runner labels and job structure of the macOS path, as measured and chosen in ci.yml."""
+    problems = []
+    declared = re.findall(r"^    runs-on:\s*(.*?)\s*$", workflow, re.M)
+    for label in declared:
+        if "intel" in label or re.search(r"macos-(?!15\b)", label):
+            problems.append(f"unmeasured or Intel macOS label: {label}")
+    for name in MACOS_JOBS:
+        body = job_body(workflow, name) or ""
+        runs_on = re.search(r"^    runs-on:\s*(.*?)\s*$", body, re.M)
+        if not runs_on:
+            problems.append(f"{name}: missing runs-on")
+        elif name == "product-validation":
+            if runs_on.group(1) != (
+                    "${{ needs.change-scope.outputs.full-validation == 'true' && "
+                    f"'{MACOS_LABEL}' || 'ubuntu-latest' }}}}"):
+                problems.append(f"{name}: runs-on is not {MACOS_LABEL} for full validation")
+        elif runs_on.group(1) != MACOS_LABEL:
+            problems.append(f"{name}: runs-on is {runs_on.group(1)}, not {MACOS_LABEL}")
+    release = job_body(workflow, "release-build") or ""
+    if 'test "$(lipo -archs .build/release/LogicProMCP)" = arm64' not in release:
+        problems.append("release-build does not assert the release-runtime artifact is arm64")
+    build = job_body(workflow, "test-build") or ""
+    if 'test "$(lipo -archs "$test_binary")" = arm64' not in build:
+        problems.append("test-build does not assert the coverage test binary is arm64")
+    shards = job_body(workflow, "test-shards") or ""
+    if not re.search(r"^      max-parallel: 2$", shards, re.M):
+        problems.append("test-shards no longer caps its simultaneous macOS allocations at 2")
+    if re.findall(r"^          - shard: (\w+)$", shards, re.M) != ["selected", "complement"]:
+        problems.append("test-shards no longer runs exactly the selected and complement shards")
+    for dependency in ("release-build", "test-build", "test-shards"):
+        needs = re.search(r"^    needs:\s*(.*)$", job_body(workflow, "product-validation") or "", re.M)
+        if not needs or dependency not in needs.group(1):
+            problems.append(f"product-validation does not wait for {dependency}")
+    return problems
+
+
 class RequiredVerificationWorkflow(unittest.TestCase):
     def test_real_workflow_is_fail_closed(self):
         self.assertEqual(workflow_problems(read(".github/workflows/ci.yml")), [])
@@ -585,6 +629,44 @@ class RequiredVerificationWorkflow(unittest.TestCase):
         self.assertNotEqual(shallow, release)
         problems = history_checkout_problems(shallow, scripts)
         self.assertTrue(any(p.startswith("candidate-package:") for p in problems), problems)
+
+
+    def test_macos_path_uses_one_measured_arm64_label_and_keeps_its_structure(self):
+        self.assertEqual(runner_problems(read(".github/workflows/ci.yml")), [])
+
+    def test_a_job_moved_to_another_macos_label_is_detected(self):
+        workflow = read(".github/workflows/ci.yml")
+        for name, label in (("release-build", "macos-15-intel"), ("test-build", "macos-26"),
+                            ("test-shards", "macos-14")):
+            with self.subTest(job=name, label=label):
+                body = job_body(workflow, name)
+                moved = workflow.replace(body, body.replace(
+                    f"runs-on: {MACOS_LABEL}\n", f"runs-on: {label}\n", 1), 1)
+                self.assertNotEqual(moved, workflow)
+                self.assertTrue(runner_problems(moved), label)
+        full = workflow.replace("&& 'macos-15' ||", "&& 'macos-15-intel' ||", 1)
+        self.assertNotEqual(full, workflow)
+        self.assertTrue(runner_problems(full))
+
+    def test_dropping_the_arm64_artifact_assertions_or_the_shard_structure_is_detected(self):
+        workflow = read(".github/workflows/ci.yml")
+        for needle, replacement in (
+            ('          test "$(lipo -archs .build/release/LogicProMCP)" = arm64\n', ""),
+            ('          test "$(lipo -archs "$test_binary")" = arm64\n', ""),
+            ("      max-parallel: 2\n", ""),
+            ("          - shard: complement\n            mode: skip\n", ""),
+            ("needs: [change-scope, release-build, test-build, test-shards]",
+             "needs: [change-scope, release-build, test-build]"),
+        ):
+            with self.subTest(needle=needle):
+                mutant = workflow.replace(needle, replacement, 1)
+                self.assertNotEqual(mutant, workflow)
+                self.assertTrue(runner_problems(mutant))
+
+    def test_the_universal_release_is_still_installed_on_both_architectures(self):
+        release = read(".github/workflows/release.yml")
+        self.assertEqual(re.findall(r"^        os: \[(.*)\]$", release, re.M),
+                         ["macos-15-intel, macos-26", "macos-15-intel, macos-26"])
 
 
 RELEASE_PATH_SCRIPTS = (

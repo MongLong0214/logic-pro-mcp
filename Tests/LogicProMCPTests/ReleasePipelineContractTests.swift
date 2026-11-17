@@ -272,8 +272,13 @@ import Testing
 @Test func ci_and_release_use_supported_standard_macos_runners() throws {
     let ci = try scriptContents(".github/workflows/ci.yml")
     let release = try scriptContents(".github/workflows/release.yml")
-    #expect(ci.contains("'macos-15-intel'"))
-    #expect(!ci.contains("&& 'macos-15' ||"))
+    // The four CI jobs that build, run and merge coverage share one arm64 label; the release
+    // candidate is still built and installed on both architectures.
+    #expect(ci.contains("&& 'macos-15' ||"))
+    #expect(ci.components(separatedBy: "runs-on: macos-15\n").count - 1 == 3)
+    #expect(!ci.contains("runs-on: macos-15-intel"))
+    #expect(!ci.contains("'macos-15-intel'"))
+    #expect(ci.contains("lipo -archs .build/release/LogicProMCP"))
     #expect(release.contains("runs-on: macos-15-intel"))
     #expect(release.contains("os: [macos-15-intel, macos-26]"))
     #expect(!release.contains("macos-14"))
