@@ -13,10 +13,13 @@ What is deliberately NOT here: switching Logic's language, relaunching it, or th
 Those are live steps in locale-campaign.sh; this half can be dry-run on any census.
 """
 import datetime
+import importlib.util
 import json
 import os
 import re
 import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
 
 # Which window rows belong to which taxonomy surface, decided by what the path passes through.
 # Everything else is reported as unclassified in the menus record's limits rather than filed.
@@ -97,7 +100,98 @@ def missing_release(host):
     return None
 
 
-def main(census_path, repo, write, date=None):
+# --------------------------------------------------------------------------------------------------
+# THE CANON AXIS
+# --------------------------------------------------------------------------------------------------
+# A record joining the tree states facts about Logic, so `check-canon-citations.py` wants each of them
+# CITED to Apple's bytes or PROVED absent from them (docs/canon/README.md). A census record states
+# nothing but strings, so the generator accounts for every distinct string it files:
+#
+#   ships        a whole value of some pinned corpus      -> a `logic-canon://<source>/<locale>#value`
+#                                                            citation carrying the string verbatim
+#   absent       a value of no corpus and no near miss    -> one `canon_absent` proof over every corpus
+#                                                            the manifest pins (project content, numbers)
+#   near miss    absent as bytes, but a shipped label     -> filed under neither: a proof would be
+#                folds to it (a colon, an ellipsis)          refused, and the shipped spelling is not
+#                                                            something this census read. Named in `limits`
+#   unconfirmed  its 32-bit prefix is in a corpus and no  -> REFUSED. Whether it ships is a string
+#                string comparison is pinned                 comparison on a machine with Logic, and the
+#                                                            generator does not guess it
+#
+# The citations are pinned by `Scripts/logic_canon.py build`, which reads the citations out of the
+# records, and the unconfirmed ones are settled by `logic_canon.py confirm --stdin`. Neither runs here.
+
+def _load_canon():
+    path = os.path.join(os.path.dirname(os.path.dirname(HERE)), "Scripts", "logic_canon.py")
+    spec = importlib.util.spec_from_file_location("logic_canon_for_census_records", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module  # dataclass-style modules want to find themselves
+    spec.loader.exec_module(module)
+    return module
+
+
+def _locale_preference(host_locale):
+    """Corpus locales to cite from, best first, for a census taken in `host_locale`."""
+    full = host_locale.replace("-", "_")
+    return [full, full.split("_")[0], "en", "-"]
+
+
+def account_for_strings(strings, host_locale, canon):
+    """Sort every string into citations, absences, near misses and unconfirmed ones.
+
+    Returns `(citations, absent, near, unconfirmed, corpora)`. `citations` is `[(ref, string)]` in
+    string order. Everything is decided from the committed canon (`canon.presence`), so it runs with
+    no Logic; a string the committed canon cannot decide comes back in `unconfirmed`.
+    """
+    manifest = canon.load_manifest()
+    corpora = sorted((source, locale) for source, block in (manifest.get("sources") or {}).items()
+                     for locale in (block.get("locales") or []))
+    prefer = _locale_preference(host_locale)
+    citations, absent, near, unconfirmed = [], [], [], []
+    for text in strings:
+        # An ASCII string is cited from English: the host locale's file may hold it only as the
+        # untranslated English copy, which `check-canon-citations` refuses as "not localized".
+        order = (["en"] + [p for p in prefer if p != "en"]) if text.isascii() else prefer
+        rank = {locale: i for i, locale in enumerate(order)}
+        verdicts = [(source, locale, canon.presence(source, locale, text)) for source, locale in corpora]
+        shipped = [(rank.get(locale, len(order)), locale, source)
+                   for source, locale, verdict in verdicts if verdict == canon.SHIPS]
+        if shipped:
+            _rank, locale, source = min(shipped)
+            # Joined, not one f-string: `build` scans every file under Scripts/ for the scheme, and a
+            # braced scheme literal here is read as a malformed citation.
+            citations.append(("logic-canon://" + f"{source}/{locale}#value", text))
+        elif any(verdict == canon.UNCONFIRMED for _s, _l, verdict in verdicts):
+            unconfirmed.append(text)
+        elif any(canon.differs_only_by_decoration(source, locale, text) for source, locale in corpora):
+            near.append(text)
+        else:
+            absent.append(text)
+    return citations, absent, near, unconfirmed, corpora
+
+
+def canon_blocks(strings, host_locale, canon):
+    """`(fields, near, unconfirmed)`: the record keys that carry the canon axis, ready to merge."""
+    citations, absent, near, unconfirmed, corpora = account_for_strings(strings, host_locale, canon)
+    fields = {"canon": [
+        {"ref": ref, "value": text,
+         "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the "
+                     "string is Apple's and not one that was typed",
+         "binding": {"kind": "record"}}
+        for ref, text in citations]}
+    if absent:
+        fields["canon_absent"] = [{
+            "claim": f"{len(absent)} strings this surface exposes are a whole value of no corpus the "
+                     f"canon pins, and no shipped label folds to them",
+            "strings": absent,
+            "searched": [{"source": source, "locale": locale} for source, locale in corpora],
+            "why_runtime": "Apple's bytes hold none of them, so the only route to each is the census "
+                           "reading itself: they are project content, numbers and runtime text",
+        }]
+    return fields, near, unconfirmed
+
+
+def main(census_path, repo, write, date=None, canon=None):
     census = json.load(open(census_path, encoding="utf-8"))
     host = census["host"]
     locale = host["locale"]
@@ -121,13 +215,18 @@ def main(census_path, repo, write, date=None):
             continue
         buckets.setdefault(s, []).append(row)
 
+    canon = canon or _load_canon()
     records = {}
+    refused = []
     for surface, rows in sorted(buckets.items()):
         rid = f"{date}-{locale}-{surface.replace('.', '-')}-census"
         strings = sorted({v for r in rows for k in ("title", "description", "help", "value") if (v := r.get(k))})
         idents = sorted({r["identifier"] for r in rows if r.get("identifier")})
+        canon_fields, near, unconfirmed = canon_blocks(strings, locale, canon)
+        if unconfirmed:
+            refused.append((rid, unconfirmed))
         records[rid] = {
-            "id": rid, "date": date, "schema": 2,
+            "id": rid, "date": date, "schema": 3,
             "subject": f"Every string the {surface} surface exposes to AX in {locale}",
             "question": f"What labels does Logic show on {surface} in {locale}, and on which elements?",
             "verdict": "works",
@@ -169,8 +268,23 @@ def main(census_path, repo, write, date=None):
                 "name, a region name — is a reading of this fixture, not of Logic.",
             ],
             "supersedes": None,
+            **canon_fields,
         }
+        if near:
+            records[rid]["limits"].append(
+                f"{len(near)} strings are neither cited nor proved absent: each is absent from Apple's "
+                f"corpora as bytes and a shipped label folds to it (a colon, an ellipsis, a case), so "
+                f"the spelling Logic ships is not something this census read: "
+                + "; ".join(near))
 
+    if refused:
+        for rid, texts in refused:
+            print(f"{rid}: {len(texts)} string(s) the committed canon cannot place")
+        print("REFUSED: a string whose 32-bit prefix is in a corpus is neither shipped nor absent until a "
+              "string comparison is pinned. On a machine with Logic, read-only:\n"
+              "  python3 Scripts/logic_canon.py confirm --stdin < strings.txt\n"
+              "then file the records again. Nothing was written.")
+        return 2
     print(f"census {locale} {host['version']} ({host['build']}): {sum(len(v) for v in buckets.values())} rows "
           f"in {len(buckets)} surfaces, {unclassified} unclassified")
     for rid, rec in records.items():

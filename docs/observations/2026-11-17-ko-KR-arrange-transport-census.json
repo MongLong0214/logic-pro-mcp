@@ -1,7 +1,7 @@
 {
   "id": "2026-11-17-ko-KR-arrange-transport-census",
   "date": "2026-11-17",
-  "schema": 2,
+  "schema": 3,
   "subject": "Every string the arrange.transport surface exposes to AX in ko-KR",
   "question": "What labels does Logic show on arrange.transport in ko-KR, and on which elements?",
   "verdict": "works",
@@ -135,5 +135,503 @@
     "177 window rows matched no surface rule and are not filed under any record; they are in the evidence file and can be re-classified when a rule exists.",
     "One project, one host, one build. A label that depends on project content — a track name, a region name — is a reading of this fixture, not of Logic."
   ],
-  "supersedes": null
+  "supersedes": null,
+  "canon": [
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "4/4",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ko#value",
+      "value": "Smart Controls",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ko#value",
+      "value": "녹음",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ko#value",
+      "value": "대치",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ko#value",
+      "value": "도구 막대",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ko#value",
+      "value": "라이브러리",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ko#value",
+      "value": "마디",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ko#value",
+      "value": "메모장",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ko#value",
+      "value": "메트로놈",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ko#value",
+      "value": "목록 편집기",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ko#value",
+      "value": "믹서",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ko#value",
+      "value": "박자표",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ko#value",
+      "value": "브라우저",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ko#value",
+      "value": "비트",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ko#value",
+      "value": "비트 및 프로젝트",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ko#value",
+      "value": "빠른 도움말",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ko#value",
+      "value": "빠른 도움말 버튼. 빠른 도움말 영역을 표시합니다. 인스펙터가 닫혀 있으면 빠른 도움말이 별도의 윈도우로 열립니다. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ko#value",
+      "value": "사이클",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ko#value",
+      "value": "솔로",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ko#value",
+      "value": "인스펙터",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ko#value",
+      "value": "재생",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ko#value",
+      "value": "재생헤드 위치",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ko#value",
+      "value": "조표",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ko#value",
+      "value": "카운트 인",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ko#value",
+      "value": "컨트롤 막대",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ko#value",
+      "value": "컨트롤 막대. 프로젝트 및 앱 기능에 대한 버튼과 디스플레이가 포함되어 있습니다. 사용자화하려면 포인터를 컨트롤 막대 버튼 위에 올려놓고, 더 보기 버튼이 나타나면 Control-클릭한 다음, 단축 메뉴에서 ‘컨트롤 막대 및 디스플레이 사용자화’를 선택하십시오. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/ko#value",
+      "value": "템포",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ko#value",
+      "value": "튜너",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ko#value",
+      "value": "트랜스포트 디스플레이",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ko#value",
+      "value": "편집기",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ko#value",
+      "value": "표시 모드",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ko#value",
+      "value": "프로젝트 파일",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ko#value",
+      "value": "프리 템포 녹음",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/ko#value",
+      "value": "플래시백 캡처",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    }
+  ],
+  "canon_absent": [
+    {
+      "claim": "26 strings this surface exposes are a whole value of no corpus the canon pins, and no shipped label folds to them",
+      "strings": [
+        "C 메이저",
+        "Smart Controls   Y, Smart Controls 버튼. 개별 채널 스트립 또는 플러그인을 편집할 필요 없이 현재 패치의 사운드를 빠르게 수정할 수 있습니다. ",
+        "녹음   R, 녹음 버튼. 선택한 트랙 또는 녹음 준비된 여러 트랙에 녹음합니다. ",
+        "대치   /, 대치 버튼. 기존 녹음 또는 녹음 일부를 신규 녹음으로 대치합니다. ",
+        "도구 막대   ⌃⌥⌘T, 도구 막대 버튼. 키 기능에 대한 버튼을 포함하는 도구 막대를 표시합니다. ",
+        "메모장   ⌃⇧P, 메모장 버튼. 프로젝트 및 트랙 텍스트 메모를 생성하고 보고 편집합니다. ",
+        "메트로놈 클릭   K, 메트로놈 버튼. 재생 또는 녹음 중에 프로젝트 템포에서 클릭 소리를 듣습니다. 추가 옵션을 보려면 길게 클릭합니다. ",
+        "목록 편집기   D, 목록 편집기 버튼. MIDI 이벤트, 마커, 템포 변경 및 조표 및 박자표 이벤트를 보고 편집합니다. ",
+        "믹서   X, 믹서 버튼. 프로젝트의 각 트랙에 대한 채널 스트립을 표시하는 믹서를 엽니다. 채널 스트립 컨트롤을 편집하고 플러그인을 추가 및 편집하며 라우팅 옵션을 사용자화할 수 있습니다. ",
+        "박자표, 박자표 디스플레이. 마디의 비트 숫자와 한 박자에 대한 노트 값을 나타냅니다. 수직으로 드래그하여 값을 편집하거나 두 번 클릭하여 새 값을 입력합니다. ",
+        "브라우저   B, 브라우저 버튼. 루프, 원샷, 패치 및 플러그인 설정을 찾아 로드합니다. ",
+        "사이클   C, 사이클 버튼. 눈금자에 나타나는 노란색 사이클 영역 내의 프로젝트 섹션을 반복적으로 재생하거나 위로 녹음하려면 사이클을 사용합니다. ",
+        "솔로, 솔로 버튼. 재생하는 동안 선택된 리전만 듣습니다. ",
+        "인스펙터   I, 인스펙터 버튼. 작업 중인 위치 및 선택한 항목에 따라 리전 및 트랙 설정을 보고 편집합니다. 채널 스트립 패닝 및 볼륨을 설정하거나 이펙트를 추가할 수도 있습니다. ",
+        "재생   ⌅, 재생 버튼. 재생헤드 위치에서 재생을 시작하거나 사이클 모드에서 눈금자에 표시된 왼쪽 로케이터에서 시작합니다. ",
+        "재생헤드 위치(마디), 재생헤드 위치 디스플레이. 마디 및 비트로 재생헤드 위치를 나타냅니다. 각 요소를 수직으로 드래그하여 편집하거나 두 번 클릭하여 새 값을 입력합니다. ",
+        "조표, 조표 디스플레이. 프로젝트의 조표를 나타냅니다. 팝업 메뉴에서 메이저 및 마이너 조표를 선택합니다. ",
+        "처음으로 이동   ↩",
+        "카운트 인   ⇧K, 카운트 인 버튼. 녹음이 시작하기 전에 사전 정의된 카운트 인을 재생합니다. 버튼을 Control-클릭하면 카운트 인 길이를 선택할 수 있는 메뉴가 열립니다. ",
+        "템포, 템포 디스플레이. 재생 또는 녹음 속도를 나타냅니다. 수직으로 드래그하여 속도를 높이거나 낮추거나 두 번 클릭하여 새 값을 입력합니다. ",
+        "튜너, 튜너 버튼. 시스템에 연결된 악기를 조정합니다. ",
+        "편집기   E, 편집기 버튼. 편집기에 접근합니다. 선택한 트랙 유형에 따라 오디오 트랙, 오디오 파일, Session Player, 피아노 롤, 악보 또는 스텝 편집기를 선택할 수 있습니다. ",
+        "표시 모드, 디스플레이 모드 팝업 메뉴. 눈금자 디스플레이를 마디 및 비트 또는 시간, 분, 초 또는 둘의 조합으로 전환합니다. 거대 디스플레이를 열 수도 있습니다. ",
+        "프로젝트 템포 메뉴, 프로젝트 템포 모드 팝업 메뉴. 프로젝트 템포를 유지하고 오디오 녹음 및 가져온 오디오 파일의 템포를 조정할 것인지 또는 Logic Pro에서 프로젝트 템포 동작을 설정할 것인지를 선택합니다. ",
+        "프로젝트 파일, 프로젝트 파일 버튼. 오디오 및 그 외 미디어 파일에 접근합니다. 또한 다른 프로젝트의 데이터 및 세팅을 가져올 수도 있습니다. ",
+        "프리 템포 녹음   ⌃⌥⌘R, 프리 템포 녹음. 녹음하는 동안 기존 콘텐츠를 음소거하고 스마트 템포 분석을 수행합니다. "
+      ],
+      "searched": [
+        {
+          "source": "madsp",
+          "locale": "-"
+        },
+        {
+          "source": "nib",
+          "locale": "-"
+        },
+        {
+          "source": "niblabels",
+          "locale": "-"
+        },
+        {
+          "source": "niblabels",
+          "locale": "de"
+        },
+        {
+          "source": "niblabels",
+          "locale": "en"
+        },
+        {
+          "source": "niblabels",
+          "locale": "es"
+        },
+        {
+          "source": "niblabels",
+          "locale": "fr"
+        },
+        {
+          "source": "niblabels",
+          "locale": "it"
+        },
+        {
+          "source": "niblabels",
+          "locale": "ja"
+        },
+        {
+          "source": "niblabels",
+          "locale": "ko"
+        },
+        {
+          "source": "niblabels",
+          "locale": "pt"
+        },
+        {
+          "source": "niblabels",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "niblabels",
+          "locale": "zh_TW"
+        },
+        {
+          "source": "nibstrings",
+          "locale": "en"
+        },
+        {
+          "source": "plugin_names",
+          "locale": "-"
+        },
+        {
+          "source": "pluginsettings",
+          "locale": "-"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "de"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "en"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "es"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "fr"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "it"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "ja"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "ko"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "pt"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "zh_TW"
+        },
+        {
+          "source": "strings",
+          "locale": "-"
+        },
+        {
+          "source": "strings",
+          "locale": "de"
+        },
+        {
+          "source": "strings",
+          "locale": "en"
+        },
+        {
+          "source": "strings",
+          "locale": "es"
+        },
+        {
+          "source": "strings",
+          "locale": "fr"
+        },
+        {
+          "source": "strings",
+          "locale": "it"
+        },
+        {
+          "source": "strings",
+          "locale": "ja"
+        },
+        {
+          "source": "strings",
+          "locale": "ko"
+        },
+        {
+          "source": "strings",
+          "locale": "pt"
+        },
+        {
+          "source": "strings",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "strings",
+          "locale": "zh_TW"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "de"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "en"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "es"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "fr"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "it"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "ja"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "ko"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "pt"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "zh_TW"
+        }
+      ],
+      "why_runtime": "Apple's bytes hold none of them, so the only route to each is the census reading itself: they are project content, numbers and runtime text"
+    }
+  ]
 }

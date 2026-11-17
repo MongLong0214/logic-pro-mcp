@@ -168,7 +168,7 @@
      "match": "exact",
      "observed": "모든 MIDI 트랙을 MIDI 파일로…",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -254,7 +254,7 @@
      "match": "exact",
      "observed": "모든 트랙을 오디오 파일로…",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -946,7 +946,7 @@
      "match": "exact",
      "observed": "바운스",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -1862,7 +1862,7 @@
      "match": "exact",
      "observed": "설정…",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -1967,7 +1967,7 @@
      "match": "exact",
      "observed": "설정…",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -2131,7 +2131,7 @@
      "match": "exact",
      "observed": "컨트롤 서피스",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -2276,7 +2276,7 @@
      "match": "exact",
      "observed": "마커 생성",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -2469,7 +2469,7 @@
      "match": "exact",
      "observed": "트랙 삭제",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -2645,7 +2645,7 @@
      "match": "exact",
      "observed": "편집",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuBarItem"
     }
    },
@@ -3935,7 +3935,7 @@
      "match": "exact",
      "observed": "내보내기",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -4038,7 +4038,7 @@
      "match": "exact",
      "observed": "파일",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuBarItem"
     }
    },
@@ -4141,7 +4141,7 @@
      "match": "exact",
      "observed": "이동",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -4302,7 +4302,7 @@
      "match": "exact",
      "observed": "위치…",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -4583,7 +4583,7 @@
      "match": "exact",
      "observed": "가져오기",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -5327,7 +5327,7 @@
      "match": "exact",
      "observed": "MIDI 파일…",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -5716,7 +5716,7 @@
      "match": "contains",
      "observed": "인스펙터 가리기",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -6613,7 +6613,7 @@
      "match": "exact",
      "observed": "이동",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -6698,7 +6698,7 @@
      "match": "exact",
      "observed": "탐색",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuBarItem"
     }
    },
@@ -6789,7 +6789,7 @@
      "match": "exact",
      "observed": "새로운 오디오 트랙",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -6862,7 +6862,7 @@
      "match": "exact",
      "observed": "새로운 외부 MIDI 트랙",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -6948,7 +6948,7 @@
      "match": "exact",
      "observed": "신규",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -7040,7 +7040,7 @@
      "match": "exact",
      "observed": "새로운 Session Player SI 트랙…",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -7113,7 +7113,7 @@
      "match": "exact",
      "observed": "새로운 소프트웨어 악기 트랙",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -7449,7 +7449,7 @@
      "match": "exact",
      "observed": "마커 목록 열기",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -7730,7 +7730,7 @@
      "match": "contains",
      "observed": "재생헤드 위치에 있는 마커 삭제",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -7977,7 +7977,7 @@
      "match": "contains",
      "observed": "모든 컨트롤 서피스 바이패스",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -8960,7 +8960,7 @@
      "match": "exact",
      "observed": "프로젝트 또는 섹션…",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -9727,7 +9727,7 @@
      "match": "exact",
      "observed": "트랙 이름 변경",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -9813,7 +9813,7 @@
      "match": "exact",
      "observed": "별도 저장…",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -10284,7 +10284,7 @@
      "match": "exact",
      "observed": "믹서 가리기",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -10459,7 +10459,7 @@
      "match": "exact",
      "observed": "템포 목록 보기",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -10530,7 +10530,7 @@
      "match": "contains",
      "observed": "볼륨, 패닝, 센드에 대해 각 1개의 오토메이션 포인트 생성",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -10668,7 +10668,7 @@
      "match": "contains",
      "observed": "볼륨, 패닝, 센드에 대해 각 1개의 오토메이션 포인트 생성",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -10798,7 +10798,7 @@
     "ko-KR": "7801"
    },
    "coverage_record_sha256": {
-    "ko-KR": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746"
+    "ko-KR": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1"
    },
    "coverage_derived": {
     "en-US": "strings:en:ships_up_to_case:Audio Channel",
@@ -10861,7 +10861,7 @@
     "ko-KR": "7801"
    },
    "coverage_record_sha256": {
-    "ko-KR": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746"
+    "ko-KR": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1"
    },
    "coverage_derived": {
     "en-US": "strings:en:ships_up_to_case:Creation Date",
@@ -10941,7 +10941,7 @@
     "ko-KR": "7801"
    },
    "coverage_record_sha256": {
-    "ko-KR": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746"
+    "ko-KR": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1"
    },
    "coverage_derived": {
     "ja-JP": "niblabels:ja:ships_up_to_case:音源名",
@@ -11021,7 +11021,7 @@
     "ko-KR": "7801"
    },
    "coverage_record_sha256": {
-    "ko-KR": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746"
+    "ko-KR": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1"
    },
    "coverage_derived": {
     "ja-JP": "quickhelp:ja:ships_up_to_case:MIDIチャンネル",
@@ -11083,7 +11083,7 @@
     "ko-KR": "7801"
    },
    "coverage_record_sha256": {
-    "ko-KR": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746"
+    "ko-KR": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1"
    },
    "coverage_derived": {
     "en-US": "strings:en:ships_up_to_case:Sort Tracks by",
@@ -11146,7 +11146,7 @@
     "ko-KR": "7801"
    },
    "coverage_record_sha256": {
-    "ko-KR": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746"
+    "ko-KR": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1"
    },
    "coverage_derived": {
     "en-US": "strings:en:ships_up_to_case:Output Channel",
@@ -11209,7 +11209,7 @@
     "ko-KR": "7801"
    },
    "coverage_record_sha256": {
-    "ko-KR": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746"
+    "ko-KR": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1"
    },
    "coverage_derived": {
     "en-US": "nibstrings:en:ships_up_to_case:Track Name",
@@ -11272,7 +11272,7 @@
     "ko-KR": "7801"
    },
    "coverage_record_sha256": {
-    "ko-KR": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746"
+    "ko-KR": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1"
    },
    "coverage_derived": {
     "en-US": "strings:en:ships_up_to_case:Used, Unused",
@@ -11635,7 +11635,7 @@
      "match": "exact",
      "observed": "템포",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -11748,7 +11748,7 @@
      "match": "contains",
      "observed": "스마트 템포…",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -11874,7 +11874,7 @@
      "match": "exact",
      "observed": "재생헤드로",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -11934,7 +11934,7 @@
      "match": "exact",
      "observed": "보기 가리기 토글",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuItem"
     }
    },
@@ -12308,7 +12308,7 @@
      "match": "exact",
      "observed": "트랙",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuBarItem"
     }
    },
@@ -13550,7 +13550,7 @@
      "match": "exact",
      "observed": "보기",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuBarItem"
     }
    },
@@ -13654,7 +13654,7 @@
      "match": "exact",
      "observed": "윈도우",
      "record": "2026-11-17-ko-KR-arrange-menus-census",
-     "record_sha256": "7ea78b3b92475e2fffb383ddf06fade707f491309302bdba74c0816977356746",
+     "record_sha256": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1",
      "role": "AXMenuBarItem"
     }
    },

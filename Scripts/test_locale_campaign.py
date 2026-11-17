@@ -391,6 +391,46 @@ def main():
     json.dump(census([], locale="unknown"), open(cpath, "w"))
     case("unknown locale refuses", records.main(cpath, tmp, False) == 2, "filed records for an unprovable locale")
 
+    # 8b. A generated record carries what check-canon-citations demands of a record joining the tree:
+    # a citation (with its value) for each string Apple ships, and one absence proof for the rest.
+    # The strings come from the committed ko-KR census record so the cited value is one the pinned
+    # canon holds; the absent one is a string no corpus can hold.
+    committed = json.load(open(HERE.parent / "docs" / "observations"
+                               / "2026-11-17-ko-KR-mixer-channel_strips-census.json", encoding="utf-8"))
+    shipped = committed["canon"][0]
+    absent_text = "Spur-zzq 4711 Fixture Track"
+    json.dump(census([row("AXMenuItem", "AXMenuBar/AXMenuBarItem[a]/AXMenu/AXMenuItem[x]", title=shipped["value"]),
+                      row("AXMenuItem", "AXMenuBar/AXMenuBarItem[a]/AXMenu/AXMenuItem[y]", title=absent_text)]),
+              open(cpath, "w"))
+    gspec = importlib.util.spec_from_file_location("canon_guard_for_records", HERE / "check-canon-citations.py")
+    canon_guard = importlib.util.module_from_spec(gspec); gspec.loader.exec_module(canon_guard)
+
+    def guard_failures(mutate=None):
+        out_repo = tempfile.mkdtemp()
+        saved = records.canon_blocks
+        if mutate:
+            records.canon_blocks = mutate
+        try:
+            rc = records.main(cpath, out_repo, True, "2026-11-17")
+        finally:
+            records.canon_blocks = saved
+        found = []
+        path = Path(out_repo) / "docs" / "observations" / "2026-11-17-ko-KR-arrange-menus-census.json"
+        if rc != 0 or not path.exists():
+            return rc, ["record not written"], None
+        canon_guard.check_record(str(path), found, set(), canon_guard.canon.load_manifest())
+        return rc, found, json.load(open(path, encoding="utf-8"))
+
+    rc, found, rec = guard_failures()
+    case("a generated census record passes check-canon-citations", rc == 0 and not found, (rc, found[:3]))
+    case("it cites the shipped string and proves the other absent",
+         rec and [c["value"] for c in rec["canon"]] == [shipped["value"]]
+         and rec["canon_absent"][0]["strings"] == [absent_text], rec and (rec.get("canon"), rec.get("canon_absent")))
+    # MUTANT: drop the citation emission. The record must then be refused, or the case above proves nothing.
+    rc, found, _ = guard_failures(lambda strings, loc, canon: ({}, [], []))
+    case("MUTANT: a generator that emits no canon block is refused by the guard", rc == 0 and bool(found),
+         (rc, found[:2]))
+
     # 9. Classification: regions before headers, so a region under a track-labelled area is a region.
     r = row("AXLayoutItem", "AXWindow[x]/AXGroup[트랙 콘텐츠]/AXLayoutArea[34개의 ‘Studio Grand’ 트랙]/AXLayoutItem", help="리전은 1 마디")
     case("region under a track-labelled area is a region", records.classify(r) == "arrange.regions", records.classify(r))
