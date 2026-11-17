@@ -551,8 +551,22 @@ extension AccessibilityChannel {
                 ]
             ))
         }
-        // The list is known closed here (checked above), so only the screen's identity is read.
-        let originBeforeOpen = markerListOrigin(runtime: runtime, listWasOpen: false)
+        // The list is known closed here (checked above), so only the screen's identity is read —
+        // including the project in front, which is what makes the list that appears this
+        // operation's. Without a readable origin project nothing could be shown to be ours, so
+        // nothing is opened.
+        guard let originBeforeOpen = markerListOrigin(runtime: runtime, listWasOpen: false),
+              originBeforeOpen.projectDocument != nil else {
+            return .error(HonestContract.encodeStateC(
+                error: .readbackUnavailable,
+                hint: "The project in front could not be read, so a Marker List opened now could not be shown to be this operation's; nothing was opened.",
+                extras: [
+                    "operation": "nav.open_marker_list",
+                    "failure_stage": "origin_project_unreadable",
+                    "write_attempted": false,
+                ]
+            ))
+        }
         let menuResult = await pressMarkerMenuItem(.openList)
         guard menuResult.isSuccess else {
             return .error(HonestContract.encodeStateC(
@@ -563,7 +577,19 @@ extension AccessibilityChannel {
         for _ in 0..<20 {
             if let binding = AXLogicProElements.markerListBinding(runtime: runtime) {
                 // The exact window that appeared, bound to its project: cleanup closes this one.
-                if let originBeforeOpen { recordOpenedMarkerList(originBeforeOpen, opened: binding) }
+                // A list of another project (the user switched while the menu action was awaited)
+                // is not adopted, and the operation does not go on as if its own list were open.
+                guard recordOpenedMarkerList(originBeforeOpen, opened: binding) else {
+                    return .error(HonestContract.encodeStateC(
+                        error: .readbackUnavailable,
+                        hint: "The Marker List now open is not bound to the project that was in front when it was opened, so it was not adopted and is left as it is.",
+                        extras: [
+                            "operation": "nav.open_marker_list",
+                            "failure_stage": "project_changed_during_open",
+                            "write_attempted": true,
+                        ]
+                    ))
+                }
                 return .success(HonestContract.encodeStateA(extras: [
                     "operation": "nav.open_marker_list",
                     "already_open": false,

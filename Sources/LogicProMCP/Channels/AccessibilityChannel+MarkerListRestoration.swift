@@ -19,6 +19,9 @@ extension AccessibilityChannel {
         let main: AXUIElement?
         let focusedWindow: AXUIElement?
         let focusedElement: AXUIElement?
+        /// The AXDocument of the main window, read BEFORE the open; nil when it could not be read.
+        /// A list is adopted only when it is bound to this same project.
+        let projectDocument: String?
     }
 
     /// The Marker List window an operation opened, and the project document it was bound to when
@@ -50,16 +53,23 @@ extension AccessibilityChannel {
     }
     private static let openedListLedger = OpenedListLedger()
 
-    /// Records the list `binding` names as opened by this operation. A window that was already in
-    /// the census taken before the open is not this operation's, and nothing is recorded for it.
+    /// Records the list `binding` names as opened by this operation, and answers whether it did.
+    /// Nothing is recorded for a window that was already in the census taken before the open, for
+    /// a list bound to a project other than the one in front before the open (the user can switch
+    /// projects and open that project's list while the opener awaits the menu action), or when
+    /// that origin project could not be read: none of those is shown to be this operation's.
+    @discardableResult
     static func recordOpenedMarkerList(
         _ origin: MarkerListOrigin,
         opened binding: AXLogicProElements.MarkerListBinding
-    ) {
+    ) -> Bool {
         guard !origin.listWasOpen,
-              !origin.windows.contains(where: { CFEqual($0, binding.window) }) else { return }
+              let originProject = origin.projectDocument,
+              originProject == binding.projectDocument,
+              !origin.windows.contains(where: { CFEqual($0, binding.window) }) else { return false }
         openedListLedger.record(OpenedMarkerList(
             origin: origin, window: binding.window, projectDocument: binding.projectDocument))
+        return true
     }
 
     /// Closes the list `nav.open_marker_list` opened and restores focus. Answers State A with
@@ -91,7 +101,19 @@ extension AccessibilityChannel {
             listWasOpen: knownListWasOpen ?? (AXLogicProElements.findMarkerListWindow(runtime: runtime) != nil),
             main: AXHelpers.getAttribute(app, kAXMainWindowAttribute as String, runtime: runtime.ax),
             focusedWindow: AXHelpers.getAttribute(app, kAXFocusedWindowAttribute as String, runtime: runtime.ax),
-            focusedElement: AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: runtime.ax))
+            focusedElement: AXHelpers.getAttribute(app, kAXFocusedUIElementAttribute as String, runtime: runtime.ax),
+            projectDocument: mainWindowDocument(app, runtime: runtime))
+    }
+
+    /// The AXDocument of the app's main window, or nil when either read fails or answers nothing.
+    static func mainWindowDocument(_ app: AXUIElement, runtime: AXLogicProElements.Runtime) -> String? {
+        let main: Result<AXUIElement?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+            app, kAXMainWindowAttribute as String, runtime: runtime.ax)
+        guard case .success(.some(let window)) = main else { return nil }
+        let document: Result<String?, AXHelpers.AXStatusError> = AXHelpers.getAttributeResult(
+            window, kAXDocumentAttribute as String, runtime: runtime.ax)
+        guard case .success(.some(let value)) = document, !value.isEmpty else { return nil }
+        return value
     }
 
     /// The application's window list, or the AX status that kept it from being read. A window is

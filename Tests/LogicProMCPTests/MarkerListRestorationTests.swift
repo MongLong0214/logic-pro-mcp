@@ -31,6 +31,8 @@ import Testing
         var windowsUnreadableAfterPress = false
         /// The app's focused-window and focused-element reads fail.
         var focusUnreadable = false
+        /// The main window's AXDocument read fails.
+        var mainDocumentUnreadable = false
 
         init(listOpen: Bool) {
             app = builder.element(1)
@@ -65,7 +67,13 @@ import Testing
         }
 
         /// What the operation does to the screen: open the list and move the key view into it.
-        func openList(_ ledgerRuntime: AXLogicProElements.Runtime, record: Bool = true) {
+        /// `between` runs after the list appears and before the opener registers it: the window in
+        /// which the opener awaits the menu action and the user can still act.
+        func openList(
+            _ ledgerRuntime: AXLogicProElements.Runtime,
+            record: Bool = true,
+            between: () -> Void = {}
+        ) {
             // The opener reads the screen it found, then records the exact list window it saw
             // appear and that window's project, as `defaultOpenMarkerList` does.
             let origin = record
@@ -73,6 +81,7 @@ import Testing
             builder.setAttribute(app, kAXWindowsAttribute as String, [arrange, list])
             builder.setAttribute(app, kAXFocusedWindowAttribute as String, list)
             builder.setAttribute(app, kAXFocusedUIElementAttribute as String, listTable)
+            between()
             if let origin, let binding = AXLogicProElements.markerListBinding(runtime: ledgerRuntime) {
                 AccessibilityChannel.recordOpenedMarkerList(origin, opened: binding)
             }
@@ -104,6 +113,9 @@ import Testing
 
         /// Whether a read of `attribute` on `element` fails with an AX status right now.
         private func readFails(_ element: AXUIElement, _ attribute: String) -> Bool {
+            if mainDocumentUnreadable, CFEqual(element, arrange), attribute == kAXDocumentAttribute as String {
+                return true
+            }
             guard CFEqual(element, app) else { return false }
             if attribute == kAXWindowsAttribute as String { return windowsUnreadable }
             if attribute == kAXFocusedWindowAttribute as String
@@ -327,5 +339,38 @@ import Testing
         }
         let restored = Self.body(result)["focus_restored"] as? Bool ?? true
         #expect(!restored, "\(Self.body(result))")
+    }
+
+    /// The user switches to another project and opens ITS list while the opener is still awaiting
+    /// the menu action, so the binding read at registration is the other project's list. That
+    /// list is never adopted: it is not closed, and focus is not pulled back from it.
+    @Test func aListFromAProjectSwitchedToBeforeRegistrationIsNeverAdopted() async {
+        let screen = Screen(listOpen: false)
+        let runtime = screen.runtime
+        let result = await AccessibilityChannel.withMarkerListRestored(runtime: runtime) {
+            screen.openList(runtime, between: { screen.switchToOtherProject() })
+            return .success(#"{"success":true}"#)
+        }
+        let body = Self.body(result)
+        #expect(screen.otherPresses == 0, "the other project's list was pressed closed: \(body)")
+        #expect(screen.windows.contains { CFEqual($0, screen.otherList) }, "\(body)")
+        let focusStayed = screen.focusedElement.map { CFEqual($0, screen.otherStrip) } ?? false
+        #expect(focusStayed, "focus was pulled back to the project the user left: \(body)")
+        #expect(body["marker_list_closed"] == nil, "nothing is claimed for a list never owned: \(body)")
+    }
+
+    /// The origin project could not be read before the open, so no list that appears can be shown
+    /// to be this operation's: none is adopted or closed.
+    @Test func anOriginProjectThatCannotBeReadAdoptsNothing() async {
+        let screen = Screen(listOpen: false)
+        screen.mainDocumentUnreadable = true
+        let runtime = screen.runtime
+        let result = await AccessibilityChannel.withMarkerListRestored(runtime: runtime) {
+            screen.openList(runtime, between: { screen.mainDocumentUnreadable = false })
+            return .success(#"{"success":true}"#)
+        }
+        let body = Self.body(result)
+        #expect(screen.presses == 0, "a list with no proven origin project was closed: \(body)")
+        #expect(body["marker_list_closed"] == nil, "\(body)")
     }
 }
