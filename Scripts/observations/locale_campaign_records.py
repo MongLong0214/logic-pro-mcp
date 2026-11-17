@@ -83,14 +83,32 @@ def classify(row):
     return None
 
 
-def main(census_path, repo, write):
+def missing_release(host):
+    """Why this host block cannot say which Logic the census was read on, or None when it can.
+
+    A record that does not name its Logic version AND build is a reading of an unknown release, and the
+    ledger counts a reading by the release it describes. Refused here, at the source, rather than filed
+    and caught later: `?` is what the probe writes when it cannot read the application's Info.plist.
+    """
+    for axis in ("version", "build"):
+        value = str((host or {}).get(axis) or "").strip()
+        if value in ("", "?", "unknown"):
+            return f"the census host carries no Logic {axis} ({value or 'empty'!r})"
+    return None
+
+
+def main(census_path, repo, write, date=None):
     census = json.load(open(census_path, encoding="utf-8"))
     host = census["host"]
     locale = host["locale"]
     if locale == "unknown":
         print("census locale is unknown — refusing to file records that cannot say what they are true of")
         return 2
-    date = datetime.date.today().isoformat()
+    why = missing_release(host)
+    if why:
+        print(f"{why} — refusing to file records that cannot say which Logic they are true of")
+        return 2
+    date = date or datetime.date.today().isoformat()
     obs_dir = os.path.join(repo, "docs", "observations")
     ev_rel = f"evidence/{date}-{locale}-navigation-free.census.json"
     ev_path = os.path.join(obs_dir, ev_rel)

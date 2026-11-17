@@ -8,6 +8,18 @@ import Foundation
 /// no stable non-localized AX handle, and keep State A gated by independent
 /// readback on write paths.
 enum AXLocalePolicy {
+    /// The Logic release `docs/locale/ui-labels.json` is judged against, declared HERE and nowhere else.
+    ///
+    /// Every measurement in the ledger names the version and build of the Logic it was read on, taken
+    /// from the observation record it cites. A reading whose release differs from this one is not
+    /// `measured` on the current Logic, and `Scripts/locale_labels.py` counts it as such per locale.
+    /// Moving to a new Logic is therefore one edit: change these two literals, run the census for each
+    /// locale (docs/adr/ADR-019, "Runbook: a Logic update"), and the ledger reports exactly what has
+    /// not been read on the new release yet. `Scripts/locale_labels.py --check` refuses a second
+    /// statement of either value anywhere else in the repository.
+    static let currentLogicVersion = "13.0"
+    static let currentLogicBuild = "7801"
+
     enum MatchMode {
         case exact
         case prefix

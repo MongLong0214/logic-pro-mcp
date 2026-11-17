@@ -35,7 +35,7 @@ WHAT IT REFUSES
       holds -- a citation was available, so the declaration is false
   6  a record joining the tree at schema 2 or lower -- the known set below may only shrink
   7  a waiver list that GAINED a member relative to the merge base
-  8  a canon index pinning a different Logic than docs/observations/LOGIC-BUILD.json declares
+  8  a canon index pinning a NEWER Logic than AXLocalePolicy.currentLogicVersion declares
   9  a citation with no binding, or whose binding target does not contain the cited value
  10  an index or absence file whose bytes are not the bytes `build` wrote, or an index row whose
       value is in no absence set -- a row whose value is not in the corpus was not taken from it
@@ -440,26 +440,38 @@ def check_no_measured_count_shrinks(failures: list) -> None:
 
 
 def check_build_agrees_with_the_ledger(manifest: dict, failures: list) -> None:
-    """Rule 8: the canon index and the observation ledger must describe the same Logic.
+    """Rule 8: the canon index may not describe a NEWER Logic than the one the ledger declares.
 
-    Two declarations of the installed build is two places for it to be wrong. Before this, the
-    index could be taken over Logic 12.4 while every record in `docs/observations/` claimed 12.3,
-    and each file would be internally consistent.
+    There is one declaration of the current Logic -- `AXLocalePolicy.currentLogicVersion`/`...Build`.
+    The canon index carries its own pin, which is a MEASUREMENT: the build the corpus was extracted
+    from. Before the declaration moved into Swift this rule demanded the two be equal, so a Logic
+    update could not land until the corpus was re-ingested on the same day. Now the pin may trail the
+    declaration -- `check-observation-ratchets.py` counts that as `canon_pinned_to_a_superseded_logic`,
+    a gap that may only shrink -- but it may not run AHEAD of it: an index taken over Logic 13.1 while
+    the ledger declares 13.0 means the declaration was not moved with the Logic, which is the exact
+    two-sources drift this rule exists for.
     """
-    path = os.path.join(REPO, "docs", "observations", "LOGIC-BUILD.json")
-    if not os.path.exists(path):
+    spec = importlib.util.spec_from_file_location(
+        "locale_release_for_canon_rule8",
+        os.path.join(os.path.dirname(os.path.abspath(__file__)), "locale_release.py"))
+    release = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(release)
+    try:
+        declared = release.declared_logic(os.path.join(REPO, release.SWIFT_RELATIVE))
+    except ValueError as exc:
+        failures.append(str(exc))
         return
-    with open(path, "r", encoding="utf-8") as handle:
-        declared = json.load(handle)
+    if declared is None:
+        return
     pinned = manifest.get("logic") or {}
-    for field in ("version", "build"):
-        if str(declared.get(field)) != str(pinned.get(field)):
-            failures.append(
-                f"docs/canon/MANIFEST.json pins Logic {pinned.get('version')} "
-                f"({pinned.get('build')}) and docs/observations/LOGIC-BUILD.json declares "
-                f"{declared.get('version')} ({declared.get('build')}). The canon index and the "
-                f"observation ledger must describe the same application.")
-            return
+    if (release.release_key(pinned.get("version"), pinned.get("build"))
+            > release.release_key(declared["version"], declared["build"])):
+        failures.append(
+            f"docs/canon/MANIFEST.json pins Logic {pinned.get('version')} "
+            f"({pinned.get('build')}), which is newer than the Logic AXLocalePolicy declares "
+            f"({declared['version']} / {declared['build']}). The canon index and the observation "
+            f"ledger must describe the same application: move the declaration, "
+            f"not the corpus pin.")
 
 
 def required_corpora(manifest: dict):
@@ -791,7 +803,7 @@ def check_binding(where: str, citation: dict, record: dict, failures: list,
 
 
 def observation_records() -> list:
-    """Every record file. A record is date-prefixed; RATCHETS.json and LOGIC-BUILD.json are not."""
+    """Every record file. A record is date-prefixed; RATCHETS.json is not."""
     out = []
     for path in sorted(glob.glob(os.path.join(REPO, "docs", "observations", "*.json"))):
         name = os.path.basename(path)

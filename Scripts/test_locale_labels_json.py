@@ -518,15 +518,20 @@ def main():
 
     guard.OBS = _ledger({
         "2026-09-05-ko": ("ko-KR", [_row("AXButton", help="입력 슬롯. 채널 스트립 입력 소스")]),
+        # Cited by the coverage cases below. The generator now refuses to carry a claim of
+        # measurement whose record does not exist, so the record has to.
+        "2026-09-05-en": ("en-US", [_row("AXMenuButton", title="Edit", identifier="markerEdit:")]),
     })
 
-    # 15. Migration and carry-forward.
+    # 15. Migration and carry-forward. The generator reads records from `labels.OBS_DIR`, so a fixture
+    # ledger has to be pointed at there as well as at the guard.
+    labels.OBS_DIR = guard.OBS
     v1 = {"schema": 1, "labels": {"inputSlotHelpKeyword": {"measured": {"입력 슬롯": _prov()}}}}
     built = labels.build(existing=v1)
     ent = built["labels"].get("inputSlotHelpKeyword") or {}
     case("measured block migrates", "입력 슬롯" in (ent.get("provenance") or {}), ent)
     case("measured derived", (ent.get("coverage") or {}).get("ko-KR") == "measured", ent.get("coverage"))
-    case("schema 2", built.get("schema") == 2, built.get("schema"))
+    case("schema is the current one", built.get("schema") == labels.SCHEMA == 3, built.get("schema"))
     v2 = {"schema": 2, "labels": {"inputSlotHelpKeyword": {
         "coverage": {"en-US": "measured", "ko-KR": "measured", "ja-JP": "unmeasured"},
         "coverage_records": {"en-US": "2026-09-05-en"}}}}
@@ -1313,6 +1318,13 @@ def main():
                  capture_output=True, text=True)
     case("and accepts the repository's own records",
          ok.returncode == 0, (ok.stdout + ok.stderr).strip()[:200])
+
+    # The version axis and the census tool have suites of their own -- guard, then the same scenario
+    # against a mutant of the guard -- and they run HERE so the one test list CI already runs for the
+    # ledger carries them: a suite nobody lists is a guard nobody has seen fail.
+    for suite in ("test_locale_version_axis.py", "test_locale_census.py"):
+        proc = _sp.run([sys.executable, os.path.join(here, suite)], capture_output=True, text=True)
+        case(f"{suite} passes", proc.returncode == 0, (proc.stdout + proc.stderr).strip()[-300:])
 
     if failures:
         for f in failures:

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """What a Logic update costs, before you pay it.
 
-`docs/observations/LOGIC-BUILD.json` declares the Logic build every reading in this repository is
-understood to describe. `check-observation-ratchets.py` counts readings that name a DIFFERENT build,
+`AXLocalePolicy.currentLogicVersion`/`currentLogicBuild` (Swift, the one declaration) name the Logic
+every reading in this repository is judged against. `check-observation-ratchets.py` counts readings that name a DIFFERENT build,
 as sets that may only shrink — so bumping the declaration turns a Logic update into a refusal you
 have to answer, one reading at a time, instead of a hundred records quietly describing a build
 nobody runs.
@@ -23,7 +23,7 @@ import re
 import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-DECLARATION = os.path.join(REPO, "docs", "observations", "LOGIC-BUILD.json")
+DECLARATION = os.path.join(REPO, "Sources", "LogicProMCP", "Accessibility", "AXLocalePolicy.swift")
 LOGIC_PLIST = "/Applications/Logic Pro.app/Contents/Info.plist"
 OBS = os.path.join(REPO, "docs", "observations")
 LABELS = os.path.join(REPO, "docs", "locale", "ui-labels.json")
@@ -66,20 +66,23 @@ def readings(target):
         entries = {}
     for label, entry in entries.items():
         for variant, prov in (entry.get("provenance") or {}).items():
-            host = prov.get("host") if isinstance(prov, dict) else None
-            seen = re.match(r"^\s*Logic Pro\s+([0-9][0-9.]*)\s+\(([^)]+)\)", str(host or ""))
-            if not seen or (seen.group(1), seen.group(2)) != target:
+            prov = prov if isinstance(prov, dict) else {}
+            if (str(prov.get("logic_version") or ""), str(prov.get("logic_build") or "")) != target:
                 stale_labels.append(f"{label}→{variant}")
     return stale_records, stale_labels
 
 
 def main():
     as_json = "--json" in sys.argv[1:]
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import locale_release
     try:
-        with open(DECLARATION, encoding="utf-8") as handle:
-            declared = json.load(handle)
-    except (OSError, ValueError) as exc:
-        print(f"cannot read {os.path.relpath(DECLARATION, REPO)}: {exc}", file=sys.stderr)
+        declared = locale_release.declared_logic(DECLARATION)
+    except ValueError as exc:
+        print(f"cannot read the declaration: {exc}", file=sys.stderr)
+        return 2
+    if declared is None:
+        print(f"{os.path.relpath(DECLARATION, REPO)} declares no current Logic", file=sys.stderr)
         return 2
 
     target = (str(declared.get("version") or ""), str(declared.get("build") or ""))
@@ -122,7 +125,7 @@ def main():
     print(f"""
 THE DECLARATION IS BEHIND THE INSTALLED LOGIC.
 
-Bumping `docs/observations/LOGIC-BUILD.json` to {here[0]} ({here[1]}) will move every reading taken
+Bumping `AXLocalePolicy.currentLogicVersion`/`currentLogicBuild` to {here[0]} ({here[1]}) will move every reading taken
 on {target[0]} ({target[1]}) into the ratchet's drift sets — roughly {total} records and the label
 readings above. The ratchet then REFUSES until each is either
 

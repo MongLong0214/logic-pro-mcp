@@ -900,7 +900,22 @@ def main():
         print("docs/locale/ui-labels.json is missing or unreadable — run Scripts/locale_labels.py --write")
         return 1
 
-    expected = labels.build(existing=on_disk)["labels"]
+    # Bytes first, then claims. A projection is exactly what the generator renders: the JSON carries a
+    # declared `logic`, per-locale `currency` counts and every digest, and a hand edit to any of them
+    # has to be red even where no label changed.
+    unbound = []
+    generated = labels.build(existing=on_disk, unbound=unbound)
+    expected = generated["labels"]
+    try:
+        with open(labels.JSON_PATH, encoding="utf-8", newline="") as handle:
+            raw = handle.read()
+    except OSError:
+        raw = ""
+    if raw != labels.render(generated) and on_disk["labels"] == expected:
+        print("docs/locale/ui-labels.json is not byte-identical to what Scripts/locale_labels.py "
+              "generates (top-level fields, ordering or whitespace differ).\n"
+              "\n  Regenerate: Scripts/locale_labels.py --write")
+        return 1
     if on_disk["labels"] != expected:
         only_json = sorted(set(on_disk["labels"]) - set(expected))
         only_swift = sorted(set(expected) - set(on_disk["labels"]))
@@ -919,12 +934,20 @@ def main():
     locales = tuple(on_disk.get("supported_locales") or ())
     values = tuple(on_disk.get("coverage_values") or ())
     problems = []
-    if on_disk.get("schema") != 2:
-        problems.append(f"schema is {on_disk.get('schema')!r}; this guard reads schema 2 — regenerate")
+    if on_disk.get("schema") != labels.SCHEMA:
+        problems.append(f"schema is {on_disk.get('schema')!r}; this guard reads schema "
+                        f"{labels.SCHEMA} — regenerate")
+    # THE VERSION AXIS. Every measured cell is bound to a record that exists, whose locale, Logic
+    # version and build match the cell and whose bytes (and evidence) hash to the digest the cell
+    # carries. Missing, unreadable or changed is a failure, never a quiet demotion.
+    problems += [f"unbound: {line}" for line in unbound]
+    problems += [f"unbound: {line}" for line in labels.binding_report(on_disk)]
+    problems += [f"restated: {line}" for line in labels.restatement_problems()]
     if not locales or not values:
         problems.append("supported_locales / coverage_values missing — regenerate")
     surfaces = _records_module().known_surfaces()
     for name, entry in sorted(on_disk["labels"].items()):
+        problems += labels.derived_problems(name, entry)
         problems += scope_problems(name, entry, surfaces)
         problems += provenance_problems(name, entry)
         if locales and values:

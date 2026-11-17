@@ -75,7 +75,7 @@ class GuardBehaviour(unittest.TestCase):
         # `ratchet.py` is the shared merge-base comparison the guard imports by path; a
         # fixture without it does not run a weaker guard, it runs no guard at all.
         for name in ("logic_canon.py", "check-canon-citations.py", "nibarchive.py",
-                     "ratchet.py"):
+                     "ratchet.py", "locale_release.py"):
             shutil.copy2(os.path.join(REPO, "Scripts", name),
                          os.path.join(self.root, "Scripts", name))
         shutil.copytree(os.path.join(REPO, "docs", "canon"),
@@ -697,14 +697,33 @@ class GuardBehaviour(unittest.TestCase):
         self.assertIn("carries no `artifacts` block", result.stderr)
 
     # -- rule 8: one Logic, not two --------------------------------------------------------------
-    def test_an_index_pinning_a_different_logic_than_the_ledger_fails(self):
-        os.makedirs(os.path.join(self.root, "docs", "observations"), exist_ok=True)
-        with open(os.path.join(self.root, "docs", "observations", "LOGIC-BUILD.json"),
-                  "w", encoding="utf-8") as handle:
-            json.dump({"app": "Logic Pro", "version": "99.9", "build": "1"}, handle)
+    def declare(self, version, build):
+        swift = os.path.join(self.root, "Sources", "LogicProMCP", "Accessibility")
+        os.makedirs(swift, exist_ok=True)
+        with open(os.path.join(swift, "AXLocalePolicy.swift"), "w", encoding="utf-8") as handle:
+            handle.write(f'enum AXLocalePolicy {{\n    static let currentLogicVersion = "{version}"\n'
+                         f'    static let currentLogicBuild = "{build}"\n}}\n')
+
+    def test_an_index_pinning_a_newer_logic_than_the_declaration_fails(self):
+        self.declare("1.0", "1")
         result = self.run_guard()
         self.assertEqual(result.returncode, 1)
         self.assertIn("must describe the same application", result.stderr)
+
+    def test_an_index_trailing_the_declaration_is_counted_by_the_ratchet_not_refused_here(self):
+        self.declare("99.9", "99999")
+        result = self.run_guard()
+        self.assertEqual(result.returncode, 0, result.stderr)
+
+    def test_two_declarations_of_the_current_logic_fail(self):
+        self.declare("99.9", "99999")
+        swift = os.path.join(self.root, "Sources", "LogicProMCP", "Accessibility",
+                             "AXLocalePolicy.swift")
+        with open(swift, "a", encoding="utf-8") as handle:
+            handle.write('    static let currentLogicVersion = "98.0"\n')
+        result = self.run_guard()
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("exactly one", result.stderr)
 
     # -- rule 3 again, now that absence must search everything -----------------------------------
     def test_an_absence_that_skips_a_pinned_corpus_fails(self):
@@ -820,7 +839,7 @@ class ARecordMayDeclareTheAxisInapplicable(unittest.TestCase):
         # `ratchet.py` is the shared merge-base comparison the guard imports by path; a
         # fixture without it does not run a weaker guard, it runs no guard at all.
         for name in ("logic_canon.py", "check-canon-citations.py", "nibarchive.py",
-                     "ratchet.py"):
+                     "ratchet.py", "locale_release.py"):
             shutil.copy2(os.path.join(REPO, "Scripts", name),
                          os.path.join(self.root, "Scripts", name))
         shutil.copytree(os.path.join(REPO, "docs", "canon"),

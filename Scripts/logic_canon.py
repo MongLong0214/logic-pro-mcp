@@ -18,8 +18,8 @@ fact that cannot be is proved uncitable before anyone is allowed to measure it b
 
 THE CONSTRAINT THAT SHAPES EVERYTHING HERE
 ------------------------------------------
-CI has no Logic installed -- `docs/observations/LOGIC-BUILD.json` says so, and that is why the
-build there is declared rather than detected. A checker that needs the application can only run on
+CI has no Logic installed -- that is why the current build is declared (`AXLocalePolicy.currentLogicBuild`)
+rather than detected. A checker that needs the application can only run on
 a developer's machine, which makes it advice. So this module splits in two:
 
     build time (needs Logic)      extract -> digest -> commit an index under docs/canon/
