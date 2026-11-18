@@ -207,8 +207,29 @@ def resolve_locale(census, requested, labels_mod):
 # --------------------------------------------------------------------------------------------------
 # FILING
 # --------------------------------------------------------------------------------------------------
-def ingest(locale, census, repo, write, date=None, labels_mod=None, records_mod=None):
-    """File one census as observation records. Returns an exit code (0 filed, 2 refused)."""
+def _run_confirm(records_mod, repo, locale, date):
+    """Run the `logic_canon.py confirm` command a refused census left, and report whether it exited 0.
+
+    The refusal names strings whose 32-bit prefix is in a corpus and whose string comparison is not
+    pinned yet; `confirm` reads the installed Logic's files (it never drives Logic) and pins them in
+    docs/canon/ledger/presence.tsv. A runner used to have to copy that command out of the message.
+    """
+    listing = records_mod.unconfirmed_path(repo, date or __import__("datetime").date.today().isoformat(), locale)
+    if not os.path.exists(listing):
+        return False
+    texts = [line.rstrip("\n") for line in open(listing, encoding="utf-8")]
+    _path, command = records_mod.write_unconfirmed(
+        repo, date or __import__("datetime").date.today().isoformat(), locale, [t for t in texts if t])
+    # Multi-line strings travel as ANSI-C quoted words, which only bash and zsh read.
+    return subprocess.run(command, shell=True, executable="/bin/bash").returncode == 0
+
+
+def ingest(locale, census, repo, write, date=None, labels_mod=None, records_mod=None, confirm=False):
+    """File one census as observation records. Returns an exit code (0 filed, 2 refused).
+
+    With `confirm`, a census refused for strings the canon cannot place is confirmed against the
+    installed Logic and filed again, once. A refusal that survives that is returned as it is.
+    """
     labels_mod = labels_mod or _labels()
     records_mod = records_mod or _records()
     host = dict(census.get("host") or {})
@@ -235,13 +256,18 @@ def ingest(locale, census, repo, write, date=None, labels_mod=None, records_mod=
         with open(path, "w", encoding="utf-8") as handle:
             json.dump(census, handle, ensure_ascii=False)
         rc = records_mod.main(path, repo, write, date)
+        if rc == 2 and confirm and write and _run_confirm(records_mod, repo, resolved, date):
+            print("confirmed the unplaced strings against the installed Logic; filing the census again")
+            rc = records_mod.main(path, repo, write, date)
     if rc == 0:
         rows = census.get("census") or []
-        unplaced = sum(1 for row in rows if records_mod.classify(row) is None)
+        unplaced = sum(1 for row in rows if records_mod.classify(row, resolved) is None
+                       and not records_mod.is_window_frame(row))
         print(f"{unplaced} of {len(rows)} rows matched no surface rule for {resolved} and are in the "
               f"evidence file but under no record"
-              + (" -- markers for this locale's main-window surfaces have to be read off this census "
-                 "and added to locale_campaign_records.ANCESTRY" if unplaced else ""))
+              + (" -- the area names come from docs/locale/census-areas.json; regenerate it with "
+                 "Scripts/observations/census_areas.py --write and check the area is declared in "
+                 "locale_campaign_records.AREA_RULES" if unplaced else ""))
     return rc
 
 
@@ -272,6 +298,9 @@ def main(argv=None):
     p_ing.add_argument("locale")
     p_ing.add_argument("census")
     p_ing.add_argument("--write", action="store_true")
+    p_ing.add_argument("--confirm", action="store_true",
+                       help="confirm strings the canon cannot place against the installed Logic, then file")
+    p_run.add_argument("--confirm", action="store_true")
     args = parser.parse_args(argv)
     labels_mod = _labels()
 
@@ -297,7 +326,7 @@ def main(argv=None):
     else:
         with open(args.census, encoding="utf-8") as handle:
             census = json.load(handle)
-    return ingest(args.locale, census, REPO, args.write, labels_mod=labels_mod)
+    return ingest(args.locale, census, REPO, args.write, labels_mod=labels_mod, confirm=args.confirm)
 
 
 if __name__ == "__main__":

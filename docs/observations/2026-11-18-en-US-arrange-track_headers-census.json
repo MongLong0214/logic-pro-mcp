@@ -20,7 +20,7 @@
   "reverify": {
     "kind": "script",
     "command": "Scripts/observations/locale-census.sh en-US",
-    "expected": "a census in en-US whose arrange.track_headers rows carry the same 6 distinct strings; a differing set means Logic's labels moved and every provenance citing this record wants re-reading",
+    "expected": "a census in en-US whose arrange.track_headers rows carry the same 33 distinct strings; a differing set means Logic's labels moved and every provenance citing this record wants re-reading",
     "cost": "~1 min with Logic open on the fixture project in that locale"
   },
   "depends": [
@@ -33,19 +33,46 @@
   "observations": [
     {
       "what": "rows on arrange.track_headers",
-      "rows": 8,
-      "distinct_strings": 6,
+      "rows": 53,
+      "distinct_strings": 33,
       "distinct_identifiers": 0
     },
     {
       "what": "the strings, verbatim",
       "strings": [
+        "0 Pan",
+        "Add Tracks   ⌥⌘N",
+        "Add Tracks button. Add audio and software instrument tracks. Use tracks for recording, editing, and arranging regions. ",
+        "Deluxe Classic",
+        "Duplicate Track button. Create an empty track with the same settings as the selected track. Option-click to create a track with the same settings and content. ",
+        "Global Tracks button. Work with global tracks to control various aspects of the overall project, such as arrangement and tempo. ",
         "Has Focus",
+        "Individual Track Zoom",
+        "Individual track zoom. Drag the track’s bottom divider line to adjust its vertical track zoom level. Command-drag to adjust all tracks of the same track type. Shift-click to reset all tracks to the default zoom level. ",
+        "Input Monitoring",
+        "Input Monitoring button. Hear incoming signals on audio or software instrument tracks that aren’t record enabled. This is useful when setting levels or practicing parts before recording. ",
+        "Mute",
+        "Mute button. Silence a track’s signal, audibly removing it from project playback. Corresponds to the Mute button on the channel strip in the Mixer, so that changing one also changes the other. ",
+        "Name field. Double-click to rename the track. ",
+        "New Track with Duplicate Settings   ⌘D",
+        "Pan/Balance knob. Drag vertically to position the track signal in the stereo field. ",
+        "Record Enable",
+        "Record Enable button. Prepare the track for recording, or deactivate a record-ready track. The button changes to indicate whether the track is inactive, record enabled, or currently recording. ",
+        "Show/Hide Global Tracks   G",
+        "Solo",
+        "Solo button. Isolate a track’s signal so that it can be heard without other tracks. Use on an aux or output channel strip to isolate that part of the mix. ",
+        "Studio Grand",
         "Track 1 “오디오 1”",
         "Track 2 “오디오 2”",
         "Track 3 “Deluxe Classic”",
         "Track 4 “Studio Grand”",
-        "Track header. Mute or solo the track’s channel strip signal, enable the track for recording, and adjust volume or pan. Control-click and choose Track Header Components to select which controls to show or hide. "
+        "Track header. Mute or solo the track’s channel strip signal, enable the track for recording, and adjust volume or pan. Control-click and choose Track Header Components to select which controls to show or hide. ",
+        "Tracks header",
+        "Tracks legend",
+        "Volume",
+        "Volume fader. Set a track’s playback volume. Use on an aux or output channel strip to adjust the volume of that part of the mix, or on the output channel strip to set the overall project volume. ",
+        "오디오 1",
+        "오디오 2"
       ]
     },
     {
@@ -53,17 +80,153 @@
       "identifiers": []
     }
   ],
-  "conclusion": "On this host in en-US, arrange.track_headers exposes 8 elements carrying 6 distinct strings. Every string is in the evidence file verbatim, which is what lets a label variant cite this record: the guard requires the string to occur in the observations or evidence, and here it does or it does not.",
+  "conclusion": "On this host in en-US, arrange.track_headers exposes 53 elements carrying 33 distinct strings. Every string is in the evidence file verbatim, which is what lets a label variant cite this record: the guard requires the string to occur in the observations or evidence, and here it does or it does not.",
   "limits": [
     "Navigation-free surfaces only: nothing behind a menu press or a button was opened, so this says nothing about the mixer, plug-in editors or the editors.",
-    "211 window rows matched no surface rule and are not filed under any record; they are in the evidence file and can be re-classified when a rule exists.",
+    "9 window-level rows (the title bar, its close/minimise/zoom buttons and the unnamed containers directly under the window) belong to no area and are filed under no record; 0 further window rows matched no area rule. All are in the evidence file.",
     "One project, one host, one build. A label that depends on project content — a track name, a region name — is a reading of this fixture, not of Logic."
   ],
   "supersedes": null,
   "canon": [
     {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Add Tracks button. Add audio and software instrument tracks. Use tracks for recording, editing, and arranging regions. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Deluxe Classic",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Duplicate Track button. Create an empty track with the same settings as the selected track. Option-click to create a track with the same settings and content. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Global Tracks button. Work with global tracks to control various aspects of the overall project, such as arrangement and tempo. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
       "ref": "logic-canon://strings/en#value",
       "value": "Has Focus",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Individual Track Zoom",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Individual track zoom. Drag the track’s bottom divider line to adjust its vertical track zoom level. Command-drag to adjust all tracks of the same track type. Shift-click to reset all tracks to the default zoom level. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "Input Monitoring",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Input Monitoring button. Hear incoming signals on audio or software instrument tracks that aren’t record enabled. This is useful when setting levels or practicing parts before recording. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "Mute",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Mute button. Silence a track’s signal, audibly removing it from project playback. Corresponds to the Mute button on the channel strip in the Mixer, so that changing one also changes the other. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Name field. Double-click to rename the track. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Pan/Balance knob. Drag vertically to position the track signal in the stereo field. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "Record Enable",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Record Enable button. Prepare the track for recording, or deactivate a record-ready track. The button changes to indicate whether the track is inactive, record enabled, or currently recording. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "Solo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Solo button. Isolate a track’s signal so that it can be heard without other tracks. Use on an aux or output channel strip to isolate that part of the mix. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Studio Grand",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -76,16 +239,40 @@
       "binding": {
         "kind": "record"
       }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "Volume",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Volume fader. Set a track’s playback volume. Use on an aux or output channel strip to adjust the volume of that part of the mix, or on the output channel strip to set the overall project volume. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
     }
   ],
   "canon_absent": [
     {
-      "claim": "4 strings this surface exposes are a whole value of no corpus the canon pins, and no shipped label folds to them",
+      "claim": "12 strings this surface exposes are a whole value of no corpus the canon pins, and no shipped label folds to them",
       "strings": [
+        "0 Pan",
+        "Add Tracks   ⌥⌘N",
+        "New Track with Duplicate Settings   ⌘D",
+        "Show/Hide Global Tracks   G",
         "Track 1 “오디오 1”",
         "Track 2 “오디오 2”",
         "Track 3 “Deluxe Classic”",
-        "Track 4 “Studio Grand”"
+        "Track 4 “Studio Grand”",
+        "Tracks header",
+        "Tracks legend",
+        "오디오 1",
+        "오디오 2"
       ],
       "searched": [
         {

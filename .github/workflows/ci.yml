@@ -111,6 +111,8 @@ jobs:
             Scripts/test_locale_detection_is_derived.py
             Scripts/test_locale_campaign.py
             Scripts/test_locale_census.py
+            Scripts/test_locale_rules.py
+            Scripts/test_locale_campaign_script.py
             Scripts/test_locale_labels_json.py
             Scripts/test_locale_version_axis.py
             Scripts/test_policy_literals_against_canon.py

@@ -20,7 +20,7 @@
   "reverify": {
     "kind": "script",
     "command": "Scripts/observations/locale-census.sh en-US",
-    "expected": "a census in en-US whose arrange.regions rows carry the same 16 distinct strings; a differing set means Logic's labels moved and every provenance citing this record wants re-reading",
+    "expected": "a census in en-US whose arrange.regions rows carry the same 20 distinct strings; a differing set means Logic's labels moved and every provenance citing this record wants re-reading",
     "cost": "~1 min with Logic open on the fixture project in that locale"
   },
   "depends": [
@@ -33,26 +33,30 @@
   "observations": [
     {
       "what": "rows on arrange.regions",
-      "rows": 14,
-      "distinct_strings": 16,
+      "rows": 16,
+      "distinct_strings": 20,
       "distinct_identifiers": 0
     },
     {
       "what": "the strings, verbatim",
       "strings": [
-        "Add Tracks   ⌥⌘N",
-        "Add Tracks button. Add audio and software instrument tracks. Use tracks for recording, editing, and arranging regions. ",
-        "MIDI In",
-        "MIDI In   ⌥I, MIDI In button. Click to add notes to an existing MIDI region, or double-click to change pitch/velocity of a selected note in a MIDI region, using the Musical Typing or an external MIDI keyboard. ",
+        "Cycle area. Repeatedly play or record over the project section within the yellow bar. Drag the bar to move the range, or the edges to edit the length. ",
+        "End Marker",
         "MIDI 리전",
-        "Region Path",
+        "Playhead thumb",
+        "Playhead. Indicates the playback position. Move by dragging, clicking the lower part of the ruler, or using the LCD Position displays. ",
+        "Project End marker. Indicates the project end point. When recording, the marker moves to fit the project length. Drag vertically to change position. ",
+        "Project Start marker. Indicates the project start point. Drag left to play upbeats or program change commands before the first downbeat. ",
         "Region starts at 1 bar  and ends at 2 bars , MIDI region. Contains MIDI note and controller events. Drag the middle to move, the lower edges to resize, and the upper-right edge to loop. Use the tools to perform other edits. ",
+        "Start Marker",
         "Track 1 “오디오 1”",
         "Track 2 “오디오 2”",
         "Track 3 “Deluxe Classic”",
         "Track 4 “Studio Grand”",
         "Tracks contents",
+        "Tracks time ruler",
         "Workspace. The primary area for recording, editing, and arranging audio, MIDI, and Session Player regions, divided into different track types. ",
+        "cycle region",
         "loop",
         "move left border",
         "move right border"
@@ -63,17 +67,17 @@
       "identifiers": []
     }
   ],
-  "conclusion": "On this host in en-US, arrange.regions exposes 14 elements carrying 16 distinct strings. Every string is in the evidence file verbatim, which is what lets a label variant cite this record: the guard requires the string to occur in the observations or evidence, and here it does or it does not.",
+  "conclusion": "On this host in en-US, arrange.regions exposes 16 elements carrying 20 distinct strings. Every string is in the evidence file verbatim, which is what lets a label variant cite this record: the guard requires the string to occur in the observations or evidence, and here it does or it does not.",
   "limits": [
     "Navigation-free surfaces only: nothing behind a menu press or a button was opened, so this says nothing about the mixer, plug-in editors or the editors.",
-    "211 window rows matched no surface rule and are not filed under any record; they are in the evidence file and can be re-classified when a rule exists.",
+    "9 window-level rows (the title bar, its close/minimise/zoom buttons and the unnamed containers directly under the window) belong to no area and are filed under no record; 0 further window rows matched no area rule. All are in the evidence file.",
     "One project, one host, one build. A label that depends on project content — a track name, a region name — is a reading of this fixture, not of Logic."
   ],
   "supersedes": null,
   "canon": [
     {
       "ref": "logic-canon://quickhelp/en#value",
-      "value": "Add Tracks button. Add audio and software instrument tracks. Use tracks for recording, editing, and arranging regions. ",
+      "value": "Cycle area. Repeatedly play or record over the project section within the yellow bar. Drag the bar to move the range, or the edges to edit the length. ",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -81,7 +85,7 @@
     },
     {
       "ref": "logic-canon://strings/en#value",
-      "value": "MIDI In",
+      "value": "End Marker",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -97,7 +101,39 @@
     },
     {
       "ref": "logic-canon://strings/en#value",
-      "value": "Region Path",
+      "value": "Playhead thumb",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Playhead. Indicates the playback position. Move by dragging, clicking the lower part of the ruler, or using the LCD Position displays. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Project End marker. Indicates the project end point. When recording, the marker moves to fit the project length. Drag vertically to change position. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Project Start marker. Indicates the project start point. Drag left to play upbeats or program change commands before the first downbeat. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Start Marker",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -106,6 +142,14 @@
     {
       "ref": "logic-canon://quickhelp/en#value",
       "value": "Workspace. The primary area for recording, editing, and arranging audio, MIDI, and Session Player regions, divided into different track types. ",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "cycle region",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -138,16 +182,15 @@
   ],
   "canon_absent": [
     {
-      "claim": "8 strings this surface exposes are a whole value of no corpus the canon pins, and no shipped label folds to them",
+      "claim": "7 strings this surface exposes are a whole value of no corpus the canon pins, and no shipped label folds to them",
       "strings": [
-        "Add Tracks   ⌥⌘N",
-        "MIDI In   ⌥I, MIDI In button. Click to add notes to an existing MIDI region, or double-click to change pitch/velocity of a selected note in a MIDI region, using the Musical Typing or an external MIDI keyboard. ",
         "Region starts at 1 bar  and ends at 2 bars , MIDI region. Contains MIDI note and controller events. Drag the middle to move, the lower edges to resize, and the upper-right edge to loop. Use the tools to perform other edits. ",
         "Track 1 “오디오 1”",
         "Track 2 “오디오 2”",
         "Track 3 “Deluxe Classic”",
         "Track 4 “Studio Grand”",
-        "Tracks contents"
+        "Tracks contents",
+        "Tracks time ruler"
       ],
       "searched": [
         {

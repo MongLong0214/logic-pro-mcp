@@ -5,6 +5,11 @@
     locale-regenerate.py LOCALE --apply                      write the confirmations and regenerate
     locale-regenerate.py LOCALE --apply --accept-changed L   also take label L's changed reading
     locale-regenerate.py LOCALE --apply --accept-new L       also add the aligned new variant of L to Swift
+    locale-regenerate.py LOCALE --apply --rule-only          the unattended form: take CHANGED and NEW
+                                                             VARIANT only where the live string EXACTLY
+                                                             equals the label's own canon value in LOCALE;
+                                                             every other one is a HOLD, recorded with its
+                                                             reason in docs/locale/holds.json
 
 One command per locale. The inputs are the observation records `label-census.py` filed for LOCALE on
 the release `AXLocalePolicy.currentLogicVersion`/`Build` declares; nothing else is read from Logic.
@@ -196,6 +201,30 @@ def writable(hits, plan, accept_changed):
     return todo, held_back
 
 
+def rule_only(cv, corpus, locale, plan, new_variants):
+    """`(labels to accept as changed, labels to accept as new, holds)` under the one unattended rule.
+
+    A CHANGED reading or a NEW VARIANT is taken only when the live string EXACTLY equals a value the
+    label's own canon rows carry in `locale` (`cv.verdict`). Everything else is a hold with the reason,
+    returned for `locale_holds.record`; nothing here decides by taste.
+    """
+    holds = {"changed": {}, "new_variant": {}}
+    take_changed, take_new = [], []
+    for item in plan["changed"]:
+        verdict, why = cv.verdict(corpus, item["label"], locale, item["now"])
+        if verdict == "ACCEPT":
+            take_changed.append(item["label"])
+        else:
+            holds["changed"][item["label"]] = {"was": item["was"], "now": item["now"], "reason": why}
+    for name, cand in sorted(new_variants.items()):
+        verdict, why = cv.verdict(corpus, name, locale, cand["target"])
+        if verdict == "ACCEPT":
+            take_new.append(name)
+        else:
+            holds["new_variant"][name] = {"base": cand["base"], "target": cand["target"], "reason": why}
+    return take_changed, take_new, holds
+
+
 def render_diff(plan, new_variants, locale, declared):
     """The diff a person reads before `--apply`."""
     lines = [f"{locale} against Logic {declared['version']} ({declared['build']}):"]
@@ -281,6 +310,9 @@ def run(argv=None, repo=REPO):
     parser.add_argument("--apply", action="store_true")
     parser.add_argument("--accept-changed", nargs="*", default=[])
     parser.add_argument("--accept-new", nargs="*", default=[])
+    parser.add_argument("--rule-only", action="store_true",
+                        help="accept CHANGED / NEW VARIANT only on an exact match with the label's own "
+                             "canon value; hold (and record) the rest")
     args = parser.parse_args(argv)
 
     labels_mod = _load("locale_labels_for_regenerate", os.path.join(repo, "Scripts", "locale_labels.py"))
@@ -345,6 +377,34 @@ def run(argv=None, repo=REPO):
         return 0
 
     # --- apply -------------------------------------------------------------------------------------
+    # Roles are settled BEFORE anything is read from the census a second time: narrowing removes the
+    # readings that rested on a role the label never addressed, and the hits and the plan are then
+    # recomputed against the ledger as it now stands.
+    narrowed = propose.narrow_roles(labels_path, census, locale)
+    if narrowed:
+        print(f"narrowed the roles of {len(narrowed)} containment label(s) to the elements that carry "
+              f"their string whole: {', '.join(sorted(narrowed))}")
+        subprocess.run([sys.executable, os.path.join(repo, "Scripts", "locale_labels.py"), "--write"],
+                       check=True)
+        doc = labels_mod.load_json()
+        _l, _h, hits, _u = propose.main(census_path, labels_path)
+        plan = plan_changes(doc.get("labels") or {}, locale, hits, declared)
+    holds = {"unconfirmed": {i["label"] + "|" + str(i["string"]): {
+                 "string": i["string"], "record": i["record"], "was": i["was"],
+                 "reason": "read on an earlier Logic and not found by this census; the read-only census "
+                           "does not reach it, so it stays on the old release until a navigation census "
+                           "finds it or proves it absent"} for i in plan["unconfirmed"]}}
+    if args.rule_only:
+        try:
+            cv = _load("locale_canon_value_for_regenerate", os.path.join(HERE, "locale_canon_value.py"))
+            corpus = cv.Corpus(repo)
+        except Exception as exc:  # CorpusUnavailable, or a tree with no canon axis
+            print(f"REFUSED: --rule-only needs the pinned corpus: {exc}")
+            return 2
+        take_changed, take_new, rule_holds = rule_only(cv, corpus, locale, plan, new_variants)
+        args.accept_changed += take_changed
+        args.accept_new += take_new
+        holds.update(rule_holds)
     changed_ok = set(args.accept_changed)
     for name in args.accept_new:
         if name not in new_variants:
@@ -368,6 +428,11 @@ def run(argv=None, repo=REPO):
         plan = plan_changes(doc.get("labels") or {}, locale, hits, declared)
 
     todo, held_back = writable(hits, plan, changed_ok)
+    if not args.rule_only:
+        for item in held_back:
+            holds.setdefault("changed", {})[item["label"]] = {
+                "was": item["was"], "now": item["now"],
+                "reason": "changed reading not named with --accept-changed"}
     # Stale readings of what the census CONFIRMED (or the operator accepted as changed) are cleared so
     # the proposer, which never overwrites an existing block, writes the new one.
     refresh = {(i["label"], i["string"], i["kind"]) for i in plan["confirmed"]}
@@ -386,6 +451,12 @@ def run(argv=None, repo=REPO):
     with open(labels_path, "w", encoding="utf-8") as handle:
         handle.write(labels_mod.render(raw))
     by_surface = {r["surface"]: rid for rid, r in records.items()}
+    # Roles first: a label whose name cannot say what element it addresses is written only once it
+    # declares one, and the declaration comes from the AX role this census read -- never typed.
+    declared_roles, undeclared = propose.declare_roles(labels_path, census, locale, sighted=set(hits))
+    if declared_roles:
+        print(f"declared roles for {len(declared_roles)} label(s) from the census's own AX roles")
+    holds["role_undeclared"] = dict(undeclared)
     n_prov, n_cov = propose.apply(labels_path, census, todo, by_surface)
     print(f"wrote {n_prov} provenance block(s) and {n_cov} coverage citation(s)")
     bind = []
@@ -396,6 +467,15 @@ def run(argv=None, repo=REPO):
     if held_back:
         print(f"HELD BACK: {len(held_back)} changed reading(s) were not written; name each label with "
               f"--accept-changed to take it")
+    holds_mod = _load("locale_holds_for_regenerate", os.path.join(HERE, "locale_holds.py"))
+    still_new = {name: c for name, c in new_variants.items() if name not in set(args.accept_new)}
+    if still_new and not args.rule_only:
+        for name, cand in still_new.items():
+            holds.setdefault("new_variant", {})[name] = {
+                "base": cand["base"], "target": cand["target"],
+                "reason": "aligned candidate not named with --accept-new"}
+    holds_mod.record(repo, locale, holds, declared_roles, narrowed)
+    print("HOLDS " + json.dumps({k: len(v) for k, v in holds.items() if v}, sort_keys=True))
     return subprocess.run([sys.executable, os.path.join(repo, "Scripts", "locale_labels.py"), "--check"]).returncode
 
 

@@ -42,14 +42,14 @@
  ],
  "currency": {
   "en-US": {
-   "current": 38,
+   "current": 145,
    "superseded": 12,
    "unknown_version": 0,
    "unverified": 0,
-   "derived": 204,
+   "derived": 97,
    "unmeasured": 1,
    "retired": 1,
-   "not_measured_on_current": 217
+   "not_measured_on_current": 110
   },
   "ko-KR": {
    "current": 48,
@@ -268,7 +268,7 @@
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "measured",
     "de-DE": "derived",
@@ -279,11 +279,29 @@
     "zh-CN": "measured",
     "zh-TW": "measured"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:All MIDI Tracks as MIDI File…",
     "de-DE": "strings:de:ships_up_to_case:Alle MIDI-Spuren als MIDI-Datei …"
    },
    "coverage_currency": {
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
     "es-ES": "current",
@@ -459,7 +477,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_currency": {
     "en-US": "current",
@@ -537,7 +555,7 @@
     "ja-JP": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
     "ko-KR": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9",
     "ja-JP": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022"
    },
@@ -652,12 +670,40 @@
     "音频效果插槽"
    ],
    "rationale": "Classifies an empty audio-plugin insert-slot button; read-only (structural fallback exists). MAMixer's audio plug-in row matches the archived own EN/KO/JA/DE empty-button descriptions; INS_009_InsertSlot Title supplies that button's own Audio Effect help. Legacy fragments remain containment tolerances. This is not plug-in-editor label authority or additional native locale qualification.",
+   "provenance": {
+    "audio effect": {
+     "attribute": "help",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Audio Effect slot. Insert an audio effect. Click an occupied slot to open the plug-in. Use effects to alter signals in real time. ",
+     "record": "2026-11-18-en-US-mixer-channel_strips-census",
+     "record_sha256": "c83252ccc60b20ecaefb665e74ec68131cd289aa4ff02b556f63ad7b03655284",
+     "role": "AXButton"
+    },
+    "Audio Effect slot": {
+     "attribute": "help",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Audio Effect slot. Insert an audio effect. Click an occupied slot to open the plug-in. Use effects to alter signals in real time. ",
+     "record": "2026-11-18-en-US-mixer-channel_strips-census",
+     "record_sha256": "c83252ccc60b20ecaefb665e74ec68131cd289aa4ff02b556f63ad7b03655284",
+     "role": "AXButton"
+    }
+   },
    "roles": [
     "AXButton"
    ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -669,7 +715,6 @@
     "zh-TW": "derived"
    },
    "coverage_derived": {
-    "en-US": "quickhelp:en:ships_up_to_case:Audio Effect slot",
     "ko-KR": "niblabels:ko:ships_up_to_case:오디오 이펙트",
     "ja-JP": "quickhelp:ja:ships_up_to_case:オーディオエフェクトスロット",
     "de-DE": "quickhelp:de:ships_up_to_case:Audioeffekt-Slot",
@@ -679,6 +724,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:plug-in de áudio",
     "zh-CN": "quickhelp:zh_CN:ships_up_to_case:音频效果插槽",
     "zh-TW": "strings:zh_TW:ships_up_to_case:音訊外掛模組"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "automationModeContext": {
@@ -693,9 +741,12 @@
     "自動混音"
    ],
    "rationale": "Gates the track-header automation-mode read to the automation control; read-only classifier.",
+   "roles": [
+    "AXCheckBox"
+   ],
    "match": "exact_strict",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -706,8 +757,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-mixer-channel_strips-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXCheckBox"
+   },
+   "coverage_attributes": {
+    "en-US": "description"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "c83252ccc60b20ecaefb665e74ec68131cd289aa4ff02b556f63ad7b03655284"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:automation",
     "ko-KR": "quickhelp:ko:ships_up_to_case:오토메이션",
     "ja-JP": "quickhelp:ja:ships_up_to_case:オートメーション",
     "de-DE": "quickhelp:de:ships_up_to_case:automation",
@@ -717,6 +785,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:automação",
     "zh-CN": "strings:zh_CN:ships_up_to_case:自动化",
     "zh-TW": "strings:zh_TW:ships_up_to_case:自動混音"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "automationModeLatch": {
@@ -781,12 +852,13 @@
     }
    },
    "roles": [
+    "AXButton",
     "AXMenuItem",
     "AXPopUpButton"
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -797,8 +869,25 @@
     "zh-CN": "derived",
     "zh-TW": "measured"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-mixer-channel_strips-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXButton"
+   },
+   "coverage_attributes": {
+    "en-US": "value"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "c83252ccc60b20ecaefb665e74ec68131cd289aa4ff02b556f63ad7b03655284"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:off",
     "ko-KR": "quickhelp:ko:ships_up_to_case:off",
     "ja-JP": "quickhelp:ja:ships_up_to_case:off",
     "de-DE": "quickhelp:de:ships_up_to_case:Aus",
@@ -809,6 +898,7 @@
     "zh-CN": "quickhelp:zh_CN:ships_up_to_case:关"
    },
    "coverage_currency": {
+    "en-US": "current",
     "zh-TW": "current"
    }
   },
@@ -882,9 +972,12 @@
     "트림"
    ],
    "rationale": "Retained automation-mode value tokens after automation-context gating; read-only. The reader tokenizes description/title/value, not AXHelp. The whole QuickHelp Automation Mode Trim Title and unrelated Trim editing/Controller Assignments rows do not establish this popup value; its own value provider remains unidentified. No translated mode is guessed.",
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "unmeasured",
     "ja-JP": "unmeasured",
     "de-DE": "unmeasured",
@@ -895,8 +988,26 @@
     "zh-CN": "unmeasured",
     "zh-TW": "unmeasured"
    },
-   "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:trim"
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "automationModeWrite": {
@@ -944,9 +1055,13 @@
     "小節"
    ],
    "rationale": "Identifies the bar slider in the control bar; verbatim description match; read-only.",
+   "roles": [
+    "AXMenuItem",
+    "AXSlider"
+   ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -957,8 +1072,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:bar",
     "ko-KR": "strings:ko:ships_up_to_case:마디",
     "ja-JP": "strings:ja:ships_up_to_case:bar",
     "de-DE": "strings:de:ships_up_to_case:Takt",
@@ -968,6 +1100,9 @@
     "pt-BR": "niblabels:pt:ships_up_to_case:compasso",
     "zh-CN": "strings:zh_CN:ships_up_to_case:小节",
     "zh-TW": "strings:zh_TW:ships_up_to_case:小節"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "beatSliderLabel": {
@@ -984,9 +1119,13 @@
     "節拍"
    ],
    "rationale": "Identifies the beat slider in the control bar; verbatim description match; read-only.",
+   "roles": [
+    "AXMenuItem",
+    "AXSlider"
+   ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -997,8 +1136,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:beat",
     "ko-KR": "niblabels:ko:ships_up_to_case:비트",
     "ja-JP": "quickhelp:ja:ships_up_to_case:beat",
     "de-DE": "quickhelp:de:ships_up_to_case:beat",
@@ -1008,6 +1164,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Batida",
     "zh-CN": "niblabels:zh_CN:ships_up_to_case:节拍",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:節拍"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "beatsDisplayModeItem": {
@@ -1173,7 +1332,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Bounce",
@@ -1541,7 +1700,7 @@
     "ko-KR": "6674"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
     "ko-KR": "2e9525408d71ee3cbfea8abe74e1097f5fb713720d49d8af2ee13b6090b8e408"
    },
    "coverage_currency": {
@@ -1567,9 +1726,15 @@
     "混音器"
    ],
    "rationale": "Discovers the unique Control Bar Mixer checkbox from its own view-button row. Native ownership, observed boolean direction, complete membership and transport checks remain required; static aliases do not qualify navigation in every locale.",
+   "roles": [
+    "AXCheckBox",
+    "AXGroup",
+    "AXLayoutArea",
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -1580,8 +1745,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:Mixer",
     "ko-KR": "strings:ko:ships_up_to_case:믹서",
     "ja-JP": "strings:ja:ships_up_to_case:ミキサー",
     "de-DE": "strings:de:ships_up_to_case:Mixer",
@@ -1591,6 +1773,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Mixer",
     "zh-CN": "strings:zh_CN:ships_up_to_case:混音器",
     "zh-TW": "strings:zh_TW:ships_up_to_case:混音器"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "controlSurfaceAddButton": {
@@ -2204,7 +2389,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_derived": {
     "pt-BR": "niblabels:pt:ships_up_to_case:Ajustes…"
@@ -2400,7 +2585,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_currency": {
     "en-US": "current",
@@ -2627,7 +2812,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_derived": {
     "zh-TW": "strings:zh_TW:ships_up_to_case:控制表面"
@@ -2850,7 +3035,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_currency": {
     "en-US": "current",
@@ -2916,9 +3101,13 @@
     "循環"
    ],
    "rationale": "Names the cycle in a transport-bar text field description; read-only locator, ANDed with a side. Derived from Apple's own row, checked offline by Scripts/check-labelsets-are-derived.py.",
+   "roles": [
+    "AXCheckBox",
+    "AXMenuItem"
+   ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -2929,8 +3118,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:Cycle",
     "ko-KR": "quickhelp:ko:ships_up_to_case:사이클",
     "ja-JP": "strings:ja:ships_up_to_case:サイクル",
     "de-DE": "strings:de:ships_up_to_case:Cycle",
@@ -2940,6 +3146,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Repetição",
     "zh-CN": "quickhelp:zh_CN:ships_up_to_case:循环",
     "zh-TW": "strings:zh_TW:ships_up_to_case:循環"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "cycleRangeStart": {
@@ -3118,7 +3327,7 @@
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "measured",
     "de-DE": "measured",
@@ -3129,10 +3338,26 @@
     "zh-CN": "measured",
     "zh-TW": "measured"
    },
-   "coverage_derived": {
-    "en-US": "quickhelp:en:ships_up_to_case:Delete Track"
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_currency": {
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
     "de-DE": "current",
@@ -3208,9 +3433,12 @@
     "顯示模式"
    ],
    "rationale": "Identifies the control bar's display-mode AXPopUpButton by description. Read live 2026-09-14 on a Korean Logic 12.3; it is the control that decides how many position components the Playhead Position group exposes.",
+   "roles": [
+    "AXPopUpButton"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -3221,8 +3449,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-transport-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXPopUpButton"
+   },
+   "coverage_attributes": {
+    "en-US": "description"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "6ea11cace626ae3930960008bfa3e48cd292273dddf87b3c08fd4ef98f4280e8"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:display mode",
     "ko-KR": "strings:ko:ships_up_to_case:표시 모드",
     "ja-JP": "strings:ja:ships_up_to_case:表示モード",
     "de-DE": "strings:de:ships_up_to_case:Anzeigemodus",
@@ -3232,6 +3477,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Modo de visualização",
     "zh-CN": "strings:zh_CN:ships_up_to_case:显示模式",
     "zh-TW": "strings:zh_TW:ships_up_to_case:顯示模式"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "editMenuBar": {
@@ -3399,7 +3647,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_currency": {
     "en-US": "current",
@@ -4159,9 +4407,12 @@
     "附加資訊"
    ],
    "rationale": "Event List additional-info filter; ten-locale titles derived from the cited Apple row.",
+   "roles": [
+    "AXCheckBox"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -4172,8 +4423,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-editor-event_list-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXCheckBox"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "006dc5675855ace356cd91517420bdec8a4921bb0d763e147850c2bca36fe333"
+   },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:Additional Info",
     "ko-KR": "strings:ko:ships_up_to_case:추가 정보",
     "ja-JP": "strings:ja:ships_up_to_case:追加情報",
     "de-DE": "strings:de:ships_up_to_case:Weitere Infos",
@@ -4183,6 +4451,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Informações Adicionais",
     "zh-CN": "strings:zh_CN:ships_up_to_case:附加信息",
     "zh-TW": "strings:zh_TW:ships_up_to_case:附加資訊"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "eventListFilterAftertouch": {
@@ -4194,9 +4465,12 @@
     "後觸"
    ],
    "rationale": "Event List aftertouch filter; ten-locale titles derived from the cited Apple row.",
+   "roles": [
+    "AXCheckBox"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -4207,8 +4481,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-editor-event_list-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXCheckBox"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "006dc5675855ace356cd91517420bdec8a4921bb0d763e147850c2bca36fe333"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:Aftertouch",
     "ko-KR": "quickhelp:ko:ships_up_to_case:Aftertouch",
     "ja-JP": "quickhelp:ja:ships_up_to_case:Aftertouch",
     "de-DE": "quickhelp:de:ships_up_to_case:Aftertouch",
@@ -4218,6 +4509,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Aftertouch",
     "zh-CN": "quickhelp:zh_CN:ships_up_to_case:Aftertouch",
     "zh-TW": "strings:zh_TW:ships_up_to_case:後觸"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "eventListFilterController": {
@@ -4230,9 +4524,12 @@
     "控制器"
    ],
    "rationale": "Event List controller filter; ten-locale titles derived from the cited Apple row.",
+   "roles": [
+    "AXCheckBox"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -4243,8 +4540,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-editor-event_list-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXCheckBox"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "006dc5675855ace356cd91517420bdec8a4921bb0d763e147850c2bca36fe333"
+   },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:Controller",
     "ko-KR": "strings:ko:ships_up_to_case:컨트롤러",
     "ja-JP": "strings:ja:ships_up_to_case:コントローラ",
     "de-DE": "strings:de:ships_up_to_case:Controller",
@@ -4254,6 +4568,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Controlador",
     "zh-CN": "strings:zh_CN:ships_up_to_case:控制器",
     "zh-TW": "strings:zh_TW:ships_up_to_case:控制器"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "eventListFilterNotes": {
@@ -4267,9 +4584,29 @@
     "音符"
    ],
    "rationale": "Event List note-event filter; ten-locale titles derived from the cited Apple row.",
+   "provenance": {
+    "Note": {
+     "attribute": "description",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Note",
+     "record": "2026-11-18-en-US-editor-event_list-census",
+     "record_sha256": "006dc5675855ace356cd91517420bdec8a4921bb0d763e147850c2bca36fe333",
+     "role": "AXCell"
+    }
+   },
+   "roles": [
+    "AXCell",
+    "AXCheckBox",
+    "AXPopUpButton"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -4281,7 +4618,6 @@
     "zh-TW": "derived"
    },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:Notes",
     "ko-KR": "quickhelp:ko:ships_up_to_case:노트",
     "ja-JP": "quickhelp:ja:ships_up_to_case:Note",
     "de-DE": "quickhelp:de:ships_up_to_case:Note",
@@ -4291,6 +4627,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Notas",
     "zh-CN": "quickhelp:zh_CN:ships_up_to_case:音符",
     "zh-TW": "strings:zh_TW:ships_up_to_case:音符"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "eventListFilterPitchBend": {
@@ -4305,9 +4644,12 @@
     "彎音"
    ],
    "rationale": "Event List pitch-bend filter; ten-locale titles derived from the cited Apple row. Logic 12.3 (6674) shipped 滑音 in zh_TW; Logic 13.0 (7801) ships 彎音, and 滑音 stays for 12.x.",
+   "roles": [
+    "AXCheckBox"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -4318,8 +4660,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-editor-event_list-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXCheckBox"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "006dc5675855ace356cd91517420bdec8a4921bb0d763e147850c2bca36fe333"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:Pitch Bend",
     "ko-KR": "quickhelp:ko:ships_up_to_case:Pitch Bend",
     "ja-JP": "quickhelp:ja:ships_up_to_case:Pitch Bend",
     "de-DE": "quickhelp:de:ships_up_to_case:Pitch Bend",
@@ -4329,6 +4688,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Pitch Bend",
     "zh-CN": "quickhelp:zh_CN:ships_up_to_case:Pitch Bend",
     "zh-TW": "strings:zh_TW:ships_up_to_case:滑音"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "eventListFilterPolyAftertouch": {
@@ -4344,9 +4706,12 @@
     "多重後觸"
    ],
    "rationale": "Event List polyphonic-aftertouch filter; ten-locale titles derived from the cited Apple row.",
+   "roles": [
+    "AXCheckBox"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -4357,8 +4722,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-editor-event_list-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXCheckBox"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "006dc5675855ace356cd91517420bdec8a4921bb0d763e147850c2bca36fe333"
+   },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:Poly Aftertouch",
     "ko-KR": "strings:ko:ships_up_to_case:폴리포닉 애프터터치",
     "ja-JP": "strings:ja:ships_up_to_case:ポリアフタータッチ",
     "de-DE": "strings:de:ships_up_to_case:Poly Aftertouch",
@@ -4368,6 +4750,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Aftertouch Polif.",
     "zh-CN": "strings:zh_CN:ships_up_to_case:复音触后",
     "zh-TW": "strings:zh_TW:ships_up_to_case:多重後觸"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "eventListFilterProgramChange": {
@@ -4382,9 +4767,12 @@
     "程式更動"
    ],
    "rationale": "Event List program-change filter; ten-locale titles derived from the cited Apple row.",
+   "roles": [
+    "AXCheckBox"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -4395,8 +4783,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-editor-event_list-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXCheckBox"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "006dc5675855ace356cd91517420bdec8a4921bb0d763e147850c2bca36fe333"
+   },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:Progr. Change",
     "ko-KR": "strings:ko:ships_up_to_case:프로그램 체인지",
     "ja-JP": "strings:ja:ships_up_to_case:Progr. Change",
     "de-DE": "strings:de:ships_up_to_case:Progr. Change",
@@ -4406,6 +4811,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Mudança de Prog.",
     "zh-CN": "strings:zh_CN:ships_up_to_case:音色变化",
     "zh-TW": "strings:zh_TW:ships_up_to_case:程式更動"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "eventListFilterSystemExclusive": {
@@ -4419,9 +4827,12 @@
     "系統保留"
    ],
    "rationale": "Event List system-exclusive filter; ten-locale titles derived from the cited Apple row.",
+   "roles": [
+    "AXCheckBox"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -4432,8 +4843,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-editor-event_list-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXCheckBox"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "006dc5675855ace356cd91517420bdec8a4921bb0d763e147850c2bca36fe333"
+   },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:Syst. Exclusive",
     "ko-KR": "strings:ko:ships_up_to_case:시스템 고유",
     "ja-JP": "strings:ja:ships_up_to_case:SysEx",
     "de-DE": "strings:de:ships_up_to_case:Syst. Exclusive",
@@ -4443,6 +4871,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:SysEx",
     "zh-CN": "strings:zh_CN:ships_up_to_case:SysEx",
     "zh-TW": "strings:zh_TW:ships_up_to_case:SysEx"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "eventListItemCountHelp": {
@@ -4459,9 +4890,12 @@
     "項目數量"
    ],
    "rationale": "Apple's row for the Event List item-count field's AXHelp, read on every MIDI",
+   "roles": [
+    "AXStaticText"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -4472,8 +4906,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-editor-event_list-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXStaticText"
+   },
+   "coverage_attributes": {
+    "en-US": "description"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "006dc5675855ace356cd91517420bdec8a4921bb0d763e147850c2bca36fe333"
+   },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:Number of Items",
     "ko-KR": "strings:ko:ships_up_to_case:항목 수",
     "ja-JP": "strings:ja:ships_up_to_case:項目数",
     "de-DE": "strings:de:ships_up_to_case:Anzahl der Objekte",
@@ -4483,6 +4934,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Número de Itens",
     "zh-CN": "strings:zh_CN:ships_up_to_case:项目数",
     "zh-TW": "strings:zh_TW:ships_up_to_case:項目數量"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "eventListRegionPathHelp": {
@@ -4499,9 +4953,12 @@
     "區段路徑"
    ],
    "rationale": "Apple's row for the Event List region-path field's AXHelp. Its absence is what",
+   "roles": [
+    "AXStaticText"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -4512,8 +4969,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-editor-event_list-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXStaticText"
+   },
+   "coverage_attributes": {
+    "en-US": "description"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "006dc5675855ace356cd91517420bdec8a4921bb0d763e147850c2bca36fe333"
+   },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:Region Path",
     "ko-KR": "strings:ko:ships_up_to_case:리전 경로",
     "ja-JP": "strings:ja:ships_up_to_case:リージョンパス",
     "de-DE": "strings:de:ships_up_to_case:Regionspfad:",
@@ -4523,6 +4997,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Caminho da região",
     "zh-CN": "strings:zh_CN:ships_up_to_case:片段路径",
     "zh-TW": "strings:zh_TW:ships_up_to_case:區段路徑"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "eventListTab": {
@@ -4535,9 +5012,13 @@
     "事件"
    ],
    "rationale": "Identifies the Event tab of the List Editors pane; the collector presses it.",
+   "roles": [
+    "AXGroup",
+    "AXRadioButton"
+   ],
    "match": "exact_strict",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -4548,8 +5029,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-editor-event_list-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXRadioButton"
+   },
+   "coverage_attributes": {
+    "en-US": "description"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "006dc5675855ace356cd91517420bdec8a4921bb0d763e147850c2bca36fe333"
+   },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:event",
     "ko-KR": "strings:ko:ships_up_to_case:이벤트",
     "ja-JP": "strings:ja:ships_up_to_case:イベント",
     "de-DE": "strings:de:ships_up_to_case:event",
@@ -4559,6 +5057,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Evento",
     "zh-CN": "strings:zh_CN:ships_up_to_case:事件",
     "zh-TW": "strings:zh_TW:ships_up_to_case:事件"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "eventPositionAsTimeMenuItem": {
@@ -4752,7 +5253,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_derived": {
     "pt-BR": "strings:pt:ships_up_to_case:Exportar"
@@ -4920,7 +5421,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_derived": {
     "it-IT": "strings:it:ships_up_to_case:File"
@@ -5088,7 +5589,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_derived": {
     "zh-TW": "strings:zh_TW:ships_up_to_case:移動"
@@ -5301,7 +5802,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_derived": {
     "fr-FR": "strings:fr:ships_up_to_case:Position…",
@@ -5515,7 +6016,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_currency": {
     "en-US": "current",
@@ -5549,7 +6050,7 @@
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -5560,8 +6061,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-area_controls-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXSlider"
+   },
+   "coverage_attributes": {
+    "en-US": "description"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "4fb6e58a250bfef7e6cc110fd8215f27633e0d5bc224019291899c9e6745e401"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:Horizontal Zoom",
     "ko-KR": "strings:ko:ships_up_to_case:수평 확대/축소",
     "ja-JP": "strings:ja:ships_up_to_case:横方向にズーム",
     "de-DE": "strings:de:ships_up_to_case:Horizontal-Zoom",
@@ -5571,6 +6089,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Zoom horizontal",
     "zh-CN": "strings:zh_CN:ships_up_to_case:水平缩放",
     "zh-TW": "strings:zh_TW:ships_up_to_case:水平縮放"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "importMenuItem": {
@@ -5724,7 +6245,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_derived": {
     "pt-BR": "strings:pt:ships_up_to_case:Importar"
@@ -5757,7 +6278,7 @@
    ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -5768,13 +6289,33 @@
     "zh-CN": "derived",
     "zh-TW": "unmeasured"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-mixer-channel_strips-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXButton"
+   },
+   "coverage_attributes": {
+    "en-US": "help"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "c83252ccc60b20ecaefb665e74ec68131cd289aa4ff02b556f63ad7b03655284"
+   },
    "coverage_derived": {
-    "en-US": "quickhelp:en:ships_up_to_case:input slot",
     "ko-KR": "quickhelp:ko:ships_up_to_case:입력 슬롯",
     "ja-JP": "quickhelp:ja:ships_up_to_case:入力スロット",
     "de-DE": "quickhelp:de:ships_up_to_case:Input-Slot",
     "es-ES": "quickhelp:es:ships_up_to_case:Ranura de entrada",
     "zh-CN": "quickhelp:zh_CN:ships_up_to_case:输入插槽"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "inspectorChannelStripHelpPrefix": {
@@ -5793,7 +6334,7 @@
    ],
    "match": "prefix",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -5804,13 +6345,33 @@
     "zh-CN": "derived",
     "zh-TW": "unmeasured"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-mixer-channel_strips-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXLayoutItem"
+   },
+   "coverage_attributes": {
+    "en-US": "help"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "c83252ccc60b20ecaefb665e74ec68131cd289aa4ff02b556f63ad7b03655284"
+   },
    "coverage_derived": {
-    "en-US": "quickhelp:en:ships_up_to_case:left inspector channel strip",
     "ko-KR": "quickhelp:ko:ships_up_to_case:왼쪽 인스펙터 채널 스트립",
     "ja-JP": "quickhelp:ja:ships_up_to_case:インスペクタの左チャンネルストリップ",
     "de-DE": "quickhelp:de:ships_up_to_case:Linkes Informationsfenster für Channel-Strip",
     "es-ES": "quickhelp:es:ships_up_to_case:Canal de inspector izquierdo",
     "zh-CN": "quickhelp:zh_CN:ships_up_to_case:左检查器通道条"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "keyCommandsControlSurfaceColumnTitle": {
@@ -5906,9 +6467,12 @@
     "調號"
    ],
    "rationale": "Identifies the key-signature AXPopUpButton by its complete description under the already bound control bar; read-only. The archived 2026-09-12 en-US/de-DE navigation-free censuses place Key Signature and Tonart at the same nested control-bar popup path. Descriptions are derived from Apple's own Key Signature row in Logic.framework; other locales are not claimed as live readings. Spanish and Portuguese share Armadura, so only one member is carried.",
+   "roles": [
+    "AXPopUpButton"
+   ],
    "match": "exact_strict",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -5919,8 +6483,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-transport-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXPopUpButton"
+   },
+   "coverage_attributes": {
+    "en-US": "description"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "6ea11cace626ae3930960008bfa3e48cd292273dddf87b3c08fd4ef98f4280e8"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:Key Signature",
     "ko-KR": "strings:ko:ships_up_to_case:조표",
     "ja-JP": "niblabels:ja:ships_up_to_case:キー",
     "de-DE": "niblabels:de:ships_up_to_case:Tonart",
@@ -5930,6 +6511,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Armadura",
     "zh-CN": "strings:zh_CN:ships_up_to_case:调号",
     "zh-TW": "strings:zh_TW:ships_up_to_case:調號"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "learnByKeyLabelCheckbox": {
@@ -6025,9 +6609,12 @@
     "資料庫"
    ],
    "rationale": "Identifies the Library panel/browser by whole-string description; read-only locator (structural fallback exists).",
+   "roles": [
+    "AXCheckBox"
+   ],
    "match": "exact_strict",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -6038,8 +6625,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-transport-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXCheckBox"
+   },
+   "coverage_attributes": {
+    "en-US": "description"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "6ea11cace626ae3930960008bfa3e48cd292273dddf87b3c08fd4ef98f4280e8"
+   },
    "coverage_derived": {
-    "en-US": "niblabels:en:ships_up_to_case:library",
     "ko-KR": "niblabels:ko:ships_up_to_case:라이브러리",
     "ja-JP": "niblabels:ja:ships_up_to_case:ライブラリ",
     "de-DE": "niblabels:de:ships_up_to_case:Bibliothek",
@@ -6049,6 +6653,9 @@
     "pt-BR": "niblabels:pt:ships_up_to_case:Biblioteca",
     "zh-CN": "niblabels:zh_CN:ships_up_to_case:资源库",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:資料庫"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "markerContainerKeywords": {
@@ -6063,9 +6670,12 @@
     "標記"
    ],
    "rationale": "Last-resort marker-ruler container classifier; read-only keyword scan.",
+   "roles": [
+    "AXRadioButton"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -6076,8 +6686,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-editor-event_list-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXRadioButton"
+   },
+   "coverage_attributes": {
+    "en-US": "description"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "006dc5675855ace356cd91517420bdec8a4921bb0d763e147850c2bca36fe333"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:marker",
     "ko-KR": "strings:ko:ships_up_to_case:마커",
     "ja-JP": "strings:ja:ships_up_to_case:マーカー",
     "de-DE": "strings:de:ships_up_to_case:marker",
@@ -6087,6 +6714,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Marcador",
     "zh-CN": "quickhelp:zh_CN:ships_up_to_case:标记",
     "zh-TW": "strings:zh_TW:ships_up_to_case:標記"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "markerEditToggle": {
@@ -6188,9 +6818,12 @@
     "編輯"
    ],
    "rationale": "Live-confirmed on Logic 12.3: the Marker List toolbar AXMenuButton exposes the exact AXDescription `編集` in Japanese and `편집` in Korean; the bottom AXButton with the same label is deliberately rejected unless its actions advertise AXShowMenu. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
+   "roles": [
+    "AXMenuButton"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -6201,8 +6834,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-area_controls-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuButton"
+   },
+   "coverage_attributes": {
+    "en-US": "description"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "4fb6e58a250bfef7e6cc110fd8215f27633e0d5bc224019291899c9e6745e401"
+   },
    "coverage_derived": {
-    "en-US": "niblabels:en:ships_up_to_case:Edit",
     "ko-KR": "niblabels:ko:ships_up_to_case:편집",
     "ja-JP": "niblabels:ja:ships_up_to_case:編集",
     "de-DE": "niblabels:de:ships_up_to_case:Bearbeiten",
@@ -6212,6 +6862,9 @@
     "pt-BR": "niblabels:pt:ships_up_to_case:Editar",
     "zh-CN": "niblabels:zh_CN:ships_up_to_case:编辑",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:編輯"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "markerListNumberOfItemsLabel": {
@@ -6228,9 +6881,12 @@
     "項目數量"
    ],
    "rationale": "Live-measured on Logic 12.3 on 2026-08-17: AXDescription and AXHelp both read `항목 수` in Korean and `項目数` in Japanese, alongside the English `Number of Items`. Until that date this LabelSet deliberately carried no variants because none had been measured; the values it renders were measured in the same pass (`2개의 마커`, `0個のマーカー`) and drove the count parser's separator rule.",
+   "roles": [
+    "AXStaticText"
+   ],
    "match": "exact_strict",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -6241,8 +6897,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-editor-event_list-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXStaticText"
+   },
+   "coverage_attributes": {
+    "en-US": "description"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "006dc5675855ace356cd91517420bdec8a4921bb0d763e147850c2bca36fe333"
+   },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:Number of Items",
     "ko-KR": "strings:ko:ships_up_to_case:항목 수",
     "ja-JP": "strings:ja:ships_up_to_case:項目数",
     "de-DE": "strings:de:ships_up_to_case:Anzahl der Objekte",
@@ -6252,6 +6925,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Número de Itens",
     "zh-CN": "strings:zh_CN:ships_up_to_case:项目数",
     "zh-TW": "strings:zh_TW:ships_up_to_case:項目數量"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "menuActionNameFragment": {
@@ -6342,9 +7018,12 @@
     "MIDI 效果插槽"
    ],
    "rationale": "Detects a channel strip's MIDI effect slot by its AXHelp string; read-only classifier.",
+   "roles": [
+    "AXButton"
+   ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -6355,13 +7034,33 @@
     "zh-CN": "derived",
     "zh-TW": "unmeasured"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-mixer-channel_strips-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXButton"
+   },
+   "coverage_attributes": {
+    "en-US": "help"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "c83252ccc60b20ecaefb665e74ec68131cd289aa4ff02b556f63ad7b03655284"
+   },
    "coverage_derived": {
-    "en-US": "quickhelp:en:ships_up_to_case:midi effect slot",
     "ko-KR": "quickhelp:ko:ships_up_to_case:MIDI 이펙트 슬롯",
     "ja-JP": "quickhelp:ja:ships_up_to_case:MIDIエフェクトスロット",
     "de-DE": "quickhelp:de:ships_up_to_case:MIDI-Effekt-Slot",
     "es-ES": "quickhelp:es:ships_up_to_case:Ranura de efectos MIDI",
     "zh-CN": "quickhelp:zh_CN:ships_up_to_case:MIDI 效果插槽"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "midiFileMenuItem": {
@@ -6529,7 +7228,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_currency": {
     "en-US": "current",
@@ -6671,9 +7370,14 @@
     "拍速"
    ],
    "rationale": "Positively identifies the post-import tempo alert, which exposes no window name. German text read 2026-09-13: `Auch Tempo-Informationen importieren?`. Callers match it by CONTAINMENT — the alert's body is a paragraph, and the question is one phrase inside it.",
+   "roles": [
+    "AXMenuItem",
+    "AXRadioButton",
+    "AXSlider"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -6684,8 +7388,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "niblabels:en:ships_up_to_case:tempo",
     "ko-KR": "niblabels:ko:ships_up_to_case:템포",
     "ja-JP": "niblabels:ja:ships_up_to_case:テンポ",
     "de-DE": "niblabels:de:ships_up_to_case:tempo",
@@ -6695,6 +7416,9 @@
     "pt-BR": "niblabels:pt:ships_up_to_case:tempo",
     "zh-CN": "niblabels:zh_CN:ships_up_to_case:速度",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:拍速"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "mixerAppendTracksForSelectedStrips": {
@@ -6751,9 +7475,12 @@
     "聲道模式"
    ],
    "rationale": "Identifies the channel-mode AXButton whose raw String AXValue describes the format, not an ordinal or a guessed checkbox value. EN/KO raw control shape was read; variants come from this MAMixer row and are not all-locale lifecycle qualification.",
+   "roles": [
+    "AXButton"
+   ],
    "match": "exact_strict",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -6764,8 +7491,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-mixer-channel_strips-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXButton"
+   },
+   "coverage_attributes": {
+    "en-US": "description"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "c83252ccc60b20ecaefb665e74ec68131cd289aa4ff02b556f63ad7b03655284"
+   },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:channel mode",
     "ko-KR": "strings:ko:ships_up_to_case:채널 모드",
     "ja-JP": "strings:ja:ships_up_to_case:チャンネルモード",
     "de-DE": "strings:de:ships_up_to_case:Kanalmodus",
@@ -6775,6 +7519,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:modo do canal",
     "zh-CN": "strings:zh_CN:ships_up_to_case:通道模式",
     "zh-TW": "strings:zh_TW:ships_up_to_case:聲道模式"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "mixerCreateAuxiliaryChannelStrip": {
@@ -6831,9 +7578,12 @@
     "增益減弱測量計"
    ],
    "rationale": "Identifies the gain-reduction AXButton for strict raw default-state reading. EN/KO raw control shape was read; variants are the installed MAMixer row's values, not native lifecycle or plug-in absence qualification.",
+   "roles": [
+    "AXButton"
+   ],
    "match": "exact_strict",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -6844,8 +7594,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-mixer-channel_strips-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXButton"
+   },
+   "coverage_attributes": {
+    "en-US": "description"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "c83252ccc60b20ecaefb665e74ec68131cd289aa4ff02b556f63ad7b03655284"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:gain reduction meter",
     "ko-KR": "strings:ko:ships_up_to_case:게인 축소 측정기",
     "ja-JP": "quickhelp:ja:ships_up_to_case:ゲインリダクションメーター",
     "de-DE": "quickhelp:de:ships_up_to_case:Pegelreduktionsmesser",
@@ -6855,6 +7622,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:medidor de redução de ganho",
     "zh-CN": "quickhelp:zh_CN:ships_up_to_case:增益降低指示器",
     "zh-TW": "strings:zh_TW:ships_up_to_case:增益減弱測量計"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "mixerInspectorContext": {
@@ -7005,7 +7775,7 @@
     "it-IT": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
     "es-ES": "34823bdfa10c669f8be978aa13e01159afa903c384b97d78a0f81b1e58bdb2a3",
     "it-IT": "5564c6c9576195f80f0c9badd9bbf6e9a895f851efcb4d8e37af5bd60d5b389b"
    },
@@ -7224,7 +7994,7 @@
     "zh-TW": "6674"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
     "de-DE": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
     "it-IT": "5564c6c9576195f80f0c9badd9bbf6e9a895f851efcb4d8e37af5bd60d5b389b",
     "pt-BR": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
@@ -7258,9 +8028,13 @@
     "全部"
    ],
    "rationale": "The All mode radio button in the Mixer-own toolbar; does not itself prove whole population coverage.",
+   "roles": [
+    "AXMenuItem",
+    "AXRadioButton"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -7271,8 +8045,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:All",
     "ko-KR": "niblabels:ko:ships_up_to_case:모두",
     "ja-JP": "niblabels:ja:ships_up_to_case:すべて",
     "de-DE": "quickhelp:de:ships_up_to_case:Alle",
@@ -7282,6 +8073,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Tudo",
     "zh-CN": "quickhelp:zh_CN:ships_up_to_case:全部",
     "zh-TW": "strings:zh_TW:ships_up_to_case:全部"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "mixerPresentationSingle": {
@@ -7298,9 +8092,12 @@
     "獨奏"
    ],
    "rationale": "The Single mode radio button in the Mixer-own toolbar; read-only presentation witness.",
+   "roles": [
+    "AXRadioButton"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -7311,8 +8108,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-mixer-channel_strips-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXRadioButton"
+   },
+   "coverage_attributes": {
+    "en-US": "description"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "c83252ccc60b20ecaefb665e74ec68131cd289aa4ff02b556f63ad7b03655284"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:Individual",
     "ko-KR": "quickhelp:ko:ships_up_to_case:단일",
     "ja-JP": "quickhelp:ja:ships_up_to_case:シングル",
     "de-DE": "quickhelp:de:ships_up_to_case:Single",
@@ -7322,6 +8136,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Individual",
     "zh-CN": "strings:zh_CN:ships_up_to_case:单个",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:獨奏"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "mixerPresentationTracks": {
@@ -7337,9 +8154,13 @@
     "音軌"
    ],
    "rationale": "The Tracks mode radio button in the Mixer-own toolbar; not the Tracks main-window area.",
+   "roles": [
+    "AXGroup",
+    "AXRadioButton"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -7350,8 +8171,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-area_controls-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXGroup"
+   },
+   "coverage_attributes": {
+    "en-US": "description"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "4fb6e58a250bfef7e6cc110fd8215f27633e0d5bc224019291899c9e6745e401"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:Tracks",
     "ko-KR": "quickhelp:ko:ships_up_to_case:트랙",
     "ja-JP": "quickhelp:ja:ships_up_to_case:トラック",
     "de-DE": "quickhelp:de:ships_up_to_case:Spuren",
@@ -7361,6 +8199,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Pistas",
     "zh-CN": "strings:zh_CN:ships_up_to_case:轨道",
     "zh-TW": "strings:zh_TW:ships_up_to_case:音軌"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "mixerScrollToMenuItem": {
@@ -7474,9 +8315,12 @@
     "名稱"
    ],
    "rationale": "Semantic channel-strip Name text field; excludes fader readouts and opaque strip metadata.",
+   "roles": [
+    "AXTextField"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -7487,8 +8331,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-mixer-channel_strips-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXTextField"
+   },
+   "coverage_attributes": {
+    "en-US": "description"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "c83252ccc60b20ecaefb665e74ec68131cd289aa4ff02b556f63ad7b03655284"
+   },
    "coverage_derived": {
-    "en-US": "niblabels:en:ships_up_to_case:Name",
     "ko-KR": "niblabels:ko:ships_up_to_case:이름",
     "ja-JP": "niblabels:ja:ships_up_to_case:名前",
     "de-DE": "niblabels:de:ships_up_to_case:Name",
@@ -7498,6 +8359,9 @@
     "pt-BR": "niblabels:pt:ships_up_to_case:Nome",
     "zh-CN": "niblabels:zh_CN:ships_up_to_case:名称",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:名稱"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "mixerTypeFilterAudio": {
@@ -7510,9 +8374,12 @@
     "音訊"
    ],
    "rationale": "Mixer-own type-filter checkbox description, not an input or instrument slot.",
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -7523,8 +8390,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "niblabels:en:ships_up_to_case:Audio",
     "ko-KR": "niblabels:ko:ships_up_to_case:오디오",
     "ja-JP": "niblabels:ja:ships_up_to_case:オーディオ",
     "de-DE": "niblabels:de:ships_up_to_case:Audio",
@@ -7534,6 +8418,9 @@
     "pt-BR": "niblabels:pt:ships_up_to_case:Áudio",
     "zh-CN": "niblabels:zh_CN:ships_up_to_case:音频",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:音訊"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "mixerTypeFilterAux": {
@@ -7543,9 +8430,12 @@
     "辅助"
    ],
    "rationale": "Mixer-own auxiliary type-filter checkbox description.",
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -7556,8 +8446,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:Aux",
     "ko-KR": "strings:ko:ships_up_to_case:Aux",
     "ja-JP": "strings:ja:ships_up_to_case:Aux",
     "de-DE": "strings:de:ships_up_to_case:Aux",
@@ -7567,6 +8474,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Aux",
     "zh-CN": "strings:zh_CN:ships_up_to_case:辅助",
     "zh-TW": "strings:zh_TW:ships_up_to_case:Aux"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "mixerTypeFilterBus": {
@@ -7683,9 +8593,12 @@
    "canonical": "MIDI",
    "variants": [],
    "rationale": "Mixer-own MIDI type-filter checkbox description; this row is MIDI in all installed locales.",
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -7696,8 +8609,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:MIDI",
     "ko-KR": "strings:ko:ships_up_to_case:MIDI",
     "ja-JP": "strings:ja:ships_up_to_case:MIDI",
     "de-DE": "strings:de:ships_up_to_case:MIDI",
@@ -7707,6 +8637,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:MIDI",
     "zh-CN": "strings:zh_CN:ships_up_to_case:MIDI",
     "zh-TW": "strings:zh_TW:ships_up_to_case:MIDI"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "mixerTypeFilterMasterVCA": {
@@ -7908,7 +8841,7 @@
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "measured",
     "de-DE": "measured",
@@ -7919,11 +8852,29 @@
     "zh-CN": "measured",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:Move",
     "zh-TW": "strings:zh_TW:ships_up_to_case:移動"
    },
    "coverage_currency": {
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
     "de-DE": "current",
@@ -8085,7 +9036,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_derived": {
     "pt-BR": "strings:pt:ships_up_to_case:Navegar"
@@ -8240,7 +9191,7 @@
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "measured",
     "de-DE": "measured",
@@ -8251,10 +9202,26 @@
     "zh-CN": "measured",
     "zh-TW": "measured"
    },
-   "coverage_derived": {
-    "en-US": "quickhelp:en:ships_up_to_case:New Audio Track"
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_currency": {
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
     "de-DE": "current",
@@ -8404,7 +9371,7 @@
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "measured",
     "de-DE": "measured",
@@ -8415,10 +9382,26 @@
     "zh-CN": "measured",
     "zh-TW": "measured"
    },
-   "coverage_derived": {
-    "en-US": "quickhelp:en:ships_up_to_case:New External MIDI Track"
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_currency": {
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
     "de-DE": "current",
@@ -8582,7 +9565,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_derived": {
     "es-ES": "niblabels:es:ships_up_to_case:Nuevo"
@@ -8738,7 +9721,7 @@
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "measured",
     "de-DE": "measured",
@@ -8749,10 +9732,26 @@
     "zh-CN": "measured",
     "zh-TW": "measured"
    },
-   "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:New Session Player SI Track…"
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_currency": {
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
     "de-DE": "current",
@@ -8902,7 +9901,7 @@
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "measured",
     "de-DE": "measured",
@@ -8913,10 +9912,26 @@
     "zh-CN": "measured",
     "zh-TW": "measured"
    },
-   "coverage_derived": {
-    "en-US": "quickhelp:en:ships_up_to_case:New Software Instrument Track"
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_currency": {
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
     "de-DE": "current",
@@ -9080,9 +10095,184 @@
     "밸런스"
    ],
    "rationale": "Retained measured compound negative fragments excluding non-insert channel-strip buttons from empty-slot enumeration; case-insensitive containment of the own aggregate. These 29 fragments span routing, setting, meters and controls, not one Record menu row. The three qualified own routing-help predicates additionally exclude translated routing slots. No single-row derivation or completeness for every translated control is claimed.",
+   "provenance": {
+    "setting": {
+     "attribute": "help",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Browser   B, Browser button. Find and load loops, one-shots, patches, and plug-in settings. ",
+     "record": "2026-11-18-en-US-arrange-transport-census",
+     "record_sha256": "6ea11cace626ae3930960008bfa3e48cd292273dddf87b3c08fd4ef98f4280e8",
+     "role": "AXCheckBox"
+    },
+    "volume": {
+     "attribute": "help",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Inspector   I, Inspector button. View and edit region and track settings, based on where you’re working and the item selected. You can also set channel strip pan and volume, or add effects. ",
+     "record": "2026-11-18-en-US-arrange-transport-census",
+     "record_sha256": "6ea11cace626ae3930960008bfa3e48cd292273dddf87b3c08fd4ef98f4280e8",
+     "role": "AXCheckBox"
+    },
+    "pan": {
+     "attribute": "help",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Inspector   I, Inspector button. View and edit region and track settings, based on where you’re working and the item selected. You can also set channel strip pan and volume, or add effects. ",
+     "record": "2026-11-18-en-US-arrange-transport-census",
+     "record_sha256": "6ea11cace626ae3930960008bfa3e48cd292273dddf87b3c08fd4ef98f4280e8",
+     "role": "AXCheckBox"
+    },
+    "record": {
+     "attribute": "description",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Record",
+     "record": "2026-11-18-en-US-arrange-transport-census",
+     "record_sha256": "6ea11cace626ae3930960008bfa3e48cd292273dddf87b3c08fd4ef98f4280e8",
+     "role": "AXCheckBox"
+    },
+    "mute": {
+     "attribute": "help",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Free Tempo Recording   ⌃⌥⌘R, Free Tempo Recording. Mutes all existing content during recording and performs a Smart Tempo analysis. ",
+     "record": "2026-11-18-en-US-arrange-transport-census",
+     "record_sha256": "6ea11cace626ae3930960008bfa3e48cd292273dddf87b3c08fd4ef98f4280e8",
+     "role": "AXCheckBox"
+    },
+    "solo": {
+     "attribute": "description",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Solo",
+     "record": "2026-11-18-en-US-arrange-transport-census",
+     "record_sha256": "6ea11cace626ae3930960008bfa3e48cd292273dddf87b3c08fd4ef98f4280e8",
+     "role": "AXCheckBox"
+    },
+    "output": {
+     "attribute": "help",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Mute button. Silence a channel strip so it’s no longer audible. Use on an aux or output channel strip to silence that part of the mix, or on the master channel strip to mute the project. ",
+     "record": "2026-11-18-en-US-mixer-channel_strips-census",
+     "record_sha256": "c83252ccc60b20ecaefb665e74ec68131cd289aa4ff02b556f63ad7b03655284",
+     "role": "AXButton"
+    },
+    "eq": {
+     "attribute": "description",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "EQ",
+     "record": "2026-11-18-en-US-mixer-channel_strips-census",
+     "record_sha256": "c83252ccc60b20ecaefb665e74ec68131cd289aa4ff02b556f63ad7b03655284",
+     "role": "AXButton"
+    },
+    "gain reduction": {
+     "attribute": "description",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "gain reduction meter",
+     "record": "2026-11-18-en-US-mixer-channel_strips-census",
+     "record_sha256": "c83252ccc60b20ecaefb665e74ec68131cd289aa4ff02b556f63ad7b03655284",
+     "role": "AXButton"
+    },
+    "channel mode": {
+     "attribute": "description",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "channel mode",
+     "record": "2026-11-18-en-US-mixer-channel_strips-census",
+     "record_sha256": "c83252ccc60b20ecaefb665e74ec68131cd289aa4ff02b556f63ad7b03655284",
+     "role": "AXButton"
+    },
+    "input": {
+     "attribute": "description",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Input Monitoring",
+     "record": "2026-11-18-en-US-arrange-track_headers-census",
+     "record_sha256": "1b074388af1393eaac2cc3dbb08174f8687ec04688f611d1b7e891e9ea4309b0",
+     "role": "AXCheckBox"
+    },
+    "monitor": {
+     "attribute": "description",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Input Monitoring",
+     "record": "2026-11-18-en-US-arrange-track_headers-census",
+     "record_sha256": "1b074388af1393eaac2cc3dbb08174f8687ec04688f611d1b7e891e9ea4309b0",
+     "role": "AXCheckBox"
+    },
+    "fader": {
+     "attribute": "help",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Sends on Faders - On/Off. Swaps the Pan knob and Fader on channel strips so that they control the panning and volume of the chosen send. ",
+     "record": "2026-11-18-en-US-mixer-channel_strips-census",
+     "record_sha256": "c83252ccc60b20ecaefb665e74ec68131cd289aa4ff02b556f63ad7b03655284",
+     "role": "AXCheckBox"
+    }
+   },
+   "roles": [
+    "AXButton",
+    "AXCheckBox"
+   ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -9094,7 +10284,6 @@
     "zh-TW": "unmeasured"
    },
    "coverage_derived": {
-    "en-US": "niblabels:en:ships_up_to_case:input",
     "ko-KR": "niblabels:ko:ships_up_to_case:센드",
     "ja-JP": "niblabels:ja:ships_up_to_case:output",
     "de-DE": "niblabels:de:ships_up_to_case:output",
@@ -9103,6 +10292,9 @@
     "it-IT": "niblabels:it:ships_up_to_case:volume",
     "pt-BR": "niblabels:pt:ships_up_to_case:mute",
     "zh-CN": "quickhelp:zh_CN:ships_up_to_case:volume"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "okButton": {
@@ -9330,7 +10522,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_derived": {
     "pt-BR": "strings:pt:ships_up_to_case:Abrir lista de marcadores"
@@ -9438,7 +10630,7 @@
    ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -9449,13 +10641,33 @@
     "zh-CN": "derived",
     "zh-TW": "unmeasured"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-mixer-channel_strips-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXButton"
+   },
+   "coverage_attributes": {
+    "en-US": "help"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "c83252ccc60b20ecaefb665e74ec68131cd289aa4ff02b556f63ad7b03655284"
+   },
    "coverage_derived": {
-    "en-US": "quickhelp:en:ships_up_to_case:output slot",
     "ko-KR": "quickhelp:ko:ships_up_to_case:출력 슬롯",
     "ja-JP": "quickhelp:ja:ships_up_to_case:出力スロット",
     "de-DE": "quickhelp:de:ships_up_to_case:Output-Slot",
     "es-ES": "quickhelp:es:ships_up_to_case:Ranura de salida",
     "zh-CN": "quickhelp:zh_CN:ships_up_to_case:输出插槽"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "physicalOutputLabelPrefix": {
@@ -9513,9 +10725,29 @@
     "播放磁頭位置"
    ],
    "rationale": "Identifies the playhead position text field description; read-only. Uses the existing Playhead Position group's Logic.framework row, not the unrelated Live Loops start-position choice. The generic English position containment tolerance and original Korean reading remain. Static derivation does not establish native text-field publication in every locale.",
+   "provenance": {
+    "playhead position": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Delete Marker at Playhead Position",
+     "record": "2026-11-18-en-US-arrange-menus-census",
+     "record_sha256": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
+     "role": "AXMenuItem"
+    }
+   },
+   "roles": [
+    "AXButton",
+    "AXGroup",
+    "AXMenuItem"
+   ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -9527,7 +10759,6 @@
     "zh-TW": "derived"
    },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:position",
     "ko-KR": "quickhelp:ko:ships_up_to_case:재생헤드 위치",
     "ja-JP": "quickhelp:ja:ships_up_to_case:再生ヘッドの位置",
     "de-DE": "quickhelp:de:ships_up_to_case:position",
@@ -9537,6 +10768,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Posição do Cursor de Reprodução",
     "zh-CN": "strings:zh_CN:ships_up_to_case:播放头位置",
     "zh-TW": "strings:zh_TW:ships_up_to_case:播放磁頭位置"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "playheadPositionGroupLabel": {
@@ -9666,7 +10900,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_derived": {
     "de-DE": "quickhelp:de:ships_up_to_case:Position der Abspielposition",
@@ -9728,9 +10962,13 @@
     "自動混音"
    ],
    "rationale": "Rejects automation-mode slot labels (substring) when extracting a plugin display name; read-only filter.",
+   "roles": [
+    "AXCheckBox",
+    "AXMenuItem"
+   ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -9741,8 +10979,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:automation",
     "ko-KR": "quickhelp:ko:ships_up_to_case:오토메이션",
     "ja-JP": "quickhelp:ja:ships_up_to_case:オートメーション",
     "de-DE": "quickhelp:de:ships_up_to_case:automation",
@@ -9752,6 +11007,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:automação",
     "zh-CN": "strings:zh_CN:ships_up_to_case:自动化",
     "zh-TW": "strings:zh_TW:ships_up_to_case:自動混音"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "pluginBypassControl": {
@@ -9899,7 +11157,7 @@
     "pt-BR": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
     "pt-BR": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81"
    },
    "coverage_derived": {
@@ -9935,7 +11193,7 @@
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "measured",
@@ -9947,28 +11205,33 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "de-DE": "2026-09-25-977-de-DE-plugin-editor-is-not-a-blocking-modal"
+    "de-DE": "2026-09-25-977-de-DE-plugin-editor-is-not-a-blocking-modal",
+    "en-US": "2026-11-18-en-US-mixer-channel_strips-census"
    },
    "coverage_roles": {
-    "de-DE": "AXCheckBox"
+    "de-DE": "AXCheckBox",
+    "en-US": "AXCheckBox"
    },
    "coverage_attributes": {
-    "de-DE": "description"
+    "de-DE": "description",
+    "en-US": "description"
    },
    "coverage_paths": {
     "de-DE": "/AXWindow/AXCheckBox"
    },
    "coverage_logic_version": {
+    "en-US": "13.0",
     "de-DE": "12.3"
    },
    "coverage_logic_build": {
+    "en-US": "7801",
     "de-DE": "6674"
    },
    "coverage_record_sha256": {
+    "en-US": "c83252ccc60b20ecaefb665e74ec68131cd289aa4ff02b556f63ad7b03655284",
     "de-DE": "095485978df18bc7ec5a3f44afea18b70b9ee055fb4767625134ac90a4cd5664"
    },
    "coverage_derived": {
-    "en-US": "quickhelp:en:ships_up_to_case:bypass",
     "ko-KR": "quickhelp:ko:ships_up_to_case:바이패스",
     "ja-JP": "niblabels:ja:ships_up_to_case:バイパス",
     "es-ES": "strings:es:ships_up_to_case:desactivar",
@@ -9979,6 +11242,7 @@
     "zh-TW": "strings:zh_TW:ships_up_to_case:略過"
    },
    "coverage_currency": {
+    "en-US": "current",
     "de-DE": "superseded"
    }
   },
@@ -10028,9 +11292,12 @@
     "單聲道"
    ],
    "rationale": "Plugin format leaf after exact plugin selection. Derived from the row Apple ",
+   "roles": [
+    "AXButton"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -10041,8 +11308,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-mixer-channel_strips-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXButton"
+   },
+   "coverage_attributes": {
+    "en-US": "value"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "c83252ccc60b20ecaefb665e74ec68131cd289aa4ff02b556f63ad7b03655284"
+   },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:Mono",
     "ko-KR": "strings:ko:ships_up_to_case:모노",
     "ja-JP": "strings:ja:ships_up_to_case:モノラル",
     "de-DE": "strings:de:ships_up_to_case:Mono",
@@ -10052,6 +11336,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Mono",
     "zh-CN": "strings:zh_CN:ships_up_to_case:单声道",
     "zh-TW": "strings:zh_TW:ships_up_to_case:單聲道"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "pluginFormatMonoToStereo": {
@@ -10102,9 +11389,12 @@
     "立體聲"
    ],
    "rationale": "Plugin format leaf after exact plugin selection. Derived from the row Apple ",
+   "roles": [
+    "AXButton"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -10115,8 +11405,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-mixer-channel_strips-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXButton"
+   },
+   "coverage_attributes": {
+    "en-US": "value"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "c83252ccc60b20ecaefb665e74ec68131cd289aa4ff02b556f63ad7b03655284"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:Stereo",
     "ko-KR": "quickhelp:ko:ships_up_to_case:스테레오",
     "ja-JP": "quickhelp:ja:ships_up_to_case:ステレオ",
     "de-DE": "quickhelp:de:ships_up_to_case:Stereo",
@@ -10126,6 +11433,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Estéreo",
     "zh-CN": "strings:zh_CN:ships_up_to_case:立体声",
     "zh-TW": "strings:zh_TW:ships_up_to_case:立體聲"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "pluginMenuAudioUnits": {
@@ -10282,9 +11592,13 @@
     "列表"
    ],
    "rationale": "Ranks an insert slot's list control behind its open control. Derived from Apple's own row; no live reading at an insert slot exists. Checked offline by Scripts/check-labelsets-are-derived.py.",
+   "roles": [
+    "AXButton",
+    "AXMenuItem"
+   ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -10295,8 +11609,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:list",
     "ko-KR": "strings:ko:ships_up_to_case:목록",
     "ja-JP": "strings:ja:ships_up_to_case:リスト",
     "de-DE": "strings:de:ships_up_to_case:Liste",
@@ -10306,6 +11637,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:lista",
     "zh-CN": "strings:zh_CN:ships_up_to_case:列表",
     "zh-TW": "strings:zh_TW:ships_up_to_case:列表"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "pluginSlotOpenControl": {
@@ -10321,9 +11655,13 @@
     "打開"
    ],
    "rationale": "Ranks an insert slot's open control first. Korean read live 2026-09-18 at an occupied insert slot; the other nine are the same row's values. Checked offline by Scripts/check-labelsets-are-derived.py.",
+   "roles": [
+    "AXButton",
+    "AXMenuItem"
+   ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -10334,8 +11672,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "niblabels:en:ships_up_to_case:open",
     "ko-KR": "niblabels:ko:ships_up_to_case:열기",
     "ja-JP": "niblabels:ja:ships_up_to_case:開く",
     "de-DE": "strings:de:ships_up_to_case:geöffnet",
@@ -10345,6 +11700,9 @@
     "pt-BR": "niblabels:pt:ships_up_to_case:abrir",
     "zh-CN": "niblabels:zh_CN:ships_up_to_case:打开",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:打開"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "pluginWindowControlsViewMenuItem": {
@@ -10437,9 +11795,13 @@
     "智慧型控制項目"
    ],
    "rationale": "Locates the Smart Controls toggle in a Drummer track's docked Smart Controls pane for the non-blocking classifier; read-only classifier. Until 2026-09-28 English only (OQ-1: the localized label was unverified, so non-English panes stayed blocking, fail-closed).",
+   "roles": [
+    "AXCheckBox",
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -10450,8 +11812,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:smart controls",
     "ko-KR": "quickhelp:ko:ships_up_to_case:smart controls",
     "ja-JP": "quickhelp:ja:ships_up_to_case:smart controls",
     "de-DE": "quickhelp:de:ships_up_to_case:smart controls",
@@ -10461,6 +11840,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:smart controls",
     "zh-CN": "quickhelp:zh_CN:ships_up_to_case:smart controls",
     "zh-TW": "strings:zh_TW:ships_up_to_case:智慧型控制項目"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "pluginWindowViewSwitcher": {
@@ -10477,9 +11859,13 @@
     "顯示方式"
    ],
    "rationale": "Identifies the plug-in window's Controls/editor AXMenuButton by AXDescription; AXTitle is not a view readback (measured live 2026-09-02 in Compressor, View/보기). The description is the value of MAToolKit's `view` row: read live on 2026-09-29 as affichage (fr), visualização (pt) and 보기 (ko).",
+   "roles": [
+    "AXMenuBarItem",
+    "AXMenuButton"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -10490,8 +11876,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuBarItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "niblabels:en:ships_up_to_case:View",
     "ko-KR": "niblabels:ko:ships_up_to_case:보기",
     "ja-JP": "niblabels:ja:ships_up_to_case:表示",
     "de-DE": "strings:de:ships_up_to_case:Ansicht",
@@ -10501,6 +11904,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:visualização",
     "zh-CN": "niblabels:zh_CN:ships_up_to_case:显示",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:顯示方式"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "projectChooserCommitButton": {
@@ -10851,7 +12257,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_currency": {
     "en-US": "current",
@@ -10920,9 +12326,12 @@
     "8 分音符"
    ],
    "rationale": "The Region inspector's quantize value pop-up offers this row as a menu item and shows it as its value once chosen; the edit.quantize grid 1/8. The Korean item was read on 2026-10-03 (lpm-evidence/1094/explore2-ko.json); the other languages are this row's values in Logic.framework.",
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -10933,8 +12342,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:1/8 Note",
     "ko-KR": "strings:ko:ships_up_to_case:8분음표",
     "ja-JP": "strings:ja:ships_up_to_case:1/8 -音符",
     "de-DE": "strings:de:ships_up_to_case:1/8 Note",
@@ -10944,6 +12370,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Colcheia",
     "zh-CN": "strings:zh_CN:ships_up_to_case:1/8 音符",
     "zh-TW": "strings:zh_TW:ships_up_to_case:8 分音符"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "quantizeGridEighthTriplet": {
@@ -10960,9 +12389,12 @@
     "1/8 三連音（1/12）"
    ],
    "rationale": "The Region inspector's quantize value pop-up offers this row as a menu item and shows it as its value once chosen; the edit.quantize grid 1/8T. The Korean item was read on 2026-10-03 (lpm-evidence/1094/explore2-ko.json); the other languages are this row's values in Logic.framework.",
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -10973,8 +12405,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:1/8 Triplet (1/12)",
     "ko-KR": "strings:ko:ships_up_to_case:셋잇단 8분음표(1/12)",
     "ja-JP": "strings:ja:ships_up_to_case:1/8 - 3連符（1/12）",
     "de-DE": "strings:de:ships_up_to_case:1/8 Triole (1/12)",
@@ -10984,6 +12433,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Tercina de Colcheias (1/12)",
     "zh-CN": "strings:zh_CN:ships_up_to_case:8 分三连音符 (1/12)",
     "zh-TW": "strings:zh_TW:ships_up_to_case:1/8 三連音（1/12）"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "quantizeGridHalfNote": {
@@ -10997,9 +12449,12 @@
     "2 分音符"
    ],
    "rationale": "The Region inspector's quantize value pop-up offers this row as a menu item and shows it as its value once chosen; the edit.quantize grid 1/2. The Korean item was read on 2026-10-03 (lpm-evidence/1094/explore2-ko.json); the other languages are this row's values in Logic.framework.",
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -11010,8 +12465,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:1/2 Note",
     "ko-KR": "strings:ko:ships_up_to_case:2분음표",
     "ja-JP": "strings:ja:ships_up_to_case:1/2 - 音符",
     "de-DE": "strings:de:ships_up_to_case:1/2 Note",
@@ -11021,6 +12493,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Mínima",
     "zh-CN": "strings:zh_CN:ships_up_to_case:2 分音符",
     "zh-TW": "strings:zh_TW:ships_up_to_case:2 分音符"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "quantizeGridQuarterNote": {
@@ -11035,9 +12510,12 @@
     "4 分音符"
    ],
    "rationale": "The Region inspector's quantize value pop-up offers this row as a menu item and shows it as its value once chosen; the edit.quantize grid 1/4. The Korean item was read on 2026-10-03 (lpm-evidence/1094/explore2-ko.json); the other languages are this row's values in Logic.framework.",
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -11048,8 +12526,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:1/4 Note",
     "ko-KR": "strings:ko:ships_up_to_case:4분음표",
     "ja-JP": "strings:ja:ships_up_to_case:1/4 - 音符",
     "de-DE": "strings:de:ships_up_to_case:1/4 Note",
@@ -11059,6 +12554,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Semínima",
     "zh-CN": "strings:zh_CN:ships_up_to_case:1/4 音符",
     "zh-TW": "strings:zh_TW:ships_up_to_case:4 分音符"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "quantizeGridQuarterTriplet": {
@@ -11075,9 +12573,12 @@
     "1/4 三連音（1/6）"
    ],
    "rationale": "The Region inspector's quantize value pop-up offers this row as a menu item and shows it as its value once chosen; the edit.quantize grid 1/4T. The Korean item was read on 2026-10-03 (lpm-evidence/1094/explore2-ko.json); the other languages are this row's values in Logic.framework.",
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -11088,8 +12589,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:1/4 Triplet (1/6)",
     "ko-KR": "strings:ko:ships_up_to_case:셋잇단 4분음표(1/6)",
     "ja-JP": "strings:ja:ships_up_to_case:1/4 - 3連符（1/6）",
     "de-DE": "strings:de:ships_up_to_case:1/4 Triole (1/6)",
@@ -11099,6 +12617,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Tercina de Semínimas (1/6)",
     "zh-CN": "strings:zh_CN:ships_up_to_case:4 分三连音符 (1/6)",
     "zh-TW": "strings:zh_TW:ships_up_to_case:1/4 三連音（1/6）"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "quantizeGridSixteenthNote": {
@@ -11113,9 +12634,12 @@
     "16 分音符"
    ],
    "rationale": "The Region inspector's quantize value pop-up offers this row as a menu item and shows it as its value once chosen; the edit.quantize grid 1/16. The Korean item was read on 2026-10-03 (lpm-evidence/1094/explore2-ko.json); the other languages are this row's values in Logic.framework.",
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -11126,8 +12650,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:1/16 Note",
     "ko-KR": "strings:ko:ships_up_to_case:16분음표",
     "ja-JP": "strings:ja:ships_up_to_case:1/16 -音符",
     "de-DE": "strings:de:ships_up_to_case:1/16 Note",
@@ -11137,6 +12678,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Semicolcheia",
     "zh-CN": "strings:zh_CN:ships_up_to_case:1/16 音符",
     "zh-TW": "strings:zh_TW:ships_up_to_case:16 分音符"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "quantizeGridSixteenthTriplet": {
@@ -11153,9 +12697,12 @@
     "1/16 三連音（1/24）"
    ],
    "rationale": "The Region inspector's quantize value pop-up offers this row as a menu item and shows it as its value once chosen; the edit.quantize grid 1/16T. The Korean item was read on 2026-10-03 (lpm-evidence/1094/explore2-ko.json); the other languages are this row's values in Logic.framework.",
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -11166,8 +12713,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:1/16 Triplet (1/24)",
     "ko-KR": "strings:ko:ships_up_to_case:셋잇단 16분음표(1/24)",
     "ja-JP": "strings:ja:ships_up_to_case:1/16 - 3連符（1/24）",
     "de-DE": "strings:de:ships_up_to_case:1/16 Triole (1/24)",
@@ -11177,6 +12741,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Tercina de Semicolcheias (1/24)",
     "zh-CN": "strings:zh_CN:ships_up_to_case:16 分三连音符 (1/24)",
     "zh-TW": "strings:zh_TW:ships_up_to_case:1/16 三連音（1/24）"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "quantizeGridSixtyFourthNote": {
@@ -11190,9 +12757,12 @@
     "64 分音符"
    ],
    "rationale": "The Region inspector's quantize value pop-up offers this row as a menu item and shows it as its value once chosen; the edit.quantize grid 1/64. The Korean item was read on 2026-10-03 (lpm-evidence/1094/explore2-ko.json); the other languages are this row's values in Logic.framework.",
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -11203,8 +12773,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:1/64 Note",
     "ko-KR": "strings:ko:ships_up_to_case:64분음표",
     "ja-JP": "strings:ja:ships_up_to_case:1/64 - 音符",
     "de-DE": "strings:de:ships_up_to_case:1/64 Note",
@@ -11214,6 +12801,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Semifusa",
     "zh-CN": "strings:zh_CN:ships_up_to_case:1/64 音符",
     "zh-TW": "strings:zh_TW:ships_up_to_case:64 分音符"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "quantizeGridThirtySecondNote": {
@@ -11227,9 +12817,12 @@
     "32 分音符"
    ],
    "rationale": "The Region inspector's quantize value pop-up offers this row as a menu item and shows it as its value once chosen; the edit.quantize grid 1/32. The Korean item was read on 2026-10-03 (lpm-evidence/1094/explore2-ko.json); the other languages are this row's values in Logic.framework.",
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -11240,8 +12833,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:1/32 Note",
     "ko-KR": "strings:ko:ships_up_to_case:32분음표",
     "ja-JP": "strings:ja:ships_up_to_case:1/32 -音符",
     "de-DE": "strings:de:ships_up_to_case:1/32 Note",
@@ -11251,6 +12861,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Fusa",
     "zh-CN": "strings:zh_CN:ships_up_to_case:1/32 音符",
     "zh-TW": "strings:zh_TW:ships_up_to_case:32 分音符"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "quantizeGridWholeNote": {
@@ -11265,9 +12878,12 @@
     "1 分音符"
    ],
    "rationale": "The Region inspector's quantize value pop-up offers this row as a menu item and shows it as its value once chosen; the edit.quantize grid 1/1. The Korean item was read on 2026-10-03 (lpm-evidence/1094/explore2-ko.json); the other languages are this row's values in Logic.framework.",
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -11278,8 +12894,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:1/1 Note",
     "ko-KR": "strings:ko:ships_up_to_case:온음표",
     "ja-JP": "strings:ja:ships_up_to_case:1/1 - 音符",
     "de-DE": "strings:de:ships_up_to_case:1/1 Note",
@@ -11289,6 +12922,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Semibreve",
     "zh-CN": "strings:zh_CN:ships_up_to_case:全音符",
     "zh-TW": "strings:zh_TW:ships_up_to_case:1 分音符"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "quantizeModePopupValue": {
@@ -11425,9 +13061,28 @@
     "區段"
    ],
    "rationale": "Detects an arrange region by its AXHelp string; read-only classifier.",
+   "provenance": {
+    "리전": {
+     "attribute": "description",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "MIDI 리전",
+     "record": "2026-11-18-en-US-arrange-regions-census",
+     "record_sha256": "fe96bbb4533b05eb3c744989128f4441bd9ef30e6477116d15387df2ebf633bb",
+     "role": "AXLayoutItem"
+    }
+   },
+   "roles": [
+    "AXCheckBox",
+    "AXLayoutItem"
+   ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -11439,7 +13094,6 @@
     "zh-TW": "derived"
    },
    "coverage_derived": {
-    "en-US": "niblabels:en:ships_up_to_case:region",
     "ko-KR": "niblabels:ko:ships_up_to_case:리전",
     "ja-JP": "niblabels:ja:ships_up_to_case:リージョン",
     "de-DE": "strings:de:ships_up_to_case:region",
@@ -11449,6 +13103,9 @@
     "pt-BR": "niblabels:pt:ships_up_to_case:Região",
     "zh-CN": "niblabels:zh_CN:ships_up_to_case:片段",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:區段"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "regionKindAudio": {
@@ -11461,9 +13118,28 @@
     "音訊"
    ],
    "rationale": "Classifies a region as audio content; read-only.",
+   "provenance": {
+    "오디오": {
+     "attribute": "description",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Track 1 “오디오 1”",
+     "record": "2026-11-18-en-US-arrange-track_headers-census",
+     "record_sha256": "1b074388af1393eaac2cc3dbb08174f8687ec04688f611d1b7e891e9ea4309b0",
+     "role": "AXLayoutItem"
+    }
+   },
+   "roles": [
+    "AXLayoutItem",
+    "AXMenuItem"
+   ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -11475,7 +13151,6 @@
     "zh-TW": "derived"
    },
    "coverage_derived": {
-    "en-US": "niblabels:en:ships_up_to_case:audio",
     "ko-KR": "niblabels:ko:ships_up_to_case:오디오",
     "ja-JP": "niblabels:ja:ships_up_to_case:オーディオ",
     "de-DE": "niblabels:de:ships_up_to_case:audio",
@@ -11485,6 +13160,9 @@
     "pt-BR": "niblabels:pt:ships_up_to_case:Áudio",
     "zh-CN": "niblabels:zh_CN:ships_up_to_case:音频",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:音訊"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "regionKindDrummer": {
@@ -11528,9 +13206,12 @@
    "canonical": "midi",
    "variants": [],
    "rationale": "Classifies a region as MIDI content; read-only.",
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -11541,8 +13222,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:midi",
     "ko-KR": "strings:ko:ships_up_to_case:midi",
     "ja-JP": "strings:ja:ships_up_to_case:midi",
     "de-DE": "strings:de:ships_up_to_case:midi",
@@ -11552,6 +13250,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:midi",
     "zh-CN": "strings:zh_CN:ships_up_to_case:midi",
     "zh-TW": "strings:zh_TW:ships_up_to_case:midi"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "renameTrackMenuItem": {
@@ -11693,7 +13394,7 @@
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "measured",
     "de-DE": "measured",
@@ -11704,10 +13405,26 @@
     "zh-CN": "measured",
     "zh-TW": "measured"
    },
-   "coverage_derived": {
-    "en-US": "quickhelp:en:ships_up_to_case:Rename Track"
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_currency": {
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
     "de-DE": "current",
@@ -11884,7 +13601,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_currency": {
     "en-US": "current",
@@ -11945,9 +13662,12 @@
     "檔案夾"
    ],
    "rationale": "One of the two project-organisation radios that identify the Save As panel.",
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -11958,8 +13678,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:Folder",
     "ko-KR": "strings:ko:ships_up_to_case:폴더",
     "ja-JP": "strings:ja:ships_up_to_case:フォルダ",
     "de-DE": "strings:de:ships_up_to_case:Ordner",
@@ -11969,6 +13706,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Pasta",
     "zh-CN": "strings:zh_CN:ships_up_to_case:文件夹",
     "zh-TW": "strings:zh_TW:ships_up_to_case:檔案夾"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "savePanelPackageRadio": {
@@ -12150,9 +13890,12 @@
     "发送插槽"
    ],
    "rationale": "Detects a channel strip's send slot by its AXHelp string; read-only classifier.",
+   "roles": [
+    "AXButton"
+   ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -12163,13 +13906,33 @@
     "zh-CN": "derived",
     "zh-TW": "unmeasured"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-mixer-channel_strips-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXButton"
+   },
+   "coverage_attributes": {
+    "en-US": "help"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "c83252ccc60b20ecaefb665e74ec68131cd289aa4ff02b556f63ad7b03655284"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:Send slot",
     "ko-KR": "quickhelp:ko:ships_up_to_case:센드 슬롯",
     "ja-JP": "quickhelp:ja:ships_up_to_case:センドスロット",
     "de-DE": "quickhelp:de:ships_up_to_case:Send-Slot",
     "es-ES": "quickhelp:es:ships_up_to_case:Ranura de envío",
     "zh-CN": "quickhelp:zh_CN:ships_up_to_case:发送插槽"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "setLocatorsMenuItem": {
@@ -12516,7 +14279,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_currency": {
     "en-US": "current",
@@ -12669,7 +14432,7 @@
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "measured",
     "de-DE": "measured",
@@ -12680,10 +14443,26 @@
     "zh-CN": "measured",
     "zh-TW": "measured"
    },
-   "coverage_derived": {
-    "en-US": "quickhelp:en:ships_up_to_case:Show Tempo List"
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_currency": {
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
     "de-DE": "current",
@@ -12767,7 +14546,7 @@
    ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "measured",
     "de-DE": "measured",
@@ -12779,31 +14558,37 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "de-DE": "2026-11-18-de-DE-arrange-menus-census"
+    "de-DE": "2026-11-18-de-DE-arrange-menus-census",
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
-    "de-DE": "AXMenuItem"
+    "de-DE": "AXMenuItem",
+    "en-US": "AXMenuItem"
    },
    "coverage_attributes": {
-    "de-DE": "title"
+    "de-DE": "title",
+    "en-US": "title"
    },
    "coverage_logic_version": {
+    "en-US": "13.0",
     "de-DE": "13.0"
    },
    "coverage_logic_build": {
+    "en-US": "7801",
     "de-DE": "7801"
    },
    "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
     "de-DE": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e"
    },
    "coverage_derived": {
-    "en-US": "niblabels:en:ships_up_to_case:pan",
     "es-ES": "quickhelp:es:ships_up_to_case:pan",
     "fr-FR": "niblabels:fr:ships_up_to_case:pan",
     "pt-BR": "niblabels:pt:ships_up_to_case:pan",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:聲像"
    },
    "coverage_currency": {
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "current",
@@ -12931,7 +14716,7 @@
    ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "measured",
     "de-DE": "measured",
@@ -12942,14 +14727,32 @@
     "zh-CN": "measured",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "niblabels:en:ships_up_to_case:volume",
     "fr-FR": "niblabels:fr:ships_up_to_case:volume",
     "it-IT": "niblabels:it:ships_up_to_case:volume",
     "pt-BR": "niblabels:pt:ships_up_to_case:volume",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:音量"
    },
    "coverage_currency": {
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
     "de-DE": "current",
@@ -12979,9 +14782,41 @@
     "垂直縮放"
    ],
    "rationale": "Negative exclusion of own horizontal/vertical zoom sliders from volume/pan selection. Composes the two Logic own-slider rows, corroborated by archived own AXSlider description/help (the horizontal row also names horizontalZoomSlider). The original zoom/확대 containment fragments remain. Score Settings Enlarged is an unrelated checkbox title, not this authority; no additional native qualification is claimed.",
+   "provenance": {
+    "Vertical Zoom": {
+     "attribute": "description",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Vertical Zoom",
+     "record": "2026-11-18-en-US-arrange-area_controls-census",
+     "record_sha256": "4fb6e58a250bfef7e6cc110fd8215f27633e0d5bc224019291899c9e6745e401",
+     "role": "AXSlider"
+    },
+    "Horizontal Zoom": {
+     "attribute": "description",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Horizontal Zoom",
+     "record": "2026-11-18-en-US-arrange-area_controls-census",
+     "record_sha256": "4fb6e58a250bfef7e6cc110fd8215f27633e0d5bc224019291899c9e6745e401",
+     "role": "AXSlider"
+    }
+   },
+   "roles": [
+    "AXMenuItem",
+    "AXSlider"
+   ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -12993,7 +14828,6 @@
     "zh-TW": "derived"
    },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:zoom",
     "ko-KR": "quickhelp:ko:ships_up_to_case:확대",
     "ja-JP": "strings:ja:ships_up_to_case:横方向にズーム",
     "de-DE": "strings:de:ships_up_to_case:Horizontal-Zoom",
@@ -13003,6 +14837,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:zoom",
     "zh-CN": "strings:zh_CN:ships_up_to_case:水平缩放",
     "zh-TW": "strings:zh_TW:ships_up_to_case:水平縮放"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "sortTracksByAudioChannelMenuItem": {
@@ -13030,7 +14867,7 @@
      "match": "exact",
      "observed": "Audio Channel",
      "record": "2026-11-18-en-US-arrange-menus-census",
-     "record_sha256": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
+     "record_sha256": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
      "role": "AXMenuItem"
     },
     "オーディオチャンネル": {
@@ -13210,7 +15047,7 @@
      "match": "exact",
      "observed": "Creation Date",
      "record": "2026-11-18-en-US-arrange-menus-census",
-     "record_sha256": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
+     "record_sha256": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
      "role": "AXMenuItem"
     },
     "作成日": {
@@ -13391,7 +15228,7 @@
      "match": "exact",
      "observed": "Instrument Name",
      "record": "2026-11-18-en-US-arrange-menus-census",
-     "record_sha256": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
+     "record_sha256": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
      "role": "AXMenuItem"
     },
     "音源名": {
@@ -13509,7 +15346,7 @@
      "match": "exact",
      "observed": "MIDI Channel",
      "record": "2026-11-18-en-US-arrange-menus-census",
-     "record_sha256": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
+     "record_sha256": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
      "role": "AXMenuItem"
     },
     "MIDIチャンネル": {
@@ -13625,7 +15462,7 @@
      "match": "exact",
      "observed": "Sort Tracks by",
      "record": "2026-11-18-en-US-arrange-menus-census",
-     "record_sha256": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
+     "record_sha256": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
      "role": "AXMenuItem"
     },
     "トラックを並べ替える": {
@@ -13794,7 +15631,7 @@
      "match": "exact",
      "observed": "Output Channel",
      "record": "2026-11-18-en-US-arrange-menus-census",
-     "record_sha256": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
+     "record_sha256": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
      "role": "AXMenuItem"
     },
     "出力チャンネル": {
@@ -13974,7 +15811,7 @@
      "match": "exact",
      "observed": "Track Name",
      "record": "2026-11-18-en-US-arrange-menus-census",
-     "record_sha256": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
+     "record_sha256": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
      "role": "AXMenuItem"
     },
     "トラック名": {
@@ -14154,7 +15991,7 @@
      "match": "exact",
      "observed": "Used, Unused",
      "record": "2026-11-18-en-US-arrange-menus-census",
-     "record_sha256": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
+     "record_sha256": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
      "role": "AXMenuItem"
     },
     "使用、不使用": {
@@ -14529,9 +16366,12 @@
     "細分"
    ],
    "rationale": "Identifies the subdivision slider in the Playhead Position group; verbatim description match; read-only. Korean read live 2026-09-14 on Logic 12.3 (6674): the group exposes this slider ONLY while the control bar's display mode is `비트` / Beats — in the default `비트 및 프로젝트` it has two children, bar and beat.",
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -14542,8 +16382,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:division",
     "ko-KR": "strings:ko:ships_up_to_case:디비전",
     "ja-JP": "strings:ja:ships_up_to_case:ディビジョン",
     "de-DE": "strings:de:ships_up_to_case:Rasterwert",
@@ -14553,6 +16410,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:divisão",
     "zh-CN": "strings:zh_CN:ships_up_to_case:个等份",
     "zh-TW": "strings:zh_TW:ships_up_to_case:細分"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "tempoFieldLabel": {
@@ -14567,9 +16427,29 @@
     "拍速"
    ],
    "rationale": "Identifies a tempo text field/slider description; read-only.",
+   "provenance": {
+    "템포": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Undo 템포 변경",
+     "record": "2026-11-18-en-US-arrange-menus-census",
+     "record_sha256": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
+     "role": "AXMenuItem"
+    }
+   },
+   "roles": [
+    "AXMenuItem",
+    "AXRadioButton",
+    "AXSlider"
+   ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -14581,7 +16461,6 @@
     "zh-TW": "derived"
    },
    "coverage_derived": {
-    "en-US": "niblabels:en:ships_up_to_case:tempo",
     "ko-KR": "niblabels:ko:ships_up_to_case:템포",
     "ja-JP": "niblabels:ja:ships_up_to_case:テンポ",
     "de-DE": "niblabels:de:ships_up_to_case:tempo",
@@ -14591,6 +16470,9 @@
     "pt-BR": "niblabels:pt:ships_up_to_case:tempo",
     "zh-CN": "niblabels:zh_CN:ships_up_to_case:速度",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:拍速"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "tempoListNumberOfItemsLabel": {
@@ -14607,9 +16489,12 @@
     "項目數量"
    ],
    "rationale": "Measured 2026-09-02 on live Logic Pro 12.3 ko-KR as AXDescription `항목 수` on the Tempo List event-count AXStaticText.",
+   "roles": [
+    "AXStaticText"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -14620,8 +16505,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-editor-event_list-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXStaticText"
+   },
+   "coverage_attributes": {
+    "en-US": "description"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "006dc5675855ace356cd91517420bdec8a4921bb0d763e147850c2bca36fe333"
+   },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:Number of Items",
     "ko-KR": "strings:ko:ships_up_to_case:항목 수",
     "ja-JP": "strings:ja:ships_up_to_case:項目数",
     "de-DE": "strings:de:ships_up_to_case:Anzahl der Objekte",
@@ -14631,6 +16533,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Número de Itens",
     "zh-CN": "strings:zh_CN:ships_up_to_case:项目数",
     "zh-TW": "strings:zh_TW:ships_up_to_case:項目數量"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "tempoMenuItem": {
@@ -14729,7 +16634,7 @@
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "measured",
     "de-DE": "measured",
@@ -14741,29 +16646,35 @@
     "zh-TW": "measured"
    },
    "coverage_records": {
-    "de-DE": "2026-11-18-de-DE-arrange-menus-census"
+    "de-DE": "2026-11-18-de-DE-arrange-menus-census",
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
-    "de-DE": "AXMenuItem"
+    "de-DE": "AXMenuItem",
+    "en-US": "AXMenuItem"
    },
    "coverage_attributes": {
-    "de-DE": "title"
+    "de-DE": "title",
+    "en-US": "title"
    },
    "coverage_logic_version": {
+    "en-US": "13.0",
     "de-DE": "13.0"
    },
    "coverage_logic_build": {
+    "en-US": "7801",
     "de-DE": "7801"
    },
    "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
     "de-DE": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e"
    },
    "coverage_derived": {
-    "en-US": "niblabels:en:ships_up_to_case:Tempo",
     "es-ES": "niblabels:es:ships_up_to_case:Tempo",
     "fr-FR": "niblabels:fr:ships_up_to_case:Tempo"
    },
    "coverage_currency": {
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
     "de-DE": "current",
@@ -14784,9 +16695,29 @@
     "拍速"
    ],
    "rationale": "Identifies the tempo slider in TransportState extraction; substring match without bpm; read-only.",
+   "provenance": {
+    "템포": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Undo 템포 변경",
+     "record": "2026-11-18-en-US-arrange-menus-census",
+     "record_sha256": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
+     "role": "AXMenuItem"
+    }
+   },
+   "roles": [
+    "AXMenuItem",
+    "AXRadioButton",
+    "AXSlider"
+   ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -14798,7 +16729,6 @@
     "zh-TW": "derived"
    },
    "coverage_derived": {
-    "en-US": "niblabels:en:ships_up_to_case:tempo",
     "ko-KR": "niblabels:ko:ships_up_to_case:템포",
     "ja-JP": "niblabels:ja:ships_up_to_case:テンポ",
     "de-DE": "niblabels:de:ships_up_to_case:tempo",
@@ -14808,6 +16738,9 @@
     "pt-BR": "niblabels:pt:ships_up_to_case:tempo",
     "zh-CN": "niblabels:zh_CN:ships_up_to_case:速度",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:拍速"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "tempoSliderLabel": {
@@ -14908,7 +16841,7 @@
    ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "measured",
     "de-DE": "measured",
@@ -14920,29 +16853,35 @@
     "zh-TW": "measured"
    },
    "coverage_records": {
-    "de-DE": "2026-11-18-de-DE-arrange-menus-census"
+    "de-DE": "2026-11-18-de-DE-arrange-menus-census",
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
-    "de-DE": "AXMenuItem"
+    "de-DE": "AXMenuItem",
+    "en-US": "AXMenuItem"
    },
    "coverage_attributes": {
-    "de-DE": "title"
+    "de-DE": "title",
+    "en-US": "title"
    },
    "coverage_logic_version": {
+    "en-US": "13.0",
     "de-DE": "13.0"
    },
    "coverage_logic_build": {
+    "en-US": "7801",
     "de-DE": "7801"
    },
    "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
     "de-DE": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e"
    },
    "coverage_derived": {
-    "en-US": "niblabels:en:ships_up_to_case:tempo",
     "fr-FR": "niblabels:fr:ships_up_to_case:tempo",
     "it-IT": "niblabels:it:ships_up_to_case:tempo"
    },
    "coverage_currency": {
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
     "de-DE": "current",
@@ -14960,9 +16899,12 @@
     "coche"
    ],
    "rationale": "Identifies the tick slider in the Playhead Position group; whole description match; read-only. Measured in the same live reading as the subdivision slider, and present under the same condition: display mode `비트` / Beats. For this bars/beats path, TransportSegmentedScrubberCell uses the inherited singular tick description from TransportDisplayClockFormatter and Logic.framework's bundle. Its `tick` row supplies the ten locale values in Logic 12.3 (6674); canonical `tick` also covers case-only `Tick`. Japanese is `tick` and French is `coche`, not MAApplication's values. Source and bundle derivation do not claim native Japanese/French readback or qualification of every display mode.",
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -14973,8 +16915,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:tick",
     "ko-KR": "strings:ko:ships_up_to_case:틱",
     "ja-JP": "strings:ja:ships_up_to_case:tick",
     "de-DE": "strings:de:ships_up_to_case:tick",
@@ -14984,6 +16943,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:tick",
     "zh-CN": "strings:zh_CN:ships_up_to_case:tick",
     "zh-TW": "strings:zh_TW:ships_up_to_case:tick"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "toPlayheadMenuItem": {
@@ -15124,7 +17086,7 @@
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "measured",
     "de-DE": "measured",
@@ -15135,10 +17097,26 @@
     "zh-CN": "measured",
     "zh-TW": "measured"
    },
-   "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:To Playhead"
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_currency": {
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
     "de-DE": "current",
@@ -15288,7 +17266,7 @@
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "measured",
     "de-DE": "measured",
@@ -15299,10 +17277,26 @@
     "zh-CN": "measured",
     "zh-TW": "measured"
    },
-   "coverage_derived": {
-    "en-US": "strings:en:ships_up_to_case:Toggle Hide View"
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_currency": {
+    "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
     "de-DE": "current",
@@ -15331,12 +17325,27 @@
     "音軌 內容"
    ],
    "rationale": "Identifies the arrange Track-Content group by normalized description; read-only classifier. German read 2026-09-12 off the de-DE navigation-free census of that day (#876), where it is the AXDescription of the AXGroup this label addresses; the spelling carries its capitals because Logic renders them.",
+   "provenance": {
+    "tracks contents": {
+     "attribute": "description",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Tracks contents",
+     "record": "2026-11-18-en-US-arrange-regions-census",
+     "record_sha256": "fe96bbb4533b05eb3c744989128f4441bd9ef30e6477116d15387df2ebf633bb",
+     "role": "AXGroup"
+    }
+   },
    "roles": [
     "AXGroup"
    ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -15348,7 +17357,6 @@
     "zh-TW": "derived"
    },
    "coverage_derived": {
-    "en-US": "niblabels:en:composed_value:트랙 콘텐츠",
     "ko-KR": "niblabels:ko:composed_value:트랙 콘텐츠",
     "ja-JP": "niblabels:ja:composed_value:트랙 콘텐츠",
     "de-DE": "niblabels:de:composed_value:트랙 콘텐츠",
@@ -15358,6 +17366,9 @@
     "pt-BR": "niblabels:pt:composed_value:트랙 콘텐츠",
     "zh-CN": "niblabels:zh_CN:composed_value:트랙 콘텐츠",
     "zh-TW": "niblabels:zh_TW:composed_value:트랙 콘텐츠"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "trackContentGeneric": {
@@ -15432,9 +17443,27 @@
     "音軌 標題"
    ],
    "rationale": "Identifies the track-header rail by normalized description; read-only classifier (structural detection preferred). German read 2026-09-12 off the de-DE navigation-free census of that day (#876), where it is the AXDescription of the AXGroup this label addresses; the spelling carries its capitals because Logic renders them.",
+   "provenance": {
+    "tracks header": {
+     "attribute": "description",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact_strict",
+     "observed": "Tracks header",
+     "record": "2026-11-18-en-US-arrange-track_headers-census",
+     "record_sha256": "1b074388af1393eaac2cc3dbb08174f8687ec04688f611d1b7e891e9ea4309b0",
+     "role": "AXGroup"
+    }
+   },
+   "roles": [
+    "AXGroup"
+   ],
    "match": "exact_strict",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -15446,7 +17475,6 @@
     "zh-TW": "derived"
    },
    "coverage_derived": {
-    "en-US": "niblabels:en:composed_value:tracks header",
     "ko-KR": "niblabels:ko:composed_value:tracks header",
     "ja-JP": "niblabels:ja:composed_value:tracks header",
     "de-DE": "niblabels:de:composed_value:tracks header",
@@ -15456,6 +17484,9 @@
     "pt-BR": "niblabels:pt:composed_value:tracks header",
     "zh-CN": "niblabels:zh_CN:composed_value:tracks header",
     "zh-TW": "niblabels:zh_TW:composed_value:tracks header"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "trackHiddenViewControl": {
@@ -15551,9 +17582,12 @@
     "輸入監聽"
    ],
    "rationale": "Identifies the track header's Input Monitoring checkbox by description substring; read-only state extraction (#1040).",
+   "roles": [
+    "AXCheckBox"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -15564,8 +17598,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-track_headers-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXCheckBox"
+   },
+   "coverage_attributes": {
+    "en-US": "description"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "1b074388af1393eaac2cc3dbb08174f8687ec04688f611d1b7e891e9ea4309b0"
+   },
    "coverage_derived": {
-    "en-US": "niblabels:en:ships_up_to_case:Input Monitoring",
     "ko-KR": "niblabels:ko:ships_up_to_case:입력 모니터링",
     "ja-JP": "niblabels:ja:ships_up_to_case:入力モニタリング",
     "de-DE": "niblabels:de:ships_up_to_case:Input-Monitoring",
@@ -15575,6 +17626,9 @@
     "pt-BR": "niblabels:pt:ships_up_to_case:Monitoramento de Entrada",
     "zh-CN": "niblabels:zh_CN:ships_up_to_case:输入监听",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:輸入監聽"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "trackMenuBar": {
@@ -15728,7 +17782,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_derived": {
     "pt-BR": "strings:pt:ships_up_to_case:Pista"
@@ -15760,11 +17814,12 @@
    ],
    "rationale": "Identifies the track Mute button by description substring; read-only state extraction. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the inspector strip's mute button. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "roles": [
-    "AXButton"
+    "AXButton",
+    "AXCheckBox"
    ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -15775,8 +17830,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-transport-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXCheckBox"
+   },
+   "coverage_attributes": {
+    "en-US": "help"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "6ea11cace626ae3930960008bfa3e48cd292273dddf87b3c08fd4ef98f4280e8"
+   },
    "coverage_derived": {
-    "en-US": "niblabels:en:ships_up_to_case:Mute",
     "ko-KR": "niblabels:ko:ships_up_to_case:음소거",
     "ja-JP": "niblabels:ja:ships_up_to_case:ミュート",
     "de-DE": "niblabels:de:ships_up_to_case:Stumm",
@@ -15786,6 +17858,9 @@
     "pt-BR": "niblabels:pt:ships_up_to_case:Mute",
     "zh-CN": "niblabels:zh_CN:ships_up_to_case:静音",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:靜音"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "trackRecordButton": {
@@ -15805,9 +17880,12 @@
     "錄音"
    ],
    "rationale": "Identifies the track Record/arm button by description substring; read-only state extraction. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
+   "roles": [
+    "AXCheckBox"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -15818,8 +17896,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-transport-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXCheckBox"
+   },
+   "coverage_attributes": {
+    "en-US": "description"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "6ea11cace626ae3930960008bfa3e48cd292273dddf87b3c08fd4ef98f4280e8"
+   },
    "coverage_derived": {
-    "en-US": "niblabels:en:ships_up_to_case:Record",
     "ko-KR": "niblabels:ko:ships_up_to_case:녹음 활성화",
     "ja-JP": "niblabels:ja:ships_up_to_case:録音",
     "de-DE": "niblabels:de:ships_up_to_case:Aufnahme",
@@ -15829,6 +17924,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Gravação",
     "zh-CN": "niblabels:zh_CN:ships_up_to_case:录音",
     "zh-TW": "strings:zh_TW:ships_up_to_case:錄音"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "trackRecordEnableCheckbox": {
@@ -15846,9 +17944,42 @@
     "錄音啟用"
    ],
    "rationale": "Locates the per-track record-enable AXCheckBox; verbatim description match; read-only locator.",
+   "provenance": {
+    "Record": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Record",
+     "record": "2026-11-18-en-US-arrange-menus-census",
+     "record_sha256": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
+     "role": "AXMenuBarItem"
+    },
+    "Record Enable": {
+     "attribute": "description",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Record Enable",
+     "record": "2026-11-18-en-US-arrange-track_headers-census",
+     "record_sha256": "1b074388af1393eaac2cc3dbb08174f8687ec04688f611d1b7e891e9ea4309b0",
+     "role": "AXCheckBox"
+    }
+   },
+   "roles": [
+    "AXButton",
+    "AXCheckBox",
+    "AXMenuBarItem"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -15860,7 +17991,6 @@
     "zh-TW": "derived"
    },
    "coverage_derived": {
-    "en-US": "niblabels:en:ships_up_to_case:Record Enable",
     "ko-KR": "niblabels:ko:ships_up_to_case:녹음 활성화",
     "ja-JP": "niblabels:ja:ships_up_to_case:録音を可能にする",
     "de-DE": "niblabels:de:ships_up_to_case:Aufnahme aktivieren",
@@ -15870,6 +18000,9 @@
     "pt-BR": "niblabels:pt:ships_up_to_case:Ativar Gravação",
     "zh-CN": "niblabels:zh_CN:ships_up_to_case:录音启用",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:錄音啟用"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "trackSoloButton": {
@@ -15882,9 +18015,12 @@
     "獨奏"
    ],
    "rationale": "Identifies the track Solo button by description substring; read-only state extraction.",
+   "roles": [
+    "AXCheckBox"
+   ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -15895,8 +18031,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-transport-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXCheckBox"
+   },
+   "coverage_attributes": {
+    "en-US": "description"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "6ea11cace626ae3930960008bfa3e48cd292273dddf87b3c08fd4ef98f4280e8"
+   },
    "coverage_derived": {
-    "en-US": "niblabels:en:ships_up_to_case:Solo",
     "ko-KR": "niblabels:ko:ships_up_to_case:솔로",
     "ja-JP": "niblabels:ja:ships_up_to_case:ソロ",
     "de-DE": "niblabels:de:ships_up_to_case:Solo",
@@ -15906,6 +18059,9 @@
     "pt-BR": "niblabels:pt:ships_up_to_case:Solo",
     "zh-CN": "niblabels:zh_CN:ships_up_to_case:独奏",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:獨奏"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "trackTypeAudio": {
@@ -15918,9 +18074,12 @@
     "音訊"
    ],
    "rationale": "Classifies an audio track by header aggregate; read-only classifier.",
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -15931,8 +18090,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "niblabels:en:ships_up_to_case:audio",
     "ko-KR": "niblabels:ko:ships_up_to_case:오디오",
     "ja-JP": "niblabels:ja:ships_up_to_case:オーディオ",
     "de-DE": "niblabels:de:ships_up_to_case:audio",
@@ -15942,6 +18118,9 @@
     "pt-BR": "niblabels:pt:ships_up_to_case:Áudio",
     "zh-CN": "niblabels:zh_CN:ships_up_to_case:音频",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:音訊"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "trackTypeAux": {
@@ -15951,9 +18130,12 @@
     "辅助"
    ],
    "rationale": "Classifies an aux track by the shipped Logic Aux noun, also used by mixerTypeFilterAux. The existing lowercase containment tolerance remains; this is not track/strip association or native locale qualification.",
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -15964,8 +18146,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:aux",
     "ko-KR": "strings:ko:ships_up_to_case:aux",
     "ja-JP": "strings:ja:ships_up_to_case:aux",
     "de-DE": "strings:de:ships_up_to_case:aux",
@@ -15975,6 +18174,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:aux",
     "zh-CN": "strings:zh_CN:ships_up_to_case:辅助",
     "zh-TW": "strings:zh_TW:ships_up_to_case:aux"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "trackTypeBus": {
@@ -16058,9 +18260,27 @@
     "外部 MIDI"
    ],
    "rationale": "Classifies an external-MIDI track; read-only classifier.",
+   "provenance": {
+    "midi": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "MIDI",
+     "record": "2026-11-18-en-US-arrange-menus-census",
+     "record_sha256": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
+     "role": "AXMenuItem"
+    }
+   },
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -16072,7 +18292,6 @@
     "zh-TW": "derived"
    },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:midi",
     "ko-KR": "strings:ko:ships_up_to_case:midi",
     "ja-JP": "strings:ja:ships_up_to_case:midi",
     "de-DE": "strings:de:ships_up_to_case:midi",
@@ -16082,6 +18301,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:midi",
     "zh-CN": "strings:zh_CN:ships_up_to_case:midi",
     "zh-TW": "strings:zh_TW:ships_up_to_case:midi"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "trackTypeGMDevice": {
@@ -16134,9 +18356,12 @@
     "樂器"
    ],
    "rationale": "Classifies a software-instrument track; read-only classifier.",
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -16147,8 +18372,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "niblabels:en:ships_up_to_case:instrument",
     "ko-KR": "niblabels:ko:ships_up_to_case:악기",
     "ja-JP": "niblabels:ja:ships_up_to_case:音源",
     "de-DE": "niblabels:de:ships_up_to_case:instrument",
@@ -16158,6 +18400,9 @@
     "pt-BR": "niblabels:pt:ships_up_to_case:instrumento",
     "zh-CN": "niblabels:zh_CN:ships_up_to_case:乐器",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:樂器"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "trackTypeMaster": {
@@ -16166,9 +18411,29 @@
     "stereo out"
    ],
    "rationale": "Retained Master/Stereo Out header-aggregate fragments; read-only classifier. The matching Bass Amp Master candidate names a plug-in parameter, not this header/default-output name. A plain Master row alone also cannot establish the Stereo Out name provider or distinguish a user-assigned name. No new track/strip association or translated default name is inferred.",
+   "provenance": {
+    "stereo out": {
+     "attribute": "description",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Stereo Out",
+     "record": "2026-11-18-en-US-mixer-channel_strips-census",
+     "record_sha256": "c83252ccc60b20ecaefb665e74ec68131cd289aa4ff02b556f63ad7b03655284",
+     "role": "AXButton"
+    }
+   },
+   "roles": [
+    "AXButton",
+    "AXLayoutItem",
+    "AXTextField"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -16180,7 +18445,6 @@
     "zh-TW": "unmeasured"
    },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:master",
     "ko-KR": "strings:ko:ships_up_to_case:master",
     "ja-JP": "strings:ja:ships_up_to_case:master",
     "de-DE": "strings:de:ships_up_to_case:master",
@@ -16188,6 +18452,9 @@
     "fr-FR": "strings:fr:ships_up_to_case:master",
     "it-IT": "strings:it:ships_up_to_case:master",
     "pt-BR": "strings:pt:ships_up_to_case:master"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "transportAutopunchControl": {
@@ -16245,9 +18512,29 @@
     "控制列"
    ],
    "rationale": "Classifies the transport/control-bar container by metadata substring; read-only.",
+   "provenance": {
+    "control bar": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Control Bar",
+     "record": "2026-11-18-en-US-arrange-menus-census",
+     "record_sha256": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
+     "role": "AXMenuItem"
+    }
+   },
+   "roles": [
+    "AXGroup",
+    "AXMenuItem",
+    "AXToolbar"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -16259,7 +18546,6 @@
     "zh-TW": "derived"
    },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:transport",
     "ko-KR": "quickhelp:ko:ships_up_to_case:컨트롤 막대",
     "ja-JP": "quickhelp:ja:ships_up_to_case:コントロールバー",
     "de-DE": "quickhelp:de:ships_up_to_case:Steuerungsleiste",
@@ -16269,6 +18555,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Barra de controles",
     "zh-CN": "quickhelp:zh_CN:ships_up_to_case:控制条",
     "zh-TW": "strings:zh_TW:ships_up_to_case:控制列"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "transportCountInControl": {
@@ -16285,9 +18574,12 @@
     "預備拍"
    ],
    "rationale": "Derived from Apple's own StrTransportBtns|||Count In across all ten locales Logic ships (Logic 12.3 build 6674). Cited in docs/observations/2026-09-16-two-languages-was-the-whole-design.json.",
+   "roles": [
+    "AXCheckBox"
+   ],
    "match": "exact_strict",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -16298,8 +18590,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-transport-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXCheckBox"
+   },
+   "coverage_attributes": {
+    "en-US": "description"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "6ea11cace626ae3930960008bfa3e48cd292273dddf87b3c08fd4ef98f4280e8"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:Count In",
     "ko-KR": "quickhelp:ko:ships_up_to_case:카운트 인",
     "ja-JP": "quickhelp:ja:ships_up_to_case:カウントイン",
     "de-DE": "strings:de:ships_up_to_case:Einzählen",
@@ -16309,6 +18618,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Contagem preparatória",
     "zh-CN": "strings:zh_CN:ships_up_to_case:预备",
     "zh-TW": "strings:zh_TW:ships_up_to_case:預備拍"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "transportCycleControl": {
@@ -16323,9 +18635,29 @@
     "循環"
    ],
    "rationale": "Identifies the Cycle/Loop transport control; read-only.",
+   "provenance": {
+    "loop": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Live Loops Grid…",
+     "record": "2026-11-18-en-US-arrange-menus-census",
+     "record_sha256": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
+     "role": "AXMenuItem"
+    }
+   },
+   "roles": [
+    "AXCheckBox",
+    "AXHandle",
+    "AXMenuItem"
+   ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -16337,7 +18669,6 @@
     "zh-TW": "derived"
    },
    "coverage_derived": {
-    "en-US": "niblabels:en:ships_up_to_case:loop",
     "ko-KR": "quickhelp:ko:ships_up_to_case:사이클",
     "ja-JP": "quickhelp:ja:ships_up_to_case:loop",
     "de-DE": "quickhelp:de:ships_up_to_case:loop",
@@ -16347,6 +18678,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:loop",
     "zh-CN": "quickhelp:zh_CN:ships_up_to_case:循环",
     "zh-TW": "strings:zh_TW:ships_up_to_case:循環"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "transportForwardControl": {
@@ -16449,9 +18783,82 @@
     "即時循環樂段格線"
    ],
    "rationale": "Negative guard: labels carrying a transport keyword that are not transport ",
+   "provenance": {
+    "live loops grid": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Live Loops Grid…",
+     "record": "2026-11-18-en-US-arrange-menus-census",
+     "record_sha256": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
+     "role": "AXMenuItem"
+    },
+    "session player": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "To Session Player Region",
+     "record": "2026-11-18-en-US-arrange-menus-census",
+     "record_sha256": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
+     "role": "AXMenuItem"
+    },
+    "playhead position": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Delete Marker at Playhead Position",
+     "record": "2026-11-18-en-US-arrange-menus-census",
+     "record_sha256": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
+     "role": "AXMenuItem"
+    },
+    "show/hide live loops grid": {
+     "attribute": "help",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Show/Hide Live Loops Grid",
+     "record": "2026-11-18-en-US-arrange-area_controls-census",
+     "record_sha256": "4fb6e58a250bfef7e6cc110fd8215f27633e0d5bc224019291899c9e6745e401",
+     "role": "AXCheckBox"
+    },
+    "playhead thumb": {
+     "attribute": "description",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Playhead thumb",
+     "record": "2026-11-18-en-US-arrange-regions-census",
+     "record_sha256": "fe96bbb4533b05eb3c744989128f4441bd9ef30e6477116d15387df2ebf633bb",
+     "role": "AXValueIndicator"
+    }
+   },
+   "roles": [
+    "AXCheckBox",
+    "AXGroup",
+    "AXMenuItem",
+    "AXValueIndicator"
+   ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -16463,7 +18870,6 @@
     "zh-TW": "derived"
    },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:playhead position",
     "ko-KR": "quickhelp:ko:ships_up_to_case:session player",
     "ja-JP": "quickhelp:ja:ships_up_to_case:session player",
     "de-DE": "quickhelp:de:ships_up_to_case:session player",
@@ -16473,6 +18879,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:session player",
     "zh-CN": "quickhelp:zh_CN:ships_up_to_case:伴奏乐手",
     "zh-TW": "strings:zh_TW:ships_up_to_case:session player"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "transportMetronomeControl": {
@@ -16495,9 +18904,55 @@
     "節拍器"
    ],
    "rationale": "Identifies the Metronome/Click transport control; read-only.",
+   "provenance": {
+    "Metronom": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Metronome…",
+     "record": "2026-11-18-en-US-arrange-menus-census",
+     "record_sha256": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
+     "role": "AXMenuItem"
+    },
+    "click": {
+     "attribute": "help",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Playhead Position (Bars), Playhead Position display. Indicates the playhead position in bars and beats. Drag each element vertically to edit it, or double-click and enter a new value. ",
+     "record": "2026-11-18-en-US-arrange-transport-census",
+     "record_sha256": "6ea11cace626ae3930960008bfa3e48cd292273dddf87b3c08fd4ef98f4280e8",
+     "role": "AXGroup"
+    },
+    "Metronome Click": {
+     "attribute": "help",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Metronome Click   K, Metronome button. Hear a click at the project tempo during playback or recording. Click and hold for further options. ",
+     "record": "2026-11-18-en-US-arrange-transport-census",
+     "record_sha256": "6ea11cace626ae3930960008bfa3e48cd292273dddf87b3c08fd4ef98f4280e8",
+     "role": "AXCheckBox"
+    }
+   },
+   "roles": [
+    "AXCheckBox",
+    "AXGroup",
+    "AXMenuItem"
+   ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -16509,7 +18964,6 @@
     "zh-TW": "derived"
    },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:Metronome Click",
     "ko-KR": "strings:ko:ships_up_to_case:메트로놈 클릭",
     "ja-JP": "strings:ja:ships_up_to_case:メトロノームクリック",
     "de-DE": "strings:de:ships_up_to_case:Metronom",
@@ -16519,6 +18973,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Metrônomo",
     "zh-CN": "strings:zh_CN:ships_up_to_case:节拍器",
     "zh-TW": "strings:zh_TW:ships_up_to_case:節拍器"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "transportPlayControl": {
@@ -16535,9 +18992,13 @@
     "Reproduz"
    ],
    "rationale": "Identifies the Play transport control when reading TransportState; read-only.",
+   "roles": [
+    "AXCheckBox",
+    "AXMenuItem"
+   ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -16548,8 +19009,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:play",
     "ko-KR": "quickhelp:ko:ships_up_to_case:재생",
     "ja-JP": "quickhelp:ja:ships_up_to_case:再生",
     "de-DE": "quickhelp:de:ships_up_to_case:Wiedergabe",
@@ -16559,6 +19037,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:reproduzir",
     "zh-CN": "quickhelp:zh_CN:ships_up_to_case:播放",
     "zh-TW": "strings:zh_TW:ships_up_to_case:播放"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "transportRecordArmExclusion": {
@@ -16599,9 +19080,14 @@
     "錄音"
    ],
    "rationale": "Identifies the Record transport control; excluded by arm-tokens at the call site; read-only.",
+   "roles": [
+    "AXButton",
+    "AXCheckBox",
+    "AXMenuItem"
+   ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -16612,8 +19098,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-menus-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXMenuItem"
+   },
+   "coverage_attributes": {
+    "en-US": "title"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
+   },
    "coverage_derived": {
-    "en-US": "niblabels:en:ships_up_to_case:Record",
     "ko-KR": "niblabels:ko:ships_up_to_case:녹음",
     "ja-JP": "niblabels:ja:ships_up_to_case:録音",
     "de-DE": "niblabels:de:ships_up_to_case:Aufnahme",
@@ -16623,6 +19126,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Grava",
     "zh-CN": "niblabels:zh_CN:ships_up_to_case:录音",
     "zh-TW": "strings:zh_TW:ships_up_to_case:錄音"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "transportRewindControl": {
@@ -16676,9 +19182,27 @@
     "Para"
    ],
    "rationale": "Identifies the Stop family for read-only transport-container classification. Values read from Logic 12.3 (6674) StrTransportBtns|||Stop; the existing lowercase English containment tolerance is retained. Static derivation is not runtime qualification.",
+   "provenance": {
+    "Para": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "en-US",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Separate by Kit Piece",
+     "record": "2026-11-18-en-US-arrange-menus-census",
+     "record_sha256": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e",
+     "role": "AXMenuItem"
+    }
+   },
+   "roles": [
+    "AXMenuItem"
+   ],
    "match": "contains",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -16690,7 +19214,6 @@
     "zh-TW": "derived"
    },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:stop",
     "ko-KR": "quickhelp:ko:ships_up_to_case:정지",
     "ja-JP": "quickhelp:ja:ships_up_to_case:停止",
     "de-DE": "quickhelp:de:ships_up_to_case:Stoppen",
@@ -16700,6 +19223,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Para",
     "zh-CN": "strings:zh_CN:ships_up_to_case:停止",
     "zh-TW": "strings:zh_TW:ships_up_to_case:停止"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "unassignedInputSlotLabel": {
@@ -16787,7 +19313,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_derived": {
     "ko-KR": "strings:ko:ships_up_to_case:%@ 실행 취소",
@@ -16857,9 +19383,12 @@
     "垂直縮放"
    ],
    "rationale": "Exact own AXSlider description for selection-owned viewport restoration. Values read from the installed Vertical Zoom row; static derivation is not ten-locale native qualification.",
+   "roles": [
+    "AXSlider"
+   ],
    "match": "exact",
    "coverage": {
-    "en-US": "derived",
+    "en-US": "measured",
     "ko-KR": "derived",
     "ja-JP": "derived",
     "de-DE": "derived",
@@ -16870,8 +19399,25 @@
     "zh-CN": "derived",
     "zh-TW": "derived"
    },
+   "coverage_records": {
+    "en-US": "2026-11-18-en-US-arrange-area_controls-census"
+   },
+   "coverage_roles": {
+    "en-US": "AXSlider"
+   },
+   "coverage_attributes": {
+    "en-US": "description"
+   },
+   "coverage_logic_version": {
+    "en-US": "13.0"
+   },
+   "coverage_logic_build": {
+    "en-US": "7801"
+   },
+   "coverage_record_sha256": {
+    "en-US": "4fb6e58a250bfef7e6cc110fd8215f27633e0d5bc224019291899c9e6745e401"
+   },
    "coverage_derived": {
-    "en-US": "nibstrings:en:ships_up_to_case:Vertical Zoom",
     "ko-KR": "strings:ko:ships_up_to_case:수직 확대/축소",
     "ja-JP": "strings:ja:ships_up_to_case:縦方向にズーム",
     "de-DE": "strings:de:ships_up_to_case:Vertikal-Zoom",
@@ -16881,6 +19427,9 @@
     "pt-BR": "strings:pt:ships_up_to_case:Zoom vertical",
     "zh-CN": "strings:zh_CN:ships_up_to_case:垂直缩放",
     "zh-TW": "strings:zh_TW:ships_up_to_case:垂直縮放"
+   },
+   "coverage_currency": {
+    "en-US": "current"
    }
   },
   "viewMenuBar": {
@@ -17048,7 +19597,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_currency": {
     "en-US": "current",
@@ -17228,7 +19777,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
+    "en-US": "a73adb9427106244f37c3789118cf3bc063c35868b609060814c1f55ecddc99e"
    },
    "coverage_currency": {
     "en-US": "current",

@@ -13,6 +13,7 @@ harder question, **"what have we never measured?"**
 |---|---|
 | `arrange.track_headers` | the track rail: names, numbers, selection, stacks, disclosure |
 | `arrange.regions` | regions in the arrangement area |
+| `arrange.area_controls` | the arrangement area's own controls: snap, drag mode, zoom sliders, catch playhead, folder navigation |
 | `arrange.menus` | Track / Edit / Navigate menus acting on the arrangement |
 | `arrange.transport` | transport bar, playhead, tempo/key display |
 | `mixer.channel_strips` | strips, their controls, ordering |

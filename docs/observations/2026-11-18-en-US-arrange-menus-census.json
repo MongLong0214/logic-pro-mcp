@@ -741,7 +741,7 @@
   "conclusion": "On this host in en-US, arrange.menus exposes 778 elements carrying 609 distinct strings. Every string is in the evidence file verbatim, which is what lets a label variant cite this record: the guard requires the string to occur in the observations or evidence, and here it does or it does not.",
   "limits": [
     "Navigation-free surfaces only: nothing behind a menu press or a button was opened, so this says nothing about the mixer, plug-in editors or the editors.",
-    "211 window rows matched no surface rule and are not filed under any record; they are in the evidence file and can be re-classified when a rule exists.",
+    "9 window-level rows (the title bar, its close/minimise/zoom buttons and the unnamed containers directly under the window) belong to no area and are filed under no record; 0 further window rows matched no area rule. All are in the evidence file.",
     "One project, one host, one build. A label that depends on project content — a track name, a region name — is a reading of this fixture, not of Logic.",
     "6 strings are neither cited nor proved absent: each is absent from Apple's corpora as bytes and a shipped label folds to it (a colon, an ellipsis, a case), so the spelling Logic ships is not something this census read: Bottom Left; Bottom Right; Top Left; Top Right; 시스템 설정…; 최근 사용 항목"
   ],

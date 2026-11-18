@@ -1,0 +1,581 @@
+{
+ "locales": {
+  "de-DE": {
+   "contents": [
+    "Spuren enthält"
+   ],
+   "control_bar": [
+    "Steuerungsleiste"
+   ],
+   "event": [
+    "Event"
+   ],
+   "header": [
+    "Spuren Titel"
+   ],
+   "inspector": [
+    "Informationen"
+   ],
+   "legend": [
+    "Spuren Legende"
+   ],
+   "library": [
+    "Bibliothek"
+   ],
+   "marker": [
+    "Marker"
+   ],
+   "mixer": [
+    "Mixer"
+   ],
+   "playhead_position": [
+    "Position der Abspielposition"
+   ],
+   "signature": [
+    "Taktart/Tonart"
+   ],
+   "tempo": [
+    "Tempo"
+   ],
+   "time_ruler": [
+    "Spuren Zeitskala"
+   ],
+   "tracks": [
+    "Spuren"
+   ],
+   "transport_display": [
+    "Transportanzeige"
+   ]
+  },
+  "en-US": {
+   "contents": [
+    "Tracks contents"
+   ],
+   "control_bar": [
+    "Control Bar"
+   ],
+   "event": [
+    "Event"
+   ],
+   "header": [
+    "Tracks header"
+   ],
+   "inspector": [
+    "Inspector"
+   ],
+   "legend": [
+    "Tracks legend"
+   ],
+   "library": [
+    "Library"
+   ],
+   "marker": [
+    "Marker"
+   ],
+   "mixer": [
+    "Mixer"
+   ],
+   "playhead_position": [
+    "Playhead Position"
+   ],
+   "signature": [
+    "Signature"
+   ],
+   "tempo": [
+    "Tempo"
+   ],
+   "time_ruler": [
+    "Tracks time ruler"
+   ],
+   "tracks": [
+    "Tracks"
+   ],
+   "transport_display": [
+    "Transport Display"
+   ]
+  },
+  "es-ES": {
+   "contents": [
+    "Contenido de Pistas"
+   ],
+   "control_bar": [
+    "Barra de controles"
+   ],
+   "event": [
+    "Evento"
+   ],
+   "header": [
+    "Cabecera de Pistas"
+   ],
+   "inspector": [
+    "Inspector"
+   ],
+   "legend": [
+    "Leyenda de Pistas"
+   ],
+   "library": [
+    "Biblioteca"
+   ],
+   "marker": [
+    "Marcador"
+   ],
+   "mixer": [
+    "Mezclador"
+   ],
+   "playhead_position": [
+    "Posición del cursor de reproducción"
+   ],
+   "signature": [
+    "Compás"
+   ],
+   "tempo": [
+    "Tempo"
+   ],
+   "time_ruler": [
+    "Regla temporal de Pistas"
+   ],
+   "tracks": [
+    "Pistas"
+   ],
+   "transport_display": [
+    "Visualización de transporte"
+   ]
+  },
+  "fr-FR": {
+   "contents": [
+    "Pistes contenus"
+   ],
+   "control_bar": [
+    "Barre des commandes"
+   ],
+   "event": [
+    "Évènement"
+   ],
+   "header": [
+    "En-tête Pistes"
+   ],
+   "inspector": [
+    "Inspecteur"
+   ],
+   "legend": [
+    "Pistes légende"
+   ],
+   "library": [
+    "Bibliothèque"
+   ],
+   "marker": [
+    "Marqueur"
+   ],
+   "mixer": [
+    "Table de mixage"
+   ],
+   "playhead_position": [
+    "Position de la tête de lecture"
+   ],
+   "signature": [
+    "Altération"
+   ],
+   "tempo": [
+    "Tempo"
+   ],
+   "time_ruler": [
+    "règle de temps Pistes"
+   ],
+   "tracks": [
+    "Pistes"
+   ],
+   "transport_display": [
+    "Affichage de transport"
+   ]
+  },
+  "it-IT": {
+   "contents": [
+    "Contenuto di Tracce"
+   ],
+   "control_bar": [
+    "Barra di controllo"
+   ],
+   "event": [
+    "Evento"
+   ],
+   "header": [
+    "Intestazione di Tracce"
+   ],
+   "inspector": [
+    "Inspector",
+    "inspector"
+   ],
+   "legend": [
+    "Legenda di Tracce"
+   ],
+   "library": [
+    "Libreria",
+    "libreria"
+   ],
+   "marker": [
+    "Marcatore"
+   ],
+   "mixer": [
+    "Mixer",
+    "mixer"
+   ],
+   "playhead_position": [
+    "Posizione testina di riproduzione"
+   ],
+   "signature": [
+    "Metro e armatura"
+   ],
+   "tempo": [
+    "Ritmo"
+   ],
+   "time_ruler": [
+    "Righello temporale di Tracce"
+   ],
+   "tracks": [
+    "Tracce"
+   ],
+   "transport_display": [
+    "Visualizzazione controlli di riproduzione"
+   ]
+  },
+  "ja-JP": {
+   "contents": [
+    "トラックコンテンツ"
+   ],
+   "control_bar": [
+    "コントロールバー"
+   ],
+   "event": [
+    "イベント"
+   ],
+   "header": [
+    "トラックヘッダ"
+   ],
+   "inspector": [
+    "インスペクタ"
+   ],
+   "legend": [
+    "トラック凡例"
+   ],
+   "library": [
+    "ライブラリ"
+   ],
+   "marker": [
+    "マーカー"
+   ],
+   "mixer": [
+    "ミキサー"
+   ],
+   "playhead_position": [
+    "再生ヘッドの位置"
+   ],
+   "signature": [
+    "キー/拍子"
+   ],
+   "tempo": [
+    "テンポ"
+   ],
+   "time_ruler": [
+    "トラックタイムルーラ"
+   ],
+   "tracks": [
+    "トラック"
+   ],
+   "transport_display": [
+    "トランスポートディスプレイ"
+   ]
+  },
+  "ko-KR": {
+   "contents": [
+    "트랙 콘텐츠"
+   ],
+   "control_bar": [
+    "컨트롤 막대"
+   ],
+   "event": [
+    "이벤트"
+   ],
+   "header": [
+    "트랙 헤더"
+   ],
+   "inspector": [
+    "인스펙터"
+   ],
+   "legend": [
+    "트랙 범례"
+   ],
+   "library": [
+    "라이브러리"
+   ],
+   "marker": [
+    "마커"
+   ],
+   "mixer": [
+    "믹서"
+   ],
+   "playhead_position": [
+    "재생헤드 위치"
+   ],
+   "signature": [
+    "조표 및 박자표"
+   ],
+   "tempo": [
+    "템포"
+   ],
+   "time_ruler": [
+    "트랙 시간 눈금자"
+   ],
+   "tracks": [
+    "트랙"
+   ],
+   "transport_display": [
+    "트랜스포트 디스플레이"
+   ]
+  },
+  "pt-BR": {
+   "contents": [
+    "Conteúdos de Pistas"
+   ],
+   "control_bar": [
+    "Barra de Controles",
+    "Barra de Controle"
+   ],
+   "event": [
+    "Evento"
+   ],
+   "header": [
+    "Cabeçalho de Pistas"
+   ],
+   "inspector": [
+    "Inspetor"
+   ],
+   "legend": [
+    "Legenda de Pistas"
+   ],
+   "library": [
+    "Biblioteca"
+   ],
+   "marker": [
+    "Marcador"
+   ],
+   "mixer": [
+    "Mixer"
+   ],
+   "playhead_position": [
+    "Posição do Cursor de Reprodução"
+   ],
+   "signature": [
+    "Armadura e Compasso"
+   ],
+   "tempo": [
+    "Andamento"
+   ],
+   "time_ruler": [
+    "Régua de tempo de Pistas"
+   ],
+   "tracks": [
+    "Pistas"
+   ],
+   "transport_display": [
+    "Visualização do Transporte"
+   ]
+  },
+  "zh-CN": {
+   "contents": [
+    "“轨道”内容"
+   ],
+   "control_bar": [
+    "控制条"
+   ],
+   "event": [
+    "事件"
+   ],
+   "header": [
+    "轨道 标头"
+   ],
+   "inspector": [
+    "检查器"
+   ],
+   "legend": [
+    "“轨道”图例"
+   ],
+   "library": [
+    "资源库"
+   ],
+   "marker": [
+    "标记"
+   ],
+   "mixer": [
+    "混音器"
+   ],
+   "playhead_position": [
+    "播放头位置"
+   ],
+   "signature": [
+    "拍号"
+   ],
+   "tempo": [
+    "速度"
+   ],
+   "time_ruler": [
+    "轨道 时间标尺"
+   ],
+   "tracks": [
+    "轨道"
+   ],
+   "transport_display": [
+    "走带控制显示"
+   ]
+  },
+  "zh-TW": {
+   "contents": [
+    "音軌 內容"
+   ],
+   "control_bar": [
+    "控制列"
+   ],
+   "event": [
+    "事件"
+   ],
+   "header": [
+    "音軌 標題"
+   ],
+   "inspector": [
+    "檢閱器"
+   ],
+   "legend": [
+    "音軌 說明"
+   ],
+   "library": [
+    "資料庫"
+   ],
+   "marker": [
+    "標記"
+   ],
+   "mixer": [
+    "混音器"
+   ],
+   "playhead_position": [
+    "播放磁頭位置"
+   ],
+   "signature": [
+    "拍子記號"
+   ],
+   "tempo": [
+    "拍速"
+   ],
+   "time_ruler": [
+    "音軌 時間尺標"
+   ],
+   "tracks": [
+    "音軌"
+   ],
+   "transport_display": [
+    "傳輸顯示器"
+   ]
+  }
+ },
+ "logic": {
+  "build": "7801",
+  "version": "13.0"
+ },
+ "note": "Generated by Scripts/observations/census_areas.py --write from the installed Logic's Localizable.strings; never edited by hand. The names Logic gives the main window's areas, which decide the surface a census row is filed under.",
+ "rows": {
+  "contents": {
+   "composed_with": "tracks",
+   "keys": [
+    "%@ contents"
+   ]
+  },
+  "control_bar": {
+   "composed_with": null,
+   "keys": [
+    "StrTabBtnLabel|||Control Bar",
+    "Control Bar#acc"
+   ]
+  },
+  "event": {
+   "composed_with": null,
+   "keys": [
+    "StrTabBtnLabel|||Event"
+   ]
+  },
+  "header": {
+   "composed_with": "tracks",
+   "keys": [
+    "%@ header"
+   ]
+  },
+  "inspector": {
+   "composed_with": null,
+   "keys": [
+    "Inspector",
+    "Inspector#acc"
+   ]
+  },
+  "legend": {
+   "composed_with": "tracks",
+   "keys": [
+    "%@ legend"
+   ]
+  },
+  "library": {
+   "composed_with": null,
+   "keys": [
+    "StrTabBtnLabel|||Library",
+    "Library#acc"
+   ]
+  },
+  "marker": {
+   "composed_with": null,
+   "keys": [
+    "StrTabBtnLabel|||Marker"
+   ]
+  },
+  "mixer": {
+   "composed_with": null,
+   "keys": [
+    "StrTabBtnLabel|||Mixer",
+    "Mixer#acc"
+   ]
+  },
+  "playhead_position": {
+   "composed_with": null,
+   "keys": [
+    "Playhead Position"
+   ]
+  },
+  "signature": {
+   "composed_with": null,
+   "keys": [
+    "StrTabBtnLabel|||Signature"
+   ]
+  },
+  "tempo": {
+   "composed_with": null,
+   "keys": [
+    "StrTabBtnLabel|||Tempo"
+   ]
+  },
+  "time_ruler": {
+   "composed_with": "tracks",
+   "keys": [
+    "%@ time ruler"
+   ]
+  },
+  "tracks": {
+   "composed_with": null,
+   "keys": [
+    "StrTabBtnLabel|||Tracks"
+   ]
+  },
+  "transport_display": {
+   "composed_with": null,
+   "keys": [
+    "Transport Display"
+   ]
+  }
+ },
+ "schema": 1,
+ "source": "Contents/Frameworks/Logic.framework/Versions/A/Resources/Localizable.strings"
+}

@@ -1,0 +1,637 @@
+{
+ "holds": {
+  "en-US": {
+   "role_undeclared": {
+    "cycleRangeEnd": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses",
+    "cycleRangeStart": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses",
+    "menuActionNameFragment": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses",
+    "projectPickerWindow": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses",
+    "regionKindDrummer": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses",
+    "sendOrIOControlLabel": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses",
+    "sliderSendHint": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses",
+    "transportForwardControl": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses"
+   },
+   "unconfirmed": {
+    "eventListColumnChannel|Ch": {
+     "reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent",
+     "record": "2026-09-08-en-US-event-list-column-titles",
+     "string": "Ch",
+     "was": "12.3"
+    },
+    "eventListColumnLengthInfo|Length/Info": {
+     "reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent",
+     "record": "2026-09-08-en-US-event-list-column-titles",
+     "string": "Length/Info",
+     "was": "12.3"
+    },
+    "eventListColumnLength|Length": {
+     "reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent",
+     "record": "2026-09-08-en-US-event-list-column-titles",
+     "string": "Length",
+     "was": "12.3"
+    },
+    "eventListColumnL|L": {
+     "reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent",
+     "record": "2026-09-08-en-US-event-list-column-titles",
+     "string": "L",
+     "was": "12.3"
+    },
+    "eventListColumnM|M": {
+     "reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent",
+     "record": "2026-09-08-en-US-event-list-column-titles",
+     "string": "M",
+     "was": "12.3"
+    },
+    "eventListColumnName|Name": {
+     "reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent",
+     "record": "2026-09-08-en-US-event-list-column-titles",
+     "string": "Name",
+     "was": "12.3"
+    },
+    "eventListColumnNumber|Num": {
+     "reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent",
+     "record": "2026-09-08-en-US-event-list-column-titles",
+     "string": "Num",
+     "was": "12.3"
+    },
+    "eventListColumnPosition|Position": {
+     "reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent",
+     "record": "2026-09-08-en-US-event-list-column-titles",
+     "string": "Position",
+     "was": "12.3"
+    },
+    "eventListColumnStatus|Status": {
+     "reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent",
+     "record": "2026-09-08-en-US-event-list-column-titles",
+     "string": "Status",
+     "was": "12.3"
+    },
+    "eventListColumnTrack|Trk": {
+     "reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent",
+     "record": "2026-09-08-en-US-event-list-column-titles",
+     "string": "Trk",
+     "was": "12.3"
+    },
+    "eventListColumnValue|Val": {
+     "reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent",
+     "record": "2026-09-08-en-US-event-list-column-titles",
+     "string": "Val",
+     "was": "12.3"
+    },
+    "trackContentGeneric|콘텐츠": {
+     "reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent",
+     "record": "2026-09-05-en-US-arrange-regions-census",
+     "string": "콘텐츠",
+     "was": "12.3"
+    }
+   }
+  }
+ },
+ "note": "Written by Scripts/observations/locale_holds.py; never by hand. A hold is a reading a campaign declined to apply, and why.",
+ "roles": {
+  "automationModeContext": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXCheckBox"
+   ]
+  },
+  "automationModeTrim": {
+   "basis": "menus",
+   "census_locale": "en-US",
+   "roles": [
+    "AXMenuItem"
+   ]
+  },
+  "barSliderLabel": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXSlider"
+   ]
+  },
+  "beatSliderLabel": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXSlider"
+   ]
+  },
+  "controlBarMixerToggle": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXCheckBox",
+    "AXGroup",
+    "AXLayoutArea"
+   ]
+  },
+  "cycleRangeLabel": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXCheckBox"
+   ]
+  },
+  "displayModePopupLabel": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXPopUpButton"
+   ]
+  },
+  "eventListFilterAdditionalInfo": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXCheckBox"
+   ]
+  },
+  "eventListFilterAftertouch": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXCheckBox"
+   ]
+  },
+  "eventListFilterController": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXCheckBox"
+   ]
+  },
+  "eventListFilterNotes": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXCell",
+    "AXCheckBox",
+    "AXPopUpButton"
+   ]
+  },
+  "eventListFilterPitchBend": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXCheckBox"
+   ]
+  },
+  "eventListFilterPolyAftertouch": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXCheckBox"
+   ]
+  },
+  "eventListFilterProgramChange": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXCheckBox"
+   ]
+  },
+  "eventListFilterSystemExclusive": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXCheckBox"
+   ]
+  },
+  "eventListItemCountHelp": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXStaticText"
+   ]
+  },
+  "eventListRegionPathHelp": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXStaticText"
+   ]
+  },
+  "eventListTab": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXGroup",
+    "AXRadioButton"
+   ]
+  },
+  "keySignaturePopupLabel": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXPopUpButton"
+   ]
+  },
+  "libraryPanelLabel": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXCheckBox"
+   ]
+  },
+  "markerContainerKeywords": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXRadioButton"
+   ]
+  },
+  "markerListNumberOfItemsLabel": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXStaticText"
+   ]
+  },
+  "midiImportTempoAlertText": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXRadioButton",
+    "AXSlider"
+   ]
+  },
+  "mixerChannelModeControl": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXButton"
+   ]
+  },
+  "mixerGainReductionMeterControl": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXButton"
+   ]
+  },
+  "mixerPresentationAll": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXRadioButton"
+   ]
+  },
+  "mixerPresentationSingle": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXRadioButton"
+   ]
+  },
+  "mixerPresentationTracks": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXGroup",
+    "AXRadioButton"
+   ]
+  },
+  "mixerStripNameField": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXTextField"
+   ]
+  },
+  "mixerTypeFilterAudio": {
+   "basis": "menus",
+   "census_locale": "en-US",
+   "roles": [
+    "AXMenuItem"
+   ]
+  },
+  "mixerTypeFilterAux": {
+   "basis": "menus",
+   "census_locale": "en-US",
+   "roles": [
+    "AXMenuItem"
+   ]
+  },
+  "mixerTypeFilterMIDI": {
+   "basis": "menus",
+   "census_locale": "en-US",
+   "roles": [
+    "AXMenuItem"
+   ]
+  },
+  "playheadPositionFieldLabel": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXButton",
+    "AXGroup"
+   ]
+  },
+  "pluginAutomationLabelSubstring": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXCheckBox"
+   ]
+  },
+  "pluginFormatMono": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXButton"
+   ]
+  },
+  "pluginFormatStereo": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXButton"
+   ]
+  },
+  "pluginSlotListControl": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXButton"
+   ]
+  },
+  "pluginSlotOpenControl": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXButton"
+   ]
+  },
+  "pluginWindowSmartControlsControl": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXCheckBox"
+   ]
+  },
+  "pluginWindowViewSwitcher": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXMenuButton"
+   ]
+  },
+  "quantizeGridEighthNote": {
+   "basis": "menus",
+   "census_locale": "en-US",
+   "roles": [
+    "AXMenuItem"
+   ]
+  },
+  "quantizeGridEighthTriplet": {
+   "basis": "menus",
+   "census_locale": "en-US",
+   "roles": [
+    "AXMenuItem"
+   ]
+  },
+  "quantizeGridHalfNote": {
+   "basis": "menus",
+   "census_locale": "en-US",
+   "roles": [
+    "AXMenuItem"
+   ]
+  },
+  "quantizeGridQuarterNote": {
+   "basis": "menus",
+   "census_locale": "en-US",
+   "roles": [
+    "AXMenuItem"
+   ]
+  },
+  "quantizeGridQuarterTriplet": {
+   "basis": "menus",
+   "census_locale": "en-US",
+   "roles": [
+    "AXMenuItem"
+   ]
+  },
+  "quantizeGridSixteenthNote": {
+   "basis": "menus",
+   "census_locale": "en-US",
+   "roles": [
+    "AXMenuItem"
+   ]
+  },
+  "quantizeGridSixteenthTriplet": {
+   "basis": "menus",
+   "census_locale": "en-US",
+   "roles": [
+    "AXMenuItem"
+   ]
+  },
+  "quantizeGridSixtyFourthNote": {
+   "basis": "menus",
+   "census_locale": "en-US",
+   "roles": [
+    "AXMenuItem"
+   ]
+  },
+  "quantizeGridThirtySecondNote": {
+   "basis": "menus",
+   "census_locale": "en-US",
+   "roles": [
+    "AXMenuItem"
+   ]
+  },
+  "quantizeGridWholeNote": {
+   "basis": "menus",
+   "census_locale": "en-US",
+   "roles": [
+    "AXMenuItem"
+   ]
+  },
+  "regionKindAudio": {
+   "basis": "menus",
+   "census_locale": "en-US",
+   "roles": [
+    "AXMenuItem"
+   ]
+  },
+  "regionKindMidi": {
+   "basis": "menus",
+   "census_locale": "en-US",
+   "roles": [
+    "AXMenuItem"
+   ]
+  },
+  "savePanelFolderRadio": {
+   "basis": "menus",
+   "census_locale": "en-US",
+   "roles": [
+    "AXMenuItem"
+   ]
+  },
+  "sliderZoomHint": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXSlider"
+   ]
+  },
+  "subdivisionSliderLabel": {
+   "basis": "menus",
+   "census_locale": "en-US",
+   "roles": [
+    "AXMenuItem"
+   ]
+  },
+  "tempoFieldLabel": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXRadioButton",
+    "AXSlider"
+   ]
+  },
+  "tempoListNumberOfItemsLabel": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXStaticText"
+   ]
+  },
+  "tempoSliderContainsLabel": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXRadioButton",
+    "AXSlider"
+   ]
+  },
+  "tickSliderLabel": {
+   "basis": "menus",
+   "census_locale": "en-US",
+   "roles": [
+    "AXMenuItem"
+   ]
+  },
+  "trackHeadersDescription": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXGroup"
+   ]
+  },
+  "trackRecordEnableCheckbox": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXButton",
+    "AXCheckBox"
+   ]
+  },
+  "trackTypeAudio": {
+   "basis": "menus",
+   "census_locale": "en-US",
+   "roles": [
+    "AXMenuItem"
+   ]
+  },
+  "trackTypeAux": {
+   "basis": "menus",
+   "census_locale": "en-US",
+   "roles": [
+    "AXMenuItem"
+   ]
+  },
+  "trackTypeExternalMIDI": {
+   "basis": "menus",
+   "census_locale": "en-US",
+   "roles": [
+    "AXMenuItem"
+   ]
+  },
+  "trackTypeInstrument": {
+   "basis": "menus",
+   "census_locale": "en-US",
+   "roles": [
+    "AXMenuItem"
+   ]
+  },
+  "trackTypeMaster": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXButton",
+    "AXLayoutItem",
+    "AXTextField"
+   ]
+  },
+  "transportContainerMetadata": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXGroup",
+    "AXToolbar"
+   ]
+  },
+  "transportCountInControl": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXCheckBox"
+   ]
+  },
+  "transportCycleControl": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXCheckBox",
+    "AXHandle"
+   ]
+  },
+  "transportKeywordFalseFriends": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXCheckBox",
+    "AXGroup",
+    "AXValueIndicator"
+   ]
+  },
+  "transportMetronomeControl": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXCheckBox"
+   ]
+  },
+  "transportPlayControl": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXCheckBox"
+   ]
+  },
+  "transportRecordControl": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXButton",
+    "AXCheckBox"
+   ]
+  },
+  "transportStopControl": {
+   "basis": "menus",
+   "census_locale": "en-US",
+   "roles": [
+    "AXMenuItem"
+   ]
+  },
+  "verticalZoomSlider": {
+   "basis": "window",
+   "census_locale": "en-US",
+   "roles": [
+    "AXSlider"
+   ]
+  }
+ },
+ "schema": 1
+}

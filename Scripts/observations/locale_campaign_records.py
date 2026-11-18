@@ -22,69 +22,114 @@ import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 
-# Which window rows belong to which taxonomy surface, decided by what the path passes through.
-# Everything else is reported as unclassified in the menus record's limits rather than filed.
-SURFACE_RULES = [
-    ("arrange.track_headers", re.compile(r"AXGroup.*AXList.*AXLayoutArea.*AXLayoutItem(?!.*AXLayoutArea)")),
-    ("arrange.transport",     re.compile(r"Transport|트랜스포트|LCD")),
+# WHICH SURFACE A CENSUS ROW BELONGS TO is decided by the main-window AREA its path passes through.
+#
+# The area names are Apple's strings, per locale, read from the row each comes from and committed in
+# docs/locale/census-areas.json (`census_areas.py --write`): `Control Bar` / `Barra de controles` /
+# `控制列`, and the Tracks area's four children composed from `%@ header`, `%@ contents`, `%@ legend`
+# and `%@ time ruler` (`Cabecera de Pistas`, `En-tête Pistes`). This used to be a list of spellings
+# typed after reading a census in en, ko, ja and de -- which left 526 to 537 rows unfiled in each of
+# the other six locales, and would have left every future locale the same way.
+#
+# The AX tree has the same SHAPE in every locale (measured on all ten censuses of 2026-11-17/18), so
+# the rules below are about the tree and only the names are localised:
+#
+#   AXToolbar|AXGroup[<Control Bar>] and its Transport Display      -> arrange.transport
+#   AXGroup[<Mixer>] and a strip's AXLayoutArea[<Mixer>] in the
+#       Inspector                                                   -> mixer.channel_strips
+#   the rest of AXGroup[<Inspector>]                                -> inspector.channel_strip
+#   AXGroup[<Library>]                                              -> library.patches
+#   AXGroup[<Event>] and its Event / Marker / Tempo / Signature tabs -> editor.event_list
+#   AXGroup[<Tracks>]:  its `contents` and `time ruler` children    -> arrange.regions
+#                       its `header` and `legend` children          -> arrange.track_headers
+#                       its own controls (snap, zoom, folders)      -> arrange.area_controls
+#
+# More specific first: a path passes through `AXGroup[Tracks]` on its way to `AXGroup[Tracks header]`,
+# and through `AXToolbar[Control Bar]` on its way to `AXCheckBox[Mixer]`, which is a transport control.
+# A row no rule places stays unplaced and is counted in its record's `limits`: the window itself, three
+# bare buttons and one image have no area to be filed under.
+#
+# The probe names an element by its description cut to 28 characters (`locale-census.swift`), so an
+# area whose name is longer is matched on its first 28.
+PROBE_NAME_LIMIT = 28
+
+#: (surface, areas whose bracketed name in the path files a row under it), most specific first.
+AREA_RULES = [
+    ("arrange.transport",     ("control_bar", "transport_display", "playhead_position")),
+    ("arrange.regions",       ("contents", "time_ruler")),
+    ("arrange.track_headers", ("header", "legend")),
+    ("mixer.channel_strips",  ("mixer",)),
+    ("library.patches",       ("library",)),
+    ("editor.event_list",     ("event", "marker", "tempo", "signature")),
+    ("inspector.channel_strip", ("inspector",)),
+    ("arrange.area_controls", ("tracks",)),
 ]
 
 
-# Ancestor labels the census writes into the path, in the locales measured so far. A row is filed
-# under the FIRST surface whose marker appears in its path; unmatched rows stay unclassified and are
-# counted in limits. Adding a locale means adding its spellings here — from a census, not a guess.
-ANCESTRY = [
-    ("arrange.transport",     ("{Transport}", "[컨트롤 막대", "[Control Bar", "[LCD", "[コントロールバー",
-                               "[Steuerungsleiste")),
-    ("mixer.channel_strips",  ("[왼쪽 인스펙터 채널 스트립", "[오른쪽 인스펙터 채널 스트립", "[Left Inspector", "[Right Inspector", "[믹서", "[Mixer", "[ミキサー")),
-    ("library.patches",       ("[라이브러리", "[Library", "[ライブラリ", "[Bibliothek")),
-    # Regions BEFORE headers: a region's path passes through a layout area described "N개의 ‘name’ 트랙",
-    # which the headers marker would otherwise claim. First match wins, so the more specific goes first.
-    ("arrange.regions",       ("[트랙 콘텐츠", "[Track Content", "[Tracks contents", "[トラックコンテンツ",
-                               "[Spuren enthält")),
-    ("arrange.track_headers", ("[트랙 헤더", "[Track Header", "[트랙 헤더 목록", "’ 트랙]", "' Track]",
-                               "[トラックヘッダ")),
-]
-
-# The ja-JP spellings above were read out of a ja-JP census, not translated: `[コントロールバー`,
-# `[ミキサー`, `[ライブラリ`, `[トラックコンテンツ`, `[トラックヘッダ`, each with the same row counts
-# as its en-US counterpart. Without them every window row in Japanese fell through — 414 of 617 —
-# so a locale campaign produced ONE surface in Japanese and six in English, and the ledger recorded
-# that asymmetry as if it were something about Logic rather than about this list.
-#
-# The de-DE spellings were read the same way, off the census of 2026-09-12 (#876): `[Steuerungsleiste`,
-# `[Bibliothek`, `[Spuren enthält`. `[Mixer` needed nothing — German keeps the English word there.
-#
-# `[Spuren Titel` was tried here and REMOVED. It is the counterpart of `[Tracks header`, which
-# appears 230 times in both censuses and is deliberately not a marker on either side — English
-# reaches those 38 rows through the help text instead. Adding it in German only would have filed
-# 230 German rows against 38 English ones and made the per-locale counts incomparable, which is the
-# same trap `[インスペクタ` is held out of below. Without them a German campaign produced THREE surfaces against English's six, with 447
-# rows unclassified, and the ledger would have recorded that as a fact about German Logic rather than
-# about this list — exactly the asymmetry the Japanese note below describes.
-#
-# `[インスペクタ` is deliberately absent. It is the exact counterpart of `[Inspector` (99 rows in
-# both censuses), and `[Inspector` is not here either — adding it on one side only would make the
-# Japanese taxonomy richer than the English one and the per-locale counts incomparable.
+def _areas():
+    path = os.path.join(HERE, "census_areas.py")
+    spec = importlib.util.spec_from_file_location("census_areas_for_records", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = module
+    spec.loader.exec_module(module)
+    return module
 
 
-def classify(row):
+_AREAS = _areas()
+_SEGMENT = re.compile(r"\[([^\]]*)\]$")
+#: One path segment: a role, optionally with its bracketed name. The name may itself contain `/` (the
+#: ja-JP tab `キー/拍子`, the de-DE tab `Taktart/Tonart`), so a path cannot be cut at every `/`; a
+#: segment ends at the `]` that is followed by the next role or by the end of the path.
+_PATH_SEGMENT = re.compile(r"(AX[A-Za-z]+)(?:\[(.*?)\](?=/AX|$))?")
+
+
+def _fold(text):
+    return text.replace("\u00a0", " ").casefold()
+
+
+def _segments(path):
+    """The bracketed names along a census path, folded: `AXGroup[Tracks]` -> `tracks`."""
+    return [_fold(name) for _role, name in _PATH_SEGMENT.findall(path) if name]
+
+
+def _names_for(locale):
+    """`{area: [folded names]}` the committed table gives `locale`, or every locale's when it is None."""
+    return {area: [_fold(n[:PROBE_NAME_LIMIT]) for n in found]
+            for area, found in _AREAS.names(locale).items()}
+
+
+def classify(row, locale=None):
+    """The taxonomy surface a census row belongs to, or None when no rule places it."""
     if row["surface"] == "arrange.menus":
         return "arrange.menus"
-    path = row["path"]
-    for surface, markers in ANCESTRY:
-        if any(m in path for m in markers):
+    names = _names_for(locale)
+    segments = _segments(row["path"])
+    for surface, areas in AREA_RULES:
+        wanted = {name for area in areas for name in names.get(area, ())}
+        if any(seg in wanted for seg in segments):
             return surface
+    # A row outside every named area still says what it is in its help text. Kept for the censuses
+    # taken before 13.0, where regions and headers sat under differently named containers.
     help_ = row.get("help") or ""
     if "리전" in help_ or "region" in help_.lower():
         return "arrange.regions"
-    # German spells the same help string `Spur-Header.`, which contains neither of the two above.
-    # Read off the de-DE census of 2026-09-12: 38 rows carry it, the same count as the en-US
-    # `Track Header` rows, which is what makes the two locales' taxonomies comparable.
     if ("트랙 헤더" in help_ or "track header" in help_.lower()
             or "spur-header" in help_.lower()):
         return "arrange.track_headers"
     return None
+
+
+def is_window_frame(row):
+    """Whether a row sits at the window's own level: its title, close/minimise/zoom buttons, proxy icon.
+
+    AppKit draws these (and two unnamed containers hold the areas), they sit directly under `AXWindow`
+    with no area between, and the only Logic content they carry is the project name. No surface is true
+    of them, so they are counted as window-level rows in a record's `limits` instead of being filed or
+    being lumped in with rows a rule failed to place.
+    """
+    found = _PATH_SEGMENT.findall(row["path"])
+    return (bool(found) and found[0][0] == "AXWindow" and len(found) <= 3
+            and not any(name for _role, name in found[1:]))
 
 
 def missing_release(host):
@@ -248,11 +293,14 @@ def main(census_path, repo, write, date=None, canon=None):
     ev_rel = f"evidence/{date}-{locale}-navigation-free.census.json"
     ev_path = os.path.join(obs_dir, ev_rel)
 
-    buckets, unclassified = {}, 0
+    buckets, unclassified, frame = {}, 0, 0
     for row in census["census"]:
-        s = classify(row)
+        s = classify(row, locale)
         if s is None:
-            unclassified += 1
+            if is_window_frame(row):
+                frame += 1
+            else:
+                unclassified += 1
             continue
         buckets.setdefault(s, []).append(row)
 
@@ -303,8 +351,10 @@ def main(census_path, repo, write, date=None, canon=None):
             "limits": [
                 "Navigation-free surfaces only: nothing behind a menu press or a button was opened, so "
                 "this says nothing about the mixer, plug-in editors or the editors.",
-                f"{unclassified} window rows matched no surface rule and are not filed under any record; "
-                "they are in the evidence file and can be re-classified when a rule exists.",
+                f"{frame} window-level rows (the title bar, its close/minimise/zoom buttons and the "
+                f"unnamed containers directly under the window) belong to no area and are filed under no "
+                f"record; {unclassified} further window rows matched no area rule. All are in the "
+                "evidence file.",
                 "One project, one host, one build. A label that depends on project content — a track "
                 "name, a region name — is a reading of this fixture, not of Logic.",
             ],
@@ -333,7 +383,7 @@ def main(census_path, repo, write, date=None, canon=None):
         # Settled: the list a refused run left is now a claim about a canon that has moved on.
         os.remove(stale)
     print(f"census {locale} {host['version']} ({host['build']}): {sum(len(v) for v in buckets.values())} rows "
-          f"in {len(buckets)} surfaces, {unclassified} unclassified")
+          f"in {len(buckets)} surfaces, {unclassified} unclassified (+{frame} window-level)")
     for rid, rec in records.items():
         print(f"  {rid}: {rec['observations'][0]['rows']} rows, {rec['observations'][0]['distinct_strings']} strings")
     if not write:

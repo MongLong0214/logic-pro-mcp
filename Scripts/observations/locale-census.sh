@@ -49,14 +49,14 @@ def strings(rows):
 
 fresh_by = {}
 for row in fresh["census"]:
-    s = classify(row)
+    s = classify(row, want)
     if s:
         fresh_by.setdefault(s, []).append(row)
 
 disagree = 0
 for surface, rec in sorted(records.items()):
     ev = json.load(open(os.path.join(obs, rec["evidence"][0]), encoding="utf-8"))
-    then = strings(r for r in ev["census"] if classify(r) == surface)
+    then = strings(r for r in ev["census"] if classify(r, want) == surface)
     now = strings(fresh_by.get(surface, []))
     gone, new = sorted(then - now), sorted(now - then)
     if gone or new:
