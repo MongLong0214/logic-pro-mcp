@@ -20,7 +20,7 @@
   "reverify": {
     "kind": "script",
     "command": "Scripts/observations/locale-census.sh en-US",
-    "expected": "a census in en-US whose arrange.menus rows carry the same 456 distinct strings; a differing set means Logic's labels moved and every provenance citing this record wants re-reading",
+    "expected": "a census in en-US whose arrange.menus rows carry the same 609 distinct strings; a differing set means Logic's labels moved and every provenance citing this record wants re-reading",
     "cost": "~1 min with Logic open on the fixture project in that locale"
   },
   "depends": [
@@ -33,9 +33,9 @@
   "observations": [
     {
       "what": "rows on arrange.menus",
-      "rows": 598,
-      "distinct_strings": 456,
-      "distinct_identifiers": 77
+      "rows": 778,
+      "distinct_strings": 609,
+      "distinct_identifiers": 81
     },
     {
       "what": "the strings, verbatim",
@@ -44,7 +44,24 @@
         "03 Drum Machine Designer.logicx",
         "1",
         "1 Bar",
+        "1 ms",
+        "1/1 Note",
+        "1/16 Note",
+        "1/16 Triplet (1/24)",
+        "1/2 Frame",
+        "1/2 Note",
+        "1/2 Triplet (1/3)",
+        "1/32 Note",
+        "1/32 Triplet (1/48)",
         "1/4",
+        "1/4 Note",
+        "1/4 Triplet (1/6)",
+        "1/64 Note",
+        "1/64 Triplet (1/96)",
+        "1/8 Note",
+        "1/8 Triplet (1/12)",
+        "10 Ticks",
+        "10 ms",
         "2 Bars",
         "2/4",
         "3 Bars",
@@ -52,6 +69,7 @@
         "4 Bars",
         "4/4",
         "5 Bars",
+        "5 Frames",
         "5/4",
         "6 Bars",
         "6/4",
@@ -61,7 +79,12 @@
         "AAF…",
         "About Logic Pro",
         "Add to Browser…",
+        "Adjust Tempo using Region Length and Locators",
         "AirDrop…",
+        "All",
+        "All Following",
+        "All Following of Same Track",
+        "All Inside Locators",
         "All MIDI Tracks as MIDI File…",
         "All Plug-in Windows",
         "All Scene Markers",
@@ -72,6 +95,8 @@
         "App Store",
         "App Store…, 5개의 업데이트",
         "Apple",
+        "Apply Project Tempo to Region and Downbeat",
+        "Apply Region Tempo to Project Tempo…",
         "Arrange",
         "Arrange in Front",
         "Arrangement Track",
@@ -80,9 +105,12 @@
         "Assets…",
         "Assign Track Color…",
         "Assign Track Icon…",
+        "Audio",
         "Audio Channel",
         "Audio Files As…",
         "Audio File…",
+        "Audio Regions to New Audio Files",
+        "Audio Regions to New Regions",
         "Audio…",
         "Auto Input Monitoring",
         "Auto Range",
@@ -90,6 +118,9 @@
         "Automation Settings…",
         "Automation…",
         "Autoselect Automation Parameter in Read Mode",
+        "Aux",
+        "Bar",
+        "Beat",
         "Beat Mapping Track",
         "Bottom",
         "Bottom & Quarters",
@@ -97,6 +128,8 @@
         "Bottom Left",
         "Bottom Right",
         "Bounce",
+        "Bounce Regions in Place…",
+        "Bounce or Join",
         "Bring All to Front",
         "Browser",
         "Bubbles at Pointer Location",
@@ -105,7 +138,9 @@
         "By Note Selection",
         "By Region Selection",
         "Bypass All Control Surfaces",
+        "Can’t Redo",
         "Center",
+        "Change…",
         "Chord Grid Library…",
         "Chord Track",
         "Clean Up…",
@@ -113,6 +148,7 @@
         "Close",
         "Close Project",
         "Colors",
+        "Complex",
         "Configure Global Tracks…",
         "Configure Track Header…",
         "Consolidate…",
@@ -122,6 +158,7 @@
         "Control Surfaces",
         "Control Surfaces…",
         "Controller Assignments…",
+        "Convert",
         "Convert All Region Automation to Track Automation",
         "Convert All Track Automation to Region Automation",
         "Convert Automation",
@@ -130,6 +167,10 @@
         "Convert Visible Region Automation to Track Automation",
         "Convert Visible Track Automation to Region Automation",
         "Copy",
+        "Copy MIDI Events…",
+        "Copy Region Selection to Live Loops Scene",
+        "Copy Scene to Playhead",
+        "Copy Section Between Locators",
         "Count-in",
         "Create 1 Automation Point at Region Borders",
         "Create 1 Automation Point each for Volume, Pan, Sends",
@@ -143,6 +184,7 @@
         "Create Movie Scene Cut Markers",
         "Create New Track",
         "Create Project from ADM BWF…",
+        "Create Smart Tempo Multitrack Set",
         "Create Support Profile…",
         "Create Take Folder",
         "Create Track",
@@ -156,9 +198,12 @@
         "Create Volume Fade-Out on Main Output",
         "Create Without Rounding",
         "Creation Date",
+        "Crop Outside Locators",
         "Customize Control Bar and Display…",
         "Customize Toolbar…",
         "Cut",
+        "Cut Section Between Locators",
+        "Cut/Insert Time",
         "Cycle Area",
         "Cycle Off",
         "Cycle On",
@@ -167,6 +212,7 @@
         "Delete All Automation on Selected Tracks",
         "Delete All Track Automation",
         "Delete Automation",
+        "Delete MIDI Events",
         "Delete Marker at Playhead Position",
         "Delete Orphaned Automation on Selected Tracks",
         "Delete Redundant Automation Points",
@@ -174,21 +220,31 @@
         "Delete Undo History",
         "Delete Unused Tracks",
         "Delete Visible Automation on Selected Tracks",
+        "Delete and Move",
+        "Deselect All",
+        "Deselect Global Tracks",
+        "Deselect Outside Locators",
         "Discord",
+        "Division",
         "Dolby Atmos…",
+        "Double",
+        "Duplicates",
         "Duplicate…",
         "Edit",
         "Editor",
+        "Empty Regions",
         "Enable Auto Set Locators",
         "Enable Automation Quick Access",
         "Enter Full Screen",
         "Entire Movie",
+        "Equal Regions",
         "Event Float",
         "Export",
         "Export Audio to Movie…",
         "Export Marker to Audio File",
         "File",
         "Fill",
+        "Fill within Locators",
         "Final Cut Pro XML…",
         "Finder에서 ‘03 Drum Machine Designer.logicx’ 보기",
         "Finder에서 ‘03 Drum Machine Designer’ 보기",
@@ -208,8 +264,14 @@
         "Finder에서 ‘텍스트-4B34-8C6B-9E-0.txt’ 보기",
         "Finder에서 ‘시스템 설정’ 보기",
         "Finder에서 ‘터미널’ 보기",
+        "First Transient to Nearest Beat",
         "Flatten Stack",
+        "Flex Pitch/Time",
         "Floating Window",
+        "Folder",
+        "Folder Stack",
+        "Frame",
+        "Frozen",
         "Full Screen Tile",
         "General…",
         "Global Tracks",
@@ -217,6 +279,7 @@
         "Google Chrome",
         "Group Settings",
         "Groups Active",
+        "Halve",
         "Halves",
         "Help",
         "Hide Logic Pro",
@@ -229,11 +292,19 @@
         "Import Audio from Movie",
         "Import Marker from Audio File",
         "Import Project Settings…",
+        "Insert Scene at Playhead",
+        "Insert Section at Playhead",
+        "Insert Silence at Locators",
+        "Inside Locators",
         "Inspector",
         "Inspector Pane",
+        "Instrument",
         "Instrument Name",
+        "Invert Selection",
         "Isaac 로그아웃",
         "Isaac 로그아웃…",
+        "Join",
+        "Join per Tracks",
         "Jump between Cycle- and Project Start if stopped",
         "Jump between Last Locate Position and Project Start if stopped",
         "Jump between Marquee- and Project Start if stopped",
@@ -246,6 +317,8 @@
         "Left & Right",
         "Left Locator",
         "Left of Screen",
+        "Legacy Algorithms",
+        "Length",
         "List Editors",
         "Live Loops Grid…",
         "Lock",
@@ -259,9 +332,12 @@
         "Logic Pro on the Web",
         "Logic Pro 강제 종료",
         "Logic Projects…",
+        "Loops to Regions",
         "Low Latency Monitoring Mode",
+        "MIDI",
         "MIDI Channel",
         "MIDI File…",
+        "MIDI Loops to Aliases",
         "MIDI…",
         "Macintosh HD",
         "Mail…",
@@ -278,17 +354,23 @@
         "Minimize All",
         "Mix",
         "Mixer",
+        "Move",
         "Move & Resize",
         "Move Locators Backwards by Cycle Length",
         "Move Locators Forward by Cycle Length",
         "Move Movie Files out of Project…",
         "Move Track Automation with Regions",
+        "Move to AH-200HZB",
+        "Move to DELL P2425H",
         "Movie",
         "Movie Track",
         "Movie Window",
         "Movie…",
+        "Multiple…",
         "MusicXML…",
         "Musical Typing",
+        "Muted",
+        "Muted Regions",
         "My Info…",
         "NativeLogic13-9995.logicx",
         "Navigate",
@@ -307,9 +389,13 @@
         "New Tracks…",
         "New from Template…",
         "Next Marker",
+        "Next Region",
         "No Services Apply",
         "None",
         "Note Pads",
+        "Nudge Left",
+        "Nudge Right",
+        "Once",
         "Open Audio File Editor",
         "Open Audio Track Editor",
         "Open Event List",
@@ -329,17 +415,24 @@
         "Open Step Editor",
         "Open Step Sequencer",
         "Open Transport Float",
+        "Open in External Sample Editor",
         "Open…",
         "OrbStack",
         "Other",
         "Other…",
         "Output Channel",
+        "Outside Locators",
+        "Outside Region Boundaries",
         "Overlap",
         "Overlap/Merge Selected Regions",
+        "Overlapped Regions",
         "Overlapping Audio Recordings",
         "Overlapping MIDI Recordings",
         "Page Setup…",
         "Paste",
+        "Paste Replace",
+        "Paste at Original Position",
+        "Percussive",
         "Play Button Options",
         "Play From Last Locate Position",
         "Play From Selected Region",
@@ -350,6 +443,7 @@
         "Position…",
         "Pre-Fader Metering",
         "Previous Marker",
+        "Previous Region",
         "Print",
         "Project Alternatives",
         "Project Files",
@@ -375,20 +469,32 @@
         "Record Button Options",
         "Recording Settings…",
         "Recording…",
-        "Redo",
+        "Region End to Next Region",
+        "Region End to Next Transient",
+        "Region End to Previous Transient",
         "Region Erase",
         "Region Inspector Float",
         "Region Punch",
+        "Region Start to Next Transient",
+        "Region Start to Previous Region",
+        "Region Start to Previous Transient",
         "Regions as Audio Files…",
+        "Regions at Locators",
+        "Regions at Playhead",
         "Regions in Place…",
         "Release Notes",
         "Remove Marker from Audio File",
         "Remove Movie",
         "Remove Movie Scene Cut Markers",
+        "Remove Overlaps",
+        "Remove Tempo Information",
         "Remove Window from Set",
         "Rename Marker",
         "Rename Track",
         "Rename…",
+        "Repeat",
+        "Repeat Section Between Locators",
+        "Repetitions to Loops",
         "Replace",
         "Replace or Double Drum Track…",
         "Reset All Settings Except Key Command Assignments…",
@@ -400,6 +506,13 @@
         "Right & Quarters",
         "Right Locator",
         "Right of Screen",
+        "Rotate Left",
+        "Rotate Right",
+        "SMPTE Bit",
+        "SMPTE-Locked Regions",
+        "Same-Colored",
+        "Same-Colored Regions",
+        "Sample",
         "Save",
         "Save A Copy As…",
         "Save As…",
@@ -410,7 +523,8 @@
         "Scroll to Selection",
         "Search and Add Plug-in…",
         "Search and Select Track…",
-        "Select All",
+        "Select",
+        "Select Tracks",
         "Selected Regions",
         "Selected Track(s) as MainStage Patch…",
         "Selected Track(s) as MainStage Set…",
@@ -418,9 +532,15 @@
         "Selection Start",
         "Selection as Audio File…",
         "Selection as MIDI File…",
+        "Separate MIDI Events",
+        "Separate by Articulation",
+        "Separate by Kit Piece",
+        "Separate by MIDI Channel",
+        "Separate by Note Pitch",
         "Services",
         "Services Settings…",
         "Set Locators by Selection and Enable Cycle",
+        "Set Nudge Value to",
         "Set Rounded Locators by Selection and Enable Cycle",
         "Settings",
         "Settings…",
@@ -428,23 +548,51 @@
         "Share",
         "Show All",
         "Show Automation",
+        "Show Beat Mapping Track",
         "Show Single Global Track",
+        "Show Tempo List",
         "Show in Finder",
         "Show in Finder…",
+        "Shuffle Left",
+        "Shuffle Right",
         "Signature Track",
+        "Similar Regions",
+        "Slip Left",
+        "Slip Right",
         "Smart Controls",
+        "Smart Tempo Editor",
         "Smart Tempo…",
+        "Soloed",
         "Song to Voice Memos…",
         "Song to iTunes…",
         "Sort Tracks by",
         "Sound Library…",
+        "Split",
+        "Step Input",
         "Step Input Keyboard",
         "Stop",
         "Stop Button Options",
         "Stop and Go to Last Locate Position",
         "Stop and Go to Left Locator",
+        "Sub/VCA",
+        "Summing Stack",
         "Synchronization…",
+        "Tempo",
+        "Tempo Interpreter…",
+        "Tempo Operations…",
         "Tempo Track",
+        "Tick",
+        "Time Stretch",
+        "Time Stretch Region Length to Locators",
+        "Time Stretch Region Length to Nearest Bar",
+        "Time Stretching Algorithm",
+        "To Beat",
+        "To Focused Track",
+        "To MIDI Region",
+        "To Pattern Region",
+        "To Playhead",
+        "To Recorded Position",
+        "To Session Player Region",
         "Toggle Hide View",
         "Toolbar",
         "Top",
@@ -457,10 +605,14 @@
         "Track Name",
         "Tracks as Audio Files…",
         "Tracks in Place…",
+        "Trim",
         "Tuning…",
-        "Undo",
         "Undo History…",
+        "Undo 템포 변경",
         "Unhide All Tracks",
+        "Universal",
+        "Unselected Within Selection",
+        "Unused",
         "Use Musical Grid",
         "Used, Unused",
         "View",
@@ -468,6 +620,7 @@
         "Warp",
         "What’s New in Logic Pro",
         "Window",
+        "Write Project Tempo to Audio Files",
         "Zoom",
         "Zoom All",
         "en-final",
@@ -511,6 +664,7 @@
         "_lockScreenRequested:",
         "_logOutNowRequested:",
         "_logOutRequested:",
+        "_moveToDisplay:",
         "_noServicesApplyAction:",
         "_openRecentDocument:",
         "_recentItemRequested:",
@@ -551,12 +705,15 @@
         "copy:",
         "cut:",
         "delete:",
+        "deselectAll:",
         "doScreensetsMenuCall:",
         "globalCreateSupportProfile:",
         "globalHelpMenuItemCall:",
         "globalMenuItemCall:",
         "hide:",
         "hideOtherApplications:",
+        "invertSelection:",
+        "localMenuItemAction:",
         "makeKeyAndOrderFront:",
         "miniaturizeAll:",
         "newDocument:",
@@ -581,7 +738,7 @@
       ]
     }
   ],
-  "conclusion": "On this host in en-US, arrange.menus exposes 598 elements carrying 456 distinct strings. Every string is in the evidence file verbatim, which is what lets a label variant cite this record: the guard requires the string to occur in the observations or evidence, and here it does or it does not.",
+  "conclusion": "On this host in en-US, arrange.menus exposes 778 elements carrying 609 distinct strings. Every string is in the evidence file verbatim, which is what lets a label variant cite this record: the guard requires the string to occur in the observations or evidence, and here it does or it does not.",
   "limits": [
     "Navigation-free surfaces only: nothing behind a menu press or a button was opened, so this says nothing about the mixer, plug-in editors or the editors.",
     "211 window rows matched no surface rule and are not filed under any record; they are in the evidence file and can be re-classified when a rule exists.",
@@ -607,8 +764,144 @@
       }
     },
     {
+      "ref": "logic-canon://strings/en#value",
+      "value": "1 ms",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "1/1 Note",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "1/16 Note",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "1/16 Triplet (1/24)",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "1/2 Frame",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "1/2 Note",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "1/2 Triplet (1/3)",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "1/32 Note",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "1/32 Triplet (1/48)",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
       "ref": "logic-canon://nibstrings/en#value",
       "value": "1/4",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "1/4 Note",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "1/4 Triplet (1/6)",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "1/64 Note",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "1/64 Triplet (1/96)",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "1/8 Note",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "1/8 Triplet (1/12)",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "10 Ticks",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "10 ms",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -665,6 +958,14 @@
     {
       "ref": "logic-canon://nibstrings/en#value",
       "value": "5 Bars",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "5 Frames",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -743,8 +1044,48 @@
       }
     },
     {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Adjust Tempo using Region Length and Locators",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
       "ref": "logic-canon://strings/en#value",
       "value": "AirDrop…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "All",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "All Following",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "All Following of Same Track",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "All Inside Locators",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -808,6 +1149,22 @@
     },
     {
       "ref": "logic-canon://quickhelp/en#value",
+      "value": "Apply Project Tempo to Region and Downbeat",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Apply Region Tempo to Project Tempo…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
       "value": "Arrange",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
@@ -855,6 +1212,14 @@
       }
     },
     {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "Audio",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
       "ref": "logic-canon://strings/en#value",
       "value": "Audio Channel",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
@@ -873,6 +1238,22 @@
     {
       "ref": "logic-canon://strings/en#value",
       "value": "Audio File…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Audio Regions to New Audio Files",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Audio Regions to New Regions",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -935,6 +1316,30 @@
       }
     },
     {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Aux",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Bar",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Beat",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
       "ref": "logic-canon://strings/en#value",
       "value": "Beat Mapping Track",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
@@ -953,6 +1358,22 @@
     {
       "ref": "logic-canon://nibstrings/en#value",
       "value": "Bounce",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Bounce Regions in Place…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Bounce or Join",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -1023,8 +1444,24 @@
       }
     },
     {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Can’t Redo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
       "ref": "logic-canon://nibstrings/en#value",
       "value": "Center",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Change…",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -1081,6 +1518,14 @@
     {
       "ref": "logic-canon://nibstrings/en#value",
       "value": "Colors",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Complex",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -1159,6 +1604,14 @@
       }
     },
     {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Convert",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
       "ref": "logic-canon://quickhelp/en#value",
       "value": "Convert All Region Automation to Track Automation",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
@@ -1217,6 +1670,38 @@
     {
       "ref": "logic-canon://niblabels/en#value",
       "value": "Copy",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Copy MIDI Events…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Copy Region Selection to Live Loops Scene",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Copy Scene to Playhead",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Copy Section Between Locators",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -1328,6 +1813,14 @@
     },
     {
       "ref": "logic-canon://strings/en#value",
+      "value": "Create Smart Tempo Multitrack Set",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
       "value": "Create Support Profile…",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
@@ -1431,6 +1924,14 @@
       }
     },
     {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Crop Outside Locators",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
       "ref": "logic-canon://strings/en#value",
       "value": "Customize Control Bar and Display…",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
@@ -1449,6 +1950,22 @@
     {
       "ref": "logic-canon://niblabels/en#value",
       "value": "Cut",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Cut Section Between Locators",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Cut/Insert Time",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -1519,6 +2036,14 @@
       }
     },
     {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Delete MIDI Events",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
       "ref": "logic-canon://quickhelp/en#value",
       "value": "Delete Marker at Playhead Position",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
@@ -1575,8 +2100,64 @@
       }
     },
     {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Delete and Move",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "Deselect All",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Deselect Global Tracks",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Deselect Outside Locators",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Division",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
       "ref": "logic-canon://strings/en#value",
       "value": "Dolby Atmos…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Double",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Duplicates",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -1601,6 +2182,14 @@
     {
       "ref": "logic-canon://strings/en#value",
       "value": "Editor",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Empty Regions",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -1633,6 +2222,14 @@
     {
       "ref": "logic-canon://quickhelp/en#value",
       "value": "Entire Movie",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Equal Regions",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -1688,7 +2285,23 @@
     },
     {
       "ref": "logic-canon://strings/en#value",
+      "value": "Fill within Locators",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
       "value": "Final Cut Pro XML…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "First Transient to Nearest Beat",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -1704,7 +2317,47 @@
     },
     {
       "ref": "logic-canon://strings/en#value",
+      "value": "Flex Pitch/Time",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
       "value": "Floating Window",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Folder",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Folder Stack",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Frame",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Frozen",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -1745,6 +2398,14 @@
     {
       "ref": "logic-canon://strings/en#value",
       "value": "Groups Active",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Halve",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -1831,6 +2492,38 @@
       }
     },
     {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Insert Scene at Playhead",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Insert Section at Playhead",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Insert Silence at Locators",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Inside Locators",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
       "ref": "logic-canon://nibstrings/en#value",
       "value": "Inspector",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
@@ -1848,7 +2541,39 @@
     },
     {
       "ref": "logic-canon://niblabels/en#value",
+      "value": "Instrument",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
       "value": "Instrument Name",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "Invert Selection",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Join",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Join per Tracks",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -1911,6 +2636,22 @@
       }
     },
     {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Legacy Algorithms",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Length",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
       "ref": "logic-canon://nibstrings/en#value",
       "value": "List Editors",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
@@ -1959,8 +2700,24 @@
       }
     },
     {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Loops to Regions",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
       "ref": "logic-canon://nibstrings/en#value",
       "value": "Low Latency Monitoring Mode",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "MIDI",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -1977,6 +2734,14 @@
     {
       "ref": "logic-canon://strings/en#value",
       "value": "MIDI File…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "MIDI Loops to Aliases",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -2103,6 +2868,14 @@
       }
     },
     {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Move",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
       "ref": "logic-canon://quickhelp/en#value",
       "value": "Move Locators Backwards by Cycle Length",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
@@ -2168,6 +2941,14 @@
     },
     {
       "ref": "logic-canon://strings/en#value",
+      "value": "Multiple…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
       "value": "MusicXML…",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
@@ -2177,6 +2958,22 @@
     {
       "ref": "logic-canon://niblabels/en#value",
       "value": "Musical Typing",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Muted",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Muted Regions",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -2319,6 +3116,14 @@
       }
     },
     {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Next Region",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
       "ref": "logic-canon://nibstrings/en#value",
       "value": "None",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
@@ -2329,6 +3134,30 @@
     {
       "ref": "logic-canon://strings/en#value",
       "value": "Note Pads",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Nudge Left",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Nudge Right",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Once",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -2487,6 +3316,14 @@
       }
     },
     {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Open in External Sample Editor",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
       "ref": "logic-canon://strings/en#value",
       "value": "Open…",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
@@ -2519,6 +3356,22 @@
       }
     },
     {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Outside Locators",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Outside Region Boundaries",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
       "ref": "logic-canon://nibstrings/en#value",
       "value": "Overlap",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
@@ -2529,6 +3382,14 @@
     {
       "ref": "logic-canon://nibstrings/en#value",
       "value": "Overlap/Merge Selected Regions",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Overlapped Regions",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -2561,6 +3422,30 @@
     {
       "ref": "logic-canon://niblabels/en#value",
       "value": "Paste",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Paste Replace",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Paste at Original Position",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Percussive",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -2641,6 +3526,14 @@
     {
       "ref": "logic-canon://strings/en#value",
       "value": "Previous Marker",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Previous Region",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -2799,8 +3692,24 @@
       }
     },
     {
-      "ref": "logic-canon://niblabels/en#value",
-      "value": "Redo",
+      "ref": "logic-canon://strings/en#value",
+      "value": "Region End to Next Region",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Region End to Next Transient",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Region End to Previous Transient",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -2832,7 +3741,47 @@
     },
     {
       "ref": "logic-canon://strings/en#value",
+      "value": "Region Start to Next Transient",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Region Start to Previous Region",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Region Start to Previous Transient",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
       "value": "Regions as Audio Files…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Regions at Locators",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Regions at Playhead",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -2872,6 +3821,22 @@
     },
     {
       "ref": "logic-canon://quickhelp/en#value",
+      "value": "Remove Overlaps",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Remove Tempo Information",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
       "value": "Rename Marker",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
@@ -2889,6 +3854,30 @@
     {
       "ref": "logic-canon://strings/en#value",
       "value": "Rename…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Repeat",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Repeat Section Between Locators",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Repetitions to Loops",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -2945,6 +3934,62 @@
     {
       "ref": "logic-canon://nibstrings/en#value",
       "value": "Right Locator",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Rotate Left",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Rotate Right",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "SMPTE Bit",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "SMPTE-Locked Regions",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Same-Colored",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Same-Colored Regions",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Sample",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -3023,8 +4068,16 @@
       }
     },
     {
-      "ref": "logic-canon://niblabels/en#value",
-      "value": "Select All",
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Select",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Select Tracks",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -3088,6 +4141,46 @@
     },
     {
       "ref": "logic-canon://strings/en#value",
+      "value": "Separate MIDI Events",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Separate by Articulation",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Separate by Kit Piece",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Separate by MIDI Channel",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Separate by Note Pitch",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
       "value": "Services",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
@@ -3097,6 +4190,14 @@
     {
       "ref": "logic-canon://quickhelp/en#value",
       "value": "Set Locators by Selection and Enable Cycle",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Set Nudge Value to",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -3159,8 +4260,24 @@
       }
     },
     {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Show Beat Mapping Track",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
       "ref": "logic-canon://strings/en#value",
       "value": "Show Single Global Track",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Show Tempo List",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -3183,8 +4300,48 @@
       }
     },
     {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Shuffle Left",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Shuffle Right",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
       "ref": "logic-canon://strings/en#value",
       "value": "Signature Track",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Similar Regions",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Slip Left",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Slip Right",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -3199,8 +4356,24 @@
       }
     },
     {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Smart Tempo Editor",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
       "ref": "logic-canon://strings/en#value",
       "value": "Smart Tempo…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Soloed",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -3233,6 +4406,22 @@
     {
       "ref": "logic-canon://strings/en#value",
       "value": "Sound Library…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Split",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Step Input",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -3280,7 +4469,47 @@
     },
     {
       "ref": "logic-canon://strings/en#value",
+      "value": "Sub/VCA",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "Summing Stack",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
       "value": "Synchronization…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "Tempo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Tempo Interpreter…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Tempo Operations…",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -3289,6 +4518,102 @@
     {
       "ref": "logic-canon://strings/en#value",
       "value": "Tempo Track",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Tick",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Time Stretch",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Time Stretch Region Length to Locators",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Time Stretch Region Length to Nearest Bar",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Time Stretching Algorithm",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "To Beat",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "To Focused Track",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "To MIDI Region",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "To Pattern Region",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "To Playhead",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "To Recorded Position",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "To Session Player Region",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -3359,16 +4684,16 @@
       }
     },
     {
-      "ref": "logic-canon://strings/en#value",
-      "value": "Tuning…",
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Trim",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
       }
     },
     {
-      "ref": "logic-canon://niblabels/en#value",
-      "value": "Undo",
+      "ref": "logic-canon://strings/en#value",
+      "value": "Tuning…",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -3385,6 +4710,30 @@
     {
       "ref": "logic-canon://quickhelp/en#value",
       "value": "Unhide All Tracks",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Universal",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Unselected Within Selection",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Unused",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
       "binding": {
         "kind": "record"
@@ -3439,6 +4788,14 @@
       }
     },
     {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Write Project Tempo to Audio Files",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
       "ref": "logic-canon://nibstrings/en#value",
       "value": "Zoom",
       "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
@@ -3465,7 +4822,7 @@
   ],
   "canon_absent": [
     {
-      "claim": "91 strings this surface exposes are a whole value of no corpus the canon pins, and no shipped label folds to them",
+      "claim": "94 strings this surface exposes are a whole value of no corpus the canon pins, and no shipped label folds to them",
       "strings": [
         "03 Drum Machine Designer",
         "03 Drum Machine Designer.logicx",
@@ -3515,6 +4872,8 @@
         "Logic Pro 강제 종료",
         "Macintosh HD",
         "Move & Resize",
+        "Move to AH-200HZB",
+        "Move to DELL P2425H",
         "NativeLogic13-9995.logicx",
         "No Services Apply",
         "OrbStack",
@@ -3534,6 +4893,7 @@
         "Services Settings…",
         "Top & Bottom",
         "Top & Quarters",
+        "Undo 템포 변경",
         "Warp",
         "en-final",
         "en-final —  native-fixture",

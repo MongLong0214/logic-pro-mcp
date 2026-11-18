@@ -1047,7 +1047,7 @@
    "title": ""
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "performClose:",
    "path": "AXMenuBar/AXMenuBarItem[File]/AXMenu/AXMenuItem[Close]",
    "role": "AXMenuItem",
@@ -1063,7 +1063,7 @@
    "title": "Close Project"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "saveDocument:",
    "path": "AXMenuBar/AXMenuBarItem[File]/AXMenu/AXMenuItem[Save]",
    "role": "AXMenuItem",
@@ -1071,7 +1071,7 @@
    "title": "Save"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "saveDocumentAs:",
    "path": "AXMenuBar/AXMenuBarItem[File]/AXMenu/AXMenuItem[Save As…]",
    "role": "AXMenuItem",
@@ -1079,7 +1079,7 @@
    "title": "Save As…"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "saveDocumentTo:",
    "path": "AXMenuBar/AXMenuBarItem[File]/AXMenu/AXMenuItem[Save A Copy As…]",
    "role": "AXMenuItem",
@@ -1734,18 +1734,18 @@
   {
    "enabled": true,
    "identifier": "undo:",
-   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Undo]",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Undo 템포 변경]",
    "role": "AXMenuItem",
    "surface": "arrange.menus",
-   "title": "Undo"
+   "title": "Undo 템포 변경"
   },
   {
    "enabled": false,
    "identifier": "redo:",
-   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Redo]",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Can’t Redo]",
    "role": "AXMenuItem",
    "surface": "arrange.menus",
-   "title": "Redo"
+   "title": "Can’t Redo"
   },
   {
    "enabled": true,
@@ -1771,7 +1771,7 @@
    "title": ""
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "cut:",
    "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Cut]",
    "role": "AXMenuItem",
@@ -1779,7 +1779,7 @@
    "title": "Cut"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "copy:",
    "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Copy]",
    "role": "AXMenuItem",
@@ -1787,7 +1787,7 @@
    "title": "Copy"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "paste:",
    "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Paste]",
    "role": "AXMenuItem",
@@ -1795,12 +1795,1379 @@
    "title": "Paste"
   },
   {
-   "enabled": false,
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Paste Replace]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Paste Replace"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Paste at Original Position]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Paste at Original Position"
+  },
+  {
+   "enabled": true,
    "identifier": "delete:",
    "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Delete]",
    "role": "AXMenuItem",
    "surface": "arrange.menus",
    "title": "Delete"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Delete and Move]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Delete and Move"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Copy Region Selection to Live Loops Scene]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Copy Region Selection to Live Loops Scene"
+  },
+  {
+   "enabled": true,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Select"
+  },
+  {
+   "enabled": true,
+   "identifier": "selectAll:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select]/AXMenu/AXMenuItem[All]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "All"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select]/AXMenu/AXMenuItem[All Following]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "All Following"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select]/AXMenu/AXMenuItem[All Following of Same Track]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "All Following of Same Track"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select]/AXMenu/AXMenuItem[All Inside Locators]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "All Inside Locators"
+  },
+  {
+   "enabled": false,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select]/AXMenu/AXMenuItem[]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": ""
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select]/AXMenu/AXMenuItem[Muted Regions]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Muted Regions"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select]/AXMenu/AXMenuItem[Overlapped Regions]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Overlapped Regions"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select]/AXMenu/AXMenuItem[Same-Colored Regions]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Same-Colored Regions"
+  },
+  {
+   "enabled": false,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select]/AXMenu/AXMenuItem[]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": ""
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select]/AXMenu/AXMenuItem[Empty Regions]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Empty Regions"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select]/AXMenu/AXMenuItem[SMPTE-Locked Regions]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "SMPTE-Locked Regions"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select]/AXMenu/AXMenuItem[Similar Regions]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Similar Regions"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select]/AXMenu/AXMenuItem[Equal Regions]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Equal Regions"
+  },
+  {
+   "enabled": false,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select]/AXMenu/AXMenuItem[]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": ""
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select]/AXMenu/AXMenuItem[Next Region]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Next Region"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select]/AXMenu/AXMenuItem[Previous Region]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Previous Region"
+  },
+  {
+   "enabled": false,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select]/AXMenu/AXMenuItem[]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": ""
+  },
+  {
+   "enabled": true,
+   "identifier": "deselectAll:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select]/AXMenu/AXMenuItem[Deselect All]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Deselect All"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select]/AXMenu/AXMenuItem[Deselect Global Tracks]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Deselect Global Tracks"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select]/AXMenu/AXMenuItem[Deselect Outside Locators]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Deselect Outside Locators"
+  },
+  {
+   "enabled": true,
+   "identifier": "invertSelection:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select]/AXMenu/AXMenuItem[Invert Selection]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Invert Selection"
+  },
+  {
+   "enabled": true,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select Tracks]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Select Tracks"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select Tracks]/AXMenu/AXMenuItem[All]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "All"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select Tracks]/AXMenu/AXMenuItem[Unused]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Unused"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select Tracks]/AXMenu/AXMenuItem[Muted]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Muted"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select Tracks]/AXMenu/AXMenuItem[Soloed]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Soloed"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select Tracks]/AXMenu/AXMenuItem[Frozen]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Frozen"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select Tracks]/AXMenu/AXMenuItem[Same-Colored]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Same-Colored"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select Tracks]/AXMenu/AXMenuItem[Instrument]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Instrument"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select Tracks]/AXMenu/AXMenuItem[MIDI]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "MIDI"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select Tracks]/AXMenu/AXMenuItem[Audio]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Audio"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select Tracks]/AXMenu/AXMenuItem[Aux]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Aux"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select Tracks]/AXMenu/AXMenuItem[Sub/VCA]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Sub/VCA"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select Tracks]/AXMenu/AXMenuItem[Summing Stack]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Summing Stack"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select Tracks]/AXMenu/AXMenuItem[Folder Stack]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Folder Stack"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select Tracks]/AXMenu/AXMenuItem[Folder]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Folder"
+  },
+  {
+   "enabled": false,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": ""
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Flex Pitch/Time]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Flex Pitch/Time"
+  },
+  {
+   "enabled": false,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": ""
+  },
+  {
+   "enabled": true,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Repeat]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Repeat"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Repeat]/AXMenu/AXMenuItem[Once]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Once"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Repeat]/AXMenu/AXMenuItem[Multiple…]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Multiple…"
+  },
+  {
+   "enabled": true,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Length]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Length"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Length]/AXMenu/AXMenuItem[Double]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Double"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Length]/AXMenu/AXMenuItem[Halve]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Halve"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Length]/AXMenu/AXMenuItem[Change…]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Change…"
+  },
+  {
+   "enabled": true,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Split]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Split"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Split]/AXMenu/AXMenuItem[Regions at Playhead]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Regions at Playhead"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Split]/AXMenu/AXMenuItem[Regions at Locators]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Regions at Locators"
+  },
+  {
+   "enabled": true,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Bounce or Join]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Bounce or Join"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Bounce or Join]/AXMenu/AXMenuItem[Bounce Regions in Place…]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Bounce Regions in Place…"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Bounce or Join]/AXMenu/AXMenuItem[Join]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Join"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Bounce or Join]/AXMenu/AXMenuItem[Join per Tracks]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Join per Tracks"
+  },
+  {
+   "enabled": true,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Move"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[To Playhead]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "To Playhead"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[To Recorded Position]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "To Recorded Position"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[To Beat]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "To Beat"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[First Transient to Nearest Beat]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "First Transient to Nearest Beat"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[To Focused Track]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "To Focused Track"
+  },
+  {
+   "enabled": false,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": ""
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Shuffle Left]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Shuffle Left"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Shuffle Right]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Shuffle Right"
+  },
+  {
+   "enabled": false,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": ""
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Nudge Left]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Nudge Left"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Nudge Right]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Nudge Right"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Slip Left]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Slip Left"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Slip Right]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Slip Right"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Rotate Left]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Rotate Left"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Rotate Right]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Rotate Right"
+  },
+  {
+   "enabled": true,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Set Nudge Value to"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[Bar]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Bar"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[Beat]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Beat"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[Division]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Division"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[10 Ticks]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "10 Ticks"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[Tick]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Tick"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[Step Input]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Step Input"
+  },
+  {
+   "enabled": false,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": ""
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[1/1 Note]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "1/1 Note"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[1/2 Note]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "1/2 Note"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[1/4 Note]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "1/4 Note"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[1/8 Note]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "1/8 Note"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[1/16 Note]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "1/16 Note"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[1/32 Note]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "1/32 Note"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[1/64 Note]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "1/64 Note"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[1/2 Triplet (1/3)]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "1/2 Triplet (1/3)"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[1/4 Triplet (1/6)]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "1/4 Triplet (1/6)"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[1/8 Triplet (1/12)]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "1/8 Triplet (1/12)"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[1/16 Triplet (1/24)]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "1/16 Triplet (1/24)"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[1/32 Triplet (1/48)]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "1/32 Triplet (1/48)"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[1/64 Triplet (1/96)]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "1/64 Triplet (1/96)"
+  },
+  {
+   "enabled": false,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": ""
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[5 Frames]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "5 Frames"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[Frame]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Frame"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[1/2 Frame]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "1/2 Frame"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[SMPTE Bit]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "SMPTE Bit"
+  },
+  {
+   "enabled": false,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": ""
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[10 ms]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "10 ms"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[1 ms]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "1 ms"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Move]/AXMenu/AXMenuItem[Set Nudge Value to]/AXMenu/AXMenuItem[Sample]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Sample"
+  },
+  {
+   "enabled": true,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Trim]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Trim"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Trim]/AXMenu/AXMenuItem[Remove Overlaps]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Remove Overlaps"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Trim]/AXMenu/AXMenuItem[Fill within Locators]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Fill within Locators"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Trim]/AXMenu/AXMenuItem[Crop Outside Locators]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Crop Outside Locators"
+  },
+  {
+   "enabled": false,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Trim]/AXMenu/AXMenuItem[]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": ""
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Trim]/AXMenu/AXMenuItem[Region Start to Previous Region]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Region Start to Previous Region"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Trim]/AXMenu/AXMenuItem[Region Start to Previous Transient]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Region Start to Previous Transient"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Trim]/AXMenu/AXMenuItem[Region Start to Next Transient]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Region Start to Next Transient"
+  },
+  {
+   "enabled": false,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Trim]/AXMenu/AXMenuItem[]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": ""
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Trim]/AXMenu/AXMenuItem[Region End to Next Region]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Region End to Next Region"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Trim]/AXMenu/AXMenuItem[Region End to Previous Transient]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Region End to Previous Transient"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Trim]/AXMenu/AXMenuItem[Region End to Next Transient]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Region End to Next Transient"
+  },
+  {
+   "enabled": true,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Convert]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Convert"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Convert]/AXMenu/AXMenuItem[Loops to Regions]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Loops to Regions"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Convert]/AXMenu/AXMenuItem[MIDI Loops to Aliases]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "MIDI Loops to Aliases"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Convert]/AXMenu/AXMenuItem[Repetitions to Loops]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Repetitions to Loops"
+  },
+  {
+   "enabled": false,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Convert]/AXMenu/AXMenuItem[]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": ""
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Convert]/AXMenu/AXMenuItem[To MIDI Region]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "To MIDI Region"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Convert]/AXMenu/AXMenuItem[To Session Player Region]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "To Session Player Region"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Convert]/AXMenu/AXMenuItem[To Pattern Region]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "To Pattern Region"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Convert]/AXMenu/AXMenuItem[Separate by Kit Piece]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Separate by Kit Piece"
+  },
+  {
+   "enabled": false,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Convert]/AXMenu/AXMenuItem[]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": ""
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Convert]/AXMenu/AXMenuItem[Audio Regions to New Regions]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Audio Regions to New Regions"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Convert]/AXMenu/AXMenuItem[Audio Regions to New Audio Files]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Audio Regions to New Audio Files"
+  },
+  {
+   "enabled": true,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Time Stretch]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Time Stretch"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Time Stretch]/AXMenu/AXMenuItem[Time Stretch Region Length to Locators]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Time Stretch Region Length to Locators"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Time Stretch]/AXMenu/AXMenuItem[Time Stretch Region Length to Nearest Bar]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Time Stretch Region Length to Nearest Bar"
+  },
+  {
+   "enabled": true,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Time Stretch]/AXMenu/AXMenuItem[Time Stretching Algorithm]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Time Stretching Algorithm"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Time Stretch]/AXMenu/AXMenuItem[Time Stretching Algorithm]/AXMenu/AXMenuItem[Universal]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Universal"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Time Stretch]/AXMenu/AXMenuItem[Time Stretching Algorithm]/AXMenu/AXMenuItem[Complex]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Complex"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Time Stretch]/AXMenu/AXMenuItem[Time Stretching Algorithm]/AXMenu/AXMenuItem[Percussive]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Percussive"
+  },
+  {
+   "enabled": false,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Time Stretch]/AXMenu/AXMenuItem[Time Stretching Algorithm]/AXMenu/AXMenuItem[]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": ""
+  },
+  {
+   "enabled": true,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Time Stretch]/AXMenu/AXMenuItem[Time Stretching Algorithm]/AXMenu/AXMenuItem[Legacy Algorithms]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Legacy Algorithms"
+  },
+  {
+   "enabled": false,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Time Stretch]/AXMenu/AXMenuItem[Time Stretching Algorithm]/AXMenu/AXMenuItem[]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": ""
+  },
+  {
+   "enabled": false,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": ""
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Copy MIDI Events…]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Copy MIDI Events…"
+  },
+  {
+   "enabled": true,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Delete MIDI Events]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Delete MIDI Events"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Delete MIDI Events]/AXMenu/AXMenuItem[Duplicates]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Duplicates"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Delete MIDI Events]/AXMenu/AXMenuItem[Inside Locators]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Inside Locators"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Delete MIDI Events]/AXMenu/AXMenuItem[Outside Locators]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Outside Locators"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Delete MIDI Events]/AXMenu/AXMenuItem[Outside Region Boundaries]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Outside Region Boundaries"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Delete MIDI Events]/AXMenu/AXMenuItem[Unselected Within Selection]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Unselected Within Selection"
+  },
+  {
+   "enabled": true,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Separate MIDI Events]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Separate MIDI Events"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Separate MIDI Events]/AXMenu/AXMenuItem[Separate by Note Pitch]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Separate by Note Pitch"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Separate MIDI Events]/AXMenu/AXMenuItem[Separate by MIDI Channel]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Separate by MIDI Channel"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Separate MIDI Events]/AXMenu/AXMenuItem[Separate by Articulation]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Separate by Articulation"
+  },
+  {
+   "enabled": false,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": ""
+  },
+  {
+   "enabled": true,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Cut/Insert Time]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Cut/Insert Time"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Cut/Insert Time]/AXMenu/AXMenuItem[Cut Section Between Locators]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Cut Section Between Locators"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Cut/Insert Time]/AXMenu/AXMenuItem[Copy Section Between Locators]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Copy Section Between Locators"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Cut/Insert Time]/AXMenu/AXMenuItem[Insert Section at Playhead]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Insert Section at Playhead"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Cut/Insert Time]/AXMenu/AXMenuItem[Insert Silence at Locators]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Insert Silence at Locators"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Cut/Insert Time]/AXMenu/AXMenuItem[Repeat Section Between Locators]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Repeat Section Between Locators"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Cut/Insert Time]/AXMenu/AXMenuItem[Copy Scene to Playhead]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Copy Scene to Playhead"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Cut/Insert Time]/AXMenu/AXMenuItem[Insert Scene at Playhead]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Insert Scene at Playhead"
+  },
+  {
+   "enabled": false,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": ""
+  },
+  {
+   "enabled": true,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Tempo]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Tempo"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Tempo]/AXMenu/AXMenuItem[Apply Region Tempo to Project Tempo…]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Apply Region Tempo to Project Tempo…"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Tempo]/AXMenu/AXMenuItem[Apply Project Tempo to Region and Downbeat]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Apply Project Tempo to Region and Downbeat"
+  },
+  {
+   "enabled": false,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Tempo]/AXMenu/AXMenuItem[]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": ""
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Tempo]/AXMenu/AXMenuItem[Write Project Tempo to Audio Files]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Write Project Tempo to Audio Files"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Tempo]/AXMenu/AXMenuItem[Remove Tempo Information]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Remove Tempo Information"
+  },
+  {
+   "enabled": false,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Tempo]/AXMenu/AXMenuItem[]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": ""
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Tempo]/AXMenu/AXMenuItem[Smart Tempo Editor]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Smart Tempo Editor"
+  },
+  {
+   "enabled": false,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Tempo]/AXMenu/AXMenuItem[Create Smart Tempo Multitrack Set]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Create Smart Tempo Multitrack Set"
+  },
+  {
+   "enabled": false,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Tempo]/AXMenu/AXMenuItem[]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": ""
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Tempo]/AXMenu/AXMenuItem[Adjust Tempo using Region Length and Locators]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Adjust Tempo using Region Length and Locators"
+  },
+  {
+   "enabled": false,
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Tempo]/AXMenu/AXMenuItem[]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": ""
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Tempo]/AXMenu/AXMenuItem[Show Beat Mapping Track]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Show Beat Mapping Track"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Tempo]/AXMenu/AXMenuItem[Show Tempo List]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Show Tempo List"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Tempo]/AXMenu/AXMenuItem[Tempo Operations…]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Tempo Operations…"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Tempo]/AXMenu/AXMenuItem[Tempo Interpreter…]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Tempo Interpreter…"
   },
   {
    "enabled": false,
@@ -1811,11 +3178,19 @@
   },
   {
    "enabled": false,
-   "identifier": "selectAll:",
-   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Select All]",
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Open in External Sample Editor]",
    "role": "AXMenuItem",
    "surface": "arrange.menus",
-   "title": "Select All"
+   "title": "Open in External Sample Editor"
+  },
+  {
+   "enabled": true,
+   "identifier": "localMenuItemAction:",
+   "path": "AXMenuBar/AXMenuBarItem[Edit]/AXMenu/AXMenuItem[Open Smart Tempo Editor]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Open Smart Tempo Editor"
   },
   {
    "enabled": true,
@@ -3692,7 +5067,7 @@
    "title": "Browser"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "globalMenuItemCall:",
    "path": "AXMenuBar/AXMenuBarItem[View]/AXMenu/AXMenuItem[Inspector]",
    "role": "AXMenuItem",
@@ -3769,7 +5144,7 @@
    "title": ""
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "globalMenuItemCall:",
    "path": "AXMenuBar/AXMenuBarItem[View]/AXMenu/AXMenuItem[Control Bar]",
    "role": "AXMenuItem",
@@ -3777,7 +5152,7 @@
    "title": "Control Bar"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "globalMenuItemCall:",
    "path": "AXMenuBar/AXMenuBarItem[View]/AXMenu/AXMenuItem[Customize Control Bar and Display…]",
    "role": "AXMenuItem",
@@ -3792,7 +5167,7 @@
    "title": ""
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "globalMenuItemCall:",
    "path": "AXMenuBar/AXMenuBarItem[View]/AXMenu/AXMenuItem[Toolbar]",
    "role": "AXMenuItem",
@@ -3800,7 +5175,7 @@
    "title": "Toolbar"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "globalMenuItemCall:",
    "path": "AXMenuBar/AXMenuBarItem[View]/AXMenu/AXMenuItem[Customize Toolbar…]",
    "role": "AXMenuItem",
@@ -3838,7 +5213,7 @@
    "title": ""
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "toggleFullScreen:",
    "path": "AXMenuBar/AXMenuBarItem[View]/AXMenu/AXMenuItem[Enter Full Screen]",
    "role": "AXMenuItem",
@@ -3853,7 +5228,7 @@
    "title": "Window"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "performMiniaturize:",
    "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[Minimize]",
    "role": "AXMenuItem",
@@ -3869,7 +5244,7 @@
    "title": "Minimize All"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "performZoom:",
    "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[Zoom]",
    "role": "AXMenuItem",
@@ -3885,7 +5260,7 @@
    "title": "Zoom All"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "_zoomFill:",
    "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[Fill]",
    "role": "AXMenuItem",
@@ -3893,7 +5268,7 @@
    "title": "Fill"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "_zoomCenter:",
    "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[Center]",
    "role": "AXMenuItem",
@@ -3922,7 +5297,7 @@
    "title": "Halves"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "_zoomLeft:",
    "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[Move & Resize]/AXMenu/AXMenuItem[Left]",
    "role": "AXMenuItem",
@@ -3930,7 +5305,7 @@
    "title": "Left"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "_zoomRight:",
    "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[Move & Resize]/AXMenu/AXMenuItem[Right]",
    "role": "AXMenuItem",
@@ -3938,7 +5313,7 @@
    "title": "Right"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "_zoomTop:",
    "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[Move & Resize]/AXMenu/AXMenuItem[Top]",
    "role": "AXMenuItem",
@@ -3946,7 +5321,7 @@
    "title": "Top"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "_zoomBottom:",
    "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[Move & Resize]/AXMenu/AXMenuItem[Bottom]",
    "role": "AXMenuItem",
@@ -3968,7 +5343,7 @@
    "title": "Quarters"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "_zoomTopLeft:",
    "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[Move & Resize]/AXMenu/AXMenuItem[Top Left]",
    "role": "AXMenuItem",
@@ -3976,7 +5351,7 @@
    "title": "Top Left"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "_zoomTopRight:",
    "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[Move & Resize]/AXMenu/AXMenuItem[Top Right]",
    "role": "AXMenuItem",
@@ -3984,7 +5359,7 @@
    "title": "Top Right"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "_zoomBottomLeft:",
    "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[Move & Resize]/AXMenu/AXMenuItem[Bottom Left]",
    "role": "AXMenuItem",
@@ -3992,7 +5367,7 @@
    "title": "Bottom Left"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "_zoomBottomRight:",
    "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[Move & Resize]/AXMenu/AXMenuItem[Bottom Right]",
    "role": "AXMenuItem",
@@ -4014,7 +5389,7 @@
    "title": "Arrange"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "_zoomLeftAndRight:",
    "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[Move & Resize]/AXMenu/AXMenuItem[Left & Right]",
    "role": "AXMenuItem",
@@ -4022,7 +5397,7 @@
    "title": "Left & Right"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "_zoomLeftThreeUp:",
    "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[Move & Resize]/AXMenu/AXMenuItem[Left & Quarters]",
    "role": "AXMenuItem",
@@ -4030,7 +5405,7 @@
    "title": "Left & Quarters"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "_zoomRightAndLeft:",
    "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[Move & Resize]/AXMenu/AXMenuItem[Right & Left]",
    "role": "AXMenuItem",
@@ -4038,7 +5413,7 @@
    "title": "Right & Left"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "_zoomRightThreeUp:",
    "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[Move & Resize]/AXMenu/AXMenuItem[Right & Quarters]",
    "role": "AXMenuItem",
@@ -4046,7 +5421,7 @@
    "title": "Right & Quarters"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "_zoomTopAndBottom:",
    "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[Move & Resize]/AXMenu/AXMenuItem[Top & Bottom]",
    "role": "AXMenuItem",
@@ -4054,7 +5429,7 @@
    "title": "Top & Bottom"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "_zoomTopThreeUp:",
    "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[Move & Resize]/AXMenu/AXMenuItem[Top & Quarters]",
    "role": "AXMenuItem",
@@ -4062,7 +5437,7 @@
    "title": "Top & Quarters"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "_zoomBottomAndTop:",
    "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[Move & Resize]/AXMenu/AXMenuItem[Bottom & Top]",
    "role": "AXMenuItem",
@@ -4070,7 +5445,7 @@
    "title": "Bottom & Top"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "_zoomBottomThreeUp:",
    "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[Move & Resize]/AXMenu/AXMenuItem[Bottom & Quarters]",
    "role": "AXMenuItem",
@@ -4078,7 +5453,7 @@
    "title": "Bottom & Quarters"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "_zoomQuarters:",
    "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[Move & Resize]/AXMenu/AXMenuItem[Quarters]",
    "role": "AXMenuItem",
@@ -4101,14 +5476,14 @@
    "title": "Return to Previous Size"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[Full Screen Tile]",
    "role": "AXMenuItem",
    "surface": "arrange.menus",
    "title": "Full Screen Tile"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "_tileLeft:",
    "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[Full Screen Tile]/AXMenu/AXMenuItem[Left of Screen]",
    "role": "AXMenuItem",
@@ -4116,7 +5491,7 @@
    "title": "Left of Screen"
   },
   {
-   "enabled": false,
+   "enabled": true,
    "identifier": "_tileRight:",
    "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[Full Screen Tile]/AXMenu/AXMenuItem[Right of Screen]",
    "role": "AXMenuItem",
@@ -4140,6 +5515,29 @@
   },
   {
    "enabled": false,
+   "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": ""
+  },
+  {
+   "enabled": true,
+   "identifier": "_moveToDisplay:",
+   "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[Move to AH-200HZB]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Move to AH-200HZB"
+  },
+  {
+   "enabled": true,
+   "identifier": "_moveToDisplay:",
+   "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[Move to DELL P2425H]",
+   "role": "AXMenuItem",
+   "surface": "arrange.menus",
+   "title": "Move to DELL P2425H"
+  },
+  {
+   "enabled": true,
    "identifier": "_cycleWindows:",
    "path": "AXMenuBar/AXMenuBarItem[Window]/AXMenu/AXMenuItem[Cycle Through Windows]",
    "role": "AXMenuItem",

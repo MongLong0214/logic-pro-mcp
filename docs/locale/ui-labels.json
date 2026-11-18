@@ -290,7 +290,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Todas las pistas como archivos de audio…",
@@ -370,7 +370,7 @@
     "ja-JP": "6674"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763",
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
     "ko-KR": "aeba4fee8e19906795f994ef3a3e700f914cdf1260b63956ed474fcdaefad8f9",
     "ja-JP": "774c5d58d15774d9d704c969278b41ad68929ba51665aa31631b2d6c5270bd65"
    },
@@ -964,7 +964,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Bounce",
@@ -1274,7 +1274,7 @@
     "zh-TW": "6674"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763",
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
     "ko-KR": "2e9525408d71ee3cbfea8abe74e1097f5fb713720d49d8af2ee13b6090b8e408",
     "ja-JP": "54a66a517a4e2b166a03dcaa87dee9b41499efe07c2944e28ef971a1c8d79591",
     "de-DE": "efed9d933ab83d0d4018b4e6d89badb837086af1432b90b6ec3bab3d41168a34",
@@ -1880,7 +1880,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
     "es-ES": "niblabels:es:ships_up_to_case:Ajustes…",
@@ -1985,7 +1985,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Configuración…",
@@ -2149,7 +2149,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Superficies de control",
@@ -2294,7 +2294,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
     "es-ES": "quickhelp:es:ships_up_to_case:Crear marcador",
@@ -2663,7 +2663,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
     "es-ES": "niblabels:es:ships_up_to_case:Editar",
@@ -3953,7 +3953,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Exportar",
@@ -4056,7 +4056,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Archivo",
@@ -4159,7 +4159,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Ir a",
@@ -4320,7 +4320,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Posición…",
@@ -4455,7 +4455,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Todas las ventanas de módulos",
@@ -4601,7 +4601,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Importar",
@@ -5345,7 +5345,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Archivo MIDI…",
@@ -5785,7 +5785,7 @@
     "zh-TW": "6674"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763",
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
     "ja-JP": "54a66a517a4e2b166a03dcaa87dee9b41499efe07c2944e28ef971a1c8d79591",
     "de-DE": "efed9d933ab83d0d4018b4e6d89badb837086af1432b90b6ec3bab3d41168a34",
     "es-ES": "0f565be08a03e2f1162e93e344cd5544be624e81eeb961b58ef963b8c5a7ab11",
@@ -6017,7 +6017,7 @@
     "zh-TW": "6674"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763",
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
     "de-DE": "46d85bc34794f0ca9c28afb3b5d61c0c4b715737239ca542d5e1604ace2adb32",
     "it-IT": "805b24117e890d858f11cbdbe8cffffbe7f537c438fce84d108384b517b1fb31",
     "pt-BR": "16c13e2efeb1501446367e81db1ff7c0f870114ed21ebc3085c3260e0b06ec08",
@@ -6715,7 +6715,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Navegar",
@@ -6965,7 +6965,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
     "es-ES": "niblabels:es:ships_up_to_case:Nuevo",
@@ -7466,7 +7466,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
     "es-ES": "quickhelp:es:ships_up_to_case:Abrir lista de marcadores",
@@ -7748,7 +7748,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
     "de-DE": "quickhelp:de:ships_up_to_case:Position der Abspielposition",
@@ -8004,7 +8004,7 @@
     "pt-BR": "6674"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763",
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
     "pt-BR": "8c26366c0d38002b3bbfa68b4473e2f8942c7fca845eca78ab94d14eabeb58c9"
    },
    "coverage_currency": {
@@ -8969,7 +8969,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Proyecto o sección…",
@@ -9822,7 +9822,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
     "es-ES": "niblabels:es:ships_up_to_case:Guardar como…",
@@ -10377,7 +10377,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Teclado de introducción por pasos",
@@ -10750,7 +10750,7 @@
      "match": "exact",
      "observed": "Audio Channel",
      "record": "2026-11-18-en-US-arrange-menus-census",
-     "record_sha256": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763",
+     "record_sha256": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
      "role": "AXMenuItem"
     }
    },
@@ -10828,7 +10828,7 @@
      "match": "exact",
      "observed": "Creation Date",
      "record": "2026-11-18-en-US-arrange-menus-census",
-     "record_sha256": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763",
+     "record_sha256": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
      "role": "AXMenuItem"
     }
    },
@@ -10907,7 +10907,7 @@
      "match": "exact",
      "observed": "Instrument Name",
      "record": "2026-11-18-en-US-arrange-menus-census",
-     "record_sha256": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763",
+     "record_sha256": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
      "role": "AXMenuItem"
     }
    },
@@ -10986,7 +10986,7 @@
      "match": "exact",
      "observed": "MIDI Channel",
      "record": "2026-11-18-en-US-arrange-menus-census",
-     "record_sha256": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763",
+     "record_sha256": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
      "role": "AXMenuItem"
     }
    },
@@ -11063,7 +11063,7 @@
      "match": "exact",
      "observed": "Sort Tracks by",
      "record": "2026-11-18-en-US-arrange-menus-census",
-     "record_sha256": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763",
+     "record_sha256": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
      "role": "AXMenuItem"
     }
    },
@@ -11141,7 +11141,7 @@
      "match": "exact",
      "observed": "Output Channel",
      "record": "2026-11-18-en-US-arrange-menus-census",
-     "record_sha256": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763",
+     "record_sha256": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
      "role": "AXMenuItem"
     }
    },
@@ -11219,7 +11219,7 @@
      "match": "exact",
      "observed": "Track Name",
      "record": "2026-11-18-en-US-arrange-menus-census",
-     "record_sha256": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763",
+     "record_sha256": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
      "role": "AXMenuItem"
     }
    },
@@ -11297,7 +11297,7 @@
      "match": "exact",
      "observed": "Used, Unused",
      "record": "2026-11-18-en-US-arrange-menus-census",
-     "record_sha256": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763",
+     "record_sha256": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
      "role": "AXMenuItem"
     }
    },
@@ -12394,7 +12394,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Pista",
@@ -13453,7 +13453,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
     "ko-KR": "strings:ko:ships_up_to_case:%@ 실행 취소",
@@ -13636,7 +13636,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
     "es-ES": "niblabels:es:ships_up_to_case:Visualización",
@@ -13740,7 +13740,7 @@
     "en-US": "7801"
    },
    "coverage_record_sha256": {
-    "en-US": "af59161f11158f07c6ee0fff5a620545e2e2029f04a5a6aa899ae388b5966763"
+    "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
     "es-ES": "strings:es:ships_up_to_case:Window",
