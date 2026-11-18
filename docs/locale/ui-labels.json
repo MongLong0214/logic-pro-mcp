@@ -72,14 +72,14 @@
    "not_measured_on_current": 204
   },
   "de-DE": {
-   "current": 0,
-   "superseded": 43,
+   "current": 48,
+   "superseded": 4,
    "unknown_version": 0,
    "unverified": 0,
-   "derived": 209,
+   "derived": 200,
    "unmeasured": 3,
    "retired": 1,
-   "not_measured_on_current": 255
+   "not_measured_on_current": 207
   },
   "es-ES": {
    "current": 0,
@@ -231,19 +231,6 @@
    ],
    "rationale": "Measured all-tracks audio-file export leaf: EN uses `All Tracks` against singular/Selected entries; KO uses `모든 트랙을` against `1개의 트랙을` and `선택 범위를`. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Export > All Tracks as Audio Files…. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
-    "Alle Spuren als Audiodateien …": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Alle Spuren als Audiodateien …",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuItem"
-    },
     "모든 트랙을 오디오 파일로…": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -268,6 +255,19 @@
      "observed": "すべてのトラックをオーディオファイルとして…",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuItem"
+    },
+    "Alle Spuren als Audiodateien …": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Alle Spuren als Audiodateien …",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuItem"
     }
    },
@@ -317,7 +317,7 @@
     "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "applicationMenuBarItem": {
@@ -329,15 +329,15 @@
    "provenance": {
     "Logic Pro": {
      "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
      "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
+     "logic_build": "7801",
+     "logic_version": "13.0",
      "match": "exact",
      "observed": "Logic Pro",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuBarItem"
     }
    },
@@ -399,7 +399,7 @@
     "en-US": "current",
     "ko-KR": "superseded",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "arrangeWindowTitleSuffix": {
@@ -890,19 +890,6 @@
    ],
    "rationale": "File menu entry that opens the Bounce dialog; menu-only in the AppleScript bounce path. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Bounce. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
-    "Bouncen": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Bouncen",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuItem"
-    },
     "바운스": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -927,6 +914,19 @@
      "observed": "バウンス",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuItem"
+    },
+    "Bouncen": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Bouncen",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuItem"
     }
    },
@@ -976,7 +976,7 @@
     "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "bounceNormalizeSetting": {
@@ -1196,6 +1196,19 @@
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
      "role": "AXMenuItem"
+    },
+    "Steuerungsleiste": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact_strict",
+     "observed": "Steuerungsleiste",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -1216,7 +1229,6 @@
     "zh-TW": "measured"
    },
    "coverage_records": {
-    "de-DE": "2026-09-25-979-de-DE-main-window-areas-by-row",
     "es-ES": "2026-09-25-979-es-ES-main-window-areas-by-row",
     "fr-FR": "2026-09-25-979-fr-FR-main-window-areas-by-row",
     "it-IT": "2026-09-25-979-it-IT-main-window-areas-by-row",
@@ -1227,7 +1239,6 @@
     "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
-    "de-DE": "AXGroup",
     "es-ES": "AXGroup",
     "fr-FR": "AXGroup",
     "it-IT": "AXGroup",
@@ -1238,7 +1249,6 @@
     "en-US": "AXMenuItem"
    },
    "coverage_attributes": {
-    "de-DE": "description",
     "es-ES": "description",
     "fr-FR": "description",
     "it-IT": "description",
@@ -1249,7 +1259,6 @@
     "en-US": "title"
    },
    "coverage_paths": {
-    "de-DE": "AXWindow#1/AXGroup#5",
     "es-ES": "AXWindow#0/AXGroup#5",
     "fr-FR": "AXWindow#1/AXGroup#5",
     "it-IT": "AXWindow#1/AXGroup#5",
@@ -1261,7 +1270,6 @@
    "coverage_logic_version": {
     "en-US": "13.0",
     "ko-KR": "12.3",
-    "de-DE": "12.3",
     "es-ES": "12.3",
     "fr-FR": "12.3",
     "it-IT": "12.3",
@@ -1272,7 +1280,6 @@
    "coverage_logic_build": {
     "en-US": "7801",
     "ko-KR": "6674",
-    "de-DE": "6674",
     "es-ES": "6674",
     "fr-FR": "6674",
     "it-IT": "6674",
@@ -1283,7 +1290,6 @@
    "coverage_record_sha256": {
     "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
     "ko-KR": "2e9525408d71ee3cbfea8abe74e1097f5fb713720d49d8af2ee13b6090b8e408",
-    "de-DE": "efed9d933ab83d0d4018b4e6d89badb837086af1432b90b6ec3bab3d41168a34",
     "es-ES": "0f565be08a03e2f1162e93e344cd5544be624e81eeb961b58ef963b8c5a7ab11",
     "fr-FR": "4fc247c4a45d25ebac7acd4ff5b5fcf3fbbfc5ac3405351d06a91dea90789567",
     "it-IT": "98ae0ffa9955da6cba4145231d3c46bc13b0b57d4e0f82a5ee9400d15d07a5f2",
@@ -1295,7 +1301,7 @@
     "en-US": "current",
     "ko-KR": "superseded",
     "ja-JP": "current",
-    "de-DE": "superseded",
+    "de-DE": "current",
     "es-ES": "superseded",
     "fr-FR": "superseded",
     "it-IT": "superseded",
@@ -1814,19 +1820,6 @@
    ],
    "rationale": "The global control-surface preferences item, adjacent to `Setup…`. MEASURED in all four locales: en-US `Settings…`, ko-KR `설정…`, ja-JP `設定…`, de-DE `Einstellungen …`. Its ko-KR and ja-JP spellings are identical to `Setup…`, which is the whole reason the setup drive identifies its window rather than its menu item.",
    "provenance": {
-    "Einstellungen …": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Einstellungen …",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuItem"
-    },
     "설정…": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -1851,6 +1844,19 @@
      "observed": "設定…",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuItem"
+    },
+    "Einstellungen …": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Einstellungen …",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuItem"
     }
    },
@@ -1900,7 +1906,7 @@
     "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "controlSurfaceSetupMenuItem": {
@@ -1919,19 +1925,6 @@
    ],
    "rationale": "Opens the Control Surface Setup window. zh_CN reads 设置… on Logic 12.3 (6674) and 设定… on 13.0 (7801); both are kept. MEASURED in all four locales at AXMenuItem[Control Surfaces]/AXMenu: en-US `Setup…`, ko-KR `설정…`, ja-JP `設定…`, de-DE `Setup …` (U+0020 before the ellipsis, unlike en-US). Collides with `Settings…` on ko-KR AND ja-JP -- see the doc comment. German does not collide.",
    "provenance": {
-    "Setup …": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Setup …",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuItem"
-    },
     "설정…": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -1956,6 +1949,19 @@
      "observed": "設定…",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuItem"
+    },
+    "Setup …": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Setup …",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuItem"
     }
    },
@@ -2005,7 +2011,7 @@
     "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "controlSurfaceSetupWindowTitle": {
@@ -2083,19 +2089,6 @@
    ],
    "rationale": "The `Logic Pro` menu's Control Surfaces submenu parent, matched by AXMenuItem title. All four spellings are MEASURED at AXMenuBar/AXMenuBarItem[Logic Pro]/AXMenu/AXMenuItem: en-US `Control Surfaces` and de-DE `Bedienoberflächen` in the 2026-09-12 navigation-free censuses, ko-KR `컨트롤 서피스` and ja-JP `コントロールサーフェス` in the 2026-09-05 ones.",
    "provenance": {
-    "Bedienoberflächen": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Bedienoberflächen",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuItem"
-    },
     "컨트롤 서피스": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -2120,6 +2113,19 @@
      "observed": "コントロールサーフェス",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuItem"
+    },
+    "Bedienoberflächen": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Bedienoberflächen",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuItem"
     }
    },
@@ -2169,7 +2175,7 @@
     "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "createButton": {
@@ -2228,19 +2234,6 @@
    ],
    "rationale": "Navigate menu entry that creates a marker at the playhead. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
-    "Marker erzeugen": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Marker erzeugen",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuItem"
-    },
     "마커 생성": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -2265,6 +2258,19 @@
      "observed": "マーカーを作成",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuItem"
+    },
+    "Marker erzeugen": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Marker erzeugen",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuItem"
     }
    },
@@ -2314,7 +2320,7 @@
     "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "cycleRangeEnd": {
@@ -2472,6 +2478,19 @@
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
      "role": "AXMenuItem"
+    },
+    "Spur löschen": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Spur löschen",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -2482,7 +2501,7 @@
     "en-US": "derived",
     "ko-KR": "measured",
     "ja-JP": "measured",
-    "de-DE": "derived",
+    "de-DE": "measured",
     "es-ES": "derived",
     "fr-FR": "derived",
     "it-IT": "derived",
@@ -2492,7 +2511,6 @@
    },
    "coverage_derived": {
     "en-US": "quickhelp:en:ships_up_to_case:Delete Track",
-    "de-DE": "quickhelp:de:ships_up_to_case:Spur löschen",
     "es-ES": "quickhelp:es:ships_up_to_case:Eliminar pista",
     "fr-FR": "strings:fr:ships_up_to_case:Supprimer la piste",
     "it-IT": "strings:it:ships_up_to_case:Elimina traccia",
@@ -2502,7 +2520,8 @@
    },
    "coverage_currency": {
     "ko-KR": "current",
-    "ja-JP": "current"
+    "ja-JP": "current",
+    "de-DE": "current"
    }
   },
   "deleteTracksPrimaryButton": {
@@ -2610,19 +2629,6 @@
    ],
    "rationale": "Undo is menu-only in the rollback path; post-undo inventory readback verifies outcome. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires. Extended on 2026-09-16 from the row Apple keys this menu title under -- Apple suffixes menu titles `#mti` and all 48 such keys carry all ten locales -- so every language Logic ships is covered. The reference and its value are cited in docs/observations/2026-09-16-seven-languages-reported-unknown.json. The variants read off running Logics before this change are each one of that row's own values -- nothing measured was dropped, and nothing was typed.",
    "provenance": {
-    "Bearbeiten": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Bearbeiten",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuBarItem"
-    },
     "편집": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -2647,6 +2653,19 @@
      "observed": "編集",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuBarItem"
+    },
+    "Bearbeiten": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Bearbeiten",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuBarItem"
     }
    },
@@ -2696,7 +2715,7 @@
     "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "eventListColumnChannel": {
@@ -3900,19 +3919,6 @@
    ],
    "rationale": "File submenu title measured in English and Korean; a locale without one of these labels is refused as an unmeasured stem-export menu label. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Export. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
-    "Exportieren": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Exportieren",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuItem"
-    },
     "내보내기": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -3937,6 +3943,19 @@
      "observed": "書き出す",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuItem"
+    },
+    "Exportieren": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Exportieren",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuItem"
     }
    },
@@ -3986,7 +4005,7 @@
     "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "fileMenuBar": {
@@ -4003,19 +4022,6 @@
    ],
    "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires. Extended on 2026-09-16 from the row Apple keys this menu title under -- Apple suffixes menu titles `#mti` and all 48 such keys carry all ten locales -- so every language Logic ships is covered. The reference and its value are cited in docs/observations/2026-09-16-seven-languages-reported-unknown.json. The variants read off running Logics before this change are each one of that row's own values -- nothing measured was dropped, and nothing was typed.",
    "provenance": {
-    "Ablage": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Ablage",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuBarItem"
-    },
     "파일": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -4040,6 +4046,19 @@
      "observed": "ファイル",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuBarItem"
+    },
+    "Ablage": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Ablage",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuBarItem"
     }
    },
@@ -4089,7 +4108,7 @@
     "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "goToMenuItem": {
@@ -4106,19 +4125,6 @@
    ],
    "rationale": "Navigate menu entry that opens the Go To submenu used by goto_position. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
-    "Gehe zu": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Gehe zu",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuItem"
-    },
     "이동": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -4143,6 +4149,19 @@
      "observed": "移動",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuItem"
+    },
+    "Gehe zu": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Gehe zu",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuItem"
     }
    },
@@ -4192,7 +4211,7 @@
     "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "goToPositionDialogTitle": {
@@ -4267,19 +4286,6 @@
    ],
    "rationale": "Go To submenu leaf that opens the Go To Position dialog. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
-    "Position …": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Position …",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuItem"
-    },
     "위치…": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -4304,6 +4310,19 @@
      "observed": "位置…",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuItem"
+    },
+    "Position …": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Position …",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuItem"
     }
    },
@@ -4353,7 +4372,7 @@
     "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "headerPanHint": {
@@ -4404,19 +4423,6 @@
    ],
    "rationale": "Best-effort cleanup so stale plugin windows do not steal later menu focus. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
-    "Alle Plug-in-Fenster": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Alle Plug-in-Fenster",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuItem"
-    },
     "모든 플러그인 윈도우": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -4440,6 +4446,19 @@
      "observed": "すべてのプラグインウインドウ",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuItem"
+    },
+    "Alle Plug-in-Fenster": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Alle Plug-in-Fenster",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuItem"
     }
    },
@@ -4489,7 +4508,7 @@
     "en-US": "current",
     "ko-KR": "superseded",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "horizontalZoomSlider": {
@@ -4549,19 +4568,6 @@
    ],
    "rationale": "File menu entry that opens the Import submenu used by midi.import_file. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
-    "Importieren": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Importieren",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuItem"
-    },
     "가져오기": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -4586,6 +4592,19 @@
      "observed": "読み込む",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuItem"
+    },
+    "Importieren": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Importieren",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuItem"
     }
    },
@@ -4635,7 +4654,7 @@
     "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "inputSlotHelpKeyword": {
@@ -5276,19 +5295,6 @@
    ],
    "rationale": "Import submenu leaf that opens the MIDI file chooser for midi.import_file. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
-    "MIDI-Datei …": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "MIDI-Datei …",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuItem"
-    },
     "MIDI 파일…": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -5313,6 +5319,19 @@
      "observed": "MIDIファイル…",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuItem"
+    },
+    "MIDI-Datei …": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "MIDI-Datei …",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuItem"
     }
    },
@@ -5362,7 +5381,7 @@
     "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "midiImportCommitButton": {
@@ -5716,6 +5735,19 @@
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
      "role": "AXMenuItem"
+    },
+    "Informationen": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Tempoinformationen entfernen",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -5736,7 +5768,6 @@
     "zh-TW": "measured"
    },
    "coverage_records": {
-    "de-DE": "2026-09-25-979-de-DE-main-window-areas-by-row",
     "es-ES": "2026-09-25-979-es-ES-main-window-areas-by-row",
     "fr-FR": "2026-09-25-979-fr-FR-main-window-areas-by-row",
     "it-IT": "2026-09-25-979-it-IT-main-window-areas-by-row",
@@ -5746,7 +5777,6 @@
     "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
-    "de-DE": "AXGroup",
     "es-ES": "AXGroup",
     "fr-FR": "AXGroup",
     "it-IT": "AXGroup",
@@ -5756,7 +5786,6 @@
     "en-US": "AXMenuItem"
    },
    "coverage_attributes": {
-    "de-DE": "description",
     "es-ES": "description",
     "fr-FR": "description",
     "it-IT": "description",
@@ -5766,7 +5795,6 @@
     "en-US": "title"
    },
    "coverage_paths": {
-    "de-DE": "AXWindow#1/AXGroup#6",
     "es-ES": "AXWindow#0/AXGroup#6",
     "fr-FR": "AXWindow#1/AXGroup#6",
     "it-IT": "AXWindow#1/AXGroup#6",
@@ -5776,7 +5804,6 @@
    },
    "coverage_logic_version": {
     "en-US": "13.0",
-    "de-DE": "12.3",
     "es-ES": "12.3",
     "fr-FR": "12.3",
     "it-IT": "12.3",
@@ -5786,7 +5813,6 @@
    },
    "coverage_logic_build": {
     "en-US": "7801",
-    "de-DE": "6674",
     "es-ES": "6674",
     "fr-FR": "6674",
     "it-IT": "6674",
@@ -5796,7 +5822,6 @@
    },
    "coverage_record_sha256": {
     "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
-    "de-DE": "efed9d933ab83d0d4018b4e6d89badb837086af1432b90b6ec3bab3d41168a34",
     "es-ES": "0f565be08a03e2f1162e93e344cd5544be624e81eeb961b58ef963b8c5a7ab11",
     "fr-FR": "4fc247c4a45d25ebac7acd4ff5b5fcf3fbbfc5ac3405351d06a91dea90789567",
     "it-IT": "98ae0ffa9955da6cba4145231d3c46bc13b0b57d4e0f82a5ee9400d15d07a5f2",
@@ -5808,7 +5833,7 @@
     "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded",
+    "de-DE": "current",
     "es-ES": "superseded",
     "fr-FR": "superseded",
     "it-IT": "superseded",
@@ -5984,49 +6009,48 @@
     "zh-TW": "measured"
    },
    "coverage_records": {
-    "de-DE": "2026-09-25-977-de-DE-mixer-area-by-description",
     "it-IT": "2026-09-25-977-it-IT-mixer-area-by-description",
     "pt-BR": "2026-09-25-977-pt-BR-mixer-area-by-description",
     "zh-TW": "2026-09-25-977-zh-TW-mixer-area-by-description",
-    "en-US": "2026-11-18-en-US-arrange-menus-census"
+    "en-US": "2026-11-18-en-US-arrange-menus-census",
+    "de-DE": "2026-11-18-de-DE-arrange-menus-census"
    },
    "coverage_roles": {
-    "de-DE": "AXLayoutArea",
     "it-IT": "AXLayoutArea",
     "pt-BR": "AXLayoutArea",
     "zh-TW": "AXLayoutArea",
-    "en-US": "AXMenuItem"
+    "en-US": "AXMenuItem",
+    "de-DE": "AXMenuItem"
    },
    "coverage_attributes": {
-    "de-DE": "description",
     "it-IT": "description",
     "pt-BR": "description",
     "zh-TW": "description",
-    "en-US": "title"
+    "en-US": "title",
+    "de-DE": "title"
    },
    "coverage_paths": {
-    "de-DE": "/AXWindow/AXGroup/AXLayoutArea",
     "it-IT": "/AXWindow/AXGroup/AXLayoutArea",
     "pt-BR": "/AXWindow/AXGroup/AXLayoutArea",
     "zh-TW": "/AXWindow/AXGroup/AXLayoutArea"
    },
    "coverage_logic_version": {
     "en-US": "13.0",
-    "de-DE": "12.3",
+    "de-DE": "13.0",
     "it-IT": "12.3",
     "pt-BR": "12.3",
     "zh-TW": "12.3"
    },
    "coverage_logic_build": {
     "en-US": "7801",
-    "de-DE": "6674",
+    "de-DE": "7801",
     "it-IT": "6674",
     "pt-BR": "6674",
     "zh-TW": "6674"
    },
    "coverage_record_sha256": {
     "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
-    "de-DE": "46d85bc34794f0ca9c28afb3b5d61c0c4b715737239ca542d5e1604ace2adb32",
+    "de-DE": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
     "it-IT": "805b24117e890d858f11cbdbe8cffffbe7f537c438fce84d108384b517b1fb31",
     "pt-BR": "16c13e2efeb1501446367e81db1ff7c0f870114ed21ebc3085c3260e0b06ec08",
     "zh-TW": "3a79acf143eecff4fe2dfebe0a4430985ca42bb4b7ec00c0b9c8de6a02d4baf5"
@@ -6037,7 +6061,7 @@
    "coverage_currency": {
     "en-US": "current",
     "ja-JP": "current",
-    "de-DE": "superseded",
+    "de-DE": "current",
     "es-ES": "superseded",
     "fr-FR": "superseded",
     "it-IT": "superseded",
@@ -6579,19 +6603,6 @@
    ],
    "rationale": "Edit menu entry that opens the Move submenu used to reposition a selected region. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
-    "Bewegen": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Bewegen",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuItem"
-    },
     "이동": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -6616,6 +6627,19 @@
      "observed": "移動",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuItem"
+    },
+    "Bewegen": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Bewegen",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuItem"
     }
    },
@@ -6647,7 +6671,7 @@
    "coverage_currency": {
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "navigateMenuBar": {
@@ -6664,19 +6688,6 @@
    ],
    "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires. Extended on 2026-09-16 from the row Apple keys this menu title under -- Apple suffixes menu titles `#mti` and all 48 such keys carry all ten locales -- so every language Logic ships is covered. The reference and its value are cited in docs/observations/2026-09-16-seven-languages-reported-unknown.json. The variants read off running Logics before this change are each one of that row's own values -- nothing measured was dropped, and nothing was typed.",
    "provenance": {
-    "Navigieren": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Navigieren",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuBarItem"
-    },
     "탐색": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -6701,6 +6712,19 @@
      "observed": "移動",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuBarItem"
+    },
+    "Navigieren": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Navigieren",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuBarItem"
     }
    },
@@ -6750,7 +6774,7 @@
     "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "newAudioTrackMenuItem": {
@@ -6768,19 +6792,6 @@
    ],
    "rationale": "Track menu leaf for this track type, derived from the row Apple keys it under ",
    "provenance": {
-    "Neue Audiospur": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Neue Audiospur",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuItem"
-    },
     "새로운 오디오 트랙": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -6805,6 +6816,19 @@
      "observed": "新規オーディオトラック",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuItem"
+    },
+    "Neue Audiospur": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Neue Audiospur",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuItem"
     }
    },
@@ -6836,7 +6860,7 @@
    "coverage_currency": {
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "newExternalMIDITrackMenuItem": {
@@ -6854,19 +6878,6 @@
    ],
    "rationale": "Track menu leaf for this track type, derived from the row Apple keys it under ",
    "provenance": {
-    "Neue externe MIDI-Spur": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Neue externe MIDI-Spur",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuItem"
-    },
     "새로운 외부 MIDI 트랙": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -6891,6 +6902,19 @@
      "observed": "新規外部MIDIトラック",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuItem"
+    },
+    "Neue externe MIDI-Spur": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Neue externe MIDI-Spur",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuItem"
     }
    },
@@ -6922,7 +6946,7 @@
    "coverage_currency": {
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "newProjectMenuItem": {
@@ -6940,19 +6964,6 @@
    ],
    "rationale": "Reveals the New Project chooser, or creates the project directly where Logic skips it. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
-    "Neu": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Neu",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuItem"
-    },
     "신규": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -6977,6 +6988,19 @@
      "observed": "新規",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuItem"
+    },
+    "Neu": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Neu",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuItem"
     }
    },
@@ -7026,7 +7050,7 @@
     "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "newSessionPlayerTrackMenuItem": {
@@ -7045,19 +7069,6 @@
    ],
    "rationale": "Track menu leaf for this track type, derived from the row Apple keys it under ",
    "provenance": {
-    "Neue Session Player SI-Spur …": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Neue Session Player SI-Spur …",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuItem"
-    },
     "새로운 Session Player SI 트랙…": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -7082,6 +7093,19 @@
      "observed": "新規Session Playerソフトウェア音源トラック…",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuItem"
+    },
+    "Neue Session Player SI-Spur …": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Neue Session Player SI-Spur …",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuItem"
     }
    },
@@ -7113,7 +7137,7 @@
    "coverage_currency": {
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "newSoftwareInstrumentTrackMenuItem": {
@@ -7131,19 +7155,6 @@
    ],
    "rationale": "Track menu leaf for this track type, derived from the row Apple keys it under ",
    "provenance": {
-    "Neue Spur für Software-Instrument": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Neue Spur für Software-Instrument",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuItem"
-    },
     "새로운 소프트웨어 악기 트랙": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -7168,6 +7179,19 @@
      "observed": "新規ソフトウェア音源トラック",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuItem"
+    },
+    "Neue Spur für Software-Instrument": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Neue Spur für Software-Instrument",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuItem"
     }
    },
@@ -7199,7 +7223,7 @@
    "coverage_currency": {
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "newTrackSheetDescription": {
@@ -7467,19 +7491,6 @@
    ],
    "rationale": "Navigate menu entry that opens the Marker List window. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
-    "Marker-Liste öffnen": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Marker-Liste öffnen",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuItem"
-    },
     "마커 목록 열기": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -7504,6 +7515,19 @@
      "observed": "マーカーリストを開く",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuItem"
+    },
+    "Marker-Liste öffnen": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Marker-Liste öffnen",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuItem"
     }
    },
@@ -7553,7 +7577,7 @@
     "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "outputPopupBusSubmenuTitle": {
@@ -7925,20 +7949,6 @@
    ],
    "rationale": "Locates an insert slot's bypass toggle; read-only locator (structural fallback exists). Read live 2026-09-25 at a Compressor insert slot in all ten locales, each the same row's value (docs/observations/2026-09-25-977-<locale>-insert-slot-bypass-and-open.json, #977). Checked offline by Scripts/check-labelsets-are-derived.py.",
    "provenance": {
-    "Umgehen": {
-     "attribute": "description",
-     "date": "2026-09-25",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "contains",
-     "observed": "Umgehen",
-     "path_contains": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
-     "record": "2026-09-25-977-de-DE-insert-slot-bypass-and-open",
-     "record_sha256": "e535f46fcfc589ae4e8d6913403465f75aeb83bf3feaa9f7e5b7b21f213e961a",
-     "role": "AXCheckBox"
-    },
     "desactivar": {
      "attribute": "description",
      "date": "2026-09-25",
@@ -8034,6 +8044,19 @@
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
      "role": "AXMenuItem"
+    },
+    "Umgehen": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Alle Bedienoberflächen umgehen",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -8085,7 +8108,7 @@
     "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded",
+    "de-DE": "current",
     "es-ES": "superseded",
     "fr-FR": "superseded",
     "it-IT": "superseded",
@@ -8957,19 +8980,6 @@
    ],
    "rationale": "Bounce dialog's menu-driven entry point; multiple ellipsis renderings observed across Logic builds. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Bounce > Project or Section…. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
-    "Projekt oder Abschnitt …": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Projekt oder Abschnitt …",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuItem"
-    },
     "프로젝트 또는 섹션…": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -8994,6 +9004,19 @@
      "observed": "プロジェクトまたは選択範囲…",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuItem"
+    },
+    "Projekt oder Abschnitt …": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Projekt oder Abschnitt …",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuItem"
     }
    },
@@ -9043,7 +9066,7 @@
     "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "projectPickerWindow": {
@@ -9775,6 +9798,19 @@
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
      "role": "AXMenuItem"
+    },
+    "Spur umbenennen": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Spur umbenennen",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -9785,7 +9821,7 @@
     "en-US": "derived",
     "ko-KR": "measured",
     "ja-JP": "measured",
-    "de-DE": "derived",
+    "de-DE": "measured",
     "es-ES": "derived",
     "fr-FR": "derived",
     "it-IT": "derived",
@@ -9795,7 +9831,6 @@
    },
    "coverage_derived": {
     "en-US": "quickhelp:en:ships_up_to_case:Rename Track",
-    "de-DE": "quickhelp:de:ships_up_to_case:Spur umbenennen",
     "es-ES": "quickhelp:es:ships_up_to_case:Renombrar pista",
     "fr-FR": "strings:fr:ships_up_to_case:Renommer la piste",
     "it-IT": "strings:it:ships_up_to_case:Rinomina traccia",
@@ -9805,7 +9840,8 @@
    },
    "coverage_currency": {
     "ko-KR": "current",
-    "ja-JP": "current"
+    "ja-JP": "current",
+    "de-DE": "current"
    }
   },
   "saveAsMenuItem": {
@@ -9823,19 +9859,6 @@
    ],
    "rationale": "File menu entry that opens the Save panel; the panel is the only path to save_as. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at File > Save As…. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
-    "Sichern unter …": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Sichern unter …",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuItem"
-    },
     "별도 저장…": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -9860,6 +9883,19 @@
      "observed": "別名で保存…",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuItem"
+    },
+    "Sichern unter …": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Sichern unter …",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuItem"
     }
    },
@@ -9909,7 +9945,7 @@
     "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "saveConfirmationButton": {
@@ -10380,19 +10416,6 @@
    ],
    "rationale": "Native Window-menu toggle, matched by containment because Logic prefixes a verb this set does not carry. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
-    "Step-Input-Keyboard": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Step-Input-Keyboard",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuItem"
-    },
     "스텝 입력 키보드": {
      "attribute": "title",
      "date": "2026-09-05",
@@ -10416,6 +10439,19 @@
      "observed": "ステップインプットキーボード",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuItem"
+    },
+    "Step-Input-Keyboard": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Step-Input-Keyboard",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuItem"
     }
    },
@@ -10465,7 +10501,7 @@
     "en-US": "current",
     "ko-KR": "superseded",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "showTempoListMenuItem": {
@@ -10483,19 +10519,6 @@
    ],
    "rationale": "Measured 2026-09-02 on live Logic Pro 12.3 ko-KR: opens the Tempo List table. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
-    "Tempoliste einblenden": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Tempoliste einblenden",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuItem"
-    },
     "템포 목록 보기": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -10520,6 +10543,19 @@
      "observed": "テンポリストを表示",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuItem"
+    },
+    "Tempoliste einblenden": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Tempoliste einblenden",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuItem"
     }
    },
@@ -10551,7 +10587,7 @@
    "coverage_currency": {
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "sliderPanHint": {
@@ -10612,7 +10648,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "de-DE": "2026-09-12-de-DE-arrange-menus-census"
+    "de-DE": "2026-11-18-de-DE-arrange-menus-census"
    },
    "coverage_roles": {
     "de-DE": "AXMenuItem"
@@ -10621,13 +10657,13 @@
     "de-DE": "title"
    },
    "coverage_logic_version": {
-    "de-DE": "12.3"
+    "de-DE": "13.0"
    },
    "coverage_logic_build": {
-    "de-DE": "6674"
+    "de-DE": "7801"
    },
    "coverage_record_sha256": {
-    "de-DE": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96"
+    "de-DE": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e"
    },
    "coverage_derived": {
     "en-US": "niblabels:en:ships_up_to_case:pan",
@@ -10641,7 +10677,7 @@
    "coverage_currency": {
     "ko-KR": "current",
     "ja-JP": "superseded",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "sliderSendHint": {
@@ -10692,19 +10728,6 @@
    ],
    "rationale": "Classifies a slider as a volume fader; read-only. Japanese added 2026-09-07 by aligning the en-US and ja-JP navigation-free censuses of 2026-09-05 (#795): 1005 of 1031 rows align as matching blocks, and this label's element was read at the track area's volume slider.",
    "provenance": {
-    "fader": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "contains",
-     "observed": "Pre-Fader-Metering",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuItem"
-    },
     "볼륨": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -10729,6 +10752,19 @@
      "observed": "ボリューム、パン、センドにオートメーションポイントを1つずつ作成",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuItem"
+    },
+    "fader": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "Pre-Fader-Metering",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuItem"
     }
    },
@@ -10761,7 +10797,7 @@
    "coverage_currency": {
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "sliderZoomHint": {
@@ -10852,6 +10888,19 @@
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
      "role": "AXMenuItem"
+    },
+    "Audiokanal": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Audiokanal",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -10862,7 +10911,7 @@
     "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "measured",
-    "de-DE": "derived",
+    "de-DE": "measured",
     "es-ES": "derived",
     "fr-FR": "derived",
     "it-IT": "derived",
@@ -10889,7 +10938,6 @@
     "ko-KR": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1"
    },
    "coverage_derived": {
-    "de-DE": "strings:de:ships_up_to_case:Audiokanal",
     "es-ES": "strings:es:ships_up_to_case:Canal de audio",
     "fr-FR": "strings:fr:ships_up_to_case:Canal audio",
     "it-IT": "strings:it:ships_up_to_case:Canale audio",
@@ -10900,7 +10948,8 @@
    "coverage_currency": {
     "en-US": "current",
     "ko-KR": "current",
-    "ja-JP": "current"
+    "ja-JP": "current",
+    "de-DE": "current"
    }
   },
   "sortTracksByCreationDateMenuItem": {
@@ -10943,6 +10992,19 @@
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
      "role": "AXMenuItem"
+    },
+    "Erstellungsdatum": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Erstellungsdatum",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -10953,7 +11015,7 @@
     "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "measured",
-    "de-DE": "derived",
+    "de-DE": "measured",
     "es-ES": "derived",
     "fr-FR": "derived",
     "it-IT": "derived",
@@ -10980,7 +11042,6 @@
     "ko-KR": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1"
    },
    "coverage_derived": {
-    "de-DE": "strings:de:ships_up_to_case:Erstellungsdatum",
     "es-ES": "strings:es:ships_up_to_case:Fecha de creación",
     "fr-FR": "strings:fr:ships_up_to_case:Date de création",
     "it-IT": "strings:it:ships_up_to_case:Data di creazione",
@@ -10991,7 +11052,8 @@
    "coverage_currency": {
     "en-US": "current",
     "ko-KR": "current",
-    "ja-JP": "current"
+    "ja-JP": "current",
+    "de-DE": "current"
    }
   },
   "sortTracksByInstrumentNameMenuItem": {
@@ -11217,6 +11279,19 @@
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
      "role": "AXMenuItem"
+    },
+    "Spuren sortieren nach": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Spuren sortieren nach",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -11227,7 +11302,7 @@
     "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "measured",
-    "de-DE": "derived",
+    "de-DE": "measured",
     "es-ES": "derived",
     "fr-FR": "derived",
     "it-IT": "derived",
@@ -11254,7 +11329,6 @@
     "ko-KR": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1"
    },
    "coverage_derived": {
-    "de-DE": "strings:de:ships_up_to_case:Spuren sortieren nach",
     "es-ES": "strings:es:ships_up_to_case:Ordenar pistas por",
     "fr-FR": "strings:fr:ships_up_to_case:Trier les pistes par",
     "it-IT": "strings:it:ships_up_to_case:Ordina tracce per",
@@ -11265,7 +11339,8 @@
    "coverage_currency": {
     "en-US": "current",
     "ko-KR": "current",
-    "ja-JP": "current"
+    "ja-JP": "current",
+    "de-DE": "current"
    }
   },
   "sortTracksByOutputChannelMenuItem": {
@@ -11308,6 +11383,19 @@
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
      "role": "AXMenuItem"
+    },
+    "Output-Kanal": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Output-Kanal",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -11318,7 +11406,7 @@
     "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "measured",
-    "de-DE": "derived",
+    "de-DE": "measured",
     "es-ES": "derived",
     "fr-FR": "derived",
     "it-IT": "derived",
@@ -11345,7 +11433,6 @@
     "ko-KR": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1"
    },
    "coverage_derived": {
-    "de-DE": "strings:de:ships_up_to_case:Output-Kanal",
     "es-ES": "strings:es:ships_up_to_case:Canal de salida",
     "fr-FR": "strings:fr:ships_up_to_case:Canal de sortie",
     "it-IT": "strings:it:ships_up_to_case:Canale di uscita",
@@ -11356,7 +11443,8 @@
    "coverage_currency": {
     "en-US": "current",
     "ko-KR": "current",
-    "ja-JP": "current"
+    "ja-JP": "current",
+    "de-DE": "current"
    }
   },
   "sortTracksByTrackNameMenuItem": {
@@ -11399,6 +11487,19 @@
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
      "role": "AXMenuItem"
+    },
+    "Spurname": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Spurname",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -11409,7 +11510,7 @@
     "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "measured",
-    "de-DE": "derived",
+    "de-DE": "measured",
     "es-ES": "derived",
     "fr-FR": "derived",
     "it-IT": "derived",
@@ -11436,7 +11537,6 @@
     "ko-KR": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1"
    },
    "coverage_derived": {
-    "de-DE": "strings:de:ships_up_to_case:Spurname",
     "es-ES": "strings:es:ships_up_to_case:Nombre de pista",
     "fr-FR": "strings:fr:ships_up_to_case:Nom de la piste",
     "it-IT": "strings:it:ships_up_to_case:Nome traccia",
@@ -11447,7 +11547,8 @@
    "coverage_currency": {
     "en-US": "current",
     "ko-KR": "current",
-    "ja-JP": "current"
+    "ja-JP": "current",
+    "de-DE": "current"
    }
   },
   "sortTracksByUsedMenuItem": {
@@ -11490,6 +11591,19 @@
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
      "role": "AXMenuItem"
+    },
+    "Benutzt, Unbenutzt": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Benutzt, Unbenutzt",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -11500,7 +11614,7 @@
     "en-US": "measured",
     "ko-KR": "measured",
     "ja-JP": "measured",
-    "de-DE": "derived",
+    "de-DE": "measured",
     "es-ES": "derived",
     "fr-FR": "derived",
     "it-IT": "derived",
@@ -11527,7 +11641,6 @@
     "ko-KR": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1"
    },
    "coverage_derived": {
-    "de-DE": "strings:de:ships_up_to_case:Benutzt, Unbenutzt",
     "es-ES": "strings:es:ships_up_to_case:En uso, Sin usar",
     "fr-FR": "strings:fr:ships_up_to_case:Utilisé/Inutilisé",
     "it-IT": "strings:it:ships_up_to_case:Usate, non usate",
@@ -11538,7 +11651,8 @@
    "coverage_currency": {
     "en-US": "current",
     "ko-KR": "current",
-    "ja-JP": "current"
+    "ja-JP": "current",
+    "de-DE": "current"
    }
   },
   "stemExportCommitButton": {
@@ -11921,7 +12035,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "de-DE": "2026-09-12-de-DE-arrange-menus-census"
+    "de-DE": "2026-11-18-de-DE-arrange-menus-census"
    },
    "coverage_roles": {
     "de-DE": "AXMenuItem"
@@ -11930,13 +12044,13 @@
     "de-DE": "title"
    },
    "coverage_logic_version": {
-    "de-DE": "12.3"
+    "de-DE": "13.0"
    },
    "coverage_logic_build": {
-    "de-DE": "6674"
+    "de-DE": "7801"
    },
    "coverage_record_sha256": {
-    "de-DE": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96"
+    "de-DE": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e"
    },
    "coverage_derived": {
     "en-US": "niblabels:en:ships_up_to_case:Tempo",
@@ -11950,7 +12064,7 @@
    "coverage_currency": {
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "tempoSliderContainsLabel": {
@@ -12048,7 +12162,7 @@
     "zh-TW": "derived"
    },
    "coverage_records": {
-    "de-DE": "2026-09-12-de-DE-arrange-menus-census"
+    "de-DE": "2026-11-18-de-DE-arrange-menus-census"
    },
    "coverage_roles": {
     "de-DE": "AXMenuItem"
@@ -12057,13 +12171,13 @@
     "de-DE": "title"
    },
    "coverage_logic_version": {
-    "de-DE": "12.3"
+    "de-DE": "13.0"
    },
    "coverage_logic_build": {
-    "de-DE": "6674"
+    "de-DE": "7801"
    },
    "coverage_record_sha256": {
-    "de-DE": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96"
+    "de-DE": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e"
    },
    "coverage_derived": {
     "en-US": "niblabels:en:ships_up_to_case:tempo",
@@ -12077,7 +12191,7 @@
    "coverage_currency": {
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "tickSliderLabel": {
@@ -12129,19 +12243,6 @@
    ],
    "rationale": "Move submenu leaf that repositions the selected region to the playhead. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires.",
    "provenance": {
-    "Für Abspielposition": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Für Abspielposition",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuItem"
-    },
     "재생헤드로": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -12166,6 +12267,19 @@
      "observed": "再生ヘッド位置に",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuItem"
+    },
+    "Für Abspielposition": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Für Abspielposition",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuItem"
     }
    },
@@ -12197,7 +12311,7 @@
    "coverage_currency": {
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "toggleHideViewMenuItem": {
@@ -12240,6 +12354,19 @@
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
      "role": "AXMenuItem"
+    },
+    "„Spuren ausblenden“ ein-/ausschalten": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "„Spuren ausblenden“ ein-/ausschalten",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -12250,7 +12377,7 @@
     "en-US": "derived",
     "ko-KR": "measured",
     "ja-JP": "measured",
-    "de-DE": "derived",
+    "de-DE": "measured",
     "es-ES": "derived",
     "fr-FR": "derived",
     "it-IT": "derived",
@@ -12260,7 +12387,6 @@
    },
    "coverage_derived": {
     "en-US": "strings:en:ships_up_to_case:Toggle Hide View",
-    "de-DE": "strings:de:ships_up_to_case:„Spuren ausblenden“ ein-/ausschalten",
     "es-ES": "strings:es:ships_up_to_case:Activar/desactivar vista oculta",
     "fr-FR": "strings:fr:ships_up_to_case:Ouvrir/Fermer l’affichage",
     "it-IT": "strings:it:ships_up_to_case:Mostra/nascondi vista",
@@ -12270,7 +12396,8 @@
    },
    "coverage_currency": {
     "ko-KR": "current",
-    "ja-JP": "current"
+    "ja-JP": "current",
+    "de-DE": "current"
    }
   },
   "trackContentExplicit": {
@@ -12550,19 +12677,6 @@
    ],
    "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires. Extended on 2026-09-16 from the row Apple keys this menu title under -- Apple suffixes menu titles `#mti` and all 48 such keys carry all ten locales -- so every language Logic ships is covered. The reference and its value are cited in docs/observations/2026-09-16-seven-languages-reported-unknown.json. The variants read off running Logics before this change are each one of that row's own values -- nothing measured was dropped, and nothing was typed.",
    "provenance": {
-    "Spur": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Spur",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuBarItem"
-    },
     "트랙": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -12587,6 +12701,19 @@
      "observed": "トラック",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuBarItem"
+    },
+    "Spur": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Spur",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuBarItem"
     }
    },
@@ -12636,7 +12763,7 @@
     "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "trackMuteButton": {
@@ -13792,19 +13919,6 @@
    ],
    "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires. Extended on 2026-09-16 from the row Apple keys this menu title under -- Apple suffixes menu titles `#mti` and all 48 such keys carry all ten locales -- so every language Logic ships is covered. The reference and its value are cited in docs/observations/2026-09-16-seven-languages-reported-unknown.json. The variants read off running Logics before this change are each one of that row's own values -- nothing measured was dropped, and nothing was typed.",
    "provenance": {
-    "Ansicht": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Ansicht",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuBarItem"
-    },
     "보기": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -13829,6 +13943,19 @@
      "observed": "表示",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuBarItem"
+    },
+    "Ansicht": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Ansicht",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuBarItem"
     }
    },
@@ -13878,7 +14005,7 @@
     "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   },
   "windowMenuBar": {
@@ -13896,19 +14023,6 @@
    ],
    "rationale": "Top-level menu titles expose no stable AXIdentifier in Logic. German read 2026-09-12 by aligning the en-US and de-DE navigation-free censuses of that day (#876): 1986 aligned pairs with 13 base and 2 target rows unplaced, and this label's string was read off a de-DE element whose AX role its own name requires. Extended on 2026-09-16 from the row Apple keys this menu title under -- Apple suffixes menu titles `#mti` and all 48 such keys carry all ten locales -- so every language Logic ships is covered. The reference and its value are cited in docs/observations/2026-09-16-seven-languages-reported-unknown.json. The variants read off running Logics before this change are each one of that row's own values -- nothing measured was dropped, and nothing was typed.",
    "provenance": {
-    "Fenster": {
-     "attribute": "title",
-     "date": "2026-09-12",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "de-DE",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "Fenster",
-     "record": "2026-09-12-de-DE-arrange-menus-census",
-     "record_sha256": "1735bec1898e7e227bb68f3d7dae58b4c226d258f0fab9be12ab424e923b6d96",
-     "role": "AXMenuBarItem"
-    },
     "윈도우": {
      "attribute": "title",
      "date": "2026-11-17",
@@ -13933,6 +14047,19 @@
      "observed": "ウインドウ",
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
+     "role": "AXMenuBarItem"
+    },
+    "Fenster": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "de-DE",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "Fenster",
+     "record": "2026-11-18-de-DE-arrange-menus-census",
+     "record_sha256": "9bc1f64f7fd411f48e8eecb5d3bb6b0e9b589d2b61c26547447dc8f6bbc9445e",
      "role": "AXMenuBarItem"
     }
    },
@@ -13982,7 +14109,7 @@
     "en-US": "current",
     "ko-KR": "current",
     "ja-JP": "current",
-    "de-DE": "superseded"
+    "de-DE": "current"
    }
   }
  }
