@@ -10,7 +10,7 @@
  "currency_classes": ["current", "superseded", "unknown_version", "unverified", "derived", "unmeasured", "retired"],
  "currency": {
   "en-US": {"current": 146, "superseded": 12, "unknown_version": 0, "unverified": 0, "derived": 96, "unmeasured": 1, "retired": 1, "not_measured_on_current": 109},
-  "ko-KR": {"current": 153, "superseded": 11, "unknown_version": 0, "unverified": 0, "derived": 90, "unmeasured": 1, "retired": 1, "not_measured_on_current": 102},
+  "ko-KR": {"current": 173, "superseded": 9, "unknown_version": 0, "unverified": 0, "derived": 72, "unmeasured": 1, "retired": 1, "not_measured_on_current": 82},
   "ja-JP": {"current": 46, "superseded": 2, "unknown_version": 0, "unverified": 0, "derived": 204, "unmeasured": 3, "retired": 1, "not_measured_on_current": 209},
   "de-DE": {"current": 43, "superseded": 4, "unknown_version": 0, "unverified": 0, "derived": 205, "unmeasured": 3, "retired": 1, "not_measured_on_current": 212},
   "es-ES": {"current": 40, "superseded": 2, "unknown_version": 0, "unverified": 0, "derived": 209, "unmeasured": 4, "retired": 1, "not_measured_on_current": 215},
@@ -96,9 +96,14 @@
    "canonical": "Tracks",
    "variants": ["트랙", "トラック", "Spuren", "Pistas", "Pistes", "Tracce", "轨道", "音軌"],
    "rationale": "Witnesses that an arrange window exists after project.new; read-only classification.",
+   "provenance": {
+    "트랙": {"attribute": "description", "date": "2026-11-18", "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "7801", "logic_version": "13.0", "match": "contains", "observed": "새로운 트랙", "record": "2026-11-18-ko-KR-arrange-track_creation-navigated-census", "record_sha256": "cb748bcae3cd4c47bbabf9698ff4a653934c69d656cab37c6abb287639567147", "role": "AXSheet"}
+   },
+   "roles": ["AXSheet"],
    "match": "contains",
-   "coverage": {"en-US": "derived", "ko-KR": "derived", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
-   "coverage_derived": {"en-US": "nibstrings:en:ships_up_to_case:Tracks", "ko-KR": "quickhelp:ko:ships_up_to_case:트랙", "ja-JP": "quickhelp:ja:ships_up_to_case:トラック", "de-DE": "quickhelp:de:ships_up_to_case:Spuren", "es-ES": "quickhelp:es:ships_up_to_case:Pistas", "fr-FR": "strings:fr:ships_up_to_case:Pistes", "it-IT": "strings:it:ships_up_to_case:Tracce", "pt-BR": "strings:pt:ships_up_to_case:Pistas", "zh-CN": "strings:zh_CN:ships_up_to_case:轨道", "zh-TW": "strings:zh_TW:ships_up_to_case:音軌"}
+   "coverage": {"en-US": "derived", "ko-KR": "measured", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
+   "coverage_derived": {"en-US": "nibstrings:en:ships_up_to_case:Tracks", "ja-JP": "quickhelp:ja:ships_up_to_case:トラック", "de-DE": "quickhelp:de:ships_up_to_case:Spuren", "es-ES": "quickhelp:es:ships_up_to_case:Pistas", "fr-FR": "strings:fr:ships_up_to_case:Pistes", "it-IT": "strings:it:ships_up_to_case:Tracce", "pt-BR": "strings:pt:ships_up_to_case:Pistas", "zh-CN": "strings:zh_CN:ships_up_to_case:轨道", "zh-TW": "strings:zh_TW:ships_up_to_case:音軌"},
+   "coverage_currency": {"ko-KR": "current"}
   },
   "assignControlHelpKeyword": {
    "canonical": "assign control",
@@ -327,9 +332,14 @@
    "canonical": "Cancel",
    "variants": ["취소", "キャンセル", "Abbrechen", "Cancelar", "Annuler", "Annulla", "取消"],
    "rationale": "Dialog dismissal fallback; no success state is inferred from this click. JA live-confirmed (Logic 12.3: `キャンセル`).",
+   "provenance": {
+    "취소": {"attribute": "title", "date": "2026-11-18", "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "7801", "logic_version": "13.0", "match": "contains", "observed": "취소", "record": "2026-11-18-ko-KR-project-lifecycle-navigated-census", "record_sha256": "781decfa9a5b16f622c7f0653bddaeeef11bdc8275bcb6783d1196f7babe34cb", "role": "AXButton"}
+   },
+   "roles": ["AXButton"],
    "match": "contains",
-   "coverage": {"en-US": "derived", "ko-KR": "derived", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
-   "coverage_derived": {"en-US": "niblabels:en:ships_up_to_case:Cancel", "ko-KR": "niblabels:ko:ships_up_to_case:취소", "ja-JP": "niblabels:ja:ships_up_to_case:キャンセル", "de-DE": "niblabels:de:ships_up_to_case:Abbrechen", "es-ES": "niblabels:es:ships_up_to_case:Cancelar", "fr-FR": "niblabels:fr:ships_up_to_case:Annuler", "it-IT": "niblabels:it:ships_up_to_case:Annulla", "pt-BR": "niblabels:pt:ships_up_to_case:Cancelar", "zh-CN": "niblabels:zh_CN:ships_up_to_case:取消", "zh-TW": "niblabels:zh_TW:ships_up_to_case:取消"}
+   "coverage": {"en-US": "derived", "ko-KR": "measured", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
+   "coverage_derived": {"en-US": "niblabels:en:ships_up_to_case:Cancel", "ja-JP": "niblabels:ja:ships_up_to_case:キャンセル", "de-DE": "niblabels:de:ships_up_to_case:Abbrechen", "es-ES": "niblabels:es:ships_up_to_case:Cancelar", "fr-FR": "niblabels:fr:ships_up_to_case:Annuler", "it-IT": "niblabels:it:ships_up_to_case:Annulla", "pt-BR": "niblabels:pt:ships_up_to_case:Cancelar", "zh-CN": "niblabels:zh_CN:ships_up_to_case:取消", "zh-TW": "niblabels:zh_TW:ships_up_to_case:取消"},
+   "coverage_currency": {"ko-KR": "current"}
   },
   "controlBarGroupLabel": {
    "canonical": "control bar",
@@ -445,13 +455,13 @@
    "variants": ["신규", "新規", "Neu", "Nueva", "Nouveau", "Nuovo", "Novo", "新建", "新增"],
    "rationale": "The Setup window's OWN menu button -- an AXMenuButton with subrole AXSegment carrying this string in AXDescription, not AXTitle, and living inside the window rather than in the application menu bar. An earlier probe enumerated only the menu bar and the window's AXButtons and concluded no install route existed; it was reading the wrong two places. ko-KR read live 2026-09-15. English canonical unmeasured on this host.",
    "provenance": {
-    "신규": {"attribute": "description", "date": "2026-09-15", "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "6674", "logic_version": "12.3", "match": "exact", "observed": "신규", "record": "2026-09-15-the-setup-windows-own-menu-installs-the-surface", "record_sha256": "b0983ef43ba522573ba21ea69c99db3159429ef220b90450065f7deb9565a291", "role": "AXMenuButton"}
+    "신규": {"attribute": "description", "date": "2026-11-18", "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "7801", "logic_version": "13.0", "match": "exact", "observed": "신규", "record": "2026-11-18-ko-KR-system-midi-navigated-census", "record_sha256": "908f8d5d5d4a9b475032357ec4680a1c4ae84fc07caaceb66b95d6a8d8ba8404", "role": "AXMenuButton"}
    },
    "roles": ["AXMenuButton"],
    "match": "exact",
    "coverage": {"en-US": "derived", "ko-KR": "measured", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
    "coverage_derived": {"en-US": "niblabels:en:ships_up_to_case:New", "ja-JP": "niblabels:ja:ships_up_to_case:新規", "de-DE": "niblabels:de:ships_up_to_case:Neu", "es-ES": "strings:es:ships_up_to_case:Nueva", "fr-FR": "niblabels:fr:ships_up_to_case:Nouveau", "it-IT": "niblabels:it:ships_up_to_case:Nuovo", "pt-BR": "niblabels:pt:ships_up_to_case:Novo", "zh-CN": "niblabels:zh_CN:ships_up_to_case:新建", "zh-TW": "niblabels:zh_TW:ships_up_to_case:新增"},
-   "coverage_currency": {"ko-KR": "superseded"}
+   "coverage_currency": {"ko-KR": "current"}
   },
   "controlSurfaceOutputPortLabel": {
    "canonical": "Output Port",
@@ -520,13 +530,13 @@
    "variants": ["컨트롤 서피스 설정", "コントロールサーフェス設定", "Bedienoberflächen-Setup", "Configuración de superficies de control", "Configuration de la surface de contrôle", "Configurazione superfici di controllo", "Configuração de Superfície de Controle", "控制表面设置", "控制表面设定", "控制表面設定"],
    "rationale": "Identifies the Setup window by AXWindow title; zh_CN reads 控制表面设置 on Logic 12.3 (6674) and 控制表面设定 on 13.0 (7801), and both are kept; this is the reading that disambiguates the two ko-KR `설정…` items. ko-KR `컨트롤 서피스 설정` read live 2026-09-15 on Logic 12.3 (6674). The English canonical is Apple's documented title and is NOT measured on this host. ja-JP and de-DE unmeasured.",
    "provenance": {
-    "컨트롤 서피스 설정": {"attribute": "title", "date": "2026-09-15", "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "6674", "logic_version": "12.3", "match": "exact", "observed": "컨트롤 서피스 설정", "record": "2026-09-15-the-setup-windows-own-menu-installs-the-surface", "record_sha256": "b0983ef43ba522573ba21ea69c99db3159429ef220b90450065f7deb9565a291", "role": "AXWindow"}
+    "컨트롤 서피스 설정": {"attribute": "title", "date": "2026-11-18", "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "7801", "logic_version": "13.0", "match": "exact", "observed": "컨트롤 서피스 설정", "record": "2026-11-18-ko-KR-system-midi-navigated-census", "record_sha256": "908f8d5d5d4a9b475032357ec4680a1c4ae84fc07caaceb66b95d6a8d8ba8404", "role": "AXWindow"}
    },
    "roles": ["AXWindow"],
    "match": "exact",
    "coverage": {"en-US": "derived", "ko-KR": "measured", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
    "coverage_derived": {"en-US": "strings:en:ships_up_to_case:Control Surface Setup", "ja-JP": "quickhelp:ja:ships_up_to_case:コントロールサーフェス設定", "de-DE": "quickhelp:de:ships_up_to_case:Bedienoberflächen-Setup", "es-ES": "quickhelp:es:ships_up_to_case:Configuración de superficies de control", "fr-FR": "strings:fr:ships_up_to_case:Configuration de la surface de contrôle", "it-IT": "strings:it:ships_up_to_case:Configurazione superfici di controllo", "pt-BR": "strings:pt:ships_up_to_case:Configuração de Superfície de Controle", "zh-CN": "quickhelp:zh_CN:ships_up_to_case:控制表面设定", "zh-TW": "strings:zh_TW:ships_up_to_case:控制表面設定"},
-   "coverage_currency": {"ko-KR": "superseded"}
+   "coverage_currency": {"ko-KR": "current"}
   },
   "controlSurfacesMenuItem": {
    "canonical": "Control Surfaces",
@@ -558,9 +568,14 @@
    "canonical": "Create",
    "variants": ["생성", "作成", "Erzeugen", "creación", "Crear", "Créer", "Crea", "Criar", "创建", "製作"],
    "rationale": "Mandatory New Track sheet's only exit; reconciler-clicked, then verified by track-count readback. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `作成`).",
+   "provenance": {
+    "생성": {"attribute": "title", "date": "2026-11-18", "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "7801", "logic_version": "13.0", "match": "exact", "observed": "생성", "record": "2026-11-18-ko-KR-arrange-track_creation-navigated-census", "record_sha256": "cb748bcae3cd4c47bbabf9698ff4a653934c69d656cab37c6abb287639567147", "role": "AXButton"}
+   },
+   "roles": ["AXButton"],
    "match": "exact",
-   "coverage": {"en-US": "derived", "ko-KR": "derived", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
-   "coverage_derived": {"en-US": "niblabels:en:ships_up_to_case:Create", "ko-KR": "niblabels:ko:ships_up_to_case:생성", "ja-JP": "niblabels:ja:ships_up_to_case:作成", "de-DE": "niblabels:de:ships_up_to_case:Erzeugen", "es-ES": "niblabels:es:ships_up_to_case:Crear", "fr-FR": "niblabels:fr:ships_up_to_case:Créer", "it-IT": "niblabels:it:ships_up_to_case:Crea", "pt-BR": "niblabels:pt:ships_up_to_case:Criar", "zh-CN": "niblabels:zh_CN:ships_up_to_case:创建", "zh-TW": "niblabels:zh_TW:ships_up_to_case:製作"}
+   "coverage": {"en-US": "derived", "ko-KR": "measured", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
+   "coverage_derived": {"en-US": "niblabels:en:ships_up_to_case:Create", "ja-JP": "niblabels:ja:ships_up_to_case:作成", "de-DE": "niblabels:de:ships_up_to_case:Erzeugen", "es-ES": "niblabels:es:ships_up_to_case:Crear", "fr-FR": "niblabels:fr:ships_up_to_case:Créer", "it-IT": "niblabels:it:ships_up_to_case:Crea", "pt-BR": "niblabels:pt:ships_up_to_case:Criar", "zh-CN": "niblabels:zh_CN:ships_up_to_case:创建", "zh-TW": "niblabels:zh_TW:ships_up_to_case:製作"},
+   "coverage_currency": {"ko-KR": "current"}
   },
   "createMarkerMenuItem": {
    "canonical": "Create Marker",
@@ -1184,13 +1199,14 @@
    "variants": ["위치로 이동", "位置の移動", "Zu Position", "Ir a la posición", "Aller à la position", "Vai a posizione", "Ir para a posição", "前往位置"],
    "rationale": "Used only to dismiss a stale dialog before another verified operation. This covers the reviewed EN/KO/JA dialog titles; broader locale/menu policy remains tracked separately. German read 2026-09-12 by OPENING the dialog on a de-DE Logic and reading its window title (#876), twice, both times `Zu Position` on an AXFloatingWindow. It is not in the navigation-free census — the census opens nothing — which is why the live run that needed it reported `dialog_unidentified_new_window`: the menu leaf fired, the window appeared, and the product could not name it. The AppleScript literal list this LabelSet now renders also carried `Go to Position`, and it is NOT carried here. It had no provenance, `matches(_:mode:.exactStrict)` is case-sensitive so the Swift side never accepted it either, and keeping it would put two members in this set that differ only by case — which `check-probe-product-drift.py` refuses, because a later move to case-folded matching would merge them. So the generated handler is deliberately NARROWER than the literal it replaced by exactly that one string, and the two sides now agree.",
    "provenance": {
-    "Zu Position": {"attribute": "title", "date": "2026-09-12", "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)", "locale": "de-DE", "logic_build": "6674", "logic_version": "12.3", "match": "exact_strict", "observed": "Zu Position", "record": "2026-09-12-the-german-go-to-position-dialog-is-called-zu-position", "record_sha256": "5b0df8e8318887641a59d70de74573a60962b6227d3aafbc506a454ebc1d61f1", "role": "AXWindow"}
+    "Zu Position": {"attribute": "title", "date": "2026-09-12", "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)", "locale": "de-DE", "logic_build": "6674", "logic_version": "12.3", "match": "exact_strict", "observed": "Zu Position", "record": "2026-09-12-the-german-go-to-position-dialog-is-called-zu-position", "record_sha256": "5b0df8e8318887641a59d70de74573a60962b6227d3aafbc506a454ebc1d61f1", "role": "AXWindow"},
+    "위치로 이동": {"attribute": "title", "date": "2026-11-18", "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "7801", "logic_version": "13.0", "match": "exact_strict", "observed": "위치로 이동", "record": "2026-11-18-ko-KR-arrange-locators-navigated-census", "record_sha256": "d69f322d925313f347151898b525dad3c234972706d01866880bc63a514185ad", "role": "AXWindow"}
    },
    "roles": ["AXWindow"],
    "match": "exact_strict",
-   "coverage": {"en-US": "derived", "ko-KR": "derived", "ja-JP": "derived", "de-DE": "measured", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
-   "coverage_derived": {"en-US": "nibstrings:en:ships_up_to_case:Go To Position", "ko-KR": "quickhelp:ko:ships_up_to_case:Go To Position", "ja-JP": "quickhelp:ja:ships_up_to_case:Go To Position", "es-ES": "quickhelp:es:ships_up_to_case:Go To Position", "fr-FR": "quickhelp:fr:ships_up_to_case:Go To Position", "it-IT": "strings:it:ships_up_to_case:Vai a posizione", "pt-BR": "strings:pt:ships_up_to_case:Ir para a posição", "zh-CN": "quickhelp:zh_CN:ships_up_to_case:Go To Position", "zh-TW": "strings:zh_TW:ships_up_to_case:前往位置"},
-   "coverage_currency": {"de-DE": "superseded"}
+   "coverage": {"en-US": "derived", "ko-KR": "measured", "ja-JP": "derived", "de-DE": "measured", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
+   "coverage_derived": {"en-US": "nibstrings:en:ships_up_to_case:Go To Position", "ja-JP": "quickhelp:ja:ships_up_to_case:Go To Position", "es-ES": "quickhelp:es:ships_up_to_case:Go To Position", "fr-FR": "quickhelp:fr:ships_up_to_case:Go To Position", "it-IT": "strings:it:ships_up_to_case:Vai a posizione", "pt-BR": "strings:pt:ships_up_to_case:Ir para a posição", "zh-CN": "quickhelp:zh_CN:ships_up_to_case:Go To Position", "zh-TW": "strings:zh_TW:ships_up_to_case:前往位置"},
+   "coverage_currency": {"ko-KR": "current", "de-DE": "superseded"}
   },
   "goToPositionMenuItem": {
    "canonical": "Position…",
@@ -1545,9 +1561,14 @@
    "canonical": "Import",
    "variants": ["가져오기", "Importieren", "読み込む", "Importar", "Importer", "Importa", "导入", "輸入"],
    "rationale": "The commit button of Logic's MIDI-import open panel. German read 2026-09-13 by OPENING the panel on a de-DE Logic and enumerating its buttons: `Abbrechen` and `Importieren`, the latter disabled until a file is chosen. It does share the panel's title — which is why it was held back until somebody looked rather than inferred from the window name.",
+   "provenance": {
+    "가져오기": {"attribute": "title", "date": "2026-11-18", "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "7801", "logic_version": "13.0", "match": "exact", "observed": "가져오기", "record": "2026-11-18-ko-KR-project-lifecycle-navigated-census", "record_sha256": "781decfa9a5b16f622c7f0653bddaeeef11bdc8275bcb6783d1196f7babe34cb", "role": "AXButton"}
+   },
+   "roles": ["AXButton"],
    "match": "exact",
-   "coverage": {"en-US": "derived", "ko-KR": "derived", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
-   "coverage_derived": {"en-US": "nibstrings:en:ships_up_to_case:Import", "ko-KR": "strings:ko:ships_up_to_case:가져오기", "ja-JP": "strings:ja:ships_up_to_case:読み込む", "de-DE": "strings:de:ships_up_to_case:Importieren", "es-ES": "strings:es:ships_up_to_case:Importar", "fr-FR": "strings:fr:ships_up_to_case:Importer", "it-IT": "strings:it:ships_up_to_case:Importa", "pt-BR": "strings:pt:ships_up_to_case:Importar", "zh-CN": "strings:zh_CN:ships_up_to_case:导入", "zh-TW": "niblabels:zh_TW:ships_up_to_case:輸入"}
+   "coverage": {"en-US": "derived", "ko-KR": "measured", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
+   "coverage_derived": {"en-US": "nibstrings:en:ships_up_to_case:Import", "ja-JP": "strings:ja:ships_up_to_case:読み込む", "de-DE": "strings:de:ships_up_to_case:Importieren", "es-ES": "strings:es:ships_up_to_case:Importar", "fr-FR": "strings:fr:ships_up_to_case:Importer", "it-IT": "strings:it:ships_up_to_case:Importa", "pt-BR": "strings:pt:ships_up_to_case:Importar", "zh-CN": "strings:zh_CN:ships_up_to_case:导入", "zh-TW": "niblabels:zh_TW:ships_up_to_case:輸入"},
+   "coverage_currency": {"ko-KR": "current"}
   },
   "midiImportDeclineTempoButton": {
    "canonical": "No",
@@ -1561,9 +1582,14 @@
    "canonical": "Import",
    "variants": ["가져오기", "Importieren", "読み込む", "Importar", "Importer", "Importa", "导入", "輸入"],
    "rationale": "Distinguishes Logic's MIDI-import open panel from the tempo alert that may follow it; both carry subrole AXDialog, so the title is the only separator available. German read 2026-09-12 from the product's own refusal envelope (#876), which named the blocking dialog `Importieren`.",
+   "provenance": {
+    "가져오기": {"attribute": "title", "date": "2026-11-18", "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "7801", "logic_version": "13.0", "match": "exact", "observed": "가져오기", "record": "2026-11-18-ko-KR-project-lifecycle-navigated-census", "record_sha256": "781decfa9a5b16f622c7f0653bddaeeef11bdc8275bcb6783d1196f7babe34cb", "role": "AXWindow"}
+   },
+   "roles": ["AXWindow"],
    "match": "exact",
-   "coverage": {"en-US": "derived", "ko-KR": "derived", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
-   "coverage_derived": {"en-US": "nibstrings:en:ships_up_to_case:Import", "ko-KR": "strings:ko:ships_up_to_case:가져오기", "ja-JP": "strings:ja:ships_up_to_case:読み込む", "de-DE": "strings:de:ships_up_to_case:Importieren", "es-ES": "strings:es:ships_up_to_case:Importar", "fr-FR": "strings:fr:ships_up_to_case:Importer", "it-IT": "strings:it:ships_up_to_case:Importa", "pt-BR": "strings:pt:ships_up_to_case:Importar", "zh-CN": "strings:zh_CN:ships_up_to_case:导入", "zh-TW": "niblabels:zh_TW:ships_up_to_case:輸入"}
+   "coverage": {"en-US": "derived", "ko-KR": "measured", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
+   "coverage_derived": {"en-US": "nibstrings:en:ships_up_to_case:Import", "ja-JP": "strings:ja:ships_up_to_case:読み込む", "de-DE": "strings:de:ships_up_to_case:Importieren", "es-ES": "strings:es:ships_up_to_case:Importar", "fr-FR": "strings:fr:ships_up_to_case:Importer", "it-IT": "strings:it:ships_up_to_case:Importa", "pt-BR": "strings:pt:ships_up_to_case:Importar", "zh-CN": "strings:zh_CN:ships_up_to_case:导入", "zh-TW": "niblabels:zh_TW:ships_up_to_case:輸入"},
+   "coverage_currency": {"ko-KR": "current"}
   },
   "midiImportTempoAlertText": {
    "canonical": "tempo",
@@ -2100,9 +2126,14 @@
    "canonical": "New Track",
    "variants": ["새로운 트랙", "新規トラック", "Neue Spur", "Nueva pista", "Nouvelle piste", "Nuova traccia", "Nova Pista", "新轨道", "新增音軌"],
    "rationale": "Identifies the mandatory New Track sheet by AXDescription, independently of Cancel state; read-only classifier. KO live-confirmed (Logic 12.3); JA live-confirmed (Logic 12.3: `新規トラック`, Cancel enabled).",
+   "provenance": {
+    "새로운 트랙": {"attribute": "description", "date": "2026-11-18", "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "7801", "logic_version": "13.0", "match": "exact", "observed": "새로운 트랙", "record": "2026-11-18-ko-KR-arrange-track_creation-navigated-census", "record_sha256": "cb748bcae3cd4c47bbabf9698ff4a653934c69d656cab37c6abb287639567147", "role": "AXSheet"}
+   },
+   "roles": ["AXSheet"],
    "match": "exact",
-   "coverage": {"en-US": "derived", "ko-KR": "derived", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
-   "coverage_derived": {"en-US": "niblabels:en:ships_up_to_case:New Track", "ko-KR": "niblabels:ko:ships_up_to_case:새로운 트랙", "ja-JP": "niblabels:ja:ships_up_to_case:新規トラック", "de-DE": "niblabels:de:ships_up_to_case:Neue Spur", "es-ES": "niblabels:es:ships_up_to_case:Nueva pista", "fr-FR": "niblabels:fr:ships_up_to_case:Nouvelle piste", "it-IT": "niblabels:it:ships_up_to_case:Nuova traccia", "pt-BR": "niblabels:pt:ships_up_to_case:Nova Pista", "zh-CN": "niblabels:zh_CN:ships_up_to_case:新轨道", "zh-TW": "niblabels:zh_TW:ships_up_to_case:新增音軌"}
+   "coverage": {"en-US": "derived", "ko-KR": "measured", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
+   "coverage_derived": {"en-US": "niblabels:en:ships_up_to_case:New Track", "ja-JP": "niblabels:ja:ships_up_to_case:新規トラック", "de-DE": "niblabels:de:ships_up_to_case:Neue Spur", "es-ES": "niblabels:es:ships_up_to_case:Nueva pista", "fr-FR": "niblabels:fr:ships_up_to_case:Nouvelle piste", "it-IT": "niblabels:it:ships_up_to_case:Nuova traccia", "pt-BR": "niblabels:pt:ships_up_to_case:Nova Pista", "zh-CN": "niblabels:zh_CN:ships_up_to_case:新轨道", "zh-TW": "niblabels:zh_TW:ships_up_to_case:新增音軌"},
+   "coverage_currency": {"ko-KR": "current"}
   },
   "noInputMenuLabel": {
    "canonical": "No Input",
@@ -2149,9 +2180,10 @@
     "채널 모드": {"attribute": "description", "date": "2026-11-18", "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "7801", "logic_version": "13.0", "match": "contains", "observed": "채널 모드", "record": "2026-11-18-ko-KR-mixer-channel_strips-census", "record_sha256": "5ee7ccae7651e7bbeaab9404d597009f693e0100131f5a736bd2322fc191fe02", "role": "AXButton"},
     "입력": {"attribute": "description", "date": "2026-11-18", "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "7801", "logic_version": "13.0", "match": "contains", "observed": "입력 모니터링", "record": "2026-11-18-ko-KR-arrange-track_headers-census", "record_sha256": "ff4c792d60a87b0b78be36f515d5159eb16dd0c200263417531c3007624662be", "role": "AXCheckBox"},
     "모니터링": {"attribute": "description", "date": "2026-11-18", "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "7801", "logic_version": "13.0", "match": "contains", "observed": "입력 모니터링", "record": "2026-11-18-ko-KR-arrange-track_headers-census", "record_sha256": "ff4c792d60a87b0b78be36f515d5159eb16dd0c200263417531c3007624662be", "role": "AXCheckBox"},
-    "페이더": {"attribute": "help", "date": "2026-11-18", "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "7801", "logic_version": "13.0", "match": "contains", "observed": "센드 온 페이더 - 켬/끔. 채널 스트립의 패닝 노브와 페이더를 상호 교환하여 선택한 센드의 패닝 및 볼륨을 제어합니다. ", "record": "2026-11-18-ko-KR-mixer-channel_strips-census", "record_sha256": "5ee7ccae7651e7bbeaab9404d597009f693e0100131f5a736bd2322fc191fe02", "role": "AXCheckBox"}
+    "페이더": {"attribute": "help", "date": "2026-11-18", "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "7801", "logic_version": "13.0", "match": "contains", "observed": "센드 온 페이더 - 켬/끔. 채널 스트립의 패닝 노브와 페이더를 상호 교환하여 선택한 센드의 패닝 및 볼륨을 제어합니다. ", "record": "2026-11-18-ko-KR-mixer-channel_strips-census", "record_sha256": "5ee7ccae7651e7bbeaab9404d597009f693e0100131f5a736bd2322fc191fe02", "role": "AXCheckBox"},
+    "그룹": {"attribute": "help", "date": "2026-11-18", "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "7801", "logic_version": "13.0", "match": "contains", "observed": "항목 그룹화 변경(Option 버튼을 계속 눌러 정렬 변경)", "record": "2026-11-18-ko-KR-project-lifecycle-navigated-census", "record_sha256": "781decfa9a5b16f622c7f0653bddaeeef11bdc8275bcb6783d1196f7babe34cb", "role": "AXMenuButton"}
    },
-   "roles": ["AXButton", "AXCheckBox"],
+   "roles": ["AXButton", "AXCheckBox", "AXMenuButton"],
    "match": "contains",
    "coverage": {"en-US": "measured", "ko-KR": "measured", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "unmeasured"},
    "coverage_derived": {"ja-JP": "niblabels:ja:ships_up_to_case:output", "de-DE": "niblabels:de:ships_up_to_case:output", "es-ES": "niblabels:es:ships_up_to_case:solo", "fr-FR": "niblabels:fr:ships_up_to_case:solo", "it-IT": "niblabels:it:ships_up_to_case:volume", "pt-BR": "niblabels:pt:ships_up_to_case:mute", "zh-CN": "quickhelp:zh_CN:ships_up_to_case:volume"},
@@ -2161,17 +2193,27 @@
    "canonical": "OK",
    "variants": ["확인", "Aceptar", "好"],
    "rationale": "Apple's OK row. Seven of the ten locales render `OK` itself, so four distinct",
+   "provenance": {
+    "확인": {"attribute": "title", "date": "2026-11-18", "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "7801", "logic_version": "13.0", "match": "exact", "observed": "확인", "record": "2026-11-18-ko-KR-arrange-locators-navigated-census", "record_sha256": "d69f322d925313f347151898b525dad3c234972706d01866880bc63a514185ad", "role": "AXButton"}
+   },
+   "roles": ["AXButton"],
    "match": "exact",
-   "coverage": {"en-US": "derived", "ko-KR": "derived", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
-   "coverage_derived": {"en-US": "niblabels:en:ships_up_to_case:OK", "ko-KR": "niblabels:ko:ships_up_to_case:확인", "ja-JP": "niblabels:ja:ships_up_to_case:OK", "de-DE": "niblabels:de:ships_up_to_case:OK", "es-ES": "niblabels:es:ships_up_to_case:Aceptar", "fr-FR": "niblabels:fr:ships_up_to_case:OK", "it-IT": "niblabels:it:ships_up_to_case:OK", "pt-BR": "niblabels:pt:ships_up_to_case:OK", "zh-CN": "niblabels:zh_CN:ships_up_to_case:好", "zh-TW": "niblabels:zh_TW:ships_up_to_case:好"}
+   "coverage": {"en-US": "derived", "ko-KR": "measured", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
+   "coverage_derived": {"en-US": "niblabels:en:ships_up_to_case:OK", "ja-JP": "niblabels:ja:ships_up_to_case:OK", "de-DE": "niblabels:de:ships_up_to_case:OK", "es-ES": "niblabels:es:ships_up_to_case:Aceptar", "fr-FR": "niblabels:fr:ships_up_to_case:OK", "it-IT": "niblabels:it:ships_up_to_case:OK", "pt-BR": "niblabels:pt:ships_up_to_case:OK", "zh-CN": "niblabels:zh_CN:ships_up_to_case:好", "zh-TW": "niblabels:zh_TW:ships_up_to_case:好"},
+   "coverage_currency": {"ko-KR": "current"}
   },
   "oneFilePerTrackPopupValue": {
    "canonical": "One File per Track",
    "variants": ["트랙당 하나의 파일", "トラックごとに1ファイル", "Eine Datei pro Spur", "Un archivo por pista", "Un fichier par piste", "Un file per traccia", "Um Arquivo por Pista", "每个轨道一个文件", "每個音軌一個檔案"],
    "rationale": "Measured from the live stem-export panel on 2026-09-01; the panel window title is the OS Open-panel string and is therefore not a usable signal.",
+   "provenance": {
+    "트랙당 하나의 파일": {"attribute": "value", "date": "2026-11-18", "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "7801", "logic_version": "13.0", "match": "exact", "observed": "트랙당 하나의 파일", "record": "2026-11-18-ko-KR-project-export-navigated-census", "record_sha256": "77325894db53a978185884e73f21a4eb6adf589bdd07b971642c50043e801136", "role": "AXPopUpButton"}
+   },
+   "roles": ["AXPopUpButton"],
    "match": "exact",
-   "coverage": {"en-US": "derived", "ko-KR": "derived", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
-   "coverage_derived": {"en-US": "nibstrings:en:ships_up_to_case:One File per Track", "ko-KR": "strings:ko:ships_up_to_case:트랙당 하나의 파일", "ja-JP": "strings:ja:ships_up_to_case:トラックごとに1ファイル", "de-DE": "strings:de:ships_up_to_case:Eine Datei pro Spur", "es-ES": "strings:es:ships_up_to_case:Un archivo por pista", "fr-FR": "strings:fr:ships_up_to_case:Un fichier par piste", "it-IT": "strings:it:ships_up_to_case:Un file per traccia", "pt-BR": "strings:pt:ships_up_to_case:Um Arquivo por Pista", "zh-CN": "strings:zh_CN:ships_up_to_case:每个轨道一个文件", "zh-TW": "strings:zh_TW:ships_up_to_case:每個音軌一個檔案"}
+   "coverage": {"en-US": "derived", "ko-KR": "measured", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
+   "coverage_derived": {"en-US": "nibstrings:en:ships_up_to_case:One File per Track", "ja-JP": "strings:ja:ships_up_to_case:トラックごとに1ファイル", "de-DE": "strings:de:ships_up_to_case:Eine Datei pro Spur", "es-ES": "strings:es:ships_up_to_case:Un archivo por pista", "fr-FR": "strings:fr:ships_up_to_case:Un fichier par piste", "it-IT": "strings:it:ships_up_to_case:Un file per traccia", "pt-BR": "strings:pt:ships_up_to_case:Um Arquivo por Pista", "zh-CN": "strings:zh_CN:ships_up_to_case:每个轨道一个文件", "zh-TW": "strings:zh_TW:ships_up_to_case:每個音軌一個檔案"},
+   "coverage_currency": {"ko-KR": "current"}
   },
   "openMarkerListMenuItem": {
    "canonical": "Open Marker List",
@@ -2856,9 +2898,14 @@
    "canonical": "drummer",
    "variants": ["session player", "드러머", "세션 플레이어", "Session Player", "鼓手", "伴奏乐手"],
    "rationale": "Classifies a drummer / session-player region from its own name/help; read-only. The two Logic noun rows supply shipped locale values; existing Korean and English containment fragments remain. This does not infer region ancestry, a track/strip association, or native locale qualification.",
+   "provenance": {
+    "session player": {"attribute": "description", "date": "2026-11-18", "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "7801", "logic_version": "13.0", "match": "contains", "observed": "Session Player, Drummer", "record": "2026-11-18-ko-KR-arrange-track_creation-navigated-census", "record_sha256": "cb748bcae3cd4c47bbabf9698ff4a653934c69d656cab37c6abb287639567147", "role": "AXGroup"}
+   },
+   "roles": ["AXGroup", "AXRadioButton"],
    "match": "contains",
-   "coverage": {"en-US": "derived", "ko-KR": "derived", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
-   "coverage_derived": {"en-US": "strings:en:ships_up_to_case:drummer", "ko-KR": "quickhelp:ko:ships_up_to_case:session player", "ja-JP": "quickhelp:ja:ships_up_to_case:session player", "de-DE": "quickhelp:de:ships_up_to_case:session player", "es-ES": "strings:es:ships_up_to_case:drummer", "fr-FR": "strings:fr:ships_up_to_case:drummer", "it-IT": "strings:it:ships_up_to_case:drummer", "pt-BR": "strings:pt:ships_up_to_case:drummer", "zh-CN": "quickhelp:zh_CN:ships_up_to_case:伴奏乐手", "zh-TW": "strings:zh_TW:ships_up_to_case:session player"}
+   "coverage": {"en-US": "derived", "ko-KR": "measured", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
+   "coverage_derived": {"en-US": "strings:en:ships_up_to_case:drummer", "ja-JP": "quickhelp:ja:ships_up_to_case:session player", "de-DE": "quickhelp:de:ships_up_to_case:session player", "es-ES": "strings:es:ships_up_to_case:drummer", "fr-FR": "strings:fr:ships_up_to_case:drummer", "it-IT": "strings:it:ships_up_to_case:drummer", "pt-BR": "strings:pt:ships_up_to_case:drummer", "zh-CN": "quickhelp:zh_CN:ships_up_to_case:伴奏乐手", "zh-TW": "strings:zh_TW:ships_up_to_case:session player"},
+   "coverage_currency": {"ko-KR": "current"}
   },
   "regionKindMidi": {
    "canonical": "midi",
@@ -2932,9 +2979,15 @@
    "canonical": "Save",
    "variants": ["저장", "OK", "확인"],
    "rationale": "Retained scoped Save As commit-button family (exact match): Save/OK are alternatives on the structurally classified panel, and file existence verifies the result. Neither an unrelated Save/OK row among the corpus candidates nor the panel-window title establishes both button providers. No additional locale member or derivability claim is made.",
+   "provenance": {
+    "저장": {"attribute": "title", "date": "2026-11-18", "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "7801", "logic_version": "13.0", "match": "exact", "observed": "저장", "record": "2026-11-18-ko-KR-project-lifecycle-navigated-census", "record_sha256": "781decfa9a5b16f622c7f0653bddaeeef11bdc8275bcb6783d1196f7babe34cb", "role": "AXButton"},
+    "확인": {"attribute": "title", "date": "2026-11-18", "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "7801", "logic_version": "13.0", "match": "exact", "observed": "확인", "record": "2026-11-18-ko-KR-arrange-locators-navigated-census", "record_sha256": "d69f322d925313f347151898b525dad3c234972706d01866880bc63a514185ad", "role": "AXButton"}
+   },
+   "roles": ["AXButton"],
    "match": "exact",
-   "coverage": {"en-US": "derived", "ko-KR": "derived", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "unmeasured", "zh-TW": "unmeasured"},
-   "coverage_derived": {"en-US": "niblabels:en:ships_up_to_case:Save", "ko-KR": "niblabels:ko:ships_up_to_case:저장", "ja-JP": "niblabels:ja:ships_up_to_case:OK", "de-DE": "niblabels:de:ships_up_to_case:OK", "es-ES": "strings:es:ships_up_to_case:OK", "fr-FR": "niblabels:fr:ships_up_to_case:OK", "it-IT": "niblabels:it:ships_up_to_case:OK", "pt-BR": "niblabels:pt:ships_up_to_case:OK"}
+   "coverage": {"en-US": "derived", "ko-KR": "measured", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "unmeasured", "zh-TW": "unmeasured"},
+   "coverage_derived": {"en-US": "niblabels:en:ships_up_to_case:Save", "ja-JP": "niblabels:ja:ships_up_to_case:OK", "de-DE": "niblabels:de:ships_up_to_case:OK", "es-ES": "strings:es:ships_up_to_case:OK", "fr-FR": "niblabels:fr:ships_up_to_case:OK", "it-IT": "niblabels:it:ships_up_to_case:OK", "pt-BR": "niblabels:pt:ships_up_to_case:OK"},
+   "coverage_currency": {"ko-KR": "current"}
   },
   "savePanelFolderRadio": {
    "canonical": "Folder",
@@ -2959,17 +3012,27 @@
    "canonical": "Package",
    "variants": ["패키지", "パッケージ", "Paket", "Paquete", "Paquet", "Pacchetto", "Pacote", "包", "套件"],
    "rationale": "One of the two project-organisation radios that identify the Save As panel.",
+   "provenance": {
+    "패키지": {"attribute": "title", "date": "2026-11-18", "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "7801", "logic_version": "13.0", "match": "exact", "observed": "패키지", "record": "2026-11-18-ko-KR-project-lifecycle-navigated-census", "record_sha256": "781decfa9a5b16f622c7f0653bddaeeef11bdc8275bcb6783d1196f7babe34cb", "role": "AXRadioButton"}
+   },
+   "roles": ["AXRadioButton"],
    "match": "exact",
-   "coverage": {"en-US": "derived", "ko-KR": "derived", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
-   "coverage_derived": {"en-US": "nibstrings:en:ships_up_to_case:Package", "ko-KR": "strings:ko:ships_up_to_case:패키지", "ja-JP": "strings:ja:ships_up_to_case:パッケージ", "de-DE": "strings:de:ships_up_to_case:Paket", "es-ES": "strings:es:ships_up_to_case:Paquete", "fr-FR": "strings:fr:ships_up_to_case:Paquet", "it-IT": "strings:it:ships_up_to_case:Pacchetto", "pt-BR": "strings:pt:ships_up_to_case:Pacote", "zh-CN": "strings:zh_CN:ships_up_to_case:包", "zh-TW": "strings:zh_TW:ships_up_to_case:套件"}
+   "coverage": {"en-US": "derived", "ko-KR": "measured", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
+   "coverage_derived": {"en-US": "nibstrings:en:ships_up_to_case:Package", "ja-JP": "strings:ja:ships_up_to_case:パッケージ", "de-DE": "strings:de:ships_up_to_case:Paket", "es-ES": "strings:es:ships_up_to_case:Paquete", "fr-FR": "strings:fr:ships_up_to_case:Paquet", "it-IT": "strings:it:ships_up_to_case:Pacchetto", "pt-BR": "strings:pt:ships_up_to_case:Pacote", "zh-CN": "strings:zh_CN:ships_up_to_case:包", "zh-TW": "strings:zh_TW:ships_up_to_case:套件"},
+   "coverage_currency": {"ko-KR": "current"}
   },
   "savePanelWindowTitle": {
    "canonical": "Save",
    "variants": ["저장", "保存", "Sichern", "Guardar", "Enregistrer", "Salva", "Salvar", "儲存"],
    "rationale": "Title of the Save As panel window; the structural classifier matches it exactly.",
+   "provenance": {
+    "저장": {"attribute": "title", "date": "2026-11-18", "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "7801", "logic_version": "13.0", "match": "exact", "observed": "저장", "record": "2026-11-18-ko-KR-project-lifecycle-navigated-census", "record_sha256": "781decfa9a5b16f622c7f0653bddaeeef11bdc8275bcb6783d1196f7babe34cb", "role": "AXWindow"}
+   },
+   "roles": ["AXWindow"],
    "match": "exact",
-   "coverage": {"en-US": "derived", "ko-KR": "derived", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
-   "coverage_derived": {"en-US": "niblabels:en:ships_up_to_case:Save", "ko-KR": "niblabels:ko:ships_up_to_case:저장", "ja-JP": "niblabels:ja:ships_up_to_case:保存", "de-DE": "niblabels:de:ships_up_to_case:Sichern", "es-ES": "niblabels:es:ships_up_to_case:Guardar", "fr-FR": "niblabels:fr:ships_up_to_case:Enregistrer", "it-IT": "niblabels:it:ships_up_to_case:Salva", "pt-BR": "niblabels:pt:ships_up_to_case:Salvar", "zh-CN": "niblabels:zh_CN:ships_up_to_case:保存", "zh-TW": "niblabels:zh_TW:ships_up_to_case:儲存"}
+   "coverage": {"en-US": "derived", "ko-KR": "measured", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
+   "coverage_derived": {"en-US": "niblabels:en:ships_up_to_case:Save", "ja-JP": "niblabels:ja:ships_up_to_case:保存", "de-DE": "niblabels:de:ships_up_to_case:Sichern", "es-ES": "niblabels:es:ships_up_to_case:Guardar", "fr-FR": "niblabels:fr:ships_up_to_case:Enregistrer", "it-IT": "niblabels:it:ships_up_to_case:Salva", "pt-BR": "niblabels:pt:ships_up_to_case:Salvar", "zh-CN": "niblabels:zh_CN:ships_up_to_case:保存", "zh-TW": "niblabels:zh_TW:ships_up_to_case:儲存"},
+   "coverage_currency": {"ko-KR": "current"}
   },
   "sendLevelKnobHelpKeyword": {
    "canonical": "Send Level knob",
@@ -3372,17 +3435,27 @@
    "canonical": "Export",
    "variants": ["내보내기", "書き出す", "Exportieren", "Exportar", "Exporter", "Esporta", "导出", "輸出"],
    "rationale": "Measured from the live stem-export panel on 2026-09-01; the panel window title is the OS Open-panel string and is therefore not a usable signal.",
+   "provenance": {
+    "내보내기": {"attribute": "title", "date": "2026-11-18", "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "7801", "logic_version": "13.0", "match": "exact", "observed": "내보내기", "record": "2026-11-18-ko-KR-project-export-navigated-census", "record_sha256": "77325894db53a978185884e73f21a4eb6adf589bdd07b971642c50043e801136", "role": "AXButton"}
+   },
+   "roles": ["AXButton"],
    "match": "exact",
-   "coverage": {"en-US": "derived", "ko-KR": "derived", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
-   "coverage_derived": {"en-US": "nibstrings:en:ships_up_to_case:Export", "ko-KR": "strings:ko:ships_up_to_case:내보내기", "ja-JP": "strings:ja:ships_up_to_case:書き出す", "de-DE": "strings:de:ships_up_to_case:Exportieren", "es-ES": "strings:es:ships_up_to_case:Exportar", "fr-FR": "strings:fr:ships_up_to_case:Exporter", "it-IT": "strings:it:ships_up_to_case:Esporta", "pt-BR": "strings:pt:ships_up_to_case:Exportar", "zh-CN": "strings:zh_CN:ships_up_to_case:导出", "zh-TW": "niblabels:zh_TW:ships_up_to_case:輸出"}
+   "coverage": {"en-US": "derived", "ko-KR": "measured", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
+   "coverage_derived": {"en-US": "nibstrings:en:ships_up_to_case:Export", "ja-JP": "strings:ja:ships_up_to_case:書き出す", "de-DE": "strings:de:ships_up_to_case:Exportieren", "es-ES": "strings:es:ships_up_to_case:Exportar", "fr-FR": "strings:fr:ships_up_to_case:Exporter", "it-IT": "strings:it:ships_up_to_case:Esporta", "pt-BR": "strings:pt:ships_up_to_case:Exportar", "zh-CN": "strings:zh_CN:ships_up_to_case:导出", "zh-TW": "niblabels:zh_TW:ships_up_to_case:輸出"},
+   "coverage_currency": {"ko-KR": "current"}
   },
   "stemExportDismissButton": {
    "canonical": "Cancel",
    "variants": ["취소", "キャンセル", "Abbrechen", "Cancelar", "Annuler", "Annulla", "取消"],
    "rationale": "Measured from the live stem-export panel on 2026-09-01; the panel window title is the OS Open-panel string and is therefore not a usable signal.",
+   "provenance": {
+    "취소": {"attribute": "title", "date": "2026-11-18", "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "7801", "logic_version": "13.0", "match": "exact", "observed": "취소", "record": "2026-11-18-ko-KR-project-lifecycle-navigated-census", "record_sha256": "781decfa9a5b16f622c7f0653bddaeeef11bdc8275bcb6783d1196f7babe34cb", "role": "AXButton"}
+   },
+   "roles": ["AXButton"],
    "match": "exact",
-   "coverage": {"en-US": "derived", "ko-KR": "derived", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
-   "coverage_derived": {"en-US": "niblabels:en:ships_up_to_case:Cancel", "ko-KR": "niblabels:ko:ships_up_to_case:취소", "ja-JP": "niblabels:ja:ships_up_to_case:キャンセル", "de-DE": "niblabels:de:ships_up_to_case:Abbrechen", "es-ES": "niblabels:es:ships_up_to_case:Cancelar", "fr-FR": "niblabels:fr:ships_up_to_case:Annuler", "it-IT": "niblabels:it:ships_up_to_case:Annulla", "pt-BR": "niblabels:pt:ships_up_to_case:Cancelar", "zh-CN": "niblabels:zh_CN:ships_up_to_case:取消", "zh-TW": "niblabels:zh_TW:ships_up_to_case:取消"}
+   "coverage": {"en-US": "derived", "ko-KR": "measured", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
+   "coverage_derived": {"en-US": "niblabels:en:ships_up_to_case:Cancel", "ja-JP": "niblabels:ja:ships_up_to_case:キャンセル", "de-DE": "niblabels:de:ships_up_to_case:Abbrechen", "es-ES": "niblabels:es:ships_up_to_case:Cancelar", "fr-FR": "niblabels:fr:ships_up_to_case:Annuler", "it-IT": "niblabels:it:ships_up_to_case:Annulla", "pt-BR": "niblabels:pt:ships_up_to_case:Cancelar", "zh-CN": "niblabels:zh_CN:ships_up_to_case:取消", "zh-TW": "niblabels:zh_TW:ships_up_to_case:取消"},
+   "coverage_currency": {"ko-KR": "current"}
   },
   "stemExportProgressWindowTitle": {
    "canonical": "Logic Pro",
@@ -3401,9 +3474,14 @@
    "canonical": "Step Input Keyboard",
    "variants": ["스텝 입력 키보드", "ステップインプットキーボード", "Step-Input-Keyboard", "Teclado de introducción por pasos", "Clavier d’entrée pas à pas", "tastiera di inserimento step", "Teclado de Entrada de Passos", "逐个输入键盘", "循步輸入鍵盤"],
    "rationale": "Verifies the Step Input Keyboard window opened or closed after the menu action.",
+   "provenance": {
+    "스텝 입력 키보드": {"attribute": "title", "date": "2026-11-18", "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "7801", "logic_version": "13.0", "match": "contains", "observed": "QualFixtureR11 - 스텝 입력 키보드", "record": "2026-11-18-ko-KR-editor-step-navigated-census", "record_sha256": "315ef26507d80f2e02a53ab2decfafcf5d1edc9e37a5dcfc53c68e9cf1981216", "role": "AXWindow"}
+   },
+   "roles": ["AXWindow"],
    "match": "contains",
-   "coverage": {"en-US": "derived", "ko-KR": "derived", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
-   "coverage_derived": {"en-US": "strings:en:ships_up_to_case:Step Input Keyboard", "ko-KR": "strings:ko:ships_up_to_case:스텝 입력 키보드", "ja-JP": "strings:ja:ships_up_to_case:ステップインプットキーボード", "de-DE": "strings:de:ships_up_to_case:Step-Input-Keyboard", "es-ES": "strings:es:ships_up_to_case:Teclado de introducción por pasos", "fr-FR": "strings:fr:ships_up_to_case:Clavier d’entrée pas à pas", "it-IT": "strings:it:ships_up_to_case:tastiera di inserimento step", "pt-BR": "strings:pt:ships_up_to_case:Teclado de Entrada de Passos", "zh-CN": "strings:zh_CN:ships_up_to_case:逐个输入键盘", "zh-TW": "strings:zh_TW:ships_up_to_case:循步輸入鍵盤"}
+   "coverage": {"en-US": "derived", "ko-KR": "measured", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
+   "coverage_derived": {"en-US": "strings:en:ships_up_to_case:Step Input Keyboard", "ja-JP": "strings:ja:ships_up_to_case:ステップインプットキーボード", "de-DE": "strings:de:ships_up_to_case:Step-Input-Keyboard", "es-ES": "strings:es:ships_up_to_case:Teclado de introducción por pasos", "fr-FR": "strings:fr:ships_up_to_case:Clavier d’entrée pas à pas", "it-IT": "strings:it:ships_up_to_case:tastiera di inserimento step", "pt-BR": "strings:pt:ships_up_to_case:Teclado de Entrada de Passos", "zh-CN": "strings:zh_CN:ships_up_to_case:逐个输入键盘", "zh-TW": "strings:zh_TW:ships_up_to_case:循步輸入鍵盤"},
+   "coverage_currency": {"ko-KR": "current"}
   },
   "stereoOutputLabel": {
    "canonical": "Stereo Output",
@@ -3843,9 +3921,17 @@
    "canonical": "drummer",
    "variants": ["鼓手"],
    "rationale": "Classifies a drummer track by the shipped Logic Drummer noun; read-only header classifier. The lowercase English containment tolerance remains; this does not establish track/strip association or native locale qualification.",
+   "roles": ["AXRadioButton"],
    "match": "exact",
-   "coverage": {"en-US": "derived", "ko-KR": "derived", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
-   "coverage_derived": {"en-US": "strings:en:ships_up_to_case:drummer", "ko-KR": "strings:ko:ships_up_to_case:drummer", "ja-JP": "strings:ja:ships_up_to_case:drummer", "de-DE": "strings:de:ships_up_to_case:drummer", "es-ES": "strings:es:ships_up_to_case:drummer", "fr-FR": "strings:fr:ships_up_to_case:drummer", "it-IT": "strings:it:ships_up_to_case:drummer", "pt-BR": "strings:pt:ships_up_to_case:drummer", "zh-CN": "strings:zh_CN:ships_up_to_case:鼓手", "zh-TW": "strings:zh_TW:ships_up_to_case:鼓手"}
+   "coverage": {"en-US": "derived", "ko-KR": "measured", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
+   "coverage_records": {"ko-KR": "2026-11-18-ko-KR-arrange-track_creation-navigated-census"},
+   "coverage_roles": {"ko-KR": "AXRadioButton"},
+   "coverage_attributes": {"ko-KR": "description"},
+   "coverage_logic_version": {"ko-KR": "13.0"},
+   "coverage_logic_build": {"ko-KR": "7801"},
+   "coverage_record_sha256": {"ko-KR": "cb748bcae3cd4c47bbabf9698ff4a653934c69d656cab37c6abb287639567147"},
+   "coverage_derived": {"en-US": "strings:en:ships_up_to_case:drummer", "ja-JP": "strings:ja:ships_up_to_case:drummer", "de-DE": "strings:de:ships_up_to_case:drummer", "es-ES": "strings:es:ships_up_to_case:drummer", "fr-FR": "strings:fr:ships_up_to_case:drummer", "it-IT": "strings:it:ships_up_to_case:drummer", "pt-BR": "strings:pt:ships_up_to_case:drummer", "zh-CN": "strings:zh_CN:ships_up_to_case:鼓手", "zh-TW": "strings:zh_TW:ships_up_to_case:鼓手"},
+   "coverage_currency": {"ko-KR": "current"}
   },
   "trackTypeExternalMIDI": {
    "canonical": "external",
@@ -3971,9 +4057,14 @@
    "canonical": "forward",
    "variants": ["앞으로", "早送り", "Vorspulen", "Adelante", "Avance", "Avanti", "Avança", "前进", "往前"],
    "rationale": "Identifies the Forward family for read-only transport-container classification. Values read from Logic 12.3 (6674) StrTransportBtns|||Forward; the existing lowercase English containment tolerance is retained. Static derivation is not runtime qualification.",
+   "provenance": {
+    "앞으로": {"attribute": "description", "date": "2026-11-18", "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)", "locale": "ko-KR", "logic_build": "7801", "logic_version": "13.0", "match": "contains", "observed": "앞으로", "record": "2026-11-18-ko-KR-project-lifecycle-navigated-census", "record_sha256": "781decfa9a5b16f622c7f0653bddaeeef11bdc8275bcb6783d1196f7babe34cb", "role": "AXButton"}
+   },
+   "roles": ["AXButton"],
    "match": "contains",
-   "coverage": {"en-US": "derived", "ko-KR": "derived", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
-   "coverage_derived": {"en-US": "nibstrings:en:ships_up_to_case:forward", "ko-KR": "quickhelp:ko:ships_up_to_case:앞으로", "ja-JP": "quickhelp:ja:ships_up_to_case:forward", "de-DE": "strings:de:ships_up_to_case:Vorspulen", "es-ES": "strings:es:ships_up_to_case:Adelante", "fr-FR": "strings:fr:ships_up_to_case:Avance", "it-IT": "strings:it:ships_up_to_case:Avanti", "pt-BR": "strings:pt:ships_up_to_case:Avança", "zh-CN": "quickhelp:zh_CN:ships_up_to_case:前进", "zh-TW": "strings:zh_TW:ships_up_to_case:往前"}
+   "coverage": {"en-US": "derived", "ko-KR": "measured", "ja-JP": "derived", "de-DE": "derived", "es-ES": "derived", "fr-FR": "derived", "it-IT": "derived", "pt-BR": "derived", "zh-CN": "derived", "zh-TW": "derived"},
+   "coverage_derived": {"en-US": "nibstrings:en:ships_up_to_case:forward", "ja-JP": "quickhelp:ja:ships_up_to_case:forward", "de-DE": "strings:de:ships_up_to_case:Vorspulen", "es-ES": "strings:es:ships_up_to_case:Adelante", "fr-FR": "strings:fr:ships_up_to_case:Avance", "it-IT": "strings:it:ships_up_to_case:Avanti", "pt-BR": "strings:pt:ships_up_to_case:Avança", "zh-CN": "quickhelp:zh_CN:ships_up_to_case:前进", "zh-TW": "strings:zh_TW:ships_up_to_case:往前"},
+   "coverage_currency": {"ko-KR": "current"}
   },
   "transportKeywordFalseFriends": {
    "canonical": "catch playhead",

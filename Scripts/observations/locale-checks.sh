@@ -45,6 +45,7 @@ CHECKS=(
   "python3 Scripts/test_observation_size.py"
   "python3 Scripts/test_lfs_checkout.py"
   "python3 Scripts/test_logic_build_drift_agent.py"
+  "python3 Scripts/test_locale_nav.py"
   "python3 Scripts/test_locale_labels_json.py"
   "python3 Scripts/test_locale_version_axis.py"
   "python3 Scripts/test_policy_literals_against_canon.py"

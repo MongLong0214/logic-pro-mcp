@@ -1190,7 +1190,6 @@
       ],
       "ko-KR": [
         "applicationMenuBarItem",
-        "arrangeWindowTitleSuffix",
         "assignControlHelpKeyword",
         "automationModeLatch",
         "automationModeRead",
@@ -1200,16 +1199,12 @@
         "bounceNormalizeSetting",
         "bounceOfflineSetting",
         "bounceRealtimeSetting",
-        "cancelButton",
         "controlSurfaceAddButton",
         "controlSurfaceInputPortLabel",
         "controlSurfaceInstallMenuItem",
         "controlSurfaceInstallWindowTitle",
         "controlSurfaceModelLabel",
-        "controlSurfaceNewMenuButton",
         "controlSurfaceOutputPortLabel",
-        "controlSurfaceSetupWindowTitle",
-        "createButton",
         "cycleRangeEnd",
         "cycleRangeStart",
         "deleteTracksPrimaryButton",
@@ -1225,7 +1220,6 @@
         "eventListColumnTrack",
         "eventListColumnValue",
         "eventPositionAsTimeMenuItem",
-        "goToPositionDialogTitle",
         "hideAllPluginWindowsMenuItem",
         "keyCommandsControlSurfaceColumnTitle",
         "keyCommandsWindowTitle",
@@ -1235,19 +1229,14 @@
         "markerListDeleteMenuItem",
         "menuActionNameFragment",
         "metronomeClickKeyCommandName",
-        "midiImportCommitButton",
         "midiImportDeclineTempoButton",
-        "midiImportPanelTitle",
         "mixerAppendTracksForSelectedStrips",
         "mixerCreateAuxiliaryChannelStrip",
         "mixerMenuShowDirection",
         "mixerScrollToMenuItem",
         "mixerScrollToOutputsMenuItem",
-        "newTrackSheetDescription",
         "noInputMenuLabel",
         "noOutputLabel",
-        "okButton",
-        "oneFilePerTrackPopupValue",
         "outputPopupBusSubmenuTitle",
         "outputPopupOutputSubmenuTitle",
         "pluginFormatDualMono",
@@ -1265,28 +1254,19 @@
         "regionBarsSentence",
         "regionHelpKeyword",
         "regionKindAudio",
-        "regionKindDrummer",
-        "saveConfirmationButton",
-        "savePanelPackageRadio",
-        "savePanelWindowTitle",
         "sendLevelKnobHelpKeyword",
         "setLocatorsMenuItem",
         "showLibraryMenuItem",
         "showStepInputKeyboardMenuItem",
         "sliderSendHint",
-        "stemExportCommitButton",
-        "stemExportDismissButton",
         "stemExportProgressWindowTitle",
-        "stepInputKeyboardWindowTitle",
         "stereoOutputLabel",
         "trackContentGeneric",
         "trackHiddenViewControl",
         "trackHideControl",
-        "trackTypeDrummer",
         "trackTypeExternalMIDI",
         "trackTypeGMDevice",
         "transportAutopunchControl",
-        "transportForwardControl",
         "transportRecordArmExclusion",
         "transportRewindControl",
         "undoMenuItemPrefix",
@@ -1952,8 +1932,6 @@
       "controlSurfaceInstallMenuItem→安裝⋯",
       "controlSurfaceInstallMenuItem→설치…",
       "controlSurfaceInstallWindowTitle→설치",
-      "controlSurfaceNewMenuButton→신규",
-      "controlSurfaceSetupWindowTitle→컨트롤 서피스 설정",
       "goToPositionDialogTitle→Zu Position",
       "hideAllPluginWindowsMenuItem→모든 플러그인 윈도우",
       "pluginMenuAudioUnits→音频单元",
@@ -2549,6 +2527,8 @@
     ],
     "surfaces_without_records": [
       "de-DE→arrange.area_controls",
+      "de-DE→arrange.locators",
+      "de-DE→arrange.track_creation",
       "de-DE→editor.audio_track",
       "de-DE→editor.event_list",
       "de-DE→editor.piano_roll",
@@ -2559,13 +2539,17 @@
       "de-DE→system.accessibility",
       "de-DE→system.bundle",
       "de-DE→system.preferences",
+      "en-US→arrange.locators",
+      "en-US→arrange.track_creation",
       "en-US→editor.audio_track",
       "en-US→editor.piano_roll",
       "en-US→editor.step",
       "en-US→plugin.controls_view",
       "en-US→plugin.native_view",
       "es-ES→arrange.area_controls",
+      "es-ES→arrange.locators",
       "es-ES→arrange.regions",
+      "es-ES→arrange.track_creation",
       "es-ES→arrange.transport",
       "es-ES→editor.audio_track",
       "es-ES→editor.event_list",
@@ -2579,7 +2563,9 @@
       "es-ES→system.bundle",
       "es-ES→system.preferences",
       "fr-FR→arrange.area_controls",
+      "fr-FR→arrange.locators",
       "fr-FR→arrange.regions",
+      "fr-FR→arrange.track_creation",
       "fr-FR→editor.audio_track",
       "fr-FR→editor.event_list",
       "fr-FR→editor.piano_roll",
@@ -2592,6 +2578,8 @@
       "fr-FR→system.bundle",
       "fr-FR→system.preferences",
       "it-IT→arrange.area_controls",
+      "it-IT→arrange.locators",
+      "it-IT→arrange.track_creation",
       "it-IT→arrange.transport",
       "it-IT→editor.audio_track",
       "it-IT→editor.event_list",
@@ -2605,6 +2593,8 @@
       "it-IT→system.bundle",
       "it-IT→system.preferences",
       "ja-JP→arrange.area_controls",
+      "ja-JP→arrange.locators",
+      "ja-JP→arrange.track_creation",
       "ja-JP→editor.audio_track",
       "ja-JP→editor.event_list",
       "ja-JP→editor.piano_roll",
@@ -2615,9 +2605,10 @@
       "ja-JP→system.accessibility",
       "ja-JP→system.bundle",
       "ja-JP→system.preferences",
-      "ko-KR→editor.step",
       "pt-BR→arrange.area_controls",
+      "pt-BR→arrange.locators",
       "pt-BR→arrange.regions",
+      "pt-BR→arrange.track_creation",
       "pt-BR→arrange.transport",
       "pt-BR→editor.audio_track",
       "pt-BR→editor.event_list",
@@ -2631,7 +2622,9 @@
       "pt-BR→system.bundle",
       "pt-BR→system.preferences",
       "zh-CN→arrange.area_controls",
+      "zh-CN→arrange.locators",
       "zh-CN→arrange.regions",
+      "zh-CN→arrange.track_creation",
       "zh-CN→arrange.transport",
       "zh-CN→editor.audio_track",
       "zh-CN→editor.event_list",
@@ -2645,7 +2638,9 @@
       "zh-CN→system.bundle",
       "zh-CN→system.preferences",
       "zh-TW→arrange.area_controls",
+      "zh-TW→arrange.locators",
       "zh-TW→arrange.regions",
+      "zh-TW→arrange.track_creation",
       "zh-TW→arrange.transport",
       "zh-TW→editor.audio_track",
       "zh-TW→editor.event_list",
@@ -3000,7 +2995,7 @@
         "undoPluginInsertMenuItem",
         "verticalZoomSlider"
       ],
-      "reason": "RATCHETS rendered sorted, one member per line, marked generated"
+      "reason": "ko-KR navigation census: 20 more cells measured on the declared Logic"
     },
     "cells_not_measured_on_current_version.en-US": {
       "date": "2026-11-18",
@@ -3115,7 +3110,7 @@
         "unassignedInputSlotLabel",
         "undoPluginInsertMenuItem"
       ],
-      "reason": "RATCHETS rendered sorted, one member per line, marked generated"
+      "reason": "ko-KR navigation census: 20 more cells measured on the declared Logic"
     },
     "cells_not_measured_on_current_version.es-ES": {
       "date": "2026-11-18",
@@ -3336,7 +3331,7 @@
         "undoPluginInsertMenuItem",
         "verticalZoomSlider"
       ],
-      "reason": "RATCHETS rendered sorted, one member per line, marked generated"
+      "reason": "ko-KR navigation census: 20 more cells measured on the declared Logic"
     },
     "cells_not_measured_on_current_version.fr-FR": {
       "date": "2026-11-18",
@@ -3557,7 +3552,7 @@
         "undoPluginInsertMenuItem",
         "verticalZoomSlider"
       ],
-      "reason": "RATCHETS rendered sorted, one member per line, marked generated"
+      "reason": "ko-KR navigation census: 20 more cells measured on the declared Logic"
     },
     "cells_not_measured_on_current_version.it-IT": {
       "date": "2026-11-18",
@@ -3777,7 +3772,7 @@
         "undoPluginInsertMenuItem",
         "verticalZoomSlider"
       ],
-      "reason": "RATCHETS rendered sorted, one member per line, marked generated"
+      "reason": "ko-KR navigation census: 20 more cells measured on the declared Logic"
     },
     "cells_not_measured_on_current_version.ja-JP": {
       "date": "2026-11-18",
@@ -3992,13 +3987,12 @@
         "undoPluginInsertMenuItem",
         "verticalZoomSlider"
       ],
-      "reason": "RATCHETS rendered sorted, one member per line, marked generated"
+      "reason": "ko-KR navigation census: 20 more cells measured on the declared Logic"
     },
     "cells_not_measured_on_current_version.ko-KR": {
       "date": "2026-11-18",
       "members": [
         "applicationMenuBarItem",
-        "arrangeWindowTitleSuffix",
         "assignControlHelpKeyword",
         "automationModeLatch",
         "automationModeRead",
@@ -4008,16 +4002,12 @@
         "bounceNormalizeSetting",
         "bounceOfflineSetting",
         "bounceRealtimeSetting",
-        "cancelButton",
         "controlSurfaceAddButton",
         "controlSurfaceInputPortLabel",
         "controlSurfaceInstallMenuItem",
         "controlSurfaceInstallWindowTitle",
         "controlSurfaceModelLabel",
-        "controlSurfaceNewMenuButton",
         "controlSurfaceOutputPortLabel",
-        "controlSurfaceSetupWindowTitle",
-        "createButton",
         "cycleRangeEnd",
         "cycleRangeStart",
         "deleteTracksPrimaryButton",
@@ -4033,7 +4023,6 @@
         "eventListColumnTrack",
         "eventListColumnValue",
         "eventPositionAsTimeMenuItem",
-        "goToPositionDialogTitle",
         "hideAllPluginWindowsMenuItem",
         "keyCommandsControlSurfaceColumnTitle",
         "keyCommandsWindowTitle",
@@ -4043,19 +4032,14 @@
         "markerListDeleteMenuItem",
         "menuActionNameFragment",
         "metronomeClickKeyCommandName",
-        "midiImportCommitButton",
         "midiImportDeclineTempoButton",
-        "midiImportPanelTitle",
         "mixerAppendTracksForSelectedStrips",
         "mixerCreateAuxiliaryChannelStrip",
         "mixerMenuShowDirection",
         "mixerScrollToMenuItem",
         "mixerScrollToOutputsMenuItem",
-        "newTrackSheetDescription",
         "noInputMenuLabel",
         "noOutputLabel",
-        "okButton",
-        "oneFilePerTrackPopupValue",
         "outputPopupBusSubmenuTitle",
         "outputPopupOutputSubmenuTitle",
         "pluginFormatDualMono",
@@ -4073,34 +4057,25 @@
         "regionBarsSentence",
         "regionHelpKeyword",
         "regionKindAudio",
-        "regionKindDrummer",
-        "saveConfirmationButton",
-        "savePanelPackageRadio",
-        "savePanelWindowTitle",
         "sendLevelKnobHelpKeyword",
         "setLocatorsMenuItem",
         "showLibraryMenuItem",
         "showStepInputKeyboardMenuItem",
         "sliderSendHint",
-        "stemExportCommitButton",
-        "stemExportDismissButton",
         "stemExportProgressWindowTitle",
-        "stepInputKeyboardWindowTitle",
         "stereoOutputLabel",
         "trackContentGeneric",
         "trackHiddenViewControl",
         "trackHideControl",
-        "trackTypeDrummer",
         "trackTypeExternalMIDI",
         "trackTypeGMDevice",
         "transportAutopunchControl",
-        "transportForwardControl",
         "transportRecordArmExclusion",
         "transportRewindControl",
         "undoMenuItemPrefix",
         "undoPluginInsertMenuItem"
       ],
-      "reason": "RATCHETS rendered sorted, one member per line, marked generated"
+      "reason": "ko-KR navigation census: 20 more cells measured on the declared Logic"
     },
     "cells_not_measured_on_current_version.pt-BR": {
       "date": "2026-11-18",
@@ -4325,7 +4300,7 @@
         "undoPluginInsertMenuItem",
         "verticalZoomSlider"
       ],
-      "reason": "RATCHETS rendered sorted, one member per line, marked generated"
+      "reason": "ko-KR navigation census: 20 more cells measured on the declared Logic"
     },
     "cells_not_measured_on_current_version.zh-CN": {
       "date": "2026-11-18",
@@ -4542,7 +4517,7 @@
         "undoPluginInsertMenuItem",
         "verticalZoomSlider"
       ],
-      "reason": "RATCHETS rendered sorted, one member per line, marked generated"
+      "reason": "ko-KR navigation census: 20 more cells measured on the declared Logic"
     },
     "cells_not_measured_on_current_version.zh-TW": {
       "date": "2026-11-18",
@@ -4760,7 +4735,7 @@
         "undoPluginInsertMenuItem",
         "verticalZoomSlider"
       ],
-      "reason": "RATCHETS rendered sorted, one member per line, marked generated"
+      "reason": "ko-KR navigation census: 20 more cells measured on the declared Logic"
     },
     "label_readings_from_a_superseded_build": {
       "date": "2026-11-17",
@@ -5255,15 +5230,33 @@
       "date": "2026-11-18",
       "members": [
         "de-DE→arrange.area_controls",
+        "de-DE→arrange.locators",
+        "de-DE→arrange.track_creation",
+        "en-US→arrange.locators",
+        "en-US→arrange.track_creation",
         "es-ES→arrange.area_controls",
+        "es-ES→arrange.locators",
+        "es-ES→arrange.track_creation",
         "fr-FR→arrange.area_controls",
+        "fr-FR→arrange.locators",
+        "fr-FR→arrange.track_creation",
         "it-IT→arrange.area_controls",
+        "it-IT→arrange.locators",
+        "it-IT→arrange.track_creation",
         "ja-JP→arrange.area_controls",
+        "ja-JP→arrange.locators",
+        "ja-JP→arrange.track_creation",
         "pt-BR→arrange.area_controls",
+        "pt-BR→arrange.locators",
+        "pt-BR→arrange.track_creation",
         "zh-CN→arrange.area_controls",
-        "zh-TW→arrange.area_controls"
+        "zh-CN→arrange.locators",
+        "zh-CN→arrange.track_creation",
+        "zh-TW→arrange.area_controls",
+        "zh-TW→arrange.locators",
+        "zh-TW→arrange.track_creation"
       ],
-      "reason": "RATCHETS rendered sorted, one member per line, marked generated"
+      "reason": "ko-KR navigation census: 20 more cells measured on the declared Logic"
     },
     "undocumented_variants": {
       "date": "2026-11-17",

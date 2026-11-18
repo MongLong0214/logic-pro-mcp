@@ -119,6 +119,7 @@ jobs:
             Scripts/test_observation_size.py
             Scripts/test_lfs_checkout.py
             Scripts/test_logic_build_drift_agent.py
+            Scripts/test_locale_nav.py
             Scripts/test_locale_labels_json.py
             Scripts/test_locale_version_axis.py
             Scripts/test_policy_literals_against_canon.py

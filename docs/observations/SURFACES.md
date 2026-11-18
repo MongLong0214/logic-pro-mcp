@@ -14,6 +14,8 @@ harder question, **"what have we never measured?"**
 | `arrange.track_headers` | the track rail: names, numbers, selection, stacks, disclosure |
 | `arrange.regions` | regions in the arrangement area |
 | `arrange.area_controls` | the arrangement area's own controls: snap, drag mode, zoom sliders, catch playhead, folder navigation |
+| `arrange.track_creation` | the New Tracks sheet: track types, counts, the Create button |
+| `arrange.locators` | the Go To Position dialog and the other locator dialogs |
 | `arrange.menus` | Track / Edit / Navigate menus acting on the arrangement |
 | `arrange.transport` | transport bar, playhead, tempo/key display |
 | `mixer.channel_strips` | strips, their controls, ordering |
