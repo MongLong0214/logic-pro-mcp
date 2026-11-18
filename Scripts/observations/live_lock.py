@@ -97,6 +97,28 @@ def release(pid=None, path=None):
     return True
 
 
+def inherited(path=None):
+    """True when a live holder started this process and handed the lock down (`LPM_LIVE_LOCK_INHERITED`)."""
+    value = os.environ.get("LPM_LIVE_LOCK_INHERITED", "")
+    info = holder(path)
+    return bool(value.isdigit() and info and not info.get("stale") and info.get("pid") == int(value))
+
+
+def take(owner):
+    """The guard every entry point that drives Logic calls first.
+
+    Returns `(True, release)` when this process may drive Logic (it took the lock, or the campaign that
+    started it already holds it), `(False, message)` when somebody else alive holds it. `release()` is
+    always safe to call, once, when the work is done.
+    """
+    if inherited():
+        return True, lambda: None
+    if acquire(owner, pid=os.getpid()):
+        return True, lambda: release(pid=os.getpid())
+    held = holder() or {}
+    return False, f"another live run holds Logic ({held.get('owner')}, pid {held.get('pid')}); nothing was touched"
+
+
 def main(argv):
     if not argv:
         print(__doc__)
@@ -113,6 +135,9 @@ def main(argv):
         wait = int(argv[argv.index("--wait") + 1]) if "--wait" in argv else 0
         # The PARENT's pid: this process exits at once, and a lock held by a dead pid is stale by rule.
         owner_pid = os.getppid()
+        if inherited():
+            print(lock_path())
+            return 0
         if acquire(argv[1] if len(argv) > 1 else "unknown", pid=owner_pid, wait=wait):
             print(lock_path())
             return 0

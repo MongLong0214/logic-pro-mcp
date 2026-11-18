@@ -15,6 +15,7 @@ import importlib.util
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -53,7 +54,7 @@ def mutated(old, new, name):
 
 
 engine = load(ENGINE, "campaign_engine")
-STEPS = ("switch", "census", "canon", "rebind", "regenerate", "ratchet", "checks", "commit", "preflight", "lfs", "push")
+STEPS = ("switch", "census", "prune", "canon", "rebind", "regenerate", "ratchet", "checks", "commit", "preflight", "lfs", "push")
 
 
 def fixture(fail_at=None, holds=None, dirty=False):
@@ -249,6 +250,130 @@ case("the commit stages only the campaign's own paths", all(p in text for p in e
      and "git add -A --" in text, text)
 case("the commit never disables a hook", "--no-verify" not in ENGINE.read_text(encoding="utf-8")
      and "core.hooksPath" not in ENGINE.read_text(encoding="utf-8"))
+
+# ---- defect 2: a FAIL puts back what the run wrote, and only that -----------------------------------------
+def writing_fixture(fail_at="checks", preexisting=False):
+    root, log, plan = fixture(fail_at=fail_at)
+    (root / "docs/observations").mkdir(parents=True, exist_ok=True)
+    (root / "docs/observations/seed.json").write_text("{}", encoding="utf-8")
+    subprocess.run(["git", "add", "-A"], cwd=root, check=True)
+    subprocess.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-q", "-m", "seed"], cwd=root, check=True)
+    if preexisting:
+        (root / "docs/locale/pre.txt").write_text("somebody else's, already there", encoding="utf-8")
+        plan["clean"] = "true"
+    plan["census"] = (f"echo census >> {log} && echo new > docs/observations/new.json && echo changed >> docs/locale/holds.json"
+                      " && rm docs/observations/seed.json && echo outside > stray.txt")
+    return root, log, plan
+
+
+def porcelain(root):
+    return subprocess.run(["git", "status", "--porcelain", "-uall"], cwd=root, capture_output=True, text=True).stdout.splitlines()
+
+
+root, log, plan = writing_fixture()
+result, facts, _l, last = run(engine, root, plan)
+case("a FAIL restores tracked files, removes untracked ones it wrote and prints RESULT: FAIL",
+     result == "FAIL" and last.startswith("RESULT: FAIL {") and porcelain(root) == ["?? stray.txt"], (result, porcelain(root)))
+case("a FAIL says how many files it put back", facts.get("restored") == 3, facts)
+case("a retry after a FAIL passes `clean`", not [x for x in porcelain(root) if "docs" in x])
+root, log, plan = writing_fixture(fail_at="push")
+run(engine, root, plan)
+case("a FAIL after the commit leaves a clean tree too", porcelain(root) == ["?? stray.txt"], porcelain(root))
+root, log, plan = writing_fixture(preexisting=True)
+run(engine, root, plan)
+case("a file that was dirty before the run is never touched",
+     (root / "docs/locale/pre.txt").exists() and not (root / "docs/observations/new.json").exists(), porcelain(root))
+m = mutated('            if refusal.result == "FAIL":\n                self.restore()\n', "            pass\n", "mut_no_restore")
+root, log, plan = writing_fixture()
+run(m, root, plan)
+case("MUTANT: no restore leaves the run's files in the tree for the retry to trip on",
+     (root / "docs/observations/new.json").exists(), porcelain(root))
+m = mutated("            if path in self.baseline:\n                continue\n", "", "mut_restore_all")
+root, log, plan = writing_fixture(preexisting=True)
+run(m, root, plan)
+case("MUTANT: restoring without the baseline destroys a file the run did not write",
+     not (root / "docs/locale/pre.txt").exists(), porcelain(root))
+
+# ---- defect 1: superseded evidence is pruned and re-pointed before the canon is built -----------------------
+def dry_steps(module):
+    lines = []
+    module.Campaign("ja-JP", repo=str(root), plan={}, out=lines.append, dry_run=True, navigate=True).run()
+    return [x for x in lines if x.startswith("== ")]
+
+
+steps = dry_steps(engine)
+names = [x.split(":")[0][3:] for x in steps]
+case("the campaign prunes superseded evidence after the censuses and before the canon build",
+     "prune" in names and names.index("navigate") < names.index("prune") < names.index("canon"), names)
+case("the prune step is `census_pack.py prune --repoint` (records re-pointed, not left citing a deleted file)",
+     any("census_pack.py prune --repoint" in x for x in steps), steps)
+m = mutated('            self.step("prune", f"{py} Scripts/observations/census_pack.py prune --repoint")\n', "", "mut_no_prune")
+case("MUTANT: a campaign without the prune step leaves two evidence files for one locale, kind and build",
+     "prune" not in [x.split(":")[0][3:] for x in dry_steps(m)])
+
+# ---- concurrency: every entry point that drives Logic refuses while another holds the lock -----------------
+tools = Path(tempfile.mkdtemp())
+for name, body in (("defaults", "exit 1\n"),):
+    (tools / name).write_text("#!/bin/sh\n" + body, encoding="utf-8")
+    (tools / name).chmod(0o755)
+shadow = Path(tempfile.mkdtemp())
+shutil.copytree(HERE, shadow / "Scripts", ignore=shutil.ignore_patterns("__pycache__"))
+lockdir = str(Path(tempfile.mkdtemp()) / "lock")
+os.environ["LPM_LIVE_LOCK"] = lockdir
+other = subprocess.Popen(["sleep", "30"])
+fixdir = tempfile.mkdtemp()
+env = dict(os.environ, LPM_LIVE_LOCK=lockdir, LPM_LOCALE_FIXTURE=fixdir, PATH=f"{tools}:{os.environ['PATH']}")
+env.pop("LPM_LIVE_LOCK_INHERITED", None)
+try:
+    assert live.acquire("a nav-census from another session", pid=other.pid)
+    def tool(root_dir, *argv):
+        done = subprocess.run(list(argv), cwd=root_dir, capture_output=True, text=True, env=env, timeout=60)
+        return done.returncode, done.stdout + done.stderr
+    def at(base, name):
+        return str(base / "Scripts/observations" / name)
+    rc, out = tool(HERE, sys.executable, at(HERE.parent, "nav-census.py"), "ja-JP", "--compare")
+    case("nav-census.py refuses while another holds Logic", rc == 2 and "REFUSED" in out and "another live run" in out, (rc, out))
+    rc, out = tool(HERE, sys.executable, at(HERE.parent, "label-census.py"), "run", "ja-JP")
+    case("label-census.py run refuses while another holds Logic", rc == 2 and "REFUSED" in out and "another live run" in out, (rc, out))
+    rc, out = tool(HERE, "/bin/bash", at(HERE.parent, "locale-switch.sh"), "ja-JP")
+    case("locale-switch.sh refuses while another holds Logic", rc == 6 and "REFUSED" in out, (rc, out))
+    # the campaign hands its lock down: a child of the holder is not refused
+    env["LPM_LIVE_LOCK_INHERITED"] = str(other.pid)
+    rc, out = tool(HERE, "/bin/bash", at(HERE.parent, "locale-switch.sh"), "ja-JP")
+    case("a child of the lock's holder is let through (defaults stub ends it at exit 3)", rc == 3, (rc, out))
+    env.pop("LPM_LIVE_LOCK_INHERITED")
+    # mutants: the same entry points with their lock lines removed go on to do their work
+    nav = (HERE.parent / "Scripts/observations/nav-census.py")
+    src = nav.read_text(encoding="utf-8")
+    old = 'ok, release = live_lock.take(f"nav-census {args.locale}")'
+    assert src.count(old) == 1 and src.count("return _drive(args, plan)") == 1
+    (shadow / "Scripts/observations/nav-census.py").write_text(
+        src.replace(old, "ok, release = True, lambda: None").replace("return _drive(args, plan)", "return 99"), encoding="utf-8")
+    rc, out = tool(shadow, sys.executable, at(shadow, "nav-census.py"), "ja-JP", "--compare")
+    case("MUTANT: nav-census.py without the lock goes on to drive Logic", rc == 99, (rc, out))
+    lab = HERE.parent / "Scripts/observations/label-census.py"
+    src = lab.read_text(encoding="utf-8")
+    old = 'ok, release = live_lock.take(f"label-census run {args.locale}")'
+    assert src.count(old) == 1 and src.count("census = capture()") == 1
+    (shadow / "Scripts/observations/label-census.py").write_text(
+        src.replace(old, "ok, release = True, lambda: None").replace("census = capture()", "return 99"), encoding="utf-8")
+    rc, out = tool(shadow, sys.executable, at(shadow, "label-census.py"), "run", "ja-JP")
+    case("MUTANT: label-census.py run without the lock goes on to read Logic", rc == 99, (rc, out))
+    sw = HERE.parent / "Scripts/observations/locale-switch.sh"
+    src = sw.read_text(encoding="utf-8")
+    old = 'python3 "$HERE/live_lock.py" acquire "locale-switch $LOCALE" >/dev/null ||'
+    assert src.count(old) == 1
+    (shadow / "Scripts/observations/locale-switch.sh").write_text(src.replace(old, "true ||"), encoding="utf-8")
+    rc, out = tool(shadow, "/bin/bash", at(shadow, "locale-switch.sh"), "ja-JP")
+    case("MUTANT: locale-switch.sh without the lock goes on to set the language (stub ends it at exit 3)", rc == 3, (rc, out))
+    # the campaign itself refuses (HOLD) and hands the lock down when it takes it
+    case("the campaign exports the lock to its children once it holds it",
+         'os.environ["LPM_LIVE_LOCK_INHERITED"] = str(os.getpid())' in ENGINE.read_text(encoding="utf-8"))
+finally:
+    live.release(pid=other.pid)
+    other.kill()
+    other.wait()
+    shutil.rmtree(shadow, ignore_errors=True)
 
 # ---- the real script: the last line ------------------------------------------------------------------
 def wrapper(args, env_extra):

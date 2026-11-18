@@ -8,7 +8,7 @@
 # pressed a dialog's default button here is the reason this file exists; a script that clicks "Don't
 # Save" on the wrong sheet destroys somebody's project, and a language switch has no business near one.
 #
-# Exit: 0 Logic is up in <locale> on the fixture; 2 usage or no fixture; 3 the language could not be set;
+# Exit: 6 another live run holds Logic; 0 Logic is up in <locale> on the fixture; 2 usage or no fixture; 3 the language could not be set;
 #       4 Logic would not quit; 5 Logic did not come back with a window.
 set -u
 LOCALE="${1:-}"
@@ -18,6 +18,10 @@ case "$LOCALE" in
   *) echo "usage: $0 <en-US|ko-KR|ja-JP|de-DE|es-ES|fr-FR|it-IT|pt-BR|zh-CN|zh-TW>"; exit 2;;
 esac
 [ -d "$FIX" ] || { echo "PRECONDITION: fixture $FIX does not exist"; exit 2; }
+# One live run at a time: refuse while another job holds Logic (the campaign hands its lock down).
+HERE=$(cd "$(dirname "$0")" && pwd)
+python3 "$HERE/live_lock.py" acquire "locale-switch $LOCALE" >/dev/null || { echo "REFUSED: another live run holds Logic: $(python3 "$HERE/live_lock.py" holder)"; exit 6; }
+trap 'python3 "$HERE/live_lock.py" release >/dev/null 2>&1' EXIT
 defaults write com.apple.logic10 AppleLanguages -array "$LOCALE" || exit 3
 if pgrep -xq "Logic Pro"; then
   osascript -e 'tell application "Logic Pro" to quit saving no' >/dev/null 2>&1

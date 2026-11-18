@@ -220,6 +220,19 @@ def main(argv=None):
         for step in plan["steps"]:
             print(f"{step['id']:24s} {step['surface']:26s} {json.dumps(step['open'], ensure_ascii=False)}")
         return 0
+    sys.path.insert(0, HERE)
+    import live_lock
+    ok, release = live_lock.take(f"nav-census {args.locale}")
+    if not ok:
+        print(f"REFUSED: {release}")
+        return 2
+    try:
+        return _drive(args, plan)
+    finally:
+        release()
+
+
+def _drive(args, plan):
     labels_mod = _load("nav_labels", os.path.join(SCRIPTS, "locale_labels.py"))
     evidence = _load("nav_evidence", os.path.join(SCRIPTS, "census_evidence.py"))
     declared = labels_mod.declared_logic(os.path.join(REPO, "Sources", "LogicProMCP", "Accessibility", "AXLocalePolicy.swift"))

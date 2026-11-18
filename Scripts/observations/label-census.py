@@ -330,11 +330,19 @@ def main(argv=None):
         return 0
 
     if args.cmd == "run":
+        sys.path.insert(0, HERE)
+        import live_lock
+        ok, release = live_lock.take(f"label-census run {args.locale}")
+        if not ok:
+            print(f"REFUSED: {release}")
+            return 2
         try:
             census = capture()
         except RuntimeError as exc:
             print(f"REFUSED: {exc}")
             return 2
+        finally:
+            release()
     else:
         census = _read_census(args.census)
     return ingest(args.locale, census, REPO, args.write, labels_mod=labels_mod, confirm=args.confirm)

@@ -16,6 +16,8 @@ going on would write something false:
     census       label-census.py run --write --confirm: read the menu bar and main window, prove the
                  locale, confirm unplaced strings against the installed Logic, file the records
     navigate     (--navigate) nav-census.py: open each surface the plan names, read it, put it back
+    prune        census_pack.py prune --repoint: evidence a newer file of the same locale, kind and build
+                 supersedes is deleted, and the readings citing its records are re-pointed (rule R2)
     canon        logic_canon.py build: pin the citations the new records carry
     rebind       locale_labels.py --write [--rebind]: --rebind exactly when a record was REPLACED
     regenerate   locale-regenerate.py --apply --rule-only, until it writes nothing: take a reading only
@@ -28,6 +30,10 @@ going on would write something false:
                  does not upload it, so the objects go first; a pointer pushed without its object is a
                  checkout that cannot read its own evidence
     push
+
+On any FAIL after `clean` passed, every tracked file the run changed is restored and every untracked file it
+wrote is removed (only under COMMIT_PATHS, and only what was not already dirty when the run began, which
+`clean` makes nothing), so the tree ends clean and the same command can simply be run again.
 
 The last line printed is always `RESULT: PASS|HOLD|FAIL {json}`:
 
@@ -55,7 +61,7 @@ sys.path.insert(0, HERE)
 import live_lock  # noqa: E402
 
 PREFLIGHT = os.environ.get("LPM_PREFLIGHT") or os.path.expanduser("~/.claude/scripts/lpm-public-surface-preflight.sh")
-STEP_ORDER = ("precheck", "clean", "lock", "switch", "census", "navigate", "canon", "rebind", "regenerate",
+STEP_ORDER = ("precheck", "clean", "lock", "switch", "census", "navigate", "prune", "canon", "rebind", "regenerate",
               "ratchet", "checks", "commit", "preflight", "lfs", "push")
 LOCALES = ("en-US", "ko-KR", "ja-JP", "de-DE", "es-ES", "fr-FR", "it-IT", "pt-BR", "zh-CN", "zh-TW")
 #: Files a campaign writes and commits. Nothing else is staged: a campaign must not carry along whatever
@@ -89,6 +95,7 @@ class Campaign:
         self.out = out
         self.facts = {"locale": locale}
         self.locked = False
+        self.baseline = None
 
     # -- plumbing ---------------------------------------------------------------------------------
     def step(self, name, default_command, ok=(0,)):
@@ -152,11 +159,42 @@ class Campaign:
             raise Refusal("lock", f"another live run holds Logic ({held.get('owner')}, pid {held.get('pid')}); "
                                   f"nothing was touched", result="HOLD")
         self.locked = True
+        # Every child that drives Logic (switch, census, navigate) sees the lock as handed down.
+        os.environ["LPM_LIVE_LOCK_INHERITED"] = str(os.getpid())
 
     def unlock(self):
         if self.locked and "lock" not in self.plan:
             live_lock.release(pid=os.getpid())
+            os.environ.pop("LPM_LIVE_LOCK_INHERITED", None)
         self.locked = False
+
+    def dirty(self):
+        """{path: porcelain status} of every changed or untracked file under COMMIT_PATHS."""
+        _code, text = sh("git status --porcelain -uall -- " + " ".join(shlex.quote(p) for p in COMMIT_PATHS),
+                         self.repo, capture=True)
+        return {line[3:].strip('"'): line[:2] for line in text.splitlines() if line.strip()}
+
+    def restore(self):
+        """Undo what this run wrote: tracked files back to HEAD, untracked ones removed. Never touches a
+        file that was already dirty before the run (`self.baseline`), so nobody else's work is lost."""
+        if self.baseline is None or self.dry_run:
+            return
+        removed = []
+        for path, status in sorted(self.dirty().items()):
+            if path in self.baseline:
+                continue
+            if status == "??" or status[0] == "A":
+                sh(f"git rm -q -f --cached --ignore-unmatch -- {shlex.quote(path)}", self.repo, capture=True)
+                try:
+                    os.remove(os.path.join(self.repo, path))
+                except OSError:
+                    pass
+            else:
+                sh(f"git restore --staged --worktree --source=HEAD -- {shlex.quote(path)}", self.repo, capture=True)
+            removed.append(path)
+        if removed:
+            self.out(f"== restore: {len(removed)} file(s) this run wrote were put back")
+        self.facts["restored"] = len(removed)
 
     def records_replaced(self):
         """Whether the census replaced an observation record that already existed (a rebind is then due)."""
@@ -170,6 +208,7 @@ class Campaign:
         loc = shlex.quote(self.locale)
         try:
             self.clean()
+            self.baseline = set() if self.dry_run else set(self.dirty())
             if self.evidence:
                 # A census already taken: nothing here touches Logic, so no pre-check, lock or switch.
                 self.step("census", f"{py} Scripts/observations/label-census.py ingest {loc} "
@@ -183,6 +222,7 @@ class Campaign:
                 self.step("census", f"{py} Scripts/observations/label-census.py run {loc} --write --confirm")
             if self.navigate:
                 self.step("navigate", f"{py} Scripts/observations/nav-census.py {loc} --write --confirm")
+            self.step("prune", f"{py} Scripts/observations/census_pack.py prune --repoint")
             self.step("canon", f"{py} Scripts/logic_canon.py build")
             replaced = self.records_replaced() if not self.dry_run and "rebind" not in self.plan else False
             self.step("rebind", f"{py} Scripts/locale_labels.py --write" + (" --rebind" if replaced else ""))
@@ -207,8 +247,15 @@ class Campaign:
             else:
                 self.facts["pushed"] = False
         except Refusal as refusal:
+            if refusal.result == "FAIL":
+                self.restore()
             self.facts.update(reason=refusal.reason, failed_step=refusal.step, pushed=self.facts.get("pushed", False))
             return refusal.result
+        except Exception as error:  # a crash is a FAIL too, and leaves the tree as it found it
+            self.restore()
+            self.facts.update(reason=f"{type(error).__name__}: {error}", failed_step="engine",
+                              pushed=self.facts.get("pushed", False))
+            return "FAIL"
         finally:
             self.unlock()
         held = sum(self.facts.get("holds", {}).values())

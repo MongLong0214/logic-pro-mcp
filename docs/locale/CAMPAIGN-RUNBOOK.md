@@ -12,9 +12,12 @@ Goal: re-read Logic's UI labels in ONE language and commit the result. One comma
 
 ## The command
 ```
-Scripts/observations/locale-campaign.sh ko-KR
+Scripts/observations/locale-campaign.sh ko-KR --navigate
 ```
+`--navigate` is part of the command: after the menu-bar and window census it opens each surface the plan
+names, reads it and puts it back. Leave it out only when the owner says so.
 Replace `ko-KR` with one of `en-US ko-KR ja-JP de-DE es-ES fr-FR it-IT pt-BR zh-CN zh-TW`.
+Superseded evidence of the same locale, kind and build is pruned and re-pointed by the script itself.
 Add `--no-push` to commit without pushing. It takes about 10 minutes. It switches Logic's language,
 relaunches Logic on the test project, reads the screen, updates the label ledger, runs every check,
 commits and pushes. It never clicks a dialog.
@@ -33,6 +36,11 @@ not exactly the label's own value in Apple's data. They are listed with the reas
 `docs/locale/holds.json`, and nobody applies them by hand.
 
 ## If it fails
+A FAIL is cleaned up by the script: every tracked file it changed is restored and every untracked file it
+wrote is removed (only its own; a file that was dirty before it started is never touched), so the tree ends
+clean and the retry passes `clean`. Do not run `git checkout` or `git clean` yourself. The one exception is
+a `clean` failure: that is somebody else's uncommitted work, and the script leaves it alone.
+
 | `failed_step` | usual cause | what to do |
 |---|---|---|
 | `precheck` | a system dialog or a file crawler is running | wait a minute, run again; never click a system dialog |
@@ -43,6 +51,8 @@ not exactly the label's own value in Apple's data. They are listed with the reas
 | `preflight` / `push` | the public-surface preflight or git refused | report the line; the commit is local only |
 
 ## Rules that never change
+- Every job that drives Logic (`nav-census.py`, `label-census.py run`, `locale-switch.sh` and the campaign)
+  takes the live-run lock and refuses while another holds it. Never work around a refusal.
 - One locale at a time. Never run two campaigns, and never touch Logic while one runs.
 - Never edit `docs/locale/ui-labels.json`, `docs/locale/holds.json` or anything under `docs/observations/`
   by hand. They are written by the tool.
