@@ -100,7 +100,7 @@
     "index/nib.tsv": "cfa538478c6a0197d838e2629612e14ec1706fd42e09252351619754c7b2d59c",
     "index/nib.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/niblabels.tsv": "251168083f649fd298772378849247cf221a639aec6401e20978049c1cef2748",
-    "index/niblabels.values.tsv": "fc4f941ee8f70a4ff47460c2858749c8113443dc1db6e68913057da4e8027da5",
+    "index/niblabels.values.tsv": "b5e9f4951ba1d87c09ace6731944d2a8c8faa8e5b636765deb32c9a8acd400aa",
     "index/nibstrings.tsv": "afc7f0272ca27ee2dc69bec6213b0d3304e7f521e3ba387fe0bb4c08319e5b73",
     "index/nibstrings.values.tsv": "f2283ae6b4bcd8b08f1824706ad1ce723f61dbbccf09a50d05474fab656078f5",
     "index/plugin_names.tsv": "f6d22385cbe42b4e2736a1dbb2637ad10ee67b8bce79578969a473ccc3b6ec93",
@@ -110,11 +110,11 @@
     "index/quickhelp.tsv": "c7137fa138879937177d7a89744a05e3de1156887d4e51a931cafa9744e23782",
     "index/quickhelp.values.tsv": "740f5c3b0db7a1e99c39c017d301a4f59528801cbccaf737ff715a68c977a0a3",
     "index/strings.tsv": "a3c8e80e9acc28eed81bd4adc3b24a8bae20b71016f46153522d890759d06ecc",
-    "index/strings.values.tsv": "b8c04551550179b28697e30344456046415ecac24566954cef0299b1c9bdcf2a",
+    "index/strings.values.tsv": "fff03d87794c298c5e5ecb112eb10508ae9c3b16c3b68b21656de535d5601999",
     "index/stringsdict.tsv": "538081502dfdd84fb916e331a08b1682b64807cdbc2adbfe6faf9c70a983a511",
     "index/stringsdict.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "ledger/casefold.tsv": "3265f7e8e89a6a5099f54d93263b483d7245ec5b85a7a65ecd1864d865ce2f64",
-    "ledger/presence.tsv": "facc8af7c0ff19b34d9c30d1ab0606c49e1cc6a5a694c03cb30db00d9484d1bf"
+    "ledger/presence.tsv": "6211e5b9214773819301b0f49e17f65f8b3cb7a79ce8b450447243901dd35b9e"
   },
   "extractor_version": 3,
   "ledger_casefold_entries": {
@@ -170,7 +170,7 @@
       "en": 65,
       "es": 62,
       "fr": 69,
-      "it": 48,
+      "it": 69,
       "ja": 88,
       "ko": 63,
       "pt": 50,
@@ -202,12 +202,12 @@
       "-": 3,
       "de": 720,
       "en": 727,
-      "es": 680,
+      "es": 682,
       "fr": 674,
-      "it": 267,
+      "it": 701,
       "ja": 694,
       "ko": 280,
-      "pt": 289,
+      "pt": 292,
       "zh_CN": 254,
       "zh_TW": 235
     }
@@ -299,7 +299,7 @@
         "zh_TW": 9.9884e-08
       },
       "cited_rows": 39,
-      "cited_values": 195,
+      "cited_values": 218,
       "corpus_digest": "402519289fbb19a58559bbda67650fbebd24b33b2dc9b67901feb85dac0e7d01",
       "english_equal_rows_in_translated_units": {
         "de": 174,
@@ -846,7 +846,7 @@
         "zh_TW": 1.1653407e-05
       },
       "cited_rows": 7470,
-      "cited_values": 1981,
+      "cited_values": 2475,
       "corpus_digest": "be163333a326c4ef3d9e1b4923e399cc1fcf01fd04652a26f3b849a6d8a7c641",
       "english_equal_rows_in_translated_units": {
         "de": 4748,

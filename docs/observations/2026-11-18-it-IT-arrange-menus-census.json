@@ -1,0 +1,5057 @@
+{
+  "id": "2026-11-18-it-IT-arrange-menus-census",
+  "date": "2026-11-18",
+  "schema": 3,
+  "subject": "Every string the arrange.menus surface exposes to AX in it-IT",
+  "question": "What labels does Logic show on arrange.menus in it-IT, and on which elements?",
+  "verdict": "works",
+  "issues": [
+    768,
+    778
+  ],
+  "surface": "arrange.menus",
+  "host": {
+    "app": "Logic Pro",
+    "build": "7801",
+    "locale": "it-IT",
+    "os": "macOS 26.3 (25D125)",
+    "version": "13.0"
+  },
+  "reverify": {
+    "kind": "script",
+    "command": "Scripts/observations/locale-census.sh it-IT",
+    "expected": "a census in it-IT whose arrange.menus rows carry the same 606 distinct strings; a differing set means Logic's labels moved and every provenance citing this record wants re-reading",
+    "cost": "~1 min with Logic open on the fixture project in that locale"
+  },
+  "depends": [
+    "Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"
+  ],
+  "evidence": [
+    "evidence/2026-11-18-it-IT-navigation-free.census.json"
+  ],
+  "method": "Read, never actuated. The menu bar and every menu were walked without opening them; the main window was walked to depth 8. Each element with any string became one row of the evidence file; rows were assigned to this surface by what their path or help text passes through, and rows no rule could place are counted in limits rather than filed.",
+  "observations": [
+    {
+      "what": "rows on arrange.menus",
+      "rows": 778,
+      "distinct_strings": 606,
+      "distinct_identifiers": 81
+    },
+    {
+      "what": "the strings, verbatim",
+      "strings": [
+        "03 Drum Machine Designer",
+        "03 Drum Machine Designer.logicx",
+        "1",
+        "1 misura",
+        "1 ms",
+        "1/2 fotogramma",
+        "1/4",
+        "10 ms",
+        "10 tick",
+        "2 misure",
+        "2/4",
+        "3 misure",
+        "3/4",
+        "4 misure",
+        "4/4",
+        "5 Fotogrammi",
+        "5 misure",
+        "5/4",
+        "6 misure",
+        "6/4",
+        "7/4",
+        "8/4",
+        "9/4",
+        "A destra",
+        "A destra e a sinistra",
+        "A destra e in quarti",
+        "A metà",
+        "A sinistra",
+        "A sinistra e a destra",
+        "A sinistra e in quarti",
+        "AAF…",
+        "Abilita accesso rapido alle automazioni",
+        "Abilita “Imposta localizzatori automaticamente”",
+        "Accordatura…",
+        "Aggiungi al browser…",
+        "AirDrop…",
+        "Aiuto",
+        "Aiuto di Logic Pro",
+        "Aiuto rapido",
+        "Al centro",
+        "Algoritmi obsoleti",
+        "Algoritmo di allungamento temporale",
+        "Alla regione Session Player",
+        "Allarga a tutto schermo",
+        "Allunga temporalmente lunghezza della regione fino ai localizzatori",
+        "Allunga temporalmente lunghezza della regione fino alla misura più vicina",
+        "Allungamento tempo",
+        "All’interno dei localizzatori",
+        "Alternative di progetto",
+        "Altro",
+        "Altro…",
+        "Annulla 템포 변경",
+        "App Store",
+        "App Store…, 5개의 업데이트",
+        "Apple",
+        "Applica ritmo del progetto alla regione e al tempo forte",
+        "Applica ritmo della regione a quello del progetto…",
+        "Apri Smart Control",
+        "Apri audio progetto",
+        "Apri editor file audio",
+        "Apri editor partitura",
+        "Apri editor step",
+        "Apri editor traccia audio",
+        "Apri editor “Ritmo smart”",
+        "Apri elenco eventi",
+        "Apri elenco marcatori",
+        "Apri elenco metri e armature",
+        "Apri filmato…",
+        "Apri finestra fluttuante dei controlli di riproduzione",
+        "Apri finestra principale",
+        "Apri in editor campioni esterno",
+        "Apri mixer",
+        "Apri recenti",
+        "Apri step sequencer",
+        "Apri testo marcatore",
+        "Apri trasformazione MIDI",
+        "Apri “Piano roll”",
+        "Apri…",
+        "Area ciclo",
+        "Aside",
+        "Assegna colore traccia…",
+        "Assegna icona traccia…",
+        "Assegnazioni I/O…",
+        "Assegnazioni controller…",
+        "Assistente di masterizzazione…",
+        "Attiva modalità a tutto schermo",
+        "Attivi gruppi",
+        "Audio",
+        "Audio…",
+        "Automazione…",
+        "Aux",
+        "Barra di controllo",
+        "Battito",
+        "Bit SMPTE",
+        "Blocca",
+        "Brano su Memo vocali…",
+        "Brano su iTunes…",
+        "Browser",
+        "Campione",
+        "Canale MIDI",
+        "Canale audio",
+        "Canale di uscita",
+        "Cancella menu",
+        "Cancellazione contenuti",
+        "Cancellazione regione",
+        "Cartella",
+        "Cerca e aggiungi plugin…",
+        "Cerca e seleziona traccia…",
+        "Chiedi",
+        "Chiudi",
+        "Chiudi progetto",
+        "Ciclo attivo",
+        "Ciclo non attivo",
+        "Comandi da tastiera",
+        "Compatta pila",
+        "Complesso",
+        "Condividi",
+        "Configura intestazione traccia…",
+        "Configura tracce globali…",
+        "Configurazione…",
+        "Congelate",
+        "Consenti punch rapido",
+        "Consolida…",
+        "Conteggio",
+        "Contrai",
+        "Contrai tutto",
+        "Converti",
+        "Converti automazione",
+        "Converti automazioni delle regioni visibili in automazioni delle tracce",
+        "Converti pila cartella in pila somma",
+        "Converti regioni in nuova traccia campionatore…",
+        "Converti tutte le automazioni delle regioni in automazioni delle tracce",
+        "Converti tutte le automazioni delle tracce in automazioni delle regioni",
+        "Converti tutte le automazioni delle tracce visibili in automazioni delle regioni",
+        "Copia",
+        "Copia eventi MIDI…",
+        "Copia scena sulla testina di riproduzione",
+        "Copia selezione regione in scena Live Loops",
+        "Copia sezione tra i localizzatori",
+        "Crea 1 punto di automazione ai bordi della regione",
+        "Crea 1 punto di automazione per ogni volume, panning, mandata",
+        "Crea 1 punto di automazione per parametro visibile",
+        "Crea 2 punti di automazione ai bordi della regione",
+        "Crea 2 punti di automazione per ogni volume, panning, mandata",
+        "Crea 2 punti di automazione per parametro visibile",
+        "Crea automazione traccia",
+        "Crea cartella di registrazioni",
+        "Crea dissolvenza volume in uscita sull’output principale",
+        "Crea gruppo",
+        "Crea marcatore",
+        "Crea marcatore per regione/selezione a cornice",
+        "Crea marcatori di taglio scena filmato",
+        "Crea nuova traccia",
+        "Crea pila di tracce…",
+        "Crea profilo per l’assistenza…",
+        "Crea progetto da ADM BWF…",
+        "Crea senza arrotondamento",
+        "Crea set multitraccia di “Ritmo smart”",
+        "Crea tracce",
+        "Crea tracce alternative",
+        "Crea tracce e silenzia",
+        "Crea traccia",
+        "Crea traccia alternativa",
+        "Cronologia annullamenti…",
+        "Da loop MIDI ad alias",
+        "Data di creazione",
+        "Deseleziona fuori dai localizzatori",
+        "Deseleziona tracce globali",
+        "Deseleziona tutto",
+        "Deselezionati all’interno della selezione",
+        "Dimezza",
+        "Discord",
+        "Discussioni su Logic Pro",
+        "Disposizione",
+        "Divisione",
+        "Dolby Atmos…",
+        "Duplicati",
+        "Duplica…",
+        "E sostituisci tutte le tracce…",
+        "Editor “Ritmo smart”",
+        "Effetti di Logic Pro",
+        "Elimina",
+        "Elimina automazione",
+        "Elimina automazione non collegata sulle tracce selezionate",
+        "Elimina automazioni visibili sulle tracce selezionate",
+        "Elimina cronologia annullamenti",
+        "Elimina e sposta",
+        "Elimina eventi MIDI",
+        "Elimina marcatore sulla posizione della testina di riproduzione",
+        "Elimina punti di automazione ridondanti",
+        "Elimina tracce non usate",
+        "Elimina traccia",
+        "Elimina tutte le automazioni della traccia",
+        "Elimina tutte le automazioni sulle tracce selezionate",
+        "Esci da Logic Pro",
+        "Esegui bounce delle regioni in posizione…",
+        "Esegui bounce o unisci",
+        "Esegui il bounce",
+        "Esporta",
+        "Esporta audio su filmato…",
+        "Esporta marcatore in file audio",
+        "Etichette I/O…",
+        "File",
+        "File MIDI…",
+        "File audio come…",
+        "File audio…",
+        "File di progetto",
+        "Filmato",
+        "Filmato…",
+        "Finder에서 ‘03 Drum Machine Designer.logicx’ 보기",
+        "Finder에서 ‘03 Drum Machine Designer’ 보기",
+        "Finder에서 ‘App Store’ 보기",
+        "Finder에서 ‘Aside’ 보기",
+        "Finder에서 ‘Discord’ 보기",
+        "Finder에서 ‘Google Chrome’ 보기",
+        "Finder에서 ‘Logic Pro’ 보기",
+        "Finder에서 ‘NativeLogic13-9995.logicx’ 보기",
+        "Finder에서 ‘OrbStack’ 보기",
+        "Finder에서 ‘QualFixtureR11’ 보기",
+        "Finder에서 ‘ROLI Connect’ 보기",
+        "Finder에서 ‘Warp’ 보기",
+        "Finder에서 ‘en-final’ 보기",
+        "Finder에서 ‘logic-claude-handoff.command’ 보기",
+        "Finder에서 ‘qualification’ 보기",
+        "Finder에서 ‘텍스트-4B34-8C6B-9E-0.txt’ 보기",
+        "Finder에서 ‘시스템 설정’ 보기",
+        "Finder에서 ‘터미널’ 보기",
+        "Fine regione al transiente precedente",
+        "Fine regione al transiente successivo",
+        "Fine regione alla regione successiva",
+        "Fine selezione",
+        "Finestra",
+        "Finestra fluttuante",
+        "Flex Pitch/Time",
+        "Formato di stampa…",
+        "Fotogramma",
+        "Fumetti nella posizione del puntatore",
+        "Fuori dai llimiti della regione",
+        "Fuori dai localizzatori",
+        "Generali…",
+        "Gestione progetti",
+        "Gestore plugin…",
+        "Google Chrome",
+        "Griglia Live Loops…",
+        "Ignora tutte le superfici di controllo",
+        "Importa",
+        "Importa audio da filmato",
+        "Importa segnalibro da file audio",
+        "Impossibile ripristinare",
+        "Imposta localizzatori arrotondati sulla selezione e abilita ciclo",
+        "Imposta localizzatori automaticamente",
+        "Imposta localizzatori sulla selezione e abilita ciclo",
+        "Imposta valore di spostamento su",
+        "Impostazioni",
+        "Impostazioni Metronomo…",
+        "Impostazioni Registrazione…",
+        "Impostazioni automazione…",
+        "Impostazioni gruppo",
+        "Impostazioni progetto",
+        "Impostazioni progetto Importazione…",
+        "Impostazioni servizi…",
+        "Impostazioni…",
+        "In alto",
+        "In alto a destra",
+        "In alto a sinistra",
+        "In alto e in basso",
+        "In alto e in quarti",
+        "In assolo",
+        "In basso",
+        "In basso a destra",
+        "In basso a sinistra",
+        "In basso e in alto",
+        "In basso e in quarti",
+        "In quarti",
+        "In regione motivo",
+        "Incolla",
+        "Incolla e sostituisci",
+        "Incolla in posizione originale",
+        "Informazioni personali…",
+        "Informazioni su Logic Pro",
+        "Informazioni su Logic Remote…",
+        "Ingresso step",
+        "Inizio regione al transiente precedente",
+        "Inizio regione al transiente successivo",
+        "Inizio regione alla regione precedente",
+        "Inizio selezione",
+        "Inserisci scena in corrispondenza della testina di riproduzione",
+        "Inserisci sezione in corrispondenza della testina di riproduzione",
+        "Inserisci silenzio in corrispondenza dei localizzatori",
+        "Insieme di schermate 1 (Tracce/Mixer/Evento)",
+        "Intero filmato",
+        "Interprete ritmo…",
+        "Interrompi",
+        "Interrompi e vai al localizzatore sinistro",
+        "Interrompi e vai all’ultima posizione individuata",
+        "Intervallo automatico",
+        "Inverti selezione",
+        "Invia feedback su Logic Pro",
+        "Isaac 로그아웃",
+        "Isaac 로그아웃…",
+        "Libreria griglie di accordi…",
+        "Libreria suoni…",
+        "Localizzatore destro",
+        "Localizzatore sinistro",
+        "Logic Pro",
+        "Logic Pro sul web",
+        "Logic Pro 강제 종료",
+        "Loop in regioni",
+        "Lunghezza",
+        "L’aiuto rapido viene visualizzato come",
+        "MIDI",
+        "MIDI…",
+        "Macintosh HD",
+        "Mai",
+        "Mail…",
+        "Marcatore precedente",
+        "Marcatore successivo",
+        "Metronomo…",
+        "Misura",
+        "Misurazione pre-fader",
+        "Mix",
+        "Modalità di monitoraggio a bassa latenza",
+        "Modifica",
+        "Modifica…",
+        "Monitoraggio ingresso automatico",
+        "Mostra automazione",
+        "Mostra nel Finder",
+        "Mostra nel Finder…",
+        "Mostra traccia di mappatura dei battiti",
+        "Mostra traccia globale singola",
+        "Mostra tutte le tracce",
+        "Mostra tutti",
+        "Mostra “Elenco ritmo”",
+        "Mostra/nascondi vista",
+        "Multipli…",
+        "MusicXML…",
+        "Muto",
+        "Nascondi Logic Pro",
+        "Nascondi altre",
+        "Nascondi/mostra tracce non selezionate",
+        "Nascondi/mostra tracce selezionate",
+        "NativeLogic13-9995.logicx",
+        "Navigazione",
+        "Nessun servizio disponibile",
+        "Nessuno",
+        "Nome strumento",
+        "Nome traccia",
+        "Non usate",
+        "Nota da 1/1",
+        "Nota da 1/16",
+        "Nota da 1/2",
+        "Nota da 1/32",
+        "Nota da 1/4",
+        "Nota da 1/64",
+        "Nota da 1/8",
+        "Note sulla versione",
+        "Novità di Logic Pro",
+        "Numero di marcatore…",
+        "Nuova traccia MIDI esterno",
+        "Nuova traccia SI Session Player…",
+        "Nuova traccia audio",
+        "Nuova traccia con canale successivo",
+        "Nuova traccia con impostazioni duplicate",
+        "Nuova traccia con impostazioni e contenuti duplicati",
+        "Nuova traccia con stesso canale",
+        "Nuova traccia di strumento software",
+        "Nuova traccia per le regioni selezionate",
+        "Nuova traccia per le regioni sovrapposte",
+        "Nuove tracce…",
+        "Nuovo",
+        "Nuovo da modello…",
+        "Operazioni sul ritmo…",
+        "Opzioni pulsante Interrompi",
+        "Opzioni pulsante Registra",
+        "Opzioni pulsante Riproduci",
+        "OrbStack",
+        "Ordina tracce per",
+        "Pannello inspector",
+        "Parte destra dello schermo",
+        "Parte sinistra dello schermo",
+        "Partitura come MusicXML…",
+        "Partitura…",
+        "Per selezione a cornice",
+        "Per selezione marcatori/accordi",
+        "Per selezione nota",
+        "Per selezione regione",
+        "Percussivo",
+        "Personalizza barra di controllo e schermo…",
+        "Personalizza barra strumenti…",
+        "Pila cartella",
+        "Pila somma",
+        "Porta in primo piano",
+        "Porta tutto in primo piano",
+        "Posizione…",
+        "Primo transiente al battito più vicino",
+        "Progetti di Logic…",
+        "Progetto come audio spaziale…",
+        "Progetto come file AAF…",
+        "Progetto in GarageBand per iOS…",
+        "Progetto in XML di Final Cut Pro…",
+        "Progetto o sezione…",
+        "Punch contenuto",
+        "Punch regione",
+        "QualFixtureR11",
+        "QualFixtureR11 - Tracce",
+        "ROLI Connect",
+        "Raddoppia",
+        "Regione precedente",
+        "Regione successiva",
+        "Regioni agganciate al timecode SMPTE",
+        "Regioni alla testina di riproduzione",
+        "Regioni audio in nuove regioni",
+        "Regioni audio in nuovi file audio",
+        "Regioni come file audio…",
+        "Regioni dello stesso colore",
+        "Regioni in corrispondenza dei localizzatori",
+        "Regioni in posizione…",
+        "Regioni mute",
+        "Regioni selezionate",
+        "Regioni simili",
+        "Regioni sovrapposte",
+        "Regioni uguali",
+        "Regioni vuote",
+        "Registra",
+        "Registra/Disattiva registrazione",
+        "Registra/Ripeti registrazione",
+        "Registrazione…",
+        "Registrazioni MIDI sovrapposte",
+        "Registrazioni audio sovrapposte",
+        "Regola ritmo usando la lunghezza della regione e i localizzatori",
+        "Ridimensiona",
+        "Ridimensiona tutto",
+        "Ridistribuzione a destra",
+        "Ridistribuzione a sinistra",
+        "Riempi",
+        "Riempi tra i localizzatori",
+        "Rimuovi filmato",
+        "Rimuovi finestra dal gruppo",
+        "Rimuovi informazioni sul ritmo",
+        "Rimuovi marcatore dal file audio",
+        "Rimuovi marcatori di taglio scena filmato",
+        "Rinomina marcatore",
+        "Rinomina traccia",
+        "Rinomina…",
+        "Ripeti",
+        "Ripeti sezione tra i localizzaotri",
+        "Ripetizioni in loop",
+        "Ripristina a",
+        "Ripristina default",
+        "Ripristina tutte le impostazioni, eccetto le assegnazioni dei comandi da tastiera…",
+        "Ripristina versione salvata",
+        "Riproduci da selezione a cornice",
+        "Riproduci dalla regione selezionata",
+        "Riproduci dall’inizio del ciclo",
+        "Riproduci dall’ultima posizione",
+        "Ripulisci…",
+        "Risolvi sovrapposizioni",
+        "Risorse…",
+        "Ritaglia fuori dai localizzatori",
+        "Ritmo",
+        "Ritmo smart…",
+        "Ruota a destra",
+        "Ruota a sinistra",
+        "Salva",
+        "Salva come modello…",
+        "Salva come…",
+        "Salva una copia come…",
+        "Scivolamento a destra",
+        "Scivolamento a sinistra",
+        "Scopri di più su Apple Creator Studio…",
+        "Scorri fino alla selezione",
+        "Scorri tra le finestre",
+        "Scrivi ritmo del progetto su file audio",
+        "Seleziona",
+        "Seleziona automaticamente automazione in modalità Read",
+        "Seleziona tracce",
+        "Selezione a cornice",
+        "Selezione come file MIDI…",
+        "Selezione come file audio…",
+        "Sempre",
+        "Separa eventi MIDI",
+        "Separa per articolazione",
+        "Separa per canale MIDI",
+        "Separa per componente",
+        "Separa per tono di nota",
+        "Servizi",
+        "Sincronizzazione…",
+        "Smart Control",
+        "Sostituisci",
+        "Sostituisci o duplica traccia di percussioni…",
+        "Sovrapponi/unisci regioni selezionate",
+        "Sovrapposizione",
+        "Sposta",
+        "Sposta a destra",
+        "Sposta a sinistra",
+        "Sposta automazione traccia con regioni",
+        "Sposta avanti localizzatori della lunghezza del ciclo",
+        "Sposta e ridimensiona",
+        "Sposta file di filmato fuori dal progetto…",
+        "Sposta indietro localizzatori della lunghezza del ciclo",
+        "Sposta su AH-200HZB",
+        "Sposta su DELL P2425H",
+        "Stampa",
+        "Stesso colore",
+        "Strumenti di Logic Pro",
+        "Strumento",
+        "Su regione MIDI",
+        "Sub/VCA",
+        "Suddividi",
+        "Sul battito",
+        "Sulla posizione di registrazione",
+        "Sulla testina di riproduzione",
+        "Sulla traccia in evidenza",
+        "Superfici di controllo",
+        "Superfici di controllo…",
+        "Superficie sonora",
+        "Supporto di Logic Pro",
+        "Supporto per le superfici di controllo di Logic Pro",
+        "Taglia",
+        "Taglia sezione tra i localizzatori",
+        "Taglia/Inserisci tempo",
+        "Terzina da 1/16 (1/24)",
+        "Terzina da 1/2 (1/3)",
+        "Terzina da 1/32 (1/48)",
+        "Terzina da 1/4 (1/6)",
+        "Terzina da 1/64 (1/96)",
+        "Terzina da 1/8 (1/12)",
+        "Tick",
+        "Torna alle dimensioni precedenti",
+        "Tracce alternative",
+        "Tracce come file audio…",
+        "Tracce globali",
+        "Tracce in posizione…",
+        "Tracce selezionate come patch di MainStage…",
+        "Tracce selezionate come set di MainStage…",
+        "Traccia",
+        "Traccia marcatore",
+        "Tutte le tracce MIDI come file MIDI…",
+        "Tutte le tracce come file audio…",
+        "Tutti gli elementi successivi",
+        "Tutti gli elementi successivi della stessa traccia",
+        "Tutti i marcatori scena",
+        "Tutto",
+        "Tutto all’interno dei localizzatori",
+        "Una volta",
+        "Unisci",
+        "Unisci per tracce",
+        "Unisci solo la registrazione attuale",
+        "Universale",
+        "Usa griglia musicale",
+        "Usate, non usate",
+        "Vai a",
+        "Vai a inizio ciclo e inizio progetto se non in riproduzione",
+        "Vai a inizio selezione a cornice e inizio progetto se non in riproduzione",
+        "Vai a regione selezionata e inizio progetto se non in riproduzione",
+        "Vai a ultima posizione e inizio progetto se non in riproduzione",
+        "Vista",
+        "Vista…",
+        "Warp",
+        "XML di Final Cut Pro…",
+        "barra strumenti",
+        "blocchi note",
+        "colori",
+        "editor",
+        "editor elenchi",
+        "en-final",
+        "en-final -  native-fixture",
+        "en-final -  release-3.19-7c125b11-native-rerun-20261113",
+        "en-final -  release-3.19-7c125b11-pre-rerun-mutated-20261113",
+        "finestra filmato",
+        "finestra fluttuante Evento",
+        "finestra fluttuante inspector regione",
+        "inspector",
+        "ko-rerun2",
+        "ko-rerun2-logic13",
+        "logic-claude-handoff.command",
+        "mixer",
+        "qualification",
+        "tastiera di inserimento step",
+        "tastiera musicale",
+        "traccia Accordo",
+        "traccia arrangiamento",
+        "traccia filmato",
+        "traccia mappatura battiti",
+        "traccia master",
+        "traccia metro e armatura",
+        "traccia ritmo",
+        "tutte le finestre dei plugin",
+        "텍스트-4B34-8C6B-9E-0.txt",
+        "강제 종료...",
+        "메뉴 지우기",
+        "문서",
+        "서버",
+        "시스템 설정",
+        "시스템 설정…",
+        "시스템 정보",
+        "시스템 종료",
+        "시스템 종료…",
+        "응용 프로그램",
+        "이 Mac에 관하여",
+        "잠금 화면",
+        "잠자기",
+        "재시동",
+        "재시동…",
+        "최근 사용 항목",
+        "터미널"
+      ]
+    },
+    {
+      "what": "identifiers seen",
+      "identifiers": [
+        "_aboutThisMacRequested:",
+        "_appStoreRequested:",
+        "_clearRecentItemsRequested:",
+        "_configureServicesMenu:",
+        "_cycleWindows:",
+        "_forceQuitPanelRequested:",
+        "_forceQuitRequested:",
+        "_lockScreenRequested:",
+        "_logOutNowRequested:",
+        "_logOutRequested:",
+        "_moveToDisplay:",
+        "_noServicesApplyAction:",
+        "_openRecentDocument:",
+        "_recentItemRequested:",
+        "_recentsRequested:",
+        "_removeWindowFromStageManagerSet:",
+        "_restartNowRequested:",
+        "_restartRequested:",
+        "_shutDownNowRequested:",
+        "_shutDownRequested:",
+        "_sleepRequested:",
+        "_systemInformationRequested:",
+        "_systemSettingsRequested:",
+        "_tileLeft:",
+        "_tileRight:",
+        "_zoomBottom:",
+        "_zoomBottomAndTop:",
+        "_zoomBottomLeft:",
+        "_zoomBottomRight:",
+        "_zoomBottomThreeUp:",
+        "_zoomCenter:",
+        "_zoomFill:",
+        "_zoomLeft:",
+        "_zoomLeftAndRight:",
+        "_zoomLeftThreeUp:",
+        "_zoomQuarters:",
+        "_zoomRight:",
+        "_zoomRightAndLeft:",
+        "_zoomRightThreeUp:",
+        "_zoomTop:",
+        "_zoomTopAndBottom:",
+        "_zoomTopLeft:",
+        "_zoomTopRight:",
+        "_zoomTopThreeUp:",
+        "_zoomUntile:",
+        "alternateArrangeInFront:",
+        "arrangeInFront:",
+        "clearRecentDocuments:",
+        "copy:",
+        "cut:",
+        "delete:",
+        "deselectAll:",
+        "doScreensetsMenuCall:",
+        "globalCreateSupportProfile:",
+        "globalHelpMenuItemCall:",
+        "globalMenuItemCall:",
+        "hide:",
+        "hideOtherApplications:",
+        "invertSelection:",
+        "localMenuItemAction:",
+        "makeKeyAndOrderFront:",
+        "miniaturizeAll:",
+        "newDocument:",
+        "openAboutPanel:",
+        "openDocument:",
+        "paste:",
+        "performClose:",
+        "performMiniaturize:",
+        "performZoom:",
+        "print:",
+        "redo:",
+        "runPageLayout:",
+        "saveDocument:",
+        "saveDocumentAs:",
+        "saveDocumentTo:",
+        "selectAll:",
+        "terminate:",
+        "toggleFullScreen:",
+        "undo:",
+        "unhideAllApplications:",
+        "zoomAll:"
+      ]
+    }
+  ],
+  "conclusion": "On this host in it-IT, arrange.menus exposes 778 elements carrying 606 distinct strings. Every string is in the evidence file verbatim, which is what lets a label variant cite this record: the guard requires the string to occur in the observations or evidence, and here it does or it does not.",
+  "limits": [
+    "Navigation-free surfaces only: nothing behind a menu press or a button was opened, so this says nothing about the mixer, plug-in editors or the editors.",
+    "288 window rows matched no surface rule and are not filed under any record; they are in the evidence file and can be re-classified when a rule exists.",
+    "One project, one host, one build. A label that depends on project content — a track name, a region name — is a reading of this fixture, not of Logic.",
+    "2 strings are neither cited nor proved absent: each is absent from Apple's corpora as bytes and a shipped label folds to it (a colon, an ellipsis, a case), so the spelling Logic ships is not something this census read: 시스템 설정…; 최근 사용 항목"
+  ],
+  "supersedes": null,
+  "canon": [
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "1",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "1 misura",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "1 ms",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "1/2 fotogramma",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "1/4",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "10 ms",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "10 tick",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "2 misure",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "2/4",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "3 misure",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "3/4",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "4 misure",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "4/4",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "5 Fotogrammi",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "5 misure",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "5/4",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "6 misure",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "6/4",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "7/4",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "8/4",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "9/4",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "A destra",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "A sinistra",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "AAF…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Abilita accesso rapido alle automazioni",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Abilita “Imposta localizzatori automaticamente”",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Accordatura…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Aggiungi al browser…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "AirDrop…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Aiuto",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Aiuto rapido",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Al centro",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Algoritmi obsoleti",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Algoritmo di allungamento temporale",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Alla regione Session Player",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Allunga temporalmente lunghezza della regione fino ai localizzatori",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Allunga temporalmente lunghezza della regione fino alla misura più vicina",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Allungamento tempo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "All’interno dei localizzatori",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Alternative di progetto",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/it#value",
+      "value": "Altro",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Altro…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Applica ritmo del progetto alla regione e al tempo forte",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Applica ritmo della regione a quello del progetto…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Apri Smart Control",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Apri audio progetto",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Apri editor file audio",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Apri editor partitura",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Apri editor step",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Apri editor traccia audio",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Apri editor “Ritmo smart”",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Apri elenco eventi",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Apri elenco marcatori",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Apri elenco metri e armature",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Apri filmato…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Apri finestra fluttuante dei controlli di riproduzione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Apri finestra principale",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Apri in editor campioni esterno",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Apri mixer",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Apri step sequencer",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Apri testo marcatore",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Apri trasformazione MIDI",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Apri “Piano roll”",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Apri…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Area ciclo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Assegna colore traccia…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Assegna icona traccia…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Assegnazioni I/O…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Assegnazioni controller…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Assistente di masterizzazione…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Attiva modalità a tutto schermo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/it#value",
+      "value": "Attivi gruppi",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "Audio",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Audio…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Automazione…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "Aux",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Barra di controllo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Battito",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Bit SMPTE",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Blocca",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Brano su Memo vocali…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Brano su iTunes…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/en#value",
+      "value": "Browser",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Campione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Canale MIDI",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Canale audio",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Canale di uscita",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Cancellazione contenuti",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Cancellazione regione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Cartella",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Cerca e aggiungi plugin…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Cerca e seleziona traccia…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Chiedi",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Chiudi",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Chiudi progetto",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Ciclo attivo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Ciclo non attivo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Comandi da tastiera",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Compatta pila",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Complesso",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Condividi",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Configura intestazione traccia…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Configura tracce globali…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Configurazione…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Congelate",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Consenti punch rapido",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Consolida…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Conteggio",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Contrai",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Contrai tutto",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Converti",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Converti automazione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Converti automazioni delle regioni visibili in automazioni delle tracce",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Converti pila cartella in pila somma",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Converti regioni in nuova traccia campionatore…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Converti tutte le automazioni delle regioni in automazioni delle tracce",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Converti tutte le automazioni delle tracce in automazioni delle regioni",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Converti tutte le automazioni delle tracce visibili in automazioni delle regioni",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/it#value",
+      "value": "Copia",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Copia eventi MIDI…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Copia scena sulla testina di riproduzione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Copia selezione regione in scena Live Loops",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Copia sezione tra i localizzatori",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Crea 1 punto di automazione ai bordi della regione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Crea 1 punto di automazione per ogni volume, panning, mandata",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Crea 1 punto di automazione per parametro visibile",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Crea 2 punti di automazione ai bordi della regione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Crea 2 punti di automazione per ogni volume, panning, mandata",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Crea 2 punti di automazione per parametro visibile",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Crea automazione traccia",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Crea cartella di registrazioni",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Crea dissolvenza volume in uscita sull’output principale",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Crea gruppo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Crea marcatore",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Crea marcatore per regione/selezione a cornice",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Crea marcatori di taglio scena filmato",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/it#value",
+      "value": "Crea nuova traccia",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Crea pila di tracce…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Crea profilo per l’assistenza…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Crea progetto da ADM BWF…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Crea senza arrotondamento",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Crea set multitraccia di “Ritmo smart”",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Crea tracce",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Crea tracce alternative",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Crea tracce e silenzia",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Crea traccia",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Crea traccia alternativa",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Cronologia annullamenti…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Da loop MIDI ad alias",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Data di creazione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Deseleziona fuori dai localizzatori",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Deseleziona tracce globali",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/it#value",
+      "value": "Deseleziona tutto",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Deselezionati all’interno della selezione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Dimezza",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Divisione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Dolby Atmos…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Duplicati",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Duplica…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "E sostituisci tutte le tracce…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Editor “Ritmo smart”",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/it#value",
+      "value": "Elimina",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Elimina automazione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Elimina automazione non collegata sulle tracce selezionate",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Elimina automazioni visibili sulle tracce selezionate",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Elimina cronologia annullamenti",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Elimina e sposta",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Elimina eventi MIDI",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Elimina marcatore sulla posizione della testina di riproduzione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Elimina punti di automazione ridondanti",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Elimina tracce non usate",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Elimina traccia",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Elimina tutte le automazioni della traccia",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Elimina tutte le automazioni sulle tracce selezionate",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Esegui bounce delle regioni in posizione…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Esegui bounce o unisci",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Esegui il bounce",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Esporta",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Esporta audio su filmato…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Esporta marcatore in file audio",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Etichette I/O…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "File",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "File MIDI…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "File audio come…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "File audio…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "File di progetto",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Filmato",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Filmato…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Fine regione al transiente precedente",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Fine regione al transiente successivo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Fine regione alla regione successiva",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Fine selezione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Finestra",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Finestra fluttuante",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Flex Pitch/Time",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Formato di stampa…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Fotogramma",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Fumetti nella posizione del puntatore",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Fuori dai llimiti della regione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Fuori dai localizzatori",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Generali…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Gestione progetti",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Gestore plugin…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Griglia Live Loops…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Ignora tutte le superfici di controllo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Importa",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Importa audio da filmato",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Importa segnalibro da file audio",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Impossibile ripristinare",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Imposta localizzatori arrotondati sulla selezione e abilita ciclo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Imposta localizzatori automaticamente",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Imposta localizzatori sulla selezione e abilita ciclo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Imposta valore di spostamento su",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/it#value",
+      "value": "Impostazioni",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Impostazioni Metronomo…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Impostazioni Registrazione…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Impostazioni automazione…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Impostazioni gruppo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Impostazioni progetto",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Impostazioni progetto Importazione…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/it#value",
+      "value": "Impostazioni…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "In alto",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "In assolo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "In basso",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "In regione motivo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/it#value",
+      "value": "Incolla",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Incolla e sostituisci",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Incolla in posizione originale",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Informazioni personali…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Ingresso step",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Inizio regione al transiente precedente",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Inizio regione al transiente successivo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Inizio regione alla regione precedente",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Inizio selezione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Inserisci scena in corrispondenza della testina di riproduzione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Inserisci sezione in corrispondenza della testina di riproduzione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Inserisci silenzio in corrispondenza dei localizzatori",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Intero filmato",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Interprete ritmo…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Interrompi",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Interrompi e vai al localizzatore sinistro",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Interrompi e vai all’ultima posizione individuata",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Intervallo automatico",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/it#value",
+      "value": "Inverti selezione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Libreria griglie di accordi…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Libreria suoni…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Localizzatore destro",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Localizzatore sinistro",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Logic Pro",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Loop in regioni",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Lunghezza",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "L’aiuto rapido viene visualizzato come",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://nibstrings/en#value",
+      "value": "MIDI",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "MIDI…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Mai",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Mail…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Marcatore precedente",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Marcatore successivo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Metronomo…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Misura",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Misurazione pre-fader",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://quickhelp/en#value",
+      "value": "Mix",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Modalità di monitoraggio a bassa latenza",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/it#value",
+      "value": "Modifica",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Modifica…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Monitoraggio ingresso automatico",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Mostra automazione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/it#value",
+      "value": "Mostra nel Finder",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Mostra nel Finder…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Mostra traccia di mappatura dei battiti",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Mostra traccia globale singola",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Mostra tutte le tracce",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Mostra tutti",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Mostra “Elenco ritmo”",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Mostra/nascondi vista",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Multipli…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "MusicXML…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/it#value",
+      "value": "Muto",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Nascondi altre",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Nascondi/mostra tracce non selezionate",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Nascondi/mostra tracce selezionate",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Navigazione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Nessuno",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/it#value",
+      "value": "Nome strumento",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Nome traccia",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Non usate",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Nota da 1/1",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Nota da 1/16",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Nota da 1/2",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Nota da 1/32",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Nota da 1/4",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Nota da 1/64",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Nota da 1/8",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Novità di Logic Pro",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Numero di marcatore…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Nuova traccia MIDI esterno",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Nuova traccia SI Session Player…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Nuova traccia audio",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Nuova traccia con canale successivo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Nuova traccia con impostazioni duplicate",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Nuova traccia con impostazioni e contenuti duplicati",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Nuova traccia con stesso canale",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Nuova traccia di strumento software",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Nuova traccia per le regioni selezionate",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Nuova traccia per le regioni sovrapposte",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Nuove tracce…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/it#value",
+      "value": "Nuovo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Nuovo da modello…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Operazioni sul ritmo…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Opzioni pulsante Interrompi",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Opzioni pulsante Registra",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Opzioni pulsante Riproduci",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Ordina tracce per",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Pannello inspector",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Partitura come MusicXML…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Partitura…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Per selezione a cornice",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Per selezione marcatori/accordi",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Per selezione nota",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Per selezione regione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Percussivo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Personalizza barra di controllo e schermo…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Personalizza barra strumenti…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Pila cartella",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/it#value",
+      "value": "Pila somma",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Porta tutto in primo piano",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Posizione…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Primo transiente al battito più vicino",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Progetti di Logic…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Progetto come audio spaziale…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Progetto come file AAF…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Progetto in GarageBand per iOS…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Progetto in XML di Final Cut Pro…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Progetto o sezione…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Punch contenuto",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Punch regione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Raddoppia",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Regione precedente",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Regione successiva",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Regioni agganciate al timecode SMPTE",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Regioni alla testina di riproduzione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Regioni audio in nuove regioni",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Regioni audio in nuovi file audio",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Regioni come file audio…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Regioni dello stesso colore",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Regioni in corrispondenza dei localizzatori",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Regioni in posizione…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Regioni mute",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Regioni selezionate",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Regioni simili",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Regioni sovrapposte",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Regioni uguali",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Regioni vuote",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/it#value",
+      "value": "Registra",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Registra/Disattiva registrazione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Registra/Ripeti registrazione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Registrazione…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Registrazioni MIDI sovrapposte",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Registrazioni audio sovrapposte",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Regola ritmo usando la lunghezza della regione e i localizzatori",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Ridimensiona",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Ridimensiona tutto",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Ridistribuzione a destra",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Ridistribuzione a sinistra",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Riempi",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Riempi tra i localizzatori",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Rimuovi filmato",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Rimuovi informazioni sul ritmo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Rimuovi marcatore dal file audio",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Rimuovi marcatori di taglio scena filmato",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Rinomina marcatore",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Rinomina traccia",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Rinomina…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Ripeti",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Ripeti sezione tra i localizzaotri",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Ripetizioni in loop",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Ripristina a",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Ripristina default",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Ripristina tutte le impostazioni, eccetto le assegnazioni dei comandi da tastiera…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Ripristina versione salvata",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Riproduci da selezione a cornice",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Riproduci dalla regione selezionata",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Riproduci dall’inizio del ciclo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Riproduci dall’ultima posizione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Ripulisci…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Risolvi sovrapposizioni",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Risorse…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Ritaglia fuori dai localizzatori",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/it#value",
+      "value": "Ritmo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Ritmo smart…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Ruota a destra",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Ruota a sinistra",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/it#value",
+      "value": "Salva",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Salva come modello…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Salva come…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Salva una copia come…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Scivolamento a destra",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Scivolamento a sinistra",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Scorri fino alla selezione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Scorri tra le finestre",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Scrivi ritmo del progetto su file audio",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Seleziona",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Seleziona automaticamente automazione in modalità Read",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Seleziona tracce",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Selezione a cornice",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Selezione come file MIDI…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Selezione come file audio…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Sempre",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Separa eventi MIDI",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Separa per articolazione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Separa per canale MIDI",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Separa per componente",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Separa per tono di nota",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Servizi",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Sincronizzazione…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Smart Control",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Sostituisci",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Sostituisci o duplica traccia di percussioni…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Sovrapponi/unisci regioni selezionate",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Sovrapposizione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Sposta",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Sposta a destra",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Sposta a sinistra",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Sposta automazione traccia con regioni",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Sposta avanti localizzatori della lunghezza del ciclo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Sposta file di filmato fuori dal progetto…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Sposta indietro localizzatori della lunghezza del ciclo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Stampa",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Stesso colore",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/it#value",
+      "value": "Strumento",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Su regione MIDI",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Sub/VCA",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Suddividi",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Sul battito",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Sulla posizione di registrazione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Sulla testina di riproduzione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Sulla traccia in evidenza",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Superfici di controllo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Superfici di controllo…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Superficie sonora",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/it#value",
+      "value": "Taglia",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Taglia sezione tra i localizzatori",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Taglia/Inserisci tempo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Terzina da 1/16 (1/24)",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Terzina da 1/2 (1/3)",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Terzina da 1/32 (1/48)",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Terzina da 1/4 (1/6)",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Terzina da 1/64 (1/96)",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Terzina da 1/8 (1/12)",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "Tick",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/it#value",
+      "value": "Tracce alternative",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Tracce come file audio…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Tracce globali",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Tracce in posizione…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Tracce selezionate come patch di MainStage…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Tracce selezionate come set di MainStage…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Traccia",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Traccia marcatore",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Tutte le tracce MIDI come file MIDI…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Tutte le tracce come file audio…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Tutti gli elementi successivi",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Tutti gli elementi successivi della stessa traccia",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Tutti i marcatori scena",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Tutto",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Tutto all’interno dei localizzatori",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Una volta",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Unisci",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Unisci per tracce",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Unisci solo la registrazione attuale",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Universale",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Usa griglia musicale",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Usate, non usate",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Vai a",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Vai a inizio ciclo e inizio progetto se non in riproduzione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Vai a inizio selezione a cornice e inizio progetto se non in riproduzione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Vai a regione selezionata e inizio progetto se non in riproduzione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Vai a ultima posizione e inizio progetto se non in riproduzione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://niblabels/it#value",
+      "value": "Vista",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "Vista…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "XML di Final Cut Pro…",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "barra strumenti",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "blocchi note",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "colori",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "editor",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "editor elenchi",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "finestra filmato",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "finestra fluttuante Evento",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "finestra fluttuante inspector regione",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "inspector",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/en#value",
+      "value": "mixer",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "tastiera di inserimento step",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "tastiera musicale",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "traccia Accordo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "traccia arrangiamento",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "traccia filmato",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "traccia mappatura battiti",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "traccia master",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "traccia metro e armatura",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "traccia ritmo",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/it#value",
+      "value": "tutte le finestre dei plugin",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    },
+    {
+      "ref": "logic-canon://strings/ko#value",
+      "value": "시스템 설정",
+      "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the string is Apple's and not one that was typed",
+      "binding": {
+        "kind": "record"
+      }
+    }
+  ],
+  "canon_absent": [
+    {
+      "claim": "103 strings this surface exposes are a whole value of no corpus the canon pins, and no shipped label folds to them",
+      "strings": [
+        "03 Drum Machine Designer",
+        "03 Drum Machine Designer.logicx",
+        "A destra e a sinistra",
+        "A destra e in quarti",
+        "A metà",
+        "A sinistra e a destra",
+        "A sinistra e in quarti",
+        "Aiuto di Logic Pro",
+        "Allarga a tutto schermo",
+        "Annulla 템포 변경",
+        "App Store",
+        "App Store…, 5개의 업데이트",
+        "Apple",
+        "Apri recenti",
+        "Aside",
+        "Cancella menu",
+        "Discord",
+        "Discussioni su Logic Pro",
+        "Disposizione",
+        "Effetti di Logic Pro",
+        "Esci da Logic Pro",
+        "Finder에서 ‘03 Drum Machine Designer.logicx’ 보기",
+        "Finder에서 ‘03 Drum Machine Designer’ 보기",
+        "Finder에서 ‘App Store’ 보기",
+        "Finder에서 ‘Aside’ 보기",
+        "Finder에서 ‘Discord’ 보기",
+        "Finder에서 ‘Google Chrome’ 보기",
+        "Finder에서 ‘Logic Pro’ 보기",
+        "Finder에서 ‘NativeLogic13-9995.logicx’ 보기",
+        "Finder에서 ‘OrbStack’ 보기",
+        "Finder에서 ‘QualFixtureR11’ 보기",
+        "Finder에서 ‘ROLI Connect’ 보기",
+        "Finder에서 ‘Warp’ 보기",
+        "Finder에서 ‘en-final’ 보기",
+        "Finder에서 ‘logic-claude-handoff.command’ 보기",
+        "Finder에서 ‘qualification’ 보기",
+        "Finder에서 ‘텍스트-4B34-8C6B-9E-0.txt’ 보기",
+        "Finder에서 ‘시스템 설정’ 보기",
+        "Finder에서 ‘터미널’ 보기",
+        "Google Chrome",
+        "Impostazioni servizi…",
+        "In alto a destra",
+        "In alto a sinistra",
+        "In alto e in basso",
+        "In alto e in quarti",
+        "In basso a destra",
+        "In basso a sinistra",
+        "In basso e in alto",
+        "In basso e in quarti",
+        "In quarti",
+        "Informazioni su Logic Pro",
+        "Informazioni su Logic Remote…",
+        "Insieme di schermate 1 (Tracce/Mixer/Evento)",
+        "Invia feedback su Logic Pro",
+        "Isaac 로그아웃",
+        "Isaac 로그아웃…",
+        "Logic Pro sul web",
+        "Logic Pro 강제 종료",
+        "Macintosh HD",
+        "Nascondi Logic Pro",
+        "NativeLogic13-9995.logicx",
+        "Nessun servizio disponibile",
+        "Note sulla versione",
+        "OrbStack",
+        "Parte destra dello schermo",
+        "Parte sinistra dello schermo",
+        "Porta in primo piano",
+        "QualFixtureR11",
+        "QualFixtureR11 - Tracce",
+        "ROLI Connect",
+        "Rimuovi finestra dal gruppo",
+        "Scopri di più su Apple Creator Studio…",
+        "Sposta e ridimensiona",
+        "Sposta su AH-200HZB",
+        "Sposta su DELL P2425H",
+        "Strumenti di Logic Pro",
+        "Supporto di Logic Pro",
+        "Supporto per le superfici di controllo di Logic Pro",
+        "Torna alle dimensioni precedenti",
+        "Warp",
+        "en-final",
+        "en-final -  native-fixture",
+        "en-final -  release-3.19-7c125b11-native-rerun-20261113",
+        "en-final -  release-3.19-7c125b11-pre-rerun-mutated-20261113",
+        "ko-rerun2",
+        "ko-rerun2-logic13",
+        "logic-claude-handoff.command",
+        "qualification",
+        "텍스트-4B34-8C6B-9E-0.txt",
+        "강제 종료...",
+        "메뉴 지우기",
+        "문서",
+        "서버",
+        "시스템 정보",
+        "시스템 종료",
+        "시스템 종료…",
+        "응용 프로그램",
+        "이 Mac에 관하여",
+        "잠금 화면",
+        "잠자기",
+        "재시동",
+        "재시동…",
+        "터미널"
+      ],
+      "searched": [
+        {
+          "source": "madsp",
+          "locale": "-"
+        },
+        {
+          "source": "nib",
+          "locale": "-"
+        },
+        {
+          "source": "niblabels",
+          "locale": "-"
+        },
+        {
+          "source": "niblabels",
+          "locale": "de"
+        },
+        {
+          "source": "niblabels",
+          "locale": "en"
+        },
+        {
+          "source": "niblabels",
+          "locale": "es"
+        },
+        {
+          "source": "niblabels",
+          "locale": "fr"
+        },
+        {
+          "source": "niblabels",
+          "locale": "it"
+        },
+        {
+          "source": "niblabels",
+          "locale": "ja"
+        },
+        {
+          "source": "niblabels",
+          "locale": "ko"
+        },
+        {
+          "source": "niblabels",
+          "locale": "pt"
+        },
+        {
+          "source": "niblabels",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "niblabels",
+          "locale": "zh_TW"
+        },
+        {
+          "source": "nibstrings",
+          "locale": "en"
+        },
+        {
+          "source": "plugin_names",
+          "locale": "-"
+        },
+        {
+          "source": "pluginsettings",
+          "locale": "-"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "de"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "en"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "es"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "fr"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "it"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "ja"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "ko"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "pt"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "quickhelp",
+          "locale": "zh_TW"
+        },
+        {
+          "source": "strings",
+          "locale": "-"
+        },
+        {
+          "source": "strings",
+          "locale": "de"
+        },
+        {
+          "source": "strings",
+          "locale": "en"
+        },
+        {
+          "source": "strings",
+          "locale": "es"
+        },
+        {
+          "source": "strings",
+          "locale": "fr"
+        },
+        {
+          "source": "strings",
+          "locale": "it"
+        },
+        {
+          "source": "strings",
+          "locale": "ja"
+        },
+        {
+          "source": "strings",
+          "locale": "ko"
+        },
+        {
+          "source": "strings",
+          "locale": "pt"
+        },
+        {
+          "source": "strings",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "strings",
+          "locale": "zh_TW"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "de"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "en"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "es"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "fr"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "it"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "ja"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "ko"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "pt"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "zh_CN"
+        },
+        {
+          "source": "stringsdict",
+          "locale": "zh_TW"
+        }
+      ],
+      "why_runtime": "Apple's bytes hold none of them, so the only route to each is the census reading itself: they are project content, numbers and runtime text"
+    }
+  ]
+}
