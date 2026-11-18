@@ -7,7 +7,6 @@
     "menuActionNameFragment": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses",
     "projectPickerWindow": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses",
     "regionKindDrummer": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses",
-    "sendOrIOControlLabel": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses",
     "sliderSendHint": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses",
     "transportForwardControl": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses"
    },
@@ -85,6 +84,107 @@
      "was": "12.3"
     }
    }
+  },
+  "ko-KR": {
+   "new_variant": {
+    "automationModeTrim": {
+     "base": "Trim",
+     "reason": "the label names no canon row (no derivedFrom) to compare against",
+     "target": "다듬기"
+    },
+    "headerPanHint": {
+     "base": "pan",
+     "reason": "the live string '패닝' is not a value of the label's own canon row(s) in ko-KR: ['Pan']",
+     "target": "패닝"
+    },
+    "hideAllPluginWindowsMenuItem": {
+     "base": "All Plug-in Windows",
+     "reason": "the live string '모든 플러그인 윈도우 가리기' is not a value of the label's own canon row(s) in ko-KR: ['모든 플러그인 윈도우']",
+     "target": "모든 플러그인 윈도우 가리기"
+    },
+    "showStepInputKeyboardMenuItem": {
+     "base": "Step Input Keyboard",
+     "reason": "the live string '스텝 입력 키보드 보기' is not a value of the label's own canon row(s) in ko-KR: ['스텝 입력 키보드']",
+     "target": "스텝 입력 키보드 보기"
+    }
+   },
+   "role_undeclared": {
+    "cycleRangeEnd": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses",
+    "cycleRangeStart": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses",
+    "menuActionNameFragment": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses",
+    "regionKindDrummer": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses",
+    "sliderSendHint": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses",
+    "transportForwardControl": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses",
+    "transportRecordArmExclusion": "no element in this census carries any of its strings as its whole text; a substring hit does not say which element the label addresses"
+   },
+   "unconfirmed": {
+    "applicationMenuBarItem|Logic Pro": {
+     "reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent",
+     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "string": "Logic Pro",
+     "was": "12.3"
+    },
+    "controlSurfaceAddButton|추가": {
+     "reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent",
+     "record": "2026-09-15-the-setup-windows-own-menu-installs-the-surface",
+     "string": "추가",
+     "was": "12.3"
+    },
+    "controlSurfaceInstallMenuItem|설치…": {
+     "reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent",
+     "record": "2026-09-15-the-setup-windows-own-menu-installs-the-surface",
+     "string": "설치…",
+     "was": "12.3"
+    },
+    "controlSurfaceInstallWindowTitle|설치": {
+     "reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent",
+     "record": "2026-09-15-the-setup-windows-own-menu-installs-the-surface",
+     "string": "설치",
+     "was": "12.3"
+    },
+    "controlSurfaceNewMenuButton|신규": {
+     "reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent",
+     "record": "2026-09-15-the-setup-windows-own-menu-installs-the-surface",
+     "string": "신규",
+     "was": "12.3"
+    },
+    "controlSurfaceSetupWindowTitle|컨트롤 서피스 설정": {
+     "reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent",
+     "record": "2026-09-15-the-setup-windows-own-menu-installs-the-surface",
+     "string": "컨트롤 서피스 설정",
+     "was": "12.3"
+    },
+    "hideAllPluginWindowsMenuItem|모든 플러그인 윈도우": {
+     "reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent",
+     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "string": "모든 플러그인 윈도우",
+     "was": "12.3"
+    },
+    "projectChooserCommitButton|선택": {
+     "reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent",
+     "record": "2026-09-15-the-korean-project-chooser-names-itself",
+     "string": "선택",
+     "was": "12.3"
+    },
+    "projectChooserEmptyProjectLabel|비어 있는 프로젝트": {
+     "reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent",
+     "record": "2026-09-15-the-korean-project-chooser-names-itself",
+     "string": "비어 있는 프로젝트",
+     "was": "12.3"
+    },
+    "projectChooserWindowTitle|프로젝트 선택": {
+     "reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent",
+     "record": "2026-09-15-the-korean-project-chooser-names-itself",
+     "string": "프로젝트 선택",
+     "was": "12.3"
+    },
+    "showStepInputKeyboardMenuItem|스텝 입력 키보드": {
+     "reason": "read on an earlier Logic and not found by this census; the read-only census does not reach it, so it stays on the old release until a navigation census finds it or proves it absent",
+     "record": "2026-09-05-ko-KR-arrange-menus-census",
+     "string": "스텝 입력 키보드",
+     "was": "12.3"
+    }
+   }
   }
  },
  "note": "Written by Scripts/observations/locale_holds.py; never by hand. A hold is a reading a campaign declined to apply, and why.",
@@ -115,6 +215,20 @@
    "census_locale": "en-US",
    "roles": [
     "AXSlider"
+   ]
+  },
+  "beatsDisplayModeItem": {
+   "basis": "window",
+   "census_locale": "ko-KR",
+   "roles": [
+    "AXSlider"
+   ]
+  },
+  "busOutputLabelPrefix": {
+   "basis": "window",
+   "census_locale": "ko-KR",
+   "roles": [
+    "AXCheckBox"
    ]
   },
   "controlBarMixerToggle": {
@@ -270,6 +384,13 @@
     "AXButton"
    ]
   },
+  "mixerMenuHideDirection": {
+   "basis": "menus",
+   "census_locale": "ko-KR",
+   "roles": [
+    "AXMenuItem"
+   ]
+  },
   "mixerPresentationAll": {
    "basis": "window",
    "census_locale": "en-US",
@@ -313,6 +434,27 @@
     "AXMenuItem"
    ]
   },
+  "mixerTypeFilterBus": {
+   "basis": "window",
+   "census_locale": "ko-KR",
+   "roles": [
+    "AXCheckBox"
+   ]
+  },
+  "mixerTypeFilterInput": {
+   "basis": "window",
+   "census_locale": "ko-KR",
+   "roles": [
+    "AXCheckBox"
+   ]
+  },
+  "mixerTypeFilterInstrument": {
+   "basis": "window",
+   "census_locale": "ko-KR",
+   "roles": [
+    "AXCheckBox"
+   ]
+  },
   "mixerTypeFilterMIDI": {
    "basis": "menus",
    "census_locale": "en-US",
@@ -320,11 +462,39 @@
     "AXMenuItem"
    ]
   },
+  "mixerTypeFilterMasterVCA": {
+   "basis": "window",
+   "census_locale": "ko-KR",
+   "roles": [
+    "AXCheckBox"
+   ]
+  },
+  "mixerTypeFilterOutput": {
+   "basis": "window",
+   "census_locale": "ko-KR",
+   "roles": [
+    "AXCheckBox"
+   ]
+  },
+  "physicalOutputLabelPrefix": {
+   "basis": "window",
+   "census_locale": "ko-KR",
+   "roles": [
+    "AXCheckBox"
+   ]
+  },
   "playheadPositionFieldLabel": {
    "basis": "window",
    "census_locale": "en-US",
    "roles": [
     "AXButton",
+    "AXGroup"
+   ]
+  },
+  "pluginAutomationLabelExact": {
+   "basis": "window",
+   "census_locale": "ko-KR",
+   "roles": [
     "AXGroup"
    ]
   },
@@ -447,6 +617,13 @@
     "AXMenuItem"
    ]
   },
+  "quantizeModePopupValue": {
+   "basis": "window",
+   "census_locale": "ko-KR",
+   "roles": [
+    "AXButton"
+   ]
+  },
   "regionKindAudio": {
    "basis": "menus",
    "census_locale": "en-US",
@@ -464,6 +641,20 @@
   "savePanelFolderRadio": {
    "basis": "menus",
    "census_locale": "en-US",
+   "roles": [
+    "AXMenuItem"
+   ]
+  },
+  "sendOrIOControlLabel": {
+   "basis": "window",
+   "census_locale": "ko-KR",
+   "roles": [
+    "AXCheckBox"
+   ]
+  },
+  "settingPopupValue": {
+   "basis": "menus",
+   "census_locale": "ko-KR",
    "roles": [
     "AXMenuItem"
    ]
@@ -539,6 +730,13 @@
    "census_locale": "en-US",
    "roles": [
     "AXMenuItem"
+   ]
+  },
+  "trackTypeBus": {
+   "basis": "window",
+   "census_locale": "ko-KR",
+   "roles": [
+    "AXCheckBox"
    ]
   },
   "trackTypeExternalMIDI": {
@@ -625,11 +823,438 @@
     "AXMenuItem"
    ]
   },
+  "unassignedInputSlotLabel": {
+   "basis": "window",
+   "census_locale": "ko-KR",
+   "roles": [
+    "AXCheckBox"
+   ]
+  },
   "verticalZoomSlider": {
    "basis": "window",
    "census_locale": "en-US",
    "roles": [
     "AXSlider"
+   ]
+  }
+ },
+ "roles_narrowed": {
+  "barSliderLabel": {
+   "census_locale": "ko-KR",
+   "dropped": [
+    "AXMenuItem"
+   ],
+   "now": [
+    "AXSlider"
+   ],
+   "readings_removed": [
+    "en-US:coverage"
+   ],
+   "was": [
+    "AXMenuItem",
+    "AXSlider"
+   ]
+  },
+  "beatSliderLabel": {
+   "census_locale": "ko-KR",
+   "dropped": [
+    "AXMenuItem"
+   ],
+   "now": [
+    "AXSlider"
+   ],
+   "readings_removed": [
+    "en-US:coverage"
+   ],
+   "was": [
+    "AXMenuItem",
+    "AXSlider"
+   ]
+  },
+  "cycleRangeLabel": {
+   "census_locale": "ko-KR",
+   "dropped": [
+    "AXMenuItem"
+   ],
+   "now": [
+    "AXCheckBox"
+   ],
+   "readings_removed": [
+    "en-US:coverage"
+   ],
+   "was": [
+    "AXCheckBox",
+    "AXMenuItem"
+   ]
+  },
+  "mixerInspectorContext": {
+   "census_locale": "ko-KR",
+   "dropped": [
+    "AXMenuItem"
+   ],
+   "now": [
+    "AXGroup"
+   ],
+   "readings_removed": [
+    "de-DE:Informationen",
+    "en-US:coverage",
+    "es-ES:coverage",
+    "fr-FR:Inspecteur",
+    "it-IT:coverage",
+    "ja-JP:インスペクタ",
+    "ko-KR:인스펙터",
+    "pt-BR:Inspetor",
+    "zh-CN:检查器",
+    "zh-TW:檢閱器"
+   ],
+   "was": [
+    "AXGroup",
+    "AXMenuItem"
+   ]
+  },
+  "playheadPositionFieldLabel": {
+   "census_locale": "ko-KR",
+   "dropped": [
+    "AXButton",
+    "AXMenuItem"
+   ],
+   "now": [
+    "AXGroup"
+   ],
+   "readings_removed": [
+    "en-US:playhead position"
+   ],
+   "was": [
+    "AXButton",
+    "AXGroup",
+    "AXMenuItem"
+   ]
+  },
+  "playheadPositionGroupLabel": {
+   "census_locale": "ko-KR",
+   "dropped": [
+    "AXMenuItem"
+   ],
+   "now": [
+    "AXGroup"
+   ],
+   "readings_removed": [
+    "en-US:coverage",
+    "es-ES:Posición del cursor de reproducción",
+    "ja-JP:再生ヘッドの位置",
+    "ko-KR:재생헤드 위치",
+    "pt-BR:Posição do Cursor de Reprodução",
+    "zh-CN:播放头位置",
+    "zh-TW:播放磁頭位置"
+   ],
+   "was": [
+    "AXGroup",
+    "AXMenuItem"
+   ]
+  },
+  "pluginAutomationLabelSubstring": {
+   "census_locale": "ko-KR",
+   "dropped": [
+    "AXMenuItem"
+   ],
+   "now": [
+    "AXCheckBox"
+   ],
+   "readings_removed": [
+    "en-US:coverage"
+   ],
+   "was": [
+    "AXCheckBox",
+    "AXMenuItem"
+   ]
+  },
+  "pluginBypassControl": {
+   "census_locale": "ko-KR",
+   "dropped": [
+    "AXButton",
+    "AXMenuItem"
+   ],
+   "now": [
+    "AXCheckBox"
+   ],
+   "readings_removed": [
+    "de-DE:Umgehen",
+    "en-US:coverage",
+    "es-ES:desactivar",
+    "it-IT:ignora",
+    "ja-JP:バイパス",
+    "ko-KR:바이패스",
+    "pt-BR:coverage",
+    "zh-CN:旁通",
+    "zh-TW:略過"
+   ],
+   "was": [
+    "AXButton",
+    "AXCheckBox",
+    "AXMenuItem"
+   ]
+  },
+  "pluginSlotListControl": {
+   "census_locale": "ko-KR",
+   "dropped": [
+    "AXMenuItem"
+   ],
+   "now": [
+    "AXButton"
+   ],
+   "readings_removed": [
+    "en-US:coverage"
+   ],
+   "was": [
+    "AXButton",
+    "AXMenuItem"
+   ]
+  },
+  "pluginSlotOpenControl": {
+   "census_locale": "ko-KR",
+   "dropped": [
+    "AXMenuItem"
+   ],
+   "now": [
+    "AXButton"
+   ],
+   "readings_removed": [
+    "en-US:coverage"
+   ],
+   "was": [
+    "AXButton",
+    "AXMenuItem"
+   ]
+  },
+  "sendOrIOControlLabel": {
+   "census_locale": "ko-KR",
+   "dropped": [
+    "AXButton",
+    "AXMenuItem"
+   ],
+   "now": [
+    "AXCheckBox"
+   ],
+   "readings_removed": [
+    "ko-KR:센드",
+    "ko-KR:센드 슬롯",
+    "ko-KR:입력",
+    "ko-KR:입력 슬롯",
+    "ko-KR:출력",
+    "ko-KR:출력 슬롯"
+   ],
+   "was": [
+    "AXButton",
+    "AXCheckBox",
+    "AXMenuItem"
+   ]
+  },
+  "sliderPanHint": {
+   "census_locale": "ko-KR",
+   "dropped": [
+    "AXMenuItem"
+   ],
+   "now": [
+    "AXSlider"
+   ],
+   "readings_removed": [
+    "de-DE:coverage",
+    "en-US:coverage",
+    "it-IT:panning",
+    "ja-JP:パン",
+    "ko-KR:패닝",
+    "zh-CN:声像"
+   ],
+   "was": [
+    "AXMenuItem",
+    "AXSlider"
+   ]
+  },
+  "sliderVolumeHint": {
+   "census_locale": "ko-KR",
+   "dropped": [
+    "AXMenuItem"
+   ],
+   "now": [
+    "AXSlider"
+   ],
+   "readings_removed": [
+    "de-DE:fader",
+    "en-US:coverage",
+    "es-ES:Volumen",
+    "ja-JP:ボリューム",
+    "ko-KR:볼륨",
+    "zh-CN:音量"
+   ],
+   "was": [
+    "AXMenuItem",
+    "AXSlider"
+   ]
+  },
+  "sliderZoomHint": {
+   "census_locale": "ko-KR",
+   "dropped": [
+    "AXMenuItem"
+   ],
+   "now": [
+    "AXSlider"
+   ],
+   "readings_removed": [],
+   "was": [
+    "AXMenuItem",
+    "AXSlider"
+   ]
+  },
+  "tempoFieldLabel": {
+   "census_locale": "ko-KR",
+   "dropped": [
+    "AXMenuItem"
+   ],
+   "now": [
+    "AXRadioButton",
+    "AXSlider"
+   ],
+   "readings_removed": [
+    "en-US:템포"
+   ],
+   "was": [
+    "AXMenuItem",
+    "AXRadioButton",
+    "AXSlider"
+   ]
+  },
+  "tempoSliderContainsLabel": {
+   "census_locale": "ko-KR",
+   "dropped": [
+    "AXMenuItem"
+   ],
+   "now": [
+    "AXRadioButton",
+    "AXSlider"
+   ],
+   "readings_removed": [
+    "en-US:템포"
+   ],
+   "was": [
+    "AXMenuItem",
+    "AXRadioButton",
+    "AXSlider"
+   ]
+  },
+  "tempoSliderLabel": {
+   "census_locale": "ko-KR",
+   "dropped": [
+    "AXMenuItem"
+   ],
+   "now": [
+    "AXSlider"
+   ],
+   "readings_removed": [
+    "de-DE:coverage",
+    "en-US:coverage",
+    "es-ES:Ritmo",
+    "ja-JP:テンポ",
+    "ko-KR:템포",
+    "pt-BR:Andamento",
+    "zh-CN:速度",
+    "zh-TW:拍速"
+   ],
+   "was": [
+    "AXMenuItem",
+    "AXSlider"
+   ]
+  },
+  "transportCycleControl": {
+   "census_locale": "ko-KR",
+   "dropped": [
+    "AXHandle",
+    "AXMenuItem"
+   ],
+   "now": [
+    "AXCheckBox"
+   ],
+   "readings_removed": [
+    "en-US:loop"
+   ],
+   "was": [
+    "AXCheckBox",
+    "AXHandle",
+    "AXMenuItem"
+   ]
+  },
+  "transportKeywordFalseFriends": {
+   "census_locale": "ko-KR",
+   "dropped": [
+    "AXMenuItem"
+   ],
+   "now": [
+    "AXCheckBox",
+    "AXGroup",
+    "AXValueIndicator"
+   ],
+   "readings_removed": [
+    "en-US:live loops grid",
+    "en-US:playhead position",
+    "en-US:session player"
+   ],
+   "was": [
+    "AXCheckBox",
+    "AXGroup",
+    "AXMenuItem",
+    "AXValueIndicator"
+   ]
+  },
+  "transportMetronomeControl": {
+   "census_locale": "ko-KR",
+   "dropped": [
+    "AXGroup",
+    "AXMenuItem"
+   ],
+   "now": [
+    "AXCheckBox"
+   ],
+   "readings_removed": [
+    "en-US:Metronom",
+    "en-US:click"
+   ],
+   "was": [
+    "AXCheckBox",
+    "AXGroup",
+    "AXMenuItem"
+   ]
+  },
+  "transportPlayControl": {
+   "census_locale": "ko-KR",
+   "dropped": [
+    "AXMenuItem"
+   ],
+   "now": [
+    "AXCheckBox"
+   ],
+   "readings_removed": [
+    "en-US:coverage"
+   ],
+   "was": [
+    "AXCheckBox",
+    "AXMenuItem"
+   ]
+  },
+  "transportRecordControl": {
+   "census_locale": "ko-KR",
+   "dropped": [
+    "AXMenuItem"
+   ],
+   "now": [
+    "AXButton",
+    "AXCheckBox"
+   ],
+   "readings_removed": [
+    "en-US:coverage"
+   ],
+   "was": [
+    "AXButton",
+    "AXCheckBox",
+    "AXMenuItem"
    ]
   }
  },

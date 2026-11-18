@@ -243,14 +243,23 @@ def narrow_roles(labels_path, census, locale):
     """
     doc = json.load(open(labels_path, encoding="utf-8"))
     moved = {}
-    rows = census["census"]
+    # `census` is one census or a list of them. A role is kept if ANY locale's main window carries a
+    # string of the label whole under it: a translation can make a word a menu title in one language and
+    # a button in another, and a role dropped on one locale's census would silently delete the readings
+    # another locale's run had made on it -- so what one run narrows depended on which run came first.
+    censuses = census if isinstance(census, list) else [census]
     for name, entry in sorted(doc["labels"].items()):
         roles = entry.get("roles") or []
         if len(roles) < 2 or label_mode(name, entry) != "contains":
             continue
-        found = derive_roles(entry, rows)
-        if not found or found[1] != "window":
+        window_roles = set()
+        for one in censuses:
+            found = derive_roles(entry, one["census"])
+            if found and found[1] == "window":
+                window_roles |= set(found[0])
+        if not window_roles:
             continue
+        found = (sorted(window_roles), "window")
         keep = [r for r in roles if r in found[0]]
         drop = [r for r in roles if r not in found[0]]
         if not keep or not drop:

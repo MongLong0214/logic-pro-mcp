@@ -205,7 +205,7 @@ with tempfile.TemporaryDirectory() as tmp:
                                            "roles": ["AXSlider"]}})
     cpath = Path(tmp) / "census.json"
     cpath.write_text(json.dumps({"census": [PUNCH, SLIDER],
-                                 "host": {"app": "Logic Pro", "version": "13.0", "build": "7801",
+                                 "host": {"app": "Logic Pro", "version": "98.7", "build": "65432",
                                           "locale": "ja-JP", "os": "x"}}, ensure_ascii=False), encoding="utf-8")
     _loc, _host, hits, _un = propose.main(str(cpath), path3)
     observed = sorted({h["observed"] for h in hits.get("sliderPanHint", [])})
@@ -272,7 +272,7 @@ class OtherBuild:
 
     @staticmethod
     def load_manifest():
-        return {"logic": {"version": "13.0", "build": "7801"}, "sources": {}}
+        return {"logic": {"version": "98.7", "build": "65432"}, "sources": {}}
 
     @staticmethod
     def app_build(_app):

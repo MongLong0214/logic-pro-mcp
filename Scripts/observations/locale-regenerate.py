@@ -301,6 +301,18 @@ def _evidence_census(record, obs_dir):
     return None, None
 
 
+def every_census(labels_mod, declared, obs_dir, this_one):
+    """This run's census plus the newest committed one of every other locale, on the declared release."""
+    found = [this_one]
+    for other in labels_mod.SUPPORTED_LOCALES:
+        for rid in discover(other, declared, obs_dir)[:1]:
+            record, _ = gate_record(rid, other, declared, obs_dir)
+            _path, doc = _evidence_census(record, obs_dir) if record else (None, None)
+            if doc and doc is not this_one and doc.get("host", {}).get("locale") != this_one.get("host", {}).get("locale"):
+                found.append(doc)
+    return found
+
+
 def run(argv=None, repo=REPO):
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     parser.add_argument("locale")
@@ -380,7 +392,7 @@ def run(argv=None, repo=REPO):
     # Roles are settled BEFORE anything is read from the census a second time: narrowing removes the
     # readings that rested on a role the label never addressed, and the hits and the plan are then
     # recomputed against the ledger as it now stands.
-    narrowed = propose.narrow_roles(labels_path, census, locale)
+    narrowed = propose.narrow_roles(labels_path, every_census(labels_mod, declared, obs_dir, census), locale)
     if narrowed:
         print(f"narrowed the roles of {len(narrowed)} containment label(s) to the elements that carry "
               f"their string whole: {', '.join(sorted(narrowed))}")
