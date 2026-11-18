@@ -2,6 +2,8 @@
 """One locale, end to end, unattended: the engine behind `Scripts/observations/locale-campaign.sh`.
 
     locale_campaign.py <locale> [--dry-run] [--no-push] [--branch NAME] [--navigate]
+    locale_campaign.py <locale> --from-evidence CENSUS.json     re-file a census already taken: no Logic is
+                                                                driven, so no lock and no language switch
 
 Every step a person used to run by hand, in the order that is safe, and a refusal at every point where
 going on would write something false:
@@ -76,9 +78,10 @@ def sh(command, repo, check_name=None, capture=False):
 
 class Campaign:
     def __init__(self, locale, repo=REPO, plan=None, dry_run=False, push=True, branch=None, navigate=False,
-                 out=print):
+                 out=print, evidence=None):
         self.locale, self.repo, self.dry_run, self.push, self.branch = locale, repo, dry_run, push, branch
         self.navigate = navigate
+        self.evidence = evidence
         self.plan = plan if plan is not None else _plan_from_env()
         self.out = out
         self.facts = {"locale": locale}
@@ -156,13 +159,18 @@ class Campaign:
         py = shlex.quote(sys.executable)
         loc = shlex.quote(self.locale)
         try:
-            self.precheck()
             self.clean()
-            self.lock()
-            if self.branch:
-                self.step("branch", f"git checkout -B {shlex.quote(self.branch)}")
-            self.step("switch", f"Scripts/observations/locale-switch.sh {loc}")
-            self.step("census", f"{py} Scripts/observations/label-census.py run {loc} --write --confirm")
+            if self.evidence:
+                # A census already taken: nothing here touches Logic, so no pre-check, lock or switch.
+                self.step("census", f"{py} Scripts/observations/label-census.py ingest {loc} "
+                                    f"{shlex.quote(self.evidence)} --write --confirm")
+            else:
+                self.precheck()
+                self.lock()
+                if self.branch:
+                    self.step("branch", f"git checkout -B {shlex.quote(self.branch)}")
+                self.step("switch", f"Scripts/observations/locale-switch.sh {loc}")
+                self.step("census", f"{py} Scripts/observations/label-census.py run {loc} --write --confirm")
             if self.navigate:
                 self.step("navigate", f"{py} Scripts/observations/nav-census.py {loc} --write --confirm")
             self.step("canon", f"{py} Scripts/logic_canon.py build")
@@ -246,14 +254,16 @@ def result_line(result, facts):
 
 
 def main(argv):
-    args = [a for a in argv if not a.startswith("--")]
+    flag_values = {argv[i + 1] for i, a in enumerate(argv[:-1]) if a in ("--branch", "--from-evidence")}
+    args = [a for a in argv if not a.startswith("--") and a not in flag_values]
     if len(args) != 1 or args[0] not in LOCALES:
         print(result_line("FAIL", {"locale": args[0] if args else None,
                                    "reason": f"usage: locale-campaign.sh <{'|'.join(LOCALES)}>"}))
         return 1
     branch = argv[argv.index("--branch") + 1] if "--branch" in argv else None
     campaign = Campaign(args[0], repo=os.environ.get("LPM_CAMPAIGN_REPO") or REPO, dry_run="--dry-run" in argv, push="--no-push" not in argv, branch=branch,
-                        navigate="--navigate" in argv)
+                        navigate="--navigate" in argv,
+                        evidence=argv[argv.index("--from-evidence") + 1] if "--from-evidence" in argv else None)
     result = campaign.run()
     print(result_line(result, campaign.facts))
     return {"PASS": 0, "HOLD": 10, "FAIL": 1}[result]

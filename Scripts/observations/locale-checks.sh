@@ -50,7 +50,8 @@ CHECKS=(
 if [ "${1:-}" = "--list" ]; then printf '%s\n' "${CHECKS[@]}"; exit 0; fi
 failed=0
 for c in "${CHECKS[@]}"; do
-  if out=$($c 2>&1); then echo "PASS  $c"; else echo "FAIL  $c"; printf '%s\n' "$out" | tail -15 | sed 's/^/        /'; failed=$((failed+1)); fi
+  start=$SECONDS
+  if out=$($c 2>&1); then echo "PASS  $c  ($((SECONDS-start))s)"; else echo "FAIL  $c  ($((SECONDS-start))s)"; printf '%s\n' "$out" | tail -15 | sed 's/^/        /'; failed=$((failed+1)); fi
 done
 echo "CHECKS failed=$failed total=${#CHECKS[@]}"
 [ "$failed" -eq 0 ]
