@@ -17,6 +17,16 @@ import os
 import re
 import sys
 
+def _read_census(path):
+    """A census document from `path`: JSON Lines (current) or the older pretty-printed JSON."""
+    spec = importlib.util.spec_from_file_location(
+        "census_evidence_for_tool", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                                 "census_evidence.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.load(path)
+
+
 ROLE_HINTS = [
     # (name suffix / fragment, allowed AX roles)
     ("MenuBar",        {"AXMenuBarItem"}),
@@ -312,7 +322,7 @@ def strings_of(row):
 
 
 def main(census_path, labels_path):
-    census = json.load(open(census_path, encoding="utf-8"))
+    census = _read_census(census_path)
     labels = json.load(open(labels_path, encoding="utf-8"))["labels"]
     host = census["host"]
     locale = host["locale"]
@@ -561,7 +571,7 @@ def apply(labels_path, census, proposals, records_by_surface):
 if __name__ == "__main__":
     locale, host, proposals, unmatched = main(sys.argv[1], sys.argv[2])
     if "--apply" in sys.argv:
-        census = json.load(open(sys.argv[1], encoding="utf-8"))
+        census = _read_census(sys.argv[1])
         obs = os.path.join(os.path.dirname(os.path.dirname(sys.argv[2])), "observations")
         by_surface = {}
         for p in sorted(glob.glob(os.path.join(obs, f"*-{locale}-*-census.json"))):

@@ -75,7 +75,7 @@ class GuardBehaviour(unittest.TestCase):
         # `ratchet.py` is the shared merge-base comparison the guard imports by path; a
         # fixture without it does not run a weaker guard, it runs no guard at all.
         for name in ("logic_canon.py", "check-canon-citations.py", "nibarchive.py",
-                     "ratchet.py", "locale_release.py"):
+                     "ratchet.py", "locale_release.py", "canon_groups.py"):
             shutil.copy2(os.path.join(REPO, "Scripts", name),
                          os.path.join(self.root, "Scripts", name))
         shutil.copytree(os.path.join(REPO, "docs", "canon"),
@@ -905,7 +905,7 @@ class ARecordMayDeclareTheAxisInapplicable(unittest.TestCase):
         # `ratchet.py` is the shared merge-base comparison the guard imports by path; a
         # fixture without it does not run a weaker guard, it runs no guard at all.
         for name in ("logic_canon.py", "check-canon-citations.py", "nibarchive.py",
-                     "ratchet.py", "locale_release.py"):
+                     "ratchet.py", "locale_release.py", "canon_groups.py"):
             shutil.copy2(os.path.join(REPO, "Scripts", name),
                          os.path.join(self.root, "Scripts", name))
         shutil.copytree(os.path.join(REPO, "docs", "canon"),

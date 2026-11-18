@@ -75,6 +75,15 @@ import urllib.parse
 from functools import lru_cache
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+def _canon_groups():
+    """`Scripts/canon_groups.py`: a record's citations, grouped on disk and read one by one."""
+    import importlib.util as _u
+    spec = _u.spec_from_file_location("canon_groups_for_reader", os.path.join(os.path.dirname(os.path.abspath(__file__)), "canon_groups.py"))
+    module = _u.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
 CANON_DIR = os.path.join(REPO, "docs", "canon")
 DEFAULT_APP = "/Applications/Logic Pro.app"
 
@@ -3036,7 +3045,7 @@ def scan_value_citations(repo: str = REPO) -> set:
             continue
         if not isinstance(record, dict):
             continue
-        for citation in record.get("canon") or []:
+        for citation in _canon_groups().expand(record):
             ref_text, value = citation.get("ref"), citation.get("value")
             if not ref_text or value is None:
                 continue

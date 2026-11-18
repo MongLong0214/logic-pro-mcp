@@ -39,6 +39,16 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 # undocumented variant and documenting a different one leaves `total - documented` unchanged.
 
 
+
+def _census_evidence():
+    """`Scripts/census_evidence.py`, which reads census evidence whether it is JSON Lines or JSON."""
+    spec = importlib.util.spec_from_file_location(
+        "census_evidence_for_guard", os.path.join(os.path.dirname(os.path.abspath(__file__)), "census_evidence.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def _module():
     spec = importlib.util.spec_from_file_location(
         "locale_labels", os.path.join(REPO, "Scripts", "locale_labels.py"))
@@ -430,7 +440,7 @@ def _rows(rec):
         if not path.startswith(root + os.sep):
             continue
         try:
-            yield from walk(json.load(open(path, encoding="utf-8")))
+            yield from walk(_census_evidence().load(path))
         except (OSError, ValueError):
             continue
 

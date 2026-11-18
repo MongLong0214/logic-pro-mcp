@@ -58,6 +58,17 @@ def _load(name, path):
     return module
 
 
+
+
+def _read_census(path):
+    """A census document from `path`: JSON Lines (current) or the older pretty-printed JSON."""
+    spec = importlib.util.spec_from_file_location(
+        "census_evidence_for_tool", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                                 "census_evidence.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.load(path)
+
 def _labels():
     return _load("locale_labels_for_census", os.path.join(REPO, "Scripts", "locale_labels.py"))
 
@@ -207,19 +218,19 @@ def resolve_locale(census, requested, labels_mod):
 # --------------------------------------------------------------------------------------------------
 # FILING
 # --------------------------------------------------------------------------------------------------
-def _run_confirm(records_mod, repo, locale, date):
+def _run_confirm(records_mod, repo, locale, date, kind="navigation-free"):
     """Run the `logic_canon.py confirm` command a refused census left, and report whether it exited 0.
 
     The refusal names strings whose 32-bit prefix is in a corpus and whose string comparison is not
     pinned yet; `confirm` reads the installed Logic's files (it never drives Logic) and pins them in
     docs/canon/ledger/presence.tsv. A runner used to have to copy that command out of the message.
     """
-    listing = records_mod.unconfirmed_path(repo, date or __import__("datetime").date.today().isoformat(), locale)
+    day = date or __import__("datetime").date.today().isoformat()
+    listing = records_mod.unconfirmed_path(repo, day, locale, kind)
     if not os.path.exists(listing):
         return False
     texts = [line.rstrip("\n") for line in open(listing, encoding="utf-8")]
-    _path, command = records_mod.write_unconfirmed(
-        repo, date or __import__("datetime").date.today().isoformat(), locale, [t for t in texts if t])
+    _path, command = records_mod.write_unconfirmed(repo, day, locale, [t for t in texts if t], kind)
     # Multi-line strings travel as ANSI-C quoted words, which only bash and zsh read.
     return subprocess.run(command, shell=True, executable="/bin/bash").returncode == 0
 
@@ -256,7 +267,8 @@ def ingest(locale, census, repo, write, date=None, labels_mod=None, records_mod=
         with open(path, "w", encoding="utf-8") as handle:
             json.dump(census, handle, ensure_ascii=False)
         rc = records_mod.main(path, repo, write, date)
-        if rc == 2 and confirm and write and _run_confirm(records_mod, repo, resolved, date):
+        if rc == 2 and confirm and write and _run_confirm(records_mod, repo, resolved, date,
+                                                          census.get("kind") or "navigation-free"):
             print("confirmed the unplaced strings against the installed Logic; filing the census again")
             rc = records_mod.main(path, repo, write, date)
     if rc == 0:
@@ -324,8 +336,7 @@ def main(argv=None):
             print(f"REFUSED: {exc}")
             return 2
     else:
-        with open(args.census, encoding="utf-8") as handle:
-            census = json.load(handle)
+        census = _read_census(args.census)
     return ingest(args.locale, census, REPO, args.write, labels_mod=labels_mod, confirm=args.confirm)
 
 

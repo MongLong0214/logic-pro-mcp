@@ -102,6 +102,10 @@ def classify(row, locale=None):
     """The taxonomy surface a census row belongs to, or None when no rule places it."""
     if row["surface"] == "arrange.menus":
         return "arrange.menus"
+    if row["surface"] not in ("arrange.window",):
+        # A row read by a navigation census (nav-census.py) was read INSIDE a surface its step named, and
+        # carries it. The area rules below are about where a row sits in the main window's tree.
+        return row["surface"]
     names = _names_for(locale)
     segments = _segments(row["path"])
     for surface, areas in AREA_RULES:
@@ -117,6 +121,15 @@ def classify(row, locale=None):
             or "spur-header" in help_.lower()):
         return "arrange.track_headers"
     return None
+
+
+def _module(name):
+    """A sibling of this directory's parent: `Scripts/<name>.py`, loaded by path."""
+    spec = importlib.util.spec_from_file_location(
+        f"{name}_for_records", os.path.join(os.path.dirname(HERE), f"{name}.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
 
 def is_window_frame(row):
@@ -145,6 +158,14 @@ def missing_release(host):
             return f"the census host carries no Logic {axis} ({value or 'empty'!r})"
     return None
 
+
+METHOD_NAVIGATED = (
+    "Navigated and restored. For each surface the plan names, one menu item or one element was pressed "
+    "(found by a label set's own strings, a menu identifier or a key equivalent -- never by a coordinate), "
+    "the window or sheet or menu that appeared was read to depth 10, and it was closed through its own "
+    "cancel or close button. The window set and the project's modification time were read before and after "
+    "each step and had to be equal. Each element with any string became one row of the evidence file."
+)
 
 # --------------------------------------------------------------------------------------------------
 # THE CANON AXIS
@@ -219,12 +240,12 @@ def account_for_strings(strings, host_locale, canon):
 def canon_blocks(strings, host_locale, canon):
     """`(fields, near, unconfirmed)`: the record keys that carry the canon axis, ready to merge."""
     citations, absent, near, unconfirmed, corpora = account_for_strings(strings, host_locale, canon)
-    fields = {"canon": [
+    fields = {"canon_groups": _module("canon_groups").group([
         {"ref": ref, "value": text,
          "used_for": "a label this surface exposes to AX, read verbatim from the census; cited so the "
                      "string is Apple's and not one that was typed",
          "binding": {"kind": "record"}}
-        for ref, text in citations]}
+        for ref, text in citations])}
     if absent:
         fields["canon_absent"] = [{
             "claim": f"{len(absent)} strings this surface exposes are a whole value of no corpus the "
@@ -237,24 +258,24 @@ def canon_blocks(strings, host_locale, canon):
     return fields, near, unconfirmed
 
 
-def unconfirmed_path(repo, date, locale):
+def unconfirmed_path(repo, date, locale, kind="navigation-free"):
     """Where a refused census leaves the strings it could not place: beside the census it would file.
 
     Deterministic, so the operator (or a rule-following runner) can run the printed command, and the
     next run of the same census on the same day finds and replaces the same file.
     """
     return os.path.join(repo, "docs", "observations", "evidence",
-                        f"{date}-{locale}-navigation-free.unconfirmed.txt")
+                        f"{date}-{locale}-{kind}.unconfirmed.txt")
 
 
-def write_unconfirmed(repo, date, locale, texts):
+def write_unconfirmed(repo, date, locale, texts, kind="navigation-free"):
     """Write the unplaced strings for `logic_canon.py confirm --stdin`; return `(path, command)`.
 
     `confirm --stdin` reads one string per line, so a string carrying a line break cannot travel
     through the file: it is passed as a quoted argument on the same command instead, which `confirm`
     also accepts. The command names absolute paths so it runs from any directory.
     """
-    path = unconfirmed_path(repo, date, locale)
+    path = unconfirmed_path(repo, date, locale, kind)
     one_line = sorted({t for t in texts if "\n" not in t and "\r" not in t})
     multi_line = sorted({t for t in texts if "\n" in t or "\r" in t})
     os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -290,7 +311,11 @@ def main(census_path, repo, write, date=None, canon=None):
         return 2
     date = date or datetime.date.today().isoformat()
     obs_dir = os.path.join(repo, "docs", "observations")
-    ev_rel = f"evidence/{date}-{locale}-navigation-free.census.json"
+    #: `navigation-free` (menus and the main window, read without pressing anything) or `navigation`
+    #: (surfaces opened by nav-census.py, read, and closed again). The kind names the evidence file, the
+    #: record ids, the method the record states and the command that re-reads it.
+    kind = census.get("kind") or "navigation-free"
+    ev_rel = f"evidence/{date}-{locale}-{kind}.census.jsonl"
     ev_path = os.path.join(obs_dir, ev_rel)
 
     buckets, unclassified, frame = {}, 0, 0
@@ -308,7 +333,7 @@ def main(census_path, repo, write, date=None, canon=None):
     records = {}
     refused = []
     for surface, rows in sorted(buckets.items()):
-        rid = f"{date}-{locale}-{surface.replace('.', '-')}-census"
+        rid = f"{date}-{locale}-{surface.replace('.', '-')}-{'navigated-' if kind == 'navigation' else ''}census"
         strings = sorted({v for r in rows for k in ("title", "description", "help", "value") if (v := r.get(k))})
         idents = sorted({r["identifier"] for r in rows if r.get("identifier")})
         canon_fields, near, unconfirmed = canon_blocks(strings, locale, canon)
@@ -324,13 +349,15 @@ def main(census_path, repo, write, date=None, canon=None):
             "host": host,
             "reverify": {
                 "kind": "script",
-                "command": f"Scripts/observations/locale-census.sh {locale}",
+                "command": (f"Scripts/observations/nav-census.py {locale} --compare" if kind == "navigation"
+                            else f"Scripts/observations/locale-census.sh {locale}"),
                 "expected": f"a census in {locale} whose {surface} rows carry the same {len(strings)} distinct strings; a differing set means Logic's labels moved and every provenance citing this record wants re-reading",
                 "cost": "~1 min with Logic open on the fixture project in that locale",
             },
             "depends": ["Sources/LogicProMCP/Accessibility/AXLocalePolicy.swift"],
             "evidence": [ev_rel],
             "method": (
+                METHOD_NAVIGATED if kind == "navigation" else
                 "Read, never actuated. The menu bar and every menu were walked without opening them; "
                 "the main window was walked to depth 8. Each element with any string became one row of "
                 "the evidence file; rows were assigned to this surface by what their path or help text "
@@ -348,13 +375,21 @@ def main(census_path, repo, write, date=None, canon=None):
                 f"is what lets a label variant cite this record: the guard requires the string to occur "
                 f"in the observations or evidence, and here it does or it does not."
             ),
-            "limits": [
+            "limits": ([
+                "Opened by one menu press or one element press each, read, and closed through the "
+                "surface's own cancel or close button; no OK, Save, Create, Import, Export or Delete was "
+                "pressed and no text was typed. The window set and the project's modification time read "
+                "the same before and after every step (nav-census.py refuses to go on otherwise).",
+                "Only the surfaces nav-plan.json names were opened: a surface not in the plan is not "
+                "measured by this record.",
+            ] if kind == "navigation" else [
                 "Navigation-free surfaces only: nothing behind a menu press or a button was opened, so "
                 "this says nothing about the mixer, plug-in editors or the editors.",
-                f"{frame} window-level rows (the title bar, its close/minimise/zoom buttons and the "
-                f"unnamed containers directly under the window) belong to no area and are filed under no "
-                f"record; {unclassified} further window rows matched no area rule. All are in the "
-                "evidence file.",
+            ]) + [
+                (f"{frame} window-level rows (the title bar, its close/minimise/zoom buttons and the "
+                 f"unnamed containers directly under the window) belong to no area and are filed under no "
+                 f"record; {unclassified} further window rows matched no area rule. All are in the "
+                 "evidence file.") if kind != "navigation" else "Every row read is filed under the surface its step named.",
                 "One project, one host, one build. A label that depends on project content — a track "
                 "name, a region name — is a reading of this fixture, not of Logic.",
             ],
@@ -371,14 +406,14 @@ def main(census_path, repo, write, date=None, canon=None):
     if refused:
         for rid, texts in refused:
             print(f"{rid}: {len(texts)} string(s) the committed canon cannot place")
-        path, command = write_unconfirmed(repo, date, locale, [t for _rid, texts in refused for t in texts])
+        path, command = write_unconfirmed(repo, date, locale, [t for _rid, texts in refused for t in texts], kind)
         print("REFUSED: a string whose 32-bit prefix is in a corpus is neither shipped nor absent until a "
               f"string comparison is pinned. The unplaced strings are in {path}. On a machine with "
               f"Logic, read-only for Logic (it pins docs/canon/ledger/presence.tsv), run:\n"
               f"  {command}\n"
               "then file the records again. No record or evidence was written.")
         return 2
-    stale = unconfirmed_path(repo, date, locale)
+    stale = unconfirmed_path(repo, date, locale, kind)
     if write and os.path.exists(stale):
         # Settled: the list a refused run left is now a claim about a canon that has moved on.
         os.remove(stale)
@@ -389,10 +424,13 @@ def main(census_path, repo, write, date=None, canon=None):
     if not write:
         return 0
     os.makedirs(os.path.dirname(ev_path), exist_ok=True)
-    json.dump(census, open(ev_path, "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+    # Compact on disk: the evidence one row per line (`census_evidence`), a record with every leaf on one
+    # line (`compact_json`). Their BYTES are what a reading's `record_sha256` binds.
+    with open(ev_path, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write(_module("census_evidence").dumps(dict(census, kind=kind)))
     for rid, rec in records.items():
-        json.dump(rec, open(os.path.join(obs_dir, f"{rid}.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=2)
-        open(os.path.join(obs_dir, f"{rid}.json"), "a", encoding="utf-8").write("\n")
+        with open(os.path.join(obs_dir, f"{rid}.json"), "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(_module("compact_json").dumps(rec, 2))
     print(f"wrote {ev_rel} and {len(records)} record(s)")
     return 0
 

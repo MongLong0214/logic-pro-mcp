@@ -124,7 +124,12 @@ def derive(corpus):
 
 
 def render(doc):
-    return json.dumps(doc, ensure_ascii=False, indent=1, sort_keys=True) + "\n"
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "compact_json_for_areas", os.path.join(os.path.dirname(HERE), "compact_json.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.dumps(json.loads(json.dumps(doc, sort_keys=True)), 1)
 
 
 def main(argv):

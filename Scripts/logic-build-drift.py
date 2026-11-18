@@ -14,6 +14,16 @@ is why the declaration is declared rather than detected in the first place.
 
     Scripts/logic-build-drift.py            compare and report
     Scripts/logic-build-drift.py --json     the same, machine-readable
+
+AND IT IS THE TRIGGER (`observations/drift_agent.py`): a launchd agent runs it, so a Logic update starts its
+own answer instead of waiting for somebody to remember.
+
+    Scripts/logic-build-drift.py --install      write and load the agent (hourly, and when Logic's Info.plist
+                                                changes); --uninstall removes it
+    Scripts/logic-build-drift.py --agent        what launchd runs: detect drift, take the live-run lock, and
+                                                answer it on a new branch -- or HOLD if Logic is busy
+    Scripts/logic-build-drift.py --agent --dry-run --fake-installed 13.1:7900
+                                                the same against a FAKED installed Logic, running nothing
 """
 import glob
 import json
@@ -72,7 +82,42 @@ def readings(target):
     return stale_records, stale_labels
 
 
+def _agent_module():
+    import importlib.util
+    path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "observations", "drift_agent.py")
+    spec = importlib.util.spec_from_file_location("drift_agent", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules["drift_agent"] = module
+    spec.loader.exec_module(module)
+    return module
+
+
 def main():
+    args = sys.argv[1:]
+    if {"--install", "--uninstall", "--bump", "--agent"} & set(args):
+        agent = _agent_module()
+        if "--install" in args:
+            for command in agent.install():
+                print("ran:", " ".join(command))
+            print(f"installed {agent.AGENT_PLIST}")
+            return 0
+        if "--uninstall" in args:
+            agent.uninstall()
+            print(f"removed {agent.AGENT_PLIST}")
+            return 0
+        if "--bump" in args:
+            version, build = args[args.index("--bump") + 1:args.index("--bump") + 3]
+            with open(DECLARATION, encoding="utf-8") as handle:
+                text = handle.read()
+            with open(DECLARATION, "w", encoding="utf-8") as handle:
+                handle.write(agent.bump_declaration(text, version, build))
+            print(f"declared Logic {version} ({build})")
+            return 0
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+        import locale_release
+        declared = locale_release.declared_logic(DECLARATION)
+        fake = agent.parse_fake(args[args.index("--fake-installed") + 1]) if "--fake-installed" in args else None
+        return agent.agent(declared, fake or installed(), dry_run="--dry-run" in args)
     as_json = "--json" in sys.argv[1:]
     sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
     import locale_release

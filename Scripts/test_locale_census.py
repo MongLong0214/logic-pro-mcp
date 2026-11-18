@@ -289,8 +289,8 @@ def main():
          "hands confirm exactly those strings", problems == [], problems)
     for n, (name, old, new) in enumerate((
             ("no strings file (the defect)",
-             "        path, command = write_unconfirmed(repo, date, locale, [t for _rid, texts in refused for t in texts])",
-             "        path, command = unconfirmed_path(repo, date, locale), "
+             "        path, command = write_unconfirmed(repo, date, locale, [t for _rid, texts in refused for t in texts], kind)",
+             "        path, command = unconfirmed_path(repo, date, locale, kind), "
              "\"python3 Scripts/logic_canon.py confirm --stdin < strings.txt\""),
             ("an empty strings file",
              "        handle.writelines(f\"{t}\\n\" for t in one_line)",

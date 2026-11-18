@@ -53,7 +53,7 @@ def mutated(old, new, name):
 
 
 engine = load(ENGINE, "campaign_engine")
-STEPS = ("switch", "census", "canon", "rebind", "regenerate", "ratchet", "checks", "commit", "preflight", "push")
+STEPS = ("switch", "census", "canon", "rebind", "regenerate", "ratchet", "checks", "commit", "preflight", "lfs", "push")
 
 
 def fixture(fail_at=None, holds=None, dirty=False):
@@ -127,6 +127,11 @@ case("a failed check never reaches a commit or a push",
 root, log, plan = fixture(fail_at="preflight")
 run(engine, root, plan)
 case("a failed preflight is committed but never pushed", "commit" in logged(log) and "push" not in logged(log), logged(log))
+case("a failed preflight uploads no LFS object either", "lfs" not in logged(log), logged(log))
+root, log, plan = fixture(fail_at="lfs")
+run(engine, root, plan)
+case("a failed LFS upload stops before the push (a pointer without its object is a broken checkout)",
+     "push" not in logged(log), logged(log))
 
 m = mutated("        if code not in ok:\n            raise Refusal(name, f\"`{name}` exited {code}\")\n",
             "        pass\n", "mut_no_stop")
@@ -207,7 +212,7 @@ case("MUTANT: reporting PASS over held readings hides them", result == "PASS", r
 # ---- --no-push --------------------------------------------------------------------------------------
 root, log, plan = fixture()
 result, facts, _l, _last = run(engine, root, plan, push=False)
-case("--no-push commits and never pushes", "push" not in logged(log) and facts["pushed"] is False
+case("--no-push commits and never pushes", "push" not in logged(log) and "lfs" not in logged(log) and facts["pushed"] is False
      and "commit" in logged(log), (logged(log), facts))
 
 # ---- a rebind happens exactly when a record was replaced ---------------------------------------------

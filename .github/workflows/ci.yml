@@ -44,6 +44,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          lfs: true
           fetch-depth: 0
       - name: Classify changed paths
         id: scope
@@ -75,6 +76,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          lfs: true
           fetch-depth: 0
 
       - name: Verify pinned Apple corpus, citations and every declared locale
@@ -94,6 +96,7 @@ jobs:
           python3 Scripts/check-locale-labels-json.py
           python3 Scripts/check-observation-records.py
           python3 Scripts/check-observation-ratchets.py
+          python3 Scripts/check-observation-size.py
 
       - name: Mutation drives prove tampering, stale canon and wrong locale maps fail
         run: |
@@ -113,6 +116,9 @@ jobs:
             Scripts/test_locale_census.py
             Scripts/test_locale_rules.py
             Scripts/test_locale_campaign_script.py
+            Scripts/test_observation_size.py
+            Scripts/test_lfs_checkout.py
+            Scripts/test_logic_build_drift_agent.py
             Scripts/test_locale_labels_json.py
             Scripts/test_locale_version_axis.py
             Scripts/test_policy_literals_against_canon.py
@@ -133,6 +139,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          lfs: true
           fetch-depth: 0
 
       - name: Cache SwiftPM downloads
@@ -184,6 +191,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          lfs: true
           fetch-depth: 0
 
       - name: Product source guards
@@ -303,6 +311,7 @@ jobs:
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
+          lfs: true
           fetch-depth: 0
 
       - name: Use Command Line Tools
@@ -432,6 +441,7 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         if: ${{ needs.change-scope.outputs.full-validation == 'true' && needs.release-build.result == 'success' && needs.test-build.result == 'success' && needs.test-shards.result == 'success' }}
         with:
+          lfs: true
           fetch-depth: 0
 
       - name: Use Command Line Tools

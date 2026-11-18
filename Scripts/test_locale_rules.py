@@ -76,8 +76,8 @@ CORE = ("tracks", "control_bar", "mixer", "event", "inspector", "header", "conte
 
 
 def newest_census(locale):
-    found = sorted(EVIDENCE.glob(f"2026-11-1*-{locale}-navigation-free.census.json"))
-    return json.loads(found[-1].read_text(encoding="utf-8")) if found else None
+    found = sorted(EVIDENCE.glob(f"2026-11-1*-{locale}-navigation-free.census.json*"))
+    return load(HERE / "census_evidence.py", "rules_evidence").load(str(found[-1])) if found else None
 
 
 def segments(row):
@@ -327,9 +327,9 @@ def promoted(module):
     with tempfile.TemporaryDirectory() as tmp:
         copy = Path(tmp) / "ui-labels.json"
         copy.write_text(json.dumps(real, ensure_ascii=False), encoding="utf-8")
-        census_path = EVIDENCE / "2026-11-18-en-US-navigation-free.census.json"
+        census_path = EVIDENCE / "2026-11-18-en-US-navigation-free.census.jsonl"
         _loc, _host, found, _un = module.main(str(census_path), str(copy))
-        census_doc = json.loads(census_path.read_text(encoding="utf-8"))
+        census_doc = load(HERE / "census_evidence.py", "rules_evidence_apply").load(str(census_path))
         by_surface = {}
         for rec in (REPO / "docs/observations").glob("2026-11-18-en-US-*-census.json"):
             d = json.loads(rec.read_text(encoding="utf-8"))

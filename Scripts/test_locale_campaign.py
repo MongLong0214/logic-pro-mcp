@@ -396,8 +396,10 @@ def main():
     # The strings come from the committed ko-KR census record so the cited value is one the pinned
     # canon holds; the absent one is a string no corpus can hold.
     committed = json.load(open(HERE.parent / "docs" / "observations"
-                               / "2026-11-17-ko-KR-mixer-channel_strips-census.json", encoding="utf-8"))
-    shipped = committed["canon"][0]
+                               / "2026-11-18-ko-KR-mixer-channel_strips-census.json", encoding="utf-8"))
+    gspec_ = importlib.util.spec_from_file_location("canon_groups_for_test", HERE / "canon_groups.py")
+    groups_ = importlib.util.module_from_spec(gspec_); gspec_.loader.exec_module(groups_)
+    shipped = groups_.expand(committed)[0]
     absent_text = "Spur-zzq 4711 Fixture Track"
     json.dump(census([row("AXMenuItem", "AXMenuBar/AXMenuBarItem[a]/AXMenu/AXMenuItem[x]", title=shipped["value"]),
                       row("AXMenuItem", "AXMenuBar/AXMenuBarItem[a]/AXMenu/AXMenuItem[y]", title=absent_text)]),
@@ -424,8 +426,8 @@ def main():
     rc, found, rec = guard_failures()
     case("a generated census record passes check-canon-citations", rc == 0 and not found, (rc, found[:3]))
     case("it cites the shipped string and proves the other absent",
-         rec and [c["value"] for c in rec["canon"]] == [shipped["value"]]
-         and rec["canon_absent"][0]["strings"] == [absent_text], rec and (rec.get("canon"), rec.get("canon_absent")))
+         rec and [c["value"] for c in groups_.expand(rec)] == [shipped["value"]]
+         and rec["canon_absent"][0]["strings"] == [absent_text], rec and (rec.get("canon_groups"), rec.get("canon_absent")))
     # MUTANT: drop the citation emission. The record must then be refused, or the case above proves nothing.
     rc, found, _ = guard_failures(lambda strings, loc, canon: ({}, [], []))
     case("MUTANT: a generator that emits no canon block is refused by the guard", rc == 0 and bool(found),

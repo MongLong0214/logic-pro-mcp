@@ -98,6 +98,15 @@ ratchet = _load_ratchet()
 #: It is deliberately seeded with every record in the tree on the day the rule landed. Turning 107
 #: records red at once is how a rule gets deleted instead of satisfied; letting the 108th in
 #: quietly is how it becomes decorative.
+
+def _canon_groups():
+    """`Scripts/canon_groups.py`: a record's citations, grouped on disk and read one by one."""
+    import importlib.util as _u
+    spec = _u.spec_from_file_location("canon_groups_for_reader", os.path.join(os.path.dirname(os.path.abspath(__file__)), "canon_groups.py"))
+    module = _u.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
 WITHOUT_CANON_PATH = os.path.join(REPO, "docs", "canon", "WITHOUT-CANON.json")
 
 
@@ -710,7 +719,7 @@ def _every_string_in(record: dict) -> list:
 
     for field in NOT_APPLICABLE_FIELDS:
         walk(record.get(field))
-    for citation in record.get("canon") or []:
+    for citation in _canon_groups().expand(record):
         if isinstance(citation, dict) and isinstance(citation.get("value"), str):
             out.append(citation["value"])
     return out
@@ -1007,7 +1016,7 @@ def check_record(path: str, failures: list, without_canon: set, manifest: dict,
                 f"rule are listed in docs/canon/WITHOUT-CANON.json and that list may only shrink.")
         return
 
-    citations = record.get("canon", [])
+    citations = _canon_groups().expand(record)
     absences = record.get("canon_absent", [])
     if "canon_not_applicable" in record:
         check_not_applicable(rel, record, manifest, failures)

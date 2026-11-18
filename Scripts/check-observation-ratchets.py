@@ -448,6 +448,8 @@ def compare(live, ratchets, base=None):
     return grew, shrank, missing, understated, vanished
 
 
+
+
 def rebaselined(repo, reason, today=None, live=None, base=None):
     """The ratchets document after an EXPLICIT baseline change, or raises ValueError.
 
@@ -498,7 +500,7 @@ def main(argv=None):
             return 2
         with open(os.path.join(target, "docs", "observations", "RATCHETS.json"), "w",
                   encoding="utf-8") as handle:
-            handle.write(json.dumps(doc, indent=2, ensure_ascii=False) + "\n")
+            handle.write(json.dumps(doc, indent=2, ensure_ascii=False, sort_keys=True) + "\n")
         print("RATCHETS.json rewritten: `allowed` now equals the live sets, and every member that is "
               "growth against the merge base is under `raised` with your reason. Review that diff.")
         return 0

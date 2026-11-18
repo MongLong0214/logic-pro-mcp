@@ -17,6 +17,15 @@ import os
 KINDS = ("changed", "new_variant", "role_undeclared", "unconfirmed")
 
 
+def _compact():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location(
+        "compact_json_for_holds", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "compact_json.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 def path(repo):
     return os.path.join(repo, "docs", "locale", "holds.json")
 
@@ -38,7 +47,7 @@ def load(repo):
 def save(repo, doc):
     target = path(repo)
     os.makedirs(os.path.dirname(target), exist_ok=True)
-    text = json.dumps(doc, ensure_ascii=False, indent=1, sort_keys=True) + "\n"
+    text = _compact().dumps(json.loads(json.dumps(doc, sort_keys=True)), 1)
     with open(target, "w", encoding="utf-8", newline="\n") as handle:
         handle.write(text)
 

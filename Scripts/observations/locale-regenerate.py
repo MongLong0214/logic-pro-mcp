@@ -287,13 +287,22 @@ def add_variant(swift_text, label, variant):
 
 # --------------------------------------------------------------------------------------------------
 # DRIVER
+def _read_census(path):
+    """A census document from `path`: JSON Lines (current) or the older pretty-printed JSON."""
+    spec = importlib.util.spec_from_file_location(
+        "census_evidence_for_tool", os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                                                 "census_evidence.py"))
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.load(path)
+
+
 # --------------------------------------------------------------------------------------------------
 def _evidence_census(record, obs_dir):
     for rel in record.get("evidence") or []:
         path = os.path.join(obs_dir, rel)
         try:
-            with open(path, encoding="utf-8") as handle:
-                doc = json.load(handle)
+            doc = _read_census(path)
         except (OSError, ValueError):
             continue
         if isinstance(doc, dict) and "census" in doc and "host" in doc:
@@ -359,16 +368,35 @@ def run(argv=None, repo=REPO):
     propose = _load("locale_propose_for_regenerate", os.path.join(HERE, "locale-propose.py"))
     align = _load("locale_align_for_regenerate", os.path.join(HERE, "locale-align.py"))
     labels_path = labels_mod.JSON_PATH
-    census_path, census = None, None
-    for record in records.values():
-        census_path, census = _evidence_census(record, obs_dir)
-        if census:
-            break
-    if not census:
+    # The NEWEST record per surface, and the evidence census each one cites. A locale has two kinds of
+    # census -- the navigation-free one (menus and the main window) and the navigation one (surfaces
+    # nav-census.py opened) -- and several dates; `ids` is newest first, so the first record seen for a
+    # surface is the one a reading may cite. (This used to keep the LAST one, the oldest.)
+    newest = {}
+    for rid, record in records.items():
+        newest.setdefault(record["surface"], rid)
+    sources = []   # [(path, doc)], one per distinct evidence census
+    for rid in newest.values():
+        path_, doc_ = _evidence_census(records[rid], obs_dir)
+        if doc_ and all(path_ != seen for seen, _d in sources):
+            sources.append((path_, doc_))
+    if not sources:
         print("REFUSED: none of the records cites an evidence census this tool can read.")
         return 2
+    census_path, census = sources[0]
+    # One document for what has to see every row at once (roles, narrowing): every source's rows.
+    census = dict(census, census=[row for _p, d in sources for row in d["census"]])
+
+    def read_hits():
+        merged = {}
+        for path_, _d in sources:
+            _loc, _host, found, _un = propose.main(path_, labels_path)
+            for name_, items in found.items():
+                merged.setdefault(name_, []).extend(items)
+        return merged
+
     doc = labels_mod.load_json()
-    base_locale, _host, hits, _unmatched = propose.main(census_path, labels_path)
+    hits = read_hits()
     plan = plan_changes(doc.get("labels") or {}, locale, hits, declared)
 
     new_variants = {}
@@ -399,7 +427,7 @@ def run(argv=None, repo=REPO):
         subprocess.run([sys.executable, os.path.join(repo, "Scripts", "locale_labels.py"), "--write"],
                        check=True)
         doc = labels_mod.load_json()
-        _l, _h, hits, _u = propose.main(census_path, labels_path)
+        hits = read_hits()
         plan = plan_changes(doc.get("labels") or {}, locale, hits, declared)
     holds = {"unconfirmed": {i["label"] + "|" + str(i["string"]): {
                  "string": i["string"], "record": i["record"], "was": i["was"],
@@ -436,7 +464,7 @@ def run(argv=None, repo=REPO):
         subprocess.run([sys.executable, os.path.join(repo, "Scripts", "locale_labels.py"), "--write"],
                        check=True)
         doc = labels_mod.load_json()
-        _l, _h, hits, _u = propose.main(census_path, labels_path)
+        hits = read_hits()
         plan = plan_changes(doc.get("labels") or {}, locale, hits, declared)
 
     todo, held_back = writable(hits, plan, changed_ok)
@@ -462,7 +490,7 @@ def run(argv=None, repo=REPO):
                 (entry.get(key) or {}).pop(locale, None)
     with open(labels_path, "w", encoding="utf-8") as handle:
         handle.write(labels_mod.render(raw))
-    by_surface = {r["surface"]: rid for rid, r in records.items()}
+    by_surface = dict(newest)
     # Roles first: a label whose name cannot say what element it addresses is written only once it
     # declares one, and the declaration comes from the AX role this census read -- never typed.
     declared_roles, undeclared = propose.declare_roles(labels_path, census, locale, sighted=set(hits))

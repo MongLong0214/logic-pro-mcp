@@ -24,6 +24,9 @@ going on would write something false:
     checks       locale-checks.sh: every canon-locales check; any failure ends the run before a commit
     commit       one commit of the files the run wrote, no trailers, hooks on
     preflight    the public-surface preflight must PASS before a push
+    lfs          git lfs push: raw census evidence is stored in Git LFS and the repository's pre-push hook
+                 does not upload it, so the objects go first; a pointer pushed without its object is a
+                 checkout that cannot read its own evidence
     push
 
 The last line printed is always `RESULT: PASS|HOLD|FAIL {json}`:
@@ -53,7 +56,7 @@ import live_lock  # noqa: E402
 
 PREFLIGHT = os.environ.get("LPM_PREFLIGHT") or os.path.expanduser("~/.claude/scripts/lpm-public-surface-preflight.sh")
 STEP_ORDER = ("precheck", "clean", "lock", "switch", "census", "navigate", "canon", "rebind", "regenerate",
-              "ratchet", "checks", "commit", "preflight", "push")
+              "ratchet", "checks", "commit", "preflight", "lfs", "push")
 LOCALES = ("en-US", "ko-KR", "ja-JP", "de-DE", "es-ES", "fr-FR", "it-IT", "pt-BR", "zh-CN", "zh-TW")
 #: Files a campaign writes and commits. Nothing else is staged: a campaign must not carry along whatever
 #: else was lying in the tree.
@@ -137,6 +140,13 @@ class Campaign:
         self.out("== lock: the live-run lock")
         if self.dry_run:
             return
+        inherited = os.environ.get("LPM_LIVE_LOCK_INHERITED", "")
+        holder = live_lock.holder()
+        if inherited.isdigit() and holder and holder.get("pid") == int(inherited) and not holder.get("stale"):
+            # The drift agent holds the lock for its whole run and hands it down; this run neither takes
+            # nor releases it. A lock held by anybody else is still a HOLD.
+            self.out(f"   held by {holder.get('owner')} (pid {inherited}), which started this run")
+            return
         if not live_lock.acquire(f"locale-campaign {self.locale}"):
             held = live_lock.holder() or {}
             raise Refusal("lock", f"another live run holds Logic ({held.get('owner')}, pid {held.get('pid')}); "
@@ -191,6 +201,7 @@ class Campaign:
             self.facts["commit"] = self.head()
             self.step("preflight", f'{shlex.quote(PREFLIGHT)} "$PWD" $(git merge-base HEAD origin/main) HEAD')
             if self.push:
+                self.step("lfs", "git lfs push origin HEAD")
                 self.step("push", "git push origin HEAD")
                 self.facts["pushed"] = True
             else:

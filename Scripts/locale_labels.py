@@ -844,6 +844,19 @@ def record_facts(record_id, obs_dir=None):
 _STRINGS_CACHE = {}
 
 
+def _census_evidence():
+    """`Scripts/census_evidence.py`: the reader for evidence that is JSON Lines as well as JSON."""
+    if "census_evidence" not in _CANON_CACHE:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "census_evidence_for_labels", os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                                                       "census_evidence.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _CANON_CACHE["census_evidence"] = module
+    return _CANON_CACHE["census_evidence"]
+
+
 def _walk_strings(node, into):
     if isinstance(node, str):
         into.add(node)
@@ -875,8 +888,7 @@ def record_strings(record_id, obs_dir=None):
                 doc = json.load(handle)
             _walk_strings(doc, found)
             for rel in doc.get("evidence") or []:
-                with open(os.path.join(obs_dir, rel), encoding="utf-8") as handle:
-                    _walk_strings(json.load(handle), found)
+                _walk_strings(_census_evidence().load(os.path.join(obs_dir, rel)), found)
         except (OSError, ValueError):
             return None
         _STRINGS_CACHE[key] = frozenset(found)
@@ -1399,8 +1411,23 @@ INDENT = 1
 
 
 def render(doc):
-    """The document's exact text, including its trailing newline."""
-    return json.dumps(doc, ensure_ascii=False, indent=INDENT) + "\n"
+    """The document's exact text, including its trailing newline.
+
+    Compact: a leaf (a provenance block, a coverage map, a list of variants) is one line and structure
+    keeps one line per key, so the ledger's size is its number of facts and not its number of fields.
+    """
+    return _compact().dumps(doc, INDENT)
+
+
+def _compact():
+    if "compact_json" not in _CANON_CACHE:
+        import importlib.util
+        spec = importlib.util.spec_from_file_location(
+            "compact_json_for_labels", os.path.join(os.path.dirname(os.path.abspath(__file__)), "compact_json.py"))
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        _CANON_CACHE["compact_json"] = module
+    return _CANON_CACHE["compact_json"]
 
 
 def stale_artifacts(doc, json_path=None, py_path=None, swift_path=None):
