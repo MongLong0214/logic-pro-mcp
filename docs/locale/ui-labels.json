@@ -122,14 +122,14 @@
    "not_measured_on_current": 215
   },
   "zh-CN": {
-   "current": 0,
-   "superseded": 7,
+   "current": 50,
+   "superseded": 2,
    "unknown_version": 0,
    "unverified": 0,
-   "derived": 242,
+   "derived": 197,
    "unmeasured": 6,
    "retired": 1,
-   "not_measured_on_current": 255
+   "not_measured_on_current": 205
   },
   "zh-TW": {
    "current": 0,
@@ -235,6 +235,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "所有 MIDI 轨道为 MIDI 文件…": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "所有 MIDI 轨道为 MIDI 文件…",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -250,13 +263,12 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_derived": {
     "en-US": "strings:en:ships_up_to_case:All MIDI Tracks as MIDI File…",
     "de-DE": "strings:de:ships_up_to_case:Alle MIDI-Spuren als MIDI-Datei …",
-    "zh-CN": "strings:zh_CN:ships_up_to_case:所有 MIDI 轨道为 MIDI 文件…",
     "zh-TW": "strings:zh_TW:ships_up_to_case:將所有 MIDI 音軌轉換為 MIDI 檔案⋯"
    },
    "coverage_currency": {
@@ -265,7 +277,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "allTracksAsAudioFilesMenuItem": {
@@ -373,6 +386,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "所有轨道为音频文件…": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "所有轨道为音频文件…",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -388,7 +414,7 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -410,7 +436,6 @@
     "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
-    "zh-CN": "strings:zh_CN:ships_up_to_case:所有轨道为音频文件…",
     "zh-TW": "strings:zh_TW:ships_up_to_case:所有音軌為音訊檔案⋯"
    },
    "coverage_currency": {
@@ -421,7 +446,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "applicationMenuBarItem": {
@@ -1045,6 +1071,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "并轨": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "并轨",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -1060,7 +1099,7 @@
     "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -1085,7 +1124,6 @@
     "es-ES": "strings:es:ships_up_to_case:Bounce",
     "fr-FR": "strings:fr:ships_up_to_case:Bounce",
     "it-IT": "strings:it:ships_up_to_case:Bounce",
-    "zh-CN": "strings:zh_CN:ships_up_to_case:并轨",
     "zh-TW": "strings:zh_TW:ships_up_to_case:併軌"
    },
    "coverage_currency": {
@@ -1093,7 +1131,8 @@
     "ko-KR": "current",
     "ja-JP": "current",
     "de-DE": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "bounceNormalizeSetting": {
@@ -1378,6 +1417,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "控制条": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact_strict",
+     "observed": "控制条",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -1399,43 +1451,36 @@
    },
    "coverage_records": {
     "ko-KR": "2026-09-25-979-ko-KR-main-window-areas-by-row",
-    "zh-CN": "2026-09-25-979-zh-CN-main-window-areas-by-row",
     "zh-TW": "2026-09-25-979-zh-TW-main-window-areas-by-row",
     "en-US": "2026-11-18-en-US-arrange-menus-census"
    },
    "coverage_roles": {
     "ko-KR": "AXGroup",
-    "zh-CN": "AXGroup",
     "zh-TW": "AXGroup",
     "en-US": "AXMenuItem"
    },
    "coverage_attributes": {
     "ko-KR": "description",
-    "zh-CN": "description",
     "zh-TW": "description",
     "en-US": "title"
    },
    "coverage_paths": {
     "ko-KR": "AXWindow#1/AXGroup#5",
-    "zh-CN": "AXWindow#1/AXGroup#5",
     "zh-TW": "AXWindow#1/AXGroup#5"
    },
    "coverage_logic_version": {
     "en-US": "13.0",
     "ko-KR": "12.3",
-    "zh-CN": "12.3",
     "zh-TW": "12.3"
    },
    "coverage_logic_build": {
     "en-US": "7801",
     "ko-KR": "6674",
-    "zh-CN": "6674",
     "zh-TW": "6674"
    },
    "coverage_record_sha256": {
     "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
     "ko-KR": "2e9525408d71ee3cbfea8abe74e1097f5fb713720d49d8af2ee13b6090b8e408",
-    "zh-CN": "18a30bff284f0930d70390c02a933294bac1074ecfbe5f717561522052cf9357",
     "zh-TW": "e042faa84864d92fdc4e04f0c3cb5ec07eec226a7a473548e214b2259d685648"
    },
    "coverage_currency": {
@@ -1447,7 +1492,7 @@
     "fr-FR": "current",
     "it-IT": "current",
     "pt-BR": "current",
-    "zh-CN": "superseded",
+    "zh-CN": "current",
     "zh-TW": "superseded"
    }
   },
@@ -2038,6 +2083,19 @@
      "record": "2026-11-18-it-IT-arrange-menus-census",
      "record_sha256": "5564c6c9576195f80f0c9badd9bbf6e9a895f851efcb4d8e37af5bd60d5b389b",
      "role": "AXMenuItem"
+    },
+    "设置…": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "设置…",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -2053,7 +2111,7 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "derived",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -2076,7 +2134,6 @@
    },
    "coverage_derived": {
     "pt-BR": "niblabels:pt:ships_up_to_case:Ajustes…",
-    "zh-CN": "niblabels:zh_CN:ships_up_to_case:设置…",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:設定⋯"
    },
    "coverage_currency": {
@@ -2086,7 +2143,8 @@
     "de-DE": "current",
     "es-ES": "current",
     "fr-FR": "current",
-    "it-IT": "current"
+    "it-IT": "current",
+    "zh-CN": "current"
    }
   },
   "controlSurfaceSetupMenuItem": {
@@ -2195,6 +2253,32 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "设定…": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "设定…",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
+    },
+    "设置…": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "设置…",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -2210,7 +2294,7 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -2232,7 +2316,6 @@
     "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
-    "zh-CN": "niblabels:zh_CN:ships_up_to_case:设置…",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:設定⋯"
    },
    "coverage_currency": {
@@ -2243,7 +2326,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "controlSurfaceSetupWindowTitle": {
@@ -2411,6 +2495,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "控制表面": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "控制表面",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -2426,7 +2523,7 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -2448,7 +2545,6 @@
     "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
-    "zh-CN": "strings:zh_CN:ships_up_to_case:控制表面",
     "zh-TW": "strings:zh_TW:ships_up_to_case:控制表面"
    },
    "coverage_currency": {
@@ -2459,7 +2555,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "createButton": {
@@ -2608,6 +2705,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "创建标记": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "创建标记",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -2623,7 +2733,7 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -2645,7 +2755,6 @@
     "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
-    "zh-CN": "quickhelp:zh_CN:ships_up_to_case:创建标记",
     "zh-TW": "strings:zh_TW:ships_up_to_case:製作標記"
    },
    "coverage_currency": {
@@ -2656,7 +2765,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "cycleRangeEnd": {
@@ -2879,6 +2989,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "删除轨道": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "删除轨道",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -2894,12 +3017,11 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_derived": {
     "en-US": "quickhelp:en:ships_up_to_case:Delete Track",
-    "zh-CN": "quickhelp:zh_CN:ships_up_to_case:删除轨道",
     "zh-TW": "strings:zh_TW:ships_up_to_case:刪除音軌"
    },
    "coverage_currency": {
@@ -2909,7 +3031,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "deleteTracksPrimaryButton": {
@@ -3107,6 +3230,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuBarItem"
+    },
+    "编辑": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "编辑",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuBarItem"
     }
    },
    "roles": [
@@ -3122,7 +3258,7 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -3144,7 +3280,6 @@
     "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
-    "zh-CN": "niblabels:zh_CN:ships_up_to_case:编辑",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:編輯"
    },
    "coverage_currency": {
@@ -3155,7 +3290,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "eventListColumnChannel": {
@@ -4436,6 +4572,19 @@
      "record": "2026-11-18-it-IT-arrange-menus-census",
      "record_sha256": "5564c6c9576195f80f0c9badd9bbf6e9a895f851efcb4d8e37af5bd60d5b389b",
      "role": "AXMenuItem"
+    },
+    "导出": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "导出",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -4451,7 +4600,7 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "derived",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -4474,7 +4623,6 @@
    },
    "coverage_derived": {
     "pt-BR": "strings:pt:ships_up_to_case:Exportar",
-    "zh-CN": "strings:zh_CN:ships_up_to_case:导出",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:輸出"
    },
    "coverage_currency": {
@@ -4484,7 +4632,8 @@
     "de-DE": "current",
     "es-ES": "current",
     "fr-FR": "current",
-    "it-IT": "current"
+    "it-IT": "current",
+    "zh-CN": "current"
    }
   },
   "fileMenuBar": {
@@ -4578,6 +4727,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuBarItem"
+    },
+    "文件": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "文件",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuBarItem"
     }
    },
    "roles": [
@@ -4593,7 +4755,7 @@
     "fr-FR": "measured",
     "it-IT": "derived",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -4616,7 +4778,6 @@
    },
    "coverage_derived": {
     "it-IT": "strings:it:ships_up_to_case:File",
-    "zh-CN": "strings:zh_CN:ships_up_to_case:文件",
     "zh-TW": "strings:zh_TW:ships_up_to_case:檔案"
    },
    "coverage_currency": {
@@ -4626,7 +4787,8 @@
     "de-DE": "current",
     "es-ES": "current",
     "fr-FR": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "goToMenuItem": {
@@ -4733,6 +4895,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "前往": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "前往",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -4748,7 +4923,7 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -4770,7 +4945,6 @@
     "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
-    "zh-CN": "strings:zh_CN:ships_up_to_case:前往",
     "zh-TW": "strings:zh_TW:ships_up_to_case:移動"
    },
    "coverage_currency": {
@@ -4781,7 +4955,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "goToPositionDialogTitle": {
@@ -5121,6 +5296,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "所有插件窗口": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "所有插件窗口",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -5136,7 +5324,7 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -5158,7 +5346,6 @@
     "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
-    "zh-CN": "strings:zh_CN:ships_up_to_case:所有插件窗口",
     "zh-TW": "strings:zh_TW:ships_up_to_case:所有外掛模組視窗"
    },
    "coverage_currency": {
@@ -5169,7 +5356,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "horizontalZoomSlider": {
@@ -5306,6 +5494,19 @@
      "record": "2026-11-18-it-IT-arrange-menus-census",
      "record_sha256": "5564c6c9576195f80f0c9badd9bbf6e9a895f851efcb4d8e37af5bd60d5b389b",
      "role": "AXMenuItem"
+    },
+    "导入": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "导入",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -5321,7 +5522,7 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "derived",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -5344,7 +5545,6 @@
    },
    "coverage_derived": {
     "pt-BR": "strings:pt:ships_up_to_case:Importar",
-    "zh-CN": "strings:zh_CN:ships_up_to_case:导入",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:輸入"
    },
    "coverage_currency": {
@@ -5354,7 +5554,8 @@
     "de-DE": "current",
     "es-ES": "current",
     "fr-FR": "current",
-    "it-IT": "current"
+    "it-IT": "current",
+    "zh-CN": "current"
    }
   },
   "inputSlotHelpKeyword": {
@@ -6085,6 +6286,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "MIDI 文件…": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "MIDI 文件…",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -6100,7 +6314,7 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -6122,7 +6336,6 @@
     "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
-    "zh-CN": "strings:zh_CN:ships_up_to_case:MIDI 文件…",
     "zh-TW": "strings:zh_TW:ships_up_to_case:MIDI 檔案⋯"
    },
    "coverage_currency": {
@@ -6133,7 +6346,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "midiImportCommitButton": {
@@ -6526,6 +6740,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "检查器": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "检查器",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -6546,49 +6773,42 @@
     "zh-TW": "measured"
    },
    "coverage_records": {
-    "zh-CN": "2026-09-25-979-zh-CN-main-window-areas-by-row",
     "zh-TW": "2026-09-25-979-zh-TW-main-window-areas-by-row",
     "en-US": "2026-11-18-en-US-arrange-menus-census",
     "es-ES": "2026-11-18-es-ES-arrange-menus-census",
     "it-IT": "2026-11-18-it-IT-arrange-menus-census"
    },
    "coverage_roles": {
-    "zh-CN": "AXGroup",
     "zh-TW": "AXGroup",
     "en-US": "AXMenuItem",
     "es-ES": "AXMenuItem",
     "it-IT": "AXMenuItem"
    },
    "coverage_attributes": {
-    "zh-CN": "description",
     "zh-TW": "description",
     "en-US": "title",
     "es-ES": "title",
     "it-IT": "title"
    },
    "coverage_paths": {
-    "zh-CN": "AXWindow#1/AXGroup#6",
     "zh-TW": "AXWindow#1/AXGroup#6"
    },
    "coverage_logic_version": {
     "en-US": "13.0",
     "es-ES": "13.0",
     "it-IT": "13.0",
-    "zh-CN": "12.3",
     "zh-TW": "12.3"
    },
    "coverage_logic_build": {
     "en-US": "7801",
     "es-ES": "7801",
     "it-IT": "7801",
-    "zh-CN": "6674",
     "zh-TW": "6674"
    },
    "coverage_record_sha256": {
     "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394",
     "es-ES": "34823bdfa10c669f8be978aa13e01159afa903c384b97d78a0f81b1e58bdb2a3",
     "it-IT": "5564c6c9576195f80f0c9badd9bbf6e9a895f851efcb4d8e37af5bd60d5b389b",
-    "zh-CN": "18a30bff284f0930d70390c02a933294bac1074ecfbe5f717561522052cf9357",
     "zh-TW": "e042faa84864d92fdc4e04f0c3cb5ec07eec226a7a473548e214b2259d685648"
    },
    "coverage_currency": {
@@ -6600,7 +6820,7 @@
     "fr-FR": "current",
     "it-IT": "current",
     "pt-BR": "current",
-    "zh-CN": "superseded",
+    "zh-CN": "current",
     "zh-TW": "superseded"
    }
   },
@@ -6695,20 +6915,6 @@
    ],
    "rationale": "Identifies the mixer container by exact normalized name; read-only classifier.",
    "provenance": {
-    "混音器": {
-     "attribute": "description",
-     "date": "2026-09-25",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "zh-CN",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "混音器",
-     "path_contains": "/AXWindow/AXGroup/AXLayoutArea",
-     "record": "2026-09-25-977-zh-CN-mixer-area-by-description",
-     "record_sha256": "8dd0235288bc3d88458d3ef60109a5e4020b38368e9b24851da58a694d1e893b",
-     "role": "AXLayoutArea"
-    },
     "ミキサー": {
      "attribute": "title",
      "date": "2026-11-18",
@@ -6746,6 +6952,19 @@
      "observed": "Table de mixage",
      "record": "2026-11-18-fr-FR-arrange-menus-census",
      "record_sha256": "db4cbbe1c9cf5022f267ebc47682d591e9eb3be8effa45cc7fafe9a14c082b57",
+     "role": "AXMenuItem"
+    },
+    "混音器": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "混音器",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
      "role": "AXMenuItem"
     }
    },
@@ -6824,7 +7043,7 @@
     "fr-FR": "current",
     "it-IT": "current",
     "pt-BR": "current",
-    "zh-CN": "superseded",
+    "zh-CN": "current",
     "zh-TW": "superseded"
    }
   },
@@ -7451,6 +7670,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "移动": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "移动",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -7466,12 +7698,11 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_derived": {
     "en-US": "strings:en:ships_up_to_case:Move",
-    "zh-CN": "strings:zh_CN:ships_up_to_case:移动",
     "zh-TW": "strings:zh_TW:ships_up_to_case:移動"
    },
    "coverage_currency": {
@@ -7481,7 +7712,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "navigateMenuBar": {
@@ -7575,6 +7807,19 @@
      "record": "2026-11-18-it-IT-arrange-menus-census",
      "record_sha256": "5564c6c9576195f80f0c9badd9bbf6e9a895f851efcb4d8e37af5bd60d5b389b",
      "role": "AXMenuBarItem"
+    },
+    "浏览": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "浏览",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuBarItem"
     }
    },
    "roles": [
@@ -7590,7 +7835,7 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "derived",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -7613,7 +7858,6 @@
    },
    "coverage_derived": {
     "pt-BR": "strings:pt:ships_up_to_case:Navegar",
-    "zh-CN": "strings:zh_CN:ships_up_to_case:浏览",
     "zh-TW": "strings:zh_TW:ships_up_to_case:移動"
    },
    "coverage_currency": {
@@ -7623,7 +7867,8 @@
     "de-DE": "current",
     "es-ES": "current",
     "fr-FR": "current",
-    "it-IT": "current"
+    "it-IT": "current",
+    "zh-CN": "current"
    }
   },
   "newAudioTrackMenuItem": {
@@ -7731,6 +7976,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "新音频轨道": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "新音频轨道",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -7746,12 +8004,11 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_derived": {
     "en-US": "quickhelp:en:ships_up_to_case:New Audio Track",
-    "zh-CN": "quickhelp:zh_CN:ships_up_to_case:新音频轨道",
     "zh-TW": "strings:zh_TW:ships_up_to_case:新增音訊音軌"
    },
    "coverage_currency": {
@@ -7761,7 +8018,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "newExternalMIDITrackMenuItem": {
@@ -7869,6 +8127,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "新外部 MIDI 轨道": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "新外部 MIDI 轨道",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -7884,12 +8155,11 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_derived": {
     "en-US": "quickhelp:en:ships_up_to_case:New External MIDI Track",
-    "zh-CN": "quickhelp:zh_CN:ships_up_to_case:新外部 MIDI 轨道",
     "zh-TW": "strings:zh_TW:ships_up_to_case:新增外部 MIDI 音軌"
    },
    "coverage_currency": {
@@ -7899,7 +8169,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "newProjectMenuItem": {
@@ -7994,6 +8265,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "新建": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "新建",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -8009,7 +8293,7 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -8032,7 +8316,6 @@
    },
    "coverage_derived": {
     "es-ES": "niblabels:es:ships_up_to_case:Nuevo",
-    "zh-CN": "niblabels:zh_CN:ships_up_to_case:新建",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:新增"
    },
    "coverage_currency": {
@@ -8042,7 +8325,8 @@
     "de-DE": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "newSessionPlayerTrackMenuItem": {
@@ -8151,6 +8435,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "新建伴奏乐手 SI 轨道…": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "新建伴奏乐手 SI 轨道…",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -8166,12 +8463,11 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_derived": {
     "en-US": "strings:en:ships_up_to_case:New Session Player SI Track…",
-    "zh-CN": "strings:zh_CN:ships_up_to_case:新建伴奏乐手 SI 轨道…",
     "zh-TW": "strings:zh_TW:ships_up_to_case:新增 Session Player SI 音軌⋯"
    },
    "coverage_currency": {
@@ -8181,7 +8477,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "newSoftwareInstrumentTrackMenuItem": {
@@ -8289,6 +8586,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "新建软件乐器轨道": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "新建软件乐器轨道",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -8304,12 +8614,11 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_derived": {
     "en-US": "quickhelp:en:ships_up_to_case:New Software Instrument Track",
-    "zh-CN": "strings:zh_CN:ships_up_to_case:新建软件乐器轨道",
     "zh-TW": "strings:zh_TW:ships_up_to_case:新增軟體樂器音軌"
    },
    "coverage_currency": {
@@ -8319,7 +8628,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "newTrackSheetDescription": {
@@ -8664,6 +8974,19 @@
      "record": "2026-11-18-it-IT-arrange-menus-census",
      "record_sha256": "5564c6c9576195f80f0c9badd9bbf6e9a895f851efcb4d8e37af5bd60d5b389b",
      "role": "AXMenuItem"
+    },
+    "打开标记列表": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "打开标记列表",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -8679,7 +9002,7 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "derived",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -8702,7 +9025,6 @@
    },
    "coverage_derived": {
     "pt-BR": "strings:pt:ships_up_to_case:Abrir lista de marcadores",
-    "zh-CN": "quickhelp:zh_CN:ships_up_to_case:打开标记列表",
     "zh-TW": "strings:zh_TW:ships_up_to_case:打開標記列表"
    },
    "coverage_currency": {
@@ -8712,7 +9034,8 @@
     "de-DE": "current",
     "es-ES": "current",
     "fr-FR": "current",
-    "it-IT": "current"
+    "it-IT": "current",
+    "zh-CN": "current"
    }
   },
   "outputPopupBusSubmenuTitle": {
@@ -8973,6 +9296,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "播放头位置": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "删除播放头位置处的标记",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -8989,7 +9325,7 @@
     "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -9014,7 +9350,6 @@
     "de-DE": "quickhelp:de:ships_up_to_case:Position der Abspielposition",
     "fr-FR": "strings:fr:ships_up_to_case:Position de la tête de lecture",
     "it-IT": "strings:it:ships_up_to_case:Posizione testina di riproduzione",
-    "zh-CN": "strings:zh_CN:ships_up_to_case:播放头位置",
     "zh-TW": "strings:zh_TW:ships_up_to_case:播放磁頭位置"
    },
    "coverage_currency": {
@@ -9022,7 +9357,8 @@
     "ko-KR": "current",
     "ja-JP": "current",
     "es-ES": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "pluginAutomationLabelExact": {
@@ -9110,20 +9446,6 @@
    ],
    "rationale": "Locates an insert slot's bypass toggle; read-only locator (structural fallback exists). Read live 2026-09-25 at a Compressor insert slot in all ten locales, each the same row's value (docs/observations/2026-09-25-977-<locale>-insert-slot-bypass-and-open.json, #977). Checked offline by Scripts/check-labelsets-are-derived.py.",
    "provenance": {
-    "旁通": {
-     "attribute": "description",
-     "date": "2026-09-25",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "zh-CN",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "contains",
-     "observed": "旁通",
-     "path_contains": "/AXWindow/AXGroup/AXLayoutArea/AXLayoutItem/AXGroup/AXCheckBox",
-     "record": "2026-09-25-977-zh-CN-insert-slot-bypass-and-open",
-     "record_sha256": "b32ee074786ff9d6cd916ed6ec19ca78a97420e89c5d8a047f5bb24157031926",
-     "role": "AXCheckBox"
-    },
     "略過": {
      "attribute": "description",
      "date": "2026-09-25",
@@ -9202,6 +9524,19 @@
      "record": "2026-11-18-it-IT-arrange-menus-census",
      "record_sha256": "5564c6c9576195f80f0c9badd9bbf6e9a895f851efcb4d8e37af5bd60d5b389b",
      "role": "AXMenuItem"
+    },
+    "旁通": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "旁通所有控制表面",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -9257,7 +9592,7 @@
     "es-ES": "current",
     "it-IT": "current",
     "pt-BR": "current",
-    "zh-CN": "superseded",
+    "zh-CN": "current",
     "zh-TW": "superseded"
    }
   },
@@ -9274,20 +9609,6 @@
    ],
    "rationale": "Identifies a plug-in editor window by its bypass toggle, which is what keeps an open editor from reading as a blocking modal. Read live 2026-09-25 in all ten locales, each the same row's value (docs/observations/2026-09-25-977-<locale>-plugin-editor-is-not-a-blocking-modal.json, #977). Checked offline by Scripts/check-labelsets-are-derived.py.",
    "provenance": {
-    "旁通": {
-     "attribute": "description",
-     "date": "2026-09-25",
-     "host": "Logic Pro 12.3 (6674) on macOS 26.3 (25D125)",
-     "locale": "zh-CN",
-     "logic_build": "6674",
-     "logic_version": "12.3",
-     "match": "exact",
-     "observed": "旁通",
-     "path_contains": "/AXWindow/AXCheckBox",
-     "record": "2026-09-25-977-zh-CN-plugin-editor-is-not-a-blocking-modal",
-     "record_sha256": "837220e23bec921e220030bf02a0b14defe9e4278942440785b6494908eb9ba2",
-     "role": "AXCheckBox"
-    },
     "略過": {
      "attribute": "description",
      "date": "2026-09-25",
@@ -9317,7 +9638,7 @@
     "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
-    "zh-CN": "measured",
+    "zh-CN": "derived",
     "zh-TW": "measured"
    },
    "coverage_records": {
@@ -9348,11 +9669,11 @@
     "es-ES": "strings:es:ships_up_to_case:desactivar",
     "fr-FR": "strings:fr:ships_up_to_case:inactif",
     "it-IT": "strings:it:ships_up_to_case:ignora",
-    "pt-BR": "strings:pt:ships_up_to_case:bypass"
+    "pt-BR": "strings:pt:ships_up_to_case:bypass",
+    "zh-CN": "strings:zh_CN:ships_up_to_case:旁通"
    },
    "coverage_currency": {
     "de-DE": "superseded",
-    "zh-CN": "superseded",
     "zh-TW": "superseded"
    }
   },
@@ -10165,6 +10486,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "项目或部分…": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "项目或部分…",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -10180,7 +10514,7 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -10202,7 +10536,6 @@
     "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
-    "zh-CN": "strings:zh_CN:ships_up_to_case:项目或部分…",
     "zh-TW": "strings:zh_TW:ships_up_to_case:計畫案或段落⋯"
    },
    "coverage_currency": {
@@ -10213,7 +10546,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "projectPickerWindow": {
@@ -11010,6 +11344,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "给轨道重新命名": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "给轨道重新命名",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -11025,12 +11372,11 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_derived": {
     "en-US": "quickhelp:en:ships_up_to_case:Rename Track",
-    "zh-CN": "quickhelp:zh_CN:ships_up_to_case:给轨道重新命名",
     "zh-TW": "strings:zh_TW:ships_up_to_case:重新命名音軌"
    },
    "coverage_currency": {
@@ -11040,7 +11386,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "saveAsMenuItem": {
@@ -11148,6 +11495,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "保存为…": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "保存为…",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -11163,7 +11523,7 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -11185,7 +11545,6 @@
     "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
-    "zh-CN": "niblabels:zh_CN:ships_up_to_case:保存为…",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:儲存為⋯"
    },
    "coverage_currency": {
@@ -11196,7 +11555,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "saveConfirmationButton": {
@@ -11756,6 +12116,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "逐个输入键盘": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "逐个输入键盘",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -11771,7 +12144,7 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -11793,7 +12166,6 @@
     "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
-    "zh-CN": "strings:zh_CN:ships_up_to_case:逐个输入键盘",
     "zh-TW": "strings:zh_TW:ships_up_to_case:循步輸入鍵盤"
    },
    "coverage_currency": {
@@ -11804,7 +12176,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "showTempoListMenuItem": {
@@ -11912,6 +12285,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "显示速度列表": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "显示速度列表",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -11927,12 +12313,11 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_derived": {
     "en-US": "quickhelp:en:ships_up_to_case:Show Tempo List",
-    "zh-CN": "quickhelp:zh_CN:ships_up_to_case:显示速度列表",
     "zh-TW": "strings:zh_TW:ships_up_to_case:顯示拍速列表"
    },
    "coverage_currency": {
@@ -11942,7 +12327,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "sliderPanHint": {
@@ -11996,6 +12382,19 @@
      "record": "2026-11-18-it-IT-arrange-menus-census",
      "record_sha256": "5564c6c9576195f80f0c9badd9bbf6e9a895f851efcb4d8e37af5bd60d5b389b",
      "role": "AXMenuItem"
+    },
+    "声像": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "为音量、声像和发送各创建 1 个自动化点",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -12012,7 +12411,7 @@
     "fr-FR": "derived",
     "it-IT": "measured",
     "pt-BR": "derived",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -12038,14 +12437,14 @@
     "es-ES": "quickhelp:es:ships_up_to_case:pan",
     "fr-FR": "niblabels:fr:ships_up_to_case:pan",
     "pt-BR": "niblabels:pt:ships_up_to_case:pan",
-    "zh-CN": "niblabels:zh_CN:ships_up_to_case:声像",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:聲像"
    },
    "coverage_currency": {
     "ko-KR": "current",
     "ja-JP": "superseded",
     "de-DE": "current",
-    "it-IT": "current"
+    "it-IT": "current",
+    "zh-CN": "current"
    }
   },
   "sliderSendHint": {
@@ -12147,6 +12546,19 @@
      "record": "2026-11-18-es-ES-arrange-menus-census",
      "record_sha256": "34823bdfa10c669f8be978aa13e01159afa903c384b97d78a0f81b1e58bdb2a3",
      "role": "AXMenuItem"
+    },
+    "音量": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "为音量、声像和发送各创建 1 个自动化点",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -12163,7 +12575,7 @@
     "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_derived": {
@@ -12171,14 +12583,14 @@
     "fr-FR": "niblabels:fr:ships_up_to_case:volume",
     "it-IT": "niblabels:it:ships_up_to_case:volume",
     "pt-BR": "niblabels:pt:ships_up_to_case:volume",
-    "zh-CN": "niblabels:zh_CN:ships_up_to_case:音量",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:音量"
    },
    "coverage_currency": {
     "ko-KR": "current",
     "ja-JP": "current",
     "de-DE": "current",
-    "es-ES": "current"
+    "es-ES": "current",
+    "zh-CN": "current"
    }
   },
   "sliderZoomHint": {
@@ -12334,6 +12746,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "音频通道": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "音频通道",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -12349,7 +12774,7 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -12371,7 +12796,6 @@
     "ko-KR": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1"
    },
    "coverage_derived": {
-    "zh-CN": "strings:zh_CN:ships_up_to_case:音频通道",
     "zh-TW": "strings:zh_TW:ships_up_to_case:聲道"
    },
    "coverage_currency": {
@@ -12382,7 +12806,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "sortTracksByCreationDateMenuItem": {
@@ -12490,6 +12915,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "创建日期": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "创建日期",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -12505,7 +12943,7 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -12527,7 +12965,6 @@
     "ko-KR": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1"
    },
    "coverage_derived": {
-    "zh-CN": "strings:zh_CN:ships_up_to_case:创建日期",
     "zh-TW": "strings:zh_TW:ships_up_to_case:製作日期"
    },
    "coverage_currency": {
@@ -12538,7 +12975,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "sortTracksByInstrumentNameMenuItem": {
@@ -12582,6 +13020,19 @@
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
      "role": "AXMenuItem"
+    },
+    "乐器名称": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "乐器名称",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -12597,7 +13048,7 @@
     "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -12624,13 +13075,13 @@
     "fr-FR": "strings:fr:ships_up_to_case:Noms des instruments",
     "it-IT": "strings:it:ships_up_to_case:nomi strumenti",
     "pt-BR": "strings:pt:ships_up_to_case:Nomes dos Instrumentos",
-    "zh-CN": "niblabels:zh_CN:ships_up_to_case:乐器名称",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:樂器名稱"
    },
    "coverage_currency": {
     "en-US": "current",
     "ko-KR": "current",
-    "ja-JP": "current"
+    "ja-JP": "current",
+    "zh-CN": "current"
    }
   },
   "sortTracksByMIDIChannelMenuItem": {
@@ -12674,6 +13125,19 @@
      "record": "2026-11-18-ja-JP-arrange-menus-census",
      "record_sha256": "328f3993ccb797ac389b3e35940d276874b1b3cd1a3cff6bffd53613c3006022",
      "role": "AXMenuItem"
+    },
+    "MIDI 通道": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "MIDI 通道",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -12689,7 +13153,7 @@
     "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "derived",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -12716,13 +13180,13 @@
     "fr-FR": "strings:fr:ships_up_to_case:Canaux MIDI",
     "it-IT": "strings:it:ships_up_to_case:Canali MIDI",
     "pt-BR": "strings:pt:ships_up_to_case:Canais de MIDI",
-    "zh-CN": "quickhelp:zh_CN:ships_up_to_case:MIDI 通道",
     "zh-TW": "strings:zh_TW:ships_up_to_case:MIDI 聲道"
    },
    "coverage_currency": {
     "en-US": "current",
     "ko-KR": "current",
-    "ja-JP": "current"
+    "ja-JP": "current",
+    "zh-CN": "current"
    }
   },
   "sortTracksByMenuItem": {
@@ -12816,6 +13280,19 @@
      "record": "2026-11-18-it-IT-arrange-menus-census",
      "record_sha256": "5564c6c9576195f80f0c9badd9bbf6e9a895f851efcb4d8e37af5bd60d5b389b",
      "role": "AXMenuItem"
+    },
+    "轨道排序方式": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "轨道排序方式",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -12831,7 +13308,7 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "derived",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -12854,7 +13331,6 @@
    },
    "coverage_derived": {
     "pt-BR": "strings:pt:ships_up_to_case:Ordenar pistas por",
-    "zh-CN": "strings:zh_CN:ships_up_to_case:轨道排序方式",
     "zh-TW": "strings:zh_TW:ships_up_to_case:按以下方式排列音軌"
    },
    "coverage_currency": {
@@ -12864,7 +13340,8 @@
     "de-DE": "current",
     "es-ES": "current",
     "fr-FR": "current",
-    "it-IT": "current"
+    "it-IT": "current",
+    "zh-CN": "current"
    }
   },
   "sortTracksByOutputChannelMenuItem": {
@@ -12972,6 +13449,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "输出通道": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "输出通道",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -12987,7 +13477,7 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -13009,7 +13499,6 @@
     "ko-KR": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1"
    },
    "coverage_derived": {
-    "zh-CN": "strings:zh_CN:ships_up_to_case:输出通道",
     "zh-TW": "strings:zh_TW:ships_up_to_case:輸出聲道"
    },
    "coverage_currency": {
@@ -13020,7 +13509,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "sortTracksByTrackNameMenuItem": {
@@ -13128,6 +13618,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "轨道名称": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "轨道名称",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -13143,7 +13646,7 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -13165,7 +13668,6 @@
     "ko-KR": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1"
    },
    "coverage_derived": {
-    "zh-CN": "strings:zh_CN:ships_up_to_case:轨道名称",
     "zh-TW": "strings:zh_TW:ships_up_to_case:音軌名稱"
    },
    "coverage_currency": {
@@ -13176,7 +13678,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "sortTracksByUsedMenuItem": {
@@ -13284,6 +13787,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "已使用, 未使用": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "已使用, 未使用",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -13299,7 +13815,7 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -13321,7 +13837,6 @@
     "ko-KR": "2ebce130fe7f17590861f3cd868fa89ddcf1d670fdf2cbe3e9f1341657c96bd1"
    },
    "coverage_derived": {
-    "zh-CN": "strings:zh_CN:ships_up_to_case:已使用, 未使用",
     "zh-TW": "strings:zh_TW:ships_up_to_case:已使用、未使用"
    },
    "coverage_currency": {
@@ -13332,7 +13847,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "stemExportCommitButton": {
@@ -13722,6 +14238,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "速度": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "速度",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -13737,7 +14266,7 @@
     "fr-FR": "derived",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -13762,7 +14291,6 @@
     "en-US": "niblabels:en:ships_up_to_case:Tempo",
     "es-ES": "niblabels:es:ships_up_to_case:Tempo",
     "fr-FR": "niblabels:fr:ships_up_to_case:Tempo",
-    "zh-CN": "niblabels:zh_CN:ships_up_to_case:速度",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:拍速"
    },
    "coverage_currency": {
@@ -13770,7 +14298,8 @@
     "ja-JP": "current",
     "de-DE": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "tempoSliderContainsLabel": {
@@ -13874,6 +14403,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "速度": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "contains",
+     "observed": "智能速度…",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -13890,7 +14432,7 @@
     "fr-FR": "derived",
     "it-IT": "derived",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -13915,7 +14457,6 @@
     "en-US": "niblabels:en:ships_up_to_case:tempo",
     "fr-FR": "niblabels:fr:ships_up_to_case:tempo",
     "it-IT": "niblabels:it:ships_up_to_case:tempo",
-    "zh-CN": "niblabels:zh_CN:ships_up_to_case:速度",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:拍速"
    },
    "coverage_currency": {
@@ -13923,7 +14464,8 @@
     "ja-JP": "current",
     "de-DE": "current",
     "es-ES": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "tickSliderLabel": {
@@ -14065,6 +14607,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "到播放头": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "到播放头",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -14080,12 +14635,11 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_derived": {
     "en-US": "strings:en:ships_up_to_case:To Playhead",
-    "zh-CN": "strings:zh_CN:ships_up_to_case:到播放头",
     "zh-TW": "strings:zh_TW:ships_up_to_case:至播放磁頭"
    },
    "coverage_currency": {
@@ -14095,7 +14649,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "toggleHideViewMenuItem": {
@@ -14203,6 +14758,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuItem"
+    },
+    "开关隐藏视图": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "开关隐藏视图",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuItem"
     }
    },
    "roles": [
@@ -14218,12 +14786,11 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_derived": {
     "en-US": "strings:en:ships_up_to_case:Toggle Hide View",
-    "zh-CN": "strings:zh_CN:ships_up_to_case:开关隐藏视图",
     "zh-TW": "strings:zh_TW:ships_up_to_case:切換隱藏顯示區"
    },
    "coverage_currency": {
@@ -14233,7 +14800,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "trackContentExplicit": {
@@ -14590,6 +15158,19 @@
      "record": "2026-11-18-it-IT-arrange-menus-census",
      "record_sha256": "5564c6c9576195f80f0c9badd9bbf6e9a895f851efcb4d8e37af5bd60d5b389b",
      "role": "AXMenuBarItem"
+    },
+    "轨道": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "轨道",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuBarItem"
     }
    },
    "roles": [
@@ -14605,7 +15186,7 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "derived",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -14628,7 +15209,6 @@
    },
    "coverage_derived": {
     "pt-BR": "strings:pt:ships_up_to_case:Pista",
-    "zh-CN": "strings:zh_CN:ships_up_to_case:轨道",
     "zh-TW": "strings:zh_TW:ships_up_to_case:音軌"
    },
    "coverage_currency": {
@@ -14638,7 +15218,8 @@
     "de-DE": "current",
     "es-ES": "current",
     "fr-FR": "current",
-    "it-IT": "current"
+    "it-IT": "current",
+    "zh-CN": "current"
    }
   },
   "trackMuteButton": {
@@ -15884,6 +16465,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuBarItem"
+    },
+    "显示": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "显示",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuBarItem"
     }
    },
    "roles": [
@@ -15899,7 +16493,7 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -15921,7 +16515,6 @@
     "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
-    "zh-CN": "niblabels:zh_CN:ships_up_to_case:显示",
     "zh-TW": "niblabels:zh_TW:ships_up_to_case:顯示方式"
    },
    "coverage_currency": {
@@ -15932,7 +16525,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   },
   "windowMenuBar": {
@@ -16040,6 +16634,19 @@
      "record": "2026-11-18-pt-BR-arrange-menus-census",
      "record_sha256": "c7bd18bbb9e732c6f34dd66abecef394d9f30fa7cd3f305a3d93f501fd610b81",
      "role": "AXMenuBarItem"
+    },
+    "窗口": {
+     "attribute": "title",
+     "date": "2026-11-18",
+     "host": "Logic Pro 13.0 (7801) on macOS 26.3 (25D125)",
+     "locale": "zh-CN",
+     "logic_build": "7801",
+     "logic_version": "13.0",
+     "match": "exact",
+     "observed": "窗口",
+     "record": "2026-11-18-zh-CN-arrange-menus-census",
+     "record_sha256": "ff3d775f71bdd471eb405860fe794fdae98f2d736801d9d0526728b6de6e47bb",
+     "role": "AXMenuBarItem"
     }
    },
    "roles": [
@@ -16055,7 +16662,7 @@
     "fr-FR": "measured",
     "it-IT": "measured",
     "pt-BR": "measured",
-    "zh-CN": "derived",
+    "zh-CN": "measured",
     "zh-TW": "derived"
    },
    "coverage_records": {
@@ -16077,7 +16684,6 @@
     "en-US": "d07b45d119842c296b042e6f4c429062a7488d58942a610ce7aa742518f11394"
    },
    "coverage_derived": {
-    "zh-CN": "strings:zh_CN:ships_up_to_case:Window",
     "zh-TW": "strings:zh_TW:ships_up_to_case:Window"
    },
    "coverage_currency": {
@@ -16088,7 +16694,8 @@
     "es-ES": "current",
     "fr-FR": "current",
     "it-IT": "current",
-    "pt-BR": "current"
+    "pt-BR": "current",
+    "zh-CN": "current"
    }
   }
  }

@@ -100,7 +100,7 @@
     "index/nib.tsv": "cfa538478c6a0197d838e2629612e14ec1706fd42e09252351619754c7b2d59c",
     "index/nib.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/niblabels.tsv": "251168083f649fd298772378849247cf221a639aec6401e20978049c1cef2748",
-    "index/niblabels.values.tsv": "7a198225a1937fc0e99614b22f49081029366a3190e813a7c691dc10228ab825",
+    "index/niblabels.values.tsv": "7f6024d9287cb5d1a976371121eddc9d9c28508ba7ae7ca34c6fc7f3dcf232e6",
     "index/nibstrings.tsv": "afc7f0272ca27ee2dc69bec6213b0d3304e7f521e3ba387fe0bb4c08319e5b73",
     "index/nibstrings.values.tsv": "b7803f3ce6258c6ed95bab2df7255ba28d277149333831265fc36d641aa36d7e",
     "index/plugin_names.tsv": "f6d22385cbe42b4e2736a1dbb2637ad10ee67b8bce79578969a473ccc3b6ec93",
@@ -108,13 +108,13 @@
     "index/pluginsettings.tsv": "827154b12becb1b89cf36a9cd5bc43c1d8ca952a370fea6b9dcafde2ac1a6eb9",
     "index/pluginsettings.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "index/quickhelp.tsv": "c7137fa138879937177d7a89744a05e3de1156887d4e51a931cafa9744e23782",
-    "index/quickhelp.values.tsv": "40aa34c15aa174a329effdac31e187efac6dc43655694b172d8e5cedfbe55f86",
+    "index/quickhelp.values.tsv": "b92d2a8890e726583c9bc7add88ce065e67680a71c4d7e9556c4743a92b1e852",
     "index/strings.tsv": "a3c8e80e9acc28eed81bd4adc3b24a8bae20b71016f46153522d890759d06ecc",
-    "index/strings.values.tsv": "7640d904b2918fc91e43ef102157b63f93c37cada9cba99114a4c61b85125752",
+    "index/strings.values.tsv": "f16ecd7c150d66ba03a906b994658dbdd1a35b7138b84dce2d9de01072e0d552",
     "index/stringsdict.tsv": "538081502dfdd84fb916e331a08b1682b64807cdbc2adbfe6faf9c70a983a511",
     "index/stringsdict.values.tsv": "81c2945e23ef803ec6c80a4b3b1dab6f4d4d7f16554dc07956accb89e667190f",
     "ledger/casefold.tsv": "3265f7e8e89a6a5099f54d93263b483d7245ec5b85a7a65ecd1864d865ce2f64",
-    "ledger/presence.tsv": "d48ec56cfb33d1f9f733dad2fba4f6a85838a92e12d9206404f8b10f6135f30f"
+    "ledger/presence.tsv": "582e96664968bafcd28ef799a1960627ce4c5f32348e56f1eaa5d92bc7ede906"
   },
   "extractor_version": 3,
   "ledger_casefold_entries": {
@@ -174,8 +174,8 @@
       "ja": 88,
       "ko": 63,
       "pt": 65,
-      "zh_CN": 58,
-      "zh_TW": 59
+      "zh_CN": 81,
+      "zh_TW": 60
     },
     "nibstrings": {
       "en": 248
@@ -195,7 +195,7 @@
       "ja": 334,
       "ko": 109,
       "pt": 300,
-      "zh_CN": 85,
+      "zh_CN": 266,
       "zh_TW": 300
     },
     "strings": {
@@ -208,8 +208,8 @@
       "ja": 695,
       "ko": 281,
       "pt": 709,
-      "zh_CN": 254,
-      "zh_TW": 235
+      "zh_CN": 655,
+      "zh_TW": 253
     }
   },
   "logic": {
@@ -299,7 +299,7 @@
         "zh_TW": 9.9884e-08
       },
       "cited_rows": 39,
-      "cited_values": 240,
+      "cited_values": 274,
       "corpus_digest": "402519289fbb19a58559bbda67650fbebd24b33b2dc9b67901feb85dac0e7d01",
       "english_equal_rows_in_translated_units": {
         "de": 174,
@@ -625,7 +625,7 @@
         "zh_TW": 4.886417e-06
       },
       "cited_rows": 726,
-      "cited_values": 1035,
+      "cited_values": 1156,
       "corpus_digest": "f11a0bf05725d3cf30c587804f6f62e4855dfb5a1574823c6c96fbc6704d4d3d",
       "english_equal_rows_in_translated_units": {
         "de": 10910,
@@ -846,7 +846,7 @@
         "zh_TW": 1.1653407e-05
       },
       "cited_rows": 7470,
-      "cited_values": 2967,
+      "cited_values": 3300,
       "corpus_digest": "be163333a326c4ef3d9e1b4923e399cc1fcf01fd04652a26f3b849a6d8a7c641",
       "english_equal_rows_in_translated_units": {
         "de": 4748,
