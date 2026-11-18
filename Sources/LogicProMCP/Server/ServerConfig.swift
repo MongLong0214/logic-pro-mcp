@@ -98,5 +98,8 @@ struct ServerConfig: Sendable {
 
 struct LogicProSupport: Sendable {
     static let minimumSupportedLogicVersion = "12.0.1"
-    static let latestValidatedLogicVersion = "12.3"
+    /// Derived, never restated: `AXLocalePolicy.currentLogicVersion` is the one declaration of the
+    /// current Logic release (docs/locale/ui-labels.json is judged against it). The canon MANIFEST
+    /// guard in LatestValidatedLogicVersionTests keeps that declaration and the canon in step.
+    static let latestValidatedLogicVersion = AXLocalePolicy.currentLogicVersion
 }

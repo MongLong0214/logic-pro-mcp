@@ -17,7 +17,7 @@
       ]
     }
   ],
-  "version": "3.18.0",
+  "version": "3.19.0",
   "_meta": {
     "io.modelcontextprotocol.registry/publisher-provided": {
       "distribution": {
@@ -31,7 +31,7 @@
             "brew install logic-pro-mcp"
           ]
         },
-        "release": "https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v3.18.0",
+        "release": "https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v3.19.0",
         "directories": {
           "lobeHub": "https://lobehub.com/mcp/monglong0214-logic-pro-mcp",
           "pulseMCP": "https://www.pulsemcp.com/servers/monglong-logic-pro"
@@ -82,7 +82,7 @@
       },
       "requirements": {
         "platform": "macOS 14+ for the MCP server; Logic Pro 12.3 requires macOS 15.6+",
-        "logicPro": "12.3 first-class validation target; 12.0.1+ best-effort floor; supports desktop (com.apple.logic10) and Creator Studio (com.apple.mobilelogic)",
+        "logicPro": "latest release is the first-class validation target; 12.0.1+ best-effort floor; supports desktop (com.apple.logic10) and Creator Studio (com.apple.mobilelogic)",
         "permissions": [
           "Accessibility",
           "Automation"

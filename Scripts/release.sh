@@ -128,7 +128,7 @@ PY
     --artifacts-json "$EVIDENCE_DIR/artifacts-$suffix.json" \
     --jobs-json "$EVIDENCE_DIR/jobs-$suffix.json" \
     --repository "$REPO" --source-sha "$QUALIFIED" --run-id "$RUN_ID" \
-    "${attempt_args[@]}" > "$EVIDENCE_DIR/binding-$suffix.json"
+    ${attempt_args[@]+"${attempt_args[@]}"} > "$EVIDENCE_DIR/binding-$suffix.json"
 }
 
 git fetch --quiet origin main --tags

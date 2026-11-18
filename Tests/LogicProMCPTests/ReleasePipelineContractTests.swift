@@ -73,11 +73,11 @@ import Testing
     let stage = try #require(gate.range(of: "cp \"$CANDIDATE\" .build/release/LogicProMCP"))
     let logic = try #require(gate.range(of: "if ! pgrep -xq \"Logic Pro\"; then"))
     let permission = try #require(gate.range(of: ".build/release/LogicProMCP --check-permissions"))
-    let releaseLoop = try #require(gate.range(of: "for live_test in \"${release_live_tests[@]}\"",
+    let releaseLoop = try #require(gate.range(of: "for live_test in ${release_live_tests[@]+\"${release_live_tests[@]}\"}; do",
                                               range: permission.upperBound..<gate.endIndex))
     let debugExecutable = try #require(gate.range(of: "if [ ! -x .build/debug/LogicProMCP ]; then",
                                                   range: releaseLoop.upperBound..<gate.endIndex))
-    let debugLoop = try #require(gate.range(of: "for live_test in \"${debug_live_tests[@]}\"",
+    let debugLoop = try #require(gate.range(of: "for live_test in ${debug_live_tests[@]+\"${debug_live_tests[@]}\"}; do",
                                             range: debugExecutable.upperBound..<gate.endIndex))
     let suite = try #require(gate.range(of: "\nswift test --no-parallel\n"))
     let finalHash = try #require(gate.range(of: "verify_candidate_bytes", range: suite.upperBound..<gate.endIndex))
@@ -272,8 +272,13 @@ import Testing
 @Test func ci_and_release_use_supported_standard_macos_runners() throws {
     let ci = try scriptContents(".github/workflows/ci.yml")
     let release = try scriptContents(".github/workflows/release.yml")
-    #expect(ci.contains("'macos-15-intel'"))
-    #expect(!ci.contains("&& 'macos-15' ||"))
+    // The four CI jobs that build, run and merge coverage share one arm64 label; the release
+    // candidate is still built and installed on both architectures.
+    #expect(ci.contains("&& 'macos-15' ||"))
+    #expect(ci.components(separatedBy: "runs-on: macos-15\n").count - 1 == 3)
+    #expect(!ci.contains("runs-on: macos-15-intel"))
+    #expect(!ci.contains("'macos-15-intel'"))
+    #expect(ci.contains("lipo -archs .build/release/LogicProMCP"))
     #expect(release.contains("runs-on: macos-15-intel"))
     #expect(release.contains("os: [macos-15-intel, macos-26]"))
     #expect(!release.contains("macos-14"))
