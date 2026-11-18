@@ -5,7 +5,7 @@ Minimal install and Logic Pro integration guide for Logic Pro MCP v3.19.0.
 ## Requirements
 
 - macOS 14+
-- Logic Pro — **latest release prioritized (currently 12.3)**; works down to the 12.0.1 floor on a best-effort basis. Supported Mac variant: desktop **Logic Pro** (`com.apple.logic10`, `/Applications/Logic Pro.app`). Apple Creator Studio **Logic Pro Creator Studio** (`com.apple.mobilelogic`, `/Applications/Logic Pro Creator Studio.app`) is recognised, not supported; the two use different process names for System Events automation. Desktop **Logic Pro** is the only variant the release qualification matrix covers (`shipVariants = [.desktop]`), and the only one this release supports. Without `LOGIC_PRO_BUNDLE_ID` the server can still select Creator Studio: it targets the frontmost Logic; failing that a running one, then an installed one, desktop first in both. So a Creator Studio that is frontmost, or is the only Logic running, becomes the target, with no qualification evidence behind it. Set `LOGIC_PRO_BUNDLE_ID=com.apple.logic10` to keep the server on desktop Logic Pro.
+- Logic Pro — **latest release prioritized (currently 13.0)**; works down to the 12.0.1 floor on a best-effort basis. Supported Mac variant: desktop **Logic Pro** (`com.apple.logic10`, `/Applications/Logic Pro.app`). Apple Creator Studio **Logic Pro Creator Studio** (`com.apple.mobilelogic`, `/Applications/Logic Pro Creator Studio.app`) is recognised, not supported; the two use different process names for System Events automation. Desktop **Logic Pro** is the only variant the release qualification matrix covers (`shipVariants = [.desktop]`), and the only one this release supports. Without `LOGIC_PRO_BUNDLE_ID` the server can still select Creator Studio: it targets the frontmost Logic; failing that a running one, then an installed one, desktop first in both. So a Creator Studio that is frontmost, or is the only Logic running, becomes the target, with no qualification evidence behind it. Set `LOGIC_PRO_BUNDLE_ID=com.apple.logic10` to keep the server on desktop Logic Pro.
 - Claude Code, Claude Desktop, Cursor, or another MCP client
 - Homebrew, or Command Line Tools with Swift if building from source
 
@@ -308,7 +308,7 @@ No supported Logic Pro installation, or a Creator-Studio-only installation this 
 
 <a id="doctor-logicversion-support"></a>
 ### `logic.version_support`
-A detected Logic Pro version below the 12.0.1 support floor is a terminal unavailable state: the check preserves the measured version without requesting a version change or adding a continuation to `fix_plan`. Logic Pro 12.3 is the latest validated target; other versions at or above the floor remain informational warnings.
+A detected Logic Pro version below the 12.0.1 support floor is a terminal unavailable state: the check preserves the measured version without requesting a version change or adding a continuation to `fix_plan`. Logic Pro 13.0 is the latest validated target; other versions at or above the floor remain informational warnings.
 
 <a id="doctor-logicblocking-dialog"></a>
 ### `logic.blocking_dialog`

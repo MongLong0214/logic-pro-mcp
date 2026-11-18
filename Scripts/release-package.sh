@@ -15,7 +15,7 @@ source_members=(
   Scripts/logic_ui_labels.py
 )
 if [ "${1:-}" = --list-members ]; then
-  printf '%s\n' LogicProMCP "${source_members[@]}"
+  printf '%s\n' LogicProMCP ${source_members[@]+"${source_members[@]}"}
   exit 0
 fi
 
@@ -96,7 +96,7 @@ fi
 # unauthenticated filesystem metadata alongside those exact source bytes.
 COPYFILE_DISABLE=1 tar czf LogicProMCP-macOS-universal.tar.gz \
   -C "$binary_dir" LogicProMCP \
-  -C "$PWD" "${source_members[@]}"
+  -C "$PWD" ${source_members[@]+"${source_members[@]}"}
 
 cp LogicProMCP-macOS-universal.tar.gz LogicProMCP-macOS-arm64.tar.gz
 shasum -a 256 LogicProMCP-macOS-universal.tar.gz > SHA256SUMS.txt

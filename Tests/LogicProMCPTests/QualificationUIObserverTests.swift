@@ -101,6 +101,58 @@ struct QualificationUIObserverTests {
         #expect(Self.unreadable(found), "\(found)")
     }
 
+    @Test func anUnreadableBaselineDoesNotReportTheMainWindowAsLeftOpen() {
+        // Native run 9e6d22b7-r2: the baseline lookup found no Logic, so its window list was empty
+        // and the main window (same id before and after) was reported as window_left_open.
+        let f = Fixture()
+        let main: [String: Any] = [
+            kCGWindowOwnerPID as String: Int(Self.pid), kCGWindowNumber as String: 1340,
+            kCGWindowLayer as String: 0, kCGWindowName as String: Self.mainTitle,
+            kCGWindowBounds as String: ["X": 0.0, "Y": 30.0, "Width": 1920.0, "Height": 1050.0],
+        ]
+        let missing = QualificationUIInvariants.observeLogic(
+            runningPID: { nil }, windowList: { [] }, runtime: f.runtime)
+        let found = QualificationUIInvariants.violations(before: missing, after: f.observe(cg: [main]))
+        #expect(!found.contains { $0.contains("window_left_open") }, "\(found)")
+        #expect(found.contains { $0.contains("ui_invariant_unreadable(baseline") }, "\(found)")
+    }
+
+    @Test func aNewWindowIdAgainstAReadBaselineIsStillLeftOpen() {
+        let f = Fixture()
+        func main(_ id: Int) -> [String: Any] {
+            [kCGWindowOwnerPID as String: Int(Self.pid), kCGWindowNumber as String: id,
+             kCGWindowLayer as String: 0, kCGWindowName as String: Self.mainTitle,
+             kCGWindowBounds as String: ["X": 0.0, "Y": 30.0, "Width": 1920.0, "Height": 1050.0]]
+        }
+        let found = QualificationUIInvariants.violations(
+            before: f.observe(cg: [main(1340)]), after: f.observe(cg: [main(1341)]))
+        #expect(found.contains { $0.contains("window_left_open(window 1341") }, "\(found)")
+    }
+
+    @Test func aBaselineThatBecomesReadableIsRetriedBeforeTheOperation() throws {
+        let f = Fixture()
+        var calls = 0
+        let missing = QualificationUIInvariants.observeLogic(
+            runningPID: { nil }, windowList: { [] }, runtime: f.runtime)
+        let baseline = QualificationUIInvariants.settledBaseline(
+            observe: { calls += 1; return calls < 3 ? missing : f.observe() }, sleep: { _ in })
+        #expect(calls == 3)
+        let b = try #require(baseline)
+        #expect(b.windowListRead)
+    }
+
+    @Test func aBaselineThatNeverReadsIsReturnedUnreadableAfterTheLimit() throws {
+        let f = Fixture()
+        var calls = 0
+        let missing = QualificationUIInvariants.observeLogic(
+            runningPID: { nil }, windowList: { [] }, runtime: f.runtime)
+        let baseline = QualificationUIInvariants.settledBaseline(
+            observe: { calls += 1; return missing }, sleep: { _ in })
+        let b = try #require(baseline)
+        #expect(!b.windowListRead)
+        #expect(calls == 21)
+    }
+
     @Test func aMissingWindowListIsAnUnreadableObservationThatNamesTheList() {
         let f = Fixture()
         let missing = QualificationUIInvariants.observeLogic(

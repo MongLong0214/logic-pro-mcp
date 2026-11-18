@@ -21,6 +21,18 @@ env:
   # implementation-qualified name while `swift test list` includes the module prefix.
   TEST_SHARD_SELECTOR: '\.(QualificationRunnerTests|Issue965FreshPopulationAcquisitionTests|Issue538TrackCreationObservationTests|Issue968ExactTrackNameAdapterTests|QualificationFaultInjectionTests|MIDIReadbackCallSiteLintTests|Issue538ModalWitnessTests)/'
 
+# Every macOS job below runs on `macos-15`, an arm64 image: the architecture the product ships
+# to and the native Logic host qualifies. The compile and the test run are architecture specific
+# (a coverage profile is only meaningful against the binary that produced it, and the
+# release-runtime artifact is the exact file native qualification runs), so the four jobs that
+# share them must share one label. The `lipo -archs` assertions below fail the job if the label
+# ever stops being arm64 instead of letting the evidence change silently.
+# Measured on this repository's CI history, 2026-11-03 .. 2026-11-17: the identical coverage
+# test-build compile step took a median of 37 minutes on the arm label (3 runs) and 85 minutes
+# on the Intel one (33 runs), and a test-build job hit its 130-minute limit while compiling.
+# Queue stalls and "not acquired" aborts occurred on both labels, overlapping in time on
+# 2026-11-08 and 2026-11-11, so neither label is a cure for them and no label fallback is wired;
+# the shorter job is what makes a lost attempt cheaper.
 jobs:
   change-scope:
     name: change-scope
@@ -111,7 +123,7 @@ jobs:
   release-build:
     name: release-build
     needs: change-scope
-    runs-on: macos-15-intel
+    runs-on: macos-15
     timeout-minutes: 60
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
@@ -142,6 +154,7 @@ jobs:
           swift build -c release
           git diff --exit-code Package.resolved
           test -x .build/release/LogicProMCP
+          test "$(lipo -archs .build/release/LogicProMCP)" = arm64
           mkdir -p "$RUNNER_TEMP/release-runtime"
           cp .build/release/LogicProMCP "$RUNNER_TEMP/release-runtime/LogicProMCP"
           git rev-parse HEAD > "$RUNNER_TEMP/release-runtime/candidate-sha.txt"
@@ -159,7 +172,7 @@ jobs:
     name: test-build
     needs: change-scope
     if: ${{ needs.change-scope.outputs.full-validation == 'true' }}
-    runs-on: macos-15-intel
+    runs-on: macos-15
     timeout-minutes: 130
     env:
       DEVELOPER_DIR: /Library/Developer/CommandLineTools
@@ -252,6 +265,7 @@ jobs:
           test_bundle=".build/$triple_debug/LogicProMCPPackageTests.xctest"
           test_binary="$test_bundle/Contents/MacOS/LogicProMCPPackageTests"
           test -x "$test_binary"
+          test "$(lipo -archs "$test_binary")" = arm64
           test -x ".build/$triple_debug/LogicProMCP"
           tar -czf "$artifact/runtime.tar.gz" \
             .build/debug "$test_bundle" ".build/$triple_debug/LogicProMCP"
@@ -270,7 +284,7 @@ jobs:
     name: test-shards (${{ matrix.shard }})
     needs: [change-scope, release-build, test-build]
     if: ${{ needs.change-scope.outputs.full-validation == 'true' && needs.release-build.result == 'success' && needs.test-build.result == 'success' }}
-    runs-on: macos-15-intel
+    runs-on: macos-15
     timeout-minutes: 120
     strategy:
       fail-fast: false
@@ -373,7 +387,7 @@ jobs:
     name: product-validation
     needs: [change-scope, release-build, test-build, test-shards]
     if: always()
-    runs-on: ${{ needs.change-scope.outputs.full-validation == 'true' && 'macos-15-intel' || 'ubuntu-latest' }}
+    runs-on: ${{ needs.change-scope.outputs.full-validation == 'true' && 'macos-15' || 'ubuntu-latest' }}
     timeout-minutes: 20
     outputs:
       outcome: ${{ steps.product.outcome }}
