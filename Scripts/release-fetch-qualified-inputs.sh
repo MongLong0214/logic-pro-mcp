@@ -41,14 +41,14 @@ download_input() {
     # curl does not forward these credentials to the different host named by
     # GitHub's asset redirect. Redirects remain HTTPS-only and bounded.
     printf 'oauth2-bearer = "%s"\n' "$token" | curl -q --config - \
-      "${common[@]}" --location --proto-redir '=https' --max-redirs 3 \
+      ${common[@]+"${common[@]}"} --location --proto-redir '=https' --max-redirs 3 \
       --header 'Accept: application/octet-stream' "$url" --output "$output"
     return
   fi
 
   # Existing owner/pre-signed HTTPS inputs remain supported, but never receive
   # repository credentials or redirect authority.
-  curl -q "${common[@]}" "$url" --output "$output"
+  curl -q ${common[@]+"${common[@]}"} "$url" --output "$output"
 }
 
 if [ "$mode" = public ]; then

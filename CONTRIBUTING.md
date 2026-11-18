@@ -81,7 +81,7 @@ does not replace the live evidence required to accept a native behavior change.
 
 - macOS 14+
 - Swift 6.0+ from Command Line Tools
-- Logic Pro — latest release prioritized (currently 12.3), works down to the 12.0.1 floor best-effort (only for live E2E testing — unit tests run without it). Live-verify against the newest Logic Pro version you have; that is the first-class target.
+- Logic Pro — latest release prioritized (currently 13.0), works down to the 12.0.1 floor best-effort (only for live E2E testing — unit tests run without it). Live-verify against the newest Logic Pro version you have; that is the first-class target.
 
 ## Low-Risk PRs
 
