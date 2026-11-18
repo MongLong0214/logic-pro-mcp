@@ -73,11 +73,11 @@ import Testing
     let stage = try #require(gate.range(of: "cp \"$CANDIDATE\" .build/release/LogicProMCP"))
     let logic = try #require(gate.range(of: "if ! pgrep -xq \"Logic Pro\"; then"))
     let permission = try #require(gate.range(of: ".build/release/LogicProMCP --check-permissions"))
-    let releaseLoop = try #require(gate.range(of: "for live_test in \"${release_live_tests[@]}\"",
+    let releaseLoop = try #require(gate.range(of: "for live_test in ${release_live_tests[@]+\"${release_live_tests[@]}\"}; do",
                                               range: permission.upperBound..<gate.endIndex))
     let debugExecutable = try #require(gate.range(of: "if [ ! -x .build/debug/LogicProMCP ]; then",
                                                   range: releaseLoop.upperBound..<gate.endIndex))
-    let debugLoop = try #require(gate.range(of: "for live_test in \"${debug_live_tests[@]}\"",
+    let debugLoop = try #require(gate.range(of: "for live_test in ${debug_live_tests[@]+\"${debug_live_tests[@]}\"}; do",
                                             range: debugExecutable.upperBound..<gate.endIndex))
     let suite = try #require(gate.range(of: "\nswift test --no-parallel\n"))
     let finalHash = try #require(gate.range(of: "verify_candidate_bytes", range: suite.upperBound..<gate.endIndex))
