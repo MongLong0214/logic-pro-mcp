@@ -264,29 +264,15 @@ private func workflowStep(_ workflow: String, named name: String) -> String? {
     let formulaVersion = String(formula[formulaVersionRange])
 
     #expect(sourceCandidateVersion == "3.19.0")
-    #expect(publishedVersion == "3.18.0")
+    #expect(publishedVersion == "3.19.0")
     #expect(formulaVersion == publishedVersion)
-    #expect(sourceCandidateVersion != publishedVersion)
-
-    let requiredCandidateReferences = [
-        "source_candidate-v\(sourceCandidateVersion)-",
-        "**Source candidate**: `v\(sourceCandidateVersion)`",
-        "`v\(sourceCandidateVersion)` is the source candidate",
-        "The source candidate is `v\(sourceCandidateVersion)`",
-    ]
-    for reference in requiredCandidateReferences {
-        #expect(
-            readme.contains(reference),
-            "README.md must identify the source candidate without claiming publication: \(reference)"
-        )
-    }
 
     let requiredPublishedReferences = [
         "published_stable-v\(publishedVersion)-",
         "**Current published stable**: [`v\(publishedVersion)`](https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v\(publishedVersion))",
-        "`v\(publishedVersion)` remains the current published stable",
-        "current published stable remains `v\(publishedVersion)`",
+        "`v\(publishedVersion)` is the current published stable",
         "/v\(publishedVersion)/Scripts/install.sh",
+        "names the published registry release (`v\(publishedVersion)`)",
     ]
     for reference in requiredPublishedReferences {
         #expect(
@@ -295,9 +281,6 @@ private func workflowStep(_ workflow: String, named name: String) -> String? {
         )
     }
 
-    #expect(
-        readme.contains("published registry release (`v\(publishedVersion)`)")
-    )
     let publishedInstallerURL = "https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v\(publishedVersion)/Scripts/install.sh"
     #expect(
         readme.components(separatedBy: publishedInstallerURL).count - 1 == 2,
@@ -315,6 +298,11 @@ private func workflowStep(_ workflow: String, named name: String) -> String? {
         #expect(
             !readme.contains("https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v\(sourceCandidateVersion)/Scripts/install.sh"),
             "README.md must not offer a source-candidate installer URL before that tag is published"
+        )
+    } else {
+        #expect(
+            !readme.contains("source_candidate-v"),
+            "README.md must not carry a source-candidate badge once the source version is published"
         )
     }
 }

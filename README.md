@@ -3,19 +3,22 @@
 A local [Model Context Protocol](https://modelcontextprotocol.io) server that lets an MCP client (Claude Code, Claude Desktop, Cursor, Codex, VS Code and others) drive Logic Pro on macOS: transport, tracks, mixer, MIDI, plug-ins, navigation, project lifecycle and audio-file analysis. It talks to the client over stdio, and every write is checked against what Logic reports back.
 
 <p align="center">
-  <img src="https://img.shields.io/badge/source_candidate-v3.19.0-orange.svg?style=flat-square" />
-  <img src="https://img.shields.io/badge/published_stable-v3.18.0-blue.svg?style=flat-square" />
+  <a href="https://claude.com/contact-sales/claude-for-oss"><img src="https://img.shields.io/badge/Claude_for_Open_Source-Selected-D97757.svg?style=flat-square&logo=anthropic&logoColor=white" alt="Claude for Open Source — Selected" /></a>
+  <img src="https://img.shields.io/badge/published_stable-v3.19.0-blue.svg?style=flat-square" />
 </p>
 
 [Install](#install) · [Register a client](#register-with-an-mcp-client) · [Permissions](#permissions) · [Tools](#tools-and-operations) · [Safety model](#safety-model) · [What changed in 3.19.0](#what-changed-in-3190) · [Demo](docs/media/logic-pro-mcp-demo.mp4)
+
+> ### 🏆 Selected for Anthropic's [Claude for Open Source](https://claude.com/contact-sales/claude-for-oss) program
+> Logic Pro MCP has been **officially selected for Anthropic's Claude for Open Source program** — recognition from the makers of Claude that this project is open-source work worth supporting. This server is built with Claude, for Claude-powered agents — and is now officially supported by the program.
 
 ## At a Glance
 
 | Item | Value |
 |------|-------|
 | Server version | 3.19.0 (`ServerConfig.serverVersion`) |
-| Release state | **Source candidate**: `v3.19.0`. **Current published stable**: [`v3.18.0`](https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v3.18.0) |
-| Logic Pro | Desktop Logic Pro (`com.apple.logic10`). The declared current version is **13.0** (build 7801, `docs/canon/MANIFEST.json`); the supported floor is 12.0.1 (`minimumSupportedLogicVersion`), best effort. Apple Creator Studio's Logic Pro is recognized, not supported |
+| Release state | **Current published stable**: [`v3.19.0`](https://github.com/MongLong0214/logic-pro-mcp/releases/tag/v3.19.0) |
+| Logic Pro | Desktop Logic Pro (`com.apple.logic10`). The declared current version is **13.0** (`LogicProSupport.latestValidatedLogicVersion`; build 7801 from `docs/canon/MANIFEST.json`); the supported floor is 12.0.1 (`minimumSupportedLogicVersion`), best effort. Apple Creator Studio's Logic Pro is recognized, not supported |
 | macOS | 14 or later (`Package.swift`: `.macOS(.v14)`) |
 | Architecture | Release package is universal (`arm64` and `x86_64`, `LogicProMCP-macOS-universal.tar.gz`) |
 | Source build | Swift 6 toolchain (`swift-tools-version: 6.0`) |
@@ -23,7 +26,7 @@ A local [Model Context Protocol](https://modelcontextprotocol.io) server that le
 | Read resources | 19 static resources: health, transport, Tempo List, tracks, mixer, markers, project info/audit/cleanup plan, MIDI ports, MCU state, library inventory, stock plugins and instruments, Session Players, workflow skills |
 | Resource templates | 12 templates: operation catalog, per-track, region, mixer strip, plug-in and instrument lookup/search, Session Player, session plan, workflow lookup/search |
 
-`v3.19.0` is the source candidate. The source candidate is `v3.19.0`; the current published stable remains `v3.18.0` (and `v3.18.0` remains the current published stable) until the candidate's tag, release assets and public-byte readback exist, so the installer URLs below pin `v3.18.0`. The Formula and `server.json` are bumped to 3.19.0 right after the release; the 3.19.0 installer line is in [docs/SETUP.md](docs/SETUP.md).
+`v3.19.0` is the current published stable. The Formula and `server.json` name it, and the installer URLs below pin it. The 3.19.0 installer line is also in [docs/SETUP.md](docs/SETUP.md).
 
 ## Install
 
@@ -39,14 +42,14 @@ The Formula pins the release tarball URL and its SHA256. Upgrade with `brew upda
 
 ### MCP registry
 
-`server.json` publishes this server's metadata as `io.github.MongLong0214/logic-pro-mcp`. During this source cut the source candidate is `v3.19.0`, while `server.json` and the Formula remain pinned to the published registry release (`v3.18.0`). The record is metadata-only: it points at the Homebrew install above and the GitHub release, and does not install anything itself.
+`server.json` publishes this server's metadata as `io.github.MongLong0214/logic-pro-mcp`. The record names the published registry release (`v3.19.0`), the same release the Formula names. The record is metadata-only: it points at the Homebrew install above and the GitHub release, and does not install anything itself.
 
 ### Pinned shell installer
 
 The installer is fail-closed: it refuses to run without an explicit `LOGIC_PRO_MCP_SHA256` archive pin. It verifies the downloaded `LogicProMCP-macOS-universal.tar.gz` archive before extraction. Copy the pin from the LogicProMCP-macOS-universal.tar.gz SHA256SUMS entry of the release:
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.18.0/Scripts/install.sh -o install.sh
+curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.19.0/Scripts/install.sh -o install.sh
 # inspect install.sh, then:
 LOGIC_PRO_MCP_SHA256=<paste the SHA256SUMS entry for the universal archive> bash install.sh
 ```
@@ -55,7 +58,7 @@ To accept fetching the checksum from the same release as the archive, opt in exp
 
 ```bash
 LOGIC_PRO_MCP_ALLOW_SAME_ORIGIN=1 \
-bash <(curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.18.0/Scripts/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/MongLong0214/logic-pro-mcp/v3.19.0/Scripts/install.sh)
 ```
 
 By default the installer also registers the server with Claude Code and fails if the `claude` CLI is missing; set `LOGIC_PRO_MCP_REGISTER_CLAUDE=0` to skip that. See [SECURITY.md](SECURITY.md#installer-trust-model) for the trust tiers.
